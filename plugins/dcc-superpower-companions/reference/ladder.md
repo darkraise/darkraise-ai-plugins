@@ -91,47 +91,79 @@ work broken into smaller tasks, each scored fresh against Rule S and dispatched
 on its own. This is the ladder's answer to a task that is genuinely too large,
 and it is the same answer Rule S gives at planning time.
 
-**A task may be split-escalated once.** A second exhaustion is reported BLOCKED
-through superpowers' existing contract. Without that guard, a task that resists
-both splitting and capability would loop.
+**A task may be split-escalated once.** If a split half also exhausts
+`impl-opus-high`, the task has resisted both capability and decomposition. That
+is the one situation the reserve table below exists for, and the only one in
+which it is entered automatically.
 
 ### Why this terminates
 
 Rank each agent as `model_rank * 10 + effort_rank`, where Haiku ranks 0, Sonnet
-1, and Opus 2, and effort ranks 0 through 2 from `low` to `high`. That puts Haiku
-at 0, Sonnet at 10 to 12, and Opus at 20 to 22. Every successor has a strictly
-higher rank, so the graph is acyclic and every walk reaches `SPLIT`.
-`tests/ladder.test.sh` asserts both the ranking and the walk rather than trusting
-this argument.
+1, Opus 2, and Fable 3, and effort ranks 0 through 4 from `low` to `max`. That
+puts Haiku at 0, Sonnet at 10 to 14, Opus at 20 to 24, and Fable at 30 to 34.
+Every successor in this table and in the reserve table has a strictly higher
+rank, so both graphs are acyclic and every walk reaches a terminal: `SPLIT`
+here, `BLOCKED` there. `tests/ladder.test.sh` asserts the ranking and both walks
+rather than trusting this argument.
 
 Judges and scouts are not on the ladder. They are not implementers, so they are
 never an escalation source or target.
 
-## Retired-agent map
+## Reserve table
 
-0.1.0 plans name agents 0.2.0 deletes. Map them on read. The rule is **clamp each
-dimension to its allowed maximum**: a retired effort clamps to `high`, and a
-retired model clamps to the top execution rung.
+Nine implementers exist that no score can reach: the `xhigh` and `max` efforts,
+and every Fable tier. They are the reserve. No row of the assignment table names
+one, and no row of the escalation table points at one.
 
-```retired
-impl-sonnet-xhigh impl-sonnet-high
-impl-sonnet-max impl-sonnet-high
-impl-opus-xhigh impl-opus-high
-impl-opus-max impl-opus-high
-impl-fable-low impl-opus-high
-impl-fable-medium impl-opus-high
-impl-fable-high impl-opus-high
-impl-fable-xhigh impl-opus-high
-impl-fable-max impl-opus-high
+Two things reach them:
+
+1. **A human ruling.** A hand-edited `**Implementer:**` line naming a reserve
+   agent is dispatched as written. A human ruling has always beaten the rubric;
+   the reserve is what gives that ruling somewhere above `impl-opus-high` to go.
+2. **A task that has run out of splits.** A task that exhausts
+   `impl-opus-high`, is split once, and exhausts `impl-opus-high` again in one
+   of its halves has resisted both capability and decomposition. That is the
+   only case the reserve is entered automatically.
+
+```reserve
+impl-sonnet-xhigh impl-sonnet-max
+impl-sonnet-max impl-opus-high
+impl-opus-high impl-opus-xhigh
+impl-opus-xhigh impl-opus-max
+impl-opus-max impl-fable-high
+impl-fable-low impl-fable-medium
+impl-fable-medium impl-fable-high
+impl-fable-high impl-fable-xhigh
+impl-fable-xhigh impl-fable-max
+impl-fable-max BLOCKED
 ```
 
-Effort clamps keep their model, because the ban is on the effort level. Fable
-clamps to `impl-opus-high` regardless of its effort, because the ban is on the
-model and the top execution rung is where a Fable implementer's work belongs.
+`impl-opus-high` is a source in both tables, and the difference between them is
+whether the split has been spent. Its escalation successor is `SPLIT` the first
+time it is exhausted; its reserve successor, `impl-opus-xhigh`, applies only
+after that split has happened and failed. That condition is the whole of the
+guard: no ordinary task reaches Fable without a split standing between it and
+the reserve.
 
-State the substitution in the ledger. Never substitute silently: a plan that
-quietly runs on a different tier than it records is the audit failure this
-plugin exists to prevent.
+The Sonnet reserve rungs point back at the execution ladder rather than upward
+into Fable. A human who hand-assigns `impl-sonnet-max` and watches it stall gets
+`impl-opus-high`, and with it the split, before anything reaches the top of the
+reserve.
+
+Every reserve agent is a source exactly once, so a hand-assigned
+`impl-fable-low` has somewhere to escalate. `BLOCKED` is the terminal and is not
+an agent: a task that exhausts `impl-fable-max` is reported BLOCKED through
+superpowers' existing contract. There is no rung above it and no second split.
+
+Ranking Fable above Opus puts `impl-fable-low` above `impl-opus-max` in the walk
+order. That is a statement about how the chain is traversed, not a claim that
+Fable at low effort out-thinks Opus at max: `impl-fable-low` is reachable only
+by a human naming it, and the automatic path enters Fable at `impl-fable-high`.
+
+0.1.0 plans name every one of these nine agents, and they now resolve natively.
+A plan that recorded `impl-fable-max` runs at `impl-fable-max`, which is what it
+asked for. Nothing is substituted on read, so there is nothing to state in the
+ledger beyond the reserve tier itself.
 
 ## What the range actually reaches
 
