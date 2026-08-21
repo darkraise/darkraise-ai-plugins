@@ -63,9 +63,11 @@ means superpowers' final whole-branch review.
 ## Dispatch a task
 
 1. Read the task's `**Implementer:**` line.
-2. If that value names an agent from the `reserve` table in
-   [`../../reference/ladder.md`](../../reference/ladder.md), dispatch it as
-   written and note the tier in the ledger line you already add:
+2. If that value names one of the nine reserve implementers - every name in the
+   `reserve` table of [`../../reference/ladder.md`](../../reference/ladder.md)
+   except `impl-opus-high`, which is an execution implementer and appears there
+   only as the conditional entry edge - dispatch it as written and note the tier
+   in the ledger line you already add:
 
    ```
    Task <N>: implementer impl-opus-max (assigned; reserve tier)
@@ -293,7 +295,7 @@ Task <N>: fix round 3/5 (1 addressed, 1 open - stale cache; commits a7f..b21; pr
 | Situation | Response |
 |-----------|----------|
 | Task has no `**Implementer:**` line | Score it with the rubric in `reference/ladder.md`, dispatch, and record `Task <N>: implementer <agent> (scored at dispatch)` |
-| The line names a reserve agent | Dispatch it as written and note `reserve tier` in the ledger. No score reaches one, so it is a human ruling |
+| The line names one of the nine reserve implementers | Dispatch it as written and note `reserve tier` in the ledger. No score reaches one, so it is a human ruling. `impl-opus-high` is not one of them - it is the score-6 assignment |
 | The line names an agent in neither the assignment nor the reserve table | Stop and ask your human partner. Never fall back silently |
 | Fable is unavailable or declined for a judge seat | Dispatch `judge-opus`, say so, and continue |
 | An implementer's model is unavailable on this account | Substitute the same effort one model down, state the substitution in the ledger and to your partner, and continue. From Sonnet there is no such rung - stop and ask instead |

@@ -167,8 +167,9 @@ Requires `jq`. No model calls.
 
 ## Reference
 
-`reference/ladder.md` holds the rubric, the assignment table, and the escalation
-table. All three skills and the test suite read that one copy.
+`reference/ladder.md` holds the rubric, the assignment table, the escalation
+table, and the reserve table. All three skills and the test suite read that one
+copy.
 
 `criteria/` holds the verifier criteria; `criteria/TEMPLATE.md` documents the
 format. `tests/criteria.test.sh` validates every file in that directory.

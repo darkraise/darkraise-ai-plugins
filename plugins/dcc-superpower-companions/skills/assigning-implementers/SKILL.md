@@ -142,10 +142,11 @@ Before saving the plan:
   assignment by hand. A reserve name you wrote yourself is an error, not an
   override.
 - Every `**Evaluation:**` line's four scores actually sum to the stated total,
-  and that total maps to the named agent — allowing for the spec-3 floor in
-  `reference/ladder.md`, which is the one case where the agent legitimately
-  outranks the total. A total that disagrees with the agent for any other
-  reason is the one error that makes the record actively misleading.
+  and that total maps to the named agent — allowing for the two cases where the
+  agent legitimately does not match the total: the spec-3 floor in
+  `reference/ladder.md`, and a hand-edited override, which every reserve
+  assignment is. A total that disagrees with the agent for any other reason is
+  the one error that makes the record actively misleading.
 - Every task clears Rule S. Compute `files + spec + coupling` for each and
   confirm none reaches 4, and that no task scores 3 on spec completeness. A
   total above 6 anywhere means the gate was skipped, since Rule S caps a

@@ -1,4 +1,4 @@
-# Assignment, escalation, and retirement tables
+# Assignment, escalation, and reserve tables
 
 Single source of truth for the companion skills and the test suite. The fenced
 blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
