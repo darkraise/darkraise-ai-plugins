@@ -49,7 +49,8 @@ The rule's intent survives intact: the agent definition pins the model, so
 nothing inherits the session default.
 
 The supersession covers every fleet agent whose frontmatter pins a model - the
-seven implementers, both judges, and the scout. Passing a `model` argument to
+seven execution implementers, the nine reserve implementers, both judges, and
+the scout. Passing a `model` argument to
 any of them overrides the pin while `effort` keeps its frontmatter value, so the
 agent runs at a tier the ledger does not record - the audit failure this plugin
 exists to prevent. For a judge seat it is worse: the override silently bypasses
@@ -62,17 +63,19 @@ means superpowers' final whole-branch review.
 ## Dispatch a task
 
 1. Read the task's `**Implementer:**` line.
-2. If that value names a retired agent, map it through the `retired` table in
-   [`../../reference/ladder.md`](../../reference/ladder.md) and dispatch the
-   target instead. Say the substitution aloud and record it in the ledger line
-   you already add:
+2. If that value names an agent from the `reserve` table in
+   [`../../reference/ladder.md`](../../reference/ladder.md), dispatch it as
+   written and note the tier in the ledger line you already add:
 
    ```
-   Task <N>: implementer impl-opus-high (assigned; mapped from retired impl-fable-max)
+   Task <N>: implementer impl-opus-max (assigned; reserve tier)
    ```
 
-   A 0.1.0 plan names agents this version deletes. Mapping them is why the
-   table exists; without it the next rule stops the run.
+   No score reaches a reserve agent, so its presence in a plan is a human
+   ruling, and a human ruling beats the rubric. Dispatch it as written; do not
+   re-score the task down to an execution tier. A 0.1.0 plan naming one of these
+   agents is honoured the same way, because the tier it recorded is the tier it
+   asked for.
 3. Dispatch with that value as `subagent_type`, using superpowers'
    `implementer-prompt.md` template unchanged for the prompt body. Where the
    template's header reads `Subagent (general-purpose):`, use the assigned
@@ -163,8 +166,24 @@ This `Ruling:` line is exempt from the last-line rule above, because it is not a
 position after the cap, so crash recovery already steps over them when it looks
 for a task's last `Task <N>:` verb.
 
-**A task may be split-escalated once.** If a split half also exhausts the
-ladder, report BLOCKED through superpowers' existing contract. Do not loop.
+**A task may be split-escalated once.** If a split half also exhausts
+`impl-opus-high`, the task has resisted both capability and decomposition, and
+only then does it enter the reserve chain in
+[`../../reference/ladder.md`](../../reference/ladder.md). It enters at
+`impl-opus-xhigh` and walks one successor per further exhaustion. Record the
+entry as its own ruling, and say it aloud:
+
+```
+Ruling: Task <N>a enters the reserve at impl-opus-xhigh - impl-opus-high exhausted again after the split - if wrong, the task is BLOCKED instead and waits for a human
+```
+
+A reserve dispatch is the one place this loop spends above the tier the plan
+recorded. It should never be a surprise, which is why it is said aloud as well
+as written down. Like the split ruling above it, this line is exempt from the
+last-line rule, because it is not a `Task <N>:` line.
+
+`impl-fable-max` has no successor. When it exhausts, report BLOCKED through
+superpowers' existing contract. Do not loop, and do not split a second time.
 
 ## Score the review
 
@@ -274,11 +293,12 @@ Task <N>: fix round 3/5 (1 addressed, 1 open - stale cache; commits a7f..b21; pr
 | Situation | Response |
 |-----------|----------|
 | Task has no `**Implementer:**` line | Score it with the rubric in `reference/ladder.md`, dispatch, and record `Task <N>: implementer <agent> (scored at dispatch)` |
-| The line names a retired agent | Map it through the `retired` table, dispatch the target, and state the substitution in the ledger |
-| The line names an agent that is neither current nor retired | Stop and ask your human partner. Never fall back silently |
+| The line names a reserve agent | Dispatch it as written and note `reserve tier` in the ledger. No score reaches one, so it is a human ruling |
+| The line names an agent in neither the assignment nor the reserve table | Stop and ask your human partner. Never fall back silently |
 | Fable is unavailable or declined for a judge seat | Dispatch `judge-opus`, say so, and continue |
 | An implementer's model is unavailable on this account | Substitute the same effort one model down, state the substitution in the ledger and to your partner, and continue. From Sonnet there is no such rung - stop and ask instead |
-| Escalation exhausted at impl-opus-high | Split the remaining work once; if a half also exhausts, report BLOCKED per superpowers |
+| Escalation exhausted at impl-opus-high | Split the remaining work once; if a half also exhausts, enter the reserve at `impl-opus-xhigh` |
+| Reserve exhausted at impl-fable-max | Report BLOCKED per superpowers. There is no rung above it and no second split |
 
 The silent-fallback rule matters more than it looks. If a bad agent name quietly
 degraded to the session default, every task would run at the session's model and
@@ -295,3 +315,12 @@ effort variants, so "same effort, one model down" has no target from a
 `impl-sonnet-*` agent, and dropping to `impl-haiku` would silently discard the
 effort level the score asked for. If Sonnet itself is unavailable, say so and
 ask your partner rather than inventing a rung.
+
+Inside the reserve the same substitution has a target at every effort:
+`impl-fable-max` drops to `impl-opus-max`, `impl-fable-xhigh` to
+`impl-opus-xhigh`, and `impl-fable-high` to `impl-opus-high`. That works for a
+hand-assigned Fable tier. It does not work for a task walking the chain
+automatically, which reached Fable precisely by exhausting those Opus rungs -
+re-dispatching one of them would re-run an agent that already failed. When Fable
+is unavailable and the reserve was entered automatically, report BLOCKED
+instead and say why.
