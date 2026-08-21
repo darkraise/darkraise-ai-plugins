@@ -17,7 +17,7 @@ case "$skill" in
     context="Plans in this repository record an implementer assignment for each task: an \`**Implementer:**\` line naming a dcc-superpower-companions agent, an \`**Evaluation:**\` line showing the four-axis scores behind it, and an \`**Approach:**\` line when the task involved an approach decision. The dcc-superpower-companions:assigning-implementers skill holds the scoring rubric, the assignment table, and Rule S, which sends an over-scoring task back to be split rather than to a larger model."
     ;;
   superpowers:subagent-driven-development)
-    context="Tasks in this repository's plans carry an \`**Implementer:**\` line naming the subagent that runs them. The dcc-superpower-companions:dispatching-tiered-implementers skill holds the dispatch rules, the escalation ladder, the retired-agent map for plans written against version 0.1.0, and the criteria-scored review it adds to the task-review seat."
+    context="Tasks in this repository's plans carry an \`**Implementer:**\` line naming the subagent that runs them. The dcc-superpower-companions:dispatching-tiered-implementers skill holds the dispatch rules, the escalation ladder, the reserve tier for a task that resists splitting, and the criteria-scored review it adds to the task-review seat."
     ;;
   superpowers:brainstorming)
     context="Approach decisions in this repository are settled through the dcc-superpower-companions:selecting-approaches skill, which gates each decision to inline, one advisory pass, or a best-of-3 pairwise ranking. It holds five numbered conditions for skipping straight to inline, including bug fixes with a located root cause."

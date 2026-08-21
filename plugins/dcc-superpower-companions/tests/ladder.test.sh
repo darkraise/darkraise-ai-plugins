@@ -93,10 +93,11 @@ rank() { # rank <agent> - model_rank * 10 + effort_rank
     impl-haiku) echo 0; return ;;
     impl-sonnet-*) m=10 ;;
     impl-opus-*) m=20 ;;
+    impl-fable-*) m=30 ;;
     *) echo -1; return ;;
   esac
   case "${1##*-}" in
-    low) e=0 ;; medium) e=1 ;; high) e=2 ;; *) echo -1; return ;;
+    low) e=0 ;; medium) e=1 ;; high) e=2 ;; xhigh) e=3 ;; max) e=4 ;; *) echo -1; return ;;
   esac
   echo $((m + e))
 }
@@ -129,24 +130,86 @@ for start in $IMPLEMENTERS; do
 done
 check "escalation from every implementer reaches SPLIT without cycling" "$bad_walk" "NONE"
 
-# --- retired-agent map ------------------------------------------------------
+# --- retirement is over -----------------------------------------------------
+# All nine names resolve natively again, so the map is gone. Asserting its
+# absence stops a stale table rotting back in behind a passing suite.
 retired=$(block retired)
-check "retired map has 9 rows" "$(printf '%s\n' "$retired" | grep -c .)" "9"
+check "the retired-agent map is gone" "$(printf '%s' "$retired" | grep -c .)" "0"
 
-RETIRED_NAMES="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-opus-max impl-opus-xhigh impl-sonnet-max impl-sonnet-xhigh"
+# --- reserve table ----------------------------------------------------------
+reserve=$(block reserve)
+check "reserve table has 10 rows" "$(printf '%s\n' "$reserve" | grep -c .)" "10"
 
-retired_sources=$(printf '%s\n' "$retired" | awk 'NF {print $1}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-check "retired map covers exactly the nine deleted agents" "$retired_sources" "$RETIRED_NAMES"
+RESERVE_AGENTS="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-opus-max impl-opus-xhigh impl-sonnet-max impl-sonnet-xhigh"
+RESERVE_SOURCES="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-opus-high impl-opus-max impl-opus-xhigh impl-sonnet-max impl-sonnet-xhigh"
 
-bad_target=NONE
-still_present=NONE
+bad_rfrom=NONE
+bad_rto=NONE
+rterminals=""
 while read -r from to; do
   [ -n "$from" ] || continue
-  agent_exists "$from" && still_present="$from"
-  agent_exists "$to" || bad_target="$to"
-done <<< "$retired"
-check "every retired target has a definition file" "$bad_target" "NONE"
-check "no retired name still has a definition file" "$still_present" "NONE"
+  agent_exists "$from" || bad_rfrom="$from"
+  if [ "$to" = "BLOCKED" ]; then
+    rterminals="$rterminals $from"
+  else
+    agent_exists "$to" || bad_rto="$to"
+  fi
+done <<< "$reserve"
+
+check "every reserve source has a definition file" "$bad_rfrom" "NONE"
+check "every reserve target has a definition file" "$bad_rto" "NONE"
+check "exactly one reserve terminal, and it is impl-fable-max" \
+  "$(echo $rterminals)" "impl-fable-max"
+
+rsources=$(printf '%s\n' "$reserve" | awk 'NF {print $1}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+check "reserve sources are the nine reserve agents plus the entry rung" \
+  "$rsources" "$RESERVE_SOURCES"
+
+# The gate is structural: if an ordinary escalation row could reach a reserve
+# agent, a task would arrive there without a split standing in front of it.
+leak=NONE
+for a in $RESERVE_AGENTS; do
+  if printf '%s\n' "$escalation" | awk -v a="$a" 'NF && ($1 == a || $2 == a) { found = 1 } END { exit !found }'; then
+    leak="$a"
+  fi
+done
+check "no escalation row mentions a reserve agent" "$leak" "NONE"
+
+# impl-opus-high is a source in both tables, and the difference between them is
+# whether the split has been spent. No other agent may be in both.
+esources=$(printf '%s\n' "$escalation" | awk 'NF {print $1}' | LC_ALL=C sort)
+overlap=$(printf '%s\n' "$rsources" | tr ' ' '\n' | grep -Fx -f <(printf '%s\n' "$esources") | tr '\n' ' ' | sed 's/ $//')
+check "impl-opus-high is the only source in both tables" "$overlap" "impl-opus-high"
+
+bad_rrank=NONE
+while read -r from to; do
+  [ -n "$from" ] || continue
+  [ "$to" = "BLOCKED" ] && continue
+  rf=$(rank "$from"); rt=$(rank "$to")
+  if [ "$rf" -lt 0 ] || [ "$rt" -lt 0 ]; then bad_rrank="unrankable:$from->$to"; break; fi
+  if [ "$rt" -le "$rf" ]; then bad_rrank="not-increasing:$from($rf)->$to($rt)"; break; fi
+done <<< "$reserve"
+check "every reserve step strictly increases rank" "$bad_rrank" "NONE"
+
+reserve_successor() { printf '%s\n' "$reserve" | awk -v a="$1" 'NF && $1 == a {print $2; exit}'; }
+
+bad_rwalk=NONE
+for start in $RESERVE_AGENTS; do
+  cur="$start"; steps=0; visited=""
+  while [ "$cur" != "BLOCKED" ]; do
+    case " $visited " in *" $cur "*) bad_rwalk="cycle-at:$cur"; break ;; esac
+    visited="$visited $cur"
+    steps=$((steps + 1))
+    if [ "$steps" -gt 20 ]; then bad_rwalk="runaway-from:$start"; break; fi
+    cur=$(reserve_successor "$cur")
+    [ -n "$cur" ] || { bad_rwalk="dead-end-from:$start"; break; }
+  done
+  [ "$bad_rwalk" = NONE ] || break
+done
+check "reserve from every reserve agent reaches BLOCKED without cycling" "$bad_rwalk" "NONE"
+
+offreserve=$(printf '%s\n' "$reserve" | awk 'NF {print $1; print $2}' | grep -E '^(judge|scout)-' | tr '\n' ' ' | sed 's/ $//')
+check "no judge or scout appears in the reserve table" "${offreserve:-NONE}" "NONE"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

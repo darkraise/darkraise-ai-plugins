@@ -58,6 +58,19 @@ specific failure this version of the rubric exists to remove. If a task keeps
 failing Rule S no matter how you split it, that is a real finding about the
 work - say so in the plan rather than scoring around it.
 
+## Reserve agents are never an assignment output
+
+Nine implementers - the `xhigh` and `max` efforts, and every Fable tier - sit in
+`reference/ladder.md`'s reserve table and in no other table. Do not assign one.
+No score reaches them, and reaching for one anyway is the exact move Rule S
+exists to prevent.
+
+They are legal in a plan only as a human override: your partner edits an
+`**Implementer:**` line by hand, and the dispatching skill obeys it. When that
+happens, leave the `**Evaluation:**` line in place for the reason the Overriding
+section below already gives - the gap between the score and the choice is the
+interesting part.
+
 ## Write the assignment
 
 Add two or three lines to each task block, directly below its `**Interfaces:**`
@@ -124,13 +137,16 @@ Before saving the plan:
   an `**Approach:**` line whenever the task involved an approach decision. A
   task missing the first two gets scored at dispatch time instead, which works
   but loses the audit trail.
-- Every agent name is fully qualified and appears in
-  `reference/ladder.md`'s assignment table.
+- Every agent name is fully qualified and appears in `reference/ladder.md`'s
+  assignment table, or in its reserve table when your partner has overridden the
+  assignment by hand. A reserve name you wrote yourself is an error, not an
+  override.
 - Every `**Evaluation:**` line's four scores actually sum to the stated total,
-  and that total maps to the named agent — allowing for the spec-3 floor in
-  `reference/ladder.md`, which is the one case where the agent legitimately
-  outranks the total. A total that disagrees with the agent for any other
-  reason is the one error that makes the record actively misleading.
+  and that total maps to the named agent — allowing for the two cases where the
+  agent legitimately does not match the total: the spec-3 floor in
+  `reference/ladder.md`, and a hand-edited override, which every reserve
+  assignment is. A total that disagrees with the agent for any other reason is
+  the one error that makes the record actively misleading.
 - Every task clears Rule S. Compute `files + spec + coupling` for each and
   confirm none reaches 4, and that no task scores 3 on spec completeness. A
   total above 6 anywhere means the gate was skipped, since Rule S caps a

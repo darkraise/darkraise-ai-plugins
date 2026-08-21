@@ -22,27 +22,35 @@ that settles an open approach decision before the choice is made.
 
 ## What you get
 
-**Ten agents in two classes.** Seven implementers - Sonnet 5 and Opus 5 at
-`low`, `medium`, and `high`, plus one Haiku 4.5 agent. Three read-only role
-agents - `judge-fable`, its `judge-opus` fallback, and `scout-sonnet` - whose
-`tools:` frontmatter omits `Edit`, `Write`, and `Agent`, so a reviewer that
-cannot modify the tree or spawn subagents is a fact about the registry rather
-than a request in a prompt.
+**Nineteen agents in three classes.** Seven execution implementers - Sonnet 5
+and Opus 5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
+everything a score can reach. Nine reserve implementers - the `xhigh` and `max`
+efforts, and every Fable 5 tier - are reachable only by a human override, or by
+a task that has already been split once and still exhausted `impl-opus-high`.
+Three read-only role agents - `judge-fable`, its `judge-opus` fallback, and
+`scout-sonnet` - whose `tools:` frontmatter omits `Edit`, `Write`, and `Agent`,
+so a reviewer that cannot modify the tree or spawn subagents is a fact about the
+registry rather than a request in a prompt.
 
-`xhigh` and `max` are retired everywhere, and Fable never implements. Above
-`impl-opus-high` the answer to a hard task is to split it, not to escalate it.
+The reserve exists so that a human ruling, and a task that genuinely cannot be
+split any further, both have somewhere to go. It is not a way around the gate:
+above `impl-opus-high` the first answer to a hard task is still to split it, and
+the reserve is only entered when that split has already been spent.
 
 **A four-axis rubric that gates the plan.** Files, spec completeness, coupling,
 and risk, each scored 0 to 3. Three of those four measure how the task was
 drawn, not how hard the change is, so Rule S sends a task scoring 4 or more
 across them back to be split rather than to a larger model. That cap is what
-makes the assignment table stop at 6, which is exactly the seven implementers.
+makes the assignment table stop at 6, which is exactly the seven execution
+implementers.
 
-**An escalation ladder.** Every implementer has exactly one successor, changing
-model before effort except at the two Opus effort rows, where Opus is already
-the top model and there is nowhere else to go. Walks terminate at a SPLIT action
-rather than an agent. Used at superpowers' fix rounds 4 and 5, at its BLOCKED
-handler, and at round 3 when the re-review reports stalled progress.
+**An escalation ladder.** Every execution implementer has exactly one successor,
+changing model before effort except at the two Opus effort rows, where Opus is
+already the top model and there is nowhere else to go. Walks terminate at a
+SPLIT action rather than an agent, and only a task that survives that split
+enters the reserve chain, which terminates at BLOCKED. Used at superpowers' fix
+rounds 4 and 5, at its BLOCKED handler, and at round 3 when the re-review
+reports stalled progress.
 
 **Criteria-scored reviews.** `criteria/` holds narrow scored criteria adapted
 from LLM-as-a-Verifier (arXiv:2607.05391): a ground-truth note the judge sees on
@@ -159,8 +167,9 @@ Requires `jq`. No model calls.
 
 ## Reference
 
-`reference/ladder.md` holds the rubric, the assignment table, and the escalation
-table. All three skills and the test suite read that one copy.
+`reference/ladder.md` holds the rubric, the assignment table, the escalation
+table, and the reserve table. All three skills and the test suite read that one
+copy.
 
 `criteria/` holds the verifier criteria; `criteria/TEMPLATE.md` documents the
 format. `tests/criteria.test.sh` validates every file in that directory.
