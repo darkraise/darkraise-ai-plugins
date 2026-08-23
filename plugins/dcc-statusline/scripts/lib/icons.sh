@@ -9,7 +9,7 @@ set -uo pipefail
 DCC_ICON_MODE="unicode"
 DCC_ICON_W=0
 DCC_I_DIR=""; DCC_I_GIT=""; DCC_I_MODEL=""; DCC_I_FAST=""
-DCC_I_ACCOUNT=""; DCC_I_CTX=""; DCC_I_CLOCK=""; DCC_I_COST=""
+DCC_I_ACCOUNT=""; DCC_I_CTX=""; DCC_I_CLOCK=""; DCC_I_COST=""; DCC_I_CACHE=""
 
 _dcc_icons_load() {
   printf -v DCC_I_DIR     '\357\201\273'   # U+F07B folder
@@ -20,11 +20,12 @@ _dcc_icons_load() {
   printf -v DCC_I_CTX     '\357\207\200'   # U+F1C0 database
   printf -v DCC_I_CLOCK   '\357\200\227'   # U+F017 clock
   printf -v DCC_I_COST    '\357\205\225'   # U+F155 dollar
+  printf -v DCC_I_CACHE   '\357\200\241'   # U+F021 reuse arrows
 }
 
 _dcc_icons_clear() {
   DCC_I_DIR=""; DCC_I_GIT=""; DCC_I_MODEL=""; DCC_I_FAST=""
-  DCC_I_ACCOUNT=""; DCC_I_CTX=""; DCC_I_CLOCK=""; DCC_I_COST=""
+  DCC_I_ACCOUNT=""; DCC_I_CTX=""; DCC_I_CLOCK=""; DCC_I_COST=""; DCC_I_CACHE=""
 }
 
 dcc_icons_init() { # -> DCC_ICON_MODE, DCC_ICON_W, DCC_I_*

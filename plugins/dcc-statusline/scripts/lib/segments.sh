@@ -15,9 +15,9 @@ _dcc_icon() { # _dcc_icon <glyph> <color> -- emits the glyph and its trailing sp
   dcc_seg_add " " "$2" "" 1
 }
 
-_dcc_meter() { # _dcc_meter <icon> <label> <pct> <width> <reset-epoch> <tokens|""> [tier]
+_dcc_meter() { # _dcc_meter <icon> <label> <pct> <width> <reset-epoch> <tokens|""> [tier] [invert]
   local icon="$1" label="$2" pct="$3" width="$4" reset="$5" tokens="$6" tier="${7:-0}"
-  local suffix=""
+  local invert="${8:-0}" suffix=""
   [ -n "$pct" ] || return 0
   # The bar is the first thing to give: it is the least precise reading on the
   # line, and the percentage beside it says the same thing exactly.
@@ -36,7 +36,11 @@ _dcc_meter() { # _dcc_meter <icon> <label> <pct> <width> <reset-epoch> <tokens|"
   # below 100%" clamp empties it, so it would read as 0% at every reading under
   # 100. Below two cells the bar is dropped rather than shown misleadingly.
   [ "$width" -lt 2 ] 2>/dev/null && width=0
-  dcc_ramp "$pct"
+  # An inverted meter reads the other way round -- high is good, not near a
+  # limit -- so the ramp is fed the complement while the bar still fills from
+  # the reading itself. Feeding the complement rather than carrying a second
+  # ramp means whichever ramp the user or theme configures serves both senses.
+  if [ "$invert" -eq 1 ]; then dcc_ramp $(( 100 - pct )); else dcc_ramp "$pct"; fi
   dcc_bar "$pct" "$width"
   _dcc_icon "$icon" "$DCC_P_MUTE"
   dcc_seg_add "$label " "$DCC_P_MUTE"
@@ -239,9 +243,10 @@ dcc_segment() { # dcc_segment <name> [tier] -> DCC_SEG_OUT, DCC_SEG_CELLS
         dcc_seg_add "\$$money" "$DCC_P_COST" bold
       fi
       ;;
-    ctx) _dcc_meter "$DCC_I_CTX"   "${DCC_L_CTX:-ctx}" "$P_CTX_PCT" "$DCC_W_CTX" "" "$P_CTX_TOK" "$tier" ;;
-    5h)  _dcc_meter "$DCC_I_CLOCK" "${DCC_L_5H:-5h}"   "$P_5H_PCT"  "$DCC_W_5H"  "$P_5H_RESET" "" "$tier" ;;
-    7d)  _dcc_meter "$DCC_I_CLOCK" "${DCC_L_7D:-7d}"   "$P_7D_PCT"  "$DCC_W_7D"  "$P_7D_RESET" "" "$tier" ;;
+    ctx)   _dcc_meter "$DCC_I_CTX"   "${DCC_L_CTX:-ctx}"     "$P_CTX_PCT"   "$DCC_W_CTX"   "" "$P_CTX_TOK" "$tier" ;;
+    cache) _dcc_meter "$DCC_I_CACHE" "${DCC_L_CACHE:-cache}" "$P_CACHE_PCT" "$DCC_W_CACHE" "" ""            "$tier" 1 ;;
+    5h)    _dcc_meter "$DCC_I_CLOCK" "${DCC_L_5H:-5h}"       "$P_5H_PCT"    "$DCC_W_5H"    "$P_5H_RESET" "" "$tier" ;;
+    7d)    _dcc_meter "$DCC_I_CLOCK" "${DCC_L_7D:-7d}"       "$P_7D_PCT"    "$DCC_W_7D"    "$P_7D_RESET" "" "$tier" ;;
   esac
   return 0
 }

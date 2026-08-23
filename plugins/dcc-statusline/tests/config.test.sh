@@ -56,9 +56,11 @@ DCC_ACCT_KEY="~/.claude"
 dcc_parse_all "$(cat "$F/full.json")" /dev/null /dev/null
 check "defaults: config is not flagged bad"     "$DCC_CONFIG_BAD" "0"
 check "defaults: line one segment order"        "$DCC_LINE1" "dir git model effort fast agent style account"
-check "defaults: line two segment order"        "$DCC_LINE2" "ctx cost 5h 7d"
+check "defaults: line two segment order"        "$DCC_LINE2" "ctx cache cost 5h 7d"
 check "defaults: context meter width"           "$DCC_W_CTX" "10"
+check "defaults: cache meter width"             "$DCC_W_CACHE" "10"
 check "defaults: usage meter width"             "$DCC_W_5H"  "8"
+check "defaults: cache meter label"             "$DCC_L_CACHE" "cache"
 check "defaults: ramp is sorted ascending"      "$DCC_RAMP"  "0:green: 50:yellow: 75:orange: 90:red:bold"
 check "defaults: no account entry means no tint" "$DCC_ACCOUNT_COLOR" ""
 check "defaults: frame mode"                    "$DCC_FRAME_MODE"    "auto"
@@ -86,6 +88,7 @@ check "thinking is a 1/0 flag"      "$P_THINK"     "1"
 check "default output style is dropped" "$P_STYLE" ""
 check "context percentage is floored" "$P_CTX_PCT" "47"
 check "context tokens"              "$P_CTX_TOK"   "94210"
+check "cache hit rate is floored"    "$P_CACHE_PCT" "93"
 check "5h percentage is floored"    "$P_5H_PCT"    "23"
 check "5h reset epoch"              "$P_5H_RESET"  "1785900000"
 check "7d percentage is floored"    "$P_7D_PCT"    "41"
@@ -95,6 +98,7 @@ dcc_parse_all "$(cat "$F/fresh.json")" /dev/null /dev/null
 check "absent rate_limits yields empty 5h" "$P_5H_PCT"  ""
 check "absent rate_limits yields empty 7d" "$P_7D_PCT"  ""
 check "null used_percentage yields empty"  "$P_CTX_PCT" ""
+check "null current_usage yields empty cache" "$P_CACHE_PCT" ""
 check "absent effort yields empty"         "$P_EFFORT"  ""
 check "absent email yields empty"          "$P_EMAIL"   ""
 
@@ -113,7 +117,7 @@ check "valid config is not flagged bad"    "$DCC_CONFIG_BAD" "0"
 # --- malformed config ---------------------------------------------------------
 dcc_parse_all "$(cat "$F/full.json")" "$F/config-bad.json" /dev/null
 check "malformed config is flagged"        "$DCC_CONFIG_BAD" "1"
-check "malformed config falls back to defaults" "$DCC_LINE2" "ctx cost 5h 7d"
+check "malformed config falls back to defaults" "$DCC_LINE2" "ctx cache cost 5h 7d"
 check "malformed config still parses payload"   "$P_MODEL"   "Opus"
 
 # --- malformed account file alone -----------------------------------------------
@@ -128,7 +132,7 @@ check "malformed account file still resolves account tint" "$DCC_ACCOUNT_COLOR" 
 # --- both config and account file malformed -------------------------------------
 dcc_parse_all "$(cat "$F/full.json")" "$F/config-bad.json" "$F/claude-bad.json"
 check "double-malformed still parses payload"         "$P_MODEL"   "Opus"
-check "double-malformed falls back to default line two" "$DCC_LINE2" "ctx cost 5h 7d"
+check "double-malformed falls back to default line two" "$DCC_LINE2" "ctx cache cost 5h 7d"
 check "double-malformed yields empty email"           "$P_EMAIL"   ""
 check "double-malformed is flagged as config bad"     "$DCC_CONFIG_BAD" "1"
 
@@ -172,14 +176,32 @@ check "drift: thinking still renders"                    "$P_THINK"   "1"
 check "drift: fast mode still renders"                   "$P_FAST"    "1"
 check "drift: a string workspace falls back to cwd"      "$P_CWD"     "/tmp/here"
 check "drift: a string context_window yields empty pct"  "$P_CTX_PCT" ""
+check "drift: a string context_window yields empty cache" "$P_CACHE_PCT" ""
 check "drift: an array rate_limits yields empty"         "$P_5H_PCT"  ""
 check "drift: a string output_style yields empty"        "$P_STYLE"   ""
 check "drift: a numeric cost yields empty"               "$P_COST"    ""
-check "drift: the config still loads"                    "$DCC_LINE2" "ctx cost 5h 7d"
+check "drift: the config still loads"                    "$DCC_LINE2" "ctx cache cost 5h 7d"
 
 dcc_parse_all '{"model":{"display_name":"Opus"},"context_window":{"used_percentage":"47"}}' /dev/null /dev/null
 check "drift: a string percentage yields empty"          "$P_CTX_PCT" ""
 check "drift: the model survives a string percentage"    "$P_MODEL"   "Opus"
+
+# current_usage is the one payload block this plugin indexes two levels deep. A
+# string there would abort jq on the first field access and cost both lines, not
+# just the cache meter -- the guard has to reject the wrong type before indexing.
+dcc_parse_all '{"context_window":{"current_usage":"none"}}' /dev/null /dev/null
+check "drift: a string current_usage yields empty cache"  "$P_CACHE_PCT" ""
+
+dcc_parse_all '{"context_window":{"current_usage":{"input_tokens":"2","cache_read_input_tokens":98,"cache_creation_input_tokens":0}}}' /dev/null /dev/null
+check "drift: a string token count is read as zero"       "$P_CACHE_PCT" "100"
+
+# Before the first API response every count is zero, so the hit rate has no
+# denominator. That is a missing reading, not a zero-percent one.
+dcc_parse_all '{"context_window":{"current_usage":{"input_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}' /dev/null /dev/null
+check "a zero denominator yields empty, not zero"         "$P_CACHE_PCT" ""
+
+dcc_parse_all '{"context_window":{"current_usage":{"input_tokens":61706,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}' /dev/null /dev/null
+check "a full cache miss reads zero, not empty"           "$P_CACHE_PCT" "0"
 
 # --- user overrides for frame, icon and palette config -------------------------
 cfg="$(mktemp)"

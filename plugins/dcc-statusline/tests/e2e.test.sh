@@ -39,8 +39,8 @@ check "line one carries model and state chips" \
   "$(printf '%s' "$line1" | grep -c 'Opus  ·  xhigh  ·  fast')" "1"
 check "line one no longer carries a think chip" \
   "$(printf '%s' "$line1" | grep -c 'think')" "0"
-check "line two carries all three meters" \
-  "$(printf '%s' "$line2" | grep -c 'ctx .* 47% · 94k  ·  \$1.20  ·  5h .* 23% · 3h40m  ·  7d .* 41% · 5d22h')" "1"
+check "line two carries every meter in order" \
+  "$(printf '%s' "$line2" | grep -c 'ctx .* 47% · 94k  ·  cache .* 93%  ·  \$1.20  ·  5h .* 23% · 3h40m  ·  7d .* 41% · 5d22h')" "1"
 
 # A fresh session has no rate_limits and a null percentage, so line two has
 # nothing but cost -- and must not print as a bare separator.
@@ -104,7 +104,7 @@ check "the captured line is actually line one" "$is_line1" "yes"
 # how many meters are on the line -- and reads 0 the moment a user's config moves
 # one of them to the other line.
 check "every meter on line two takes the ramp color" \
-  "$(printf '%s' "$raw2" | grep -o $'\033\\[38;5;10m' | wc -l | tr -d ' ')" "3"
+  "$(printf '%s' "$raw2" | grep -o $'\033\\[38;5;10m' | wc -l | tr -d ' ')" "4"
 
 # Without a frame, the account chip itself must carry the tint -- the one
 # at-a-glance account signal available when the terminal is too narrow to draw

@@ -18,7 +18,7 @@
         "type": "array",
         "items": {
           "enum": ["dir", "git", "model", "effort", "fast", "agent", "style",
-                   "account", "ctx", "cost", "5h", "7d", "time"]
+                   "account", "ctx", "cache", "cost", "5h", "7d", "time"]
         }
       }
     },
@@ -87,7 +87,8 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "ctx": { "type": "integer", "minimum": 0, "maximum": 64 },
+            "ctx":   { "type": "integer", "minimum": 0, "maximum": 64 },
+            "cache": { "type": "integer", "minimum": 0, "maximum": 64 },
             "5h":  { "type": "integer", "minimum": 0, "maximum": 64 },
             "7d":  { "type": "integer", "minimum": 0, "maximum": 64 }
           }
@@ -139,6 +140,8 @@
         "model": { "type": "object", "additionalProperties": false,
                    "properties": { "short": { "type": "boolean" } } },
         "ctx":   { "type": "object", "additionalProperties": false,
+                   "properties": { "label": { "type": "string" } } },
+        "cache": { "type": "object", "additionalProperties": false,
                    "properties": { "label": { "type": "string" } } },
         "5h":    { "type": "object", "additionalProperties": false,
                    "properties": { "label": { "type": "string" } } },

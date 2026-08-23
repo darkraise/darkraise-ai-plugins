@@ -13,17 +13,18 @@ source "$HERE/../scripts/lib/segments.sh"
 
 DCC_RAMP="0:green: 50:yellow: 75:orange: 90:red:bold"
 DCC_GLYPH_FILLED="#"; DCC_GLYPH_EMPTY="."; DCC_GLYPH_DIRTY="*"
-DCC_W_CTX=10; DCC_W_5H=8; DCC_W_7D=8
+DCC_W_CTX=10; DCC_W_CACHE=10; DCC_W_5H=8; DCC_W_7D=8
 DCC_SHOW_ETA=1; DCC_SHOW_TOKENS=1
 DCC_NOW=1785886800   # fixed clock so countdowns are deterministic
 
 DCC_ICON_MODE="unicode"; DCC_ICON_W=0
 DCC_I_DIR=""; DCC_I_GIT=""; DCC_I_MODEL=""; DCC_I_FAST=""
-DCC_I_ACCOUNT=""; DCC_I_CTX=""; DCC_I_CLOCK=""; DCC_I_COST=""
+DCC_I_ACCOUNT=""; DCC_I_CTX=""; DCC_I_CLOCK=""; DCC_I_COST=""; DCC_I_CACHE=""
 DCC_P_DIR="blue"; DCC_P_GIT="magenta"; DCC_P_MODEL="cyan"
 DCC_P_EFFORT="gray"; DCC_P_FAST="white"; DCC_P_COST="141"; DCC_P_MUTE="gray"
 DCC_P_EFF_LOW="gray"; DCC_P_EFF_MEDIUM="blue"; DCC_P_EFF_HIGH="cyan"
 DCC_P_EFF_XHIGH="141"; DCC_P_EFF_MAX="magenta"
+DCC_L_CACHE="cache"
 
 seg() { # seg <name> -> the visible text of that segment
   dcc_seg_reset
@@ -167,6 +168,32 @@ for bad in "1785900000.0" "2026-07-28T10:00:00Z" "soon" "-5"; do
 done
 P_5H_PCT=""; P_5H_RESET=""
 
+# --- cache ---------------------------------------------------------------------
+# The cache meter reads the opposite way round from the usage meters: a high
+# percentage is a cheap turn. The bar fills from the hit rate while the ramp is
+# fed the miss rate, so one configured ramp serves both senses.
+P_CACHE_PCT=93
+check "cache meter: bar and percentage, no suffix" "$(seg cache)" "cache #########. 93%"
+
+dcc_seg_reset; dcc_segment cache
+ramped="no"; printf '%s' "$DCC_SEG_OUT" | grep -q $'\033\\[38;5;10m' && ramped="yes"
+check "a high hit rate paints the cache bar green" "$ramped" "yes"
+
+P_CACHE_PCT=0
+check "a full cache miss shows an empty bar" "$(seg cache)" "cache .......... 0%"
+
+dcc_seg_reset; dcc_segment cache
+ramped="no"; printf '%s' "$DCC_SEG_OUT" | grep -q $'\033\\[1;38;5;9m' && ramped="yes"
+check "a full cache miss turns red and bold" "$ramped" "yes"
+
+# The suffix slot the other meters use for tokens and countdowns stays empty
+# here whatever those switches say: the percentage is the whole reading.
+P_CACHE_PCT=93; P_CTX_TOK=94210
+check "the cache meter never grows a suffix" "$(seg cache)" "cache #########. 93%"
+
+P_CACHE_PCT=""
+check "an absent cache reading hides the meter" "$(seg cache)" ""
+
 # --- unknown ------------------------------------------------------------------
 check "an unknown segment name is ignored" "$(seg nosuchsegment)" ""
 
@@ -177,11 +204,11 @@ check "an unknown segment name is ignored" "$(seg nosuchsegment)" ""
 # between that failure and an "unbound variable" abort of the whole status
 # line. Each name runs in its own subshell so a real regression fails that
 # one assertion instead of taking this whole file down with it.
-for name in dir git model effort fast time agent style account ctx cost 5h 7d; do
+for name in dir git model effort fast time agent style account ctx cache cost 5h 7d; do
   result=$(
     {
       unset P_EMAIL P_CWD P_MODEL P_EFFORT P_FAST P_THINK P_AGENT P_STYLE \
-            P_CTX_PCT P_CTX_TOK P_COST P_5H_PCT P_5H_RESET P_7D_PCT P_7D_RESET
+            P_CTX_PCT P_CTX_TOK P_CACHE_PCT P_COST P_5H_PCT P_5H_RESET P_7D_PCT P_7D_RESET
       source "$HERE/../scripts/lib/config.sh"
       dcc_seg_reset
       dcc_segment "$name"
