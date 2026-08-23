@@ -17,6 +17,13 @@ branch, cyan for the model, violet for cost — while the meters keep the usage
 ramp: green below 50%, yellow to 74%, orange to 89%, then red and bold at 90%
 and above.
 
+The `cache` meter is the one reading where a high number is good news, so it
+takes the same ramp from the other end: its bar fills with the share of the last
+request served from the prompt cache, and its colour comes from the share that
+was not. A 93% hit rate is green because only 7% missed; a turn that missed the
+cache entirely reads 0% in red. Nothing about the ramp is configured twice —
+retune `meters.ramp` and both senses follow.
+
 Within every section, three weights separate what leads from what supports. The
 repository name, branch name, model, percentage, and cost figure are bold;
 icons, effort, meter labels, the path inside the repository and the git counters
@@ -160,7 +167,7 @@ defaults.
 | `separator` | String placed between segments, or a two-element array giving each line its own; a shorter array reuses its last element for the missing line, and an empty array falls back to the default |
 | `theme` | `default`, `minimal`, `mono`, or `vivid` |
 | `responsive.maxTier` | Cap on shrinking, `0`–`3`; default `3`; any other value falls back to `3` |
-| `meters.width` | Bar width per meter, keyed `ctx`, `5h`, `7d`; values under `2` drop the bar entirely |
+| `meters.width` | Bar width per meter, keyed `ctx`, `cache`, `5h`, `7d`; values under `2` drop the bar entirely |
 | `meters.showEta` | Show the reset countdown |
 | `meters.showTokens` | Show the token count on the context meter |
 | `meters.ramp` | Color stops, each `{ "at": <pct>, "color": <name>, "bold": <bool> }` |
@@ -176,10 +183,17 @@ defaults.
 | `segments.git.counters` | Show the ahead/behind/staged counts; default true |
 | `segments.git.maxBranch` | Truncate the branch name; `0` means no limit |
 | `segments.model.short` | Always show the first word of the model name |
-| `segments.ctx.label` | Label text for a meter, likewise `5h` and `7d` |
+| `segments.ctx.label` | Label text for a meter, likewise `cache`, `5h` and `7d` |
 
 Segment names: `dir`, `git`, `model`, `effort`, `fast`, `agent`, `style`,
-`account`, `ctx`, `cost`, `5h`, `7d`, `time`. Unknown names are ignored.
+`account`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Unknown names are ignored.
+
+`cache` reads the prompt-cache hit rate of the most recent request: the tokens
+served from cache as a share of every input token that request was billed for,
+counted the same way the context meter counts its own. Claude Code reports those
+counts only once a request has come back, so the meter is absent at the very
+start of a session and again for the moment after `/compact`, and it reappears
+on the next reply.
 
 Colors: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`,
 `orange`, `gray`, or a 256-color number.
