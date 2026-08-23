@@ -76,8 +76,8 @@ Guided setup. Do not run a script for this one.
 1. Read `~/.claude/dcc-statusline.json`, or note that it does not exist yet.
 2. Ask which theme they want: `default`, `minimal`, `mono`, or `vivid`.
 3. Ask which segments belong on each of the two lines. Valid names are `dir`,
-   `git`, `model`, `effort`, `fast`, `agent`, `style`, `account`, `ctx`, `cost`,
-   `5h`, `7d`, `time`.
+   `git`, `model`, `effort`, `fast`, `agent`, `style`, `account`, `ctx`,
+   `cache`, `cost`, `5h`, `7d`, `time`.
 4. If they run more than one Claude account, ask for a frame colour per account
    and write it under `accounts`, keyed by config directory in `~/...` form.
 5. Edit the file, keeping the `$schema` key at the top if present.

@@ -94,7 +94,16 @@ payload="$(cat <<JSON
   "model": { "display_name": "Opus 4.8" },
   "effort": { "level": "xhigh" },
   "cost": { "total_cost_usd": 1.2 },
-  "context_window": { "used_percentage": 47, "total_input_tokens": 94210 },
+  "context_window": {
+    "used_percentage": 47,
+    "total_input_tokens": 94210,
+    "current_usage": {
+      "input_tokens": 2,
+      "output_tokens": 487,
+      "cache_creation_input_tokens": 4237,
+      "cache_read_input_tokens": 57467
+    }
+  },
   "rate_limits": {
     "five_hour":  { "used_percentage": 23, "resets_at": $(( now + 13200 )) },
     "seven_day":  { "used_percentage": 41, "resets_at": $(( now + 500000 )) }

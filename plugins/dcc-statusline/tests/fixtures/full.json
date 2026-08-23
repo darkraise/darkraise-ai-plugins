@@ -6,7 +6,17 @@
   "version": "2.1.211",
   "output_style": { "name": "default" },
   "cost": { "total_cost_usd": 1.2034 },
-  "context_window": { "total_input_tokens": 94210, "context_window_size": 200000, "used_percentage": 47 },
+  "context_window": {
+    "total_input_tokens": 94210,
+    "context_window_size": 200000,
+    "used_percentage": 47,
+    "current_usage": {
+      "input_tokens": 2,
+      "output_tokens": 487,
+      "cache_creation_input_tokens": 4237,
+      "cache_read_input_tokens": 57467
+    }
+  },
   "fast_mode": true,
   "effort": { "level": "xhigh" },
   "thinking": { "enabled": true },

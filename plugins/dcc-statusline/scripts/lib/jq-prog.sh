@@ -11,7 +11,7 @@ set -uo pipefail
 DCC_DEFAULT_CONFIG='{
   "lines": [
     ["dir","git","model","effort","fast","agent","style","account"],
-    ["ctx","cost","5h","7d"]
+    ["ctx","cache","cost","5h","7d"]
   ],
   "separator": "  \u00b7  ",
   "frame": "auto",
@@ -27,7 +27,7 @@ DCC_DEFAULT_CONFIG='{
     }
   },
   "meters": {
-    "width": {"ctx":10,"5h":8,"7d":8},
+    "width": {"ctx":10,"cache":10,"5h":8,"7d":8},
     "showEta": true,
     "showTokens": true,
     "ramp": [
@@ -43,6 +43,7 @@ DCC_DEFAULT_CONFIG='{
     "git": { "counters": true, "maxBranch": 0 },
     "model": { "short": false },
     "ctx": { "label": "ctx" },
+    "cache": { "label": "cache" },
     "5h": { "label": "5h" },
     "7d": { "label": "7d" }
   },
@@ -60,7 +61,7 @@ DCC_THEMES='{
     "icons": { "mode": "unicode" },
     "lines": [["dir","git","model"],["ctx","cost"]],
     "meters": {
-      "width": { "ctx": 0, "5h": 0, "7d": 0 },
+      "width": { "ctx": 0, "cache": 0, "5h": 0, "7d": 0 },
       "showEta": false,
       "showTokens": false
     }
@@ -118,6 +119,7 @@ DCC_JQ_PROG='
 | (if ($u.theme|type) == "string" then ($themes[$u.theme] // {}) else {} end) as $t
 | ($d * $t * $u) as $c
 | def num($v; $dflt): if ($v|type) == "number" then ($v|floor) else $dflt end;
+  def n0($v): if ($v|type) == "number" then $v else 0 end;
   def flt($v): if ($v|type) == "number" then $v else "" end;
   def str($v): if ($v|type) == "string" then $v else "" end;
   @sh "DCC_LINE1=\($c.lines[0] // [] | join(" "))",
@@ -136,6 +138,7 @@ DCC_JQ_PROG='
   @sh "DCC_SEG_GIT_MAXBRANCH=\(num($c.segments.git.maxBranch; 0))",
   @sh "DCC_SEG_MODEL_SHORT=\(if $c.segments.model.short == true then 1 else 0 end)",
   @sh "DCC_L_CTX=\(if ($c.segments.ctx.label|type) == "string" and ($c.segments.ctx.label|length) > 0 then $c.segments.ctx.label else "ctx" end)",
+  @sh "DCC_L_CACHE=\(if ($c.segments.cache.label|type) == "string" and ($c.segments.cache.label|length) > 0 then $c.segments.cache.label else "cache" end)",
   @sh "DCC_L_5H=\(if ($c.segments["5h"].label|type) == "string" and ($c.segments["5h"].label|length) > 0 then $c.segments["5h"].label else "5h" end)",
   @sh "DCC_L_7D=\(if ($c.segments["7d"].label|type) == "string" and ($c.segments["7d"].label|length) > 0 then $c.segments["7d"].label else "7d" end)",
   @sh "DCC_ICON_MODE_CFG=\($c.icons.mode // "auto")",
@@ -153,6 +156,7 @@ DCC_JQ_PROG='
   @sh "DCC_P_COST=\($c.palette.cost // "141")",
   @sh "DCC_P_MUTE=\($c.palette.mute // "gray")",
   @sh "DCC_W_CTX=\($c.meters.width.ctx // 10)",
+  @sh "DCC_W_CACHE=\($c.meters.width.cache // 10)",
   @sh "DCC_W_5H=\($c.meters.width["5h"] // 8)",
   @sh "DCC_W_7D=\($c.meters.width["7d"] // 8)",
   @sh "DCC_SHOW_ETA=\(if $c.meters.showEta == false then 0 else 1 end)",
@@ -175,6 +179,19 @@ DCC_JQ_PROG='
   @sh "P_STYLE=\(str(($p.output_style.name)? // null) | if . == "default" then "" else . end)",
   @sh "P_CTX_PCT=\(num(($p.context_window.used_percentage)? // null; ""))",
   @sh "P_CTX_TOK=\(num(($p.context_window.total_input_tokens)? // null; 0))",
+  # current_usage is bound to $u before any field is read: it is the one block
+  # indexed two levels deep, and `.foo` against a string aborts jq outright
+  # rather than yielding null, which would cost both lines instead of one meter.
+  #
+  # The denominator is the input-only sum the payload documents for
+  # used_percentage, so the two meters beside each other count the same tokens.
+  # A zero denominator means no API call has landed yet, which is a missing
+  # reading rather than a nought-percent one -- hence "" and not 0.
+  @sh "P_CACHE_PCT=\((($p.context_window.current_usage)? // null) as $cu
+                     | (if ($cu|type) == "object" then $cu else {} end) as $u
+                     | n0($u.cache_read_input_tokens) as $r
+                     | ($r + n0($u.input_tokens) + n0($u.cache_creation_input_tokens)) as $tot
+                     | if $tot > 0 then (($r * 100 / $tot) | floor) else "" end)",
   @sh "P_COST=\(flt(($p.cost.total_cost_usd)? // null))",
   @sh "P_5H_PCT=\(num(($p.rate_limits.five_hour.used_percentage)? // null; ""))",
   @sh "P_5H_RESET=\(num(($p.rate_limits.five_hour.resets_at)? // null; ""))",

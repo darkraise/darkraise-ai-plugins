@@ -74,7 +74,7 @@ _dcc_v_load_schema
 check "top-level keys are read from the schema" \
   "$(printf '%s' "$DCC_VALID_TOPKEYS" | wc -w | tr -d ' ')" "13"
 check "segment names are read from the schema" \
-  "$(printf '%s' "$DCC_VALID_SEGMENTS" | wc -w | tr -d ' ')" "13"
+  "$(printf '%s' "$DCC_VALID_SEGMENTS" | wc -w | tr -d ' ')" "14"
 check "theme names are read from the schema" \
   "$(printf '%s' "$DCC_VALID_THEMES" | wc -w | tr -d ' ')" "4"
 check "the schema list includes the time segment" \
