@@ -116,8 +116,8 @@ import { Button } from "darkraise-ui"                     // wrong
 <div><Label /><Input /><p className="text-red-500" /></div>         // wrong
 
 // Validation: isInvalid + errors, never hand-rolled markup.
-<TextField isInvalid errors={["Invalid email."]} />        // correct
-<Input className="border-red-500" />                       // wrong
+<TextField isInvalid errors={[{ message: "Invalid email." }]} />   // correct
+<Input className="border-red-500" />                              // wrong
 
 // Conditional classes: cn(), not a template-literal ternary.
 <Card className={cn("p-4", isActive && "ring-2")} />       // correct
