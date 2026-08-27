@@ -51,7 +51,7 @@ plugins/dcc-darkraise-ui/
     rules/composition.md
     rules/forms.md
     rules/layout-data.md
-    evals/evals.json
+  evals/<case-name>/case.yaml
 
 plugins/dcc-darkraise-win32ui/
   .claude-plugin/plugin.json
@@ -63,16 +63,25 @@ plugins/dcc-darkraise-win32ui/
     rules/layout.md
     rules/mvvm-draml.md
     rules/limitations.md
-    evals/evals.json
+  evals/<case-name>/case.yaml
 ```
 
 Each plugin gets an entry in `.claude-plugin/marketplace.json`. Plugin names carry
 the repository's mandatory `dcc-` prefix; skill names do not, following the
 precedent of `dcc-superpower-companions`, whose skills are named for what they do.
 
-Both skills are user-invocable, so `/darkraise-ui` and `/darkraise-win32ui` force
-them, and both carry a description that auto-triggers on the framework being
-present. This differs deliberately from shadcn, which sets `user-invocable: false`.
+Both skills are user-invocable, so they can be forced rather than waiting on
+description matching, and both carry a description that auto-triggers on the
+framework being present. This differs deliberately from shadcn, which sets
+`user-invocable: false`. The guaranteed invocation form is the qualified one —
+`/dcc-darkraise-ui:darkraise-ui` and `/dcc-darkraise-win32ui:darkraise-win32ui`;
+the bare `/darkraise-ui` works only while no other installed plugin claims that
+skill name. Each README states the qualified form.
+
+Note that `!`-backtick command injection in a skill body is a real, documented
+Claude Code feature and works on Windows through Git Bash, but a permission
+policy can disable it. Each README says so, because a disabled probe degrades
+the skill to its prose without any visible error.
 
 ## Live project context
 
@@ -105,53 +114,104 @@ match.
 
 The standing instruction is: **before using, creating, fixing, or debugging any
 component, read `node_modules/darkraise-ui/dist/components/<kebab-name>.d.ts`.**
-Subpath entry points (`theme`, `forms`, `layout`, `data-table`, `router`, `errors`,
-`labels`, `lib`) each have their own `dist/<name>/index.d.ts`, read the same way.
+Subpath entry points (`theme`, `hooks`, `forms`, `layout`, `data-table`, `router`,
+`errors`, `labels`, `lib`) each have their own `dist/<name>/index.d.ts`, read the
+same way.
 
-If `node_modules` is absent — a fresh clone before install — the probes emit
-nothing, and the skill instructs Claude to say so and offer to install rather than
-guess.
+Some component typings re-export their principal symbols from a shared chunk file
+rather than declaring them inline — `calendar.d.ts` declares its hook types
+locally but pulls `Calendar` and `CalendarProps` from `../Calendar-CWyF6DAE.js`,
+and `dist/lib/index.d.ts` gets `cn` the same way. The instruction therefore
+carries a follow-through step: if the symbol you need is re-exported, read the
+chunk `.d.ts` the import names. Those chunk filenames carry a content hash that
+changes on every build, so the skill must never cite one in its prose.
+
+If `node_modules` is absent — a fresh clone before install — `cat` writes "No such
+file or directory", which the skill treats as a clear "not installed" signal:
+say so and offer to install, never guess. In a workspace that hoists differently,
+`pnpm why darkraise-ui` resolves the real location. Note that the tempting
+`node -p "require('darkraise-ui/package.json').version"` does not work here — the
+package's `exports` map does not expose `./package.json` — so `cat` is the correct
+probe.
 
 ### Darkraise.Win32UI
 
-The NuGet package sets `GenerateDocumentationFile`, so `Darkraise.Win32UI.xml`
-ships alongside the assembly at:
+The NuGet package sets `GenerateDocumentationFile`, so an XML doc file ships
+alongside each assembly in the package cache. **Two** files matter, not one:
 
 ```
 ~/.nuget/packages/darkraise.win32ui/<version>/lib/net10.0-windows/Darkraise.Win32UI.xml
+~/.nuget/packages/darkraise/<version>/lib/<tfm>/Darkraise.xml
 ```
 
-The XML doc file is verbose, so the skill does not instruct reading it whole. It
-instructs a targeted grep for the member prefix of the type in question — for
+The second is load-bearing and easy to miss: the MVVM surface the skill teaches —
+`DarkraiseScreen`, `Set(ref …)`, `[RootViewModel]`, the conductors — lives in the
+**Darkraise core assembly**, at `src/Darkraise/Mvvm/`, not in Darkraise.Win32UI.
+A skill that names only the Win32UI XML file sends every MVVM lookup to a file
+that does not contain the answer.
+
+The XML doc files are verbose, so the skill does not instruct reading one whole.
+It instructs a targeted grep for the member prefix of the type in question — for
 example `<member name="M:Darkraise.Win32UI.Builder.ButtonBuilder.` to enumerate a
-builder's fluent methods.
+builder's own fluent methods. That prefix alone is insufficient, and the rule file
+must say so: builders derive from `ViewBuilder<TControl,TBuilder>`, so the
+inherited half of the fluent surface — `Padding`, `Margin`, `Width`, `Height`,
+`Visible`, `Enabled`, `Name`, and the generic `Bind` — sits under the mangled
+generic-arity prefix ``M:Darkraise.Win32UI.Builder.ViewBuilder`2.``. Grepping only
+the concrete builder reports `ButtonBuilder` as having eight methods, which is
+wrong in a way that looks right.
 
 When the framework is project-referenced rather than package-referenced (the
 `darkraise-framework` repository itself, and any solution that includes it), the
-skill prefers the source tree at `src/Darkraise.Win32UI/`, which is richer than the
-XML docs.
+skill prefers the source tree at `src/Darkraise.Win32UI/` and `src/Darkraise/`,
+which is richer than the XML docs.
 
-SKILL.md injects a probe that resolves which of the two situations holds:
+SKILL.md injects two probes. The first resolves which situation holds and, unlike
+a naive attribute-value grep, captures the whole reference element so the
+`Version` attribute survives — the XML doc path depends on knowing the version:
 
 ```
-!`grep -rhoE 'Darkraise\.Win32UI[^"<]*' --include=*.csproj . | sort -u`
+!`grep -rh --include=*.csproj --include=Directory.Packages.props -oE '<(Package|Project)Reference[^>]*Darkraise[^>]*' . | sort -u`
+```
+
+The second enumerates what is actually in the cache, which also covers central
+package management, where the csproj carries no version at all:
+
+```
+!`ls ~/.nuget/packages/darkraise.win32ui/ ~/.nuget/packages/darkraise/ 2>/dev/null`
 ```
 
 ## Version drift
 
-Both frameworks move quickly. `darkraise-ui` went from 6.0.0 to 6.5.0 in roughly a
-month, renaming the theme axis `accentVibrancy` to `accentIntensity` and making
-`surfaceIntensity` and `controlDepth` required keys — a breaking change to every
-consumer's `theme.config.ts`.
+Both frameworks move quickly, but they drift in opposite directions, and the skills
+must handle both cases.
+
+**darkraise-ui drifts ahead of the skill.** It went from 6.0.0 to 6.5.0 in twelve
+days (2026-08-14 to 2026-08-26), renaming the theme axis `accentVibrancy` to
+`accentIntensity` and making `surfaceIntensity` and `controlDepth` required keys —
+a breaking change to every consumer's `theme.config.ts`. A consumer's installed
+package is therefore likely *newer* than the skill's prose.
+
+**Darkraise.Win32UI drifts behind it.** The published package lags the source
+repository substantially — at the time of writing, the last tag is two weeks and
+several hundred commits behind `main`, and packages publish to an
+authentication-required feed. The skill's prose is written from
+`docs/win32ui/`, which tracks the source. So a consumer's installed package is
+likely *older* than the skill's prose, and the failure mode is the reverse of the
+web one: the skill describes controls and methods the consumer's package does not
+have yet.
 
 Each SKILL.md therefore states, near the top, the exact version its prose was
-written against. The injected probe prints the installed version. The standing
-instruction is: **when the installed version differs from the pinned version, the
-package's own type definitions or XML docs win over anything written in this
-skill.**
+written against — for Win32UI, the framework docs revision rather than a package
+version, since that is what the prose actually tracks. The injected probes print
+what is installed. The standing instruction is: **when installed and pinned
+disagree, the package's own type definitions or XML docs win over anything written
+in this skill** — and for Win32UI specifically, an API described here but absent
+from the installed package's XML docs means the consumer needs an upgrade, not a
+workaround.
 
-This costs nothing to maintain and degrades safely — a stale rule is flagged as
-possibly stale rather than read as authoritative.
+This costs nothing to maintain and degrades safely in both directions — a stale
+rule is flagged as possibly stale rather than read as authoritative.
 
 ## darkraise-ui skill content
 
@@ -197,8 +257,14 @@ The override contract, which is the single most consequential styling rule and i
 documented only in the package's `CONTRIBUTING.md`, which consumers never see:
 component CSS lives in `@layer components`, consumer utilities land in
 `@layer utilities`, and the layer order in `theme.css` (`theme, base, components,
-utilities, overrides`) means consumer utilities always win. Therefore `!important`
-and Tailwind's `!` modifier are never needed and are forbidden.
+utilities, overrides`) means consumer utilities always win *over component-class
+declarations*. Therefore `!important` and Tailwind's `!` modifier are never needed
+and are forbidden.
+
+The qualifier is not pedantry and must be stated: the package's own
+`@layer overrides` — where preset bindings live — outranks consumer utilities. A
+consumer utility fighting a preset will lose, and without the qualifier that reads
+as the skill being wrong about the whole contract.
 
 State variants are independent. Passing `bg-red-500` overrides the resting state
 only; the hover state needs its own `hover:bg-red-600`. This surprises everyone
@@ -276,13 +342,20 @@ Scaffolding coverage: `DarkraiseApplication`, `ConfigureServices`, `Configure`, 
 ### rules/tokens.md
 
 Colors, font families, radii, padding, gaps, and font sizes resolve from `Tokens.*`
-values or a named design-system token. Never a literal. The framework enforces this
-on its own `Controls/**` and `Builder/**` through the DRUI020 analyzer; custom
-controls in a consumer project follow the same rule for the same reason — a literal
-does not re-theme.
+values or a named design-system token. Never a literal, because a literal does not
+re-theme.
 
-The raise ladder: the nine surface roles from `SurfaceSunken` through
-`SurfaceOverlay` and the three component-internal steps, with what each is for.
+The rule file must be explicit about where enforcement exists. The DRUI020 analyzer
+is scoped to the assembly named `Darkraise.Win32UI` and, within it, to `Controls/**`
+and `Builder/**`; it returns early for any other compilation. **A consumer project
+gets no analyzer backstop at all** — Claude is the only enforcement there. Stating
+this prevents the opposite error of assuming a clean build means the rule was
+followed.
+
+The raise ladder: the six surface roles — `SurfaceSunken`, `SurfaceBase`,
+`SurfaceSidebar`, `SurfaceHeader`, `SurfaceRaised`, `SurfaceOverlay` — plus the
+three component-internal state steps `Surface1`, `Surface2`, `Surface3`, with what
+each is for.
 The overlay-hover rule, which is load-bearing and easy to get wrong: a hover fill
 must be at least one *visible* step above its host surface, so on a `SurfaceOverlay`
 host — menus, dropdown lists — that means `Surface3`, because `Surface2` is nearly
@@ -312,18 +385,35 @@ or looping motion outside explicit progress indicators.
 
 ### rules/builder.md
 
-Composition through the static `View` factory — 107 entry points covering controls,
+Composition through the static `View` factory — 106 entry points covering controls,
 containers, and layout. The fluent chain: `.Bind(vm, x => x.Property)` for one-way
 and two-way binding, `.OnClick(vm.Method)` for commands, and the styling verbs
 (`.FontSize()`, `.Bold()`, `.Muted()`, `.Padding()`).
 
 How to discover a builder's methods rather than guess them: grep the XML doc file
-for that builder's member prefix, or read `src/Darkraise.Win32UI/Builder/<Name>Builder.cs`
+for that builder's member prefix *and* the `ViewBuilder`2.` base prefix, or read
+`src/Darkraise.Win32UI/Builder/<Name>Builder.cs` together with `Builder/ViewBuilder.cs`
 when the source is available.
 
-The three `View` factories that return builders rather than controls, which is a
-sanctioned inconsistency documented in the framework's known limitations and will
-otherwise look like a bug.
+Authoring a custom control, condensed from `docs/win32ui/extending-controls.md`:
+the extension contract a control must satisfy — measure and arrange, paint through
+the drawing context, resolve every visual from tokens, and participate in the
+interaction-state contract. This is required because one of the eval cases asks for
+a custom control, and without it the skill would be graded on knowledge it never
+supplies.
+
+Every `View` factory returns a builder, uniformly. The framework's known-limitations
+§15 records that `View.ImageView()`, `View.Drawer()`, and `View.Sheet()` were the
+last three returning bare controls and were changed in the 2026-07-27 parity sweep —
+so this is a *historical source break*, not a live inconsistency. The rule file
+states the current uniform behaviour and notes only that older sample code
+constructing those three no longer compiles, and that reaching a control member or
+assigning to a concretely-typed target needs `.Build()`. Describing three factories
+as still differing would teach a falsehood.
+
+`Border` has no `View.Border()` factory despite `Border` being one of the two
+painting primitives; the layout rule file must say how it is actually reached
+rather than leaving a reader to call a factory that does not exist.
 
 ### rules/layout.md
 
@@ -349,12 +439,23 @@ Convention-based MVVM: `FooViewModel` resolves to `FooView`. Screens derive from
 configured assemblies. The view model lifecycle hooks, dependency injection, and
 dialog access.
 
+These types live in the **Darkraise core assembly** (`src/Darkraise/Mvvm/`), not in
+Darkraise.Win32UI. The rule file says so and routes API lookups to `Darkraise.xml`
+rather than `Darkraise.Win32UI.xml`.
+
+Multi-screen navigation, which is the first thing a real app needs and which a
+single-screen rule file would leave uncovered: `AppShellViewModel` and
+`OneActiveConductor<DarkraiseScreen>` for page hosting and activation.
+
 Markup views: `.drui` and `.draml` files handed to the compiler as
 `AdditionalFiles`, compiled by `Darkraise.Win32UI.Generators` into control trees at
 build time, so a renamed or mistyped binding is a compile error rather than a
-silent runtime no-op. `DruiSchema.xsd` ships in the package for editor validation.
-`.draml` can alternatively be loaded at runtime with `DramlView.LoadFile`, in which
-case the files are `Content`, not `AdditionalFiles`.
+silent runtime no-op. `DruiSchema.xsd` ships in the generator package under `content/`, which a
+`PackageReference` does not copy into the consuming project — editor validation
+means pointing the editor at the package-cache path, and the rule file says so
+rather than implying the file appears locally. `.draml` can alternatively be loaded
+at runtime with `DramlView.LoadFile`, in which case the files are `Content`, not
+`AdditionalFiles`.
 
 The DRUI001 through DRUI014 diagnostic table, so a build error is diagnosable from
 the skill alone without a web search.
@@ -380,28 +481,57 @@ a code pair does.
 
 ## Testing
 
-Manifest validation, per the repository convention:
+### Manifest validation
+
+Per the repository convention, and the hard gate in CI, which already runs it on
+every push to `main` and every pull request:
 
 ```
 claude plugin validate .
 ```
 
-CI already runs this on every push to `main` and every pull request.
+### Behavioural evaluation
 
-Behavioural verification through an eval suite per skill, in shadcn's style, at
-`skills/<name>/evals/evals.json`. Each eval is a prompt plus assertions about the
-code Claude produces. Coverage targets the rules most likely to be violated:
+Verified against `claude plugin eval --help` rather than copied from shadcn.
+shadcn's `evals/evals.json` belongs to a different harness and this command would
+never read it. The real contract is a directory of **cases** below the eval dir:
+
+```
+plugins/dcc-darkraise-ui/evals/
+  <case-name>/case.yaml          # or prompt.md + graders/*.md
+```
+
+The eval dir defaults to `evals/`, overridable by `--eval-dir` or by the manifest's
+`experimental.evals` value. Cases are authored through `claude plugin eval init`,
+which runs an interview that sources inputs and designs graders — the correct
+implementation path, rather than hand-writing a schema from a guess. `--bare <name>`
+produces a blank single-case template.
+
+The mechanism that makes these evals worth writing is `--ablation with-without`:
+it runs a no-plugin baseline arm alongside the plugin arm and reports the **score
+delta**. That is a direct measurement of whether the skill changed behaviour,
+which is precisely the question a rule change raises and which no amount of reading
+the rule file can answer. Graders marked with-only — including `tool_used: Skill` —
+serve as a plugin-fired indicator rather than contributing to the score.
+
+Coverage targets the rules most likely to be violated:
 
 - **darkraise-ui** — a settings page must use subpath imports, semantic tokens, and
   `forms` field primitives rather than raw divs; a themed component must not carry a
   raw Tailwind color; a form must not hand-roll error markup; no `@radix-ui` import
-  may appear.
+  may appear. The last of these is a one-line negative pattern grader; the others
+  need an LLM grader.
 - **Win32UI** — a custom control must resolve colors from `Tokens.*`; a dropdown's
   hover state must use `Surface3` on an overlay host; a navigation surface must use
   the standard current-item marker; a layout must use the layout primitives rather
   than manual coordinates.
 
-Evals run through `claude plugin eval`.
+Two operational constraints belong in the spec because they shape what CI can
+assume. Eval runs invoke real models and therefore cost money — `--max-cost-usd`
+bounds a run and `--runs` controls repetition — and the command may be gated
+depending on account enablement. **CI keeps `claude plugin validate .` as the hard
+gate; eval runs stay a local, deliberate step.** `--threshold` is available for
+gating a run once that is desirable.
 
 ## Risks
 
@@ -416,3 +546,8 @@ the package artifacts win on disagreement.
 **Two skills drift apart in shape.** Mitigated by writing them against the same
 outline in the same pass, and by the mirrored directory structure making a
 divergence visible.
+
+**Stale counts leak in from the package metadata.** `packages/ui/package.json`
+advertises "65 themed components, 38 hooks, 6-axis theming" — all three are wrong
+against the current source. No skill text quotes that description; counts come from
+the live probe or from the source, or are omitted.
