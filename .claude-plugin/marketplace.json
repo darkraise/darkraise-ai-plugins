@@ -13,21 +13,56 @@
       "source": "./plugins/dcc-telegram-notify",
       "description": "Push a Telegram message when a Claude Code session finishes a turn, ends on a question, or needs your attention. Cross-platform, multi-account aware, optional LLM summaries.",
       "category": "productivity",
-      "keywords": ["telegram", "notifications", "hooks", "push", "mobile"]
+      "keywords": [
+        "telegram",
+        "notifications",
+        "hooks",
+        "push",
+        "mobile"
+      ]
     },
     {
       "name": "dcc-superpower-companions",
       "source": "./plugins/dcc-superpower-companions",
       "description": "Extends superpowers with 19 tiered subagents: seven execution implementers, nine reserve implementers, two read-only judges, and a scout. Scores every plan task on a four-axis rubric that sends over-scoring tasks back to be split, dispatches with a defined escalation ladder, and scores task reviews against named criteria.",
       "category": "workflow",
-      "keywords": ["superpowers", "subagents", "planning", "effort", "model-selection", "verification", "code-review"]
+      "keywords": [
+        "superpowers",
+        "subagents",
+        "planning",
+        "effort",
+        "model-selection",
+        "verification",
+        "code-review"
+      ]
     },
     {
       "name": "dcc-statusline",
       "source": "./plugins/dcc-statusline",
       "description": "A Claude Code status line: git detail, model and session state, plus context, prompt-cache and rate-limit meters colored by usage level, framed in the color of the Claude account the session belongs to.",
       "category": "productivity",
-      "keywords": ["statusline", "status-line", "multi-account", "rate-limits", "context-window", "prompt-cache"]
+      "keywords": [
+        "statusline",
+        "status-line",
+        "multi-account",
+        "rate-limits",
+        "context-window",
+        "prompt-cache"
+      ]
+    },
+    {
+      "name": "dcc-darkraise-ui",
+      "source": "./plugins/dcc-darkraise-ui",
+      "description": "Teaches Claude to write idiomatic darkraise-ui code: the 17-axis theme system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",
+      "category": "development",
+      "keywords": [
+        "darkraise-ui",
+        "react",
+        "tailwind",
+        "design-system",
+        "theming",
+        "component-library"
+      ]
     }
   ]
 }
