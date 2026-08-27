@@ -150,14 +150,14 @@ every component's CSS.
 
 ## Never write a chunk filename
 
-Build output contains hash-named chunks such as `Calendar-CWyF6DAE.js`. **The hash
+Build output contains hash-named chunks such as `Calendar-<hash>.js`. **The hash
 changes on every build.** Reading one to find a type is fine; writing one into
 source, an import, or documentation guarantees a break at the next release.
 
 **Incorrect**
 
 ```tsx
-import type { CalendarProps } from "darkraise-ui/dist/Calendar-CWyF6DAE"
+import type { CalendarProps } from "darkraise-ui/dist/Calendar-A1b2C3d4"
 ```
 
 **Correct**

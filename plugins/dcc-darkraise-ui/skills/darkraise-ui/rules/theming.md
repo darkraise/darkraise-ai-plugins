@@ -147,7 +147,7 @@ common axes it owns, through `hiddenCommonAxes`.
 
 ## Do not quote the package description
 
-`package.json`'s `description` field advertises "6-axis theming". It is stale —
-there are seventeen axes. The same field's component and hook counts are also
+`package.json`'s `description` field advertises a six-axis theme system. It is
+stale — there are seventeen axes. The same field's component and hook counts are also
 wrong. **The axes are whatever `ThemeConfig` declares**, and nothing else is
 authoritative.
