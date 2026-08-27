@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "dcc-darkraise-win32ui",
+  "description": "Teaches Claude to write idiomatic Darkraise.Win32UI code: token-resolved visuals, the raise ladder and overlay-hover rule, the fluent View builder, convention-based MVVM and draml markup, plus the framework limits it must never promise past.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Darkraise"
+  },
+  "homepage": "https://github.com/darkraise/claude-code-plugins/tree/main/plugins/dcc-darkraise-win32ui",
+  "repository": "https://github.com/darkraise/claude-code-plugins",
+  "license": "MIT",
+  "keywords": [
+    "darkraise-win32ui",
+    "win32",
+    "direct2d",
+    "desktop",
+    "csharp",
+    "mvvm",
+    "design-system"
+  ]
+}
