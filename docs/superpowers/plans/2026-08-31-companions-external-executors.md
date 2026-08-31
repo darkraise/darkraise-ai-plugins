@@ -342,7 +342,8 @@ check() { # check <name> <got> <want>
 # A synthetic PATH holding only the stubs we choose, so the result does not
 # depend on what happens to be installed on the machine running the suite.
 mkdir -p "$TMP/bin" "$TMP/codexhome"
-make_stub() { printf '#!/usr/bin/env bash\necho "%s"\n' "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
+BASH_BIN=$(command -v bash)
+make_stub() { printf '#!%s\necho "%s"\n' "$BASH_BIN" "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
 
 # PATH isolation has to be structural, not a coincidence of one machine's layout.
 # A wide PATH hides the real executors only as long as none of them shares a
@@ -350,9 +351,10 @@ make_stub() { printf '#!/usr/bin/env bash\necho "%s"\n' "$2" > "$TMP/bin/$1"; ch
 # jq and codex land in /usr/bin, which would resolve the real binary and flip
 # every not-present assertion. Shim just the four commands the script needs, so
 # PATH can be exactly one directory this test controls.
-BASH_BIN=$(command -v bash)
+# Shebangs here must name bash by absolute path: `#!/usr/bin/env bash` resolves
+# bash through PATH, and PATH no longer contains it.
 for dep in jq timeout head tr; do
-  printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$(command -v "$dep")" > "$TMP/bin/$dep"
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v "$dep")" > "$TMP/bin/$dep"
   chmod +x "$TMP/bin/$dep"
 done
 run() { PATH="$TMP/bin" CODEX_HOME="$TMP/codexhome" "$BASH_BIN" "$SCRIPT"; }
