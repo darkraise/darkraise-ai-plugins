@@ -1575,8 +1575,11 @@ In `tests/hook.test.sh`, immediately before the `printf '\n%d passed` footer, ad
 # The planning nudge must mention the executor lane, or a planner will score
 # tasks correctly and never learn that an external lane exists.
 plan_ctx=$(run superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext')
+# No -F here: GNU grep 3.0 under MSYS aborts with SIGABRT (rc 134) whenever -i
+# and -F are combined, in either order. The term holds no regex metacharacters,
+# so -i alone is behaviourally identical.
 check "writing-plans context mentions the external lane" \
-  "$(grep -qiF 'Executor' <<<"$plan_ctx" && echo yes || echo no)" "yes"
+  "$(grep -qi 'Executor' <<<"$plan_ctx" && echo yes || echo no)" "yes"
 check "writing-plans context names the detection script" \
   "$(grep -qF 'detect-executors' <<<"$plan_ctx" && echo yes || echo no)" "yes"
 ```
