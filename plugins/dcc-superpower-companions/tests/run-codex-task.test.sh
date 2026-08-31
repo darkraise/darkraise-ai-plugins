@@ -36,6 +36,13 @@ check "schema status enum matches the contract" \
 check "schema required covers every property" \
   "$(jq -r '((.properties|keys)-(.required))|join(",")' \
       < "$HERE/../scripts/codex-report-schema.json")" ""
+# The subtraction check above passes vacuously if `required` is missing
+# outright: jq errors on "array and null cannot be subtracted", the command
+# substitution captures nothing from stderr, and "" matches the expected "".
+# This check closes that hole by asserting a required array exists at all.
+check "schema declares a required array" \
+  "$(jq -r 'if (.required|type) == "array" and (.required|length) > 0 then "ok" else "missing" end' \
+      < "$HERE/../scripts/codex-report-schema.json")" "ok"
 
 # --- validation happens before anything is spawned --------------------------
 check "rejects a model absent from codex-assignment" "$(rc_of --model gpt-4o --effort medium)" "2"
@@ -57,9 +64,14 @@ check "dry run never bypasses the sandbox" \
 
 # --- timeouts come from the table unless overridden -------------------------
 check "timeout defaults from codex-timeout" \
-  "$(grep -qE 'timeout +900' <<<"$cmd" && echo yes || echo no)" "yes"
+  "$(grep -qE '^timeout=900$' <<<"$cmd" && echo yes || echo no)" "yes"
+# Captured into a variable first, not `dry ... | grep -q`: `grep -q` exits as
+# soon as it matches the first ("timeout=...") line and closes its end of the
+# pipe, and the wrapper's still-pending second `printf` (the "codex ..." line)
+# can then hit SIGPIPE, making `dry` exit 141 under `pipefail` even though the
+# match itself succeeded - reproduced directly at roughly a 50% rate.
 check "explicit timeout wins" \
-  "$(dry --model gpt-5.5 --effort medium --timeout 42 | grep -qE 'timeout +42' && echo yes || echo no)" "yes"
+  "$(out=$(dry --model gpt-5.5 --effort medium --timeout 42); grep -qE '^timeout=42$' <<<"$out" && echo yes || echo no)" "yes"
 
 # --- resume must re-send every per-invocation flag ---------------------------
 # A bare `codex exec resume <id>` falls back to the user's config defaults, so a
@@ -101,7 +113,7 @@ check "rejected input prints nothing on stdout" \
 # what it printed and confirm a space-containing path survives as ONE argument.
 mkdir -p "$TMP/dir with space"
 printed=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
-  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null)
+  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null | grep '^codex ')
 eval "set -- $printed"
 roundtrip=no
 while [ $# -gt 0 ]; do
@@ -282,6 +294,11 @@ check "a timed-out run creates no commit" \
 # for it: taskkill //F //T on a winpid was shown live to leave this exact
 # process running, so this closes the gap that check alone would leave open.
 sleep_winpid=$(cat "$TMP/sleep.winpid" 2>/dev/null || true)
+# Without this, an empty capture (a future host where /proc/N/winpid does not
+# resolve) makes the death check pass vacuously via its `|| echo gone` branch,
+# proving nothing while looking green.
+check "a timed-out run's grandchild winpid was captured" \
+  "$([ -n "$sleep_winpid" ] && echo yes || echo no)" "yes"
 check "a timed-out run's grandchild process is actually dead" \
   "$([ -n "$sleep_winpid" ] && tasklist //FI "PID eq $sleep_winpid" 2>/dev/null | grep -q "$sleep_winpid" && echo alive || echo gone)" \
   "gone"
