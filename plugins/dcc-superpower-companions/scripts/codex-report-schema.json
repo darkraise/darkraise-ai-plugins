@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "required": ["status", "summary", "commit_subject"],
+  "required": ["status", "summary", "commit_subject", "questions"],
   "additionalProperties": false,
   "properties": {
     "status": {

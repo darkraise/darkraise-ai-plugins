@@ -54,6 +54,11 @@ done
 [ -d "$cwd" ]    || die "cwd not found: $cwd"
 [ -f "$SCHEMA" ] || die "schema not found: $SCHEMA"
 
+# Resolved once: reset pathspecs are repo-relative while these files are written
+# caller-relative, and `git reset` on a non-matching path exits 0, so the miss
+# would be silent.
+case "$report" in /*|[A-Za-z]:*) ;; *) report="$(pwd)/$report" ;; esac
+
 block codex-assignment | awk '{print $2}' | sort -u | grep -qxF -- "$model" \
   || die "model is not a rung in codex-assignment: $model"
 # Word-exact, mirroring the model check above. A containment test on the padded
@@ -120,10 +125,25 @@ prefix=$(git -C "$cwd" rev-parse --show-prefix) || die "not a git repository: $c
 base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
 codex_pid=""
-codex_winpid=""
+# `taskkill //F //T` cannot reach the grandchild here: on this MSYS/Windows
+# setup a spawned child's native Windows ParentProcessId does not point back
+# to the pid MSYS itself considers the parent, so a tree-walk keyed on winpid
+# misses it. Verified live: a backgrounded child survived `taskkill //F //T`
+# on its direct parent's winpid while `tasklist` confirmed it still running
+# seconds later, and a PowerShell CIM query showed the grandchild's real
+# ParentProcessId pointed at an unrelated helper process, not that winpid.
+# Signalling the whole MSYS process group does reach it instead, since MSYS's
+# `kill` resolves a group member to its real Windows process independent of
+# native process lineage - see the `set -m` below for how that group exists.
+kill_codex_tree() {
+  kill -0 "$codex_pid" 2>/dev/null || return 0
+  kill -TERM -"$codex_pid" 2>/dev/null || true
+  sleep 1
+  kill -0 "$codex_pid" 2>/dev/null && kill -KILL -"$codex_pid" 2>/dev/null
+  return 0
+}
 cleanup() {
-  [ -n "$codex_winpid" ] && taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1
-  [ -n "$codex_pid" ] && kill -TERM "$codex_pid" 2>/dev/null
+  [ -n "$codex_pid" ] && kill_codex_tree
   return 0
 }
 trap cleanup EXIT INT TERM HUP
@@ -131,21 +151,38 @@ trap cleanup EXIT INT TERM HUP
 # Codex can exit 0 without writing its final message. Left in place, a previous
 # run's verdict would be read as this one's - guaranteed on every resume round,
 # which reuses the same report path - and the wrapper would commit under a stale
-# subject it never earned.
+# subject it never earned. rm -f succeeds on a missing file but can fail on a
+# locked one, so the clear is verified rather than assumed.
 rm -f "$last" "$jsonl"
+[ ! -f "$last" ] || die "could not clear stale verdict file: $last"
 
-timeout --kill-after=10s "$timeout_s" codex "${argv[@]}" \
-  < "$prompt" > "$jsonl" 2> "$report.stderr" &
+# A non-interactive script has job control off, so a plain `cmd &` inherits
+# this script's own process group instead of getting a fresh one - confirmed
+# live: `kill -TERM -"$codex_pid"` then fails with "No such process" because
+# no group with that id exists. `set -m` around just this launch is what makes
+# the backgrounded job (and anything it execs) its own group, which is what
+# `kill_codex_tree` signals; `setsid` would do the same but isn't on this box.
+set -m
+codex "${argv[@]}" < "$prompt" > "$jsonl" 2> "$report.stderr" &
 codex_pid=$!
-# Captured before wait: afterwards the mapping is gone, and the timeout path is
-# exactly where a Windows grandchild can outlive the child timeout signalled.
-codex_winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
+set +m
+
+# Polled rather than wrapped in `timeout`: the kill has to happen while the
+# child is still live. `timeout` reaps its child before wait returns, leaving
+# nothing left to signal by the time a kill would fire.
+timed_out=no
+waited=0
+while [ "$waited" -lt "$timeout_s" ] && kill -0 "$codex_pid" 2>/dev/null; do
+  sleep 1
+  waited=$((waited + 1))
+done
+if kill -0 "$codex_pid" 2>/dev/null; then
+  timed_out=yes
+  kill_codex_tree
+fi
 wait "$codex_pid"; rc=$?
+[ "$timed_out" = yes ] && rc=124
 codex_pid=""
-case "$rc" in
-  124|137) [ -n "$codex_winpid" ] && taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1 ;;
-esac
-codex_winpid=""
 
 # Event field naming has varied across Codex releases, so match on any of the
 # shapes rather than pinning one that a later version may rename.
@@ -169,7 +206,7 @@ if [ "$status" = DONE ] && [ -n "$subject" ]; then
   git -C "$cwd" add -A -- . || die "git add failed in $cwd"
   # Keep the wrapper's own scratch out of the task's commit. A no-op when the
   # report lives in a git-ignored directory, load-bearing when it does not.
-  for artefact in "$prompt" "$jsonl" "$last" "$report.stderr"; do
+  for artefact in "$prompt" "$jsonl" "$last" "$report.stderr" "$report"; do
     git -C "$cwd" reset -q -- "$artefact" 2>/dev/null || true
   done
   if git -C "$cwd" diff --cached --quiet; then

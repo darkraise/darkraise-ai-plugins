@@ -30,6 +30,12 @@ check "schema is valid JSON" \
 check "schema status enum matches the contract" \
   "$(jq -r '.properties.status.enum | sort | join(",")' < "$HERE/../scripts/codex-report-schema.json")" \
   "BLOCKED,DONE,NEEDS_CONTEXT"
+# OpenAI strict structured output requires `required` to name every key in
+# `properties`. A mismatch is rejected at request validation, so every real run
+# would 400 while a stubbed suite stayed green.
+check "schema required covers every property" \
+  "$(jq -r '((.properties|keys)-(.required))|join(",")' \
+      < "$HERE/../scripts/codex-report-schema.json")" ""
 
 # --- validation happens before anything is spawned --------------------------
 check "rejects a model absent from codex-assignment" "$(rc_of --model gpt-4o --effort medium)" "2"
@@ -126,6 +132,14 @@ while [ $# -gt 0 ]; do
     *) shift ;;
   esac
 done
+if [ -n "${STUB_SLEEP:-}" ]; then
+  sleep "$STUB_SLEEP" &
+  sleeppid=$!
+  # Exposes the real grandchild's own Windows pid so a test can prove it was
+  # actually killed, not just that the wrapper returned before it finished.
+  [ -n "${STUB_SLEEP_WINPID_FILE:-}" ] && cat "/proc/$sleeppid/winpid" 2>/dev/null > "$STUB_SLEEP_WINPID_FILE"
+  wait "$sleeppid"
+fi
 printf '{"type":"thread.started","thread_id":"%s"}\n' "${STUB_THREAD:-th-001}"
 printf '{"type":"item.completed"}\n'
 # Content varies with the thread id so a later run actually diffs against an
@@ -220,12 +234,57 @@ check "DONE with an empty diff still writes a report" \
   "$([ -f "$TMP/report.md" ] && echo yes || echo no)" "yes"
 check "DONE with an empty diff still prints a status line" \
   "$(grep -qF 'status=DONE' <<<"$line" && echo yes || echo no)" "yes"
+check "DONE with an empty diff records why nothing was committed" \
+  "$(grep -qF 'nothing was committed' "$TMP/report.md" && echo yes || echo no)" "yes"
 git -C "$TMP/repo" reset -q --hard HEAD
 git -C "$TMP/repo" clean -qfd
 
 check "the prompt inlines repo conventions when present" \
   "$(printf 'be terse\n' > "$TMP/repo/CLAUDE.md"; STUB_STATUS=DONE run_exec >/dev/null; \
      grep -qF 'be terse' "$TMP/report.md.prompt.md" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# $report itself is only written after the commit, so a single round never
+# exercises this. A resume round does: round 1's report is still sitting in
+# $cwd, untracked, when round 2's `git add -A` runs, so only a second round
+# with the same --report path under $cwd can prove it stays out of the commit.
+inline_report="$TMP/repo/inline-report.md"
+PATH="$TMP/stub:$PATH" STUB_STATUS=DONE STUB_THREAD=th-040 bash "$SCRIPT" \
+  --brief "$TMP/brief.md" --report "$inline_report" \
+  --cwd "$TMP/repo" --model gpt-5.5 --effort medium >/dev/null 2>"$TMP/err"
+PATH="$TMP/stub:$PATH" STUB_STATUS=DONE STUB_THREAD=th-041 bash "$SCRIPT" \
+  --brief "$TMP/brief.md" --report "$inline_report" \
+  --cwd "$TMP/repo" --model gpt-5.5 --effort medium >/dev/null 2>"$TMP/err"
+check "a resumed --report path inside cwd is not swept into the commit" \
+  "$(git -C "$TMP/repo" log -1 --name-only --pretty=format: | grep -qxF 'inline-report.md' && echo swept || echo excluded)" \
+  "excluded"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# A model that never responds must not hang the wrapper forever, and killing it
+# must happen before the process exits, since `timeout` reaping its own child
+# is what made the previous kill attempt inert (see run-codex-task.sh).
+rm -f "$TMP/report.md" "$TMP/sleep.winpid"
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+start=$(date +%s)
+line=$(STUB_SLEEP=30 STUB_THREAD=th-030 STUB_SLEEP_WINPID_FILE="$TMP/sleep.winpid" \
+  PATH="$TMP/stub:$PATH" bash "$SCRIPT" \
+  --brief "$TMP/brief.md" --report "$TMP/report.md" --cwd "$TMP/repo" \
+  --model gpt-5.5 --effort medium --timeout 3 2>/dev/null) || true
+elapsed=$(( $(date +%s) - start ))
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+check "a timed-out run returns long before the child would finish" \
+  "$([ "$elapsed" -lt 20 ] && echo yes || echo no)" "yes"
+check "a timed-out run reports BLOCKED" \
+  "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
+check "a timed-out run creates no commit" \
+  "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "0"
+# Proves the real grandchild died, not just that the wrapper stopped waiting
+# for it: taskkill //F //T on a winpid was shown live to leave this exact
+# process running, so this closes the gap that check alone would leave open.
+sleep_winpid=$(cat "$TMP/sleep.winpid" 2>/dev/null || true)
+check "a timed-out run's grandchild process is actually dead" \
+  "$([ -n "$sleep_winpid" ] && tasklist //FI "PID eq $sleep_winpid" 2>/dev/null | grep -q "$sleep_winpid" && echo alive || echo gone)" \
+  "gone"
 git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
