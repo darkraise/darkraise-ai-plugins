@@ -630,7 +630,8 @@ check "rejected input prints nothing on stdout" \
 # what it printed and confirm a space-containing path survives as ONE argument.
 mkdir -p "$TMP/dir with space"
 printed=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
-  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null)
+  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null \
+  | grep '^codex ')
 eval "set -- $printed"
 roundtrip=no
 while [ $# -gt 0 ]; do
