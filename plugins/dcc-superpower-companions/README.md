@@ -115,7 +115,8 @@ tables in `reference/ladder.md`.
 
 **Cross-family review.** On a risk-3 task one of the three judges is Codex, and
 the final whole-branch review gains a `codex exec review` round whose findings
-are deduped with superpowers' own and then verified by `judge-fable`. Risk-3
+are deduped with superpowers' own and then verified by `judge-fable` - or
+`judge-opus` when Fable is unavailable, the same fallback every judge seat uses. Risk-3
 tasks are excluded from the executor lane, so the risk-3 judge seat never
 reviews Codex's own work. The final whole-branch round is different: the branch
 contains whatever the executor lane produced, so that round is not
@@ -132,9 +133,14 @@ manifests cannot declare a dependency on another plugin, so nothing enforces
 this — with superpowers absent, the fleet loads without its preloaded skill and
 the dispatch instructions point at scripts that are not there.
 
-**`bash` and `jq`** for the hook. If `jq` is missing the hook degrades to a
-silent no-op; `bash` is required for it to run at all. On Windows that means
-Git for Windows. The hook declares `"shell": "bash"` so it takes the Git Bash
+**`bash` and `jq`.** Both are hard requirements of the external executor lane:
+`scripts/detect-executors.sh` builds every field with `jq`, and
+`scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a
+message naming the dependency rather than degrading, because a missing `jq`
+would otherwise read as "no executor usable" or as a task Codex blocked on. The
+hook is the lenient case: without `jq` it degrades to a silent no-op, and
+`bash` is required for it to run at all. On Windows that means Git for
+Windows. The hook declares `"shell": "bash"` so it takes the Git Bash
 route explicitly: without that key Claude Code falls back to PowerShell on a
 machine with no Git Bash, where the command is meaningless, and with it the
 user gets Claude Code's actionable "requires bash but Git Bash was not found"
@@ -190,33 +196,37 @@ previous task's brief.
 
 ## Compatibility
 
-The plugin extends three seams. The implementer dispatch names a fleet agent
+The plugin extends four seams. The implementer dispatch names a fleet agent
 instead of `general-purpose` and passes no `model` argument. The task-review
 seat is a judge agent rather than a general-purpose one, dispatched with a
-criteria file appended to superpowers' own reviewer prompt. And the scoped
+criteria file appended to superpowers' own reviewer prompt. The scoped
 re-review is asked for one extra reading, a progress score, which can pull the
-escalation point from round 4 to round 3.
+escalation point from round 4 to round 3. And the final whole-branch review
+gains a Codex round plus a verification pass over the union of both reviewers'
+findings.
 
 Everything else in the superpowers loop is untouched: the brief and report
 protocol, the review package, the five-round cap, the breaker and its
 adjudication rules, and the handoff to
 superpowers:finishing-a-development-branch.
 
-Two further instructions are superseded. The final whole-branch review is no
-longer untouched: it keeps superpowers' own review and model selection and adds
-a Codex round plus a verification pass over the union. And rounds 4 and 5 call
-for a more capable model, where an external task instead hands back to the Claude
-assignment-table row for its score - a change of model family plus a fresh
-context, argued as satisfying that rule's intent rather than as an exception to
-it.
+Three superpowers instructions are superseded, and no others.
 
-It supersedes one superpowers instruction, "always specify the model
-explicitly", and only for fleet agents whose frontmatter pins a model. Passing
-`model` would override the agent file while `effort` kept its frontmatter value,
-so the agent would run at a tier the ledger does not record. The intent
-survives, since the agent definition pins the model. The scores the plugin adds
-to reviews are additive to superpowers' own verdicts and never replace them,
-because its fix loop keys on those verdicts.
+1. **"Always specify the model explicitly"**, and only for fleet agents whose
+   frontmatter pins a model. Passing `model` would override the agent file while
+   `effort` kept its frontmatter value, so the agent would run at a tier the
+   ledger does not record. The intent survives, since the agent definition pins
+   the model.
+2. **The final whole-branch review is no longer untouched.** It keeps
+   superpowers' own review and model selection and adds a Codex round plus a
+   verification pass over the union.
+3. **Fix rounds 4 and 5 call for a more capable model**, where an external task
+   instead hands back to the Claude assignment-table row for its score - a change
+   of model family plus a fresh context, argued as satisfying that rule's intent
+   rather than as an exception to it.
+
+The scores the plugin adds to reviews are additive to superpowers' own verdicts
+and never replace them, because its fix loop keys on those verdicts.
 
 ## Tests
 
@@ -235,3 +245,16 @@ copy.
 
 `criteria/` holds the verifier criteria; `criteria/TEMPLATE.md` documents the
 format. `tests/criteria.test.sh` validates every file in that directory.
+
+`scripts/` holds the external executor lane:
+
+- `detect-executors.sh` emits the JSON roster read at plan time and again as a
+  dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
+  plugin ships no wrapper for reports `usable: false` with the reason.
+- `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
+  one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, 2 is no
+  run at all.
+- `codex-report-schema.json` is the `--output-schema` the wrapper passes, and
+  the shape of the verdict it parses back.
+- `codex-task-contract.md` is appended to every prompt the wrapper sends,
+  resume rounds included.

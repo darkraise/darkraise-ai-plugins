@@ -53,11 +53,21 @@ done
 [ -f "$brief" ]  || die "brief not found: $brief"
 [ -d "$cwd" ]    || die "cwd not found: $cwd"
 [ -f "$SCHEMA" ] || die "schema not found: $SCHEMA"
+# Every verdict this wrapper reports is parsed with jq. Without it the parse
+# below would fall back to BLOCKED, which is indistinguishable from a real
+# block: the controller would spend a rung and a second paid run to learn
+# nothing. Exit 2 says "no run happened", which the skill already handles.
+command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 
 # Resolved once: reset pathspecs are repo-relative while these files are written
 # caller-relative, and `git reset` on a non-matching path exits 0, so the miss
 # would be silent.
 case "$report" in /*|[A-Za-z]:*) ;; *) report="$(pwd)/$report" ;; esac
+# Checked here rather than discovered at the first redirect: a bad report
+# directory would otherwise print shell redirect errors, never run Codex, and
+# exit 1 - the code the skill defines as "Codex ran and did not reach DONE",
+# costing the controller a rung for a typo.
+[ -d "$(dirname "$report")" ] || die "report directory not found: $(dirname "$report")"
 
 block codex-assignment | awk '{print $2}' | sort -u | grep -qxF -- "$model" \
   || die "model is not a rung in codex-assignment: $model"
@@ -71,6 +81,11 @@ if [ -z "$timeout_s" ]; then
   timeout_s=$(block codex-timeout | awk -v k="$model/$effort" '$1 == k {print $2}')
   [ -n "$timeout_s" ] || die "no codex-timeout row for $model/$effort"
 fi
+# Whole seconds only. `[ "$waited" -lt "$timeout_s" ]` errors and evaluates
+# false on a value like "30m", so the poll loop never runs, the tree is killed
+# about a second after launch, and the run is reported as BLOCKED - the exact
+# opposite of what raising the timeout was meant to do.
+printf '%s' "$timeout_s" | grep -qE '^[0-9]+$' || die "--timeout must be whole seconds: $timeout_s"
 
 # Every per-invocation flag is rebuilt here, including on resume: a bare
 # `codex exec resume <id>` inherits the user's config defaults instead.
@@ -153,9 +168,12 @@ trap cleanup EXIT INT TERM HUP
 # Codex can exit 0 without writing its final message. Left in place, a previous
 # run's verdict would be read as this one's - guaranteed on every resume round,
 # which reuses the same report path - and the wrapper would commit under a stale
-# subject it never earned. rm -f succeeds on a missing file but can fail on a
-# locked one, so the clear is verified rather than assumed.
-rm -f "$last" "$jsonl"
+# subject it never earned. $report is cleared for the same reason: a die path
+# below (a failed add or commit) leaves the previous round's report in place,
+# complete and carrying `status: DONE`, while the exit-2 recovery text tells the
+# controller no report was written. rm -f succeeds on a missing file but can
+# fail on a locked one, so the clear is verified rather than assumed.
+rm -f "$last" "$jsonl" "$report"
 [ ! -f "$last" ] || die "could not clear stale verdict file: $last"
 
 # A non-interactive script has job control off, so a plain `cmd &` inherits
@@ -199,8 +217,13 @@ while [ "$grace" -lt 30 ] && kill -0 "$codex_pid" 2>/dev/null; do
   sleep 1
   grace=$((grace + 1))
 done
+survivor=no
 if kill -0 "$codex_pid" 2>/dev/null; then
   rc=124
+  # Both kills plus the grace window have already been spent, so this process
+  # outlived everything the wrapper can do about it. Saying so is what stops a
+  # retry from putting a second Codex into the same worktree.
+  survivor=yes
 else
   wait "$codex_pid"; rc=$?
   codex_pid=""
@@ -252,6 +275,7 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- status: %s\n' "$status"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
+  [ "$survivor" = yes ] && printf -- '- note: a codex process may still be running (pid %s); check before retrying in this worktree\n' "$codex_pid"
   printf '\n## Summary\n\n%s\n' "$summary"
   if [ "$status" = NEEDS_CONTEXT ]; then
     printf '\n## Questions\n\n'
@@ -264,7 +288,9 @@ head=$(git -C "$cwd" rev-parse HEAD)
   fi
 } > "$report"
 
-printf 'codex %s/%s status=%s commits=%s..%s thread=%s report=%s\n' \
-  "$model" "$effort" "$status" "${base:0:7}" "${head:0:7}" "$thread_id" "$report"
+survivor_note=""
+[ "$survivor" = yes ] && survivor_note=" note=codex-may-still-be-running"
+printf 'codex %s/%s status=%s commits=%s..%s thread=%s report=%s%s\n' \
+  "$model" "$effort" "$status" "${base:0:7}" "${head:0:7}" "$thread_id" "$report" "$survivor_note"
 
 [ "$status" = DONE ]

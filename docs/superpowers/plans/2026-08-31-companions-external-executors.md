@@ -989,16 +989,16 @@ base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
 codex_pid=""
 codex_winpid=""
-# Two mechanisms for two topologies. `codex` on PATH is a POSIX shim that
-# execs node, which then spawns codex's real payload - a native codex-*.exe -
-# via a raw CreateProcess outside the MSYS runtime entirely; that binary holds
-# no MSYS pgid, so only `taskkill //T`, which walks native ParentProcessId,
-# can reach it. `kill -TERM -<pgid>` is the complementary case: it reaches
-# whatever MSYS-aware descendants share the `set -m` group below, which is
-# what a real Windows ParentProcessId lookup was shown live NOT to find (a
-# backgrounded MSYS child survived `taskkill //F //T` on its own parent's
-# winpid while confirmed still running). Both run every time, since neither
-# topology can be assumed absent.
+# Two mechanisms for two topologies. kill -TERM -<pgid> reaches MSYS-aware
+# descendants sharing the set -m group, and taskkill //T walks native
+# ParentProcessId. Only the first is proven necessary: taskkill alone leaves an
+# MSYS grandchild alive. The group kill was also observed to reach native
+# grandchildren, by a mechanism nobody has explained - taskkill stays because
+# that observation is unexplained, not because it is known to be redundant.
+#
+# (Corrected after the run: the plan originally claimed only `taskkill //T`
+# could reach the native payload. The live kill disproved that; the shipped
+# wrapper carries the wording above.)
 kill_codex_tree() {
   kill -0 "$codex_pid" 2>/dev/null || return 0
   [ -n "$codex_winpid" ] && taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1

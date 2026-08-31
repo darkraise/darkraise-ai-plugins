@@ -104,6 +104,40 @@ msg=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
 check "rejects a multi-word effort at the effort check, not downstream" \
   "$(grep -qF 'invalid reasoning effort' <<<"$msg" && echo yes || echo no)" "yes"
 
+# A non-numeric timeout is worse than useless: `[ "$waited" -lt "$timeout_s" ]`
+# errors and evaluates false on the first iteration, so the poll loop never runs
+# and the tree is killed about a second after launch - reported as BLOCKED. A
+# controller following the Timeout row ("retry with --timeout raised") is
+# exactly who writes 30m.
+check "rejects a non-numeric timeout" "$(rc_of --model gpt-5.5 --effort medium --timeout 30m)" "2"
+check "rejects a seconds-suffixed timeout" "$(rc_of --model gpt-5.5 --effort medium --timeout 1800s)" "2"
+tmsg=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" --cwd "$TMP/work" \
+      --model gpt-5.5 --effort medium --timeout 30m --dry-run 2>&1 >/dev/null)
+check "a non-numeric timeout is rejected at the timeout check" \
+  "$(grep -qF 'whole seconds' <<<"$tmsg" && echo yes || echo no)" "yes"
+
+# A report directory that does not exist would otherwise surface as shell
+# redirect errors and exit 1 - the code the skill defines as "Codex ran and did
+# not reach DONE", costing the controller a rung for a typo.
+check "rejects a report directory that does not exist" \
+  "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/no-such-dir/report.md" \
+      --cwd "$TMP/work" --model gpt-5.5 --effort medium --dry-run >/dev/null 2>&1; echo $?)" "2"
+
+# jq parses every verdict. Absent, the parse falls back to BLOCKED, which the
+# controller cannot tell from a real block - it spends a rung and a second paid
+# run to learn nothing. PATH is stripped to a lone dirname shim, the only
+# external command the wrapper runs before this guard.
+BASH_BIN=$(command -v bash)
+mkdir -p "$TMP/nojq"
+printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v dirname)" > "$TMP/nojq/dirname"
+chmod +x "$TMP/nojq/dirname"
+jq_rc=$(PATH="$TMP/nojq" "$BASH_BIN" "$SCRIPT" --brief "$TMP/brief.md" \
+      --report "$TMP/report.md" --cwd "$TMP/work" --model gpt-5.5 --effort medium \
+      --dry-run >/dev/null 2>"$TMP/jq.err"; echo $?)
+check "a missing jq exits 2 before anything is spawned" "$jq_rc" "2"
+check "a missing jq names the dependency rather than failing downstream" \
+  "$(grep -qF 'jq is required' "$TMP/jq.err" && echo yes || echo no)" "yes"
+
 check "rejected input prints nothing on stdout" \
   "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
       --cwd "$TMP/work" --model luna --effort medium --dry-run 2>/dev/null \
@@ -159,8 +193,11 @@ printf '{"type":"item.completed"}\n'
 # is dirty" assertion unsatisfiable regardless of whether the wrapper is right.
 [ -n "$cwd" ] && [ -z "${STUB_NO_WRITE:-}" ] && printf 'produced %s\n' "${STUB_THREAD:-th-001}" > "$cwd/produced.txt"
 if [ -z "${STUB_NO_LAST:-}" ]; then
+# STUB_SUBJECT uses ${x-default}, not ${x:-default}: a test that sets it to the
+# empty string is exercising the empty-commit_subject path and must not have the
+# default substituted back in.
 cat > "$out" <<JSON
-{"status":"${STUB_STATUS:-DONE}","summary":"stub summary","commit_subject":"feat(x): stub change","questions":[]}
+{"status":"${STUB_STATUS:-DONE}","summary":"stub summary","commit_subject":"${STUB_SUBJECT-feat(x): stub change}","questions":${STUB_QUESTIONS:-[]}}
 JSON
 fi
 exit "${STUB_RC:-0}"
@@ -316,6 +353,59 @@ check "tasklist itself ran successfully" "$([ "$tl_rc" -eq 0 ] && echo yes || ec
 check "a timed-out run's grandchild process is actually dead" \
   "$(grep -q "$sleep_winpid" <<<"$tl_out" && echo alive || echo gone)" \
   "gone"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# A DONE verdict with no commit_subject is a distinct case from an empty diff:
+# the wrapper skips the commit entirely, so the shas match with no empty-diff
+# note and the work is still sitting in the tree. The skill tells the controller
+# to read exactly that combination, so it has to be produced.
+rm -f "$TMP/report.md"
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(STUB_STATUS=DONE STUB_SUBJECT= STUB_THREAD=th-050 run_exec)
+rc=$?
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+check "DONE with an empty commit subject exits 0" "$rc" "0"
+check "DONE with an empty commit subject still reports DONE" \
+  "$(grep -qF 'status=DONE' <<<"$line" && echo yes || echo no)" "yes"
+check "DONE with an empty commit subject creates no commit" "$before" "$after"
+check "DONE with an empty commit subject carries no empty-diff note" \
+  "$(grep -qF 'nothing was committed' "$TMP/report.md" && echo yes || echo no)" "no"
+check "DONE with an empty commit subject leaves the work in the tree" \
+  "$(git -C "$TMP/repo" status --porcelain | grep -q . && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# NEEDS_CONTEXT is answered and resumed, not retried, so the questions have to
+# reach the report - it is the only place the controller can read them.
+rm -f "$TMP/report.md"
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(STUB_STATUS=NEEDS_CONTEXT STUB_QUESTIONS='["which database driver?"]' \
+  STUB_THREAD=th-051 run_exec)
+rc=$?
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+check "NEEDS_CONTEXT exits 1" "$rc" "1"
+check "NEEDS_CONTEXT is reported on the status line" \
+  "$(grep -qF 'status=NEEDS_CONTEXT' <<<"$line" && echo yes || echo no)" "yes"
+check "NEEDS_CONTEXT creates no commit" "$before" "$after"
+check "NEEDS_CONTEXT writes a questions section" \
+  "$(grep -qF '## Questions' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "NEEDS_CONTEXT lists the questions themselves" \
+  "$(grep -qF -- '- which database driver?' "$TMP/report.md" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# A die path after launch (a failed stage or commit) must not leave the previous
+# round's report behind: it would still read `status: DONE` while the wrapper's
+# exit-2 recovery text tells the controller no report was written. An index.lock
+# is the cheapest way to make `git add` fail for real.
+rm -f "$TMP/report.md"
+STUB_STATUS=DONE STUB_THREAD=th-060 run_exec >/dev/null
+check "the successful round wrote a report to clear" \
+  "$([ -s "$TMP/report.md" ] && echo yes || echo no)" "yes"
+: > "$TMP/repo/.git/index.lock"
+lock_rc=$(STUB_STATUS=DONE STUB_THREAD=th-061 run_exec >/dev/null 2>&1; echo $?)
+rm -f "$TMP/repo/.git/index.lock"
+check "a failed stage exits 2" "$lock_rc" "2"
+check "a failed stage leaves no stale report behind" \
+  "$([ -f "$TMP/report.md" ] && echo yes || echo no)" "no"
 git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

@@ -34,7 +34,11 @@ dispatched in parallel, and superpowers' own final whole-branch review still run
 as written, keeping its own model selection - what changes is that it is no
 longer the only reviewer.
 
-## The one superpowers instruction this supersedes
+## The superpowers instructions this supersedes
+
+Three, all named here or below: the model-selection rule in this section, the
+final whole-branch review under The final whole-branch review, and fix rounds 4
+and 5 for an external task under Resuming a Codex task.
 
 superpowers:subagent-driven-development states in bold that you must always
 specify the model explicitly when dispatching a subagent, because an omitted
@@ -128,6 +132,13 @@ enforces is files and commits, not a particular runtime.
 call, exactly as you already run `sdd-workspace` and `task-brief`. It prints one
 status line and writes everything else to files.
 
+**Give that Bash call an explicit timeout longer than the rung's
+`codex-timeout` value** - the wrapper polls for that long before it kills Codex,
+so anything shorter cuts the call while the run is still healthy. A foreground
+call hits the Bash tool's two-minute default, which every rung exceeds, and a
+controller reading the cut call as a Codex failure has misdiagnosed its own
+harness.
+
 **There is no separate worktree.** Codex runs in the SDD worktree, on the task
 branch, where a Claude implementer would run. superpowers already created that
 worktree at setup, and its finish step is `rm -rf <workspace>`, so a nested
@@ -220,6 +231,12 @@ A timeout is only identifiable from the wall time you observed, because the
 wrapper prints no marker for it: it forces `status=BLOCKED` whenever Codex exits
 non-zero, so a timed-out run and a capability block look identical on the status
 line. You launched the wrapper, so you are the one who knows.
+
+One case does carry a marker. `note=codex-may-still-be-running` on the status
+line, and the matching note in the report, mean the child outlived both kills
+and the wrapper's grace window - only a timeout reaches that path. Check for and
+end that process before retrying, or the retry puts two Codex runs in the same
+worktree.
 
 A second `NEEDS_CONTEXT` on the same task is a capability failure: take the
 successor rung or hand back. A one-shot agent that could not resolve the brief
