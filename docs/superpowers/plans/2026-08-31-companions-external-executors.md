@@ -344,11 +344,18 @@ check() { # check <name> <got> <want>
 mkdir -p "$TMP/bin" "$TMP/codexhome"
 make_stub() { printf '#!/usr/bin/env bash\necho "%s"\n' "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
 
-# The synthetic PATH must be narrow enough to hide the real executors but wide
-# enough to keep the script's own dependencies. jq is commonly installed outside
-# /usr/bin on Git Bash, so its directory is resolved rather than assumed.
-JQ_DIR=$(dirname "$(command -v jq)")
-run() { PATH="$TMP/bin:$JQ_DIR:/usr/bin:/bin" CODEX_HOME="$TMP/codexhome" bash "$SCRIPT"; }
+# PATH isolation has to be structural, not a coincidence of one machine's layout.
+# A wide PATH hides the real executors only as long as none of them shares a
+# directory with the script's own dependencies - and on most Linux distros both
+# jq and codex land in /usr/bin, which would resolve the real binary and flip
+# every not-present assertion. Shim just the four commands the script needs, so
+# PATH can be exactly one directory this test controls.
+BASH_BIN=$(command -v bash)
+for dep in jq timeout head tr; do
+  printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$(command -v "$dep")" > "$TMP/bin/$dep"
+  chmod +x "$TMP/bin/$dep"
+done
+run() { PATH="$TMP/bin" CODEX_HOME="$TMP/codexhome" "$BASH_BIN" "$SCRIPT"; }
 field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | .[$f]' <<< "$3"; }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
