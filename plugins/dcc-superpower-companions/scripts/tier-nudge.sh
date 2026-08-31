@@ -14,7 +14,7 @@ skill=$(jq -r '.tool_input.skill // empty' <<<"$payload" 2>/dev/null) || exit 0
 
 case "$skill" in
   superpowers:writing-plans)
-    context="Plans in this repository record an implementer assignment for each task: an \`**Implementer:**\` line naming a dcc-superpower-companions agent, an \`**Evaluation:**\` line showing the four-axis scores behind it, and an \`**Approach:**\` line when the task involved an approach decision. The dcc-superpower-companions:assigning-implementers skill holds the scoring rubric, the assignment table, and Rule S, which sends an over-scoring task back to be split rather than to a larger model."
+    context="Plans in this repository record an implementer assignment for each task: an \`**Implementer:**\` line naming a dcc-superpower-companions agent, an \`**Evaluation:**\` line showing the four-axis scores behind it, and an \`**Approach:**\` line when the task involved an approach decision. The dcc-superpower-companions:assigning-implementers skill holds the scoring rubric, the assignment table, and Rule S, which sends an over-scoring task back to be split rather than to a larger model. That skill also runs scripts/detect-executors.sh to offer any usable external agent CLI as an executor, and adds an \`**Executor:**\` line to each task that clears the lane gate."
     ;;
   superpowers:subagent-driven-development)
     context="Tasks in this repository's plans carry an \`**Implementer:**\` line naming the subagent that runs them. The dcc-superpower-companions:dispatching-tiered-implementers skill holds the dispatch rules, the escalation ladder, the reserve tier for a task that resists splitting, and the criteria-scored review it adds to the task-review seat."

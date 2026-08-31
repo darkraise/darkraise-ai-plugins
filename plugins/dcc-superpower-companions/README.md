@@ -68,6 +68,60 @@ decisions to inline, including bug fixes with a located root cause - where
 ranking candidates generated before the root cause is known would launder
 guesses into a confident pick.
 
+**An external executor lane.** A task scoring 2 to 4 with `risk <= 1` can run on
+the Codex CLI instead of a Claude implementer, for quota offload onto a separate
+ChatGPT subscription and for a second model family in the loop. The lane is a
+gate in front of the assignment table, never a rung on the escalation ladder:
+offload selects downward at the cheap end while the ladder only moves upward, and
+one total order cannot express both. The Claude ladder stays the sole backstop,
+so its termination proof is untouched.
+
+The gate floors at score 2 on purpose. Rule S caps `reducible` at 3, so under
+`risk <= 1` the eligible totals are exactly 2, 3, and 4; without the floor the
+gate would reduce to `risk <= 1` and capture nearly every task by count, and it
+would offload score-0 work where the displaced agent is `impl-haiku` and the
+wrapper costs more to orchestrate than it saves.
+
+`**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
+an override on a second line, which is what makes a machine without Codex, a cold
+session, and an executor whose auth has lapsed all degrade by reading a line that
+is already there rather than re-deriving the assignment at dispatch. Under
+`superpowers:executing-plans`, which never dispatches subagents, both lines are
+simply inert instead - nothing dispatches, so nothing falls back.
+
+These facts were probed against Codex 0.151.0 on Windows with
+ChatGPT-subscription auth on 2026-08-31, and the tables depend on all of them:
+
+- Only `gpt-5.5` and `gpt-5.6-sol` are available. `luna` and `terra` are rejected
+  with HTTP 400 and Codex holds no metadata for either.
+- Valid reasoning efforts are `low`, `medium`, `high`, `xhigh`, `ultra`.
+  `minimal` is rejected. The CLI validates neither model nor effort locally - it
+  echoes any string and fails at the API - so `scripts/run-codex-task.sh`
+  validates both before spawning anything.
+- Codex **cannot commit**. Its Windows restricted-token sandbox denies writes to
+  `.git` under `-s workspace-write`, which `codex sandbox -- git add -A`
+  reproduces with no model call. The wrapper owns the commit, so the ledger's
+  commit range is measured rather than reported. It also inlines the repository's
+  `CLAUDE.md` into every prompt, because Codex natively reads only `AGENTS.md`,
+  and passes the model's own conventional-commit subject to `git commit`
+  unmodified.
+- `codex exec resume` does **not** inherit `-m` or `-c model_reasoning_effort`.
+  The wrapper re-sends every per-invocation flag, because a bare resume would
+  silently run a fix round at the user's config default instead of the recorded
+  tier.
+
+A different machine, account, or Codex version must re-probe before trusting the
+tables in `reference/ladder.md`.
+
+**Cross-family review.** On a risk-3 task one of the three judges is Codex, and
+the final whole-branch review gains a `codex exec review` round whose findings
+are deduped with superpowers' own and then verified by `judge-fable` - or
+`judge-opus` when Fable is unavailable, the same fallback every judge seat uses. Risk-3
+tasks are excluded from the executor lane, so the risk-3 judge seat never
+reviews Codex's own work. The final whole-branch round is different: the branch
+contains whatever the executor lane produced, so that round is not
+self-review-free, which is why every finding goes through a third seat.
+
 ## Requirements
 
 **superpowers must be installed.** This plugin has no standalone use, and the
@@ -79,9 +133,14 @@ manifests cannot declare a dependency on another plugin, so nothing enforces
 this — with superpowers absent, the fleet loads without its preloaded skill and
 the dispatch instructions point at scripts that are not there.
 
-**`bash` and `jq`** for the hook. If `jq` is missing the hook degrades to a
-silent no-op; `bash` is required for it to run at all. On Windows that means
-Git for Windows. The hook declares `"shell": "bash"` so it takes the Git Bash
+**`bash` and `jq`.** Both are hard requirements of the external executor lane:
+`scripts/detect-executors.sh` builds every field with `jq`, and
+`scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a
+message naming the dependency rather than degrading, because a missing `jq`
+would otherwise read as "no executor usable" or as a task Codex blocked on. The
+hook is the lenient case: without `jq` it degrades to a silent no-op, and
+`bash` is required for it to run at all. On Windows that means Git for
+Windows. The hook declares `"shell": "bash"` so it takes the Git Bash
 route explicitly: without that key Claude Code falls back to PowerShell on a
 machine with no Git Bash, where the command is meaningless, and with it the
 user gets Claude Code's actionable "requires bash but Git Bash was not found"
@@ -137,25 +196,37 @@ previous task's brief.
 
 ## Compatibility
 
-The plugin extends three seams. The implementer dispatch names a fleet agent
+The plugin extends four seams. The implementer dispatch names a fleet agent
 instead of `general-purpose` and passes no `model` argument. The task-review
 seat is a judge agent rather than a general-purpose one, dispatched with a
-criteria file appended to superpowers' own reviewer prompt. And the scoped
+criteria file appended to superpowers' own reviewer prompt. The scoped
 re-review is asked for one extra reading, a progress score, which can pull the
-escalation point from round 4 to round 3.
+escalation point from round 4 to round 3. And the final whole-branch review
+gains a Codex round plus a verification pass over the union of both reviewers'
+findings.
 
 Everything else in the superpowers loop is untouched: the brief and report
 protocol, the review package, the five-round cap, the breaker and its
-adjudication rules, the final whole-branch review and its model selection, and
-the handoff to superpowers:finishing-a-development-branch.
+adjudication rules, and the handoff to
+superpowers:finishing-a-development-branch.
 
-It supersedes one superpowers instruction, "always specify the model
-explicitly", and only for fleet agents whose frontmatter pins a model. Passing
-`model` would override the agent file while `effort` kept its frontmatter value,
-so the agent would run at a tier the ledger does not record. The intent
-survives, since the agent definition pins the model. The scores the plugin adds
-to reviews are additive to superpowers' own verdicts and never replace them,
-because its fix loop keys on those verdicts.
+Three superpowers instructions are superseded, and no others.
+
+1. **"Always specify the model explicitly"**, and only for fleet agents whose
+   frontmatter pins a model. Passing `model` would override the agent file while
+   `effort` kept its frontmatter value, so the agent would run at a tier the
+   ledger does not record. The intent survives, since the agent definition pins
+   the model.
+2. **The final whole-branch review is no longer untouched.** It keeps
+   superpowers' own review and model selection and adds a Codex round plus a
+   verification pass over the union.
+3. **Fix rounds 4 and 5 call for a more capable model**, where an external task
+   instead hands back to the Claude assignment-table row for its score - a change
+   of model family plus a fresh context, argued as satisfying that rule's intent
+   rather than as an exception to it.
+
+The scores the plugin adds to reviews are additive to superpowers' own verdicts
+and never replace them, because its fix loop keys on those verdicts.
 
 ## Tests
 
@@ -163,7 +234,8 @@ because its fix loop keys on those verdicts.
 for t in plugins/dcc-superpower-companions/tests/*.test.sh; do bash "$t"; done
 ```
 
-Requires `jq`. No model calls.
+Requires `jq` and `git`. No model calls: the executor suites run against a stub
+`codex` on `PATH` and a synthetic roster, never the real CLI.
 
 ## Reference
 
@@ -173,3 +245,18 @@ copy.
 
 `criteria/` holds the verifier criteria; `criteria/TEMPLATE.md` documents the
 format. `tests/criteria.test.sh` validates every file in that directory.
+
+`scripts/` holds the external executor lane:
+
+- `detect-executors.sh` emits the JSON roster read at plan time and again as a
+  dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
+  plugin ships no wrapper for reports `usable: false` with the reason.
+- `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
+  one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
+  no status line - either a refusal before launch or a git failure after the run,
+  which the dispatching skill tells the controller apart and recovers from
+  differently.
+- `codex-report-schema.json` is the `--output-schema` the wrapper passes, and
+  the shape of the verdict it parses back.
+- `codex-task-contract.md` is appended to every prompt the wrapper sends,
+  resume rounds included.

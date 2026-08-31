@@ -342,9 +342,22 @@ check() { # check <name> <got> <want>
 # A synthetic PATH holding only the stubs we choose, so the result does not
 # depend on what happens to be installed on the machine running the suite.
 mkdir -p "$TMP/bin" "$TMP/codexhome"
-make_stub() { printf '#!/usr/bin/env bash\necho "%s"\n' "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
+BASH_BIN=$(command -v bash)
+make_stub() { printf '#!%s\necho "%s"\n' "$BASH_BIN" "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
 
-run() { PATH="$TMP/bin:/usr/bin:/bin" CODEX_HOME="$TMP/codexhome" bash "$SCRIPT"; }
+# PATH isolation has to be structural, not a coincidence of one machine's layout.
+# A wide PATH hides the real executors only as long as none of them shares a
+# directory with the script's own dependencies - and on most Linux distros both
+# jq and codex land in /usr/bin, which would resolve the real binary and flip
+# every not-present assertion. Shim just the four commands the script needs, so
+# PATH can be exactly one directory this test controls.
+# Shebangs here must name bash by absolute path: `#!/usr/bin/env bash` resolves
+# bash through PATH, and PATH no longer contains it.
+for dep in jq timeout head tr; do
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v "$dep")" > "$TMP/bin/$dep"
+  chmod +x "$TMP/bin/$dep"
+done
+run() { PATH="$TMP/bin" CODEX_HOME="$TMP/codexhome" "$BASH_BIN" "$SCRIPT"; }
 field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | .[$f]' <<< "$3"; }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
@@ -573,9 +586,9 @@ check "dry run never bypasses the sandbox" \
 
 # --- timeouts come from the table unless overridden -------------------------
 check "timeout defaults from codex-timeout" \
-  "$(grep -qE 'timeout +900' <<<"$cmd" && echo yes || echo no)" "yes"
+  "$(grep -qE '^timeout=900$' <<<"$cmd" && echo yes || echo no)" "yes"
 check "explicit timeout wins" \
-  "$(dry --model gpt-5.5 --effort medium --timeout 42 | grep -qE 'timeout +42' && echo yes || echo no)" "yes"
+  "$(out=$(dry --model gpt-5.5 --effort medium --timeout 42); grep -qE '^timeout=42$' <<<"$out" && echo yes || echo no)" "yes"
 
 # --- resume must re-send every per-invocation flag ---------------------------
 # A bare `codex exec resume <id>` falls back to the user's config defaults, so a
@@ -586,6 +599,46 @@ check "resume carries the thread id" "$(grep -qF -- "01a0-thread" <<<"$res" && e
 check "resume re-sends the model" "$(grep -qF -- "-m gpt-5.5" <<<"$res" && echo yes || echo no)" "yes"
 check "resume re-sends the effort" \
   "$(grep -qF -- "model_reasoning_effort=high" <<<"$res" && echo yes || echo no)" "yes"
+
+# --- malformed input fails fast, and the dry run tells the truth ------------
+check "a trailing flag with no value exits 2 rather than hanging" \
+  "$(timeout 10 bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+      --cwd "$TMP/work" --model gpt-5.5 --effort medium --resume \
+      >/dev/null 2>&1; echo $?)" "2"
+
+check "rejects an unknown flag" "$(rc_of --model gpt-5.5 --effort medium --bogus x)" "2"
+# Assert the message, not just the exit code: a multi-word effort already exited
+# 2 before the fix, via an unrelated timeout-lookup miss. Only the message proves
+# the effort check itself rejected it.
+#
+# Captured to a variable rather than piped straight into grep: the wrapper's own
+# validation failure exits 2, and with `set -o pipefail` active in this suite, a
+# direct `cmd 2>&1 >/dev/null | grep ...` pipeline reports cmd's exit code (2)
+# instead of grep's match result, so the check would fail regardless of the
+# message. Command substitution sidesteps that: only the text is captured.
+msg=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+      --cwd "$TMP/work" --model gpt-5.5 --effort 'medium high' --dry-run 2>&1 >/dev/null)
+check "rejects a multi-word effort at the effort check, not downstream" \
+  "$(grep -qF 'invalid reasoning effort' <<<"$msg" && echo yes || echo no)" "yes"
+
+check "rejected input prints nothing on stdout" \
+  "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+      --cwd "$TMP/work" --model luna --effort medium --dry-run 2>/dev/null \
+      | wc -c | tr -d ' \r\n')" "0"
+
+# The dry run's contract is that it shows what would actually run, so re-parse
+# what it printed and confirm a space-containing path survives as ONE argument.
+mkdir -p "$TMP/dir with space"
+printed=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null \
+  | grep '^codex ')
+eval "set -- $printed"
+roundtrip=no
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-C" ] && [ "${2:-}" = "$TMP/dir with space" ]; then roundtrip=yes; fi
+  shift
+done
+check "dry run round-trips a space-containing path as one argument" "$roundtrip" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
@@ -606,7 +659,7 @@ Create `scripts/codex-report-schema.json`:
 ```json
 {
   "type": "object",
-  "required": ["status", "summary", "commit_subject"],
+  "required": ["status", "summary", "commit_subject", "questions"],
   "additionalProperties": false,
   "properties": {
     "status": {
@@ -662,16 +715,24 @@ block() {
 brief="" report="" model="" effort="" cwd="" timeout_s="" thread="" dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --brief)   brief="${2:-}";     shift 2 ;;
-    --report)  report="${2:-}";    shift 2 ;;
-    --model)   model="${2:-}";     shift 2 ;;
-    --effort)  effort="${2:-}";    shift 2 ;;
-    --cwd)     cwd="${2:-}";       shift 2 ;;
-    --timeout) timeout_s="${2:-}"; shift 2 ;;
-    --resume)  thread="${2:-}";    shift 2 ;;
-    --dry-run) dry=1;              shift   ;;
+    --dry-run) dry=1; shift; continue ;;
+    --brief|--report|--model|--effort|--cwd|--timeout|--resume) ;;
     *) die "unknown argument: $1" ;;
   esac
+  # Every flag reaching here takes a value. `shift 2` fails when only one
+  # positional remains, and with no `set -e` the loop would re-enter with $1
+  # unchanged and spin forever instead of reporting the malformed input.
+  [ $# -ge 2 ] || die "missing value for $1"
+  case "$1" in
+    --brief)   brief="$2" ;;
+    --report)  report="$2" ;;
+    --model)   model="$2" ;;
+    --effort)  effort="$2" ;;
+    --cwd)     cwd="$2" ;;
+    --timeout) timeout_s="$2" ;;
+    --resume)  thread="$2" ;;
+  esac
+  shift 2
 done
 
 [ -n "$brief" ]  || die "--brief is required"
@@ -685,10 +746,11 @@ done
 
 block codex-assignment | awk '{print $2}' | sort -u | grep -qxF -- "$model" \
   || die "model is not a rung in codex-assignment: $model"
-case " $VALID_EFFORTS " in
-  *" $effort "*) ;;
-  *) die "invalid reasoning effort: $effort (valid: $VALID_EFFORTS)" ;;
-esac
+# Word-exact, mirroring the model check above. A containment test on the padded
+# string admits a multi-word value like "medium high", which would then fail far
+# downstream in the timeout lookup instead of here.
+printf '%s\n' $VALID_EFFORTS | grep -qxF -- "$effort" \
+  || die "invalid reasoning effort: $effort (valid: $VALID_EFFORTS)"
 
 if [ -z "$timeout_s" ]; then
   timeout_s=$(block codex-timeout | awk -v k="$model/$effort" '$1 == k {print $2}')
@@ -710,8 +772,14 @@ argv+=(
 )
 
 if [ "$dry" -eq 1 ]; then
-  printf 'timeout %s codex' "$timeout_s"
-  printf ' %s' "${argv[@]}"
+  # %q, not %s: a dry run that prints a command different from the one that
+  # would execute is worse than no dry run, and a path containing a space
+  # silently splits into several arguments under %s. The timeout is its own
+  # labelled line because execution enforces it with a poll loop rather than by
+  # invoking timeout(1), so printing it as part of the command would be a lie.
+  printf 'timeout=%s\n' "$timeout_s"
+  printf 'codex'
+  printf ' %q' "${argv[@]}"
   printf '\n'
   exit 0
 fi
@@ -910,26 +978,98 @@ last="$report.last.json"
   cat "$HERE/codex-task-contract.md"
 } > "$prompt"
 
-base=$(git -C "$cwd" rev-parse HEAD) || die "not a git repository: $cwd"
+# `git add -A` stages the whole repository no matter which subdirectory it runs
+# from, so a cwd below the root would sweep unrelated uncommitted work into this
+# task's commit. --show-prefix is empty only at the root, and unlike comparing
+# --show-toplevel against pwd it does not care that git and MSYS disagree over
+# whether a path starts with D:/ or /d/.
+prefix=$(git -C "$cwd" rev-parse --show-prefix) || die "not a git repository: $cwd"
+[ -z "$prefix" ] || die "cwd must be the repository root, but sits under $prefix"
+base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
 codex_pid=""
-cleanup() {
-  [ -n "$codex_pid" ] || return 0
+codex_winpid=""
+# Two mechanisms for two topologies. kill -TERM -<pgid> reaches MSYS-aware
+# descendants sharing the set -m group, and taskkill //T walks native
+# ParentProcessId. Only the first is proven necessary: taskkill alone leaves an
+# MSYS grandchild alive. The group kill was also observed to reach native
+# grandchildren, by a mechanism nobody has explained - taskkill stays because
+# that observation is unexplained, not because it is known to be redundant.
+#
+# (Corrected after the run: the plan originally claimed only `taskkill //T`
+# could reach the native payload. The live kill disproved that; the shipped
+# wrapper carries the wording above.)
+kill_codex_tree() {
   kill -0 "$codex_pid" 2>/dev/null || return 0
-  # timeout signals only its direct child; codex.exe is a Windows grandchild, so
-  # reach it by Windows pid. /proc/<pid>/winpid is MSYS's mapping.
-  local winpid
-  winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
-  [ -n "$winpid" ] && taskkill //F //T //PID "$winpid" >/dev/null 2>&1
-  kill -TERM "$codex_pid" 2>/dev/null || true
+  [ -n "$codex_winpid" ] && taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1
+  kill -TERM -"$codex_pid" 2>/dev/null || true
+  sleep 1
+  kill -0 "$codex_pid" 2>/dev/null && kill -KILL -"$codex_pid" 2>/dev/null
+  return 0
 }
-trap cleanup EXIT INT TERM
+cleanup() {
+  [ -n "$codex_pid" ] && kill_codex_tree
+  return 0
+}
+trap cleanup EXIT INT TERM HUP
 
-timeout --kill-after=10s "$timeout_s" codex "${argv[@]}" \
-  < "$prompt" > "$jsonl" 2> "$report.stderr" &
+# Codex can exit 0 without writing its final message. Left in place, a previous
+# run's verdict would be read as this one's - guaranteed on every resume round,
+# which reuses the same report path - and the wrapper would commit under a stale
+# subject it never earned. rm -f succeeds on a missing file but can fail on a
+# locked one, so the clear is verified rather than assumed.
+rm -f "$last" "$jsonl"
+[ ! -f "$last" ] || die "could not clear stale verdict file: $last"
+
+# A non-interactive script has job control off, so a plain `cmd &` inherits
+# this script's own process group instead of getting a fresh one - confirmed
+# live: `kill -TERM -"$codex_pid"` then fails with "No such process" because
+# no group with that id exists. `set -m` around just this launch is what makes
+# the backgrounded job (and anything it execs) its own group, which is what
+# `kill_codex_tree` signals; `setsid` would do the same but isn't on this box.
+set -m
+codex "${argv[@]}" < "$prompt" > "$jsonl" 2> "$report.stderr" &
 codex_pid=$!
-wait "$codex_pid"; rc=$?
+set +m
+# Captured once, right after launch, while codex_pid (node) is still alive:
+# this is node's own Windows process, which is what taskkill //T needs to
+# start its native tree-walk from.
+codex_winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
+
+# Polled rather than wrapped in `timeout`: the kill has to happen while the
+# child is still live. `timeout` reaps its child before wait returns, leaving
+# nothing left to signal by the time a kill would fire - and it would also put
+# a wrapper process between us and node, which is exactly what breaks
+# taskkill's native tree-walk (see codex_winpid above).
+timed_out=no
+waited=0
+while [ "$waited" -lt "$timeout_s" ] && kill -0 "$codex_pid" 2>/dev/null; do
+  sleep 1
+  waited=$((waited + 1))
+done
+if kill -0 "$codex_pid" 2>/dev/null; then
+  timed_out=yes
+  kill_codex_tree
+fi
+
+# Bounded rather than a bare `wait`: a child that survived both signals would
+# block forever, and this wrapper must always return a status line to the
+# controller. Reintroducing `timeout` is not the answer - it would reinsert a
+# process between us and node, which is what made taskkill unable to walk the
+# native tree.
+grace=0
+while [ "$grace" -lt 30 ] && kill -0 "$codex_pid" 2>/dev/null; do
+  sleep 1
+  grace=$((grace + 1))
+done
+if kill -0 "$codex_pid" 2>/dev/null; then
+  rc=124
+else
+  wait "$codex_pid"; rc=$?
+fi
+[ "$timed_out" = yes ] && rc=124
 codex_pid=""
+codex_winpid=""
 
 # Event field naming has varied across Codex releases, so match on any of the
 # shapes rather than pinning one that a later version may rename.
@@ -948,9 +1088,22 @@ if [ -f "$last" ]; then
 fi
 [ "$rc" -eq 0 ] || status=BLOCKED
 
+committed=no
 if [ "$status" = DONE ] && [ -n "$subject" ]; then
-  git -C "$cwd" add -A
-  git -C "$cwd" commit -q -m "$subject" || die "commit failed"
+  git -C "$cwd" add -A -- . || die "git add failed in $cwd"
+  # Keep the wrapper's own scratch out of the task's commit. A no-op when the
+  # report lives in a git-ignored directory, load-bearing when it does not.
+  for artefact in "$prompt" "$jsonl" "$last" "$report.stderr" "$report"; do
+    git -C "$cwd" reset -q -- "$artefact" 2>/dev/null || true
+  done
+  if git -C "$cwd" diff --cached --quiet; then
+    # A task can legitimately finish with nothing to commit. Dying here would
+    # leave the controller no report and no status line to read.
+    committed=empty
+  else
+    git -C "$cwd" commit -q -m "$subject" || die "commit failed in $cwd"
+    committed=yes
+  fi
 fi
 
 head=$(git -C "$cwd" rev-parse HEAD)
@@ -961,6 +1114,7 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- thread: %s\n' "$thread_id"
   printf -- '- status: %s\n' "$status"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
+  [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
   printf '\n## Summary\n\n%s\n' "$summary"
   if [ "$status" = NEEDS_CONTEXT ]; then
     printf '\n## Questions\n\n'
@@ -1067,11 +1221,13 @@ executor is an override on a second line, never a replacement on the first:
 ```
 
 That ordering is what makes every degradation free. A machine without Codex, a
-cold session, an `executing-plans` run, and an executor whose auth has lapsed all
-fall back by *reading a line that is already there*, rather than re-deriving the
-assignment at dispatch time - which is the failure this whole plugin exists to
-remove. It also keeps every `**Implementer:**` value inside the assignment or
-reserve table, so the checks below still mean what they say.
+cold session, and an executor whose auth has lapsed all fall back by *reading a
+line that is already there*, rather than re-deriving the assignment at dispatch
+time - which is the failure this whole plugin exists to remove. It also keeps
+every `**Implementer:**` value inside the assignment or reserve table, so the
+checks below still mean what they say. Under superpowers:executing-plans both
+lines are simply inert, as "When this applies" says above: nothing dispatches,
+so nothing falls back.
 
 **Why the gate excludes an overridden Rule S pass.** The legacy floor lets a
 human keep a `spec = 3` task as written. Such a task can score
@@ -1085,9 +1241,41 @@ same-shape work produces one dispatch covering several tasks, which a per-task
 `**Executor:**` line on a batched task.
 ````
 
-- [ ] **Step 2: Extend the checklist**
+- [ ] **Step 2: State the line order in "Write the assignment"**
 
-In the same file, in the `## Check your work` section, add these three bullets
+A gated task that also involved an approach decision now carries four lines, and
+the existing section opens "Add two or three lines" without saying where
+`**Executor:**` sits relative to the others. Replace that opening sentence with:
+
+```markdown
+Add two to four lines to each task block, directly below its `**Interfaces:**`
+block, always in this order: `**Implementer:**`, then `**Executor:**` when the
+lane gate passed, then `**Evaluation:**`, then `**Approach:**` when the task
+involved an approach decision. `**Implementer:**` and `**Evaluation:**` are
+always present; the other two appear only under the conditions just named.
+```
+
+Leave the existing three-line example beneath it unchanged - it is the ungated
+case and is still correct - and add this immediately after it:
+
+````markdown
+A task that passed the lane gate and also involved an approach decision carries
+all four:
+
+```markdown
+**Implementer:** dcc-superpower-companions:impl-sonnet-medium
+**Executor:** codex gpt-5.5 / medium
+**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+**Approach:** inline - skip 2: follows the existing exporter pattern
+```
+````
+
+Without this, two planners can order the same four lines differently, which is
+the one thing the rubric's determinism is supposed to rule out.
+
+- [ ] **Step 3: Extend the checklist**
+
+In the same file, in the `## Check your work` section, add these bullets
 to the end of the existing list:
 
 ```markdown
@@ -1099,9 +1287,13 @@ to the end of the existing list:
   back to when the CLI is missing at dispatch time.
 - No task carrying an `**Executor:**` line scores below the gate's `min_score`,
   above its `max_risk`, or passed Rule S only by human override.
+- Every `**Executor:**` line names an executor that appears in the plan header's
+  `> **External executors:**` line. An executor line naming a tool the plan never
+  enabled is a task that will fall back to its Claude implementer at dispatch and
+  never run where the plan says it does.
 ```
 
-- [ ] **Step 3: Verify the skill still parses and the suites pass**
+- [ ] **Step 4: Verify the skill still parses and the suites pass**
 
 ```bash
 head -5 plugins/dcc-superpower-companions/skills/assigning-implementers/SKILL.md
@@ -1110,7 +1302,7 @@ for t in plugins/dcc-superpower-companions/tests/*.test.sh; do echo "== $t"; bas
 
 Expected: the frontmatter block is intact and unchanged, and every suite reports `0 failed`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add plugins/dcc-superpower-companions/skills/assigning-implementers/SKILL.md
@@ -1383,8 +1575,11 @@ In `tests/hook.test.sh`, immediately before the `printf '\n%d passed` footer, ad
 # The planning nudge must mention the executor lane, or a planner will score
 # tasks correctly and never learn that an external lane exists.
 plan_ctx=$(run superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext')
+# No -F here: GNU grep 3.0 under MSYS aborts with SIGABRT (rc 134) whenever -i
+# and -F are combined, in either order. The term holds no regex metacharacters,
+# so -i alone is behaviourally identical.
 check "writing-plans context mentions the external lane" \
-  "$(grep -qiF 'Executor' <<<"$plan_ctx" && echo yes || echo no)" "yes"
+  "$(grep -qi 'Executor' <<<"$plan_ctx" && echo yes || echo no)" "yes"
 check "writing-plans context names the detection script" \
   "$(grep -qF 'detect-executors' <<<"$plan_ctx" && echo yes || echo no)" "yes"
 ```

@@ -71,14 +71,89 @@ happens, leave the `**Evaluation:**` line in place for the reason the Overriding
 section below already gives - the gap between the score and the choice is the
 interesting part.
 
+## Offer an external executor, then apply the lane gate
+
+Run this once per plan, after scoring every task and before writing any
+assignment line:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"
+```
+
+Render the roster as a multi-select question: one tickable option per executor
+whose `usable` is `true`, and a prose line naming every other detected executor
+with its `reason`. **If no executor is usable, ask nothing** and write the plan
+Claude-only - an empty checkbox is a worse answer than no checkbox.
+
+Record the tick as one appended blockquote line in the plan header:
+
+```markdown
+> **External executors:** codex
+```
+
+Then apply the lane gate from the `gate` block of
+[`../../reference/ladder.md`](../../reference/ladder.md) to each task. All four
+conditions must hold:
+
+- an executor was ticked,
+- the task cleared Rule S without a human override,
+- `total >= min_score`,
+- `risk <= max_risk`.
+
+A task that passes the gate takes its model and effort from that file's
+`codex-assignment` block and gains one extra line. A task that fails it is
+assigned from the Claude table exactly as before and gains nothing.
+
+**The `**Implementer:**` line still names the Claude agent for the score.** The
+executor is an override on a second line, never a replacement on the first:
+
+```markdown
+**Implementer:** dcc-superpower-companions:impl-sonnet-medium
+**Executor:** codex gpt-5.5 / medium
+**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+```
+
+That ordering is what makes every degradation free. A machine without Codex, a
+cold session, and an executor whose auth has lapsed all fall back by *reading a
+line that is already there*, rather than re-deriving the assignment at dispatch
+time - which is the failure this whole plugin exists to remove. It also keeps
+every `**Implementer:**` value inside the assignment or reserve table, so the
+checks below still mean what they say. Under superpowers:executing-plans both
+lines are simply inert, as "When this applies" says above: nothing dispatches,
+so nothing falls back.
+
+**Why the gate excludes an overridden Rule S pass.** The legacy floor lets a
+human keep a `spec = 3` task as written. Such a task can score
+`files 0 + spec 3 + coupling 0 + risk 0 = 3` and would otherwise pass the gate,
+handing a task whose approach nobody decided to a one-shot external agent that
+cannot ask questions mid-run.
+
+**Batched tasks stay on the Claude lane.** superpowers' rule to batch small
+same-shape work produces one dispatch covering several tasks, which a per-task
+`**Executor:**` line and per-task thread id cannot represent. Do not write an
+`**Executor:**` line on a batched task.
+
 ## Write the assignment
 
-Add two or three lines to each task block, directly below its `**Interfaces:**`
-block:
+Add two to four lines to each task block, directly below its `**Interfaces:**`
+block, always in this order: `**Implementer:**`, then `**Executor:**` when the
+lane gate passed, then `**Evaluation:**`, then `**Approach:**` when the task
+involved an approach decision. `**Implementer:**` and `**Evaluation:**` are
+always present; the other two appear only under the conditions just named.
 
 ```markdown
 **Implementer:** dcc-superpower-companions:impl-opus-medium
 **Evaluation:** files 1 - spec 0 - coupling 2 - risk 2 = 5
+**Approach:** inline - skip 2: follows the existing exporter pattern
+```
+
+A task that passed the lane gate and also involved an approach decision carries
+all four:
+
+```markdown
+**Implementer:** dcc-superpower-companions:impl-sonnet-medium
+**Executor:** codex gpt-5.5 / medium
+**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```
 
@@ -159,6 +234,18 @@ Before saving the plan:
   A single `task-brief` run proves nothing about the rest of the plan — it only
   inspects the heading of the task you asked for, and a task whose own heading
   is fine still exits 0 while carrying a malformed neighbor's body inside it.
+- Every `**Executor:**` line names a rung that appears in `reference/ladder.md`'s
+  `codex-assignment` block, and the model and effort match the row for that
+  task's total. A rung that is not in the table cannot be dispatched.
+- Every task carrying an `**Executor:**` line also carries an `**Implementer:**`
+  line naming its Claude fallback. An executor line alone leaves nothing to fall
+  back to when the CLI is missing at dispatch time.
+- No task carrying an `**Executor:**` line scores below the gate's `min_score`,
+  above its `max_risk`, or passed Rule S only by human override.
+- Every `**Executor:**` line names an executor that appears in the plan header's
+  `> **External executors:**` line. An executor line naming a tool the plan never
+  enabled is a task that will fall back to its Claude implementer at dispatch and
+  never run where the plan says it does.
 
 ## Overriding
 

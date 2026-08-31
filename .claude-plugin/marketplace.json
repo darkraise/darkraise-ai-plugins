@@ -24,7 +24,7 @@
     {
       "name": "dcc-superpower-companions",
       "source": "./plugins/dcc-superpower-companions",
-      "description": "Extends superpowers with 19 tiered subagents: seven execution implementers, nine reserve implementers, two read-only judges, and a scout. Scores every plan task on a four-axis rubric that sends over-scoring tasks back to be split, dispatches with a defined escalation ladder, and scores task reviews against named criteria.",
+      "description": "Extends superpowers with 19 tiered subagents and an external executor lane. Scores every plan task on a four-axis rubric that sends over-scoring tasks back to be split, routes score-2..4 low-risk tasks to Codex for quota offload, dispatches with a defined escalation ladder, and scores task reviews against named criteria with a cross-family review seat.",
       "category": "workflow",
       "keywords": [
         "superpowers",
@@ -33,7 +33,9 @@
         "effort",
         "model-selection",
         "verification",
-        "code-review"
+        "code-review",
+        "codex",
+        "external-executors"
       ]
     },
     {

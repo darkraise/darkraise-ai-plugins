@@ -79,5 +79,16 @@ check "hooks.json is synchronous (async must not be true)" \
 check "hooks.json forces the bash interpreter" \
   "$(jq -r '.hooks.PreToolUse[0].hooks[0].shell // "MISSING"' "$HOOKS" 2>/dev/null)" "bash"
 
+# The planning nudge must mention the executor lane, or a planner will score
+# tasks correctly and never learn that an external lane exists.
+plan_ctx=$(run superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext')
+# -F dropped deliberately: this repo's GNU grep 3.0 (Git Bash/MSYS on
+# Windows) segfaults when -i and -F are combined, in any flag order. The
+# search term has no regex metacharacters, so plain -i is equivalent.
+check "writing-plans context mentions the external lane" \
+  "$(grep -qi 'Executor' <<<"$plan_ctx" && echo yes || echo no)" "yes"
+check "writing-plans context names the detection script" \
+  "$(grep -qF 'detect-executors' <<<"$plan_ctx" && echo yes || echo no)" "yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

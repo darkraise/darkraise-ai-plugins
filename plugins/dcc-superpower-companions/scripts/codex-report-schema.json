@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "required": ["status", "summary", "commit_subject", "questions"],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["DONE", "BLOCKED", "NEEDS_CONTEXT"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "What was changed and why, in the voice of an implementer report."
+    },
+    "commit_subject": {
+      "type": "string",
+      "description": "Conventional-commit subject line: type(scope): subject, imperative, no trailing period, 50 characters or fewer."
+    },
+    "questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Required when status is NEEDS_CONTEXT; empty otherwise."
+    }
+  }
+}
