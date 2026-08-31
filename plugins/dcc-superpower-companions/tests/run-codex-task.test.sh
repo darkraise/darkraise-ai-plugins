@@ -131,19 +131,31 @@ printf '{"type":"item.completed"}\n'
 # Content varies with the thread id so a later run actually diffs against an
 # earlier run's commit; identical bytes on every call would make a "the tree
 # is dirty" assertion unsatisfiable regardless of whether the wrapper is right.
-[ -n "$cwd" ] && printf 'produced %s\n' "${STUB_THREAD:-th-001}" > "$cwd/produced.txt"
+[ -n "$cwd" ] && [ -z "${STUB_NO_WRITE:-}" ] && printf 'produced %s\n' "${STUB_THREAD:-th-001}" > "$cwd/produced.txt"
+if [ -z "${STUB_NO_LAST:-}" ]; then
 cat > "$out" <<JSON
 {"status":"${STUB_STATUS:-DONE}","summary":"stub summary","commit_subject":"feat(x): stub change","questions":[]}
 JSON
+fi
 exit "${STUB_RC:-0}"
 STUB
 chmod +x "$TMP/stub/codex"
+
+check "the stub shadows the real codex" \
+  "$(PATH="$TMP/stub:$PATH" command -v codex)" "$TMP/stub/codex"
 
 run_exec() { # run_exec  -> prints the wrapper's stdout status line
   PATH="$TMP/stub:$PATH" bash "$SCRIPT" \
     --brief "$TMP/brief.md" --report "$TMP/report.md" \
     --cwd "$TMP/repo" --model gpt-5.5 --effort medium "$@" 2>"$TMP/err"
 }
+
+# A cwd below the repository root would make `git add -A` stage the whole repo.
+mkdir -p "$TMP/repo/sub"
+check "refuses a cwd that is not the repository root" \
+  "$(PATH="$TMP/stub:$PATH" bash "$SCRIPT" --brief "$TMP/brief.md" \
+      --report "$TMP/report.md" --cwd "$TMP/repo/sub" --model gpt-5.5 \
+      --effort medium >/dev/null 2>&1; echo $?)" "2"
 
 before=$(git -C "$TMP/repo" rev-parse HEAD)
 line=$(STUB_STATUS=DONE run_exec)
@@ -176,11 +188,38 @@ check "BLOCKED leaves the tree dirty" \
 git -C "$TMP/repo" reset -q --hard HEAD
 git -C "$TMP/repo" clean -qfd
 
+# Codex can exit 0 without writing its final message. The wrapper must not
+# read a previous run's verdict as this one's, which resume rounds guarantee
+# will be present since they reuse the same --report path.
+line=$(STUB_STATUS=DONE STUB_THREAD=th-010 run_exec) || true
+mid=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(STUB_NO_LAST=1 STUB_THREAD=th-011 run_exec) || true
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+check "a run that writes no verdict does not inherit the previous one" \
+  "$(git -C "$TMP/repo" rev-list --count "$mid".."$after")" "0"
+check "a run that writes no verdict reports BLOCKED" \
+  "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
 # A non-zero exit is a run failure regardless of what the last message claimed.
 before=$(git -C "$TMP/repo" rev-parse HEAD)
-line=$(STUB_RC=1 STUB_STATUS=DONE run_exec) || true
+line=$(STUB_RC=1 STUB_STATUS=DONE STUB_THREAD=th-003 run_exec) || true
 after=$(git -C "$TMP/repo" rev-parse HEAD)
 check "non-zero exit creates no commit" "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "0"
+git -C "$TMP/repo" reset -q --hard HEAD
+git -C "$TMP/repo" clean -qfd
+
+# A DONE verdict with an empty diff must still report, not die with nothing.
+rm -f "$TMP/report.md"
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(STUB_NO_WRITE=1 STUB_STATUS=DONE STUB_THREAD=th-020 run_exec) || true
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+check "DONE with an empty diff creates no commit" \
+  "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "0"
+check "DONE with an empty diff still writes a report" \
+  "$([ -f "$TMP/report.md" ] && echo yes || echo no)" "yes"
+check "DONE with an empty diff still prints a status line" \
+  "$(grep -qF 'status=DONE' <<<"$line" && echo yes || echo no)" "yes"
 git -C "$TMP/repo" reset -q --hard HEAD
 git -C "$TMP/repo" clean -qfd
 

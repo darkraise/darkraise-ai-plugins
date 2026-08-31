@@ -110,26 +110,42 @@ last="$report.last.json"
   cat "$HERE/codex-task-contract.md"
 } > "$prompt"
 
-base=$(git -C "$cwd" rev-parse HEAD) || die "not a git repository: $cwd"
+# `git add -A` stages the whole repository no matter which subdirectory it runs
+# from, so a cwd below the root would sweep unrelated uncommitted work into this
+# task's commit. --show-prefix is empty only at the root, and unlike comparing
+# --show-toplevel against pwd it does not care that git and MSYS disagree over
+# whether a path starts with D:/ or /d/.
+prefix=$(git -C "$cwd" rev-parse --show-prefix) || die "not a git repository: $cwd"
+[ -z "$prefix" ] || die "cwd must be the repository root, but sits under $prefix"
+base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
 codex_pid=""
+codex_winpid=""
 cleanup() {
-  [ -n "$codex_pid" ] || return 0
-  kill -0 "$codex_pid" 2>/dev/null || return 0
-  # timeout signals only its direct child; codex.exe is a Windows grandchild, so
-  # reach it by Windows pid. /proc/<pid>/winpid is MSYS's mapping.
-  local winpid
-  winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
-  [ -n "$winpid" ] && taskkill //F //T //PID "$winpid" >/dev/null 2>&1
-  kill -TERM "$codex_pid" 2>/dev/null || true
+  [ -n "$codex_winpid" ] && taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1
+  [ -n "$codex_pid" ] && kill -TERM "$codex_pid" 2>/dev/null
+  return 0
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT INT TERM HUP
+
+# Codex can exit 0 without writing its final message. Left in place, a previous
+# run's verdict would be read as this one's - guaranteed on every resume round,
+# which reuses the same report path - and the wrapper would commit under a stale
+# subject it never earned.
+rm -f "$last" "$jsonl"
 
 timeout --kill-after=10s "$timeout_s" codex "${argv[@]}" \
   < "$prompt" > "$jsonl" 2> "$report.stderr" &
 codex_pid=$!
+# Captured before wait: afterwards the mapping is gone, and the timeout path is
+# exactly where a Windows grandchild can outlive the child timeout signalled.
+codex_winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
 wait "$codex_pid"; rc=$?
 codex_pid=""
+case "$rc" in
+  124|137) [ -n "$codex_winpid" ] && taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1 ;;
+esac
+codex_winpid=""
 
 # Event field naming has varied across Codex releases, so match on any of the
 # shapes rather than pinning one that a later version may rename.
@@ -148,9 +164,22 @@ if [ -f "$last" ]; then
 fi
 [ "$rc" -eq 0 ] || status=BLOCKED
 
+committed=no
 if [ "$status" = DONE ] && [ -n "$subject" ]; then
-  git -C "$cwd" add -A
-  git -C "$cwd" commit -q -m "$subject" || die "commit failed"
+  git -C "$cwd" add -A -- . || die "git add failed in $cwd"
+  # Keep the wrapper's own scratch out of the task's commit. A no-op when the
+  # report lives in a git-ignored directory, load-bearing when it does not.
+  for artefact in "$prompt" "$jsonl" "$last" "$report.stderr"; do
+    git -C "$cwd" reset -q -- "$artefact" 2>/dev/null || true
+  done
+  if git -C "$cwd" diff --cached --quiet; then
+    # A task can legitimately finish with nothing to commit. Dying here would
+    # leave the controller no report and no status line to read.
+    committed=empty
+  else
+    git -C "$cwd" commit -q -m "$subject" || die "commit failed in $cwd"
+    committed=yes
+  fi
 fi
 
 head=$(git -C "$cwd" rev-parse HEAD)
@@ -161,6 +190,7 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- thread: %s\n' "$thread_id"
   printf -- '- status: %s\n' "$status"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
+  [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
   printf '\n## Summary\n\n%s\n' "$summary"
   if [ "$status" = NEEDS_CONTEXT ]; then
     printf '\n## Questions\n\n'
