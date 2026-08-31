@@ -436,25 +436,44 @@ on this diff, which is a fact about the review, not about the code.
 
 **One of the three seats is Codex**, when it is usable. Risk-3 tasks are excluded
 from the executor lane by `max_risk 1` in the `gate` block of
-[`../../reference/ladder.md`](../../reference/ladder.md), so a Codex judge never
-reviews Codex's own work. Establish usability the way this skill already does -
-run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"` and read the
-`usable` field for `codex`; never trust the plan's copy.
+[`../../reference/ladder.md`](../../reference/ladder.md), so this seat never
+reviews Codex's own work - a property the final whole-branch review below does
+not share. Establish usability the way this skill already does - run
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"` and read the `usable`
+field for `codex`; never trust the plan's copy.
+
+Run it as a background Bash call with an explicit timeout, exactly as you run the
+task wrapper. The rung is `gpt-5.6-sol/high`, whose `codex-timeout` row is 1800
+seconds. A foreground call hits the Bash tool's two-minute default, and a
+controller reading the cut call as a Codex failure has misdiagnosed its own
+harness.
 
 ```bash
 codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
-  --output-schema <criteria-schema> -o <out.json> -C <worktree> < <prompt-file>
+  --output-schema <schema-path> -o <workspace>/task-<N>-review-codex.json \
+  -C <worktree-root> < <prompt-file>
 ```
 
 Use `codex exec`, not `codex exec review`: the latter imposes its own report
 shape, and this seat must return the criteria the other two judges return. The
-prompt is superpowers' task-reviewer prompt with the same criteria block
-appended - see Score the review - and the schema requires one integer 1 to 20 per
-criterion, `spec`, `verification`, and `quality`, alongside superpowers' own
-verdicts. **This plugin ships no criteria schema.**
-`scripts/codex-report-schema.json` is the implementer report's shape, not this
-one; write the criteria schema to a file in the workspace directory before the
-run and pass that path.
+prompt is superpowers' task-reviewer prompt with the criteria block from Score
+the review appended, with one change. **For this seat the criteria block's
+output-format paragraph is replaced by the schema, not appended to it.** The
+schema carries the same three criterion names and the same 1 to 20 range, and the
+final message is JSON rather than a markdown `### Verification Scores` section.
+Send the criteria themselves - where to look, what scores high, what to ignore -
+and let the schema state the shape. Sent unedited, the prompt would order
+markdown while `--output-schema` forbids it.
+
+**This plugin ships no criteria schema.** `scripts/codex-report-schema.json` is
+the implementer report's shape, not this one. Write the criteria schema before
+the run - one integer 1 to 20 for each of `spec`, `verification`, and `quality`,
+alongside superpowers' own verdicts - and write it **outside the worktree**, to a
+temporary path. Reports live in the workspace because superpowers' `.gitignore`
+entry covers that directory, but this skill already names host repositories where
+it does not, and a schema is a throwaway input rather than an artefact worth that
+bet: untracked inside the worktree, it is one `git add -A` from landing in the
+next executor-lane task's commit.
 
 If Codex is not usable, dispatch the third judge seat as before - `judge-fable`,
 or `judge-opus` under the Fable-unavailable rule above - and say so. Average and
@@ -551,19 +570,27 @@ still is, but it is no longer the last word, and that is recorded here rather
 than left to accrete silently.
 
 1. **Run superpowers' review** exactly as written. Keep its findings.
-2. **Run a Codex round** over the same branch, with the worktree as the working
-   directory:
+2. **Run a Codex round** over the same branch, as a background Bash call:
 
    ```bash
-   codex exec review --base <base-branch> -m gpt-5.6-sol \
-     -c model_reasoning_effort=high -o <codex-review.md>
+   (cd <worktree-root> && codex exec review --base <base-branch> -m gpt-5.6-sol \
+     -c model_reasoning_effort=high -o <workspace>/final-review-codex.md)
    ```
 
    `codex exec review` is purpose-built for this and takes no sandbox flag,
    because review is read-only by nature. It takes no `-C` either, so the working
-   directory is how you point it at the worktree. Establish usability with the
+   directory is the only way to point it at the worktree - hence the subshell.
+   Give it an explicit timeout at least as generous as the `gpt-5.6-sol/high` row
+   in `codex-timeout`, 1800 seconds: that block has no row for a review round,
+   and a whole branch is more to read than one task. Establish usability with the
    same `detect-executors.sh` check the risk-3 seat uses; if Codex is not usable,
    skip this step, say so, and report superpowers' review alone.
+
+   Unlike the risk-3 seat, this round is **not** self-review-free. The branch
+   contains whatever the executor lane produced, so Codex is reviewing some of
+   its own commits. That is what the third seat in step 4 is for: every finding
+   is verified by an agent that wrote none of the code, whichever reviewer
+   raised it.
 3. **Dedupe into one list**, tagging each finding `claude`, `codex`, or `both`.
    Two findings are the same when they name the same defect in the same place,
    not merely the same file.
@@ -574,5 +601,12 @@ than left to accrete silently.
 5. **Report** confirmed findings ranked most severe first, then the rejected ones
    with the reason each was rejected. A finding both reviewers raised and the
    judge confirmed is the strongest signal available in this loop; say so.
+
+Confirmed findings from both reviewers form one list, and that list is what
+superpowers' final-review flow acts on - its single fix dispatch, its one scoped
+re-review, and its adjudication of residuals, all unchanged. A confirmed finding
+gates the handoff exactly as one of superpowers' own does, whichever reviewer
+raised it; a rejected one never does. Nothing about the Codex round's provenance
+changes a finding's weight once the third seat has confirmed it.
 
 The handoff to superpowers:finishing-a-development-branch is unchanged.
