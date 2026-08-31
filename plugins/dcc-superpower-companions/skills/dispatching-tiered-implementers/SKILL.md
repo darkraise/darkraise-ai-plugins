@@ -193,16 +193,17 @@ wrapper's exit code says which case you are in:
 |------|---------|
 | 0 | `status=DONE`. Proceed to review, unless the report carries the empty-diff note below |
 | 1 | Codex ran and did not reach DONE. Read the `status=` field on the same line |
-| 2 | No status line was printed. Read `<report>.stderr` before doing anything - see below |
+| 2 | No status line was printed. Read the wrapper's own stderr before doing anything - see below |
 
 A run failure is exit 1 with `status=BLOCKED`, or exit 0 with an empty diff.
 
 An empty diff is the report's `- note: DONE with an empty diff; nothing was
 committed` line, not `base==head` alone. Identical shas with no such note mean
-the wrapper skipped the commit for another reason - an empty `commit_subject`
-is the one that reaches here - and Codex's work is still uncommitted in the tree.
-Commit it yourself under a conventional-commit subject and review the task as
-normal. Do not escalate: there is a real diff to review.
+the wrapper skipped the commit because `commit_subject` came back empty. Check
+the working tree before acting: if it is dirty, Codex did real work that was
+never staged - stage it, commit it under a conventional subject, and review as
+normal. If it is clean, nothing was produced and this is the empty-diff
+capability failure below; take the successor rung.
 
 | Failure | Response |
 |---------|----------|
@@ -210,7 +211,7 @@ normal. Do not escalate: there is a real diff to review.
 | Timeout - the run's wall time reached the rung's `codex-timeout` value | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via the `codex-successor` block and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
-| Either failure a second time | `HANDBACK` |
+| Any failure a second time | `HANDBACK` |
 
 A timeout is only identifiable from the wall time you observed, because the
 wrapper prints no marker for it: it forces `status=BLOCKED` whenever Codex exits
@@ -228,8 +229,10 @@ lane and let the ordinary ladder govern from there. Record it inside the line th
 loop is already writing, never as a line of its own.
 
 **Exit 2 always means the run produced no status line** - the status line is the
-last thing a completed run prints. Read the final `run-codex-task:` line in
-`<report>.stderr` to tell the two shapes apart:
+last thing a completed run prints. Read the final `run-codex-task:` line from the
+wrapper's own stderr, which is the command output you already have; it is not in
+`<report>.stderr`, which only ever holds Codex's own stderr and is not created at
+all when the wrapper refuses before launching. Two shapes:
 
 - **Refused before launching.** The message names anything other than the two
   git failures below - an invalid model or effort, a missing `codex-timeout` row,
@@ -237,8 +240,10 @@ last thing a completed run prints. Read the final `run-codex-task:` line in
   a stale verdict file it could not clear. Codex never ran and the tree is
   untouched. The plan or the tables are wrong; fix them rather than retrying.
 - **Failed after running.** The message is `git add failed` or `commit failed`.
-  Codex ran and its work is staged but uncommitted, and there is no report and no
-  thread id, so this round cannot be resumed. Recover the tree before anything
+  Codex ran and its work is staged but uncommitted, and the wrapper reported no
+  report and no thread id. Recovering the thread id from `<report>.jsonl` is
+  possible but not worth it when the tree needs manual repair anyway, so treat
+  the round as unresumable. Recover the tree before anything
   else - a later `git add -A` would otherwise sweep this work into another task's
   commit - then treat it as a run failure and re-dispatch fresh or hand back.
 
