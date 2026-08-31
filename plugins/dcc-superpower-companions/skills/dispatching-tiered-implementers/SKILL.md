@@ -564,10 +564,10 @@ superpowers' final whole-branch review runs unchanged, including its own model
 selection. This adds a second reviewer and a verification pass over the union of
 what both of them find.
 
-**This supersedes a written promise.** This plugin's README states that the final
-whole-branch review and its model selection are untouched. The review itself
-still is, but it is no longer the last word, and that is recorded here rather
-than left to accrete silently.
+**This supersedes a written promise.** The plugin's README said, until this lane
+landed, that the final whole-branch review and its model selection were
+untouched. The review itself still is, but it is no longer the last word, and
+that is recorded here rather than left to accrete silently.
 
 1. **Run superpowers' review** exactly as written. Keep its findings.
 2. **Run a Codex round** over the same branch, as a background Bash call:

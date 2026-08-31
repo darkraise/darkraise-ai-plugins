@@ -83,9 +83,11 @@ would offload score-0 work where the displaced agent is `impl-haiku` and the
 wrapper costs more to orchestrate than it saves.
 
 `**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
-an override on a second line, which is what makes a missing CLI, a cold session,
-and an `executing-plans` run all degrade by reading a line that is already there
-rather than re-deriving the assignment at dispatch.
+an override on a second line, which is what makes a machine without Codex, a cold
+session, and an executor whose auth has lapsed all degrade by reading a line that
+is already there rather than re-deriving the assignment at dispatch. Under
+`superpowers:executing-plans`, which never dispatches subagents, both lines are
+simply inert instead - nothing dispatches, so nothing falls back.
 
 These facts were probed against Codex 0.151.0 on Windows with
 ChatGPT-subscription auth on 2026-08-31, and the tables depend on all of them:
@@ -99,9 +101,10 @@ ChatGPT-subscription auth on 2026-08-31, and the tables depend on all of them:
 - Codex **cannot commit**. Its Windows restricted-token sandbox denies writes to
   `.git` under `-s workspace-write`, which `codex sandbox -- git add -A`
   reproduces with no model call. The wrapper owns the commit, so the ledger's
-  commit range is measured rather than reported and the repository's commit
-  convention is applied by a script rather than inferred by a model that has
-  never read `CLAUDE.md`.
+  commit range is measured rather than reported. It also inlines the repository's
+  `CLAUDE.md` into every prompt, because Codex natively reads only `AGENTS.md`,
+  and passes the model's own conventional-commit subject to `git commit`
+  unmodified.
 - `codex exec resume` does **not** inherit `-m` or `-c model_reasoning_effort`.
   The wrapper re-sends every per-invocation flag, because a bare resume would
   silently run a fix round at the user's config default instead of the recorded
@@ -113,8 +116,10 @@ tables in `reference/ladder.md`.
 **Cross-family review.** On a risk-3 task one of the three judges is Codex, and
 the final whole-branch review gains a `codex exec review` round whose findings
 are deduped with superpowers' own and then verified by `judge-fable`. Risk-3
-tasks are excluded from the executor lane, so a Codex judge never reviews Codex's
-own work.
+tasks are excluded from the executor lane, so the risk-3 judge seat never
+reviews Codex's own work. The final whole-branch round is different: the branch
+contains whatever the executor lane produced, so that round is not
+self-review-free, which is why every finding goes through a third seat.
 
 ## Requirements
 
