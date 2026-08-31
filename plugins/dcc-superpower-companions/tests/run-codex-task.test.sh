@@ -72,7 +72,19 @@ check "a trailing flag with no value exits 2 rather than hanging" \
       >/dev/null 2>&1; echo $?)" "2"
 
 check "rejects an unknown flag" "$(rc_of --model gpt-5.5 --effort medium --bogus x)" "2"
-check "rejects a multi-word effort" "$(rc_of --model gpt-5.5 --effort 'medium high')" "2"
+# Assert the message, not just the exit code: a multi-word effort already exited
+# 2 before the fix, via an unrelated timeout-lookup miss. Only the message proves
+# the effort check itself rejected it.
+#
+# Captured to a variable rather than piped straight into grep: the wrapper's own
+# validation failure exits 2, and with `set -o pipefail` active in this suite, a
+# direct `cmd 2>&1 >/dev/null | grep ...` pipeline reports cmd's exit code (2)
+# instead of grep's match result, so the check would fail regardless of the
+# message. Command substitution sidesteps that: only the text is captured.
+msg=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+      --cwd "$TMP/work" --model gpt-5.5 --effort 'medium high' --dry-run 2>&1 >/dev/null)
+check "rejects a multi-word effort at the effort check, not downstream" \
+  "$(grep -qF 'invalid reasoning effort' <<<"$msg" && echo yes || echo no)" "yes"
 
 check "rejected input prints nothing on stdout" \
   "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
