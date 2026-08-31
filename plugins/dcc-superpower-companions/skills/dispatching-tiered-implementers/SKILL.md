@@ -14,7 +14,7 @@ dispatch each task's assigned implementer."
 
 ## What changes, and what does not
 
-**Changes.** Three things:
+**Changes.** Four things:
 
 1. The implementer dispatch passes
    `subagent_type: dcc-superpower-companions:impl-<model>-<effort>` and passes
@@ -24,12 +24,15 @@ dispatch each task's assigned implementer."
    superpowers' reviewer prompt. See Score the review.
 3. The scoped re-review is asked for one extra line, a progress reading, which
    can pull the escalation point from round 4 to round 3. See Progress.
+4. The final whole-branch review gains a Codex round and a verification pass over
+   the union of both reviewers' findings. See The final whole-branch review.
 
 **Does not change.** The brief and report file protocol, the review package, the
-five-round cap, the breaker and its adjudication rules, the final whole-branch
-review, and the handoff to superpowers:finishing-a-development-branch.
-Implementers are still never dispatched in parallel, and the final whole-branch
-review keeps superpowers' own model selection.
+five-round cap, the breaker and its adjudication rules, and the handoff to
+superpowers:finishing-a-development-branch. Implementers are still never
+dispatched in parallel, and superpowers' own final whole-branch review still runs
+as written, keeping its own model selection - what changes is that it is no
+longer the only reviewer.
 
 ## The one superpowers instruction this supersedes
 
@@ -431,6 +434,33 @@ criterion spread by more than 6 points, read the diff yourself rather than
 trusting the average. A wide spread means the criterion failed to discriminate
 on this diff, which is a fact about the review, not about the code.
 
+**One of the three seats is Codex**, when it is usable. Risk-3 tasks are excluded
+from the executor lane by `max_risk 1` in the `gate` block of
+[`../../reference/ladder.md`](../../reference/ladder.md), so a Codex judge never
+reviews Codex's own work. Establish usability the way this skill already does -
+run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"` and read the
+`usable` field for `codex`; never trust the plan's copy.
+
+```bash
+codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
+  --output-schema <criteria-schema> -o <out.json> -C <worktree> < <prompt-file>
+```
+
+Use `codex exec`, not `codex exec review`: the latter imposes its own report
+shape, and this seat must return the criteria the other two judges return. The
+prompt is superpowers' task-reviewer prompt with the same criteria block
+appended - see Score the review - and the schema requires one integer 1 to 20 per
+criterion, `spec`, `verification`, and `quality`, alongside superpowers' own
+verdicts. **This plugin ships no criteria schema.**
+`scripts/codex-report-schema.json` is the implementer report's shape, not this
+one; write the criteria schema to a file in the workspace directory before the
+run and pass that path.
+
+If Codex is not usable, dispatch the third judge seat as before - `judge-fable`,
+or `judge-opus` under the Fable-unavailable rule above - and say so. Average and
+read the spread exactly as this section already specifies; a Codex seat changes
+who scores, not how the scores are read.
+
 Record the reading in the ledger line you already write:
 
 ```
@@ -508,3 +538,41 @@ automatically, which reached Fable precisely by exhausting those Opus rungs -
 re-dispatching one of them would re-run an agent that already failed. When Fable
 is unavailable and the reserve was entered automatically, report BLOCKED
 instead and say why.
+
+## The final whole-branch review
+
+superpowers' final whole-branch review runs unchanged, including its own model
+selection. This adds a second reviewer and a verification pass over the union of
+what both of them find.
+
+**This supersedes a written promise.** This plugin's README states that the final
+whole-branch review and its model selection are untouched. The review itself
+still is, but it is no longer the last word, and that is recorded here rather
+than left to accrete silently.
+
+1. **Run superpowers' review** exactly as written. Keep its findings.
+2. **Run a Codex round** over the same branch, with the worktree as the working
+   directory:
+
+   ```bash
+   codex exec review --base <base-branch> -m gpt-5.6-sol \
+     -c model_reasoning_effort=high -o <codex-review.md>
+   ```
+
+   `codex exec review` is purpose-built for this and takes no sandbox flag,
+   because review is read-only by nature. It takes no `-C` either, so the working
+   directory is how you point it at the worktree. Establish usability with the
+   same `detect-executors.sh` check the risk-3 seat uses; if Codex is not usable,
+   skip this step, say so, and report superpowers' review alone.
+3. **Dedupe into one list**, tagging each finding `claude`, `codex`, or `both`.
+   Two findings are the same when they name the same defect in the same place,
+   not merely the same file.
+4. **Verify each surviving finding** with `judge-fable` - `judge-opus` under the
+   Fable-unavailable rule - in one dispatch for the whole list, returning
+   `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a third
+   seat, so neither reviewer grades its own work.
+5. **Report** confirmed findings ranked most severe first, then the rejected ones
+   with the reason each was rejected. A finding both reviewers raised and the
+   judge confirmed is the strongest signal available in this loop; say so.
+
+The handoff to superpowers:finishing-a-development-branch is unchanged.
