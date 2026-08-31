@@ -431,6 +431,7 @@ name prefix; since this design adds no agent file, it is untouched.
 | `scripts/detect-executors.sh` | New |
 | `scripts/run-codex-task.sh` | New |
 | `scripts/codex-report-schema.json` | New - the `--output-schema` file |
+| `scripts/codex-task-contract.md` | New - the report contract, TDD evidence format, ask-don't-guess rule, and no-git rule appended to every task prompt |
 | `skills/assigning-implementers/SKILL.md` | Add detection, the checkbox, the gate, and the `**Executor:**` line. Existing scoring text unchanged |
 | `skills/dispatching-tiered-implementers/SKILL.md` | Add executor dispatch, run-failure handling, resume, `HANDBACK`, the K=3 Codex seat, and the final-review round |
 | `scripts/tier-nudge.sh` | One added clause in the `writing-plans` context string |
