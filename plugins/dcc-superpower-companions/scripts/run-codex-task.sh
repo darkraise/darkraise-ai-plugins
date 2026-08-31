@@ -25,16 +25,24 @@ block() {
 brief="" report="" model="" effort="" cwd="" timeout_s="" thread="" dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --brief)   brief="${2:-}";     shift 2 ;;
-    --report)  report="${2:-}";    shift 2 ;;
-    --model)   model="${2:-}";     shift 2 ;;
-    --effort)  effort="${2:-}";    shift 2 ;;
-    --cwd)     cwd="${2:-}";       shift 2 ;;
-    --timeout) timeout_s="${2:-}"; shift 2 ;;
-    --resume)  thread="${2:-}";    shift 2 ;;
-    --dry-run) dry=1;              shift   ;;
+    --dry-run) dry=1; shift; continue ;;
+    --brief|--report|--model|--effort|--cwd|--timeout|--resume) ;;
     *) die "unknown argument: $1" ;;
   esac
+  # Every flag reaching here takes a value. `shift 2` fails when only one
+  # positional remains, and with no `set -e` the loop would re-enter with $1
+  # unchanged and spin forever instead of reporting the malformed input.
+  [ $# -ge 2 ] || die "missing value for $1"
+  case "$1" in
+    --brief)   brief="$2" ;;
+    --report)  report="$2" ;;
+    --model)   model="$2" ;;
+    --effort)  effort="$2" ;;
+    --cwd)     cwd="$2" ;;
+    --timeout) timeout_s="$2" ;;
+    --resume)  thread="$2" ;;
+  esac
+  shift 2
 done
 
 [ -n "$brief" ]  || die "--brief is required"
@@ -48,10 +56,11 @@ done
 
 block codex-assignment | awk '{print $2}' | sort -u | grep -qxF -- "$model" \
   || die "model is not a rung in codex-assignment: $model"
-case " $VALID_EFFORTS " in
-  *" $effort "*) ;;
-  *) die "invalid reasoning effort: $effort (valid: $VALID_EFFORTS)" ;;
-esac
+# Word-exact, mirroring the model check above. A containment test on the padded
+# string admits a multi-word value like "medium high", which would then fail far
+# downstream in the timeout lookup instead of here.
+printf '%s\n' $VALID_EFFORTS | grep -qxF -- "$effort" \
+  || die "invalid reasoning effort: $effort (valid: $VALID_EFFORTS)"
 
 if [ -z "$timeout_s" ]; then
   timeout_s=$(block codex-timeout | awk -v k="$model/$effort" '$1 == k {print $2}')
@@ -73,8 +82,11 @@ argv+=(
 )
 
 if [ "$dry" -eq 1 ]; then
+  # %q, not %s: a dry run that prints a command different from the one that
+  # would execute is worse than no dry run, and a path containing a space
+  # silently splits into several arguments under %s.
   printf 'timeout %s codex' "$timeout_s"
-  printf ' %s' "${argv[@]}"
+  printf ' %q' "${argv[@]}"
   printf '\n'
   exit 0
 fi

@@ -65,5 +65,32 @@ check "resume re-sends the model" "$(grep -qF -- "-m gpt-5.5" <<<"$res" && echo 
 check "resume re-sends the effort" \
   "$(grep -qF -- "model_reasoning_effort=high" <<<"$res" && echo yes || echo no)" "yes"
 
+# --- malformed input fails fast, and the dry run tells the truth ------------
+check "a trailing flag with no value exits 2 rather than hanging" \
+  "$(timeout 10 bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+      --cwd "$TMP/work" --model gpt-5.5 --effort medium --resume \
+      >/dev/null 2>&1; echo $?)" "2"
+
+check "rejects an unknown flag" "$(rc_of --model gpt-5.5 --effort medium --bogus x)" "2"
+check "rejects a multi-word effort" "$(rc_of --model gpt-5.5 --effort 'medium high')" "2"
+
+check "rejected input prints nothing on stdout" \
+  "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+      --cwd "$TMP/work" --model luna --effort medium --dry-run 2>/dev/null \
+      | wc -c | tr -d ' \r\n')" "0"
+
+# The dry run's contract is that it shows what would actually run, so re-parse
+# what it printed and confirm a space-containing path survives as ONE argument.
+mkdir -p "$TMP/dir with space"
+printed=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null)
+eval "set -- $printed"
+roundtrip=no
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-C" ] && [ "${2:-}" = "$TMP/dir with space" ]; then roundtrip=yes; fi
+  shift
+done
+check "dry run round-trips a space-containing path as one argument" "$roundtrip" "yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
