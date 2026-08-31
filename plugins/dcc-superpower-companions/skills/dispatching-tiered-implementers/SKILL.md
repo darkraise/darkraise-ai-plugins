@@ -191,31 +191,56 @@ wrapper's exit code says which case you are in:
 
 | Exit | Meaning |
 |------|---------|
-| 0 | `status=DONE`. Proceed to review - unless the status line's base and head are the same commit, which means Codex reported DONE with nothing to commit |
+| 0 | `status=DONE`. Proceed to review, unless the report carries the empty-diff note below |
 | 1 | Codex ran and did not reach DONE. Read the `status=` field on the same line |
-| 2 | The wrapper refused before launching Codex. A validation error, not a run failure |
+| 2 | No status line was printed. Read `<report>.stderr` before doing anything - see below |
 
-A run failure is exit 1 with `status=BLOCKED`, or exit 0 with an empty diff. A
-timeout arrives as `status=BLOCKED` too: the wrapper forces that status whenever
-Codex exits non-zero, so the status line does not distinguish the two and the
-tail of `<report>.stderr` is what tells them apart.
+A run failure is exit 1 with `status=BLOCKED`, or exit 0 with an empty diff.
+
+An empty diff is the report's `- note: DONE with an empty diff; nothing was
+committed` line, not `base==head` alone. Identical shas with no such note mean
+the wrapper skipped the commit for another reason - an empty `commit_subject`
+is the one that reaches here - and Codex's work is still uncommitted in the tree.
+Commit it yourself under a conventional-commit subject and review the task as
+normal. Do not escalate: there is a real diff to review.
 
 | Failure | Response |
 |---------|----------|
 | Transient - network, rate limit, 5xx in `<report>.stderr` | Retry once at the same rung |
+| Timeout - the run's wall time reached the rung's `codex-timeout` value | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via the `codex-successor` block and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Either failure a second time | `HANDBACK` |
 
-At most two Codex runs per task before Claude takes over. `HANDBACK` is an
+A timeout is only identifiable from the wall time you observed, because the
+wrapper prints no marker for it: it forces `status=BLOCKED` whenever Codex exits
+non-zero, so a timed-out run and a capability block look identical on the status
+line. You launched the wrapper, so you are the one who knows.
+
+A second `NEEDS_CONTEXT` on the same task is a capability failure: take the
+successor rung or hand back. A one-shot agent that could not resolve the brief
+after one clarification will not resolve it after two.
+
+At most two Codex runs may *fail* per task before Claude takes over. Fix-round
+resumes are not failures and do not count against that budget. `HANDBACK` is an
 action, not a rung: dispatch the task's `**Implementer:**` agent on the Claude
 lane and let the ordinary ladder govern from there. Record it inside the line the
 loop is already writing, never as a line of its own.
 
-Exit 2 never enters that table. It means the wrapper rejected the model against
-`codex-assignment`, rejected the effort against its own list of `low`, `medium`,
-`high`, `xhigh`, and `ultra`, or found no `codex-timeout` row for the pair.
-Retrying changes nothing; fix the plan or the table.
+**Exit 2 always means the run produced no status line** - the status line is the
+last thing a completed run prints. Read the final `run-codex-task:` line in
+`<report>.stderr` to tell the two shapes apart:
+
+- **Refused before launching.** The message names anything other than the two
+  git failures below - an invalid model or effort, a missing `codex-timeout` row,
+  a cwd that is not the repository root, a brief or schema it could not read, or
+  a stale verdict file it could not clear. Codex never ran and the tree is
+  untouched. The plan or the tables are wrong; fix them rather than retrying.
+- **Failed after running.** The message is `git add failed` or `commit failed`.
+  Codex ran and its work is staged but uncommitted, and there is no report and no
+  thread id, so this round cannot be resumed. Recover the tree before anything
+  else - a later `git add -A` would otherwise sweep this work into another task's
+  commit - then treat it as a run failure and re-dispatch fresh or hand back.
 
 ## Resuming a Codex task
 
@@ -233,6 +258,11 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh" \
 Give each round its own report path. The wrapper truncates whatever `--report`
 names, so reusing one path erases the earlier round that superpowers expects the
 fix reports to accumulate in. Hand the re-reviewer the round's own report.
+
+Keep every round's report inside the workspace directory `sdd-workspace` prints -
+superpowers' `.gitignore` entry covers it. In a host repository that does not
+ignore that path, reuse one report path and copy it aside between rounds instead,
+because the wrapper only un-stages the artefacts of the report path it was given.
 
 **Round 4 is `HANDBACK`.** The Claude implementer inherits the working tree, the
 commits, and the report, which is superpowers' own "supply the context and
@@ -261,6 +291,10 @@ three points - the two superpowers defines, plus one this skill adds:
   same agent, as superpowers says.
 - **Round 3, when progress has stalled** - see Progress below. This can only
   pull the escalation point earlier, never later.
+
+None of the three applies to a task running on an external executor. Its fix
+rounds resume the same Codex session and it leaves the lane by `HANDBACK`
+instead of by climbing a rung - see Resuming a Codex task above.
 
 Escalation does **not** apply to fix rounds 1 and 2, nor to round 3 unless
 Progress says the loop has stalled. Those rounds resume the original agent,
@@ -440,8 +474,9 @@ Task <N>: fix round 3/5 (1 addressed, 1 open - stale cache; commits a7f..b21; pr
 | Reserve exhausted at impl-fable-max | Report BLOCKED per superpowers. There is no rung above it and no second split |
 | Task has an `**Executor:**` line and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the ledger |
-| The `**Executor:**` line names a model or effort the tables do not contain | Stop and ask your human partner. The wrapper refuses it with exit 2 anyway |
-| Wrapper exits 2 | A validation error, not a run failure. The plan or the table is wrong; fix it rather than retrying |
+| The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`/`ultra`, or a pair with no `codex-timeout` row | Stop and ask your human partner. The wrapper refuses all three with exit 2 anyway |
+| Wrapper exits 2 with a `git add failed` or `commit failed` message | Codex ran and left its work staged but uncommitted, with no report and no thread id. Recover the tree first, then re-dispatch fresh or hand back |
+| Wrapper exits 2 with any other message | It refused before launching Codex. A validation error, not a run failure. The plan or the table is wrong; fix it rather than retrying |
 | Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 
 The silent-fallback rule matters more than it looks. If a bad agent name quietly
