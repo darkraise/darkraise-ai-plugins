@@ -91,4 +91,89 @@ if [ "$dry" -eq 1 ]; then
   exit 0
 fi
 
-die "execution is not implemented yet"
+prompt="$report.prompt.md"
+jsonl="$report.jsonl"
+last="$report.last.json"
+
+{
+  cat "$brief"
+  # Codex reads AGENTS.md, never CLAUDE.md, and the host repo may have neither.
+  # Inlining beats assuming: this plugin ships to arbitrary repositories, and
+  # writing an AGENTS.md would change the user's own Codex sessions too.
+  for f in CLAUDE.md AGENTS.md; do
+    if [ -f "$cwd/$f" ]; then
+      printf '\n\n## Repository conventions (%s)\n\n' "$f"
+      cat "$cwd/$f"
+    fi
+  done
+  printf '\n\n'
+  cat "$HERE/codex-task-contract.md"
+} > "$prompt"
+
+base=$(git -C "$cwd" rev-parse HEAD) || die "not a git repository: $cwd"
+
+codex_pid=""
+cleanup() {
+  [ -n "$codex_pid" ] || return 0
+  kill -0 "$codex_pid" 2>/dev/null || return 0
+  # timeout signals only its direct child; codex.exe is a Windows grandchild, so
+  # reach it by Windows pid. /proc/<pid>/winpid is MSYS's mapping.
+  local winpid
+  winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
+  [ -n "$winpid" ] && taskkill //F //T //PID "$winpid" >/dev/null 2>&1
+  kill -TERM "$codex_pid" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+timeout --kill-after=10s "$timeout_s" codex "${argv[@]}" \
+  < "$prompt" > "$jsonl" 2> "$report.stderr" &
+codex_pid=$!
+wait "$codex_pid"; rc=$?
+codex_pid=""
+
+# Event field naming has varied across Codex releases, so match on any of the
+# shapes rather than pinning one that a later version may rename.
+thread_id=$(jq -r 'select(type=="object")
+  | (.thread_id // .threadId // .session_id // .sessionId // empty)' \
+  "$jsonl" 2>/dev/null | head -1)
+[ -n "$thread_id" ] || thread_id="${thread:-unknown}"
+
+status=BLOCKED
+summary=""
+subject=""
+if [ -f "$last" ]; then
+  status=$(jq -r '.status // "BLOCKED"' "$last" 2>/dev/null || echo BLOCKED)
+  summary=$(jq -r '.summary // ""' "$last" 2>/dev/null || true)
+  subject=$(jq -r '.commit_subject // ""' "$last" 2>/dev/null || true)
+fi
+[ "$rc" -eq 0 ] || status=BLOCKED
+
+if [ "$status" = DONE ] && [ -n "$subject" ]; then
+  git -C "$cwd" add -A
+  git -C "$cwd" commit -q -m "$subject" || die "commit failed"
+fi
+
+head=$(git -C "$cwd" rev-parse HEAD)
+
+{
+  printf '# Task report\n\n'
+  printf -- '- executor: codex %s / %s\n' "$model" "$effort"
+  printf -- '- thread: %s\n' "$thread_id"
+  printf -- '- status: %s\n' "$status"
+  printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
+  printf '\n## Summary\n\n%s\n' "$summary"
+  if [ "$status" = NEEDS_CONTEXT ]; then
+    printf '\n## Questions\n\n'
+    jq -r '.questions[]? | "- " + .' "$last" 2>/dev/null || true
+  fi
+  if [ "$status" != DONE ]; then
+    printf '\n## Working tree\n\nLeft uncommitted on purpose. Last 20 stderr lines:\n\n```\n'
+    tail -20 "$report.stderr" 2>/dev/null || true
+    printf '```\n'
+  fi
+} > "$report"
+
+printf 'codex %s/%s status=%s commits=%s..%s thread=%s report=%s\n' \
+  "$model" "$effort" "$status" "${base:0:7}" "${head:0:7}" "$thread_id" "$report"
+
+[ "$status" = DONE ]

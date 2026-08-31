@@ -104,5 +104,90 @@ while [ $# -gt 0 ]; do
 done
 check "dry run round-trips a space-containing path as one argument" "$roundtrip" "yes"
 
+# --- execution against a stub codex -----------------------------------------
+# No model is ever called. The stub writes the JSONL and last-message files a
+# real run would produce, so commit behaviour and report shape are provable.
+mkdir -p "$TMP/stub" "$TMP/repo"
+git -C "$TMP/repo" init -q .
+git -C "$TMP/repo" config user.email t@t.t
+git -C "$TMP/repo" config user.name t
+printf 'seed\n' > "$TMP/repo/seed.txt"
+git -C "$TMP/repo" add -A
+git -C "$TMP/repo" commit -qm seed
+
+cat > "$TMP/stub/codex" <<'STUB'
+#!/usr/bin/env bash
+# Mimics `codex exec --json -o FILE`: JSONL on stdout, final message to -o.
+out=""; cwd=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -C) cwd="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '{"type":"thread.started","thread_id":"%s"}\n' "${STUB_THREAD:-th-001}"
+printf '{"type":"item.completed"}\n'
+# Content varies with the thread id so a later run actually diffs against an
+# earlier run's commit; identical bytes on every call would make a "the tree
+# is dirty" assertion unsatisfiable regardless of whether the wrapper is right.
+[ -n "$cwd" ] && printf 'produced %s\n' "${STUB_THREAD:-th-001}" > "$cwd/produced.txt"
+cat > "$out" <<JSON
+{"status":"${STUB_STATUS:-DONE}","summary":"stub summary","commit_subject":"feat(x): stub change","questions":[]}
+JSON
+exit "${STUB_RC:-0}"
+STUB
+chmod +x "$TMP/stub/codex"
+
+run_exec() { # run_exec  -> prints the wrapper's stdout status line
+  PATH="$TMP/stub:$PATH" bash "$SCRIPT" \
+    --brief "$TMP/brief.md" --report "$TMP/report.md" \
+    --cwd "$TMP/repo" --model gpt-5.5 --effort medium "$@" 2>"$TMP/err"
+}
+
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(STUB_STATUS=DONE run_exec)
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+
+check "DONE commits exactly one commit" \
+  "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "1"
+check "DONE uses the schema commit subject" \
+  "$(git -C "$TMP/repo" log -1 --pretty=%s)" "feat(x): stub change"
+check "status line reports DONE" "$(grep -qF 'status=DONE' <<<"$line" && echo yes || echo no)" "yes"
+check "status line carries the thread id" "$(grep -qF 'thread=th-001' <<<"$line" && echo yes || echo no)" "yes"
+check "report file was written" "$([ -f "$TMP/report.md" ] && echo yes || echo no)" "yes"
+check "report records the executor tier" \
+  "$(grep -qE '^- executor: codex gpt-5\.5 / medium' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "report records the thread id" \
+  "$(grep -qE '^- thread: th-001' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "report records a commit range" \
+  "$(grep -qE '^- commits: [0-9a-f]{7}\.\.[0-9a-f]{7}' "$TMP/report.md" && echo yes || echo no)" "yes"
+
+# A non-DONE status must leave the tree dirty rather than commit broken work,
+# which is how a Claude implementer behaves when it reports BLOCKED mid-task.
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(STUB_STATUS=BLOCKED STUB_THREAD=th-002 run_exec)
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+check "BLOCKED creates no commit" "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "0"
+check "BLOCKED is reported on the status line" \
+  "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
+check "BLOCKED leaves the tree dirty" \
+  "$(git -C "$TMP/repo" status --porcelain | grep -q . && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD
+git -C "$TMP/repo" clean -qfd
+
+# A non-zero exit is a run failure regardless of what the last message claimed.
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(STUB_RC=1 STUB_STATUS=DONE run_exec) || true
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+check "non-zero exit creates no commit" "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "0"
+git -C "$TMP/repo" reset -q --hard HEAD
+git -C "$TMP/repo" clean -qfd
+
+check "the prompt inlines repo conventions when present" \
+  "$(printf 'be terse\n' > "$TMP/repo/CLAUDE.md"; STUB_STATUS=DONE run_exec >/dev/null; \
+     grep -qF 'be terse' "$TMP/report.md.prompt.md" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
