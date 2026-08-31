@@ -68,6 +68,54 @@ decisions to inline, including bug fixes with a located root cause - where
 ranking candidates generated before the root cause is known would launder
 guesses into a confident pick.
 
+**An external executor lane.** A task scoring 2 to 4 with `risk <= 1` can run on
+the Codex CLI instead of a Claude implementer, for quota offload onto a separate
+ChatGPT subscription and for a second model family in the loop. The lane is a
+gate in front of the assignment table, never a rung on the escalation ladder:
+offload selects downward at the cheap end while the ladder only moves upward, and
+one total order cannot express both. The Claude ladder stays the sole backstop,
+so its termination proof is untouched.
+
+The gate floors at score 2 on purpose. Rule S caps `reducible` at 3, so under
+`risk <= 1` the eligible totals are exactly 2, 3, and 4; without the floor the
+gate would reduce to `risk <= 1` and capture nearly every task by count, and it
+would offload score-0 work where the displaced agent is `impl-haiku` and the
+wrapper costs more to orchestrate than it saves.
+
+`**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
+an override on a second line, which is what makes a missing CLI, a cold session,
+and an `executing-plans` run all degrade by reading a line that is already there
+rather than re-deriving the assignment at dispatch.
+
+These facts were probed against Codex 0.151.0 on Windows with
+ChatGPT-subscription auth on 2026-08-31, and the tables depend on all of them:
+
+- Only `gpt-5.5` and `gpt-5.6-sol` are available. `luna` and `terra` are rejected
+  with HTTP 400 and Codex holds no metadata for either.
+- Valid reasoning efforts are `low`, `medium`, `high`, `xhigh`, `ultra`.
+  `minimal` is rejected. The CLI validates neither model nor effort locally - it
+  echoes any string and fails at the API - so `scripts/run-codex-task.sh`
+  validates both before spawning anything.
+- Codex **cannot commit**. Its Windows restricted-token sandbox denies writes to
+  `.git` under `-s workspace-write`, which `codex sandbox -- git add -A`
+  reproduces with no model call. The wrapper owns the commit, so the ledger's
+  commit range is measured rather than reported and the repository's commit
+  convention is applied by a script rather than inferred by a model that has
+  never read `CLAUDE.md`.
+- `codex exec resume` does **not** inherit `-m` or `-c model_reasoning_effort`.
+  The wrapper re-sends every per-invocation flag, because a bare resume would
+  silently run a fix round at the user's config default instead of the recorded
+  tier.
+
+A different machine, account, or Codex version must re-probe before trusting the
+tables in `reference/ladder.md`.
+
+**Cross-family review.** On a risk-3 task one of the three judges is Codex, and
+the final whole-branch review gains a `codex exec review` round whose findings
+are deduped with superpowers' own and then verified by `judge-fable`. Risk-3
+tasks are excluded from the executor lane, so a Codex judge never reviews Codex's
+own work.
+
 ## Requirements
 
 **superpowers must be installed.** This plugin has no standalone use, and the
@@ -146,8 +194,16 @@ escalation point from round 4 to round 3.
 
 Everything else in the superpowers loop is untouched: the brief and report
 protocol, the review package, the five-round cap, the breaker and its
-adjudication rules, the final whole-branch review and its model selection, and
-the handoff to superpowers:finishing-a-development-branch.
+adjudication rules, and the handoff to
+superpowers:finishing-a-development-branch.
+
+Two further instructions are superseded. The final whole-branch review is no
+longer untouched: it keeps superpowers' own review and model selection and adds
+a Codex round plus a verification pass over the union. And rounds 4 and 5 call
+for a more capable model, where an external task instead hands back to the Claude
+assignment-table row for its score - a change of model family plus a fresh
+context, argued as satisfying that rule's intent rather than as an exception to
+it.
 
 It supersedes one superpowers instruction, "always specify the model
 explicitly", and only for fleet agents whose frontmatter pins a model. Passing
@@ -163,7 +219,8 @@ because its fix loop keys on those verdicts.
 for t in plugins/dcc-superpower-companions/tests/*.test.sh; do bash "$t"; done
 ```
 
-Requires `jq`. No model calls.
+Requires `jq` and `git`. No model calls: the executor suites run against a stub
+`codex` on `PATH` and a synthetic roster, never the real CLI.
 
 ## Reference
 
