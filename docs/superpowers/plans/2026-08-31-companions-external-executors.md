@@ -586,9 +586,9 @@ check "dry run never bypasses the sandbox" \
 
 # --- timeouts come from the table unless overridden -------------------------
 check "timeout defaults from codex-timeout" \
-  "$(grep -qE 'timeout +900' <<<"$cmd" && echo yes || echo no)" "yes"
+  "$(grep -qE '^timeout=900$' <<<"$cmd" && echo yes || echo no)" "yes"
 check "explicit timeout wins" \
-  "$(dry --model gpt-5.5 --effort medium --timeout 42 | grep -qE 'timeout +42' && echo yes || echo no)" "yes"
+  "$(out=$(dry --model gpt-5.5 --effort medium --timeout 42); grep -qE '^timeout=42$' <<<"$out" && echo yes || echo no)" "yes"
 
 # --- resume must re-send every per-invocation flag ---------------------------
 # A bare `codex exec resume <id>` falls back to the user's config defaults, so a
@@ -773,8 +773,11 @@ argv+=(
 if [ "$dry" -eq 1 ]; then
   # %q, not %s: a dry run that prints a command different from the one that
   # would execute is worse than no dry run, and a path containing a space
-  # silently splits into several arguments under %s.
-  printf 'timeout %s codex' "$timeout_s"
+  # silently splits into several arguments under %s. The timeout is its own
+  # labelled line because execution enforces it with a poll loop rather than by
+  # invoking timeout(1), so printing it as part of the command would be a lie.
+  printf 'timeout=%s\n' "$timeout_s"
+  printf 'codex'
   printf ' %q' "${argv[@]}"
   printf '\n'
   exit 0
