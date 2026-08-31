@@ -264,9 +264,17 @@ inline_report="$TMP/repo/inline-report.md"
 PATH="$TMP/stub:$PATH" STUB_STATUS=DONE STUB_THREAD=th-040 bash "$SCRIPT" \
   --brief "$TMP/brief.md" --report "$inline_report" \
   --cwd "$TMP/repo" --model gpt-5.5 --effort medium >/dev/null 2>"$TMP/err"
+before=$(git -C "$TMP/repo" rev-parse HEAD)
 PATH="$TMP/stub:$PATH" STUB_STATUS=DONE STUB_THREAD=th-041 bash "$SCRIPT" \
   --brief "$TMP/brief.md" --report "$inline_report" \
   --cwd "$TMP/repo" --model gpt-5.5 --effort medium >/dev/null 2>"$TMP/err"
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+# Without this, an argument error in the second invocation (or any other
+# early exit) leaves HEAD unchanged, and the exclusion check below would then
+# report "excluded" for the wrong reason - nothing to sweep, not correct
+# exclusion of something present. The reviewer confirmed this with --bogus x.
+check "the resumed round actually produced a commit" \
+  "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "1"
 check "a resumed --report path inside cwd is not swept into the commit" \
   "$(git -C "$TMP/repo" log -1 --name-only --pretty=format: | grep -qxF 'inline-report.md' && echo swept || echo excluded)" \
   "excluded"
@@ -299,8 +307,14 @@ sleep_winpid=$(cat "$TMP/sleep.winpid" 2>/dev/null || true)
 # proving nothing while looking green.
 check "a timed-out run's grandchild winpid was captured" \
   "$([ -n "$sleep_winpid" ] && echo yes || echo no)" "yes"
+# Captured separately from the match, and stderr is not discarded: `tasklist`
+# itself failing (not just finding nothing) must not be indistinguishable from
+# a clean "gone" via an `&&`-chain's `|| echo gone` fallback.
+tl_out=$(tasklist //FI "PID eq $sleep_winpid" 2>&1)
+tl_rc=$?
+check "tasklist itself ran successfully" "$([ "$tl_rc" -eq 0 ] && echo yes || echo no)" "yes"
 check "a timed-out run's grandchild process is actually dead" \
-  "$([ -n "$sleep_winpid" ] && tasklist //FI "PID eq $sleep_winpid" 2>/dev/null | grep -q "$sleep_winpid" && echo alive || echo gone)" \
+  "$(grep -q "$sleep_winpid" <<<"$tl_out" && echo alive || echo gone)" \
   "gone"
 git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
 
