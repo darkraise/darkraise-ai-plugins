@@ -138,8 +138,8 @@ same-shape work produces one dispatch covering several tasks, which a per-task
 Add two to four lines to each task block, directly below its `**Interfaces:**`
 block, always in this order: `**Implementer:**`, then `**Executor:**` when the
 lane gate passed, then `**Evaluation:**`, then `**Approach:**` when the task
-involved an approach decision. Only the first two of those four are always
-present.
+involved an approach decision. `**Implementer:**` and `**Evaluation:**` are
+always present; the other two appear only under the conditions just named.
 
 ```markdown
 **Implementer:** dcc-superpower-companions:impl-opus-medium
