@@ -1241,9 +1241,41 @@ same-shape work produces one dispatch covering several tasks, which a per-task
 `**Executor:**` line on a batched task.
 ````
 
-- [ ] **Step 2: Extend the checklist**
+- [ ] **Step 2: State the line order in "Write the assignment"**
 
-In the same file, in the `## Check your work` section, add these three bullets
+A gated task that also involved an approach decision now carries four lines, and
+the existing section opens "Add two or three lines" without saying where
+`**Executor:**` sits relative to the others. Replace that opening sentence with:
+
+```markdown
+Add two to four lines to each task block, directly below its `**Interfaces:**`
+block, always in this order: `**Implementer:**`, then `**Executor:**` when the
+lane gate passed, then `**Evaluation:**`, then `**Approach:**` when the task
+involved an approach decision. Only the first two of those four are always
+present.
+```
+
+Leave the existing three-line example beneath it unchanged - it is the ungated
+case and is still correct - and add this immediately after it:
+
+````markdown
+A task that passed the lane gate and also involved an approach decision carries
+all four:
+
+```markdown
+**Implementer:** dcc-superpower-companions:impl-sonnet-medium
+**Executor:** codex gpt-5.5 / medium
+**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+**Approach:** inline - skip 2: follows the existing exporter pattern
+```
+````
+
+Without this, two planners can order the same four lines differently, which is
+the one thing the rubric's determinism is supposed to rule out.
+
+- [ ] **Step 3: Extend the checklist**
+
+In the same file, in the `## Check your work` section, add these bullets
 to the end of the existing list:
 
 ```markdown
@@ -1261,7 +1293,7 @@ to the end of the existing list:
   never run where the plan says it does.
 ```
 
-- [ ] **Step 3: Verify the skill still parses and the suites pass**
+- [ ] **Step 4: Verify the skill still parses and the suites pass**
 
 ```bash
 head -5 plugins/dcc-superpower-companions/skills/assigning-implementers/SKILL.md
@@ -1270,7 +1302,7 @@ for t in plugins/dcc-superpower-companions/tests/*.test.sh; do echo "== $t"; bas
 
 Expected: the frontmatter block is intact and unchanged, and every suite reports `0 failed`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add plugins/dcc-superpower-companions/skills/assigning-implementers/SKILL.md
