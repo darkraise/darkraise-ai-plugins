@@ -252,8 +252,10 @@ format. `tests/criteria.test.sh` validates every file in that directory.
   dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
   plugin ships no wrapper for reports `usable: false` with the reason.
 - `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
-  one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, 2 is no
-  run at all.
+  one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
+  no status line - either a refusal before launch or a git failure after the run,
+  which the dispatching skill tells the controller apart and recovers from
+  differently.
 - `codex-report-schema.json` is the `--output-schema` the wrapper passes, and
   the shape of the verdict it parses back.
 - `codex-task-contract.md` is appended to every prompt the wrapper sends,
