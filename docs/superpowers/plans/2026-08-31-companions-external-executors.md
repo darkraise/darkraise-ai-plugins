@@ -607,7 +607,13 @@ check "a trailing flag with no value exits 2 rather than hanging" \
       >/dev/null 2>&1; echo $?)" "2"
 
 check "rejects an unknown flag" "$(rc_of --model gpt-5.5 --effort medium --bogus x)" "2"
-check "rejects a multi-word effort" "$(rc_of --model gpt-5.5 --effort 'medium high')" "2"
+# Assert the message, not just the exit code: a multi-word effort already exited
+# 2 before the fix, via an unrelated timeout-lookup miss. Only the message proves
+# the effort check itself rejected it.
+check "rejects a multi-word effort at the effort check, not downstream" \
+  "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+      --cwd "$TMP/work" --model gpt-5.5 --effort 'medium high' --dry-run 2>&1 >/dev/null \
+      | grep -qF 'invalid reasoning effort' && echo yes || echo no)" "yes"
 
 check "rejected input prints nothing on stdout" \
   "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
