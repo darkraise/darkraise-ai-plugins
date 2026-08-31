@@ -62,6 +62,10 @@ means superpowers' final whole-branch review.
 
 ## Dispatch a task
 
+**Read the task's `**Executor:**` line first.** A task carrying one runs on that
+CLI - see Dispatch an external executor below - and the steps here are its
+fallback. A task without one takes these steps directly.
+
 1. Read the task's `**Implementer:**` line.
 2. If that value names one of the nine reserve implementers - every name in the
    `reserve` table of [`../../reference/ladder.md`](../../reference/ladder.md)
@@ -109,6 +113,139 @@ means superpowers' final whole-branch review.
 `sdd-workspace` prints a bare path, but `task-brief` does not — it prints
 `wrote <path>: <N> lines`. Read the brief path out of that line; do not pipe
 `task-brief`'s output into a dispatch prompt as if it were a filename.
+
+## Dispatch an external executor
+
+A task carrying an `**Executor:**` line runs on that CLI instead of its
+`**Implementer:**` agent. Everything downstream - the review seat, the fix loop,
+the ledger, the five-round cap - is unchanged, because the contract superpowers
+enforces is files and commits, not a particular runtime.
+
+**There is no driver subagent.** Run the wrapper yourself as a background Bash
+call, exactly as you already run `sdd-workspace` and `task-brief`. It prints one
+status line and writes everything else to files.
+
+**There is no separate worktree.** Codex runs in the SDD worktree, on the task
+branch, where a Claude implementer would run. superpowers already created that
+worktree at setup, and its finish step is `rm -rf <workspace>`, so a nested
+worktree would be deleted out from under git.
+
+1. **Guard the roster.** Run
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"` and read the entry
+   for the named executor. **Never trust the plan's copy** - it records what was
+   available when the plan was written.
+
+   If `usable` is false, dispatch the task's `**Implementer:**` agent on the
+   Claude lane instead, say the substitution aloud, and record it, quoting the
+   entry's `reason` field:
+
+   ```
+   Task <N>: implementer impl-sonnet-medium (assigned; executor codex unavailable - <reason>)
+   ```
+
+   Never fall back silently. A silent fallback makes the whole lane invisible.
+
+2. **Run the wrapper**, using the brief path `task-brief` printed and the
+   worktree's repository root:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh" \
+     --brief <brief> --report <workspace>/task-<N>-report.md \
+     --cwd <worktree-root> --model <model> --effort <effort>
+   ```
+
+   `--cwd` is the repository root, not the workspace directory inside it. The
+   wrapper refuses anything below the root with exit 2, because it stages with
+   `git add -A` and a subdirectory would sweep unrelated work into the task's
+   commit. The workspace `sdd-workspace` prints sits at
+   `<worktree-root>/.superpowers/sdd/<plan-slug>`, so the root is that path's
+   repository - `git rev-parse --show-toplevel`.
+
+   The `**Executor:**` line writes the rung as `codex <model> / <effort>`; the
+   wrapper takes the two as separate flags. The timeout comes from
+   `reference/ladder.md`'s `codex-timeout` block, keyed by `<model>/<effort>`;
+   do not pass `--timeout` unless you are deliberately overriding it.
+
+   Record BASE before the run, as superpowers requires. The wrapper's status
+   line reports the same range as `commits=<a7>..<b7>` once the run finishes.
+
+3. **Record the assignment** by extending the `(assigned)` line this skill
+   already owns, reading the thread id from the status line's `thread=` field:
+
+   ```
+   Task <N>: implementer impl-sonnet-medium (assigned; executor codex gpt-5.5/medium, thread 01a0...)
+   ```
+
+   The thread id must reach the ledger. It also lands in the report file. If it
+   lived only in your context, a compaction would turn round 2 into a fresh
+   dispatch wearing a resume's name.
+
+4. **Review as normal.** Dispatch the judge exactly as for a Claude task. Do not
+   tell it which lane produced the diff: a judge that knows the author scores
+   the author, and nothing in its inputs needs to change to keep it unaware.
+
+## When a run fails
+
+A failed *run* is not a failed *review*, and they take different paths. The
+wrapper's exit code says which case you are in:
+
+| Exit | Meaning |
+|------|---------|
+| 0 | `status=DONE`. Proceed to review - unless the status line's base and head are the same commit, which means Codex reported DONE with nothing to commit |
+| 1 | Codex ran and did not reach DONE. Read the `status=` field on the same line |
+| 2 | The wrapper refused before launching Codex. A validation error, not a run failure |
+
+A run failure is exit 1 with `status=BLOCKED`, or exit 0 with an empty diff. A
+timeout arrives as `status=BLOCKED` too: the wrapper forces that status whenever
+Codex exits non-zero, so the status line does not distinguish the two and the
+tail of `<report>.stderr` is what tells them apart.
+
+| Failure | Response |
+|---------|----------|
+| Transient - network, rate limit, 5xx in `<report>.stderr` | Retry once at the same rung |
+| Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via the `codex-successor` block and run once |
+| `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
+| Either failure a second time | `HANDBACK` |
+
+At most two Codex runs per task before Claude takes over. `HANDBACK` is an
+action, not a rung: dispatch the task's `**Implementer:**` agent on the Claude
+lane and let the ordinary ladder govern from there. Record it inside the line the
+loop is already writing, never as a line of its own.
+
+Exit 2 never enters that table. It means the wrapper rejected the model against
+`codex-assignment`, rejected the effort against its own list of `low`, `medium`,
+`high`, `xhigh`, and `ultra`, or found no `codex-timeout` row for the pair.
+Retrying changes nothing; fix the plan or the table.
+
+## Resuming a Codex task
+
+Fix rounds 1 to 3 resume the same Codex session, mirroring superpowers' rule that
+those rounds resume the same implementer to preserve its model, effort, and
+context. Write the open findings verbatim into a file and pass that file as the
+brief - the wrapper appends the task contract to every run, resume included:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh" \
+  --brief <feedback-file> --report <workspace>/task-<N>-report-r<K>.md \
+  --cwd <worktree-root> --model <model> --effort <effort> --resume <thread-id>
+```
+
+Give each round its own report path. The wrapper truncates whatever `--report`
+names, so reusing one path erases the earlier round that superpowers expects the
+fix reports to accumulate in. Hand the re-reviewer the round's own report.
+
+**Round 4 is `HANDBACK`.** The Claude implementer inherits the working tree, the
+commits, and the report, which is superpowers' own "supply the context and
+re-dispatch" case. If Progress says the loop has stalled at round 3, the handback
+happens at round 3 instead: that rule pulls this lane's exit point earlier
+exactly as it pulls the Claude ladder's, and it may never push it later.
+
+This supersedes superpowers' rounds 4 and 5 instruction to escalate to a *more
+capable* model. Handing back lands the task on the Claude assignment-table row
+for its score, which is the same tier the rubric picked before the fix rounds
+happened. The argument for parity is that a change of model family plus a fresh
+context satisfies the rule's intent, and that the recorded score is the only
+evidence-free anchor available. Say the handback aloud when it happens.
 
 ## Escalate
 
@@ -301,6 +438,11 @@ Task <N>: fix round 3/5 (1 addressed, 1 open - stale cache; commits a7f..b21; pr
 | An implementer's model is unavailable on this account | Substitute the same effort one model down, state the substitution in the ledger and to your partner, and continue. From Sonnet there is no such rung - stop and ask instead |
 | Escalation exhausted at impl-opus-high | Split the remaining work once; if a half also exhausts, enter the reserve at `impl-opus-xhigh` |
 | Reserve exhausted at impl-fable-max | Report BLOCKED per superpowers. There is no rung above it and no second split |
+| Task has an `**Executor:**` line and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
+| Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the ledger |
+| The `**Executor:**` line names a model or effort the tables do not contain | Stop and ask your human partner. The wrapper refuses it with exit 2 anyway |
+| Wrapper exits 2 | A validation error, not a run failure. The plan or the table is wrong; fix it rather than retrying |
+| Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 
 The silent-fallback rule matters more than it looks. If a bad agent name quietly
 degraded to the session default, every task would run at the session's model and
