@@ -344,7 +344,11 @@ check() { # check <name> <got> <want>
 mkdir -p "$TMP/bin" "$TMP/codexhome"
 make_stub() { printf '#!/usr/bin/env bash\necho "%s"\n' "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
 
-run() { PATH="$TMP/bin:/usr/bin:/bin" CODEX_HOME="$TMP/codexhome" bash "$SCRIPT"; }
+# The synthetic PATH must be narrow enough to hide the real executors but wide
+# enough to keep the script's own dependencies. jq is commonly installed outside
+# /usr/bin on Git Bash, so its directory is resolved rather than assumed.
+JQ_DIR=$(dirname "$(command -v jq)")
+run() { PATH="$TMP/bin:$JQ_DIR:/usr/bin:/bin" CODEX_HOME="$TMP/codexhome" bash "$SCRIPT"; }
 field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | .[$f]' <<< "$3"; }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
