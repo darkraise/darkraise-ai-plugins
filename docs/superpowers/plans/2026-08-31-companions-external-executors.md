@@ -1221,11 +1221,13 @@ executor is an override on a second line, never a replacement on the first:
 ```
 
 That ordering is what makes every degradation free. A machine without Codex, a
-cold session, an `executing-plans` run, and an executor whose auth has lapsed all
-fall back by *reading a line that is already there*, rather than re-deriving the
-assignment at dispatch time - which is the failure this whole plugin exists to
-remove. It also keeps every `**Implementer:**` value inside the assignment or
-reserve table, so the checks below still mean what they say.
+cold session, and an executor whose auth has lapsed all fall back by *reading a
+line that is already there*, rather than re-deriving the assignment at dispatch
+time - which is the failure this whole plugin exists to remove. It also keeps
+every `**Implementer:**` value inside the assignment or reserve table, so the
+checks below still mean what they say. Under superpowers:executing-plans both
+lines are simply inert, as "When this applies" says above: nothing dispatches,
+so nothing falls back.
 
 **Why the gate excludes an overridden Rule S pass.** The legacy floor lets a
 human keep a `spec = 3` task as written. Such a task can score
@@ -1253,6 +1255,10 @@ to the end of the existing list:
   back to when the CLI is missing at dispatch time.
 - No task carrying an `**Executor:**` line scores below the gate's `min_score`,
   above its `max_risk`, or passed Rule S only by human override.
+- Every `**Executor:**` line names an executor that appears in the plan header's
+  `> **External executors:**` line. An executor line naming a tool the plan never
+  enabled is a task that will fall back to its Claude implementer at dispatch and
+  never run where the plan says it does.
 ```
 
 - [ ] **Step 3: Verify the skill still parses and the suites pass**
