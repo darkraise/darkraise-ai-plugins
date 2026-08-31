@@ -1251,8 +1251,8 @@ the existing section opens "Add two or three lines" without saying where
 Add two to four lines to each task block, directly below its `**Interfaces:**`
 block, always in this order: `**Implementer:**`, then `**Executor:**` when the
 lane gate passed, then `**Evaluation:**`, then `**Approach:**` when the task
-involved an approach decision. Only the first two of those four are always
-present.
+involved an approach decision. `**Implementer:**` and `**Evaluation:**` are
+always present; the other two appear only under the conditions just named.
 ```
 
 Leave the existing three-line example beneath it unchanged - it is the ungated
