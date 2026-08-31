@@ -177,3 +177,81 @@ reduce.
 That is the intended outcome. Do not inflate an axis to land on a tier that feels
 right; if a task feels harder than its score, the plan text is probably hiding
 something, and the fix is a better task description or a smaller task.
+
+## The external lane
+
+An external executor is not a rung on the escalation ladder above. Offload
+selects downward at the cheap end while the ladder only moves upward, and one
+total order cannot express both. The Claude ladder remains the sole backstop, so
+its termination proof is unchanged by anything in this section.
+
+### The lane gate
+
+```gate
+min_score 2
+max_risk 1
+require_rule_s_clean true
+require_external_enabled true
+```
+
+All four conditions must hold. `require_rule_s_clean` excludes a task whose
+`spec = 3` was kept by a human override under the legacy floor: such a task can
+score `0 + 3 + 0 + 0 = 3` and would otherwise pass, sending a task whose approach
+nobody decided to a one-shot external agent.
+
+`min_score 2` is not arbitrary. Rule S caps `reducible` at 3, so under
+`max_risk 1` the eligible totals are exactly 2, 3, and 4 - totals 5 and 6 need
+`risk >= 2` and the risk clause already excludes them. Without the floor the gate
+would reduce to `risk <= 1` and capture nearly every task by count. It would also
+offload where offload is worthless: a score-0 task displaces `impl-haiku`, which
+costs less to run than the wrapper costs to orchestrate.
+
+### Codex assignment
+
+```codex-assignment
+2 gpt-5.5 medium
+3 gpt-5.5 high
+4 gpt-5.6-sol high
+```
+
+Only `gpt-5.5` and `gpt-5.6-sol` appear. `luna` and `terra` are rejected with
+HTTP 400 on a ChatGPT account - "not supported when using Codex with a ChatGPT
+account" - and Codex holds no model metadata for either. A table naming them
+would fail every task at those rungs on every run.
+
+Valid efforts are `low`, `medium`, `high`, `xhigh`, and `ultra`. `minimal` is
+rejected. Two models across five efforts is ten rungs of headroom, all of it on
+the effort axis.
+
+### Codex successor
+
+```codex-successor
+gpt-5.5/medium gpt-5.5/high
+gpt-5.5/high gpt-5.6-sol/high
+gpt-5.6-sol/high gpt-5.6-sol/xhigh
+gpt-5.6-sol/xhigh HANDBACK
+```
+
+This is a single-successor column consulted at most once per task, not a
+walkable chain. Only a failed *run* consults it: the fix loop resumes the same
+session on rounds 1 to 3 and hands back on round 4, so no fix round ever reads
+it. It is named `successor` rather than `escalation` for that reason.
+
+`HANDBACK` is an action, not an executor - the same shape as `SPLIT` at the top
+of the escalation table. It resolves to the Claude assignment-table row for the
+task's score, after which the ordinary ladder governs.
+
+Ranking a rung as `model_rank * 10 + effort_rank`, where `gpt-5.5` ranks 0 and
+`gpt-5.6-sol` ranks 1, gives every successor a strictly higher rank than its
+source, so the column is acyclic and every walk reaches `HANDBACK`.
+
+### Codex timeout
+
+```codex-timeout
+gpt-5.5/medium 900
+gpt-5.5/high 1200
+gpt-5.6-sol/high 1800
+gpt-5.6-sol/xhigh 2400
+```
+
+Seconds. One constant cannot serve both a `medium` and an `xhigh` run.
