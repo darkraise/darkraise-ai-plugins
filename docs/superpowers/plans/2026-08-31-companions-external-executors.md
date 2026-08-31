@@ -984,18 +984,20 @@ prefix=$(git -C "$cwd" rev-parse --show-prefix) || die "not a git repository: $c
 base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
 codex_pid=""
-# `taskkill //F //T` cannot reach the grandchild here: on this MSYS/Windows
-# setup a spawned child's native Windows ParentProcessId does not point back
-# to the pid MSYS itself considers the parent, so a tree-walk keyed on winpid
-# misses it. Verified live: a backgrounded child survived `taskkill //F //T`
-# on its direct parent's winpid while `tasklist` confirmed it still running
-# seconds later, and a PowerShell CIM query showed the grandchild's real
-# ParentProcessId pointed at an unrelated helper process, not that winpid.
-# Signalling the whole MSYS process group does reach it instead, since MSYS's
-# `kill` resolves a group member to its real Windows process independent of
-# native process lineage - see the `set -m` below for how that group exists.
+codex_winpid=""
+# Two mechanisms for two topologies. `codex` on PATH is a POSIX shim that
+# execs node, which then spawns codex's real payload - a native codex-*.exe -
+# via a raw CreateProcess outside the MSYS runtime entirely; that binary holds
+# no MSYS pgid, so only `taskkill //T`, which walks native ParentProcessId,
+# can reach it. `kill -TERM -<pgid>` is the complementary case: it reaches
+# whatever MSYS-aware descendants share the `set -m` group below, which is
+# what a real Windows ParentProcessId lookup was shown live NOT to find (a
+# backgrounded MSYS child survived `taskkill //F //T` on its own parent's
+# winpid while confirmed still running). Both run every time, since neither
+# topology can be assumed absent.
 kill_codex_tree() {
   kill -0 "$codex_pid" 2>/dev/null || return 0
+  [ -n "$codex_winpid" ] && taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1
   kill -TERM -"$codex_pid" 2>/dev/null || true
   sleep 1
   kill -0 "$codex_pid" 2>/dev/null && kill -KILL -"$codex_pid" 2>/dev/null
@@ -1025,10 +1027,16 @@ set -m
 codex "${argv[@]}" < "$prompt" > "$jsonl" 2> "$report.stderr" &
 codex_pid=$!
 set +m
+# Captured once, right after launch, while codex_pid (node) is still alive:
+# this is node's own Windows process, which is what taskkill //T needs to
+# start its native tree-walk from.
+codex_winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
 
 # Polled rather than wrapped in `timeout`: the kill has to happen while the
 # child is still live. `timeout` reaps its child before wait returns, leaving
-# nothing left to signal by the time a kill would fire.
+# nothing left to signal by the time a kill would fire - and it would also put
+# a wrapper process between us and node, which is exactly what breaks
+# taskkill's native tree-walk (see codex_winpid above).
 timed_out=no
 waited=0
 while [ "$waited" -lt "$timeout_s" ] && kill -0 "$codex_pid" 2>/dev/null; do
@@ -1039,9 +1047,25 @@ if kill -0 "$codex_pid" 2>/dev/null; then
   timed_out=yes
   kill_codex_tree
 fi
-wait "$codex_pid"; rc=$?
+
+# Bounded rather than a bare `wait`: a child that survived both signals would
+# block forever, and this wrapper must always return a status line to the
+# controller. Reintroducing `timeout` is not the answer - it would reinsert a
+# process between us and node, which is what made taskkill unable to walk the
+# native tree.
+grace=0
+while [ "$grace" -lt 30 ] && kill -0 "$codex_pid" 2>/dev/null; do
+  sleep 1
+  grace=$((grace + 1))
+done
+if kill -0 "$codex_pid" 2>/dev/null; then
+  rc=124
+else
+  wait "$codex_pid"; rc=$?
+fi
 [ "$timed_out" = yes ] && rc=124
 codex_pid=""
+codex_winpid=""
 
 # Event field naming has varied across Codex releases, so match on any of the
 # shapes rather than pinning one that a later version may rename.
