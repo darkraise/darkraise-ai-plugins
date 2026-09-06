@@ -89,11 +89,15 @@ printf '%s' "$timeout_s" | grep -qE '^[0-9]+$' || die "--timeout must be whole s
 
 # Every per-invocation flag is rebuilt here, including on resume: a bare
 # `codex exec resume <id>` inherits the user's config defaults instead.
-argv=(exec)
+#
+# -C and -s must precede the subcommand. `codex exec resume` accepts neither -
+# 0.153.4 answers `error: unexpected argument '-C' found` and exits before any
+# model call - while `codex exec` takes both and honours them for the resumed
+# thread. Every other flag below is accepted in either position, so it stays
+# after, which keeps the two forms one argv apart.
+argv=(exec -C "$cwd" -s workspace-write)
 [ -n "$thread" ] && argv+=(resume "$thread")
 argv+=(
-  -C "$cwd"
-  -s workspace-write
   -m "$model"
   -c "model_reasoning_effort=$effort"
   --json

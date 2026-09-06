@@ -109,9 +109,22 @@ ChatGPT-subscription auth on 2026-08-31, and the tables depend on all of them:
   The wrapper re-sends every per-invocation flag, because a bare resume would
   silently run a fix round at the user's config default instead of the recorded
   tier.
+- `codex exec resume` accepts a **narrower flag set than `codex exec`**. It takes
+  `-m`, `-c`, `--json`, `--output-schema`, and `-o`, but rejects `-C` and `-s`
+  outright - `error: unexpected argument '-C' found`, exit 2, before any model
+  call. Those two therefore precede the subcommand, where the parent `codex exec`
+  takes them and honours them for the resumed thread. Re-confirmed against
+  0.153.4 on 2026-09-06, which is also where this was first caught: the earlier
+  argv put every flag after the subcommand, so each fix round on this lane died
+  at argument parsing and was reported as an ordinary `BLOCKED`.
 
 A different machine, account, or Codex version must re-probe before trusting the
-tables in `reference/ladder.md`.
+tables in `reference/ladder.md`. The flag-position fact above is the one that has
+already changed once, and it fails silently - the wrapper turns a parse error
+into `status=BLOCKED`, which reads as a model that gave up rather than a CLI that
+refused. `tests/run-codex-task.test.sh` now asserts the ordering on both the
+composed and the spawned argv, but a stub cannot notice a flag the real CLI stops
+accepting; only a re-probe can.
 
 **Cross-family review.** On a risk-3 task one of the three judges is Codex, and
 the final whole-branch review gains a `codex exec review` round whose findings
