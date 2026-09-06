@@ -231,6 +231,13 @@ if [ -n "${STUB_SLEEP:-}" ]; then
 fi
 printf '{"type":"thread.started","thread_id":"%s"}\n' "${STUB_THREAD:-th-001}"
 printf '{"type":"item.completed"}\n'
+# Codex reports API failures as events on this stream, never on stderr. The
+# turn.failed that follows a real error repeats it in short form, which is why
+# the wrapper takes the first of the two.
+if [ -n "${STUB_ERROR:-}" ]; then
+  printf '{"type":"error","message":"%s"}\n' "$STUB_ERROR"
+  printf '{"type":"turn.failed","error":{"message":"short form"}}\n'
+fi
 # Content varies with the thread id so a later run actually diffs against an
 # earlier run's commit; identical bytes on every call would make a "the tree
 # is dirty" assertion unsatisfiable regardless of whether the wrapper is right.
@@ -293,6 +300,55 @@ check "BLOCKED leaves the tree dirty" \
   "$(git -C "$TMP/repo" status --porcelain | grep -q . && echo yes || echo no)" "yes"
 git -C "$TMP/repo" reset -q --hard HEAD
 git -C "$TMP/repo" clean -qfd
+
+# --- the wrapper must surface what it already knows --------------------------
+# status is forced to BLOCKED on any non-zero exit, so on its own it cannot
+# separate an argument-parse failure at 50 ms from a model that gave up after
+# twenty minutes. The exit code is the discriminator and was previously
+# computed and discarded.
+line=$(STUB_RC=2 STUB_THREAD=th-060 run_exec) || true
+check "the status line reports codex's exit code" \
+  "$(grep -qE 'exit=2( |$)' <<<"$line" && echo yes || echo no)" "yes"
+check "the report records codex's exit code" \
+  "$(grep -qxF -- '- exit: 2' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "a non-zero exit still forces BLOCKED" \
+  "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# exit=0 with status=BLOCKED is a different animal: codex finished cleanly and
+# wrote no verdict. Keeping the two fields separate is what makes that legible.
+line=$(STUB_NO_LAST=1 STUB_THREAD=th-061 run_exec) || true
+check "a clean exit with no verdict reports exit=0" \
+  "$(grep -qE 'exit=0( |$)' <<<"$line" && echo yes || echo no)" "yes"
+check "a clean exit with no verdict still reports BLOCKED" \
+  "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# The failure table asks the controller to tell transient from capability
+# failures. Codex puts that text on the --json stream, so a report that tailed
+# only stderr showed nothing that could answer the question.
+line=$(STUB_RC=1 STUB_ERROR="You've hit your usage limit. Visit the usage page" \
+  STUB_THREAD=th-062 run_exec) || true
+check "the report carries a Codex error section" \
+  "$(grep -qxF '## Codex error' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "the report quotes the error codex reported" \
+  "$(grep -qF 'hit your usage limit' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "the first error event wins over the turn.failed short form" \
+  "$(grep -qF 'short form' "$TMP/report.md" && echo shortform || echo full)" "full"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# A failure with no error event must say so rather than leave the section
+# empty, which would read as "the wrapper did not look".
+line=$(STUB_RC=1 STUB_THREAD=th-063 run_exec) || true
+check "a failure with no error event says the stream carried none" \
+  "$(grep -qF 'No error event on the --json stream' "$TMP/report.md" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# A DONE run needs no error section at all.
+line=$(STUB_STATUS=DONE STUB_THREAD=th-064 run_exec) || true
+check "a DONE report carries no Codex error section" \
+  "$(grep -qxF '## Codex error' "$TMP/report.md" && echo present || echo absent)" "absent"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
 
 # Codex can exit 0 without writing its final message. The wrapper must not
 # read a previous run's verdict as this one's, which resume rounds guarantee
@@ -406,6 +462,18 @@ check "a timed-out run reports BLOCKED" \
   "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
 check "a timed-out run creates no commit" \
   "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "0"
+# The wrapper computed timed_out and rc=124 and printed neither, so the skill
+# had to tell the controller "you launched it, so you are the one who knows" -
+# which is false for a background call, the only shape the skill allows.
+check "a timed-out run marks itself on the status line" \
+  "$(grep -qF 'note=timed-out' <<<"$line" && echo yes || echo no)" "yes"
+check "a timed-out run reports exit=124" \
+  "$(grep -qE 'exit=124( |$)' <<<"$line" && echo yes || echo no)" "yes"
+check "a timed-out run's report says to raise the timeout, not change rung" \
+  "$(grep -qF 'raise --timeout rather than taking the successor rung' "$TMP/report.md" \
+     && echo yes || echo no)" "yes"
+check "a timed-out run's report names the timeout it hit" \
+  "$(grep -qF 'timed out after 3s' "$TMP/report.md" && echo yes || echo no)" "yes"
 # Proves the real grandchild died, not just that the wrapper stopped waiting
 # for it: taskkill //F //T on a winpid was shown live to leave this exact
 # process running, so this closes the gap that check alone would leave open.

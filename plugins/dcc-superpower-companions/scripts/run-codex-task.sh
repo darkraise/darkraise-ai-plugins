@@ -242,6 +242,20 @@ thread_id=$(jq -r 'select(type=="object")
   "$jsonl" 2>/dev/null | head -1)
 [ -n "$thread_id" ] || thread_id="${thread:-unknown}"
 
+# Codex reports API failures - quota, rate limit, 5xx, auth - as events on the
+# --json stream, which is stdout and lands in $jsonl. They never reach stderr,
+# which holds only the CLI's own chatter. Extracting the message here is what
+# lets the controller tell a transient failure from a capability one without
+# opening a JSONL file by hand. The first error event carries the fuller text;
+# the turn.failed that follows repeats it in short form.
+codex_error=$(jq -r '
+  select(type == "object")
+  | select(.type == "error" or .type == "turn.failed")
+  | [.message?, (.error? | objects | .message?)]
+  | map(select(. != null and . != ""))
+  | .[0] // empty
+' "$jsonl" 2>/dev/null | head -1)
+
 status=BLOCKED
 summary=""
 subject=""
@@ -250,6 +264,9 @@ if [ -f "$last" ]; then
   summary=$(jq -r '.summary // ""' "$last" 2>/dev/null || true)
   subject=$(jq -r '.commit_subject // ""' "$last" 2>/dev/null || true)
 fi
+# The verdict is forced to BLOCKED on a non-zero exit, which is why $rc is
+# reported separately below: collapsing the two makes an argument-parse failure
+# at 50 ms and a model that gave up after 20 minutes read identically.
 [ "$rc" -eq 0 ] || status=BLOCKED
 
 committed=no
@@ -277,8 +294,10 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- executor: codex %s / %s\n' "$model" "$effort"
   printf -- '- thread: %s\n' "$thread_id"
   printf -- '- status: %s\n' "$status"
+  printf -- '- exit: %s\n' "$rc"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
+  [ "$timed_out" = yes ] && printf -- '- note: timed out after %ss and codex was killed; raise --timeout rather than taking the successor rung\n' "$timeout_s"
   [ "$survivor" = yes ] && printf -- '- note: a codex process may still be running (pid %s); check before retrying in this worktree\n' "$codex_pid"
   printf '\n## Summary\n\n%s\n' "$summary"
   if [ "$status" = NEEDS_CONTEXT ]; then
@@ -286,15 +305,27 @@ head=$(git -C "$cwd" rev-parse HEAD)
     jq -r '.questions[]? | "- " + .' "$last" 2>/dev/null || true
   fi
   if [ "$status" != DONE ]; then
+    # Codex's own failure text comes first because it is the only thing here
+    # that separates a transient failure from a capability one. stderr follows
+    # as a fallback: it carries the CLI's complaints - a rejected flag, a
+    # missing directory - which are the failures that produce no error event.
+    if [ -n "$codex_error" ]; then
+      printf '\n## Codex error\n\n```\n%s\n```\n' "$codex_error"
+    else
+      printf '\n## Codex error\n\nNo error event on the --json stream. Either codex never reached the API, or it exited without reporting why.\n'
+    fi
     printf '\n## Working tree\n\nLeft uncommitted on purpose. Last 20 stderr lines:\n\n```\n'
     tail -20 "$report.stderr" 2>/dev/null || true
     printf '```\n'
   fi
 } > "$report"
 
-survivor_note=""
-[ "$survivor" = yes ] && survivor_note=" note=codex-may-still-be-running"
-printf 'codex %s/%s status=%s commits=%s..%s thread=%s report=%s%s\n' \
-  "$model" "$effort" "$status" "${base:0:7}" "${head:0:7}" "$thread_id" "$report" "$survivor_note"
+# Notes accumulate rather than replace one another: a run can both time out and
+# leave a survivor, and the old single-slot note reported only the second.
+notes=""
+[ "$timed_out" = yes ] && notes="$notes note=timed-out"
+[ "$survivor" = yes ] && notes="$notes note=codex-may-still-be-running"
+printf 'codex %s/%s status=%s exit=%s commits=%s..%s thread=%s report=%s%s\n' \
+  "$model" "$effort" "$status" "$rc" "${base:0:7}" "${head:0:7}" "$thread_id" "$report" "$notes"
 
 [ "$status" = DONE ]

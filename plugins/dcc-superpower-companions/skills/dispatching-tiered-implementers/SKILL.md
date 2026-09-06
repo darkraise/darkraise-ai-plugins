@@ -232,22 +232,38 @@ capability failure below; take the successor rung.
 
 | Failure | Response |
 |---------|----------|
-| Transient - network, rate limit, 5xx in `<report>.stderr` | Retry once at the same rung |
-| Timeout - the run's wall time reached the rung's `codex-timeout` value | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
+| Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section | Retry once at the same rung |
+| Timeout - `note=timed-out` on the status line, `exit=124` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via the `codex-successor` block and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Any failure a second time | `HANDBACK` |
 
-A timeout is only identifiable from the wall time you observed, because the
-wrapper prints no marker for it: it forces `status=BLOCKED` whenever Codex exits
-non-zero, so a timed-out run and a capability block look identical on the status
-line. You launched the wrapper, so you are the one who knows.
+**Read `## Codex error` in the report, not `<report>.stderr`.** Codex reports API
+failures - quota, rate limit, auth, 5xx - as events on its `--json` stream, which
+is stdout, so they land in `<report>.jsonl` and never in `<report>.stderr`. The
+wrapper lifts the first such event into that section for you. stderr holds the
+CLI's own complaints instead - a rejected flag, a missing directory - which are
+the failures that produce no error event at all, and the report still tails it
+underneath.
 
-One case does carry a marker. `note=codex-may-still-be-running` on the status
-line, and the matching note in the report, mean the child outlived both kills
-and the wrapper's grace window - only a timeout reaches that path. Check for and
-end that process before retrying, or the retry puts two Codex runs in the same
-worktree.
+`status` alone cannot tell you which failure you have, because it is forced to
+`BLOCKED` on any non-zero exit. Two other fields separate the cases:
+
+- **`exit=`** on the status line, and `- exit:` in the report, is Codex's own
+  exit code. `exit=2` is an argument-parse failure that took milliseconds and no
+  model call, and it means this wrapper and this CLI disagree - fix that rather
+  than retrying or changing rung. `exit=1` with a `## Codex error` section is an
+  ordinary failed run. `exit=0` with `status=BLOCKED` is the odd one: Codex
+  finished cleanly and wrote no verdict, which is a capability failure.
+- **`note=timed-out`**, with `exit=124`, means the wrapper's poll loop hit the
+  rung's `codex-timeout` and killed Codex. You do not have to infer this from
+  wall time - which you could not do anyway, since the skill runs the wrapper as
+  a background call and you are not watching the clock.
+
+`note=codex-may-still-be-running` means the child outlived both kills and the
+grace window - only a timeout reaches that path, so it appears alongside
+`note=timed-out`. Check for and end that process before retrying, or the retry
+puts two Codex runs in the same worktree.
 
 A second `NEEDS_CONTEXT` on the same task is a capability failure: take the
 successor rung or hand back. A one-shot agent that could not resolve the brief
