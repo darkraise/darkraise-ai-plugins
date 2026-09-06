@@ -132,12 +132,23 @@ enforces is files and commits, not a particular runtime.
 call, exactly as you already run `sdd-workspace` and `task-brief`. It prints one
 status line and writes everything else to files.
 
-**Give that Bash call an explicit timeout longer than the rung's
-`codex-timeout` value** - the wrapper polls for that long before it kills Codex,
-so anything shorter cuts the call while the run is still healthy. A foreground
-call hits the Bash tool's two-minute default, which every rung exceeds, and a
-controller reading the cut call as a Codex failure has misdiagnosed its own
-harness.
+**Background is not a preference here, it is the only shape that works.** The
+Bash tool's `timeout` caps at 600000 ms - ten minutes - and every rung in
+`codex-timeout` is longer than that, from 900 seconds to 2400. There is no
+foreground timeout you can pass that outlasts even the cheapest rung, so a
+foreground call is cut mid-run and a controller reading that as a Codex failure
+has misdiagnosed its own harness.
+
+A background call is not bound by `timeout` at all - measured, not assumed: a
+25-second command under a 5000 ms timeout ran to completion and exited 0. So
+pass no timeout, let the wrapper's own poll loop be the bound it already is, and
+wait for the completion notification. The wrapper polls for the rung's
+`codex-timeout` seconds, kills Codex, and always prints a status line, which is
+the guarantee that makes waiting safe.
+
+If you have a reason to run one in the foreground anyway, the ceiling is raised
+by the `BASH_MAX_TIMEOUT_MS` environment variable, which your human partner sets
+before the session starts. You cannot raise it from inside one.
 
 **There is no separate worktree.** Codex runs in the SDD worktree, on the task
 branch, where a Claude implementer would run. superpowers already created that
@@ -459,17 +470,27 @@ not share. Establish usability the way this skill already does - run
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"` and read the `usable`
 field for `codex`; never trust the plan's copy.
 
-Run it as a background Bash call with an explicit timeout, exactly as you run the
-task wrapper. The rung is `gpt-5.6-sol/high`, whose `codex-timeout` row is 1800
-seconds. A foreground call hits the Bash tool's two-minute default, and a
-controller reading the cut call as a Codex failure has misdiagnosed its own
-harness.
+Run it as a background Bash call, for the reason Dispatch an external executor
+gives: the Bash tool's `timeout` caps at ten minutes, this rung's
+`codex-timeout` row is 1800 seconds, and a background call is not bound by
+`timeout` at all.
+
+**This seat needs its own bound, unlike the task wrapper.** It calls `codex`
+directly, so there is no wrapper poll loop to kill a run that never returns.
+Wrap it in coreutils `timeout` at the rung's value. The task wrapper avoids
+`timeout` deliberately - a process between it and node breaks `taskkill`'s tree
+walk - but that reasoning is about killing a *writing* Codex cleanly before a
+commit. This seat is `-s read-only` and commits nothing, so a blunt kill costs
+nothing but the round.
 
 ```bash
-codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
+timeout 1800 codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
   --output-schema <schema-path> -o <workspace>/task-<N>-review-codex.json \
   -C <worktree-root> < <prompt-file>
 ```
+
+A `timeout` exit of 124 is a seat that produced no score. Fall back to the third
+Claude judge below rather than averaging two scores as if three had voted.
 
 Use `codex exec`, not `codex exec review`: the latter imposes its own report
 shape, and this seat must return the criteria the other two judges return. The
@@ -590,18 +611,23 @@ that is recorded here rather than left to accrete silently.
 2. **Run a Codex round** over the same branch, as a background Bash call:
 
    ```bash
-   (cd <worktree-root> && codex exec review --base <base-branch> -m gpt-5.6-sol \
-     -c model_reasoning_effort=high -o <workspace>/final-review-codex.md)
+   (cd <worktree-root> && timeout 1800 codex exec review --base <base-branch> \
+     -m gpt-5.6-sol -c model_reasoning_effort=high \
+     -o <workspace>/final-review-codex.md)
    ```
 
    `codex exec review` is purpose-built for this and takes no sandbox flag,
    because review is read-only by nature. It takes no `-C` either, so the working
    directory is the only way to point it at the worktree - hence the subshell.
-   Give it an explicit timeout at least as generous as the `gpt-5.6-sol/high` row
-   in `codex-timeout`, 1800 seconds: that block has no row for a review round,
-   and a whole branch is more to read than one task. Establish usability with the
-   same `detect-executors.sh` check the risk-3 seat uses; if Codex is not usable,
-   skip this step, say so, and report superpowers' review alone.
+   Bound it with coreutils `timeout`, not the Bash tool's: this is a direct
+   `codex` call with no wrapper poll loop behind it, and the tool's own `timeout`
+   caps at ten minutes while a whole-branch round needs more. 1800 seconds
+   matches the `gpt-5.6-sol/high` row in `codex-timeout`, which is the closest
+   thing to a figure for a round that block has no row for, and a whole branch is
+   more to read than one task. Establish usability with the same
+   `detect-executors.sh` check the risk-3 seat uses; if Codex is not usable, or
+   if `timeout` returns 124, skip this round, say so, and report superpowers'
+   review alone.
 
    Unlike the risk-3 seat, this round is **not** self-review-free. The branch
    contains whatever the executor lane produced, so Codex is reviewing some of
