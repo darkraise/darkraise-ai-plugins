@@ -16,6 +16,20 @@ check() { # check <name> <got> <want>
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 
+# Flag ORDER is a correctness property here, not a style one: `codex exec`
+# accepts -C and -s while `codex exec resume` rejects both, so a substring test
+# that ignores position passes on an argv the real CLI refuses to parse.
+before() { # before <argv-line> <first> <second> -> yes when both are present, in order
+  awk -v a="$2" -v b="$3" '
+    { ai = 0; bi = 0
+      for (i = 1; i <= NF; i++) {
+        if (ai == 0 && $i == a) ai = i
+        if (bi == 0 && $i == b) bi = i
+      }
+      print (ai > 0 && bi > 0 && ai < bi) ? "yes" : "no" }
+  ' <<<"$1"
+}
+
 mkdir -p "$TMP/work"
 printf 'do the thing\n' > "$TMP/brief.md"
 
@@ -82,6 +96,29 @@ check "resume carries the thread id" "$(grep -qF -- "01a0-thread" <<<"$res" && e
 check "resume re-sends the model" "$(grep -qF -- "-m gpt-5.5" <<<"$res" && echo yes || echo no)" "yes"
 check "resume re-sends the effort" \
   "$(grep -qF -- "model_reasoning_effort=high" <<<"$res" && echo yes || echo no)" "yes"
+
+# --- resume must place -C and -s before the subcommand -----------------------
+# Verified against codex-cli 0.153.4: `codex exec resume <id> -C <dir>` answers
+# `error: unexpected argument '-C' found` and exits before any model call, and
+# -s is refused the same way. The wrapper would then report status=BLOCKED,
+# which is indistinguishable from a real block, so every fix round on the
+# external lane would die at argument parsing. The parent `codex exec` takes
+# both flags and honours them for the resumed thread.
+res_cmd=$(tail -1 <<<"$res")
+check "resume places -C before the subcommand" "$(before "$res_cmd" -C resume)" "yes"
+check "resume places -s before the subcommand" "$(before "$res_cmd" -s resume)" "yes"
+check "resume keeps -m after the subcommand, where resume accepts it" \
+  "$(before "$res_cmd" resume -m)" "yes"
+check "resume keeps the thread id adjacent to the subcommand" \
+  "$(grep -qE -- 'resume 01a0-thread' <<<"$res_cmd" && echo yes || echo no)" "yes"
+
+plain_cmd=$(tail -1 <<<"$(dry --model gpt-5.5 --effort medium)")
+check "a non-resume run names no subcommand" \
+  "$(grep -qE -- '(^| )resume( |$)' <<<"$plain_cmd" && echo named || echo bare)" "bare"
+check "a non-resume run still passes -C" \
+  "$(grep -qF -- "-C $TMP/work" <<<"$plain_cmd" && echo yes || echo no)" "yes"
+check "a non-resume run still passes the sandbox" \
+  "$(grep -qF -- "-s workspace-write" <<<"$plain_cmd" && echo yes || echo no)" "yes"
 
 # --- malformed input fails fast, and the dry run tells the truth ------------
 check "a trailing flag with no value exits 2 rather than hanging" \
@@ -170,6 +207,12 @@ git -C "$TMP/repo" commit -qm seed
 cat > "$TMP/stub/codex" <<'STUB'
 #!/usr/bin/env bash
 # Mimics `codex exec --json -o FILE`: JSONL on stdout, final message to -o.
+#
+# Records its own argv verbatim before parsing it. The parse below is
+# order-blind, which is exactly what the real CLI is not: it accepts -C and -s
+# for `exec` and refuses them for `exec resume`. Without this record a test can
+# only prove a flag was sent, never that it was sent somewhere codex accepts.
+[ -n "${STUB_ARGV_FILE:-}" ] && printf '%s\n' "$*" > "$STUB_ARGV_FILE"
 out=""; cwd=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -188,6 +231,13 @@ if [ -n "${STUB_SLEEP:-}" ]; then
 fi
 printf '{"type":"thread.started","thread_id":"%s"}\n' "${STUB_THREAD:-th-001}"
 printf '{"type":"item.completed"}\n'
+# Codex reports API failures as events on this stream, never on stderr. The
+# turn.failed that follows a real error repeats it in short form, which is why
+# the wrapper takes the first of the two.
+if [ -n "${STUB_ERROR:-}" ]; then
+  printf '{"type":"error","message":"%s"}\n' "$STUB_ERROR"
+  printf '{"type":"turn.failed","error":{"message":"short form"}}\n'
+fi
 # Content varies with the thread id so a later run actually diffs against an
 # earlier run's commit; identical bytes on every call would make a "the tree
 # is dirty" assertion unsatisfiable regardless of whether the wrapper is right.
@@ -251,6 +301,55 @@ check "BLOCKED leaves the tree dirty" \
 git -C "$TMP/repo" reset -q --hard HEAD
 git -C "$TMP/repo" clean -qfd
 
+# --- the wrapper must surface what it already knows --------------------------
+# status is forced to BLOCKED on any non-zero exit, so on its own it cannot
+# separate an argument-parse failure at 50 ms from a model that gave up after
+# twenty minutes. The exit code is the discriminator and was previously
+# computed and discarded.
+line=$(STUB_RC=2 STUB_THREAD=th-060 run_exec) || true
+check "the status line reports codex's exit code" \
+  "$(grep -qE 'exit=2( |$)' <<<"$line" && echo yes || echo no)" "yes"
+check "the report records codex's exit code" \
+  "$(grep -qxF -- '- exit: 2' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "a non-zero exit still forces BLOCKED" \
+  "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# exit=0 with status=BLOCKED is a different animal: codex finished cleanly and
+# wrote no verdict. Keeping the two fields separate is what makes that legible.
+line=$(STUB_NO_LAST=1 STUB_THREAD=th-061 run_exec) || true
+check "a clean exit with no verdict reports exit=0" \
+  "$(grep -qE 'exit=0( |$)' <<<"$line" && echo yes || echo no)" "yes"
+check "a clean exit with no verdict still reports BLOCKED" \
+  "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# The failure table asks the controller to tell transient from capability
+# failures. Codex puts that text on the --json stream, so a report that tailed
+# only stderr showed nothing that could answer the question.
+line=$(STUB_RC=1 STUB_ERROR="You've hit your usage limit. Visit the usage page" \
+  STUB_THREAD=th-062 run_exec) || true
+check "the report carries a Codex error section" \
+  "$(grep -qxF '## Codex error' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "the report quotes the error codex reported" \
+  "$(grep -qF 'hit your usage limit' "$TMP/report.md" && echo yes || echo no)" "yes"
+check "the first error event wins over the turn.failed short form" \
+  "$(grep -qF 'short form' "$TMP/report.md" && echo shortform || echo full)" "full"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# A failure with no error event must say so rather than leave the section
+# empty, which would read as "the wrapper did not look".
+line=$(STUB_RC=1 STUB_THREAD=th-063 run_exec) || true
+check "a failure with no error event says the stream carried none" \
+  "$(grep -qF 'No error event on the --json stream' "$TMP/report.md" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# A DONE run needs no error section at all.
+line=$(STUB_STATUS=DONE STUB_THREAD=th-064 run_exec) || true
+check "a DONE report carries no Codex error section" \
+  "$(grep -qxF '## Codex error' "$TMP/report.md" && echo present || echo absent)" "absent"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
 # Codex can exit 0 without writing its final message. The wrapper must not
 # read a previous run's verdict as this one's, which resume rounds guarantee
 # will be present since they reuse the same --report path.
@@ -291,6 +390,34 @@ git -C "$TMP/repo" clean -qfd
 check "the prompt inlines repo conventions when present" \
   "$(printf 'be terse\n' > "$TMP/repo/CLAUDE.md"; STUB_STATUS=DONE run_exec >/dev/null; \
      grep -qF 'be terse' "$TMP/report.md.prompt.md" && echo yes || echo no)" "yes"
+git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
+
+# --- a resume round on the execution path ------------------------------------
+# The dry run proves the argv the wrapper composes; this proves the argv it
+# actually spawns, which is the one that reaches codex. Nothing else in this
+# file passes --resume to a real invocation, so before this the whole resume
+# path was covered only by substring checks on a string that was never run.
+before=$(git -C "$TMP/repo" rev-parse HEAD)
+line=$(PATH="$TMP/stub:$PATH" STUB_STATUS=DONE STUB_THREAD=th-050 \
+  STUB_ARGV_FILE="$TMP/resume-argv.txt" bash "$SCRIPT" \
+  --brief "$TMP/brief.md" --report "$TMP/report-resume.md" \
+  --cwd "$TMP/repo" --model gpt-5.5 --effort medium --resume th-049 2>"$TMP/err")
+after=$(git -C "$TMP/repo" rev-parse HEAD)
+resume_argv=$(cat "$TMP/resume-argv.txt" 2>/dev/null || true)
+check "a resume round reaches the executable at all" \
+  "$([ -n "$resume_argv" ] && echo yes || echo no)" "yes"
+check "a spawned resume run puts -C before the subcommand" \
+  "$(before "$resume_argv" -C resume)" "yes"
+check "a spawned resume run puts -s before the subcommand" \
+  "$(before "$resume_argv" -s resume)" "yes"
+check "a spawned resume run names the thread it was given" \
+  "$(grep -qE -- 'resume th-049' <<<"$resume_argv" && echo yes || echo no)" "yes"
+check "a spawned resume run re-sends the effort" \
+  "$(grep -qF -- 'model_reasoning_effort=medium' <<<"$resume_argv" && echo yes || echo no)" "yes"
+check "a resume round still commits" \
+  "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "1"
+check "a resume round reports the thread id codex returned" \
+  "$(grep -qF 'thread=th-050' <<<"$line" && echo yes || echo no)" "yes"
 git -C "$TMP/repo" reset -q --hard HEAD; git -C "$TMP/repo" clean -qfd
 
 # $report itself is only written after the commit, so a single round never
@@ -335,6 +462,18 @@ check "a timed-out run reports BLOCKED" \
   "$(grep -qF 'status=BLOCKED' <<<"$line" && echo yes || echo no)" "yes"
 check "a timed-out run creates no commit" \
   "$(git -C "$TMP/repo" rev-list --count "$before".."$after")" "0"
+# The wrapper computed timed_out and rc=124 and printed neither, so the skill
+# had to tell the controller "you launched it, so you are the one who knows" -
+# which is false for a background call, the only shape the skill allows.
+check "a timed-out run marks itself on the status line" \
+  "$(grep -qF 'note=timed-out' <<<"$line" && echo yes || echo no)" "yes"
+check "a timed-out run reports exit=124" \
+  "$(grep -qE 'exit=124( |$)' <<<"$line" && echo yes || echo no)" "yes"
+check "a timed-out run's report says to raise the timeout, not change rung" \
+  "$(grep -qF 'raise --timeout rather than taking the successor rung' "$TMP/report.md" \
+     && echo yes || echo no)" "yes"
+check "a timed-out run's report names the timeout it hit" \
+  "$(grep -qF 'timed out after 3s' "$TMP/report.md" && echo yes || echo no)" "yes"
 # Proves the real grandchild died, not just that the wrapper stopped waiting
 # for it: taskkill //F //T on a winpid was shown live to leave this exact
 # process running, so this closes the gap that check alone would leave open.

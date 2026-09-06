@@ -132,12 +132,23 @@ enforces is files and commits, not a particular runtime.
 call, exactly as you already run `sdd-workspace` and `task-brief`. It prints one
 status line and writes everything else to files.
 
-**Give that Bash call an explicit timeout longer than the rung's
-`codex-timeout` value** - the wrapper polls for that long before it kills Codex,
-so anything shorter cuts the call while the run is still healthy. A foreground
-call hits the Bash tool's two-minute default, which every rung exceeds, and a
-controller reading the cut call as a Codex failure has misdiagnosed its own
-harness.
+**Background is not a preference here, it is the only shape that works.** The
+Bash tool's `timeout` caps at 600000 ms - ten minutes - and every rung in
+`codex-timeout` is longer than that, from 900 seconds to 2400. There is no
+foreground timeout you can pass that outlasts even the cheapest rung, so a
+foreground call is cut mid-run and a controller reading that as a Codex failure
+has misdiagnosed its own harness.
+
+A background call is not bound by `timeout` at all - measured, not assumed: a
+25-second command under a 5000 ms timeout ran to completion and exited 0. So
+pass no timeout, let the wrapper's own poll loop be the bound it already is, and
+wait for the completion notification. The wrapper polls for the rung's
+`codex-timeout` seconds, kills Codex, and always prints a status line, which is
+the guarantee that makes waiting safe.
+
+If you have a reason to run one in the foreground anyway, the ceiling is raised
+by the `BASH_MAX_TIMEOUT_MS` environment variable, which your human partner sets
+before the session starts. You cannot raise it from inside one.
 
 **There is no separate worktree.** Codex runs in the SDD worktree, on the task
 branch, where a Claude implementer would run. superpowers already created that
@@ -209,6 +220,10 @@ wrapper's exit code says which case you are in:
 | 1 | Codex ran and did not reach DONE. Read the `status=` field on the same line |
 | 2 | No status line was printed. Read the wrapper's own stderr before doing anything - see below |
 
+**This section covers an initial run.** A resume round that fails takes a
+different path, because two of the responses below are unavailable to it - see
+When the resume itself fails.
+
 A run failure is exit 1 with `status=BLOCKED`, or exit 0 with an empty diff.
 
 An empty diff is the report's `- note: DONE with an empty diff; nothing was
@@ -221,22 +236,38 @@ capability failure below; take the successor rung.
 
 | Failure | Response |
 |---------|----------|
-| Transient - network, rate limit, 5xx in `<report>.stderr` | Retry once at the same rung |
-| Timeout - the run's wall time reached the rung's `codex-timeout` value | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
+| Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section | Retry once at the same rung |
+| Timeout - `note=timed-out` on the status line, `exit=124` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via the `codex-successor` block and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Any failure a second time | `HANDBACK` |
 
-A timeout is only identifiable from the wall time you observed, because the
-wrapper prints no marker for it: it forces `status=BLOCKED` whenever Codex exits
-non-zero, so a timed-out run and a capability block look identical on the status
-line. You launched the wrapper, so you are the one who knows.
+**Read `## Codex error` in the report, not `<report>.stderr`.** Codex reports API
+failures - quota, rate limit, auth, 5xx - as events on its `--json` stream, which
+is stdout, so they land in `<report>.jsonl` and never in `<report>.stderr`. The
+wrapper lifts the first such event into that section for you. stderr holds the
+CLI's own complaints instead - a rejected flag, a missing directory - which are
+the failures that produce no error event at all, and the report still tails it
+underneath.
 
-One case does carry a marker. `note=codex-may-still-be-running` on the status
-line, and the matching note in the report, mean the child outlived both kills
-and the wrapper's grace window - only a timeout reaches that path. Check for and
-end that process before retrying, or the retry puts two Codex runs in the same
-worktree.
+`status` alone cannot tell you which failure you have, because it is forced to
+`BLOCKED` on any non-zero exit. Two other fields separate the cases:
+
+- **`exit=`** on the status line, and `- exit:` in the report, is Codex's own
+  exit code. `exit=2` is an argument-parse failure that took milliseconds and no
+  model call, and it means this wrapper and this CLI disagree - fix that rather
+  than retrying or changing rung. `exit=1` with a `## Codex error` section is an
+  ordinary failed run. `exit=0` with `status=BLOCKED` is the odd one: Codex
+  finished cleanly and wrote no verdict, which is a capability failure.
+- **`note=timed-out`**, with `exit=124`, means the wrapper's poll loop hit the
+  rung's `codex-timeout` and killed Codex. You do not have to infer this from
+  wall time - which you could not do anyway, since the skill runs the wrapper as
+  a background call and you are not watching the clock.
+
+`note=codex-may-still-be-running` means the child outlived both kills and the
+grace window - only a timeout reaches that path, so it appears alongside
+`note=timed-out`. Check for and end that process before retrying, or the retry
+puts two Codex runs in the same worktree.
 
 A second `NEEDS_CONTEXT` on the same task is a capability failure: take the
 successor rung or hand back. A one-shot agent that could not resolve the brief
@@ -301,6 +332,54 @@ for its score, which is the same tier the rubric picked before the fix rounds
 happened. The argument for parity is that a change of model family plus a fresh
 context satisfies the rule's intent, and that the recorded score is the only
 evidence-free anchor available. Say the handback aloud when it happens.
+
+### When the resume itself fails
+
+When a fix round *runs* and produces a bad diff, the fix loop handles it: that is
+what the rounds are for. This section is about the other case - the round never
+produced a diff to review, because the resume run failed the way an initial run
+can fail. When a Run fails is written for initial runs and does not apply here
+unchanged, because two of its responses are unavailable to a fix round.
+
+**The successor column is never consulted.** `codex-successor` is read only by a
+failed initial run - `reference/ladder.md` says so, and the reason is that
+changing rung mid-fix-loop discards the session context those rounds exist to
+preserve. A fix round that cannot proceed leaves the lane by `HANDBACK` instead,
+which is where round 4 was taking it anyway.
+
+**The two-failure budget is not consulted either.** That budget counts failed
+*initial* runs, and this skill already says fix-round resumes do not count
+against it. These rounds are bounded by their own rule below and by superpowers'
+five-round cap.
+
+| Resume outcome | Response |
+|----------------|----------|
+| Transient - the report's `## Codex error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread |
+| `note=timed-out` with `exit=124` | Retry the same resume once with `--timeout` raised |
+| `exit=2` | The wrapper refused before launching, so nothing ran and the thread is untouched. A validation error in what you passed; fix it and re-issue the same resume. This does not count as a failed round |
+| `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 4 |
+| A second failure of any kind in the same round | `HANDBACK` |
+
+**An empty diff means something different here.** When a Run fails calls
+`exit 0` with an empty diff a capability failure, that is a statement about an
+initial run, where producing nothing means the agent could not start. A fix round
+that returns `DONE` with an empty diff has read the findings and elected to
+change nothing, which is a position, not a failure. Read the report's summary:
+if it argues the findings are already addressed or wrong, adjudicate that claim
+yourself the way superpowers has you adjudicate any disputed finding, and record
+the ruling. Do not re-dispatch the round to force a diff. Two consecutive
+empty-diff rounds are a stalled loop - `HANDBACK`.
+
+Record any of this inside the fix-round line the loop is already writing, never
+as a line of its own, for the reason Escalate gives about lines that land after a
+fix-round line:
+
+```
+Task <N>: fix round 2/5 (0 addressed, 2 open - codex quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-medium)
+```
+
+A handback from a failed resume is still a handback: say it aloud, and let the
+ordinary Claude ladder govern from there.
 
 ## Escalate
 
@@ -459,17 +538,27 @@ not share. Establish usability the way this skill already does - run
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"` and read the `usable`
 field for `codex`; never trust the plan's copy.
 
-Run it as a background Bash call with an explicit timeout, exactly as you run the
-task wrapper. The rung is `gpt-5.6-sol/high`, whose `codex-timeout` row is 1800
-seconds. A foreground call hits the Bash tool's two-minute default, and a
-controller reading the cut call as a Codex failure has misdiagnosed its own
-harness.
+Run it as a background Bash call, for the reason Dispatch an external executor
+gives: the Bash tool's `timeout` caps at ten minutes, this rung's
+`codex-timeout` row is 1800 seconds, and a background call is not bound by
+`timeout` at all.
+
+**This seat needs its own bound, unlike the task wrapper.** It calls `codex`
+directly, so there is no wrapper poll loop to kill a run that never returns.
+Wrap it in coreutils `timeout` at the rung's value. The task wrapper avoids
+`timeout` deliberately - a process between it and node breaks `taskkill`'s tree
+walk - but that reasoning is about killing a *writing* Codex cleanly before a
+commit. This seat is `-s read-only` and commits nothing, so a blunt kill costs
+nothing but the round.
 
 ```bash
-codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
+timeout 1800 codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
   --output-schema <schema-path> -o <workspace>/task-<N>-review-codex.json \
   -C <worktree-root> < <prompt-file>
 ```
+
+A `timeout` exit of 124 is a seat that produced no score. Fall back to the third
+Claude judge below rather than averaging two scores as if three had voted.
 
 Use `codex exec`, not `codex exec review`: the latter imposes its own report
 shape, and this seat must return the criteria the other two judges return. The
@@ -549,6 +638,8 @@ Task <N>: fix round 3/5 (1 addressed, 1 open - stale cache; commits a7f..b21; pr
 | Wrapper exits 2 with a `git add failed` or `commit failed` message | Codex ran and left its work staged but uncommitted, with no report and no thread id. Recover the tree first, then re-dispatch fresh or hand back |
 | Wrapper exits 2 with any other message | It refused before launching Codex. A validation error, not a run failure. The plan or the table is wrong; fix it rather than retrying |
 | Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
+| A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
+| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Adjudicate the report's argument rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
 
 The silent-fallback rule matters more than it looks. If a bad agent name quietly
 degraded to the session default, every task would run at the session's model and
@@ -590,18 +681,23 @@ that is recorded here rather than left to accrete silently.
 2. **Run a Codex round** over the same branch, as a background Bash call:
 
    ```bash
-   (cd <worktree-root> && codex exec review --base <base-branch> -m gpt-5.6-sol \
-     -c model_reasoning_effort=high -o <workspace>/final-review-codex.md)
+   (cd <worktree-root> && timeout 1800 codex exec review --base <base-branch> \
+     -m gpt-5.6-sol -c model_reasoning_effort=high \
+     -o <workspace>/final-review-codex.md)
    ```
 
    `codex exec review` is purpose-built for this and takes no sandbox flag,
    because review is read-only by nature. It takes no `-C` either, so the working
    directory is the only way to point it at the worktree - hence the subshell.
-   Give it an explicit timeout at least as generous as the `gpt-5.6-sol/high` row
-   in `codex-timeout`, 1800 seconds: that block has no row for a review round,
-   and a whole branch is more to read than one task. Establish usability with the
-   same `detect-executors.sh` check the risk-3 seat uses; if Codex is not usable,
-   skip this step, say so, and report superpowers' review alone.
+   Bound it with coreutils `timeout`, not the Bash tool's: this is a direct
+   `codex` call with no wrapper poll loop behind it, and the tool's own `timeout`
+   caps at ten minutes while a whole-branch round needs more. 1800 seconds
+   matches the `gpt-5.6-sol/high` row in `codex-timeout`, which is the closest
+   thing to a figure for a round that block has no row for, and a whole branch is
+   more to read than one task. Establish usability with the same
+   `detect-executors.sh` check the risk-3 seat uses; if Codex is not usable, or
+   if `timeout` returns 124, skip this round, say so, and report superpowers'
+   review alone.
 
    Unlike the risk-3 seat, this round is **not** self-review-free. The branch
    contains whatever the executor lane produced, so Codex is reviewing some of
