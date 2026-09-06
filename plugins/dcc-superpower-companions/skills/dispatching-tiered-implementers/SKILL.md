@@ -220,6 +220,10 @@ wrapper's exit code says which case you are in:
 | 1 | Codex ran and did not reach DONE. Read the `status=` field on the same line |
 | 2 | No status line was printed. Read the wrapper's own stderr before doing anything - see below |
 
+**This section covers an initial run.** A resume round that fails takes a
+different path, because two of the responses below are unavailable to it - see
+When the resume itself fails.
+
 A run failure is exit 1 with `status=BLOCKED`, or exit 0 with an empty diff.
 
 An empty diff is the report's `- note: DONE with an empty diff; nothing was
@@ -328,6 +332,54 @@ for its score, which is the same tier the rubric picked before the fix rounds
 happened. The argument for parity is that a change of model family plus a fresh
 context satisfies the rule's intent, and that the recorded score is the only
 evidence-free anchor available. Say the handback aloud when it happens.
+
+### When the resume itself fails
+
+When a fix round *runs* and produces a bad diff, the fix loop handles it: that is
+what the rounds are for. This section is about the other case - the round never
+produced a diff to review, because the resume run failed the way an initial run
+can fail. When a Run fails is written for initial runs and does not apply here
+unchanged, because two of its responses are unavailable to a fix round.
+
+**The successor column is never consulted.** `codex-successor` is read only by a
+failed initial run - `reference/ladder.md` says so, and the reason is that
+changing rung mid-fix-loop discards the session context those rounds exist to
+preserve. A fix round that cannot proceed leaves the lane by `HANDBACK` instead,
+which is where round 4 was taking it anyway.
+
+**The two-failure budget is not consulted either.** That budget counts failed
+*initial* runs, and this skill already says fix-round resumes do not count
+against it. These rounds are bounded by their own rule below and by superpowers'
+five-round cap.
+
+| Resume outcome | Response |
+|----------------|----------|
+| Transient - the report's `## Codex error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread |
+| `note=timed-out` with `exit=124` | Retry the same resume once with `--timeout` raised |
+| `exit=2` | The wrapper refused before launching, so nothing ran and the thread is untouched. A validation error in what you passed; fix it and re-issue the same resume. This does not count as a failed round |
+| `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 4 |
+| A second failure of any kind in the same round | `HANDBACK` |
+
+**An empty diff means something different here.** When a Run fails calls
+`exit 0` with an empty diff a capability failure, that is a statement about an
+initial run, where producing nothing means the agent could not start. A fix round
+that returns `DONE` with an empty diff has read the findings and elected to
+change nothing, which is a position, not a failure. Read the report's summary:
+if it argues the findings are already addressed or wrong, adjudicate that claim
+yourself the way superpowers has you adjudicate any disputed finding, and record
+the ruling. Do not re-dispatch the round to force a diff. Two consecutive
+empty-diff rounds are a stalled loop - `HANDBACK`.
+
+Record any of this inside the fix-round line the loop is already writing, never
+as a line of its own, for the reason Escalate gives about lines that land after a
+fix-round line:
+
+```
+Task <N>: fix round 2/5 (0 addressed, 2 open - codex quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-medium)
+```
+
+A handback from a failed resume is still a handback: say it aloud, and let the
+ordinary Claude ladder govern from there.
 
 ## Escalate
 
@@ -586,6 +638,8 @@ Task <N>: fix round 3/5 (1 addressed, 1 open - stale cache; commits a7f..b21; pr
 | Wrapper exits 2 with a `git add failed` or `commit failed` message | Codex ran and left its work staged but uncommitted, with no report and no thread id. Recover the tree first, then re-dispatch fresh or hand back |
 | Wrapper exits 2 with any other message | It refused before launching Codex. A validation error, not a run failure. The plan or the table is wrong; fix it rather than retrying |
 | Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
+| A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
+| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Adjudicate the report's argument rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
 
 The silent-fallback rule matters more than it looks. If a bad agent name quietly
 degraded to the session default, every task would run at the session's model and
