@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "dr-superpowers",
+  "description": "Task scoring, explicit model and effort assignment, native client dispatch, criteria-based review, and a Claude-hosted external Codex executor.",
+  "version": "0.5.0",
+  "author": {
+    "name": "Darkraise"
+  },
+  "homepage": "https://github.com/darkraise/darkraise-plugins/tree/main/plugins/dr-superpowers",
+  "repository": "https://github.com/darkraise/darkraise-plugins",
+  "license": "MIT",
+  "keywords": [
+    "superpowers",
+    "subagents",
+    "planning",
+    "effort",
+    "model-selection",
+    "verification",
+    "code-review",
+    "codex",
+    "external-executors"
+  ],
+  "dependencies": [
+    {
+      "name": "superpowers",
+      "marketplace": "claude-plugins-official"
+    }
+  ]
+}
