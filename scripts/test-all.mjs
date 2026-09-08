@@ -34,7 +34,7 @@ async function run(executable, args, seconds) {
 }
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
-  [process.execPath, ['--test', '--test-isolation=none', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
+  [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
   ...readdirSync(resolve(root, 'plugins/dr-superpowers/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dr-superpowers/tests/${name}`], 300]),
 ];
