@@ -50,6 +50,11 @@ check "the real git exists" "$([ -n "$REAL_GIT" ] && echo yes)" "yes"
 check "the real timeout exists" "$([ -n "$REAL_TIMEOUT" ] && echo yes)" "yes"
 
 shims="$(mktemp -d)"
+trap 'rm -rf "$shims" "$fakehome"' EXIT
+repo="$shims/test repo"
+git init --quiet --initial-branch=main "$repo" || exit 1
+jq --arg cwd "$repo" '.cwd = $cwd | .workspace.current_dir = $cwd' \
+  "$F/full.json" > "$shims/payload.json" || exit 1
 log="$shims/calls.log"
 : > "$log"
 
@@ -74,7 +79,7 @@ make_shim timeout "$REAL_TIMEOUT"
 # load-bearing: a call to a binary that is neither shimmed nor on the
 # restricted PATH leaves every count intact -- its only trace is bash's
 # "command not found" on stderr.
-err="$(PATH="$shims" "$REAL_BASH" "$SCRIPT" < "$F/full.json" 2>&1 >"$shims/out.raw")"
+err="$(PATH="$shims" "$REAL_BASH" "$SCRIPT" < "$shims/payload.json" 2>&1 >"$shims/out.raw")"
 out="$(strip_ansi < "$shims/out.raw")"
 check "the restricted render writes nothing to stderr" "$err" ""
 
@@ -96,5 +101,4 @@ check "a render costs exactly two timeout wrappers" \
 check "a render costs five processes in total" \
   "$(wc -l < "$log" | tr -d ' ')" "5"
 
-rm -rf "$shims" "$fakehome"
 finish
