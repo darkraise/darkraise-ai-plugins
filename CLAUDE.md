@@ -1,22 +1,22 @@
-# claude-code-plugins
+# darkraise-plugins
 
-A Claude Code plugin marketplace. Each plugin lives in `plugins/<name>/` and is
-registered in `.claude-plugin/marketplace.json`.
+A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise`.
 
 ## Conventions
 
-- **All plugin names must start with the `dcc-` prefix.** This applies to the
-  `name` field in `plugins/<name>/.claude-plugin/plugin.json`, the matching
-  entry in `.claude-plugin/marketplace.json`, and the plugin's directory name —
-  all three must agree.
-- Plugin names are lowercase kebab-case after the prefix, e.g. `dcc-telegram-notify`.
+- Claude's `.claude-plugin/marketplace.json` lists `dr-status`, `dr-superpowers`,
+  `dcc-darkraise-ui`, and `dcc-darkraise-win32ui`.
+- Codex's `.agents/plugins/marketplace.json` lists only `dr-superpowers` and the
+  two UI plugins. Register the repository root to select this catalog.
+- Directory names, catalog entries, and client manifest names must agree.
+- Keep Claude and Codex manifest versions equal. Statusline's `scripts/VERSION`
+  must also agree with its manifest.
+- Preserve existing `DCC_*` variables and statusline user storage paths.
+- Do not enroll unrelated plugin directories or edit historical plans/specs
+  during public-name migrations.
 
 ## Validation
 
-Run before committing any manifest change:
-
-```
-claude plugin validate .
-```
-
-CI runs the same command on every push to `main` and every pull request.
+Run `node scripts/validate-repository.mjs`, the maintained test suites, and
+`claude plugin validate` on the marketplace and every Claude plugin. Bound test
+and CLI execution and clean up all processes started by the validation run.

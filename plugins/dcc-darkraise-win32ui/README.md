@@ -1,6 +1,6 @@
 # dcc-darkraise-win32ui
 
-Teaches Claude the design rules and API conventions of the `Darkraise.Win32UI`
+Teaches Claude Code and Codex the design rules and API conventions of the `Darkraise.Win32UI`
 desktop framework.
 
 ## What it does
@@ -37,13 +37,18 @@ package lags the source repository, so the skill can describe an API a consumer'
 installed package does not have yet. When that happens the consumer needs a
 package upgrade — the skill is not wrong and a workaround should not be invented.
 
-Two probes report what is actually referenced and what is cached.
+Explicit discovery inspects PackageReference, ProjectReference, and centrally
+managed PackageVersion entries, then the selected framework's restore assets.
+Resolved package paths determine which XML documentation to read; the highest
+globally cached version is not evidence of the consumer's installed version.
 
 ## Requirement
 
-The probes use `` !`…` `` command injection, a documented Claude Code feature that
-works on Windows through Git Bash. A permission policy can disable it, in which
-case the skill degrades to its prose with **no visible error**.
+Use the active client's shell and file-reading tools. No Claude-only inline
+preprocessing is required. Missing packages or restore assets produce an explicit
+prerequisite result. Install `dcc-darkraise-win32ui@darkraise` from the repository
+root marketplace in either client. The slash examples above describe Claude Code;
+Codex can select or explicitly invoke the bundled skill.
 
 ## Contents
 

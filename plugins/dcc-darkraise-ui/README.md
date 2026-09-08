@@ -1,6 +1,6 @@
 # dcc-darkraise-ui
 
-Teaches Claude the opinions of the `darkraise-ui` React kit.
+Teaches Claude Code and Codex the conventions of the `darkraise-ui` React kit.
 
 ## What it does
 
@@ -26,8 +26,9 @@ claims that skill name. The qualified form is the one that always resolves.
 
 ## How it stays current
 
-The skill's prose is pinned to `darkraise-ui` **6.5.0**. On load it injects two
-shell probes that print the installed version and the available component list.
+The skill's prose is pinned to `darkraise-ui` **6.5.0**. It explicitly directs
+the active client to resolve the consumer's installed version and component
+types, including hoisted and linked workspace dependencies.
 
 **When the installed version differs from the pin, the package's own type
 definitions win over anything written in the skill.** That is the standing
@@ -37,11 +38,11 @@ two required keys along the way.
 
 ## Requirement
 
-The probes use `` !`…` `` command injection, a documented Claude Code feature
-that works on Windows through Git Bash. A permission policy can disable it, in
-which case the skill degrades to its prose with **no visible error** — the
-component list and version simply do not appear. If the skill seems to be
-guessing at what is installed, check whether command injection is permitted.
+The consumer package, shell access, and file-reading tools are required. Missing
+packages produce an explicit prerequisite result. Claude-only inline command
+preprocessing is not needed. Install `dcc-darkraise-ui@darkraise` from the root
+marketplace in either client; use the client's skill picker or explicit skill
+invocation. The slash examples above describe Claude Code.
 
 ## Contents
 

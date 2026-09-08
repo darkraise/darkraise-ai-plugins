@@ -7,6 +7,7 @@ on:
 
 jobs:
   validate:
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,5 +16,39 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install validation prerequisites
+        timeout-minutes: 3
+        run: |
+          timeout 120s sudo apt-get update
+          timeout 60s sudo apt-get install -y jq ripgrep coreutils
+
       - name: Validate marketplace and plugins
-        run: npx --yes @anthropic-ai/claude-code@latest plugin validate .
+        timeout-minutes: 3
+        run: |
+          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.263 plugin validate .
+          for plugin in dr-status dr-superpowers dcc-darkraise-ui dcc-darkraise-win32ui; do
+            timeout 30s npx --yes @anthropic-ai/claude-code@2.1.263 plugin validate "plugins/$plugin"
+          done
+
+      - name: Run maintained regression suites
+        timeout-minutes: 12
+        run: timeout --kill-after=10s 690s node scripts/test-all.mjs
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install shell prerequisites
+        timeout-minutes: 3
+        shell: pwsh
+        run: choco install jq ripgrep --yes --no-progress
+      - name: Run Windows regression suites
+        timeout-minutes: 16
+        shell: pwsh
+        env:
+          DR_TEST_BASH: C:/Program Files/Git/bin/bash.exe
+        run: node scripts/test-all.mjs

@@ -1,30 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "darkraise",
-  "version": "0.2.0",
-  "description": "Darkraise's collection of Claude Code plugins.",
+  "version": "0.3.0",
+  "description": "Darkraise plugins for Claude Code and Codex.",
   "owner": {
     "name": "Darkraise",
     "email": "quangtc94@gmail.com"
   },
   "plugins": [
     {
-      "name": "dcc-telegram-notify",
-      "source": "./plugins/dcc-telegram-notify",
-      "description": "Push a Telegram message when a Claude Code session finishes a turn, ends on a question, or needs your attention. Cross-platform, multi-account aware, optional LLM summaries.",
-      "category": "productivity",
-      "keywords": [
-        "telegram",
-        "notifications",
-        "hooks",
-        "push",
-        "mobile"
-      ]
-    },
-    {
-      "name": "dcc-superpower-companions",
-      "source": "./plugins/dcc-superpower-companions",
-      "description": "Extends superpowers with 19 tiered subagents and an external executor lane. Scores every plan task on a four-axis rubric that sends over-scoring tasks back to be split, routes score-2..4 low-risk tasks to Codex for quota offload, dispatches with a defined escalation ladder, and scores task reviews against named criteria with a cross-family review seat.",
+      "name": "dr-superpowers",
+      "source": "./plugins/dr-superpowers",
+      "description": "Task scoring, explicit model and effort assignment, native client dispatch, criteria-based review, and a Claude-hosted external Codex executor.",
       "category": "workflow",
       "keywords": [
         "superpowers",
@@ -39,8 +26,8 @@
       ]
     },
     {
-      "name": "dcc-statusline",
-      "source": "./plugins/dcc-statusline",
+      "name": "dr-status",
+      "source": "./plugins/dr-status",
       "description": "A Claude Code status line: git detail, model and session state, plus context, prompt-cache and rate-limit meters colored by usage level, framed in the color of the Claude account the session belongs to.",
       "category": "productivity",
       "keywords": [
@@ -55,7 +42,7 @@
     {
       "name": "dcc-darkraise-ui",
       "source": "./plugins/dcc-darkraise-ui",
-      "description": "Teaches Claude to write idiomatic darkraise-ui code: the 17-axis theme system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",
+      "description": "Teaches coding agents to write idiomatic darkraise-ui code: the 17-axis theme system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",
       "category": "development",
       "keywords": [
         "darkraise-ui",
@@ -69,7 +56,7 @@
     {
       "name": "dcc-darkraise-win32ui",
       "source": "./plugins/dcc-darkraise-win32ui",
-      "description": "Teaches Claude to write idiomatic Darkraise.Win32UI code: token-resolved visuals, the raise ladder and overlay-hover rule, the fluent View builder, convention-based MVVM and draml markup, plus the framework limits it must never promise past.",
+      "description": "Teaches coding agents to write idiomatic Darkraise.Win32UI code: token-resolved visuals, the raise ladder and overlay-hover rule, the fluent View builder, convention-based MVVM and draml markup, plus the framework limits it must never promise past.",
       "category": "development",
       "keywords": [
         "darkraise-win32ui",
@@ -81,5 +68,8 @@
         "design-system"
       ]
     }
+  ],
+  "allowCrossMarketplaceDependenciesOn": [
+    "claude-plugins-official"
   ]
 }

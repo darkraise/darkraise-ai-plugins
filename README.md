@@ -1,92 +1,88 @@
-# Darkraise Claude Code Plugins
+# Darkraise plugins
 
-A [Claude Code](https://code.claude.com) plugin marketplace hosting Darkraise's plugins.
+Plugins for Claude Code and Codex, distributed through the `darkraise` marketplace.
+The repository is being renamed to `darkraise/darkraise-plugins`.
 
-## Add the marketplace
+| Plugin | Claude Code | Codex |
+| --- | --- | --- |
+| [dr-status](plugins/dr-status/README.md) | Available | Not listed |
+| [dr-superpowers](plugins/dr-superpowers/README.md) | Available | Available |
+| [dcc-darkraise-ui](plugins/dcc-darkraise-ui/README.md) | Available | Available |
+| [dcc-darkraise-win32ui](plugins/dcc-darkraise-win32ui/README.md) | Available | Available |
 
-In Claude Code:
+## Installation
 
-```
-/plugin marketplace add darkraise/claude-code-plugins
-```
+Register the repository root, using its current Git URL or a local checkout.
+After the GitHub rename, the root URL is
+`https://github.com/darkraise/darkraise-plugins.git`.
 
-Then browse and install a plugin:
+Claude Code:
 
-```
-/plugin install dcc-statusline@darkraise
-```
-
-The marketplace identifier is `darkraise` (the name after `@` when installing). The
-GitHub repository is `darkraise/claude-code-plugins`.
-
-## Available plugins
-
-| Plugin | Description |
-| ------ | ----------- |
-| `dcc-statusline` | A status line with an account-colored frame, semantic per-section colour, and context and rate-limit meters. Built for machines running several Claude accounts side by side. |
-| `dcc-superpower-companions` | Extends superpowers with 16 model and effort tiered implementer subagents. Scores every plan task, records the assigned implementer in the plan, and dispatches it with a defined escalation ladder. |
-| `dcc-telegram-notify` | Telegram push notifications when a session finishes a turn, ends on a question, or needs your attention. Cross-platform, multi-account aware, optional LLM summaries. |
-
-`dcc-statusline` needs one extra step after installing. A plugin's own
-`settings.json` supports only the `agent` and `subagentStatusLine` keys, so no
-plugin can register the main `statusLine` for you. Run `/dcc-statusline install`
-once per machine to write that entry into your own settings.
-
-## Adding a new plugin
-
-1. Create `plugins/<your-plugin>/.claude-plugin/plugin.json`. New plugin names
-   take the `dcc-` prefix, and the name must match the directory and the
-   marketplace entry:
-
-   ```json
-   {
-     "name": "dcc-<your-plugin>",
-     "description": "What it does.",
-     "version": "0.1.0",
-     "keywords": ["..."]
-   }
-   ```
-
-2. Pick a starting point from an existing plugin if it helps: `dcc-statusline`
-   for scripts, hooks and a slash command; `dcc-telegram-notify` for hooks and
-   configuration; `dcc-superpower-companions` for agents.
-3. Add components under the plugin directory. Claude Code auto-discovers the standard
-   directories: `commands/` for slash commands, `skills/<name>/SKILL.md` for skills,
-   `agents/` for subagents, `hooks/` for hooks, and `.mcp.json` for MCP servers.
-4. Register the plugin in `.claude-plugin/marketplace.json` by adding an entry to the
-   `plugins` array:
-
-   ```json
-   {
-     "name": "dcc-<your-plugin>",
-     "source": "./plugins/dcc-<your-plugin>",
-     "description": "What it does.",
-     "keywords": ["..."]
-   }
-   ```
-
-5. Validate before committing:
-
-   ```
-   claude plugin validate .
-   ```
-
-## Repository layout
-
-```
-.claude-plugin/marketplace.json   Marketplace manifest (lists every plugin)
-plugins/<plugin>/                 One directory per plugin
-  .claude-plugin/plugin.json      Plugin manifest
-  commands/  skills/  agents/     Plugin components (auto-discovered)
-.github/workflows/validate.yml    CI: runs `claude plugin validate .`
+```text
+/plugin marketplace add darkraise/darkraise-plugins
+/plugin install dr-superpowers@darkraise
+/plugin install dr-status@darkraise
 ```
 
-## Validation
+For statusline registration, run `/dr-status install`, or `/dr-status install
+--all` for all discovered accounts. Existing themes and account configuration
+stay under `~/.claude/dcc-statusline.json`.
 
-Every push to `main` and every pull request runs `claude plugin validate .` via
-GitHub Actions (see `.github/workflows/validate.yml`) to catch manifest errors
-before release.
+Codex uses `.agents/plugins/marketplace.json`; Claude uses
+`.claude-plugin/marketplace.json`. Registering the root gives Codex only the
+three supported plugins. Directly registering the Claude catalog file bypasses
+root discovery and is outside the supported Codex installation route.
 
-## License
+After the repository rename, install through Codex with:
 
-[MIT](LICENSE) &copy; 2026 Darkraise
+```text
+codex plugin marketplace add https://github.com/darkraise/darkraise-plugins.git
+codex plugin list --marketplace darkraise --available
+codex plugin add dr-superpowers@darkraise
+```
+
+A local checkout's absolute root path can replace the URL. Codex 0.153.4's CLI
+rejects direct catalog-file registration; supported root discovery selects the
+dedicated Codex catalog.
+
+`dr-superpowers` requires Superpowers. Claude declares the dependency on
+`superpowers` from `claude-plugins-official`; register that marketplace if it is
+not already available. Codex requires the relevant installed Superpowers skills
+and native agent tools. Native model/effort availability is checked against the
+active client before dispatch; installation alone does not establish model parity.
+
+## Migration
+
+Refresh an existing root marketplace registration before installing renamed
+plugins. A source pinned to an old commit must explicitly move to the revised
+release. If adding the renamed URL conflicts with the existing `darkraise`
+registration, record installed plugin IDs and scopes, remove the old registration,
+add the new root, and reinstall the selected supported plugins. Preserve plugin
+data when uninstalling; do not assume marketplace removal keeps installations.
+
+Disable the old Claude `dcc-statusline` and `dcc-superpower-companions` plugins
+before enabling `dr-status` and `dr-superpowers`, so their hooks do not run twice.
+Statusline script storage remains `~/.claude/dcc-statusline/`; a registry at
+`~/.claude/dcc-statusline-installations.json` remembers custom account destinations.
+Set `DCC_STATUSLINE_HOME` only when installing or intentionally moving a copy.
+Sync, status, doctor, and uninstall use the recorded destination afterward.
+
+Telegram notification support is retired. Uninstall `dcc-telegram-notify` from
+existing clients yourself; removing its catalog entry does not remove cached
+installations. Likewise uninstall an old statusline installation from Codex.
+Repository changes do not delete Telegram configuration, erase tokens, or revoke
+the bot token. Those remain separate user-controlled actions.
+
+## Development and validation
+
+Public plugin names must match their directories and catalog entries. Add a
+native Codex manifest only for a plugin supported by Codex. Shared client
+manifests must have equal release versions. `dr-superpowers` explicitly sets
+empty Codex hooks to prevent discovery of its Claude hook file.
+
+Run repository validation and the maintained test suites with bounded commands.
+Validate the Claude marketplace and each Claude plugin separately. Installation
+and upgrade tests use disposable profiles, caches, and Git repositories; they
+must never modify your installed plugins or invoke paid models.
+
+[MIT](LICENSE) © 2026 Darkraise

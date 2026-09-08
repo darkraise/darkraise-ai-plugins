@@ -1,0 +1,44 @@
+{
+  "name": "darkraise",
+  "interface": {
+    "displayName": "Darkraise plugins"
+  },
+  "plugins": [
+    {
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "name": "dr-superpowers",
+      "category": "Development",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dr-superpowers"
+      }
+    },
+    {
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "name": "dcc-darkraise-ui",
+      "category": "Development",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dcc-darkraise-ui"
+      }
+    },
+    {
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "name": "dcc-darkraise-win32ui",
+      "category": "Development",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dcc-darkraise-win32ui"
+      }
+    }
+  ]
+}

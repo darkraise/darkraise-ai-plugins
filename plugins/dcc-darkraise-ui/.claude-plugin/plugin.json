@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dcc-darkraise-ui",
-  "description": "Teaches Claude to write idiomatic darkraise-ui code: the 17-axis theme system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",
-  "version": "0.1.0",
+  "description": "Teaches coding agents to write idiomatic darkraise-ui code: the 17-axis theme system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",
+  "version": "0.2.0",
   "author": {
     "name": "Darkraise"
   },
-  "homepage": "https://github.com/darkraise/claude-code-plugins/tree/main/plugins/dcc-darkraise-ui",
-  "repository": "https://github.com/darkraise/claude-code-plugins",
+  "homepage": "https://github.com/darkraise/darkraise-plugins/tree/main/plugins/dcc-darkraise-ui",
+  "repository": "https://github.com/darkraise/darkraise-plugins",
   "license": "MIT",
   "keywords": [
     "darkraise-ui",

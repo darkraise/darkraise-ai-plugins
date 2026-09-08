@@ -8,30 +8,30 @@ user-invocable: true
 
 A React 19 UI kit with themed components, hooks, a seventeen-axis theme system, and layout variants. Every primitive is implemented in-house — there is no Radix UI underneath — and components are styled with Tailwind CSS 4.
 
-**These rules were written against `darkraise-ui` 6.5.0.** The probe below prints what is actually installed. **When the installed version differs from 6.5.0, the package's own type definitions win over anything written in this skill.**
+**These rules were written against `darkraise-ui` 6.5.0.** The discovery steps below establish what is actually installed. **When the installed version differs from 6.5.0, the package's own type definitions win over anything written in this skill.**
 
 ## Principles
 
-1. **Use the kit before writing custom UI.** Check the injected component list first — the kit is wider than it looks, and a styled `div` is almost always a component you did not know existed.
+1. **Use the kit before writing custom UI.** Discover the installed component list first — the kit is wider than it looks, and a styled `div` is almost always a component you did not know existed.
 2. **Compose, don't reinvent.** A settings page is `Tabs` + `Card` + form fields. A dashboard is `SidebarLayout` + `Card` + `Chart` + `DataTable`.
 3. **Use built-in variants before custom styles.** `variant="outline"`, `size="sm"` — the variant already carries the theme's opinion; a `className` color does not.
 4. **Use semantic tokens, never raw color values.** Every one of the seventeen theme axes recomputes these tokens at runtime, so a raw Tailwind color silently opts the element out of the entire theme system.
 
 ## Current Project Context
 
-Installed version:
+Use the active client's shell and file-reading tools explicitly. Start in the
+consumer project, inspect its `package.json`, and locate the actual installed
+`darkraise-ui` package. Read that package's `package.json` version and list its
+`dist/components/*.d.ts` files before selecting components.
 
-```
-!`cat node_modules/darkraise-ui/package.json | grep '"version"'`
-```
-
-Available components:
-
-```
-!`ls node_modules/darkraise-ui/dist/components/*.d.ts`
-```
-
-If the first probe prints `No such file or directory`, the package is not installed at that path. Say so and offer to install it — never guess at the API. In a workspace that hoists differently, `pnpm why darkraise-ui` resolves the real location.
+For a hoisted or linked workspace dependency, follow the resolved package path
+from the consumer's package-manager metadata (`pnpm why darkraise-ui` when pnpm
+is used) and filesystem links. Treat `node_modules/darkraise-ui` below as the
+resolved package directory, not a required physical layout. If the dependency
+is missing or its location cannot be resolved, report that and request the
+consumer project location or installation. Never substitute the pinned API for
+an unavailable installed package. No inline preprocessing is required by either
+Claude Code or Codex.
 
 ## Read the types before you write
 
@@ -154,7 +154,7 @@ import { Button } from "darkraise-ui"                     // wrong
 
 ## Workflow
 
-1. **Read the injected context.** The version and component list above are live.
+1. **Discover project context.** Resolve the installed version and component list using the steps above.
 2. **Check what is already available.** Import only components that appear in the list.
 3. **Read the relevant `.d.ts`.** Every time, for every component you touch. Follow re-exports.
 4. **Write the code**, using the kit's own primitives rather than markup that imitates them.

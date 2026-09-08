@@ -22,19 +22,37 @@ A desktop UI framework built directly on Win32 and Direct2D. No WPF, no WinForms
 
 ## Current Project Context
 
-How the framework is referenced:
+Use the active Claude Code or Codex shell tool in the consumer project to locate
+its dependency declarations:
 
-```
-!`grep -rh --include=*.csproj --include=Directory.Packages.props -oE '<(Package|Project)Reference[^>]*Darkraise[^>]*' . | sort -u`
-```
-
-What is in the package cache:
-
-```
-!`ls ~/.nuget/packages/darkraise.win32ui/ ~/.nuget/packages/darkraise/ 2>/dev/null`
+```bash
+rg -n 'PackageReference|ProjectReference|PackageVersion|Darkraise' \
+  --glob '*.csproj' --glob 'Directory.Packages.props' .
 ```
 
-A `ProjectReference` means the source tree is available and is the better source. A `PackageReference` means read the XML docs. The second probe also covers central package management, where the `.csproj` carries no version at all.
+Read the matching XML elements in full, including multiline elements, conditions,
+properties, and imported central package files. `PackageVersion` supports central
+management; a versionless `PackageReference` does not establish the installed
+version. Follow `ProjectReference` source where available.
+
+Select the consumer's target framework before resolving packages. Prefer that
+framework's entries in `obj/project.assets.json`: match the Darkraise package
+keys in `targets`, look up their exact paths in `libraries`, and resolve those
+paths under the listed `packageFolders`. For example, with jq and the selected
+framework supplied as `tfm`, inspect the resolved entries:
+
+```bash
+jq --arg tfm "$tfm" '. as $assets | .targets[$tfm] | to_entries[] |
+  select(.key | test("^Darkraise([.]Win32UI)?/"; "i")) |
+  {package:.key, path:$assets.libraries[.key].path,
+   packageFolders:($assets.packageFolders | keys)}' obj/project.assets.json
+```
+
+Use the existing package folder containing that exact library path and read its
+XML docs. Never choose the highest version in the global NuGet cache. Without
+restore assets, report the declared version separately from the unresolved
+installation and request restore or the correct consumer project. A missing
+package is not permission to guess its API. No inline preprocessing is required.
 
 ## Look up the API before you write
 
