@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The lane tables are data the skills and the wrapper script read at runtime, so
 # their integrity is checkable without a model. Two invariants matter most: no
-# rung may name a model that does not exist on a ChatGPT account, and the
+# rung may name a model outside the external CLI policy, and the
 # successor column must terminate at HANDBACK rather than cycling.
 set -uo pipefail
 
@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LADDER="$HERE/../reference/ladder.md"
 
 # Probed on 2026-08-31 against Codex 0.151.0 with ChatGPT-subscription auth.
-# luna and terra are rejected with HTTP 400; minimal is rejected as an effort.
+# Luna and Terra were rejected with HTTP 400; minimal was rejected as an effort.
 VALID_MODELS="gpt-5.5 gpt-5.6-sol"
 VALID_EFFORTS="low medium high xhigh ultra"
 
@@ -59,7 +59,7 @@ while read -r score model effort; do
   in_list "$effort" "$VALID_EFFORTS" || bad_effort="$effort"
   seen="$seen $score"
 done <<< "$assignment"
-check "every assigned model is available on a ChatGPT account" "$bad_model" "NONE"
+check "every assigned model matches the external CLI policy" "$bad_model" "NONE"
 check "every assigned effort is valid" "$bad_effort" "NONE"
 
 missing=NONE

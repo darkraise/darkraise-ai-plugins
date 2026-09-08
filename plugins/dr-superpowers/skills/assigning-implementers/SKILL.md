@@ -10,10 +10,13 @@ description: Use when writing an implementation plan with superpowers:writing-pl
 Use the active native tool schemas to identify Claude Code or Codex. Read
 [native-codex.md](../../reference/native-codex.md) for host prerequisites, plan
 headers, assignment-source fields, and rename/cross-host migration rules.
-On Codex, apply this skill's rubric and Rule S, then use that reference's native
-selector and assignment format. Skip the Claude fleet and external CLI lane
-sections below. On Claude, use the existing fleet sections below. Honor the
-user's inline/delegation preference on either host.
+On Codex, use the shared raw axis definitions and Rule S, then the reference's
+`codex-v2` selector. Supply all four axes; it calculates the native 0–9 routing
+score as files + spec + coupling + twice risk. Record the raw axes and weighted
+score separately. Its native table, assignment format, and conversion checks
+replace the Claude unweighted-total checks, fleet, and external CLI lane below.
+On Claude, use the existing unweighted rubric and fleet sections below. Honor
+the user's inline/delegation preference on either host.
 
 Record, for every task in an implementation plan, which implementer subagent
 will run it. The choice becomes a property of the plan document instead of a

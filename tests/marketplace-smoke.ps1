@@ -162,7 +162,8 @@ try {
   Invoke-Client $Codex @('plugin','marketplace','remove','darkraise') | Out-Null
   Invoke-Client $Codex @('plugin','marketplace','add',$market,'--json') | Out-Null
   $reinstalled = (Invoke-Client $Codex @('plugin','add','dr-superpowers@darkraise','--json')).stdout | ConvertFrom-Json
-  Check ($reinstalled.version -eq '0.5.0') 'Supported remove/add/reinstall recovers a Codex source change'
+  $expectedVersion = (Get-Content (Join-Path $market 'plugins/dr-superpowers/.codex-plugin/plugin.json') -Raw | ConvertFrom-Json).version
+  Check ($reinstalled.version -eq $expectedVersion) 'Supported remove/add/reinstall recovers a Codex source change'
   Invoke-Client $Codex @('plugin','marketplace','remove','darkraise') | Out-Null
   $direct = Invoke-Client $Codex @('plugin','marketplace','add',$claudeCatalogPath,'--json') -AllowFailure
   if ($direct.exit -eq 0) {

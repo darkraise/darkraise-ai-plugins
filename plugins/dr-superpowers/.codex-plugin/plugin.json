@@ -1,6 +1,6 @@
 {
   "name": "dr-superpowers",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Task scoring, explicit model and effort assignment, native client dispatch, criteria-based review, and a Claude-hosted external Codex executor.",
   "author": {
     "name": "Darkraise"

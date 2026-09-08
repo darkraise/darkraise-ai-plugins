@@ -10,10 +10,15 @@ description: Use when executing a plan whose tasks carry an Implementer line - d
 Identify the host through its native tool schemas. Follow
 [native-codex.md](../../reference/native-codex.md) for prerequisites, namespace
 migration, cross-host conversion approval, and assignment-source preservation.
-On Codex, its native dispatch/review protocol replaces every Claude agent and
-external-CLI invocation below, including final branch review. Preserve the
-rubric, criteria, progress triggers, and review cap. On Claude, use the fleet
-protocol below and the durable external-task protocol when offload is selected.
+On Codex, its `codex-v2` dispatch/review protocol replaces every Claude agent and
+external-CLI invocation below, including final branch review. Supply the raw
+axes for rubric selection; validate any recorded weighted 0–9 score. Old policy
+versions require explicit conversion before dispatch. Preserve the raw risk
+axis for three independent risk-3 evaluations, criteria, progress triggers, and
+the five-round review cap. Reuse recorded assignments for transport retries;
+never clear attempt history to rerun initial selection or escape exhausted reserve.
+On Claude, use the fleet protocol below and the durable external-task protocol
+when offload is selected.
 The presence of a Codex executable does not identify the host. Missing native
 tools, advertised model metadata, or Superpowers skills blocks dispatch with a
 named prerequisite. Honor any user instruction to execute inline.

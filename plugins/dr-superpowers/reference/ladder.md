@@ -1,7 +1,9 @@
 # Assignment, escalation, and reserve tables
 
-Single source of truth for the companion skills and the test suite. The fenced
-blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
+The raw axis definitions and Rule S are shared across hosts. The unweighted
+totals, agent tables, and external CLI lane here apply to Claude. Native Codex
+uses [native-codex.md](native-codex.md) and its weighted `codex-v2` score.
+The fenced blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
 
 ## Scoring rubric
 
@@ -214,14 +216,15 @@ costs less to run than the wrapper costs to orchestrate.
 4 gpt-5.6-sol high
 ```
 
-Only `gpt-5.5` and `gpt-5.6-sol` appear. `luna` and `terra` are rejected with
-HTTP 400 on a ChatGPT account - "not supported when using Codex with a ChatGPT
-account" - and Codex holds no model metadata for either. A table naming them
-would fail every task at those rungs on every run.
+Only `gpt-5.5` and `gpt-5.6-sol` appear in this external CLI policy. On 2026-08-31,
+Codex 0.151.0 on Windows with ChatGPT-subscription authentication rejected Luna
+and Terra with HTTP 400 and provided no metadata for them. Those historical
+observations do not establish current access on another account, CLI version,
+or native client. Native Codex routes Terra through its separate capability filter.
 
-Valid efforts are `low`, `medium`, `high`, `xhigh`, and `ultra`. `minimal` is
-rejected. Two models across five efforts is ten rungs of headroom, all of it on
-the effort axis.
+This CLI policy allows `low`, `medium`, `high`, `xhigh`, and `ultra`, and rejects
+`minimal`. Verify advertised capabilities for the actual CLI/account before use;
+do not infer them from the native model list or make paid capability probes.
 
 ### Codex successor
 

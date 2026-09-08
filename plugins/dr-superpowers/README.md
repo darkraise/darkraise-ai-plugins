@@ -5,10 +5,17 @@ repository-root marketplace. Claude uses its registered fleet and hooks; Codex
 uses native agent tools and explicit model/effort pairs, with Claude hooks
 disabled in its native manifest. The fleet details below describe Claude.
 
-For Codex, read [native-codex.md](reference/native-codex.md). Its `codex-v1` policy
-filters advertised capabilities at planning and dispatch, preserves human pins,
-and records promotions and actual attempts. Cross-host plan conversion requires
-approval without rescoring. Claude translates known legacy
+For Codex, read [native-codex.md](reference/native-codex.md). Its `codex-v2` policy
+routes scores 0–9 through Luna, Terra, Sol, and Astra. The selector calculates
+files + spec + coupling + twice risk from the four raw axes, preserving the
+existing split gate. Scouts start at Sol medium; judges start at Astra high.
+It filters advertised capabilities at planning and dispatch, preserves human
+pins, and records promotions and actual attempts.
+
+Version 0.6.0 requires explicit conversion of old Codex or Claude plans: preserve
+the raw axes and original assignments, preview the recalculated score and proposed
+assignment, and obtain approval. Old policy ranks cannot be reused as v2 history.
+Claude translates known legacy
 `dcc-superpower-companions:` agent names at read time; disable the old plugin
 before enabling this one. Original assignments and evaluations remain intact.
 
@@ -278,9 +285,11 @@ Requires `jq` and `git`. No model calls: the executor suites run against a stub
 
 ## Reference
 
-`reference/ladder.md` holds the rubric, the assignment table, the escalation
-table, and the reserve table. All three skills and the test suite read that one
-copy.
+`reference/ladder.md` holds the raw rubric, Rule S, and Claude assignment,
+escalation, reserve, and external CLI tables. Native Codex reads
+`reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
+score, request format, and plan conversion. `scripts/select-native-tier.sh`
+validates raw scores and history before returning a native routing decision.
 
 `criteria/` holds the verifier criteria; `criteria/TEMPLATE.md` documents the
 format. `tests/criteria.test.sh` validates every file in that directory.
