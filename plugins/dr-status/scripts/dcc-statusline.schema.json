@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/darkraise/claude-code-plugins/plugins/dcc-statusline/dcc-statusline.schema.json",
+  "$id": "https://github.com/darkraise/darkraise-plugins/plugins/dr-status/dcc-statusline.schema.json",
   "title": "dcc-statusline configuration",
   "type": "object",
   "additionalProperties": false,

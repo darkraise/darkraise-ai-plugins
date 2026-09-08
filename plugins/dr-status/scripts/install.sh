@@ -18,6 +18,7 @@ DCC_REFRESH=2
 # dcc_doctor resolves the active account key exactly the way the render path
 # does, so a mismatch between the two can never be what the diagnostic misses.
 source "$DCC_SRC_DIR/lib/path.sh"
+source "$DCC_SRC_DIR/lib/installations.sh"
 source "$DCC_SRC_DIR/lib/jq-prog.sh"
 source "$DCC_SRC_DIR/lib/config.sh"
 source "$DCC_SRC_DIR/lib/validate.sh"
@@ -45,6 +46,7 @@ dcc_account_dirs() { # prints each qualifying account config dir, one per line
 
 dcc_copy_scripts() {
   _dcc_paths
+  [ -z "${1:-}" ] || DCC_DEST="$1"
   mkdir -p "$DCC_DEST" || return 1
   cp -R "$DCC_SRC_DIR/." "$DCC_DEST/" 2>/dev/null || return 1
   # install.sh and sync.sh are plugin-side entry points; the copy only needs the
@@ -57,24 +59,47 @@ dcc_copy_scripts() {
 
 _dcc_edit_settings() { # _dcc_edit_settings <dir> <jq-program>
   local dir="$1" prog="$2" tmp
+  shift 2
   local settings="$dir/settings.json"
-  [ -f "$settings" ] || printf '{}\n' > "$settings"
-  tmp="$settings.dcc-tmp.$$"
-  if jq --indent 2 "$prog" "$settings" > "$tmp" 2>/dev/null; then
-    mv "$tmp" "$settings"
-  else
-    rm -f "$tmp"
-    return 1
-  fi
+  mkdir -p -- "$dir" || return 1
+  tmp="$(mktemp "$settings.XXXXXX")" || return 1
+  local input='{}'
+  if [ -e "$settings" ]; then input="$(cat "$settings")" || { rm -f -- "$tmp"; return 1; }; fi
+  if jq -e --indent 2 "$@" "select(type == \"object\") | $prog" <<< "$input" > "$tmp" 2>/dev/null && mv -f -- "$tmp" "$settings"; then return 0; fi
+  rm -f -- "$tmp"
+  return 1
 }
 
 dcc_install_one() { # dcc_install_one <config-dir>
-  _dcc_edit_settings "$1" \
-    '.statusLine = {type:"command",command:"'"$DCC_COMMAND"'",padding:0,refreshInterval:'"$DCC_REFRESH"'}'
+  dcc_installation_lock || return 1
+  local result=0
+  _dcc_install_one "$1" || result=1
+  dcc_installation_unlock || result=1
+  return "$result"
+}
+
+_dcc_install_one() {
+  local destination command
+  dcc_installation_resolve "$1" install || return 1
+  destination="$DCC_DEST"; command="$DCC_COMMAND"
+  if [ -e "$1/settings.json" ]; then jq -e 'type == "object"' "$1/settings.json" >/dev/null 2>&1 || return 1; fi
+  dcc_copy_scripts "$destination" || return 1
+  dcc_seed_config || return 1
+  dcc_installation_put "$1" "$destination" "$command" || return 1
+  _dcc_edit_settings "$1" '.statusLine = {type:"command", command:$command, padding:0, refreshInterval:$refresh}' \
+    --arg command "$command" --argjson refresh "$DCC_REFRESH"
 }
 
 dcc_uninstall_one() { # dcc_uninstall_one <config-dir>
-  _dcc_edit_settings "$1" 'del(.statusLine)'
+  dcc_installation_lock || return 1
+  local result=0
+  if ! dcc_installation_read >/dev/null; then result=1
+  elif [ -e "$1/settings.json" ] && ! jq -e 'type == "object"' "$1/settings.json" >/dev/null 2>&1; then result=1
+  elif dcc_installation_owns "$1"; then
+    _dcc_edit_settings "$1" 'del(.statusLine)' && dcc_installation_remove "$1" || result=1
+  fi
+  dcc_installation_unlock || result=1
+  return "$result"
 }
 
 dcc_seed_config() { # seeds only what is genuinely per-machine -- everything
@@ -95,7 +120,9 @@ JSON
 dcc_targets() { # dcc_targets <--all|"">
   _dcc_paths
   if [ "${1:-}" = "--all" ]; then
-    dcc_account_dirs
+    local records
+    records="$(dcc_installation_read)" || return 1
+    { dcc_account_dirs; dcc_installation_json -r '.accounts | keys[]' <<< "$records"; } | sort -u
   elif [ -n "${DCC_FAKE_HOME:-}" ]; then
     # DCC_FAKE_HOME is a test-only isolation switch. Once set, it must be
     # authoritative: an ambient CLAUDE_CONFIG_DIR from the caller's real shell
@@ -109,6 +136,9 @@ dcc_targets() { # dcc_targets <--all|"">
 
 dcc_doctor() {
   _dcc_paths
+  local active
+  active="$(dcc_targets)" || return 1
+  dcc_installation_resolve "$active" || { printf 'FAIL - invalid installation registry\n'; return 1; }
   local rc=0 d cfg key probe rendered dcc_m dcc_w iv
   cfg="$DCC_HOME_DIR/.claude/dcc-statusline.json"
   command -v jq  >/dev/null 2>&1 && printf 'ok   - jq is on PATH\n'  || { printf 'FAIL - jq is not on PATH\n';  rc=1; }
@@ -118,10 +148,10 @@ dcc_doctor() {
     if cmp -s "$DCC_SRC_DIR/VERSION" "$DCC_DEST/VERSION"; then
       printf 'ok   - installed copy matches the plugin version\n'
     else
-      printf 'warn - installed copy is stale; run: /dcc-statusline install\n'
+      printf 'warn - installed copy is stale; run: /dr-status install\n'
     fi
   else
-    printf 'FAIL - scripts are not installed; run: /dcc-statusline install\n'; rc=1
+    printf 'FAIL - scripts are not installed; run: /dr-status install\n'; rc=1
   fi
   if [ -r "$DCC_DEST/icons.detected" ]; then
     read -r dcc_m dcc_w < "$DCC_DEST/icons.detected"
@@ -159,56 +189,65 @@ dcc_doctor() {
 
   while IFS= read -r d; do
     [ -n "$d" ] || continue
-    if jq -e '.statusLine' "$d/settings.json" >/dev/null 2>&1; then
-      printf 'ok   - installed in %s\n' "$d"
+    if dcc_installation_owns "$d"; then
+      if [ -f "$DCC_DEST/statusline.sh" ]; then printf 'ok   - installed in %s\n' "$d"
+      else printf 'FAIL - registered in %s but scripts are missing at %s\n' "$d" "$DCC_DEST"; rc=1; fi
+      cmp -s "$DCC_SRC_DIR/VERSION" "$DCC_DEST/VERSION" || printf 'warn - stale or missing script version for %s\n' "$d"
       iv="$(jq -r '.statusLine.refreshInterval // "unset"' "$d/settings.json" 2>/dev/null)"
       if [ "$iv" != "$DCC_REFRESH" ]; then
-        printf 'warn - %s has refreshInterval %s; a resize will lag. Run: /dcc-statusline install\n' \
+        printf 'warn - %s has refreshInterval %s; a resize will lag. Run: /dr-status install\n' \
           "$d" "$iv"
       fi
     else
-      printf 'warn - not installed in %s\n' "$d"
+      printf 'warn - not installed or another provider/record mismatch in %s\n' "$d"
     fi
-  done < <(dcc_account_dirs)
+  done < <(dcc_targets --all)
   return "$rc"
 }
 
 dcc_status() {
   _dcc_paths
-  local d
+  local d targets
+  targets="$(dcc_targets --all)" || { printf 'invalid installation registry\n' >&2; return 1; }
   # Read line by line: a home directory containing a space would word-split an
   # unquoted command substitution into fragments that name no directory.
   while IFS= read -r d; do
     [ -n "$d" ] || continue
-    if jq -e '.statusLine' "$d/settings.json" >/dev/null 2>&1; then
-      printf '%s: installed\n' "$d"
+    if dcc_installation_owns "$d"; then
+      if [ -f "$DCC_DEST/statusline.sh" ]; then printf '%s: installed at %s\n' "$d" "$DCC_DEST"
+      else printf '%s: registered; scripts missing at %s\n' "$d" "$DCC_DEST"; fi
+      [ ! -f "$DCC_DEST/VERSION" ] || printf 'installed script version: %s\n' "$(cat "$DCC_DEST/VERSION")"
     else
-      printf '%s: not installed\n' "$d"
+      printf '%s: not installed or another provider/record mismatch\n' "$d"
     fi
-  done < <(dcc_account_dirs)
-  [ -f "$DCC_DEST/VERSION" ] && printf 'installed script version: %s\n' "$(cat "$DCC_DEST/VERSION")"
+  done <<< "$targets"
   printf 'plugin script version: %s\n' "$(cat "$DCC_SRC_DIR/VERSION")"
 }
 
-if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+dcc_main() {
   _dcc_paths
-  case "${1:-status}" in
-    install)
-      dcc_copy_scripts || { printf 'dcc-statusline: could not copy scripts to %s\n' "$DCC_DEST"; exit 1; }
-      dcc_seed_config
+  local action="${1:-status}" targets d result=0 owned
+  [ "$#" -eq 0 ] || shift
+  [ "$#" -le 1 ] && { [ "$#" -eq 0 ] || [ "$1" = --all ]; } || { printf 'invalid arguments\n' >&2; return 2; }
+  command -v jq >/dev/null 2>&1 && command -v realpath >/dev/null 2>&1 || { printf 'jq and GNU realpath are required\n' >&2; return 2; }
+  case "$action" in
+    install|uninstall)
+      targets="$(dcc_targets "${1:-}")" || return 1
       while IFS= read -r d; do
         [ -n "$d" ] || continue
-        dcc_install_one "$d" && printf 'installed: %s\n' "$d" || printf 'failed: %s\n' "$d"
-      done < <(dcc_targets "${2:-}")
-      ;;
-    uninstall)
-      while IFS= read -r d; do
-        [ -n "$d" ] || continue
-        dcc_uninstall_one "$d" && printf 'uninstalled: %s\n' "$d" || printf 'failed: %s\n' "$d"
-      done < <(dcc_targets "${2:-}")
+        owned=yes
+        if [ "$action" = uninstall ] && ! dcc_installation_owns "$d"; then owned=no; fi
+        if "dcc_${action}_one" "$d"; then
+          if [ "$owned" = yes ]; then printf '%sed: %s\n' "$action" "$d"
+          else printf 'unchanged: %s (not installed, another provider, or record mismatch)\n' "$d"; fi
+        else printf 'failed: %s\n' "$d"; result=1; fi
+      done <<< "$targets"
+      return "$result"
       ;;
     status) dcc_status ;;
     doctor) dcc_doctor ;;
-    *) printf 'usage: install.sh {install|uninstall|status|doctor} [--all]\n'; exit 2 ;;
+    *) printf 'usage: install.sh {install|uninstall|status|doctor} [--all]\n'; return 2 ;;
   esac
-fi
+}
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then dcc_main "$@"; fi

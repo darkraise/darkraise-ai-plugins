@@ -48,15 +48,15 @@ check "trunc at maxlen 1 still honours the bound" "${#DCC_TRUNC}" "1"
 # --- dir ----------------------------------------------------------------------
 HOME="/home/u"
 DCC_GIT_ROOT="/home/u/Repos/Personal/claude-code-plugins"
-P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dcc-statusline"
+P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dr-status"
 
 check "dir tier 0 is the full path" "$(segt dir 0)" \
-  "~/Repos/Personal/claude-code-plugins/plugins/dcc-statusline"
+  "~/Repos/Personal/claude-code-plugins/plugins/dr-status"
 check "dir tier 1 drops the ancestry" "$(segt dir 1)" \
-  "claude-code-plugins/plugins/dcc-statusline"
+  "claude-code-plugins/plugins/dr-status"
 check "dir tier 2 elides the middle" "$(segt dir 2)" \
-  "claude-code-plugins/…/dcc-statusline"
-check "dir tier 3 is the leaf alone" "$(segt dir 3)" "dcc-statusline"
+  "claude-code-plugins/…/dr-status"
+check "dir tier 3 is the leaf alone" "$(segt dir 3)" "dr-status"
 
 # At the repo root there is no sub-path, so tier 2 has nothing to elide and
 # must not emit a dangling separator.
@@ -80,7 +80,7 @@ check "non-repo dir tier 3 is the leaf" "$(segt dir 3)" "thing"
 # --- monotonic shrink ---------------------------------------------------------
 # The escalation loop terminates only if no tier is wider than its predecessor.
 DCC_GIT_ROOT="/home/u/Repos/Personal/claude-code-plugins"
-P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dcc-statusline"
+P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dr-status"
 prev=""
 for t in 0 1 2 3; do
   now="$(segtcells dir "$t")"
@@ -187,7 +187,7 @@ DCC_GIT_BRANCH="main"; DCC_GIT_DIRTY=0
 DCC_GIT_AHEAD=0; DCC_GIT_BEHIND=0
 DCC_GIT_STAGED=0; DCC_GIT_UNSTAGED=0; DCC_GIT_UNTRACKED=0
 DCC_GIT_ROOT="/home/u/Repos/Personal/claude-code-plugins"
-P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dcc-statusline"
+P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dr-status"
 P_MODEL="Opus 4.8"
 
 dcc_line_fit "dir git model" 200 0
@@ -276,16 +276,16 @@ DCC_L_CTX="ctx"
 # dir.style pins the rendering below the line's tier, but never above it: a
 # pin is a floor on compactness, not a veto on fitting.
 DCC_GIT_ROOT="/home/u/Repos/Personal/claude-code-plugins"
-P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dcc-statusline"
+P_CWD="/home/u/Repos/Personal/claude-code-plugins/plugins/dr-status"
 DCC_SEG_DIR_STYLE="repo"
 check "dir.style repo pins tier 0 to tier 1" "$(segt dir 0)" \
-  "claude-code-plugins/plugins/dcc-statusline"
-check "dir.style repo does not block tier 3" "$(segt dir 3)" "dcc-statusline"
+  "claude-code-plugins/plugins/dr-status"
+check "dir.style repo does not block tier 3" "$(segt dir 3)" "dr-status"
 DCC_SEG_DIR_STYLE="leaf"
-check "dir.style leaf pins tier 0 to tier 3" "$(segt dir 0)" "dcc-statusline"
+check "dir.style leaf pins tier 0 to tier 3" "$(segt dir 0)" "dr-status"
 DCC_SEG_DIR_STYLE=""
 check "no dir.style restores tier 0" "$(segt dir 0)" \
-  "~/Repos/Personal/claude-code-plugins/plugins/dcc-statusline"
+  "~/Repos/Personal/claude-code-plugins/plugins/dr-status"
 
 # --- the time segment ---------------------------------------------------------
 # DCC_NOW is the frozen clock the meters already use, so the rendering is

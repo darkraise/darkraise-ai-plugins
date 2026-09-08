@@ -1,10 +1,10 @@
 ---
-description: Install, remove, or diagnose the dcc-statusline status line
+description: Install, remove, or diagnose the dr-status status line
 argument-hint: "[install|uninstall|status|doctor|preview|config] [--all]"
 allowed-tools: Bash, Read, Edit
 ---
 
-You manage the **dcc-statusline** plugin. The engine lives at
+You manage the **dr-status** plugin. The engine lives at
 `${CLAUDE_PLUGIN_ROOT}/scripts/`, the installed copy at `~/.claude/dcc-statusline/`,
 and the shared config at `~/.claude/dcc-statusline.json`.
 
@@ -12,11 +12,13 @@ A plugin cannot register a status line on its own: plugin `settings.json` suppor
 only the `agent` and `subagentStatusLine` keys. That is why installing writes a
 `statusLine` entry into the account's own `settings.json`.
 
-Interpret `$ARGUMENTS` as the subcommand, defaulting to `status`. Pass `--all`
-through when the user supplies it.
+Interpret `$ARGUMENTS` as an argument list with the subcommand first, defaulting
+to `status`. For every operation except guided `config`, invoke
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/manage.sh"` with those arguments exactly
+once, individually shell-quoted. Never evaluate argument text as shell code.
 
 ## `install`
-Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/install.sh" install $ARGUMENTS`.
+For `install --all`, run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/manage.sh" install --all`.
 
 It copies the scripts to `~/.claude/dcc-statusline/`, seeds a default config if
 none exists, and writes the `statusLine` entry into the active account, or into
@@ -33,8 +35,8 @@ keyed by the config directory in `~/...` form, for example
 256-color number.
 
 ## `uninstall`
-Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/install.sh" uninstall $ARGUMENTS`.
-This removes only the `statusLine` key. The config and the copied scripts stay,
+Run the dispatcher with `uninstall` and any remaining flags exactly once.
+This removes only an owned `statusLine` key. The config and the copied scripts stay,
 so a later `install` restores the previous appearance. Say so.
 
 ## `status`
@@ -55,7 +57,7 @@ It also reports the detected icon mode and icon cell width, printed as
 width is likely wrong — set `icons.width` in the config to correct it).
 
 ## `preview`
-Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/preview.sh" $ARGUMENTS`.
+For `preview --width 80`, run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/manage.sh" preview --width 80`.
 
 It renders the user's real config against a sample payload at 48, 60, 80, 120 and
 200 columns, labelling each block with the width and the tier each line settled

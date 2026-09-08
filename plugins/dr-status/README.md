@@ -1,11 +1,11 @@
-# dcc-statusline
+# dr-status
 
 A Claude Code status line with an account-colored frame, built for machines
 running several Claude accounts side by side.
 
 ```
 ╭─  you@example.com ───────────────────────────────────────────────────────╮
-│  plugins/dcc-statusline  ·   main* ↑2 ?2  ·   Opus  ·  xhigh  ·    │
+│  plugins/dr-status  ·   main* ↑2 ?2  ·   Opus  ·  xhigh  ·    │
 │  ctx ▰▰▰▰▰▱▱▱▱▱ 47% · 94k  ·   1.20  ·   5h ▰▰▱▱▱▱▱▱ 23% · 3h40m     │
 ╰────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -37,7 +37,7 @@ depth. What leads to the repository recedes, the repository name is the anchor,
 and where you are inside it reads plainly:
 
 ```
-/d/Repositories/Personal/claude-code-plugins/plugins/dcc-statusline
+/d/Repositories/Personal/claude-code-plugins/plugins/dr-status
 └──────── dim ──────────┘└────── bold ─────┘└───────── plain ─────┘
 ```
 
@@ -91,7 +91,7 @@ would read as empty at any figure below 100% — so the percentage carries the
 reading alone. This is the one place where the widest rendering is not simply
 the fullest one.
 
-Run `/dcc-statusline preview` to see your own config at five widths side by
+Run `/dr-status preview` to see your own config at five widths side by
 side. A block too narrow to frame is labelled `unframed` rather than given a
 tier -- but its content still shrinks to the known width, same as a framed
 block; only the border and the tier label are missing.
@@ -122,15 +122,15 @@ sit short. Setting `frame` to `none` avoids it.
 
 ## Requirements
 
-`bash`, `jq`, and `git`. On Windows these come from Git for Windows plus a
+`bash`, `jq`, `git`, and GNU coreutils (including `realpath`). On Windows these come from Git for Windows plus a
 separate `jq` install. Claude Code runs status lines through Git Bash when it is
 present.
 
 ## Install
 
 ```
-/dcc-statusline install        # the account you are running now
-/dcc-statusline install --all  # every account on this machine
+/dr-status install        # the account you are running now
+/dr-status install --all  # every account on this machine
 ```
 
 Installing copies the scripts to `~/.claude/dcc-statusline/` and adds a
@@ -138,10 +138,29 @@ Installing copies the scripts to `~/.claude/dcc-statusline/` and adds a
 plugin directories are versioned and move on every update; a `SessionStart` hook
 re-copies the tree when the version changes, so the entry never breaks.
 
+This plugin is available only in the Claude Code catalog. Codex repository-root
+registration does not list it. Disable the former `dcc-statusline@darkraise`
+installation before enabling `dr-status@darkraise`, to avoid duplicate hooks.
+Existing configuration and script storage keep their original names.
+
+Set `DCC_STATUSLINE_HOME` at install time to choose a custom destination. The
+per-user `~/.claude/dcc-statusline-installations.json` registry records each
+account's destination and exact command. Sync, doctor, status, and uninstall
+use that record even after the override is unset or changed. Reinstall explicitly
+to move an account; previous script directories are retained. `--all` resolves
+destinations separately for discovered and recorded accounts.
+
+Registry/settings edits use a bounded lock and atomic file replacement. A failed
+settings write retains the intended record as a detectable mismatch; reinstall
+repairs it. Malformed JSON is preserved. A blocked lock requires checking that
+the prior installer has stopped before manually reconciling it.
+
 The edit goes through `jq`, which rewrites the whole file, so `settings.json`
 comes back formatted with two-space indentation. Its contents are preserved;
-only the layout is normalized. Uninstalling removes the `statusLine` key and
-leaves everything else as it was.
+only the layout is normalized. Uninstalling removes an owned `statusLine` key and
+its installation record. Another provider's command, presentation configuration,
+and copied scripts remain untouched. Legacy default commands are recognized;
+legacy custom installs require an explicit reinstall with their destination.
 
 The entry sets `refreshInterval: 2`. Claude Code does not re-run a status line
 command when the terminal is resized -- resize is not one of its update triggers
@@ -224,7 +243,7 @@ turn icons on yourself:
 Icon width matters when you do: a font named "Nerd Font" draws icons at two
 cells, while its "Nerd Font Mono" variant draws them at one. Getting this wrong
 shifts the box's right edge by one cell per icon. Set `icons.width` if the
-detected value is wrong, and run `/dcc-statusline doctor` to see what was
+detected value is wrong, and run `/dr-status doctor` to see what was
 detected.
 
 ## Design notes
@@ -245,7 +264,7 @@ so a missing block shortens the line instead of breaking it.
 
 ## Troubleshooting
 
-Run `/dcc-statusline doctor`. It checks `jq` and `git`, whether the installed copy
+Run `/dr-status doctor`. It checks `jq` and `git`, whether the installed copy
 matches the plugin version, whether the config parses **and validates** — naming
 unknown keys, unrecognised names and enum values, invalid colours, and
 out-of-range numbers; a value of the wrong JSON type inside a valid key can
@@ -261,5 +280,5 @@ key the plugin resolved for the current `CLAUDE_CONFIG_DIR`, which is what your
 all resolve to the same `~/.claude-alt` key, so write the `~` form.
 
 - **The status line does not follow a terminal resize.** The account's
-  `refreshInterval` has drifted from 2. Run `/dcc-statusline doctor` to confirm,
-  then `/dcc-statusline install --all`.
+  `refreshInterval` has drifted from 2. Run `/dr-status doctor` to confirm,
+  then `/dr-status install --all`.

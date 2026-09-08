@@ -88,7 +88,7 @@ check "the install target ignores CLAUDE_CONFIG_DIR once DCC_FAKE_HOME is set" \
 dcc_install_one "$fake/.claude-alt"
 check "install writes the command" \
   "$(jq -r '.statusLine.command' "$fake/.claude-alt/settings.json")" \
-  "bash ~/.claude/dcc-statusline/statusline.sh"
+  "bash $fake/.claude/dcc-statusline/statusline.sh"
 check "install sets a refresh interval" \
   "$(jq -r '.statusLine.refreshInterval' "$fake/.claude-alt/settings.json")" "2"
 check "install preserves existing keys" \
@@ -120,6 +120,7 @@ printf '9.9.9\n' > "$src/scripts/VERSION"
 printf 'echo new\n' > "$src/scripts/statusline.sh"
 
 # Nothing installed yet: sync must stay out of the way entirely.
+rm -rf "$DCC_STATUSLINE_HOME"
 CLAUDE_PLUGIN_ROOT="$src" bash "$HERE/../scripts/sync.sh"
 check "sync does nothing when not installed" "$([ -d "$DCC_STATUSLINE_HOME" ] && echo yes || echo no)" "no"
 
@@ -195,21 +196,24 @@ check "doctor names an account that has no tint entry" \
 # --- doctor: refresh interval drift ------------------------------------------
 # A stale refreshInterval is invisible: everything renders correctly, just
 # seconds after the terminal was resized. Only doctor can surface it.
-printf '{"statusLine":{"type":"command","command":"x","refreshInterval":60}}\n' \
-  > "$fake/.claude-alt/settings.json"
+jq --arg command "bash $fake/.claude/dcc-statusline/statusline.sh" \
+  '.statusLine = {type:"command", command:$command, refreshInterval:60}' \
+  <<< '{}' > "$fake/.claude-alt/settings.json"
 doc="$(doctor_run "")"
 check "doctor names an account with a stale refresh interval" \
   "$(printf '%s\n' "$doc" | grep -c "warn - $fake/.claude-alt has refreshInterval 60")" "1"
 
-printf '{"statusLine":{"type":"command","command":"x","refreshInterval":2}}\n' \
-  > "$fake/.claude-alt/settings.json"
+jq --arg command "bash $fake/.claude/dcc-statusline/statusline.sh" \
+  '.statusLine = {type:"command", command:$command, refreshInterval:2}' \
+  <<< '{}' > "$fake/.claude-alt/settings.json"
 doc="$(doctor_run "")"
 check "doctor is silent when the refresh interval is current" \
   "$(printf '%s\n' "$doc" | grep -c 'has refreshInterval')" "0"
 
 # An entry with no refreshInterval at all predates the key and must be caught.
-printf '{"statusLine":{"type":"command","command":"x"}}\n' \
-  > "$fake/.claude-alt/settings.json"
+jq --arg command "bash $fake/.claude/dcc-statusline/statusline.sh" \
+  '.statusLine = {type:"command", command:$command}' \
+  <<< '{}' > "$fake/.claude-alt/settings.json"
 doc="$(doctor_run "")"
 check "doctor names an account with no refresh interval" \
   "$(printf '%s\n' "$doc" | grep -c "warn - $fake/.claude-alt has refreshInterval unset")" "1"
