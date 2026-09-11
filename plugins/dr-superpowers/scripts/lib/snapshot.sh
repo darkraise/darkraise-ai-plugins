@@ -109,5 +109,15 @@ dr-superpowers handoff skill.'
     [ "${#out}" -le "$cap" ] && break
     case $i in 6) s6="" ;; 5) s5="" ;; 4) s4="" ;; 3) s3="" ;; esac
   done
+  # Sections 1-2 are never dropped, but s2 (the Next session block, copied
+  # verbatim from latest.md) is unbounded — truncate it as a last resort so
+  # the "at most CAP characters" contract holds even for an oversized handoff.
+  if [ "${#out}" -gt "$cap" ]; then
+    local room=$((cap - ${#s1} - 4))
+    [ "$room" -lt 0 ] && room=0
+    s2="${s2:0:room}"
+    out="$s1"$'\n\n'
+    [ -n "$s2" ] && out+="$s2"$'\n\n'
+  fi
   printf '%s\n' "${out%$'\n\n'}"
 }

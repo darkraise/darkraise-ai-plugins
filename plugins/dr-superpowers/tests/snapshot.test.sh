@@ -117,6 +117,14 @@ out=$(snapshot_build "$T" "$REPO" 1500)
 check "explicit cap: at most 1500 characters" "$([ "${#out}" -le 1500 ] && echo yes || echo no)" "yes"
 has "explicit cap: ledger kept" "$out" "Task 2: fix round 1/5"
 
+# --- an oversized Next session block: s1+s2 alone still fits under cap ---
+LONG_NEXT=$(printf '%08000d' 0)
+printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** %s\n\n## Do not\nKeep out.\n' "$LONG_NEXT" \
+  > "$REPO/.superpowers/handoff/latest.md"
+out=$(snapshot_build "$T" "$REPO")
+check "oversized handoff: at most 5500 characters" "$([ "${#out}" -le 5500 ] && echo yes || echo no)" "yes"
+check "oversized handoff: heading kept" "$(sed -n 1p <<<"$out")" "## Compaction snapshot"
+
 git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
