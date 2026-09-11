@@ -355,10 +355,14 @@ codex_error=$(jq -r '
 status=BLOCKED
 summary=""
 subject=""
+discovered=""
+assumptions=""
 if [ -f "$last" ]; then
   status=$(jq -r '.status // "BLOCKED"' "$last" 2>/dev/null || echo BLOCKED)
   summary=$(jq -r '.summary // ""' "$last" 2>/dev/null || true)
   subject=$(jq -r '.commit_subject // ""' "$last" 2>/dev/null || true)
+  discovered=$(jq -r '(.discovered_issues // [])[] | "- " + .' "$last" 2>/dev/null || true)
+  assumptions=$(jq -r '(.assumptions // [])[] | "- " + .' "$last" 2>/dev/null || true)
 fi
 # The verdict is forced to BLOCKED on a non-zero exit, which is why $rc is
 # reported separately below: collapsing the two makes an argument-parse failure
@@ -388,6 +392,8 @@ head=$(git -C "$cwd" rev-parse HEAD)
   [ "$timed_out" = yes ] && printf -- '- note: timed out after %ss and codex was killed; raise --timeout rather than taking the successor rung\n' "$timeout_s"
   [ "$survivor" = yes ] && printf -- '- note: a codex process may still be running (pid %s); check before retrying in this worktree\n' "$codex_pid"
   printf '\n## Summary\n\n%s\n' "$summary"
+  printf '\n## Discovered issues (not fixed)\n\n%s\n' "${discovered:-None}"
+  printf '\n## Assumptions made\n\n%s\n' "${assumptions:-None}"
   if [ "$status" = NEEDS_CONTEXT ]; then
     printf '\n## Questions\n\n'
     jq -r '.questions[]? | "- " + .' "$last" 2>/dev/null || true

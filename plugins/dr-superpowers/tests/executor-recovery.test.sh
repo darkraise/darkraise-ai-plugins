@@ -33,7 +33,7 @@ if [ -n "${STUB_SLEEP:-}" ]; then
 fi
 if [ -n "${STUB_DELETE:-}" ]; then rm -f -- "$cwd/$STUB_DELETE"; fi
 if [ -z "${STUB_NO_WRITE:-}" ]; then printf '%s\n' "${STUB_CONTENT:-produced}" > "$cwd/${STUB_PATH:-produced.txt}"; fi
-printf '{"status":"%s","summary":"fixture","commit_subject":"feat(test): produce file","questions":[]}\n' "${STUB_STATUS:-DONE}" > "$out"
+printf '{"status":"%s","summary":"fixture","commit_subject":"feat(test): produce file","questions":[],"discovered_issues":["fixture issue"],"assumptions":[]}\n' "${STUB_STATUS:-DONE}" > "$out"
 exit "${STUB_EXIT:-0}"
 STUB
 chmod +x "$fixture/bin/codex"
@@ -50,6 +50,10 @@ rm -f "$fixture/work/unrelated.txt"
 run
 check 'clean linked task succeeds' "$?" 0
 check 'success commits produced file' "$(git -C "$fixture/work" show HEAD:produced.txt 2>/dev/null)" produced
+check 'report lists discovered issues' \
+  "$(grep -A2 '^## Discovered issues (not fixed)$' "$fixture/report.md" | tail -1 | tr -d '\r')" '- fixture issue'
+check 'report says None for empty assumptions' \
+  "$(grep -A2 '^## Assumptions made$' "$fixture/report.md" | tail -1 | tr -d '\r')" 'None'
 gitdir="$(git -C "$fixture/work" rev-parse --absolute-git-dir)"
 task_key="$(printf task-one | git -C "$fixture/work" hash-object --stdin)"
 state="$gitdir/dr-superpowers/tasks/$task_key/state.json"
