@@ -135,6 +135,90 @@ git commit -m "feat: add specific feature"
 ```
 ````
 
+## Assign an implementer to every task
+
+Every task records which implementer runs it, so the choice is a property of
+the plan rather than a judgment made from memory at dispatch time. Do this
+after the tasks are drafted and before the plan is saved. Retrofitting an
+existing plan is the same process: read it, resolve names written under older
+plugin prefixes with [legacy-names.md](../../reference/legacy-names.md) (a name
+outside that table: ask), score each task, and add the lines.
+
+**Codex host:** follow [native-codex.md](../../reference/native-codex.md) — its
+`codex-v2` selector, plan headers, assignment-source fields, and conversion
+rules replace the Claude table, fleet, and external CLI lane below. Honor the
+user's inline or delegation preference on either host.
+
+1. **Score** each task on the four axes in
+   [ladder.md](../../reference/ladder.md) — files, spec completeness,
+   coupling, risk. Never restate its tables or work from memory. Score the
+   task as the plan describes it: if its steps contain the complete code, spec
+   completeness is 0. Count file shapes, not file instances.
+2. **Apply Rule S before the table.** If `files + spec + coupling >= 4`, split
+   the task where a reviewer could reject one half while approving the other,
+   and re-score both halves. If `spec = 3`, the approach is undecided: settle
+   it with dr-superpowers:selecting-approaches, rewrite the task with the
+   decision in its steps, and re-score. Never answer a reducible axis with a
+   bigger model.
+3. **Assign** from the assignment table, which the total indexes directly.
+   Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
+   tier. Only a human edit puts one in a plan.
+4. **Offer an external executor** once per plan and apply the lane gate — see
+   [external-executor.md](../../reference/external-executor.md) §Planning. If
+   no executor is usable, ask nothing.
+5. **Write the lines** directly below the task's `**Interfaces:**` block, in
+   this order:
+   - `**Implementer:**` — always; the fully qualified agent, for example
+     `dr-superpowers:impl-sonnet-medium`
+   - `**Executor:**` — only when the lane gate passed, for example
+     `codex gpt-5.5 / medium`
+   - `**Evaluation:**` — always, for example
+     `files 0 - spec 1 - coupling 1 - risk 0 = 2`
+   - `**Approach:**` — only when the task involved an approach decision:
+     `inline`, `advisor`, or `best-of-3`, a dash, and a one-line reason; an
+     `inline` reason cites a skip condition by number
+
+   ```markdown
+   **Implementer:** dr-superpowers:impl-opus-medium
+   **Evaluation:** files 1 - spec 0 - coupling 2 - risk 2 = 5
+   **Approach:** inline - skip 2: follows the existing exporter pattern
+   ```
+
+6. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
+   task by a heading that begins with `Task <N>`.
+
+A human may edit any `**Implementer:**` line by hand;
+dr-superpowers:subagent-driven-development obeys it and never recomputes.
+Leave the `**Evaluation:**` line in place — the gap between the score and the
+choice is the interesting part. Under dr-superpowers:executing-plans the lines
+are inert. [assigning-implementers.md](references/assigning-implementers.md)
+explains why each of these rules exists.
+
+**Check your work** before saving the plan:
+
+- Every task has an `**Implementer:**` line and an `**Evaluation:**` line,
+  plus an `**Approach:**` line whenever the task involved an approach
+  decision.
+- Every agent name is fully qualified and appears in `ladder.md`'s assignment
+  table, or in its reserve table when your human partner overrode the
+  assignment by hand. A reserve name you wrote yourself is an error, not an
+  override.
+- Every `**Evaluation:**` line's four scores sum to the stated total, and that
+  total maps to the named agent — except under the spec-3 floor in
+  `ladder.md` or a hand-edited override.
+- Every task clears Rule S: `files + spec + coupling` below 4 and spec below 3.
+  A total above 6 anywhere means the gate was skipped.
+- Every `**Approach:**` line names `inline`, `advisor`, or `best-of-3`, and
+  every `inline` cites a skip condition by number.
+- Every task heading begins with `Task <N>`. Check them as a set:
+  `grep -cE '^#+[[:space:]]+Task[[:space:]]+[0-9]' PLAN_FILE` must equal the
+  number of tasks.
+- Every `**Executor:**` line names a rung in `ladder.md`'s `codex-assignment`
+  block matching the task's total, sits on a task that also has an
+  `**Implementer:**` line, passed the lane gate without a human Rule S
+  override, and names an executor listed in the plan header's
+  `> **External executors:**` line.
+
 ## No Placeholders
 
 Every step must contain the actual content an engineer needs. These are **plan failures** — never write them:
@@ -154,6 +238,8 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 **2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
+
+**4. Assignments:** Run the Check your work list under Assign an implementer to every task.
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
