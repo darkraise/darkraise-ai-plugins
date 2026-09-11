@@ -16,9 +16,10 @@ Upgrading from a version before 0.6.0 required explicit conversion of old Codex
 or Claude plans: preserve the raw axes and original assignments, preview the
 recalculated score and proposed assignment, and obtain approval. Old policy
 ranks cannot be reused as v2 history.
-Claude translates known legacy agent names from the dcc-superpower-companions
-era at read time; disable that plugin before enabling this one. Original
-assignments and evaluations remain intact.
+Claude translates skill and agent names written under older plugin prefixes at
+read time, per [legacy-names.md](reference/legacy-names.md); disable the older
+plugins before enabling this one. Original assignments and evaluations remain
+intact.
 
 Native reviewers have independent contexts, without a promised cross-provider
 seat. Enforce read-only tool restrictions when available; otherwise disclose
@@ -49,9 +50,10 @@ parameter, so effort can only be set in a subagent definition's frontmatter.
 Superpowers dispatches the built-in `general-purpose` agent, so every implementer
 runs at the session's effort level regardless of task difficulty.
 
-This plugin ships pre-baked agent definitions, which makes effort reachable, and
-three skills: two that write the choice into the plan and read it back, and one
-that settles an open approach decision before the choice is made.
+This plugin ships pre-baked agent definitions, which makes effort reachable.
+`writing-plans` writes the choice into the plan, `subagent-driven-development`
+reads it back and dispatches it, and `selecting-approaches` settles an open
+approach decision before the choice is made.
 
 ## What you get
 
@@ -81,16 +83,17 @@ implementers.
 changing model before effort except at the two Opus effort rows, where Opus is
 already the top model and there is nowhere else to go. Walks terminate at a
 SPLIT action rather than an agent, and only a task that survives that split
-enters the reserve chain, which terminates at BLOCKED. Used at superpowers' fix
-rounds 4 and 5, at its BLOCKED handler, and at round 3 when the re-review
-reports stalled progress.
+enters the reserve chain, which terminates at BLOCKED. Used at fix rounds 4
+and 5, at the BLOCKED handler, and at round 3 when the re-review reports
+stalled progress.
 
 **Criteria-scored reviews.** `criteria/` holds narrow scored criteria adapted
 from LLM-as-a-Verifier (arXiv:2607.05391): a ground-truth note the judge sees on
 every evaluation, and 2 to 4 criteria that each say where to look, what scores
-high, what scores low, and what to ignore. Reviews return a 1-to-20 score per
-criterion alongside superpowers' own verdicts - alongside, never replacing them,
-because its fix loop keys on those verdicts. Risk-3 tasks are scored three times
+high, what scores low, and what to ignore. Task reviews score four criteria -
+spec, scope, verification, quality - 1 to 20 each, alongside the spec and
+quality verdicts and never replacing them, because the fix loop keys on those
+verdicts. Risk-3 tasks are scored three times
 and averaged, and a spread above 6 points sends the diff to the controller
 instead of to the mean.
 
@@ -163,7 +166,7 @@ accepting; only a re-probe can.
 
 **Cross-family review.** On a risk-3 task one of the three judges is Codex, and
 the final whole-branch review gains a `codex exec review` round whose findings
-are deduped with superpowers' own and then verified by `judge-fable` - or
+are deduped with the Claude reviewer's and then verified by `judge-fable` - or
 `judge-opus` when Fable is unavailable, the same fallback every judge seat uses. Risk-3
 tasks are excluded from the executor lane, so the risk-3 judge seat never
 reviews Codex's own work. The final whole-branch round is different: the branch
@@ -176,7 +179,7 @@ self-review-free, which is why every finding goes through a third seat.
 set — brainstorming through finishing-a-development-branch — frozen at upstream
 6.3.0, so no other plugin is required: every agent definition preloads
 `dr-superpowers:verification-before-completion` through its `skills:`
-frontmatter, and the assigning and dispatching skills use the plugin's own
+frontmatter, and writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, and `next-step` —
 the last ends every execution session with the plan's next action and keeps
 `.superpowers/handoff/latest.md` pointing at it. Disable the
@@ -202,8 +205,8 @@ message instead.
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
 `dr-superpowers:using-superpowers` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
-`selecting-approaches`, `assigning-implementers`, and
-`dispatching-tiered-implementers` that a PreToolUse nudge used to add. The same
+`selecting-approaches`, implementer assignment in `writing-plans`, and tiered
+dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same
 script persists the session's `transcript_path`, `session_id`, `cwd`, and
 `source` to `~/.claude/dr-superpowers/sessions/<sanitized-cwd>.json` (last
 writer wins per directory); the session-budget tooling of a later release reads
@@ -244,8 +247,8 @@ hook always exits 0.
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```
 
-Edit the `**Implementer:**` line to override. The dispatching skill obeys the
-line and never recomputes when it is present.
+Edit the `**Implementer:**` line to override. `subagent-driven-development`
+obeys the line and never recomputes when it is present.
 
 The heading keeps superpowers' `### Task N: <name>` form on purpose.
 `scripts/task-brief` finds a task by matching a heading that starts with
@@ -254,39 +257,38 @@ empty brief and a non-zero exit — and, because the extractor keeps copying
 until the next heading it recognizes, quietly appends that task's body to the
 previous task's brief.
 
-## Compatibility
+## Differences from upstream 6.3.0
 
-The plugin extends four seams. The implementer dispatch names a fleet agent
-instead of `general-purpose` and passes no `model` argument. The task-review
-seat is a judge agent rather than a general-purpose one, dispatched with a
-criteria file appended to superpowers' own reviewer prompt. The scoped
-re-review is asked for one extra reading, a progress score, which can pull the
-escalation point from round 4 to round 3. And the final whole-branch review
-gains a Codex round plus a verification pass over the union of both reviewers'
-findings.
+The superpowers loop is kept - the brief and report protocol, the review
+package, the five-round cap, the breaker and its adjudication rules, and the
+handoff to dr-superpowers:finishing-a-development-branch - with these
+differences:
 
-Everything else in the superpowers loop is untouched: the brief and report
-protocol, the review package, the five-round cap, the breaker and its
-adjudication rules, and the handoff to
-dr-superpowers:finishing-a-development-branch.
+1. **Named seats.** The implementer is the fleet agent the plan's
+   `**Implementer:**` line names, dispatched with no `model` argument: passing
+   one would override the agent file's model while `effort` kept its
+   frontmatter value. The task reviewer is a judge agent scoring the criteria
+   file. General-purpose seats still name their model explicitly.
+2. **Scores and progress.** Task reviews add four 1-to-20 scores alongside the
+   verdicts, and the scoped re-review adds a progress reading that can pull
+   escalation from round 4 to round 3.
+3. **Escalation ladder.** Rounds 4 and 5 and the BLOCKED handler climb
+   [ladder.md](reference/ladder.md)'s table, ending in one split and then the
+   reserve chain. An external task hands back to its Claude implementer instead.
+4. **Cache-aware resumes.** Fix rounds 1 to 3 resume the implementer only while
+   its cache is warm - returned under five minutes ago, or under about 100k
+   tokens of context - and otherwise dispatch a fresh copy on the same tier.
+5. **One ledger grammar.** Every task gets an assigned line and a complete line
+   carrying its scores and a checkpoint (done, verified, remaining, discovered
+   issues, assumptions), which crash recovery and the final review read.
+6. **Cross-family final review.** The final whole-branch review adds a Codex
+   round, and a judge verifies the union of both reviewers' findings.
+7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
+   unavailable model, an Executor line the wrapper refuses - are logged
+   rulings, never silent fallbacks and never stops.
 
-Three superpowers instructions are superseded, and no others.
-
-1. **"Always specify the model explicitly"**, and only for fleet agents whose
-   frontmatter pins a model. Passing `model` would override the agent file while
-   `effort` kept its frontmatter value, so the agent would run at a tier the
-   ledger does not record. The intent survives, since the agent definition pins
-   the model.
-2. **The final whole-branch review is no longer untouched.** It keeps
-   superpowers' own review and model selection and adds a Codex round plus a
-   verification pass over the union.
-3. **Fix rounds 4 and 5 call for a more capable model**, where an external task
-   instead hands back to the Claude assignment-table row for its score - a change
-   of model family plus a fresh context, argued as satisfying that rule's intent
-   rather than as an exception to it.
-
-The scores the plugin adds to reviews are additive to superpowers' own verdicts
-and never replace them, because its fix loop keys on those verdicts.
+Names written under older plugin prefixes resolve through
+[legacy-names.md](reference/legacy-names.md).
 
 ## Licenses
 
@@ -313,8 +315,13 @@ escalation, reserve, and external CLI tables. Native Codex reads
 score, request format, and plan conversion. `scripts/select-native-tier.sh`
 validates raw scores and history before returning a native routing decision.
 
-`criteria/` holds the verifier criteria; `criteria/TEMPLATE.md` documents the
-format. `tests/criteria.test.sh` validates every file in that directory.
+`reference/external-executor.md` holds the Claude-hosted Codex CLI lane, and
+`reference/legacy-names.md` translates names written under older plugin
+prefixes.
+
+`criteria/` holds the verifier criteria, including `codex-review-schema.json`
+for the risk-3 Codex seat; `criteria/TEMPLATE.md` documents the format.
+`tests/criteria.test.sh` validates every file in that directory.
 
 `scripts/` holds the external executor lane:
 

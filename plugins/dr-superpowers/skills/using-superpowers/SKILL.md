@@ -30,8 +30,8 @@ When multiple skills apply, process skills come first — they set the approach,
 - "Let's build X" → dr-superpowers:brainstorming first, then implementation skills.
 - "Fix this bug" → dr-superpowers:systematic-debugging first, then domain skills.
 - An approach decision is open (during brainstorming, or a plan task whose approach is undecided) → dr-superpowers:selecting-approaches gates it.
-- Writing a plan → dr-superpowers:assigning-implementers records each task's implementer.
-- Executing a plan with subagents → dr-superpowers:dispatching-tiered-implementers dispatches and escalates them.
+- Writing a plan → dr-superpowers:writing-plans, which also assigns each task's implementer.
+- Executing a plan with subagents → dr-superpowers:subagent-driven-development, which dispatches each task's assigned implementer and escalates it.
 
 ## Red Flags
 
