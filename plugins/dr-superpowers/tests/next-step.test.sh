@@ -85,6 +85,7 @@ check "mid-plan: exits 0" "$status" "0"
 has "mid-plan: status counts completions" "$out" "2 of 3 tasks complete (ledger \`$LEDGER_SHOWN\`)."
 has "mid-plan: resumes the fix-round task" "$out" "**Next:** Resume at Task 3 (Third thing)."
 has "mid-plan: prompt points at the ledger" "$out" "Progress ledger: \`$LEDGER_SHOWN\` — trust its \`Task N: complete\` lines."
+has "mid-plan: prompt routes through resume-execution" "$out" "Resume \`$PLAN_REL\` with dr-superpowers:resume-execution. Resume at Task 3 (Third thing)."
 hand=$(cat "$HANDOFF")
 has "mid-plan: handoff keeps earlier sections" "$hand" "Keep me."
 has "mid-plan: handoff keeps later sections" "$hand" "## Do not"
@@ -174,6 +175,32 @@ check "unwritable handoff: exits 4" "$status" "4"
 has "unwritable handoff: block still printed" "$out" "**Next:** Start at Task 1 (First thing)."
 has "unwritable handoff: says so on stderr" "$(cat "$TMP/stderr")" "could not write"
 rm -f "$REPO/.superpowers/handoff"
+
+# --- final review clean: finishing is next ---
+ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' 'Final review: clean (commits a1b2c3d..d4e5f6a)'
+run "$REPO" "$PLAN_REL"
+has "final review clean: status" "$out" "**Status:** Plan \`$PLAN_REL\`: all 3 tasks complete; the final review is clean."
+has "final review clean: next is finishing" "$out" "**Next:** Run dr-superpowers:finishing-a-development-branch."
+has "final review clean: prompt routes through resume-execution" "$out" "Resume \`$PLAN_REL\` with dr-superpowers:resume-execution. Run dr-superpowers:finishing-a-development-branch."
+rm -rf "$LEDGER_DIR"
+
+# --- draft mode: a design phase hands off ---
+mkdir -p "$REPO/docs/specs" "$REPO/.superpowers/handoff"
+printf '# Draft\n' > "$REPO/docs/specs/draft.md"
+printf '# Handoff\n\n## State\nKeep me.\n\n## Next session\nOld block.\n' > "$HANDOFF"
+run "$REPO" --draft docs/specs/draft.md --next "Write the implementation plan with dr-superpowers:writing-plans"
+check "draft: exits 0" "$status" "0"
+has "draft: status names the authority" "$out" "**Status:** Design in progress: \`docs/specs/draft.md\` is the authority."
+has "draft: next action gains a full stop" "$out" "**Next:** Write the implementation plan with dr-superpowers:writing-plans."
+has "draft: planning launch command" "$out" "claude --model opus --effort high"
+has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dr-superpowers:writing-plans. Read \`.superpowers/handoff/latest.md\` first."
+hand=$(cat "$HANDOFF")
+has "draft: handoff keeps the notes" "$hand" "Keep me."
+lacks "draft: handoff drops the stale block" "$hand" "Old block."
+run "$REPO" --draft docs/specs/draft.md
+check "draft without --next: exits 2" "$status" "2"
+run "$REPO" --draft docs/specs/missing.md --next "x"
+check "draft of a missing file: exits 2" "$status" "2"
 
 # --- usage errors ---
 run "$REPO"

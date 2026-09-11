@@ -1,27 +1,40 @@
 #!/usr/bin/env bash
-# Print the one next action for a plan — start, resume, final review, next
-# program sub-project, or nothing — as a "## Next session" block, and write the
-# same block into the primary checkout's .superpowers/handoff/latest.md.
+# Print the one next action — for a plan: start, resume, final review,
+# finishing, next program sub-project, or nothing; for a design draft: its
+# next step — as a "## Next session" block, and write the same block into the
+# primary checkout's .superpowers/handoff/latest.md.
 #
 # Sessions end by pasting this block verbatim, so what comes next is computed
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
 # Usage: next-step [--complete] PLAN_FILE
+#        next-step --draft DRAFT_FILE --next ACTION
 #   --complete  the plan is finished and its branch integrated; the ledger may
 #               already be deleted. Replaces latest.md wholesale.
-# Exit: 0 ok; 2 usage or missing plan; 3 plan has no tasks; 4 block printed but
+#   --draft     a design phase (brainstorming, a spec, a plan being written) is
+#               handing off; DRAFT_FILE is the authority and ACTION names the
+#               next step and its skill.
+# Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written.
 set -euo pipefail
 
-usage() { echo "usage: next-step [--complete] PLAN_FILE" >&2; exit 2; }
+usage() { echo "usage: next-step [--complete] PLAN_FILE | next-step --draft DRAFT_FILE --next ACTION" >&2; exit 2; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 
-complete=0
-if [ "${1:-}" = "--complete" ]; then complete=1; shift; fi
+complete=0 draft=0 next_action=""
+case "${1:-}" in
+  --complete) complete=1; shift ;;
+  --draft)
+    draft=1; shift
+    { [ $# -eq 3 ] && [ "$2" = "--next" ] && [ -n "$3" ]; } || usage
+    next_action=$3
+    set -- "$1"
+    ;;
+esac
 [ $# -eq 1 ] || usage
 plan=$1
-[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+[ -f "$plan" ] || { echo "no such file: $plan" >&2; exit 2; }
 
 root=$(git rev-parse --show-toplevel)
 common=$(git rev-parse --path-format=absolute --git-common-dir)
@@ -32,90 +45,109 @@ plan_abs="$(cd "$(dirname "$plan")" && pwd)/$(basename "$plan")"
 rel=${plan_abs#"$root_posix"/}
 slug=$(basename "$plan" .md)
 
-plan_text=$(tr -d '\r' < "$plan")
+status_line="" next_line="" prompt="" launch=1 dir="$primary" launch_cmd=""
 
-tasks=$(plan_tasks "$plan")
-[ -n "$tasks" ] || { echo "no tasks in ${plan} (no heading matching 'Task N')" >&2; exit 3; }
-total=$(wc -l <<<"$tasks" | tr -d ' ')
-
-header_line() { # first unfenced line starting with **<label>:**
-  awk -v p="^\\\\*\\\\*$1:\\\\*\\\\*" '/^```/ { f = !f } !f && $0 ~ p { print; exit }' <<<"$plan_text"
-}
-execution=$(header_line Execution)
-program=$(header_line Program)
-
-launch_cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$execution" | head -n 1 || true)
-skill=subagent-driven-development
-if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$execution"; then skill=executing-plans; fi
-
-ledger_shown="$root/.superpowers/sdd/$slug/progress.md"
-ledger_file="$root_posix/.superpowers/sdd/$slug/progress.md"
-ledger_note="no ledger at \`$ledger_shown\`"
-done_tasks=""
-has_ledger=0
-if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
-  ledger_text=$(tr -d '\r' < "$ledger_file")
-  if head -n 1 <<<"$ledger_text" | grep -qF "plan: $rel"; then
-    has_ledger=1
-    ledger_note="ledger \`$ledger_shown\`"
-    done_tasks=$(ledger_done "$ledger_file")
-  else
-    ledger_note="the ledger at \`$ledger_shown\` belongs to another plan and is ignored"
-  fi
-fi
-
-status_line="" next_line="" prompt="" launch=1 dir="$primary"
-
-if [ "$complete" -eq 1 ]; then
-  spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$program")
-  k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
-  n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
-  next_title=$(sed -nE 's/.*[Nn]ext:[ \t]*(.*[^ \t])[ \t]*$/\1/p' <<<"$program")
-  launch=0
-  if [ -z "$program" ]; then
-    status_line="Plan \`$rel\` is complete."
-    next_line="Nothing — the plan records no follow-on work."
-  elif grep -qiE '(^|[^a-z])last[ \t.]*$' <<<"$program" || { [ -n "$k" ] && [ "$k" -ge "$n" ]; }; then
-    status_line="Plan \`$rel\` is complete${k:+; sub-project $k of $n is done}."
-    next_line="Nothing — every sub-project of \`$spec\` is done."
-  elif [ -n "$next_title" ] && [ -n "$k" ]; then
-    k1=$((k + 1))
-    status_line="Plan \`$rel\` is complete; sub-project $k of $n is done."
-    next_line="Sub-project $k1 ($next_title): write its spec in a fresh session."
-    launch_cmd="claude --model opus --effort high"
-    prompt="Start sub-project $k1 ($next_title) of the program in \`$spec\`: use dr-superpowers:brainstorming to write its spec."
-    launch=1
-  else
-    status_line="Plan \`$rel\` is complete."
-    next_line="Read \`$spec\` for the sub-project after ${k:-this one} — the plan's Program line names no next step."
-  fi
+if [ "$draft" -eq 1 ]; then
+  case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
+  status_line="Design in progress: \`$rel\` is the authority."
+  next_line=$next_action
+  launch_cmd="claude --model opus --effort high"
+  prompt="Continue from \`$rel\` (the authority): $next_action Read \`.superpowers/handoff/latest.md\` first."
 else
-  first_open="" open_title="" done_count=0
-  while IFS=$'\t' read -r num title; do
-    if grep -qx "$num" <<<"$done_tasks"; then
-      done_count=$((done_count + 1))
-    elif [ -z "$first_open" ]; then
-      first_open=$num open_title=$title
+  plan_text=$(tr -d '\r' < "$plan")
+  tasks=$(plan_tasks "$plan")
+  [ -n "$tasks" ] || { echo "no tasks in ${plan} (no heading matching 'Task N')" >&2; exit 3; }
+  total=$(wc -l <<<"$tasks" | tr -d ' ')
+
+  header_line() { # first unfenced line starting with **<label>:**
+    awk -v p="^\\\\*\\\\*$1:\\\\*\\\\*" '/^```/ { f = !f } !f && $0 ~ p { print; exit }' <<<"$plan_text"
+  }
+  execution=$(header_line Execution)
+  program=$(header_line Program)
+
+  launch_cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$execution" | head -n 1 || true)
+  skill=subagent-driven-development
+  if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$execution"; then skill=executing-plans; fi
+
+  ledger_shown="$root/.superpowers/sdd/$slug/progress.md"
+  ledger_file="$root_posix/.superpowers/sdd/$slug/progress.md"
+  ledger_note="no ledger at \`$ledger_shown\`"
+  ledger_text=""
+  done_tasks=""
+  has_ledger=0
+  if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
+    ledger_text=$(tr -d '\r' < "$ledger_file")
+    if head -n 1 <<<"$ledger_text" | grep -qF "plan: $rel"; then
+      has_ledger=1
+      ledger_note="ledger \`$ledger_shown\`"
+      done_tasks=$(ledger_done "$ledger_file")
+    else
+      ledger_note="the ledger at \`$ledger_shown\` belongs to another plan and is ignored"
     fi
-  done <<<"$tasks"
+  fi
 
-  if [ -z "$first_open" ]; then
-    status_line="Plan \`$rel\`: all $total tasks complete."
-    next_line="Run the final whole-branch review, then dr-superpowers:finishing-a-development-branch."
-  elif [ "$done_count" -eq 0 ]; then
-    status_line="Plan \`$rel\`: 0 of $total tasks complete ($ledger_note)."
-    next_line="Start at Task $first_open ($open_title)."
+  if [ "$complete" -eq 1 ]; then
+    spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$program")
+    k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
+    n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
+    next_title=$(sed -nE 's/.*[Nn]ext:[ \t]*(.*[^ \t])[ \t]*$/\1/p' <<<"$program")
+    launch=0
+    if [ -z "$program" ]; then
+      status_line="Plan \`$rel\` is complete."
+      next_line="Nothing — the plan records no follow-on work."
+    elif grep -qiE '(^|[^a-z])last[ \t.]*$' <<<"$program" || { [ -n "$k" ] && [ "$k" -ge "$n" ]; }; then
+      status_line="Plan \`$rel\` is complete${k:+; sub-project $k of $n is done}."
+      next_line="Nothing — every sub-project of \`$spec\` is done."
+    elif [ -n "$next_title" ] && [ -n "$k" ]; then
+      k1=$((k + 1))
+      status_line="Plan \`$rel\` is complete; sub-project $k of $n is done."
+      next_line="Sub-project $k1 ($next_title): write its spec in a fresh session."
+      launch_cmd="claude --model opus --effort high"
+      prompt="Start sub-project $k1 ($next_title) of the program in \`$spec\`: use dr-superpowers:brainstorming to write its spec."
+      launch=1
+    else
+      status_line="Plan \`$rel\` is complete."
+      next_line="Read \`$spec\` for the sub-project after ${k:-this one} — the plan's Program line names no next step."
+    fi
   else
-    status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
-    next_line="Resume at Task $first_open ($open_title)."
-  fi
+    first_open="" open_title="" done_count=0
+    while IFS=$'\t' read -r num title; do
+      if grep -qx "$num" <<<"$done_tasks"; then
+        done_count=$((done_count + 1))
+      elif [ -z "$first_open" ]; then
+        first_open=$num open_title=$title
+      fi
+    done <<<"$tasks"
 
-  prompt="Continue \`$rel\` with dr-superpowers:$skill. $next_line"
-  if [ "$root" != "$primary" ]; then
-    prompt="$prompt First enter the existing worktree \`$root\`."
-  fi
-  if [ "$has_ledger" -eq 1 ]; then
-    prompt="$prompt Progress ledger: \`$ledger_shown\` — trust its \`Task N: complete\` lines."
+    if [ -z "$first_open" ]; then
+      if [ "$has_ledger" -eq 1 ] && grep -q '^Final review: clean' <<<"$ledger_text"; then
+        status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
+        next_line="Run dr-superpowers:finishing-a-development-branch."
+      else
+        status_line="Plan \`$rel\`: all $total tasks complete."
+        next_line="Run the final whole-branch review, then dr-superpowers:finishing-a-development-branch."
+      fi
+    elif [ "$done_count" -eq 0 ]; then
+      status_line="Plan \`$rel\`: 0 of $total tasks complete ($ledger_note)."
+      next_line="Start at Task $first_open ($open_title)."
+    else
+      status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
+      next_line="Resume at Task $first_open ($open_title)."
+    fi
+
+    # With a ledger there is state to verify before continuing, which is
+    # resume-execution's job; without one the plan simply starts.
+    if [ "$has_ledger" -eq 1 ]; then
+      prompt="Resume \`$rel\` with dr-superpowers:resume-execution. $next_line"
+    else
+      prompt="Continue \`$rel\` with dr-superpowers:$skill. $next_line"
+    fi
+    if [ "$root" != "$primary" ]; then
+      prompt="$prompt First enter the existing worktree \`$root\`."
+    fi
+    if [ "$has_ledger" -eq 1 ]; then
+      prompt="$prompt Progress ledger: \`$ledger_shown\` — trust its \`Task N: complete\` lines."
+    fi
   fi
 fi
 
