@@ -61,7 +61,18 @@ export function validateRepository(root) {
         const path = resolve(dir, item.name);
         if (item.isDirectory()) visit(path);
         else if (item.name.endsWith('.md')) {
-          for (const match of readFileSync(path, 'utf8').matchAll(/\[[^\]]+\]\(([^\s)]+)\)/g)) {
+          // Links inside fenced code blocks are illustrative examples, not bundled references.
+          let fence = null;
+          const prose = readFileSync(path, 'utf8').split('\n').filter(line => {
+            const marker = line.match(/^ {0,3}(`{3,}|~{3,})/)?.[1];
+            if (fence) {
+              if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null;
+              return false;
+            }
+            if (marker) { fence = marker; return false; }
+            return true;
+          }).join('\n');
+          for (const match of prose.matchAll(/\[[^\]]+\]\(([^\s)]+)\)/g)) {
             const link = match[1].split('#')[0];
             if (!link || /^[a-z]+:|^\//i.test(link) || link.includes('$')) continue;
             if (!existsSync(resolve(dirname(path), decodeURIComponent(link)))) errors.push(`${relative(root, path)}: missing bundled reference ${link}`);

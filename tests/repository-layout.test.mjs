@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, mkdtempSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -48,4 +48,19 @@ test('repository validator rejects broken distribution contracts', async t => {
       } finally { rmSync(dir, { recursive: true, force: true }); }
     });
   }
+});
+
+test('bundled-link check ignores links inside fenced code blocks', async () => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
+  try {
+    for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
+      cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
+    }
+    const file = resolve(dir, 'plugins/dr-superpowers/skills/selecting-approaches/fenced.md');
+    writeFileSync(file, '````markdown\n```\n[inner](missing-inner.md)\n```\n[example](missing-example.md)\n````\n');
+    assert.deepEqual(validateRepository(dir), []);
+    writeFileSync(file, '````\n[example](missing-example.md)\n````\n[live](missing-live.md)\n');
+    assert.deepEqual(validateRepository(dir), [`plugins${sep}dr-superpowers${sep}skills${sep}selecting-approaches${sep}fenced.md: missing bundled reference missing-live.md`]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
