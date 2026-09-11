@@ -1,6 +1,6 @@
 # Task Review - Verifier Criteria
 
-Applied by dr-superpowers:dispatching-tiered-implementers when a task
+Applied by dr-superpowers:subagent-driven-development when a task
 reviewer scores one task's implementation.
 
 ## Ground Truth Note
@@ -28,6 +28,20 @@ extra abstraction, speculative options, nice-to-haves. If the brief lists
 several files each with its own change, a listed file the diff never touches is
 a LOW signal no matter how clean the rest of the batch is. Ignore code quality,
 test design, and whether the tests were actually run; other criteria own those.
+Ignore style drift, comment edits, adjacent refactors, and orphans; Scope
+Hygiene owns those.
+
+### Scope Hygiene {#scope}
+
+Look at every hunk in the diff that does not trace to a requirement in the task
+brief. Score HIGH when every changed line traces to the brief, and when orphans
+this change created - imports, helpers, or variables its own edits made unused -
+are removed. Score LOW for reformatting or style drift on lines the task did not
+need to touch, comment edits unrelated to the change, adjacent refactors,
+deletion of pre-existing dead code nobody asked for, or orphans this change left
+behind. Ignore missing requirements and unrequested features, which Spec
+Compliance owns; ignore test evidence, which Empirical Verification owns; ignore
+correctness, which Code Quality owns.
 
 ### Empirical Verification {#verification}
 
@@ -53,4 +67,5 @@ block, tests that assert nothing, silent regressions in code paths the brief did
 not mention, or a new file that is already unwieldy. Judge the diff on its
 technical merits, not on its length or apparent effort. Ignore requirements
 coverage, which Spec Compliance owns, and ignore pre-existing problems in code
-this diff does not touch.
+this diff does not touch. Ignore whether a hunk was requested; Spec Compliance
+and Scope Hygiene own that.

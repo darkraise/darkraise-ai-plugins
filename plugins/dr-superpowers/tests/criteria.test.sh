@@ -50,11 +50,28 @@ for f in "$CRITERIA"/*.md; do
     "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$f")" "0"
 done
 
-# task-review.md is named by the dispatching skill, so its ids are a contract.
+# task-review.md is named by subagent-driven-development, so its ids are a contract.
 TR="$CRITERIA/task-review.md"
 if [ -f "$TR" ]; then
   got=$(grep -o '{#[a-z0-9_]\{1,\}}' "$TR" | tr -d '{#}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-  check "task-review exposes the three contracted ids" "$got" "quality spec verification"
+  check "task-review exposes the four contracted ids" "$got" "quality scope spec verification"
+fi
+
+# The Codex review seat returns the same criteria through a JSON schema. Its
+# integer score fields must be exactly task-review.md's ids, or that seat scores
+# a different rubric from the judges it is averaged with.
+SCHEMA="$CRITERIA/codex-review-schema.json"
+check "codex-review-schema.json exists" "$([ -f "$SCHEMA" ] && echo yes || echo no)" "yes"
+if [ -f "$SCHEMA" ] && [ -f "$TR" ]; then
+  want=$(grep -o '{#[a-z0-9_]\{1,\}}' "$TR" | tr -d '{#}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+  got=$(jq -r '.properties | to_entries[] | select(.value.type=="integer") | .key' "$SCHEMA" \
+    | tr -d '\r' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+  check "codex review schema scores exactly the task-review ids" "$got" "$want"
+  # Strict structured output rejects a schema whose required list omits a key.
+  check "codex review schema requires every property" \
+    "$(jq -r '((.properties|keys)-(.required))|join(",")' "$SCHEMA" | tr -d '\r')" ""
+  check "codex review findings items are strict" \
+    "$(jq -r '.properties.findings.items | (.additionalProperties == false) and ((((.properties|keys)-(.required))|length) == 0)' "$SCHEMA" | tr -d '\r')" "true"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

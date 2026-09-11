@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec", "scope", "verification", "quality", "spec_verdict", "task_quality", "findings", "cannot_verify"],
+  "properties": {
+    "spec": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Spec Compliance score, 1 clear failure to 20 clearly met." },
+    "scope": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Scope Hygiene score, 1 clear failure to 20 clearly met." },
+    "verification": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Empirical Verification score, 1 clear failure to 20 clearly met." },
+    "quality": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Code Quality score, 1 clear failure to 20 clearly met." },
+    "spec_verdict": { "type": "string", "enum": ["compliant", "issues"] },
+    "task_quality": { "type": "string", "enum": ["approved", "needs_fixes"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "file", "line", "summary"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["Critical", "Important", "Minor"] },
+          "file": { "type": "string" },
+          "line": { "type": "integer", "description": "1-based line; 0 when the finding has no single line." },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "cannot_verify": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Requirements that cannot be verified from the diff alone; empty when none."
+    }
+  }
+}
