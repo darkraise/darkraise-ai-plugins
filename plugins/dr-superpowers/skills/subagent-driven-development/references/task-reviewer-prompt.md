@@ -8,10 +8,8 @@ code quality.
 more, nothing less) and is well-built (clean, tested, maintainable)
 
 ```
-Subagent (general-purpose):
-  description: "Review Task N (spec + quality)"
-  model: [MODEL — REQUIRED: choose per SKILL.md Model Selection; an omitted
-         model silently inherits the session's most expensive one]
+Subagent ([JUDGE]):
+  description: "Review Task N (spec + quality + scores)"
   prompt: |
     You are reviewing one task's implementation: first whether it matches its
     requirements, then whether it is well-built. This is a task-scoped gate,
@@ -185,10 +183,33 @@ Subagent (general-purpose):
     **Task quality:** [Approved | Needs fixes]
 
     **Reasoning:** [1-2 sentence technical assessment]
+
+    ## Criteria
+
+    Read the criteria file at [PLUGIN_ROOT]/criteria/task-review.md and score
+    each criterion independently on a 1 to 20 scale, where 1 is a clear
+    failure, 10 is genuinely uncertain, and 20 is clearly met.
+
+    Add this block to the end of your report, after the Assessment section:
+
+    ### Verification Scores
+    - spec: <1-20>
+    - scope: <1-20>
+    - verification: <1-20>
+    - quality: <1-20>
+
+    Score against those criteria and nothing else. Where a criterion tells you
+    to ignore something, ignoring it is part of scoring correctly. The scores
+    ride alongside the verdicts above and never replace them.
 ```
 
 **Placeholders:**
-- `[MODEL]` — REQUIRED: reviewer model per SKILL.md Model Selection
+- `[JUDGE]` — `dr-superpowers:judge-fable`, or `dr-superpowers:judge-opus`
+  when Fable is unavailable or declined (say the substitution aloud); no
+  `model` argument
+- `[PLUGIN_ROOT]` — REQUIRED: the resolved dr-superpowers plugin directory.
+  Expand it before sending; a judge handed the literal token cannot open the
+  criteria file
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N`
   prints the path; same file the implementer worked from)
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from
@@ -204,4 +225,5 @@ Subagent (general-purpose):
   path it wrote; the package never enters the controller's context)
 
 **Reviewer returns:** Spec Compliance verdict (✅/❌/⚠️), Strengths, Issues
-(Critical/Important/Minor), Task quality verdict
+(Critical/Important/Minor), Task quality verdict, and Verification Scores for
+spec, scope, verification, and quality

@@ -3,10 +3,8 @@
 Use this template when dispatching an implementer subagent.
 
 ```
-Subagent (general-purpose):
+Subagent ([IMPLEMENTER]):
   description: "Implement Task N: [task name]"
-  model: [MODEL — REQUIRED: choose per SKILL.md Model Selection; an omitted
-         model silently inherits the session's most expensive one]
   prompt: |
     You are implementing Task N: [task name]
 
@@ -118,7 +116,9 @@ Subagent (general-purpose):
 
     ## After Review Findings
 
-    If the task review finds issues, you will be resumed with the findings.
+    If the task review finds issues, you will be resumed with the findings -
+    or, when too much time has passed, a fresh implementer on your tier takes
+    over from your report file, so keep it complete.
     Fix them, re-run the tests that cover the amended code, and append a fix
     report to your report file: what you changed, the covering tests you
     ran, the command, and the output. Reviewers will not re-run tests for
@@ -136,6 +136,12 @@ Subagent (general-purpose):
     - Files changed
     - Self-review findings (if any)
     - Any issues or concerns
+    - `## Discovered issues (not fixed)`: problems you noticed and did not fix
+      because the task did not ask for them - one bullet each, or `None`.
+      Never fix one just to shorten this list.
+    - `## Assumptions made`: decisions you made where the brief was silent -
+      one bullet each, or `None`. An assumption you could not safely make is a
+      NEEDS_CONTEXT question instead.
 
     Then report back with ONLY (under 15 lines — the detail lives in the
     report file):
@@ -152,3 +158,8 @@ Subagent (general-purpose):
     Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need
     information that wasn't provided. Never silently produce work you're unsure about.
 ```
+
+**Placeholders:**
+- `[IMPLEMENTER]` — the task's `**Implementer:**` agent (for example
+  `dr-superpowers:impl-sonnet-medium`), passed as `subagent_type` with no
+  `model` argument: the agent file pins both model and effort
