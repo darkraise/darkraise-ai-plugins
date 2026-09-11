@@ -5,6 +5,13 @@ description: Use when you have a written implementation plan to execute in a sep
 
 # Executing Plans
 
+## After compaction
+
+If this session was compacted, your memory of the run is gone. Re-read the
+ledger — `progress.md` in the directory `scripts/sdd-workspace PLAN_FILE`
+prints — and trust it and `git log` over the summary: resume at the first task
+without a `Task <N>: complete` line.
+
 ## Overview
 
 Load plan, review critically, execute all tasks, report when complete.
@@ -30,6 +37,7 @@ For each task:
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
 4. Append `Task <N>: complete (commits <base7>..<head7>)` to the ledger, then mark as completed
+5. Run `scripts/context-size` from the plugin root. On exit 5 (handoff), invoke dr-superpowers:handoff and stop; see [session-budget.md](../../reference/session-budget.md)
 
 ### Step 3: Complete Development
 

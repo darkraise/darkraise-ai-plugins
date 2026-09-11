@@ -5,6 +5,22 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
+## After compaction
+
+If this session was compacted — a compaction snapshot or summary sits above —
+your memory of the run is gone, and only the start of this file may have come
+back. Before anything else:
+
+1. Run `scripts/sdd-workspace PLAN_FILE`, from the plugin root (two levels
+   above this skill's directory), and read `progress.md` and `handoff.md` in
+   the directory it prints.
+2. Trust the ledger and `git log` over the summary. For each task the last
+   ledger line decides: `complete` is done; `fix round R/5` resumes at round
+   R+1 with a fresh dispatch; an assigned line with commits after its base
+   goes to review.
+3. Run `scripts/context-size`. On exit 5, invoke dr-superpowers:handoff.
+4. Re-read this skill in full before the next dispatch.
+
 ## Select the host first
 
 Identify the host through its native tool schemas. On Codex, follow
@@ -127,7 +143,7 @@ digraph process {
     "More tasks remain?" [shape=diamond];
     "Final review: code reviewer + Codex round, judge verifies the union" [shape=box];
     "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" [shape=box];
-    "Final review clean: delete this plan's workspace" [shape=box];
+    "Final review clean: ledger it, print rulings" [shape=box];
     "Use dr-superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Setup: worktree, ledger check, read plan, legacy names, pre-flight review" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
@@ -156,8 +172,8 @@ digraph process {
     "More tasks remain?" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Final review: code reviewer + Codex round, judge verifies the union" [label="no"];
     "Final review: code reviewer + Codex round, judge verifies the union" -> "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals";
-    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" -> "Final review clean: delete this plan's workspace";
-    "Final review clean: delete this plan's workspace" -> "Use dr-superpowers:finishing-a-development-branch";
+    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" -> "Final review clean: ledger it, print rulings";
+    "Final review clean: ledger it, print rulings" -> "Use dr-superpowers:finishing-a-development-branch";
 }
 ```
 
@@ -186,6 +202,10 @@ a ledger file, not only in todos.
   — is another plan's progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
   `# SDD ledger — plan: <plan file path>`.
+- Create `<workspace>/handoff.md` from the template in dr-superpowers:handoff
+  if it does not exist. Update it in the same message as a ledger write
+  whenever an owner constraint, gotcha, prohibition or open question changes —
+  not after every task.
 - The ledger is your recovery map: the commits it names exist in git even
   when your context no longer remembers creating them. After compaction,
   trust the ledger and `git log` over your own recollection.
@@ -271,6 +291,7 @@ Task <N>: Ruling: <finding> — <what was decided and why>
 Task <N>: BLOCKED — <agent> exhausted — <what a human must decide>
 Task <N>: complete (commits a..b, review clean | K parked[; scores spec s / scope c / verification v / quality q[, K=3]]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
+Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
 
 - Every task gets its own assigned line and its own complete line, including
@@ -303,6 +324,29 @@ Then:
 A ledger written by an older version of this skill may carry an assigned line
 without `base`: take the previous task's complete-line head, or the branch's
 merge base for Task 1. An old `(scored at dispatch)` line reads as assigned.
+
+**Plan state.** Every task complete and no `Final review:` line: go to Final
+Review. A `Final review: clean` line: the review is done — go to
+dr-superpowers:finishing-a-development-branch.
+
+## Session Budget
+
+`scripts/task-brief` and `scripts/review-package` end their output with the
+budget line ([session-budget.md](../../reference/session-budget.md)), so you
+check the session budget before every task and every review at no extra
+request:
+
+    budget: 312k of 475k (65%) — ok — source: record
+
+- `ok` or `unknown`: carry on.
+- `handoff`: finish the step in flight — let the dispatched agent return and
+  write its ledger line — then invoke dr-superpowers:handoff. Dispatch nothing
+  new first.
+- After the last task's `Task N: complete` line, hand off whatever the budget
+  says: the final whole-branch review runs in a fresh session, which
+  dr-superpowers:resume-execution brings to Final Review.
+- On Codex there is no budget line: hand off after every 3 completed tasks, or
+  after any task that needed 3 or more fix rounds.
 
 ## The Task Loop
 
@@ -346,9 +390,10 @@ these steps directly.
   and note `reserve tier`. See [escalation.md](references/escalation.md).
 - **Task brief:** run `scripts/task-brief PLAN_FILE N`, from the plugin root
   (two levels above this skill's directory) — it extracts the task's full text
-  to a uniquely named file and prints `wrote <path>: <N> lines`. Read the path
-  out of that line; do not pipe the output into a prompt as if it were a
-  filename. Compose the dispatch so the brief stays the single source of
+  to a uniquely named file and prints `wrote <path>: <N> lines`, then the
+  budget line (see Session Budget). Read the path out of the first line; do
+  not pipe the output into a prompt as if it were a filename. Compose the
+  dispatch so the brief stays the single source of
   requirements. Your dispatch should contain: (1) one line on where this
   task fits in the project; (2) the brief path, introduced as "read this
   first — it is your requirements, with the exact values to use verbatim";
@@ -608,6 +653,9 @@ parked-with-ruling at the cap.
 
 ## Final Review
 
+This runs in a fresh session: after the last task's complete line you handed
+off, and dr-superpowers:resume-execution brought the next session here.
+
 The final whole-branch review gets a package too: run
 `scripts/review-package PLAN_FILE MERGE_BASE HEAD` (MERGE_BASE = the commit the
 branch started from, e.g. `git merge-base main HEAD`) and include the
@@ -648,7 +696,7 @@ to your human partner when finishing-a-development-branch presents the options.
 
 ## Finish
 
-Before you delete anything, collect every ledger line containing `Ruling:` —
+Before you leave this skill, collect every ledger line containing `Ruling:` —
 preflight rulings, dispatch rulings, translations, parked findings, breaker
 adjudications, all of them — into your final message under "Rulings I made",
 in the order you made them, each with what it costs if wrong. The list is
@@ -657,10 +705,13 @@ only place the decisions you took on your human partner's behalf reach them —
 they read it and rework whatever you got wrong. A ruling that dies with the
 workspace was a decision made in secret. Name every `BLOCKED` task there too.
 
-When the final whole-branch review is clean and its fixes are merged,
-delete this plan's workspace (`rm -rf <workspace>`) — the git history is
-the record now. Sibling directories belong to other plans; leave them
-alone.
+When the final whole-branch review is clean and its fixes are committed,
+append `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to
+the ledger in the same message as printing the rulings. Do not delete the
+workspace: dr-superpowers:finishing-a-development-branch removes it with the
+worktree once the work is merged or discarded, and until then it is what a
+later session resumes from. Then continue to finishing — unless the last
+budget line said `handoff`, in which case invoke dr-superpowers:handoff.
 
 Use dr-superpowers:finishing-a-development-branch.
 
@@ -728,12 +779,14 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 
 ...
 
-[After all tasks]
+[After the last task's complete line: dr-superpowers:handoff prints the resume guide]
+
+[Fresh session: dr-superpowers:resume-execution → Final Review]
 [review-package PLAN_FILE MERGE_BASE HEAD; general-purpose final reviewer on the most capable model; Codex round in the background]
 [Dedupe; judge-fable verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
-[Delete this plan's workspace — the record now lives in git]
+[Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); print Rulings I made; budget ok — continue]
 
 Done! Using dr-superpowers:finishing-a-development-branch.
 ```
