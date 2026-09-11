@@ -180,9 +180,9 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 6.3.0, so no other plugin is required: every agent definition preloads
 `dr-superpowers:verification-before-completion` through its `skills:`
 frontmatter, and writing-plans and subagent-driven-development use the plugin's own
-`scripts/sdd-workspace`, `task-brief`, `review-package`, and `next-step` —
-the last ends every execution session with the plan's next action and keeps
-`.superpowers/handoff/latest.md` pointing at it. Disable the
+`scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
+`context-size`, and `repo-audit` — `next-step` ends every session with its next
+action and keeps `.superpowers/handoff/latest.md` pointing at it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -209,9 +209,36 @@ session starts with the skill-routing rules — including the pointers to
 dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same
 script persists the session's `transcript_path`, `session_id`, `cwd`, and
 `source` to `~/.claude/dr-superpowers/sessions/<sanitized-cwd>.json` (last
-writer wins per directory); the session-budget tooling of a later release reads
-it. Malformed stdin skips persistence but never blocks the injection, and the
+writer wins per directory), which `scripts/context-size` reads. On the
+`compact` source it also appends a compaction snapshot (see Session budget).
+Malformed stdin skips persistence but never blocks the injection, and the
 hook always exits 0.
+
+## Session budget
+
+Long sessions cost more than they look: every request re-reads the whole
+context, and compaction drops the reports, findings and rulings a controller
+needs. dr-superpowers hands off instead.
+
+- **The budget line.** `scripts/task-brief` and `scripts/review-package` end
+  with `budget: 312k of 475k (65%) — ok — source: record`, so the controller
+  checks before every task and every review at no extra request;
+  `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
+  skill writes `latest.md` and the plan's `handoff.md` and ends with the
+  resume guide from `scripts/next-step`.
+- **Stops.** A saved plan and a finished task list always hand off; the final
+  review and finishing continue in the same session unless the budget says
+  otherwise.
+- **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
+  snapshot of branch, worktrees, dirty files, plans in flight and handoff
+  staleness — verifies the worktree, and hands control back to the plan's
+  execution skill.
+- **Compaction.** The SessionStart hook appends a snapshot of what summaries
+  drop. Compaction fires at about 93-96% of `autoCompactWindow`, so set the
+  window well above the budget — 650000 for the default 475k — and paste the
+  Compact Instructions block from
+  [session-budget.md](reference/session-budget.md) into your project's
+  CLAUDE.md.
 
 ## Migrating from 0.x
 
@@ -315,9 +342,10 @@ escalation, reserve, and external CLI tables. Native Codex reads
 score, request format, and plan conversion. `scripts/select-native-tier.sh`
 validates raw scores and history before returning a native routing decision.
 
-`reference/external-executor.md` holds the Claude-hosted Codex CLI lane, and
+`reference/external-executor.md` holds the Claude-hosted Codex CLI lane,
 `reference/legacy-names.md` translates names written under older plugin
-prefixes.
+prefixes, and `reference/session-budget.md` holds the budget numbers,
+checkpoints, stops and the Compact Instructions block.
 
 `criteria/` holds the verifier criteria, including `codex-review-schema.json`
 for the risk-3 Codex seat; `criteria/TEMPLATE.md` documents the format.
