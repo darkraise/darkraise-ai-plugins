@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "darkraise",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Darkraise plugins for Claude Code and Codex.",
   "owner": {
     "name": "Darkraise",
@@ -11,7 +11,7 @@
     {
       "name": "dr-superpowers",
       "source": "./plugins/dr-superpowers",
-      "description": "Task scoring, explicit model and effort assignment, native client dispatch, criteria-based review, and a Claude-hosted external Codex executor.",
+      "description": "Standalone fork of superpowers 6.3.0: brainstorming, planning, and tiered subagent execution with task scoring, explicit model and effort assignment, criteria-based review, and a Claude-hosted external Codex executor.",
       "category": "workflow",
       "keywords": [
         "superpowers",
@@ -68,8 +68,5 @@
         "design-system"
       ]
     }
-  ],
-  "allowCrossMarketplaceDependenciesOn": [
-    "claude-plugins-official"
   ]
 }

@@ -33,6 +33,8 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['client version mismatch', c => { c.version = '0.9.0'; }, /version mismatch/, 'plugins/dr-superpowers/.codex-plugin/plugin.json'],
     ['implicit Claude hooks', c => { delete c.hooks; }, /empty Codex hooks/, 'plugins/dr-superpowers/.codex-plugin/plugin.json'],
     ['missing bundled reference', (c, dir) => { rmSync(resolve(dir, 'plugins/dr-superpowers/reference/native-codex.md')); }, /missing bundled reference/],
+    ['reintroduced dependency', c => { c.dependencies = [{ name: 'superpowers', marketplace: 'claude-plugins-official' }]; }, /must not declare dependencies/, 'plugins/dr-superpowers/.claude-plugin/plugin.json'],
+    ['reintroduced allowlist', c => { c.allowCrossMarketplaceDependenciesOn = ['claude-plugins-official']; }, /allowlist/],
   ]) {
     await t.test(name, () => {
       const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));

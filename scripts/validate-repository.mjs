@@ -20,6 +20,7 @@ export function validateRepository(root) {
     const catalog = read(resolve(root, catalogPath));
     if (!catalog) continue;
     if (catalog.name !== 'darkraise') errors.push(`${client}: marketplace name must be darkraise`);
+    if (client === 'claude' && catalog.allowCrossMarketplaceDependenciesOn !== undefined) errors.push('claude: cross-marketplace dependency allowlist must be removed');
     if (!Array.isArray(catalog.plugins)) { errors.push(`${client}: plugins must be an array`); continue; }
     if (JSON.stringify(catalog.plugins.map(p => p.name).sort()) !== JSON.stringify(expected)) errors.push(`${client}: incorrect catalog membership`);
     const seen = new Set();
@@ -44,9 +45,8 @@ export function validateRepository(root) {
         if (manifest.skills !== './skills/' || !existsSync(resolve(pluginRoot, 'skills'))) errors.push(`${entry.name}: skills path missing`);
         if (entry.name === 'dr-superpowers' && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
       }
-      if (client === 'claude' && entry.name === 'dr-superpowers') {
-        const dependency = manifest.dependencies?.find(d => d.name === 'superpowers');
-        if (!dependency?.marketplace || !catalog.allowCrossMarketplaceDependenciesOn?.includes(dependency.marketplace)) errors.push('dr-superpowers: required Superpowers dependency/allowlist missing');
+      if (client === 'claude' && entry.name === 'dr-superpowers' && manifest.dependencies?.length) {
+        errors.push('dr-superpowers: standalone plugin must not declare dependencies');
       }
     }
   }
