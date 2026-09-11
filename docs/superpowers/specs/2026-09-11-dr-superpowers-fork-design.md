@@ -265,6 +265,13 @@ first" was false; the window is now 650000. R7 changes: the budget line is print
 A PreCompact hook cannot shape the summary, so the single-hook decision stands. Details:
 `docs/superpowers/specs/2026-09-11-dr-superpowers-session-budget-design.md`.
 
+**Amendment 2026-09-12 (sub-project 4 spec).** R2's plan-amender is not a separate seat: the
+ruling seat (R3's strong judge) returns AMEND entries and the controller transcribes them through
+`scripts/plan-amend`, which validates them. The seat has a fourth verdict, BLOCKED, the route to
+the fourth stop class for a plan defect. writing-plans no longer offers an execution choice; the
+Execution line decides. Details:
+`docs/superpowers/specs/2026-09-12-dr-superpowers-small-model-planning-design.md`.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`
