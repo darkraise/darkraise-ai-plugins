@@ -12,9 +12,10 @@ existing split gate. Scouts start at Sol medium; judges start at Astra high.
 It filters advertised capabilities at planning and dispatch, preserves human
 pins, and records promotions and actual attempts.
 
-Version 0.6.0 requires explicit conversion of old Codex or Claude plans: preserve
-the raw axes and original assignments, preview the recalculated score and proposed
-assignment, and obtain approval. Old policy ranks cannot be reused as v2 history.
+Upgrading from a version before 0.6.0 required explicit conversion of old Codex
+or Claude plans: preserve the raw axes and original assignments, preview the
+recalculated score and proposed assignment, and obtain approval. Old policy
+ranks cannot be reused as v2 history.
 Claude translates known legacy agent names from the dcc-superpower-companions
 era at read time; disable that plugin before enabling this one. Original
 assignments and evaluations remain intact.

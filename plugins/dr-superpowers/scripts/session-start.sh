@@ -16,7 +16,7 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
   source_event=$(jq -r '.source // empty' <<<"$stdin_json")
   if [ -n "$transcript_path" ] && [ -n "$cwd" ]; then
-    sessions_dir="${HOME}/.claude/dr-superpowers/sessions"
+    sessions_dir="${HOME:-}/.claude/dr-superpowers/sessions"
     key=$(printf '%s' "$cwd" | tr -c 'A-Za-z0-9' '-')
     # Git Bash rewrites POSIX-looking values passed as native-binary arguments;
     # every --arg here is opaque data, so suppress the conversion.
