@@ -88,7 +88,9 @@ polyglot, since hooks are Claude-only now.
   with non-alphanumerics replaced by `-` (collision-tolerant: last writer wins per
   directory). User-level so repositories are never polluted. Sub-project 3's
   `context-size` reads this file; the format is a contract from this sub-project on.
-- Exits 0 on malformed stdin and emits nothing (a hook must never break session start).
+- On malformed or empty stdin it still injects the entry point and skips persistence;
+  it always exits 0 (a hook must never break session start, and losing the entry point
+  would be a silent regression).
 - No dependency on `CLAUDE_CODE_SESSION_ID`.
 
 The ≤1.2k-token entry-point rewrite (program design R12) is later work; sub-project 1
