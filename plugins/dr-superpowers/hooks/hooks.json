@@ -1,5 +1,5 @@
 {
-  "description": "Injects the dr-superpowers entry point at session start and persists the session's transcript path for budget tooling.",
+  "description": "Injects the dr-superpowers entry point at session start, persists the session's transcript path for budget tooling, and appends a compaction snapshot after compaction.",
   "hooks": {
     "SessionStart": [
       {

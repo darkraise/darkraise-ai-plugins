@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# SessionStart hook: inject the using-superpowers entry point and persist the
-# session's transcript path for the budget tooling. Injection must survive a
-# missing jq or malformed stdin; only persistence is allowed to degrade.
+# SessionStart hook: inject the using-superpowers entry point, persist the
+# session's transcript path for the budget tooling, and on the compact source
+# append the compaction snapshot (scripts/lib/snapshot.sh). Injection must
+# survive a missing jq or malformed stdin; persistence and the snapshot's
+# transcript sections are allowed to degrade.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 stdin_json="$(cat 2>/dev/null || true)"
+transcript_path="" cwd=""
 
 if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
    && jq -e . >/dev/null 2>&1 <<<"$stdin_json"; then
@@ -46,6 +49,22 @@ escape_for_json() {
 
 escaped=$(escape_for_json "$content")
 context="<EXTREMELY_IMPORTANT>\nYou have dr-superpowers.\n\n**Below is the full content of your 'dr-superpowers:using-superpowers' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n</EXTREMELY_IMPORTANT>"
+
+# The compact source is detected without jq, so a machine without jq still
+# gets the handoff and ledger sections. Hook output over 10,000 characters is
+# replaced by a file reference, so the snapshot gets only the room the entry
+# point leaves, with headroom for the wrapper text.
+if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
+   && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
+  cap=$(( 9500 - ${#content} - 400 ))
+  [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
+  if [ "$cap" -gt 1000 ]; then
+    snapshot=$(snapshot_build "$transcript_path" "${cwd:-$PWD}" "$cap" 2>/dev/null || true)
+    if [ -n "$snapshot" ]; then
+      context="${context}\n\n$(escape_for_json "$snapshot")"
+    fi
+  fi
+fi
 
 printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$context"
 exit 0

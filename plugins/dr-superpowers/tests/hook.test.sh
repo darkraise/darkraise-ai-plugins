@@ -64,6 +64,34 @@ check "empty: exits 0" "$status" "0"
 check "empty: still injects the entry point" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 
+# --- compact source: the snapshot follows the entry point ---
+export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+  GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
+REPO="$TMP/repo"
+git init -q -b main "$REPO"
+git -C "$REPO" commit -q --allow-empty -m init
+mkdir -p "$REPO/.superpowers/handoff"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.superpowers/handoff/latest.md"
+TR="$TMP/transcript.jsonl"
+MSYS_NO_PATHCONV=1 jq -cn '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:"keep the API stable"}}' > "$TR"
+compact_payload() {
+  MSYS_NO_PATHCONV=1 jq -n --arg tp "$TR" --arg cwd "$REPO" \
+    '{hook_event_name:"SessionStart",session_id:"s-9",transcript_path:$tp,cwd:$cwd,source:"compact"}'
+}
+HOME_D="$TMP/d"; mkdir -p "$HOME_D"
+out=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
+status=$?
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out" 2>/dev/null)
+check "compact: exits 0" "$status" "0"
+check "compact: emits valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
+check "compact: entry point still injected" "$(grep -c 'dr-superpowers:using-superpowers' <<<"$ctx")" "1"
+check "compact: snapshot appended" "$(grep -c '^## Compaction snapshot' <<<"$ctx")" "1"
+check "compact: carries the handoff next step" "$(grep -c 'Resume at Task 4 (Four)' <<<"$ctx")" "1"
+check "compact: carries the owner prompt" "$(grep -c 'keep the API stable' <<<"$ctx")" "1"
+check "compact: under the 10,000-character hook cap" "$([ "${#ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
+startup_ctx=$(payload | HOME="$HOME_A" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "startup: no snapshot" "$(grep -c '^## Compaction snapshot' <<<"$startup_ctx")" "0"
+
 # --- hooks.json wiring ---
 check "hooks.json is valid JSON" \
   "$(jq -e . "$HOOKS" >/dev/null 2>&1 && echo yes || echo no)" "yes"
