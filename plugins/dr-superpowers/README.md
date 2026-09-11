@@ -226,9 +226,11 @@ needs. dr-superpowers hands off instead.
   `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
   skill writes `latest.md` and the plan's `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
-- **Stops.** A saved plan and a finished task list always hand off; the final
-  review runs in the fresh session that follows, and finishing follows it in
-  that same session unless the budget says otherwise.
+- **Stops.** A saved plan and a finished task list are hard stops under
+  subagent-driven-development; executing-plans' finished task list is a soft
+  stop, continuing in-session unless the budget says otherwise. The final
+  review always runs in a fresh session; see
+  [session-budget.md](reference/session-budget.md) for the full Stops table.
 - **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
   snapshot of branch, worktrees, dirty files, plans in flight and handoff
   staleness — verifies the worktree, and hands control back to the plan's
@@ -315,7 +317,7 @@ differences:
    rulings, never silent fallbacks and never stops.
 8. **Session budget.** A budget line, a compaction snapshot, and the
    dr-superpowers:handoff / dr-superpowers:resume-execution pair replace
-   upstream's unmeasured sessions — see [Session budget](#session-budget).
+   upstream's unmeasured sessions - see [Session budget](#session-budget).
 
 Names written under older plugin prefixes resolve through
 [legacy-names.md](reference/legacy-names.md).

@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when a budget line says handoff, at a hard phase stop (plan saved, every plan task complete), after 3 Codex tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
+description: Use when a budget line says handoff, at a hard phase stop (plan saved, every plan task complete under subagent-driven-development), after 3 Codex tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
 ---
 
 # Handoff
