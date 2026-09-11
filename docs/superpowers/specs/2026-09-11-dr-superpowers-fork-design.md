@@ -258,6 +258,13 @@ line (`— last` on the final one), which is where the next sub-project comes fr
   dispatching-tiered-implementers, executing-plans, writing-plans,
   finishing-a-development-branch) and must keep those calls.
 
+**Amendment 2026-09-11 (sub-project 3 spec).** Auto-compaction fires at about 93–96% of
+`autoCompactWindow` (observed 467k–479k at 500000), so §3's claim that the 475k budget "fires
+first" was false; the window is now 650000. R7 changes: the budget line is printed by
+`task-brief` and `review-package` (no extra requests), and "final review done" is a soft stop.
+A PreCompact hook cannot shape the summary, so the single-hook decision stands. Details:
+`docs/superpowers/specs/2026-09-11-dr-superpowers-session-budget-design.md`.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`
