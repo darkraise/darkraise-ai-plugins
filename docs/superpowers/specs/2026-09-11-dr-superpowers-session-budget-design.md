@@ -56,15 +56,18 @@ for the two new skills.
 
 ## 3. Measuring context (`scripts/lib/context.sh`, `scripts/context-size`)
 
-**Transcript lookup.** For each candidate directory — `$PWD`, the repository root, the primary
-checkout — in that order:
-1. Record `~/.claude/dr-superpowers/sessions/<key>.json`, key = the directory with
-   non-alphanumerics replaced by `-` (the SP1 contract). Usable when its `transcript_path` exists.
-2. Otherwise the newest `*.jsonl` directly in `~/.claude/projects/<key>/` (Claude Code's own
-   naming; names over 200 characters are truncated with a hash suffix, so a missing directory
-   is simply a miss). Source is `guessed`.
+**Transcript lookup.** Candidate directories are `$PWD`, the repository root and the primary
+checkout, in that order, each in its native form (`cygpath -w` under Git Bash, so the key matches
+the Windows path the hook received):
+1. First pass, every candidate: record `~/.claude/dr-superpowers/sessions/<key>.json`, key = the
+   directory with non-alphanumerics replaced by `-` (the SP1 contract). Usable when its
+   `transcript_path` exists.
+2. Second pass, only when no record was usable: the newest `*.jsonl` directly in
+   `~/.claude/projects/<key>/` (Claude Code's own naming; names over 200 characters are
+   truncated with a hash suffix, so a missing directory is simply a miss). Source is `guessed`.
 
-First hit wins. When a record is used but a newer `*.jsonl` exists in the same project directory
+First hit wins. Records go first across all candidates so that a worktree's own old transcript
+never outranks the record of the session actually running in the primary checkout. When a record is used but a newer `*.jsonl` exists in the same project directory
 whose name is not the record's `session_id`, the source is `record?` — two sessions share the
 directory and the record may belong to the other one.
 
@@ -109,10 +112,10 @@ resume guidance) run it first; it replaces the 5–8 orientation calls observed 
 
 **`next-step` changes.**
 - `--draft DRAFT_FILE --next "<action>"`: the design-phase block. Status names the draft as the
-  authority; launch `claude --model opus --effort high`; prompt "Continue `<draft>` with
-  dr-superpowers:brainstorming: <action>. The draft is the authority; read
-  `.superpowers/handoff/latest.md` first." Writes latest.md's Next session section like plan
-  mode.
+  authority; launch `claude --model opus --effort high`; prompt "Continue from `<draft>` (the
+  authority): <action> Read `.superpowers/handoff/latest.md` first." The action names the skill
+  (brainstorming mid-design, writing-plans after the spec), so the fixed text names none. Writes
+  latest.md's Next session section like plan mode.
 - When a ledger exists, the resume prompt names `dr-superpowers:resume-execution` in place of the
   execution skill. A plan with no ledger keeps today's "Start at Task 1" prompt.
 - A ledger whose tasks are all complete and that holds a `Final review: clean` line yields
@@ -166,9 +169,10 @@ context, built by `lib/snapshot.sh` from the stdin `transcript_path` and the rep
 6. Background agent ids from the most recent 5 `Agent` dispatches with their descriptions.
 
 Hook output is capped at 10,000 characters (hooks reference), including the entry point
-(~3.4k). The snapshot is capped at 5,500 characters; sections are truncated from 6 up to 3, and
-sections 1–2 are never cut. Without `jq`, sections 3–6 are skipped. Other sources inject nothing
-new.
+(~3.4k, growing). The snapshot is capped at 5,500 characters, or at the room the entry point
+leaves under the hook cap when that is less: whole sections are dropped in the order 6,
+5, 4, 3 until it fits, and sections 1–2 are never cut. Without `jq`, sections 4–6 (the ones read
+from the transcript) are skipped. Other sources inject nothing new.
 
 **Skill truncation.** After compaction each invoked skill body is re-injected, capped at 5,000
 tokens per skill, keeping the start of the file (context-window docs). subagent-driven-development
@@ -189,8 +193,9 @@ reports whether it is present. The plugin never edits CLAUDE.md.
   section no longer deletes the workspace: it writes `Final review: clean (commits a..b)`, prints
   "Rulings I made" from the ledger, and continues to finishing unless the budget says handoff.
   New ledger grammar line: `Final review: clean (commits a..b[, K parked])`.
-- **executing-plans.** The same checks at the same points (minimal insertion; sub-project 5
-  rewrites the skill).
+- **executing-plans.** It has no `task-brief` or `review-package`, so it runs `context-size`
+  after each `Task N: complete` line (one request per task; sub-project 5 rewrites the skill).
+  It has no final review, so finishing follows in-session unless the budget says handoff.
 - **brainstorming.** One `context-size` check after the spec commit: on `handoff`, write the plan
   in a fresh session (`next-step --draft`).
 - **finishing-a-development-branch.** Step 6 deletes the plan's workspace only for Option 1 and
