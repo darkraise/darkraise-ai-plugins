@@ -35,6 +35,7 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['missing bundled reference', (c, dir) => { rmSync(resolve(dir, 'plugins/dr-superpowers/reference/native-codex.md')); }, /missing bundled reference/],
     ['reintroduced dependency', c => { c.dependencies = [{ name: 'superpowers', marketplace: 'claude-plugins-official' }]; }, /must not declare dependencies/, 'plugins/dr-superpowers/.claude-plugin/plugin.json'],
     ['reintroduced allowlist', c => { c.allowCrossMarketplaceDependenciesOn = ['claude-plugins-official']; }, /allowlist/],
+    ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-superpowers/reference/stray.md'), 'superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
   ]) {
     await t.test(name, () => {
       const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));

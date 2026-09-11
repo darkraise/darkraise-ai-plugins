@@ -82,6 +82,24 @@ export function validateRepository(root) {
     };
     visit(skillRoot);
   }
+  const legacyPattern = /(?<!dr-)superpowers:|dcc-superpower-companions:/;
+  const legacyAllowed = new Set(['plugins/dr-superpowers/reference/legacy-names.md']);
+  for (const name of names) {
+    const pluginRoot = resolve(root, 'plugins', name);
+    if (!existsSync(pluginRoot)) continue;
+    const visit = dir => {
+      for (const item of readdirSync(dir, { withFileTypes: true })) {
+        const path = resolve(dir, item.name);
+        if (item.isDirectory()) { visit(path); continue; }
+        const rel = relative(root, path).replaceAll('\\', '/');
+        if (legacyAllowed.has(rel)) continue;
+        readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+          if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
+        });
+      }
+    };
+    visit(pluginRoot);
+  }
   return errors;
 }
 
