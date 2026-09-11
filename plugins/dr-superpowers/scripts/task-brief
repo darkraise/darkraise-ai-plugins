@@ -7,6 +7,7 @@
 # Default OUTFILE: <repo-root>/.superpowers/sdd/<plan-basename>/task-<N>-brief.md
 # (per plan and per worktree; concurrent runs of the SAME plan in the same
 # working tree share it).
+# Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
 
 if [ $# -lt 2 ] || [ $# -gt 3 ]; then
@@ -39,3 +40,8 @@ if [ ! -s "$out" ]; then
 fi
 
 echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
+
+# The budget line rides on a call the controller already makes before every
+# task, so checking the session budget costs no extra request. It must never
+# fail the brief.
+"$(cd "$(dirname "$0")" && pwd)/context-size" 2>/dev/null || true
