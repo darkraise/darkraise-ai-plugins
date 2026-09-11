@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Print the running session's context size against the handoff budget as one
+# budget line (see reference/session-budget.md).
+#
+# Usage: context-size
+# Exit: 0 ok; 5 handoff due; 3 unknown; 2 usage.
+set -uo pipefail
+
+[ $# -eq 0 ] || { echo "usage: context-size" >&2; exit 2; }
+. "$(cd "$(dirname "$0")" && pwd)/lib/context.sh"
+
+ctx_line
+status=$?
+if [ "${CTX_SOURCE:-}" = guessed ]; then
+  echo "context-size: no usable session record; measured the newest transcript for this directory — a guess" >&2
+fi
+exit "$status"
