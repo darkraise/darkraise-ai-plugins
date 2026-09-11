@@ -248,6 +248,16 @@ Skill names stay identical to upstream under `dr-superpowers:`.
    amendments protocol (R2), R3, the Execution line (R6) and the R12 planning items.
 5. **Inline mode.** An `executing-plans` rewrite on R1 and R5, after sub-projects 2 and 4.
 
+**Amendment 2026-09-11 (plugin 1.1.0): next-step guidance landed ahead of sub-project 3.**
+`scripts/next-step` prints every session's next action (start or resume a task, final review,
+next sub-project, program done) and rewrites the `## Next session` section of `latest.md`.
+Plans carry an optional `**Program:** <spec> — sub-project <k> of <n> — next: <title>` header
+line (`— last` on the final one), which is where the next sub-project comes from.
+- Sub-project 3's `handoff` skill calls `next-step` rather than re-implementing it.
+- Sub-projects 2, 4 and 5 rewrite the skills that call it (subagent-driven-development,
+  dispatching-tiered-implementers, executing-plans, writing-plans,
+  finishing-a-development-branch) and must keep those calls.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`
