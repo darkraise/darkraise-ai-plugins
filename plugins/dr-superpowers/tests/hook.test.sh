@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# The hook must fire for exactly three superpowers skills and stay silent for
-# everything else.
-#
-# dr-superpowers:executing-plans is deliberately NOT matched: it runs plan tasks
-# inline in the current session without subagents, so nudging it toward tiered
-# dispatch would push it to do the one thing it is designed not to do.
-#
-# dr-superpowers:brainstorming IS matched, because that is where an approach
-# decision is open and selecting-approaches has something to say about it.
+# The SessionStart hook must inject the using-superpowers entry point in the
+# Claude Code JSON shape, persist the session record keyed by sanitized cwd,
+# tolerate malformed stdin (inject anyway, persist nothing), and always exit 0.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$HERE/../scripts/tier-nudge.sh"
+SCRIPT="$HERE/../scripts/session-start.sh"
+HOOKS="$HERE/../hooks/hooks.json"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -19,76 +14,69 @@ check() { # check <name> <got> <want>
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 
-run() { # run <skill-name> - feed a synthetic PreToolUse payload, print stdout
-  jq -n --arg s "$1" '{hook_event_name:"PreToolUse",tool_name:"Skill",tool_input:{skill:$s,args:""}}' \
-    | bash "$SCRIPT" 2>/dev/null
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+payload() {
+  jq -n --arg tp '/tmp/fake-transcript.jsonl' --arg cwd 'D:\repo\example' \
+    '{hook_event_name:"SessionStart",session_id:"s-123",transcript_path:$tp,cwd:$cwd,source:"startup"}'
 }
 
-run_status() { # run_status <skill-name> - feed a synthetic PreToolUse payload, return the script's exit status
-  jq -n --arg s "$1" '{hook_event_name:"PreToolUse",tool_name:"Skill",tool_input:{skill:$s,args:""}}' \
-    | bash "$SCRIPT" >/dev/null 2>&1
-}
+# --- well-formed stdin ---
+HOME_A="$TMP/a"; mkdir -p "$HOME_A"
+out=$(payload | HOME="$HOME_A" bash "$SCRIPT" 2>/dev/null)
+status=$?
+check "well-formed: exits 0" "$status" "0"
+check "well-formed: emits valid JSON" \
+  "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
+check "well-formed: event name is SessionStart" \
+  "$(jq -r '.hookSpecificOutput.hookEventName // "MISSING"' <<<"$out" 2>/dev/null)" "SessionStart"
+check "well-formed: additionalContext is non-empty" \
+  "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
+check "well-formed: context names the entry-point skill" \
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dr-superpowers:using-superpowers')" "1"
+check "well-formed: emits no permissionDecision" \
+  "$(jq -r '.hookSpecificOutput.permissionDecision // "ABSENT"' <<<"$out" 2>/dev/null)" "ABSENT"
 
-for skill in dr-superpowers:writing-plans dr-superpowers:subagent-driven-development dr-superpowers:brainstorming; do
-  out=$(run "$skill")
-  check "$skill: emits valid JSON" \
-    "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
-  check "$skill: event name is PreToolUse" \
-    "$(jq -r '.hookSpecificOutput.hookEventName // "MISSING"' <<<"$out" 2>/dev/null)" "PreToolUse"
-  # permissionDecision must stay absent. "defer" in particular is print-mode
-  # only: interactive sessions ignore it with a warning, and non-interactive
-  # ones defer the Skill call itself so the skill never runs.
-  check "$skill: emits no permissionDecision" \
-    "$(jq -r '.hookSpecificOutput.permissionDecision // "ABSENT"' <<<"$out" 2>/dev/null)" "ABSENT"
-  check "$skill: additionalContext is non-empty" \
-    "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
-done
+RECORD="$HOME_A/.claude/dr-superpowers/sessions/D--repo-example.json"
+check "well-formed: persists the session record" "$([ -f "$RECORD" ] && echo yes || echo no)" "yes"
+check "record: transcript_path" \
+  "$(jq -r '.transcript_path // "MISSING"' "$RECORD" 2>/dev/null)" "/tmp/fake-transcript.jsonl"
+check "record: session_id" "$(jq -r '.session_id // "MISSING"' "$RECORD" 2>/dev/null)" "s-123"
+check "record: source" "$(jq -r '.source // "MISSING"' "$RECORD" 2>/dev/null)" "startup"
+check "record: cwd" "$(jq -r '.cwd // "MISSING"' "$RECORD" 2>/dev/null)" 'D:\repo\example'
 
-check "writing-plans context names the assigning skill" \
-  "$(run dr-superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'assigning-implementers')" "1"
-check "subagent-driven-development context names the dispatching skill" \
-  "$(run dr-superpowers:subagent-driven-development | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'dispatching-tiered-implementers')" "1"
-check "brainstorming context names the selecting skill" \
-  "$(run dr-superpowers:brainstorming | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'selecting-approaches')" "1"
+# --- malformed stdin ---
+HOME_B="$TMP/b"; mkdir -p "$HOME_B"
+out=$(printf 'not json' | HOME="$HOME_B" bash "$SCRIPT" 2>/dev/null)
+status=$?
+check "malformed: exits 0" "$status" "0"
+check "malformed: still injects the entry point" \
+  "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
+check "malformed: persists nothing" \
+  "$([ -d "$HOME_B/.claude" ] && echo yes || echo no)" "no"
 
-for skill in dr-superpowers:executing-plans other:thing ""; do
-  label="${skill:-<empty>}"
-  check "$label: emits nothing" "$(run "$skill" | wc -c | tr -d ' ')" "0"
-  run_status "$skill"
-  check "$label: exits 0" "$?" "0"
-done
+# --- empty stdin ---
+HOME_C="$TMP/c"; mkdir -p "$HOME_C"
+out=$(printf '' | HOME="$HOME_C" bash "$SCRIPT" 2>/dev/null)
+status=$?
+check "empty: exits 0" "$status" "0"
+check "empty: still injects the entry point" \
+  "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 
-check "malformed stdin exits 0 and emits nothing" \
-  "$(printf 'not json' | bash "$SCRIPT" 2>/dev/null | wc -c | tr -d ' ')" "0"
-
-printf 'not json' | bash "$SCRIPT" >/dev/null 2>&1
-check "malformed stdin: exits 0" "$?" "0"
-
-# hooks.json wiring
-HOOKS="$HERE/../hooks/hooks.json"
+# --- hooks.json wiring ---
 check "hooks.json is valid JSON" \
   "$(jq -e . "$HOOKS" >/dev/null 2>&1 && echo yes || echo no)" "yes"
-check "hooks.json registers a PreToolUse matcher on Skill" \
-  "$(jq -r '.hooks.PreToolUse[0].matcher // "MISSING"' "$HOOKS" 2>/dev/null)" "Skill"
-check "hooks.json is synchronous (async must not be true)" \
-  "$(jq -r '.hooks.PreToolUse[0].hooks[0].async // false' "$HOOKS" 2>/dev/null)" "false"
-# Hook commands default to PowerShell on Windows when Git Bash is absent, where
-# "bash" is not a command and ${CLAUDE_PLUGIN_ROOT} is not a variable. This key
-# forces the bash route, so such a machine gets Claude Code's actionable
-# "requires bash but Git Bash was not found" message instead.
+check "hooks.json registers SessionStart with the full matcher" \
+  "$(jq -r '.hooks.SessionStart[0].matcher // "MISSING"' "$HOOKS" 2>/dev/null)" "startup|resume|clear|compact"
+check "hooks.json is synchronous" \
+  "$(jq -r '.hooks.SessionStart[0].hooks[0].async // false' "$HOOKS" 2>/dev/null)" "false"
 check "hooks.json forces the bash interpreter" \
-  "$(jq -r '.hooks.PreToolUse[0].hooks[0].shell // "MISSING"' "$HOOKS" 2>/dev/null)" "bash"
-
-# The planning nudge must mention the executor lane, or a planner will score
-# tasks correctly and never learn that an external lane exists.
-plan_ctx=$(run dr-superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext')
-# -F dropped deliberately: this repo's GNU grep 3.0 (Git Bash/MSYS on
-# Windows) segfaults when -i and -F are combined, in any flag order. The
-# search term has no regex metacharacters, so plain -i is equivalent.
-check "writing-plans context mentions the external lane" \
-  "$(grep -qi 'Executor' <<<"$plan_ctx" && echo yes || echo no)" "yes"
-check "writing-plans context names the detection script" \
-  "$(grep -qF 'detect-executors' <<<"$plan_ctx" && echo yes || echo no)" "yes"
+  "$(jq -r '.hooks.SessionStart[0].hooks[0].shell // "MISSING"' "$HOOKS" 2>/dev/null)" "bash"
+check "hooks.json has no PreToolUse entry" \
+  "$(jq -r 'if .hooks.PreToolUse then "present" else "ABSENT" end' "$HOOKS" 2>/dev/null)" "ABSENT"
+check "session-start.sh parses" \
+  "$(bash -n "$SCRIPT" 2>/dev/null && echo yes || echo no)" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

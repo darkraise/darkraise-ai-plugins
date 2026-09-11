@@ -1,13 +1,13 @@
 {
-  "description": "Adds approach and implementer-assignment context when superpowers brainstorms an approach, writes a plan, or dispatches a plan's tasks.",
+  "description": "Injects the dr-superpowers entry point at session start and persists the session's transcript path for budget tooling.",
   "hooks": {
-    "PreToolUse": [
+    "SessionStart": [
       {
-        "matcher": "Skill",
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/tier-nudge.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh\"",
             "shell": "bash",
             "async": false
           }
