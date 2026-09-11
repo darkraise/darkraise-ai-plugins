@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# next-step must name exactly one next action for every plan state — start,
+# resume, final review, next sub-project, program done, no follow-on — and
+# keep the primary checkout's handoff file pointing at it.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT="$HERE/../scripts/next-step"
+
+pass=0 fail=0
+check() { # check <name> <got> <want>
+  if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+has() { # has <name> <haystack> <needle>
+  if grep -qF -- "$3" <<<"$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+lacks() { # lacks <name> <haystack> <needle>
+  if grep -qF -- "$3" <<<"$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n' "$1" "$3"; fail=$((fail + 1))
+  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
+}
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+export HOME="$TMP/home"
+mkdir -p "$HOME"
+export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+  GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
+
+REPO="$TMP/repo"
+git init -q "$REPO"
+ROOT="$(git -C "$REPO" rev-parse --show-toplevel)"
+PLAN_REL="docs/plans/2026-01-01-demo.md"
+PLAN="$REPO/$PLAN_REL"
+LEDGER_DIR="$REPO/.superpowers/sdd/2026-01-01-demo"
+LEDGER_SHOWN="$ROOT/.superpowers/sdd/2026-01-01-demo/progress.md"
+HANDOFF="$REPO/.superpowers/handoff/latest.md"
+mkdir -p "$REPO/docs/plans"
+
+write_plan() { # write_plan <file> <execution line> <program line or empty>
+  {
+    printf '# Demo Implementation Plan\n\n**Spec:** `docs/specs/demo.md`\n\n'
+    printf '%s\n\n' "$2"
+    [ -n "$3" ] && printf '%s\n\n' "$3"
+    printf '## Task index\n\n1. First\n2. Second\n3. Third\n\n'
+    printf '### Task 1: First thing\n\nBody.\n\n```bash\n### Task 9: fenced, not a task\n```\n\n'
+    printf '### Task 2: Second thing\n\nBody.\n\n### Task 3: Third thing\n\nBody.\n'
+  } > "$1"
+}
+EXEC_SUB='**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4'
+PROG_NEXT='**Program:** `docs/specs/program.md` — sub-project 2 of 5 — next: Session budget'
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm init
+
+ledger() { # ledger <lines...> — first line is the identity line
+  mkdir -p "$LEDGER_DIR"
+  { printf '# SDD ledger — plan: %s\n' "$PLAN_REL"; printf '%s\n' "$@"; } > "$LEDGER_DIR/progress.md"
+}
+run() { # run <dir> <args...>; sets out and status
+  out=$(cd "$1" && bash "$SCRIPT" "${@:2}" 2>"$TMP/stderr")
+  status=$?
+}
+
+# --- not started: no ledger ---
+rm -f "$HANDOFF"
+run "$REPO" "$PLAN_REL"
+check "not started: exits 0" "$status" "0"
+has "not started: block heading" "$out" "## Next session"
+has "not started: status counts tasks outside fences only" "$out" "**Status:** Plan \`$PLAN_REL\`: 0 of 3 tasks complete (no ledger at \`$LEDGER_SHOWN\`)."
+has "not started: next is Task 1" "$out" "**Next:** Start at Task 1 (First thing)."
+has "not started: launch dir is the primary checkout" "$out" "Launch in \`$ROOT\`:"
+has "not started: launch command from Execution line" "$out" "claude --model sonnet --effort high"
+has "not started: prompt names the sdd skill" "$out" "Continue \`$PLAN_REL\` with dr-superpowers:subagent-driven-development. Start at Task 1 (First thing)."
+check "not started: writes the handoff file" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
+check "not started: handoff carries the block" "$(grep -c '^\*\*Next:\*\* Start at Task 1' "$HANDOFF")" "1"
+
+# --- mid-plan: tasks 1-2 complete, task 3 mid fix-round ---
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: complete (commits b..c, review clean)' \
+       'Task 3: fix round 2/5 (1 addressed, 1 open — x; commits c..d)'
+printf '# Handoff\n\n## Goal\nKeep me.\n\n## Next session\nOld stale block.\n\n## Do not\nKeep me too.\n' > "$HANDOFF"
+run "$REPO" "$PLAN_REL"
+check "mid-plan: exits 0" "$status" "0"
+has "mid-plan: status counts completions" "$out" "2 of 3 tasks complete (ledger \`$LEDGER_SHOWN\`)."
+has "mid-plan: resumes the fix-round task" "$out" "**Next:** Resume at Task 3 (Third thing)."
+has "mid-plan: prompt points at the ledger" "$out" "Progress ledger: \`$LEDGER_SHOWN\` — trust its \`Task N: complete\` lines."
+hand=$(cat "$HANDOFF")
+has "mid-plan: handoff keeps earlier sections" "$hand" "Keep me."
+has "mid-plan: handoff keeps later sections" "$hand" "## Do not"
+lacks "mid-plan: handoff drops the stale block" "$hand" "Old stale block."
+check "mid-plan: handoff has one Next session section" "$(grep -c '^## Next session' "$HANDOFF")" "1"
+has "mid-plan: handoff carries the new next step" "$hand" "Resume at Task 3 (Third thing)."
+
+# --- ledger for another plan is ignored ---
+mkdir -p "$LEDGER_DIR"
+printf '# SDD ledger — plan: docs/plans/other.md\nTask 1: complete (x)\n' > "$LEDGER_DIR/progress.md"
+run "$REPO" "$PLAN_REL"
+has "foreign ledger: treated as not started" "$out" "**Next:** Start at Task 1 (First thing)."
+has "foreign ledger: says why" "$out" "belongs to another plan"
+
+# --- all tasks complete, final review not yet run ---
+ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Group 2-3: review round 1/3' 'Task 3: complete (x)'
+run "$REPO" "$PLAN_REL"
+has "tasks done: status" "$out" "**Status:** Plan \`$PLAN_REL\`: all 3 tasks complete."
+has "tasks done: next is final review then finishing" "$out" "**Next:** Run the final whole-branch review, then dr-superpowers:finishing-a-development-branch."
+
+# --- --complete with a next sub-project ---
+printf '# Handoff\n\n## Goal\nOld goal.\n\n## Next session\nOld.\n' > "$HANDOFF"
+rm -rf "$LEDGER_DIR"
+run "$REPO" --complete "$PLAN_REL"
+check "complete/next: exits 0" "$status" "0"
+has "complete/next: status" "$out" "**Status:** Plan \`$PLAN_REL\` is complete; sub-project 2 of 5 is done."
+has "complete/next: next sub-project" "$out" "**Next:** Sub-project 3 (Session budget): write its spec in a fresh session."
+has "complete/next: planning launch command" "$out" "claude --model opus --effort high"
+has "complete/next: brainstorming prompt" "$out" "Start sub-project 3 (Session budget) of the program in \`docs/specs/program.md\`: use dr-superpowers:brainstorming to write its spec."
+hand=$(cat "$HANDOFF")
+lacks "complete/next: handoff replaced wholesale" "$hand" "Old goal."
+has "complete/next: handoff carries next sub-project" "$hand" "Sub-project 3 (Session budget)"
+
+# --- --complete on the last sub-project ---
+write_plan "$PLAN" "$EXEC_SUB" '**Program:** `docs/specs/program.md` — sub-project 5 of 5 — last'
+run "$REPO" --complete "$PLAN_REL"
+has "complete/last: program done" "$out" "**Next:** Nothing — every sub-project of \`docs/specs/program.md\` is done."
+lacks "complete/last: no launch block" "$out" "Launch in"
+
+# --- --complete with no Program line ---
+write_plan "$PLAN" "$EXEC_SUB" ""
+run "$REPO" --complete "$PLAN_REL"
+has "complete/none: no follow-on" "$out" "**Next:** Nothing — the plan records no follow-on work."
+lacks "complete/none: no launch block" "$out" "Launch in"
+
+# --- --complete with a Program line naming no next step ---
+write_plan "$PLAN" "$EXEC_SUB" '**Program:** `docs/specs/program.md` — sub-project 2 of 5'
+run "$REPO" --complete "$PLAN_REL"
+has "complete/unreadable: points at the program spec" "$out" "**Next:** Read \`docs/specs/program.md\` for the sub-project after 2 — the plan's Program line names no next step."
+
+# --- Execution line variants ---
+write_plan "$PLAN" '**Execution:** inline -- claude --model sonnet --effort medium -- all tasks score <= 3' ""
+run "$REPO" "$PLAN_REL"
+has "inline: prompt names executing-plans" "$out" "with dr-superpowers:executing-plans."
+has "inline: command without backticks" "$out" "claude --model sonnet --effort medium"
+write_plan "$PLAN" '**Execution:** subagent — codex gpt-5.6-sol / high — Codex host' ""
+run "$REPO" "$PLAN_REL"
+has "codex: no claude command, points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
+
+# --- CRLF plan ---
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+sed 's/$/\r/' "$PLAN" > "$PLAN.tmp" && mv "$PLAN.tmp" "$PLAN"
+run "$REPO" "$PLAN_REL"
+has "crlf: tasks still counted" "$out" "0 of 3 tasks complete"
+lacks "crlf: no carriage return in output" "$out" $'\r'
+
+# --- worktree: ledger in the worktree, handoff in the primary checkout ---
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+WT="$TMP/wt"
+git -C "$REPO" worktree add -q -b feat "$WT"
+WT_ROOT="$(git -C "$WT" rev-parse --show-toplevel)"
+mkdir -p "$WT/.superpowers/sdd/2026-01-01-demo"
+printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$WT/.superpowers/sdd/2026-01-01-demo/progress.md"
+rm -f "$HANDOFF"
+run "$WT" "$PLAN_REL"
+has "worktree: reads the worktree ledger" "$out" "1 of 3 tasks complete"
+has "worktree: prompt names the worktree" "$out" "First enter the existing worktree \`$WT_ROOT\`."
+has "worktree: launch dir is still the primary checkout" "$out" "Launch in \`$ROOT\`:"
+check "worktree: handoff written in the primary checkout" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
+check "worktree: no handoff inside the worktree" "$([ -f "$WT/.superpowers/handoff/latest.md" ] && echo yes || echo no)" "no"
+
+# --- handoff write failure still prints the block ---
+rm -rf "$REPO/.superpowers/handoff"
+printf 'not a dir' > "$REPO/.superpowers/handoff"
+run "$REPO" "$PLAN_REL"
+check "unwritable handoff: exits 4" "$status" "4"
+has "unwritable handoff: block still printed" "$out" "**Next:** Start at Task 1 (First thing)."
+has "unwritable handoff: says so on stderr" "$(cat "$TMP/stderr")" "could not write"
+rm -f "$REPO/.superpowers/handoff"
+
+# --- usage errors ---
+run "$REPO"
+check "no args: exits 2" "$status" "2"
+run "$REPO" docs/plans/missing.md
+check "missing plan: exits 2" "$status" "2"
+printf '# Empty plan\n\nNo tasks here.\n' > "$REPO/docs/plans/empty.md"
+run "$REPO" docs/plans/empty.md
+check "no tasks: exits 3" "$status" "3"
+
+git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

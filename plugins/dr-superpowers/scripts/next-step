@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# Print the one next action for a plan — start, resume, final review, next
+# program sub-project, or nothing — as a "## Next session" block, and write the
+# same block into the primary checkout's .superpowers/handoff/latest.md.
+#
+# Sessions end by pasting this block verbatim, so what comes next is computed
+# here rather than remembered by the model: small executors reliably forget to
+# say it, and a hand-written handoff goes stale the moment work moves on.
+#
+# Usage: next-step [--complete] PLAN_FILE
+#   --complete  the plan is finished and its branch integrated; the ledger may
+#               already be deleted. Replaces latest.md wholesale.
+# Exit: 0 ok; 2 usage or missing plan; 3 plan has no tasks; 4 block printed but
+#       latest.md could not be written.
+set -euo pipefail
+
+usage() { echo "usage: next-step [--complete] PLAN_FILE" >&2; exit 2; }
+
+complete=0
+if [ "${1:-}" = "--complete" ]; then complete=1; shift; fi
+[ $# -eq 1 ] || usage
+plan=$1
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+
+root=$(git rev-parse --show-toplevel)
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel)
+
+root_posix=$(cd "$root" && pwd)
+plan_abs="$(cd "$(dirname "$plan")" && pwd)/$(basename "$plan")"
+rel=${plan_abs#"$root_posix"/}
+slug=$(basename "$plan" .md)
+
+plan_text=$(tr -d '\r' < "$plan")
+
+# Same fence-aware heading rule as task-brief, so both count the same tasks.
+tasks=$(awk '
+  /^```/ { infence = !infence }
+  !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
+    line = $0
+    sub(/^#+[ \t]+Task[ \t]+/, "", line)
+    n = line; sub(/[^0-9].*$/, "", n)
+    t = line; sub(/^[0-9]+[: \t.-]*/, "", t)
+    print n "\t" t
+  }
+' <<<"$plan_text")
+[ -n "$tasks" ] || { echo "no tasks in ${plan} (no heading matching 'Task N')" >&2; exit 3; }
+total=$(wc -l <<<"$tasks" | tr -d ' ')
+
+header_line() { # first unfenced line starting with **<label>:**
+  awk -v p="^\\\\*\\\\*$1:\\\\*\\\\*" '/^```/ { f = !f } !f && $0 ~ p { print; exit }' <<<"$plan_text"
+}
+execution=$(header_line Execution)
+program=$(header_line Program)
+
+launch_cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$execution" | head -n 1 || true)
+skill=subagent-driven-development
+if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$execution"; then skill=executing-plans; fi
+
+ledger_shown="$root/.superpowers/sdd/$slug/progress.md"
+ledger_file="$root_posix/.superpowers/sdd/$slug/progress.md"
+ledger_note="no ledger at \`$ledger_shown\`"
+done_tasks=""
+has_ledger=0
+if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
+  ledger_text=$(tr -d '\r' < "$ledger_file")
+  if head -n 1 <<<"$ledger_text" | grep -qF "plan: $rel"; then
+    has_ledger=1
+    ledger_note="ledger \`$ledger_shown\`"
+    done_tasks=$(sed -n 's/^Task \([0-9][0-9]*\): complete.*/\1/p' <<<"$ledger_text" | sort -un)
+  else
+    ledger_note="the ledger at \`$ledger_shown\` belongs to another plan and is ignored"
+  fi
+fi
+
+status_line="" next_line="" prompt="" launch=1 dir="$primary"
+
+if [ "$complete" -eq 1 ]; then
+  spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$program")
+  k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
+  n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
+  next_title=$(sed -nE 's/.*[Nn]ext:[ \t]*(.*[^ \t])[ \t]*$/\1/p' <<<"$program")
+  launch=0
+  if [ -z "$program" ]; then
+    status_line="Plan \`$rel\` is complete."
+    next_line="Nothing — the plan records no follow-on work."
+  elif grep -qiE '(^|[^a-z])last[ \t.]*$' <<<"$program" || { [ -n "$k" ] && [ "$k" -ge "$n" ]; }; then
+    status_line="Plan \`$rel\` is complete${k:+; sub-project $k of $n is done}."
+    next_line="Nothing — every sub-project of \`$spec\` is done."
+  elif [ -n "$next_title" ] && [ -n "$k" ]; then
+    k1=$((k + 1))
+    status_line="Plan \`$rel\` is complete; sub-project $k of $n is done."
+    next_line="Sub-project $k1 ($next_title): write its spec in a fresh session."
+    launch_cmd="claude --model opus --effort high"
+    prompt="Start sub-project $k1 ($next_title) of the program in \`$spec\`: use dr-superpowers:brainstorming to write its spec."
+    launch=1
+  else
+    status_line="Plan \`$rel\` is complete."
+    next_line="Read \`$spec\` for the sub-project after ${k:-this one} — the plan's Program line names no next step."
+  fi
+else
+  first_open="" open_title="" done_count=0
+  while IFS=$'\t' read -r num title; do
+    if grep -qx "$num" <<<"$done_tasks"; then
+      done_count=$((done_count + 1))
+    elif [ -z "$first_open" ]; then
+      first_open=$num open_title=$title
+    fi
+  done <<<"$tasks"
+
+  if [ -z "$first_open" ]; then
+    status_line="Plan \`$rel\`: all $total tasks complete."
+    next_line="Run the final whole-branch review, then dr-superpowers:finishing-a-development-branch."
+  elif [ "$done_count" -eq 0 ]; then
+    status_line="Plan \`$rel\`: 0 of $total tasks complete ($ledger_note)."
+    next_line="Start at Task $first_open ($open_title)."
+  else
+    status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
+    next_line="Resume at Task $first_open ($open_title)."
+  fi
+
+  prompt="Continue \`$rel\` with dr-superpowers:$skill. $next_line"
+  if [ "$root" != "$primary" ]; then
+    prompt="$prompt First enter the existing worktree \`$root\`."
+  fi
+  if [ "$has_ledger" -eq 1 ]; then
+    prompt="$prompt Progress ledger: \`$ledger_shown\` — trust its \`Task N: complete\` lines."
+  fi
+fi
+
+block=$(
+  printf '## Next session\n\n**Status:** %s\n**Next:** %s\n' "$status_line" "$next_line"
+  if [ "$launch" -eq 1 ]; then
+    if [ -n "$launch_cmd" ]; then
+      printf '\nLaunch in `%s`:\n\n```\n%s\n```\n' "$dir" "$launch_cmd"
+    else
+      printf '\nLaunch: see the **Execution:** line in `%s`.\n' "$rel"
+    fi
+    printf '\nPaste as the first prompt:\n\n```\n%s\n```\n' "$prompt"
+  fi
+)
+printf '%s\n' "$block"
+
+handoff="$primary/.superpowers/handoff/latest.md"
+today=$(date -u +%Y-%m-%d)
+write_handoff() {
+  mkdir -p "$(dirname "$handoff")" || return 1
+  if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
+    printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$handoff.tmp" || return 1
+  else
+    # Replace only the Next session section; the rest is the session's own notes.
+    BLOCK="$block" awk '
+      /^## Next session[ \t\r]*$/ { print ENVIRON["BLOCK"]; skip = 1; found = 1; next }
+      skip && /^## / { skip = 0; print "" }
+      !skip { print }
+      END { if (!found) { print ""; print ENVIRON["BLOCK"] } }
+    ' "$handoff" > "$handoff.tmp" || return 1
+  fi
+  mv "$handoff.tmp" "$handoff"
+}
+if ! write_handoff 2>/dev/null; then
+  rm -f "$handoff.tmp" 2>/dev/null || true
+  echo "next-step: could not write $handoff — copy the block above into it by hand" >&2
+  exit 4
+fi

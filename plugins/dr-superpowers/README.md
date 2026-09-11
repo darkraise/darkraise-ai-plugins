@@ -177,7 +177,9 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 6.3.0, so no other plugin is required: every agent definition preloads
 `dr-superpowers:verification-before-completion` through its `skills:`
 frontmatter, and the assigning and dispatching skills use the plugin's own
-`scripts/sdd-workspace`, `task-brief`, and `review-package`. Disable the
+`scripts/sdd-workspace`, `task-brief`, `review-package`, and `next-step` —
+the last ends every execution session with the plan's next action and keeps
+`.superpowers/handoff/latest.md` pointing at it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
