@@ -85,6 +85,11 @@ With B+R ≈ 83k, g ≈ 1.8k, w = 2 and r = 0.1, that gives n* ≈ 43 requests, 
 point cuts read-plus-write cost roughly 2.5–3× against sessions that average about 430k.
 Sensitivity: if subscription limits weighted reads higher, the optimum moves lower, never higher.
 
+**Owner ruling 2026-09-11: the working budget is 475k, not the cost optimum.** 200–250k proved
+too low in practice — handoffs came too often, and the reload overhead plus continuity loss
+outweighed the read savings. The math above stays as the cost reference; the 475k budget
+knowingly trades higher read cost for longer uninterrupted phases.
+
 **Cache expiry.**
 - *Main sessions (1-hour cache).* Continuing a large session after more than an hour idle
   re-writes the whole context at 2×; a 600k session costs about 1.2M-equivalent in one request.
@@ -96,10 +101,11 @@ Sensitivity: if subscription limits weighted reads higher, the optimum moves low
 **Codex.** The Codex executor lane runs on a separate ChatGPT subscription, so offloaded tasks
 leave the Claude budget entirely. The existing lane (score 2–4, risk ≤1) stays.
 
-**Settings change applied 2026-09-11, outside the plugin.** `"autoCompactWindow": 200000` in
-`~/.claude/settings.json`. The setting is documented at
+**Settings change applied 2026-09-11, outside the plugin.** `"autoCompactWindow": 500000` in
+`~/.claude/settings.json` (initially 200000; raised the same day with the 475k ruling above).
+The setting is documented at
 code.claude.com/docs/en/model-config (range 100K–1M). It is the backstop; the plugin's clean
-handoff budget of 160k (§5) fires first. Dropping `[1m]` would change nothing, because Fable and
+handoff budget of 475k (§5) fires first. Dropping `[1m]` would change nothing, because Fable and
 Sonnet 5 run a native 1M window on Max plans.
 
 ## 4. Target shape
@@ -167,8 +173,9 @@ Skill names stay identical to upstream under `dr-superpowers:`.
   <reason>`. The flag syntax is verified in the docs. Codex plans state the native pair per
   native-codex.md; judges, plan review and the amender are at least Astra high.
 - **R7. Budget.**
-  - Clean handoff at 160k by `scripts/context-size`, which reads the `transcript_path` the
+  - Clean handoff at 475k by `scripts/context-size`, which reads the `transcript_path` the
     SessionStart hook persisted. No dependency on the undocumented `CLAUDE_CODE_SESSION_ID`.
+    (Owner ruling in §3: 475k overrides the 160k cost optimum.)
   - Codex: hand off every 3 tasks, or after any task that needed 3 or more fix rounds.
   - Phase boundaries are hard stops: plan saved and reviewed, execution done, final review done.
   - Also hand off before a break of more than an hour.
@@ -179,6 +186,12 @@ Skill names stay identical to upstream under `dr-superpowers:`.
   - The execution handoff is `<worktree>/.superpowers/sdd/<plan>/handoff.md`.
   - `resume-execution` verifies the worktree's HEAD via `git worktree list`.
   - Plan and spec are committed before the plan-saved stop.
+  - **Every handoff ends with a resume guide printed to the owner** (owner request
+    2026-09-11): the exact launch command (`claude --model <m> --effort <e>` from the
+    Execution line, or the phase's model), the directory to launch it in, and a
+    copy-pasteable resume prompt naming the handoff file and the next step. The `handoff`
+    skill owns printing it; `latest.md` carries the same block under `## Next session`, so
+    the guide survives even when the printing session is gone.
 - **R9. Plans stay single files.** Folder plans are dropped: they collide in `sdd-workspace`
   naming, and `task-brief` already gives one-task reads. The plan gains a header block
   (Execution line, Global Constraints, Contracts, Assumptions with evidence, task index), and the
