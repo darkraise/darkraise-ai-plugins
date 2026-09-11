@@ -4,7 +4,7 @@ description: "Task implementer running Fable 5 at max effort. Top of the dr-supe
 model: fable
 effort: max
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: red
 ---
 

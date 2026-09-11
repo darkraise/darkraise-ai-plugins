@@ -1,6 +1,6 @@
 ---
 name: assigning-implementers
-description: Use when writing an implementation plan with superpowers:writing-plans - scores each task on a four-axis rubric and records which model and effort tiered implementer subagent will run it
+description: Use when writing an implementation plan with dr-superpowers:writing-plans - scores each task on a four-axis rubric and records which model and effort tiered implementer subagent will run it
 ---
 
 # Assigning Implementers
@@ -27,12 +27,12 @@ implementer to each task."
 
 ## When this applies
 
-Use alongside superpowers:writing-plans, after the tasks are drafted and before
+Use alongside dr-superpowers:writing-plans, after the tasks are drafted and before
 the plan is saved. Retrofitting an existing plan is the same process: read it,
 score each task, and add the assignment lines.
 
-The assignment is only acted on by superpowers:subagent-driven-development.
-Under superpowers:executing-plans, which runs tasks inline in the current
+The assignment is only acted on by dr-superpowers:subagent-driven-development.
+Under dr-superpowers:executing-plans, which runs tasks inline in the current
 session without subagents, the lines are inert. That is correct, not broken;
 leave them in place so the plan stays portable between both execution paths.
 
@@ -131,7 +131,7 @@ cold session, and an executor whose auth has lapsed all fall back by *reading a
 line that is already there*, rather than re-deriving the assignment at dispatch
 time - which is the failure this whole plugin exists to remove. It also keeps
 every `**Implementer:**` value inside the assignment or reserve table, so the
-checks below still mean what they say. Under superpowers:executing-plans both
+checks below still mean what they say. Under dr-superpowers:executing-plans both
 lines are simply inert, as "When this applies" says above: nothing dispatches,
 so nothing falls back.
 
@@ -186,7 +186,7 @@ intended: an implementer knowing its task's blast radius is useful context.
 
 **Keep superpowers' task heading form.** `scripts/task-brief` finds a task by
 matching a heading that begins with `Task <N>`, so the heading must read
-`### Task 4: Wire the export pipeline`, exactly as superpowers:writing-plans
+`### Task 4: Wire the export pipeline`, exactly as dr-superpowers:writing-plans
 specifies. A heading that buries the number, such as
 `### Wire the export pipeline (Task 4)`, does not match: `task-brief` exits
 non-zero leaving an empty brief file, and the task cannot be dispatched.
@@ -201,14 +201,14 @@ still exits 0 and looks fine.
 
 Append one blockquote line to the plan header. **Append it; never replace the
 existing `REQUIRED SUB-SKILL` line** — that line is what hands off to
-superpowers:subagent-driven-development, and replacing it breaks the handoff.
+dr-superpowers:subagent-driven-development, and replacing it breaks the handoff.
 
 ```markdown
 > **Implementer assignments:** each task names its implementer agent in an
 > `**Implementer:**` line. When executing with
-> superpowers:subagent-driven-development, REQUIRED SUB-SKILL:
+> dr-superpowers:subagent-driven-development, REQUIRED SUB-SKILL:
 > dr-superpowers:dispatching-tiered-implementers. Under
-> superpowers:executing-plans these lines are inert; ignore them.
+> dr-superpowers:executing-plans these lines are inert; ignore them.
 ```
 
 This is what makes the plan carry its own execution instruction, so a session

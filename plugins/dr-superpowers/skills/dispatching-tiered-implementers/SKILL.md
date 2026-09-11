@@ -23,7 +23,7 @@ The presence of a Codex executable does not identify the host. Missing native
 tools, advertised model metadata, or Superpowers skills blocks dispatch with a
 named prerequisite. Honor any user instruction to execute inline.
 
-Run superpowers:subagent-driven-development exactly as written, with one
+Run dr-superpowers:subagent-driven-development exactly as written, with one
 substitution: the implementer dispatch names a fleet agent instead of
 `general-purpose`.
 
@@ -47,7 +47,7 @@ dispatch each task's assigned implementer."
 
 **Does not change.** The brief and report file protocol, the review package, the
 five-round cap, the breaker and its adjudication rules, and the handoff to
-superpowers:finishing-a-development-branch. Implementers are still never
+dr-superpowers:finishing-a-development-branch. Implementers are still never
 dispatched in parallel, and superpowers' own final whole-branch review still runs
 as written, keeping its own model selection - what changes is that it is no
 longer the only reviewer.
@@ -58,7 +58,7 @@ Three, all named here or below: the model-selection rule in this section, the
 final whole-branch review under The final whole-branch review, and fix rounds 4
 and 5 for an external task under Resuming a Codex task.
 
-superpowers:subagent-driven-development states in bold that you must always
+dr-superpowers:subagent-driven-development states in bold that you must always
 specify the model explicitly when dispatching a subagent, because an omitted
 model inherits the session's model.
 
@@ -728,4 +728,4 @@ gates the handoff exactly as one of superpowers' own does, whichever reviewer
 raised it; a rejected one never does. Nothing about the Codex round's provenance
 changes a finding's weight once the third seat has confirmed it.
 
-The handoff to superpowers:finishing-a-development-branch is unchanged.
+The handoff to dr-superpowers:finishing-a-development-branch is unchanged.

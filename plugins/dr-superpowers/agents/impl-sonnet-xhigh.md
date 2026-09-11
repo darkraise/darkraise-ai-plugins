@@ -4,7 +4,7 @@ description: "Task implementer running Sonnet 5 at xhigh effort. Reserve tier in
 model: sonnet
 effort: xhigh
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: green
 ---
 

@@ -4,7 +4,7 @@ description: "Task implementer running Sonnet 5 at high effort. Dispatched by dr
 model: sonnet
 effort: high
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: green
 ---
 

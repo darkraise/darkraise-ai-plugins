@@ -27,11 +27,11 @@ Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it h
 
 When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
 
-- "Let's build X" → superpowers:brainstorming first, then implementation skills.
-- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
-- An approach decision is open (during brainstorming, or a plan task whose approach is undecided) → superpowers:selecting-approaches gates it.
-- Writing a plan → superpowers:assigning-implementers records each task's implementer.
-- Executing a plan with subagents → superpowers:dispatching-tiered-implementers dispatches and escalates them.
+- "Let's build X" → dr-superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → dr-superpowers:systematic-debugging first, then domain skills.
+- An approach decision is open (during brainstorming, or a plan task whose approach is undecided) → dr-superpowers:selecting-approaches gates it.
+- Writing a plan → dr-superpowers:assigning-implementers records each task's implementer.
+- Executing a plan with subagents → dr-superpowers:dispatching-tiered-implementers dispatches and escalates them.
 
 ## Red Flags
 

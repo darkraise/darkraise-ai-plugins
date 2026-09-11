@@ -4,7 +4,7 @@ description: "Task implementer running Opus 5 at xhigh effort. Reserve tier in d
 model: opus
 effort: xhigh
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: purple
 ---
 

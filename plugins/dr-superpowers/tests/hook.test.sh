@@ -2,11 +2,11 @@
 # The hook must fire for exactly three superpowers skills and stay silent for
 # everything else.
 #
-# superpowers:executing-plans is deliberately NOT matched: it runs plan tasks
+# dr-superpowers:executing-plans is deliberately NOT matched: it runs plan tasks
 # inline in the current session without subagents, so nudging it toward tiered
 # dispatch would push it to do the one thing it is designed not to do.
 #
-# superpowers:brainstorming IS matched, because that is where an approach
+# dr-superpowers:brainstorming IS matched, because that is where an approach
 # decision is open and selecting-approaches has something to say about it.
 set -uo pipefail
 
@@ -29,7 +29,7 @@ run_status() { # run_status <skill-name> - feed a synthetic PreToolUse payload, 
     | bash "$SCRIPT" >/dev/null 2>&1
 }
 
-for skill in superpowers:writing-plans superpowers:subagent-driven-development superpowers:brainstorming; do
+for skill in dr-superpowers:writing-plans dr-superpowers:subagent-driven-development dr-superpowers:brainstorming; do
   out=$(run "$skill")
   check "$skill: emits valid JSON" \
     "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
@@ -45,13 +45,13 @@ for skill in superpowers:writing-plans superpowers:subagent-driven-development s
 done
 
 check "writing-plans context names the assigning skill" \
-  "$(run superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'assigning-implementers')" "1"
+  "$(run dr-superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'assigning-implementers')" "1"
 check "subagent-driven-development context names the dispatching skill" \
-  "$(run superpowers:subagent-driven-development | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'dispatching-tiered-implementers')" "1"
+  "$(run dr-superpowers:subagent-driven-development | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'dispatching-tiered-implementers')" "1"
 check "brainstorming context names the selecting skill" \
-  "$(run superpowers:brainstorming | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'selecting-approaches')" "1"
+  "$(run dr-superpowers:brainstorming | jq -r '.hookSpecificOutput.additionalContext' | grep -c 'selecting-approaches')" "1"
 
-for skill in superpowers:executing-plans other:thing ""; do
+for skill in dr-superpowers:executing-plans other:thing ""; do
   label="${skill:-<empty>}"
   check "$label: emits nothing" "$(run "$skill" | wc -c | tr -d ' ')" "0"
   run_status "$skill"
@@ -81,7 +81,7 @@ check "hooks.json forces the bash interpreter" \
 
 # The planning nudge must mention the executor lane, or a planner will score
 # tasks correctly and never learn that an external lane exists.
-plan_ctx=$(run superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext')
+plan_ctx=$(run dr-superpowers:writing-plans | jq -r '.hookSpecificOutput.additionalContext')
 # -F dropped deliberately: this repo's GNU grep 3.0 (Git Bash/MSYS on
 # Windows) segfaults when -i and -F are combined, in any flag order. The
 # search term has no regex metacharacters, so plain -i is equivalent.

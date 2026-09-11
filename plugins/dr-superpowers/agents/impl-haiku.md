@@ -3,7 +3,7 @@ name: impl-haiku
 description: "Task implementer running Haiku 4.5. Dispatched by dr-superpowers for score 0: single-file transcription where the plan supplies the complete code."
 model: haiku
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: cyan
 ---
 

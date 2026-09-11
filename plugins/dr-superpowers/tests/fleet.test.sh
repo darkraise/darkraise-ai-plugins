@@ -81,7 +81,7 @@ for f in "$AGENTS"/*.md; do
 
       check "$base: does not set tools" "$(grep -c '^tools:' "$f")" "0"
       check "$base: preloads verification-before-completion" \
-        "$(grep -c '^  - superpowers:verification-before-completion$' "$f")" "1"
+        "$(grep -c '^  - dr-superpowers:verification-before-completion$' "$f")" "1"
       ;;
     judge-*|scout-*)
       # Role agents are read-only by registry, not by prose. The absent tools

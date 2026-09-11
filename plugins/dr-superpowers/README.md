@@ -16,7 +16,7 @@ Version 0.6.0 requires explicit conversion of old Codex or Claude plans: preserv
 the raw axes and original assignments, preview the recalculated score and proposed
 assignment, and obtain approval. Old policy ranks cannot be reused as v2 history.
 Claude translates known legacy
-`dcc-superpower-companions:` agent names at read time; disable the old plugin
+`dr-superpowers:` agent names at read time; disable the old plugin
 before enabling this one. Original assignments and evaluations remain intact.
 
 Native reviewers have independent contexts, without a promised cross-provider
@@ -117,7 +117,7 @@ wrapper costs more to orchestrate than it saves.
 an override on a second line, which is what makes a machine without Codex, a cold
 session, and an executor whose auth has lapsed all degrade by reading a line that
 is already there rather than re-deriving the assignment at dispatch. Under
-`superpowers:executing-plans`, which never dispatches subagents, both lines are
+`dr-superpowers:executing-plans`, which never dispatches subagents, both lines are
 simply inert instead - nothing dispatches, so nothing falls back.
 
 The following observations were made against the external CLI lane on Windows
@@ -172,7 +172,7 @@ self-review-free, which is why every finding goes through a third seat.
 
 **superpowers must be installed.** This plugin has no standalone use, and the
 coupling is harder than "it extends superpowers": every agent definition
-preloads `superpowers:verification-before-completion` through its `skills:`
+preloads `dr-superpowers:verification-before-completion` through its `skills:`
 frontmatter, and the assigning and dispatching skills defer to superpowers'
 `sdd-workspace`, `task-brief`, and `review-package` scripts. The Claude manifest
 declares Superpowers from `claude-plugins-official`, and the root marketplace
@@ -195,9 +195,9 @@ message instead.
 ## How it fires
 
 A `PreToolUse` hook on the `Skill` tool adds context when
-`superpowers:writing-plans`, `superpowers:subagent-driven-development`, or
-`superpowers:brainstorming` is invoked, and stays silent otherwise.
-`superpowers:brainstorming` is matched because that is where an approach
+`dr-superpowers:writing-plans`, `dr-superpowers:subagent-driven-development`, or
+`dr-superpowers:brainstorming` is invoked, and stays silent otherwise.
+`dr-superpowers:brainstorming` is matched because that is where an approach
 decision is open, and the gate that settles it belongs there rather than after
 the plan is drafted. The matcher is the tool name, so the script does run — and
 exits without output — on every `Skill` invocation of any kind. That is one
@@ -209,7 +209,7 @@ actively wrong: it is print-mode only, ignored with a warning in an interactive
 session, and in a non-interactive one it defers the `Skill` call itself so the
 skill never executes.
 
-`superpowers:executing-plans` is deliberately not matched. It runs plan tasks
+`dr-superpowers:executing-plans` is deliberately not matched. It runs plan tasks
 inline without subagents, so the `Implementer` lines are inert there, which is
 correct rather than broken.
 
@@ -254,7 +254,7 @@ findings.
 Everything else in the superpowers loop is untouched: the brief and report
 protocol, the review package, the five-round cap, the breaker and its
 adjudication rules, and the handoff to
-superpowers:finishing-a-development-branch.
+dr-superpowers:finishing-a-development-branch.
 
 Three superpowers instructions are superseded, and no others.
 

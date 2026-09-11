@@ -169,7 +169,7 @@ ledger beyond the reserve tier itself.
 
 ## What the range actually reaches
 
-A plan written to superpowers:writing-plans bans placeholders and requires the
+A plan written to dr-superpowers:writing-plans bans placeholders and requires the
 real code in every code step, so a compliant task scores 0 or 1 on spec
 completeness almost by construction. Combined with Rule S, initial assignments
 cluster in the 0 to 3 band - Haiku and Sonnet. Scores of 4 to 6 are reached

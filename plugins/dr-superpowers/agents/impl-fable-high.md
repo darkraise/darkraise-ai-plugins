@@ -4,7 +4,7 @@ description: "Task implementer running Fable 5 at high effort. Reserve tier in d
 model: fable
 effort: high
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: red
 ---
 

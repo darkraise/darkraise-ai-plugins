@@ -4,7 +4,7 @@ description: "Task implementer running Opus 5 at medium effort. Dispatched by dr
 model: opus
 effort: medium
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: purple
 ---
 

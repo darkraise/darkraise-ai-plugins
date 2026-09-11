@@ -31,7 +31,7 @@ approach decision."
 
 Two entry points:
 
-- **superpowers:brainstorming**, at the architectural path's "propose 2-3
+- **dr-superpowers:brainstorming**, at the architectural path's "propose 2-3
   approaches" step.
 - **A plan task scoring 3 on spec completeness**, which Rule S in
   [`../../reference/ladder.md`](../../reference/ladder.md) routes here rather
@@ -77,7 +77,7 @@ cost is inconvenient, which is exactly what the gate is here to stop.
 Generating candidate approaches before a root cause is located produces N
 guesses, and a ranking pass returns a winner whether or not any candidate is
 right - laundering speculation into a confident pick. An unlocated root cause is
-a debugging problem: use superpowers:systematic-debugging. Come back here only
+a debugging problem: use dr-superpowers:systematic-debugging. Come back here only
 if, with the cause in hand, more than one structurally distinct fix exists.
 
 ## When best-of-3 runs

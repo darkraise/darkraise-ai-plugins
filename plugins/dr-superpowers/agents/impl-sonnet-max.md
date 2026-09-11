@@ -4,7 +4,7 @@ description: "Task implementer running Sonnet 5 at max effort. Reserve tier in d
 model: sonnet
 effort: max
 skills:
-  - superpowers:verification-before-completion
+  - dr-superpowers:verification-before-completion
 color: green
 ---
 
