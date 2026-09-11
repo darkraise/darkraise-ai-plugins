@@ -15,9 +15,9 @@ pins, and records promotions and actual attempts.
 Version 0.6.0 requires explicit conversion of old Codex or Claude plans: preserve
 the raw axes and original assignments, preview the recalculated score and proposed
 assignment, and obtain approval. Old policy ranks cannot be reused as v2 history.
-Claude translates known legacy
-`dr-superpowers:` agent names at read time; disable the old plugin
-before enabling this one. Original assignments and evaluations remain intact.
+Claude translates known legacy agent names from the dcc-superpower-companions
+era at read time; disable that plugin before enabling this one. Original
+assignments and evaluations remain intact.
 
 Native reviewers have independent contexts, without a promised cross-provider
 seat. Enforce read-only tool restrictions when available; otherwise disclose
@@ -31,9 +31,10 @@ It refuses the primary checkout and initial staged, unstaged, or untracked work.
 Only the verified task diff is staged. Other writing agents/watchers and manual
 editing must stop in this worktree; fingerprints cannot establish authorship.
 
-Extends [superpowers](https://github.com/obra/superpowers) so that every task in
-an implementation plan records which implementer subagent runs it, chosen from a
-grid of model and reasoning-effort pairings.
+A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
+(MIT — see `LICENSES/`) that also records, for every task in an implementation
+plan, which implementer subagent runs it, chosen from a grid of model and
+reasoning-effort pairings.
 
 ## Why
 
@@ -170,22 +171,23 @@ self-review-free, which is why every finding goes through a third seat.
 
 ## Requirements
 
-**superpowers must be installed.** This plugin has no standalone use, and the
-coupling is harder than "it extends superpowers": every agent definition
-preloads `dr-superpowers:verification-before-completion` through its `skills:`
-frontmatter, and the assigning and dispatching skills defer to superpowers'
-`sdd-workspace`, `task-brief`, and `review-package` scripts. The Claude manifest
-declares Superpowers from `claude-plugins-official`, and the root marketplace
-allowlists that dependency. Codex checks for the required installed Superpowers
-skills before dispatch. Missing prerequisites must be resolved before execution.
+**The superpowers workflow ships in-plugin.** The fork carries the full skill
+set — brainstorming through finishing-a-development-branch — frozen at upstream
+6.3.0, so no other plugin is required: every agent definition preloads
+`dr-superpowers:verification-before-completion` through its `skills:`
+frontmatter, and the assigning and dispatching skills use the plugin's own
+`scripts/sdd-workspace`, `task-brief`, and `review-package`. Disable the
+upstream `superpowers` plugin: same-named skills in two enabled plugins can
+double-trigger.
 
 **Bash, jq, Git, and GNU timeout/coreutils.** These are requirements of the external executor lane:
 `scripts/detect-executors.sh` builds every field with `jq`, and
 `scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a
 message naming the dependency rather than degrading, because a missing `jq`
 would otherwise read as "no executor usable" or as a task Codex blocked on. The
-hook is the lenient case: without `jq` it degrades to a silent no-op, and
-`bash` is required for it to run at all. On Windows that means Git for
+SessionStart hook is the lenient case: without `jq` it still injects the entry
+point and only skips persisting the session record, and `bash` is required for
+it to run at all. On Windows that means Git for
 Windows. The hook declares `"shell": "bash"` so it takes the Git Bash
 route explicitly: without that key Claude Code falls back to PowerShell on a
 machine with no Git Bash, where the command is meaningless, and with it the
@@ -194,24 +196,33 @@ message instead.
 
 ## How it fires
 
-A `PreToolUse` hook on the `Skill` tool adds context when
-`dr-superpowers:writing-plans`, `dr-superpowers:subagent-driven-development`, or
-`dr-superpowers:brainstorming` is invoked, and stays silent otherwise.
-`dr-superpowers:brainstorming` is matched because that is where an approach
-decision is open, and the gate that settles it belongs there rather than after
-the plan is drafted. The matcher is the tool name, so the script does run — and
-exits without output — on every `Skill` invocation of any kind. That is one
-`bash` plus one `jq` per skill call, not zero.
+A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
+`dr-superpowers:using-superpowers` entry point as `additionalContext`, so every
+session starts with the skill-routing rules — including the pointers to
+`selecting-approaches`, `assigning-implementers`, and
+`dispatching-tiered-implementers` that a PreToolUse nudge used to add. The same
+script persists the session's `transcript_path`, `session_id`, `cwd`, and
+`source` to `~/.claude/dr-superpowers/sessions/<sanitized-cwd>.json` (last
+writer wins per directory); the session-budget tooling of a later release reads
+it. Malformed stdin skips persistence but never blocks the injection, and the
+hook always exits 0.
 
-The hook returns `additionalContext` and no `permissionDecision`. It has no
-opinion on whether the skill may run, and `defer` in particular would be
-actively wrong: it is print-mode only, ignored with a warning in an interactive
-session, and in a non-interactive one it defers the `Skill` call itself so the
-skill never executes.
+## Migrating from 0.x
 
-`dr-superpowers:executing-plans` is deliberately not matched. It runs plan tasks
-inline without subagents, so the `Implementer` lines are inert there, which is
-correct rather than broken.
+1.0.0 is standalone and breaking. On a machine with the old setup:
+
+1. **Re-point the marketplace.** The `darkraise` marketplace registration in
+   `~/.claude/settings.json` may still name `darkraise/claude-code-plugins`;
+   the canonical repository is `darkraise/darkraise-ai-plugins`. Remove and
+   re-add the marketplace (or edit the registration) to point there.
+2. **Statusline.** `dcc-statusline` is `dr-status` in this catalog; enable
+   `dr-status@darkraise` and disable the old name.
+3. **Telegram notifications.** `dcc-telegram-notify` is not in this catalog;
+   keep it installed from its previous source or drop it.
+4. **Disable the superseded plugins:** `superpowers` (its skills now ship
+   here), `dcc-superpower-companions` (folded into this plugin), and
+   `andrej-karpathy-skills` (its guidelines are folded into the skills where
+   they fire).
 
 ## What a plan looks like
 
@@ -273,6 +284,14 @@ Three superpowers instructions are superseded, and no others.
 
 The scores the plugin adds to reviews are additive to superpowers' own verdicts
 and never replace them, because its fix loop keys on those verdicts.
+
+## Licenses
+
+MIT. `LICENSES/` carries the licenses of the forked and folded projects:
+[superpowers](https://github.com/obra/superpowers) by Jesse Vincent (MIT),
+frozen at 6.3.0 with no upstream sync, and
+[andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills)
+(MIT).
 
 ## Tests
 
