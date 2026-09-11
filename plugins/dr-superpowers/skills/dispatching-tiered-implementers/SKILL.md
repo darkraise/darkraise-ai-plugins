@@ -647,6 +647,11 @@ Task <N>: fix round 3/5 (1 addressed, 1 open - stale cache; commits a7f..b21; pr
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
 | A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Adjudicate the report's argument rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
 
+Every row that stops you — stop and ask, or report BLOCKED — still ends the
+session the way dr-superpowers:subagent-driven-development requires: run
+`scripts/next-step PLAN_FILE` and make its block, verbatim, the last thing in
+your message.
+
 The silent-fallback rule matters more than it looks. If a bad agent name quietly
 degraded to the session default, every task would run at the session's model and
 effort and nothing in the output would reveal it. That is precisely the

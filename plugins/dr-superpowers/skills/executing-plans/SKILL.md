@@ -18,9 +18,10 @@ Load plan, review critically, execute all tasks, report when complete.
 ### Step 1: Load and Review Plan
 1. Ensure an isolated workspace: use dr-superpowers:using-git-worktrees to create one or verify the existing one
 2. Read plan file
-3. Review critically - identify any questions or concerns about the plan
-4. If concerns: Raise them with your human partner before starting
-5. If no concerns: Create todos for the plan items and proceed
+3. Resolve the ledger: run `scripts/sdd-workspace PLAN_FILE`, from the plugin root (two levels above this skill's directory); `progress.md` in the directory it prints is this plan's ledger. If it is absent, create it with the first line `# SDD ledger — plan: <plan file path>`. Tasks with a `Task <N>: complete` line are done — resume at the first task without one.
+4. Review critically - identify any questions or concerns about the plan
+5. If concerns: Raise them with your human partner before starting
+6. If no concerns: Create todos for the plan items not yet complete and proceed
 
 ### Step 2: Execute Tasks
 
@@ -28,7 +29,7 @@ For each task:
 1. Mark as in_progress
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
-4. Mark as completed
+4. Append `Task <N>: complete (commits <base7>..<head7>)` to the ledger, then mark as completed
 
 ### Step 3: Complete Development
 
@@ -47,6 +48,14 @@ After all tasks complete and verified:
 
 **Ask for clarification rather than guessing.**
 
+**Every session ends with the next step.** Whenever you stop before the plan
+is finished — for any reason above, a context-budget handoff, or your human
+partner asking you to stop — run `scripts/next-step PLAN_FILE`, from the
+plugin root, as your last action. The last thing in your final message is
+the block it prints, verbatim. It also rewrites the `## Next session` section
+of the primary checkout's `.superpowers/handoff/latest.md`; if it exits 4,
+say the handoff file could not be written.
+
 ## When to Revisit Earlier Steps
 
 **Return to Review (Step 1) when:**
@@ -61,4 +70,5 @@ After all tasks complete and verified:
 - Don't skip verifications
 - Reference skills when plan says to
 - Stop when blocked, don't guess
+- End every early stop with the `scripts/next-step` block
 - Never start implementation on main/master branch without explicit user consent

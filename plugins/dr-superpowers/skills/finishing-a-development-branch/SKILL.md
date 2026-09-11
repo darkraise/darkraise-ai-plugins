@@ -7,7 +7,7 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
-**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up.
+**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up → Report the next step.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -21,7 +21,12 @@ Run the project's full test suite (`npm test` / `cargo test` / `pytest` / `go te
 Tests failing (<N> failures). Must fix before completing:
 
 [Show failures]
+
+Next: fix these failures, then re-run dr-superpowers:finishing-a-development-branch.
 ```
+
+Do not run `scripts/next-step` here: the plan is not finished, and its ledger
+may already be deleted, so it would report the wrong next step.
 
 **If tests pass:** continue to Step 2.
 
@@ -200,6 +205,24 @@ Carry out the choice, then remove the worktree.
 **Otherwise:** The host environment owns this workspace — leave it in
 place. If your platform provides a workspace-exit tool, use it.
 
+## Step 7: Report the Next Step
+
+**Runs after Options 1, 2 and 3.** A discard ends at Step 6: the work is
+gone, so nothing follows from it.
+
+If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`,
+from the plugin root (two levels above this skill's directory), with the
+working directory inside the repository — after Option 1 that is the main
+repo root. It prints a `## Next session` block naming what follows the plan:
+the next program sub-project with its launch command and first prompt, or
+that the program is complete, or that the plan records no follow-on work. It
+also rewrites the primary checkout's `.superpowers/handoff/latest.md` to
+match, so a fresh session finds the same answer. If it exits 4, say the
+handoff file could not be written.
+
+The last thing in your final message is that block, verbatim. Without a
+plan file, end with: "No plan file — no follow-on work recorded."
+
 ## Quick Reference
 
 | Option | Merge | Push | Keep Worktree | Cleanup Branch |
@@ -223,3 +246,4 @@ place. If your platform provides a workspace-exit tool, use it.
 | "The merged-result failure is probably flaky" | A failing merged result stops everything. Branch and worktree stay put while you investigate. |
 | "The base branch is obviously main" | Confirm the fork point or ask. Merging into the wrong base is expensive to undo. |
 | "The push was rejected — force-push will fix it" | A rejected push means the remote moved. Investigate; force-push only on your human partner's explicit request. |
+| "I summarized the outcome — the next step is obvious" | Not to a fresh session or a partner who stepped away. End with the `next-step` block, verbatim. |

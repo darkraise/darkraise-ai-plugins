@@ -69,6 +69,13 @@ independently testable deliverable.
 **Spec:** [path to the spec/design doc this plan implements — the plan
 argues from the spec, so the spec travels with it; executors read both]
 
+**Execution:** [inline|subagent] — `claude --model <model> --effort <effort>` — [why]
+
+**Program:** [only when the spec is one sub-project of a program design:
+`<program spec path>` — sub-project <k> of <n> — next: <title of sub-project
+k+1, copied from the program's decomposition>. On the final sub-project,
+end with `— last` instead of `— next: …`. Omit the line otherwise.]
+
 ## Global Constraints
 
 [The spec's project-wide requirements — version floors, dependency limits,
@@ -152,7 +159,14 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan, run `scripts/next-step PLAN_FILE`, from the plugin
+root (two levels above this skill's directory). It prints the block for
+starting Task 1 in a fresh session — launch command from the Execution line
+and a first prompt — and records it in the primary checkout's
+`.superpowers/handoff/latest.md`. End your message with that block, verbatim,
+after the execution choice below.
+
+Offer execution choice:
 
 **"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
 

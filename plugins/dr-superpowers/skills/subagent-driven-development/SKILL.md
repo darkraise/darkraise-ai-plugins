@@ -30,6 +30,16 @@ that norms say you ask about first (a merge, a push to a shared branch, a
 publish); and a plan so broken that every path forward is a guess. For those,
 stop and ask.
 
+**Every session ends with the next step.** Whenever this session ends before
+the plan is finished — one of those four stops, a context-budget handoff, or
+your human partner asking you to stop — run `scripts/next-step PLAN_FILE`,
+from the plugin root (two levels above this skill's directory), as your last
+action. The last thing in your final message is the block it prints,
+verbatim. It also rewrites the `## Next session` section of the primary
+checkout's `.superpowers/handoff/latest.md`; if it exits 4, say the handoff
+file could not be written. When the plan finishes,
+dr-superpowers:finishing-a-development-branch runs it instead.
+
 ## When to Use
 
 ```dot
