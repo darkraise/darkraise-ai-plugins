@@ -58,6 +58,14 @@ check "schema declares a required array" \
   "$(jq -r 'if (.required|type) == "array" and (.required|length) > 0 then "ok" else "missing" end' \
       < "$HERE/../scripts/codex-report-schema.json")" "ok"
 
+# The ledger's per-task checkpoint reads these two arrays, so an executor-lane
+# task reports discovered issues and assumptions exactly as a Claude one does.
+check "schema carries the two checkpoint arrays" \
+  "$(jq -r '[.properties.discovered_issues.type, .properties.assumptions.type] | join(",")' \
+      < "$HERE/../scripts/codex-report-schema.json" | tr -d '\r')" "array,array"
+check "contract names both checkpoint fields" \
+  "$(grep -c -e '`discovered_issues`' -e '`assumptions`' "$HERE/../scripts/codex-task-contract.md")" "2"
+
 # --- validation happens before anything is spawned --------------------------
 check "rejects a model absent from codex-assignment" "$(rc_of --model gpt-4o --effort medium)" "2"
 check "rejects luna, which 400s on a ChatGPT account" "$(rc_of --model luna --effort medium)" "2"

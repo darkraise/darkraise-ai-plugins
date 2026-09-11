@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "required": ["status", "summary", "commit_subject", "questions"],
+  "required": ["status", "summary", "commit_subject", "questions", "discovered_issues", "assumptions"],
   "additionalProperties": false,
   "properties": {
     "status": {
@@ -19,6 +19,16 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "Required when status is NEEDS_CONTEXT; empty otherwise."
+    },
+    "discovered_issues": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Problems noticed while working that this task did not fix, one sentence each; empty when none."
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Decisions made where the brief was silent, one sentence each; empty when none."
     }
   }
 }

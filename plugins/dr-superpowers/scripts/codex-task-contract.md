@@ -29,3 +29,8 @@ review and fails later.
   imperative mood, no trailing period, 50 characters or fewer. Types are
   `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`.
 - `questions`: required when `status` is `NEEDS_CONTEXT`, empty otherwise.
+- `discovered_issues`: problems you noticed while working and did not fix,
+  because the brief did not ask for them - one sentence each. Empty when there
+  are none. Never fix one just to shorten this list.
+- `assumptions`: decisions you made where the brief was silent - one sentence
+  each. Empty when there are none.
