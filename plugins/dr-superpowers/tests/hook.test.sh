@@ -92,6 +92,16 @@ check "compact: under the 10,000-character hook cap" "$([ "${#ctx}" -lt 10000 ] 
 startup_ctx=$(payload | HOME="$HOME_A" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "startup: no snapshot" "$(grep -c '^## Compaction snapshot' <<<"$startup_ctx")" "0"
 
+# A prompt holding pasted terminal output carries raw C0 controls; JSON forbids
+# them unescaped inside a string, so the hook must not emit them.
+MSYS_NO_PATHCONV=1 jq -cn --arg c "$(printf 'red \033[31malert\033[0m done')" \
+  '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:$c}}' > "$TR"
+esc_out=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
+check "compact: control bytes keep the output valid JSON" \
+  "$(jq -e . >/dev/null 2>&1 <<<"$esc_out" && echo yes || echo no)" "yes"
+check "compact: control bytes stripped from the context" \
+  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$esc_out" 2>/dev/null | grep -c $'\033')" "0"
+
 # --- hooks.json wiring ---
 check "hooks.json is valid JSON" \
   "$(jq -e . "$HOOKS" >/dev/null 2>&1 && echo yes || echo no)" "yes"

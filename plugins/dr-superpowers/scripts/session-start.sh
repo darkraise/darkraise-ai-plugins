@@ -59,7 +59,11 @@ if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
   cap=$(( 9500 - ${#content} - 400 ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
-    snapshot=$(snapshot_build "$transcript_path" "${cwd:-$PWD}" "$cap" 2>/dev/null || true)
+    # Transcript text can carry raw C0 controls (pasted terminal output with
+    # ANSI codes); JSON forbids them unescaped and escape_for_json only covers
+    # the newline, carriage return and tab it re-encodes.
+    snapshot=$(snapshot_build "$transcript_path" "${cwd:-$PWD}" "$cap" 2>/dev/null \
+      | tr -d '\001-\010\013\014\016-\037' || true)
     if [ -n "$snapshot" ]; then
       context="${context}\n\n$(escape_for_json "$snapshot")"
     fi
