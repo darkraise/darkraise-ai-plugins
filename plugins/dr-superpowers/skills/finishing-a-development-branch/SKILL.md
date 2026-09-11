@@ -216,7 +216,9 @@ Which?
 Carry out the choice, then remove the worktree.
 
 **Otherwise:** The host environment owns this workspace — leave it in
-place. If your platform provides a workspace-exit tool, use it.
+place. If your platform provides a workspace-exit tool, use it. If this
+work came from a plan, delete its workspace — `rm -rf` on the directory
+`scripts/sdd-workspace PLAN_FILE` prints — before using the exit tool.
 
 ## Step 7: Report the Next Step
 

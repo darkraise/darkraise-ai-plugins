@@ -227,8 +227,8 @@ needs. dr-superpowers hands off instead.
   skill writes `latest.md` and the plan's `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
 - **Stops.** A saved plan and a finished task list always hand off; the final
-  review and finishing continue in the same session unless the budget says
-  otherwise.
+  review runs in the fresh session that follows, and finishing follows it in
+  that same session unless the budget says otherwise.
 - **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
   snapshot of branch, worktrees, dirty files, plans in flight and handoff
   staleness — verifies the worktree, and hands control back to the plan's
@@ -313,6 +313,9 @@ differences:
 7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
    unavailable model, an Executor line the wrapper refuses - are logged
    rulings, never silent fallbacks and never stops.
+8. **Session budget.** A budget line, a compaction snapshot, and the
+   dr-superpowers:handoff / dr-superpowers:resume-execution pair replace
+   upstream's unmeasured sessions — see [Session budget](#session-budget).
 
 Names written under older plugin prefixes resolve through
 [legacy-names.md](reference/legacy-names.md).

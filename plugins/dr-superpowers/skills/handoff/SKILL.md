@@ -19,8 +19,9 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   and `scripts/context-size` — said `handoff`. Act at the next ledger write,
   never mid-dispatch: finish the step you are in, write the ledger line that
   records it, then hand off.
-- A hard stop: the plan is saved, or every plan task is complete (the final
-  whole-branch review runs in a fresh session).
+- A hard stop: the plan is saved, or every plan task is complete under
+  subagent-driven-development (the final whole-branch review runs in a fresh
+  session).
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds.
 - Your human partner says they are stepping away for more than an hour, or
