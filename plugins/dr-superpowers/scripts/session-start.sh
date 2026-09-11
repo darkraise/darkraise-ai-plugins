@@ -18,8 +18,10 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   if [ -n "$transcript_path" ] && [ -n "$cwd" ]; then
     sessions_dir="${HOME}/.claude/dr-superpowers/sessions"
     key=$(printf '%s' "$cwd" | tr -c 'A-Za-z0-9' '-')
+    # Git Bash rewrites POSIX-looking values passed as native-binary arguments;
+    # every --arg here is opaque data, so suppress the conversion.
     mkdir -p "$sessions_dir" 2>/dev/null \
-      && jq -n --arg sid "$session_id" --arg tp "$transcript_path" \
+      && MSYS_NO_PATHCONV=1 jq -n --arg sid "$session_id" --arg tp "$transcript_path" \
             --arg cwd "$cwd" --arg src "$source_event" \
             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{session_id:$sid,transcript_path:$tp,cwd:$cwd,source:$src,timestamp:$ts}' \
