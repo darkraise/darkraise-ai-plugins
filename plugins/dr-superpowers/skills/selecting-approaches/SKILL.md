@@ -96,7 +96,8 @@ Everything not skipped and not qualifying lands on `advisor`.
 ## Run best-of-3
 
 **Draft.** Dispatch three `dr-superpowers:scout-sonnet` agents in
-parallel, one per candidate, per superpowers:dispatching-parallel-agents. Give
+parallel, one per candidate, dispatched in a single message so they run
+concurrently. Give
 each the same decision statement and the same constraints, and name its
 candidate's angle so the three do not converge. Each returns one committed
 approach, not a survey.

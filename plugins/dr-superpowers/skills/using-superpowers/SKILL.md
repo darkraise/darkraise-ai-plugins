@@ -29,6 +29,9 @@ When multiple skills apply, process skills come first — they set the approach,
 
 - "Let's build X" → superpowers:brainstorming first, then implementation skills.
 - "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+- An approach decision is open (during brainstorming, or a plan task whose approach is undecided) → superpowers:selecting-approaches gates it.
+- Writing a plan → superpowers:assigning-implementers records each task's implementer.
+- Executing a plan with subagents → superpowers:dispatching-tiered-implementers dispatches and escalates them.
 
 ## Red Flags
 
@@ -54,9 +57,6 @@ These thoughts mean STOP—you're rationalizing:
 If your harness appears here, read its reference file for special instructions:
 
 - Codex: `references/codex-tools.md`
-- Pi: `references/pi-tools.md`
-- Antigravity: `references/antigravity-tools.md`
-- Hermes Agent: `references/hermes-tools.md`
 
 ## User Instructions
 
