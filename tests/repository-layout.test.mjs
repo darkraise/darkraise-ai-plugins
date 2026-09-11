@@ -36,6 +36,7 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['reintroduced dependency', c => { c.dependencies = [{ name: 'superpowers', marketplace: 'claude-plugins-official' }]; }, /must not declare dependencies/, 'plugins/dr-superpowers/.claude-plugin/plugin.json'],
     ['reintroduced allowlist', c => { c.allowCrossMarketplaceDependenciesOn = ['claude-plugins-official']; }, /allowlist/],
     ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-superpowers/reference/stray.md'), 'superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
+    ['unresolved dr-superpowers reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-superpowers/reference/stray.md'), 'see dr-superpowers:no-such-skill\n'); }, /unresolved dr-superpowers reference no-such-skill/],
   ]) {
     await t.test(name, () => {
       const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
@@ -65,5 +66,18 @@ test('bundled-link check ignores links inside fenced code blocks', async () => {
     assert.deepEqual(validateRepository(dir), []);
     writeFileSync(file, '````\n[example](missing-example.md)\n````\n[live](missing-live.md)\n');
     assert.deepEqual(validateRepository(dir), [`plugins${sep}dr-superpowers${sep}skills${sep}selecting-approaches${sep}fenced.md: missing bundled reference missing-live.md`]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('reference check skips template placeholders and resolves agents', async () => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
+  try {
+    for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
+      cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
+    }
+    writeFileSync(resolve(dir, 'plugins/dr-superpowers/reference/placeholder.md'),
+      'subagent_type: dr-superpowers:impl-<model>-<effort>\nagent dr-superpowers:judge-fable\nskill dr-superpowers:writing-plans\n');
+    assert.deepEqual(validateRepository(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

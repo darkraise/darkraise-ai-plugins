@@ -95,6 +95,15 @@ export function validateRepository(root) {
         if (legacyAllowed.has(rel)) continue;
         readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
           if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
+          for (const match of line.matchAll(/dr-superpowers:([a-z0-9-]+)/g)) {
+            // A name followed by `<` is a template placeholder such as impl-<model>-<effort>.
+            if (line[match.index + match[0].length] === '<') continue;
+            const name = match[1];
+            if (!existsSync(resolve(root, 'plugins/dr-superpowers/skills', name)) &&
+                !existsSync(resolve(root, 'plugins/dr-superpowers/agents', `${name}.md`))) {
+              errors.push(`${rel}:${index + 1}: unresolved dr-superpowers reference ${name}`);
+            }
+          }
         });
       }
     };
