@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Print a read-only orientation snapshot for a session that picks up work, so
+# it costs one command instead of the five to eight a fresh session otherwise
+# spends on git status, logs, worktrees, ledgers and the handoff file.
+#
+# Usage: repo-audit
+# Exit: 0 ok; 2 usage or not inside a git repository.
+set -uo pipefail
+
+[ $# -eq 0 ] || { echo "usage: repo-audit" >&2; exit 2; }
+here="$(cd "$(dirname "$0")" && pwd)"
+. "$here/lib/plan.sh"
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) \
+  || { echo "repo-audit: not inside a git repository" >&2; exit 2; }
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel)
+
+branch=$(git symbolic-ref --short -q HEAD || echo "(detached)")
+head=$(git log -1 --format='%h %s' 2>/dev/null || echo "(no commits)")
+tracking=""
+if up=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null); then
+  read -r ahead behind < <(git rev-list --left-right --count "HEAD...$up")
+  tracking=" — $ahead ahead, $behind behind \`$up\`"
+fi
+
+echo "# Repo audit"
+echo
+echo "- Root: \`$root\`"
+[ "$root" = "$primary" ] || echo "- Primary checkout: \`$primary\`"
+echo "- Branch: \`$branch\` at $head$tracking"
+echo "- $("$here/context-size" 2>/dev/null)"
+
+echo
+echo "## Worktrees"
+git worktree list --porcelain | tr -d '\r' | awk '
+  /^worktree / { if (line != "") print line; line = "- `" substr($0, 10) "`"; next }
+  /^HEAD /     { line = line " " substr($0, 6, 7); next }
+  /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b); line = line " [" b "]"; next }
+  /^detached/  { line = line " (detached)"; next }
+  /^prunable/  { line = line " — prunable"; next }
+  END { if (line != "") print line }
+'
+
+dirty=$(git status --short)
+count=$(printf '%s' "$dirty" | grep -c . || true)
+echo
+echo "## Dirty files ($count)"
+[ "$count" -eq 0 ] || printf '%s\n' "$dirty" | head -n 20 | sed 's/^/    /'
+
+echo
+echo "## Plans in flight"
+found=0
+while IFS= read -r wt; do
+  for ledger in "$wt"/.superpowers/sdd/*/progress.md; do
+    [ -f "$ledger" ] || continue
+    found=1
+    plan_rel=$(head -n 1 "$ledger" | tr -d '\r' | sed -n 's/^# SDD ledger — plan: //p')
+    total="?"
+    if [ -n "$plan_rel" ] && [ -f "$wt/$plan_rel" ]; then
+      total=$(plan_tasks "$wt/$plan_rel" | grep -c . || true)
+    fi
+    done_n=$(ledger_done "$ledger" | grep -c . || true)
+    last=$(tr -d '\r' < "$ledger" | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-160)
+    has_handoff=no
+    [ -f "$(dirname "$ledger")/handoff.md" ] && has_handoff=yes
+    echo "- \`${plan_rel:-unknown plan}\` in \`$wt\`: $done_n of $total tasks complete; handoff.md: $has_handoff"
+    echo "  - last ledger line: $last"
+  done
+done < <(git worktree list --porcelain | tr -d '\r' | sed -n 's/^worktree //p')
+[ "$found" -eq 1 ] || echo "- none"
+
+echo
+echo "## Handoff"
+latest="$primary/.superpowers/handoff/latest.md"
+if [ -f "$latest" ]; then
+  echo "- \`$latest\`"
+  tr -d '\r' < "$latest" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'
+  mtime=$(stat -c %Y "$latest" 2>/dev/null || stat -f %m "$latest")
+  since=$(git -C "$primary" log -n 500 --format=%ct HEAD 2>/dev/null | awk -v t="$mtime" '$1 > t' | grep -c . || true)
+  echo "- Commits on the primary checkout's HEAD since it was written: $since"
+else
+  echo "- none"
+fi
+
+echo
+echo "## Compaction"
+if [ -f "$root/CLAUDE.md" ] && tr -d '\r' < "$root/CLAUDE.md" | grep -qiE '^#+[[:space:]]*compact instructions'; then
+  echo "- CLAUDE.md has a Compact Instructions section"
+else
+  echo "- CLAUDE.md has no Compact Instructions section — see reference/session-budget.md"
+fi
+
+echo
+echo "## Recent commits"
+git log -5 --oneline 2>/dev/null | sed 's/^/- /'
