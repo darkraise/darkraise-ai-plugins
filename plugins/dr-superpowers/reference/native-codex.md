@@ -181,11 +181,11 @@ review. Record the restriction mode and this limitation in the ledger.
 
 ## Claude rename compatibility
 
-On a Claude host only, translate the exact legacy agent prefix — the old plugin
-name `dcc-superpower-companions` followed by `:` — to `dr-superpowers:` when
-its suffix names an existing bundled agent file.
-Reject unknown suffixes. Preserve effort, Evaluation, and reserve overrides and
-record the namespace translation in the ledger without rewriting the plan.
+On a Claude host only, translate legacy skill and agent names per
+[legacy-names.md](legacy-names.md). A suffix outside that table is not a legacy
+name; it is handled as an unknown name. Preserve effort, Evaluation, and
+reserve overrides and record the namespace translation in the ledger without
+rewriting the plan.
 New Claude plans use `Host: claude` and `Routing policy: claude-v1`, with the
 same assignment-source field. Native-to-Claude conversion uses the explicit
 preview/approval process above: preserve raw axes and previous assignments, and
