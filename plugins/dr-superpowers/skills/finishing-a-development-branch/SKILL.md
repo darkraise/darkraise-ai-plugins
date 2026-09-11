@@ -25,8 +25,8 @@ Tests failing (<N> failures). Must fix before completing:
 Next: fix these failures, then re-run dr-superpowers:finishing-a-development-branch.
 ```
 
-Do not run `scripts/next-step` here: the plan is not finished, and its ledger
-may already be deleted, so it would report the wrong next step.
+Do not run `scripts/next-step` here: the branch is not ready to integrate, and
+it would send the next session straight back into this skill.
 
 **If tests pass:** continue to Step 2.
 
@@ -54,6 +54,12 @@ The base branch is whatever this work forked from — usually named in the
 plan, the conversation, or the branch's upstream. If it is not already
 known, ask: "This branch split from <your best guess> - is that correct?"
 Confirm before merging: merging into the wrong base is expensive to undo.
+
+**Rulings first.** If this work came from a plan with a ledger (`progress.md`
+in the directory `scripts/sdd-workspace PLAN_FILE` prints) and this session
+has not yet printed its "Rulings I made" list, print it now: every ledger line
+containing `Ruling:`, in order. Your human partner chooses how to integrate
+with those decisions in view.
 
 ## Step 4: Present Options
 
@@ -169,7 +175,14 @@ main repo root — worktree removal must run from outside the worktree —
 and use the `GIT_DIR`/`GIT_COMMON`/`WORKTREE_PATH` values captured in
 Step 2, from before that directory change.
 
-**If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
+A plan's workspace (`.superpowers/sdd/<plan>/`: ledger, briefs, reports,
+`handoff.md`) is git-ignored and lives in the worktree, so it goes with it —
+`git worktree remove` deletes ignored files without `--force`. Options 2 and 3
+keep it for the next session.
+
+**If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. If this
+work came from a plan, delete its workspace — `rm -rf` on the directory
+`scripts/sdd-workspace PLAN_FILE` prints. Done.
 
 **If `WORKTREE_PATH` is under `.worktrees/` or `worktrees/`:** Superpowers
 created this worktree — we own cleanup:

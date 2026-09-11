@@ -227,5 +227,10 @@ Wait for the user's response. If they request changes, make them and re-run the 
 
 **Implementation:**
 
-- Invoke the writing-plans skill to create a detailed implementation plan
-- Do NOT invoke any other skill. writing-plans is the next step.
+- Run `scripts/context-size`, from the plugin root (two levels above this
+  skill's directory). On exit 5 (handoff), invoke dr-superpowers:handoff with
+  the spec as the draft and the next action "Write the implementation plan
+  with dr-superpowers:writing-plans." — the plan is written in a fresh session.
+- Otherwise invoke the writing-plans skill to create a detailed implementation plan.
+- Do NOT invoke any other skill. writing-plans is the next step — in this
+  session or, after a handoff, the next one.

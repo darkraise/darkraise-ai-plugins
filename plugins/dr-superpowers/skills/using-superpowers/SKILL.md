@@ -52,6 +52,19 @@ These thoughts mean STOP—you're rationalizing:
 | "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
 | "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
 
+## Session Budget
+
+- `scripts/task-brief`, `scripts/review-package` and `scripts/context-size`
+  print a budget line. `handoff` means: finish the step in flight, then use
+  dr-superpowers:handoff. See [session-budget.md](../../reference/session-budget.md).
+- A session that picks up earlier work runs `scripts/repo-audit` first; a plan
+  with a ledger continues through dr-superpowers:resume-execution.
+- After more than an hour idle, start a fresh session from
+  `.superpowers/handoff/latest.md` rather than continuing: the prompt cache is
+  cold, and the next request re-writes the whole context.
+- After compaction, trust the compaction snapshot, the ledger and `git log`
+  over the summary.
+
 ## Platform Adaptation
 
 If your harness appears here, read its reference file for special instructions:
