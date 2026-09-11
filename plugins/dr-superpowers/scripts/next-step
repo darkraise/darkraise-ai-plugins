@@ -15,6 +15,7 @@
 set -euo pipefail
 
 usage() { echo "usage: next-step [--complete] PLAN_FILE" >&2; exit 2; }
+. "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 
 complete=0
 if [ "${1:-}" = "--complete" ]; then complete=1; shift; fi
@@ -33,17 +34,7 @@ slug=$(basename "$plan" .md)
 
 plan_text=$(tr -d '\r' < "$plan")
 
-# Same fence-aware heading rule as task-brief, so both count the same tasks.
-tasks=$(awk '
-  /^```/ { infence = !infence }
-  !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
-    line = $0
-    sub(/^#+[ \t]+Task[ \t]+/, "", line)
-    n = line; sub(/[^0-9].*$/, "", n)
-    t = line; sub(/^[0-9]+[: \t.-]*/, "", t)
-    print n "\t" t
-  }
-' <<<"$plan_text")
+tasks=$(plan_tasks "$plan")
 [ -n "$tasks" ] || { echo "no tasks in ${plan} (no heading matching 'Task N')" >&2; exit 3; }
 total=$(wc -l <<<"$tasks" | tr -d ' ')
 
@@ -67,7 +58,7 @@ if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
   if head -n 1 <<<"$ledger_text" | grep -qF "plan: $rel"; then
     has_ledger=1
     ledger_note="ledger \`$ledger_shown\`"
-    done_tasks=$(sed -n 's/^Task \([0-9][0-9]*\): complete.*/\1/p' <<<"$ledger_text" | sort -un)
+    done_tasks=$(ledger_done "$ledger_file")
   else
     ledger_note="the ledger at \`$ledger_shown\` belongs to another plan and is ignored"
   fi
