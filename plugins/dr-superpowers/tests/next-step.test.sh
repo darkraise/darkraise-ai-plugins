@@ -174,6 +174,7 @@ run "$REPO" "$PLAN_REL"
 check "unwritable handoff: exits 4" "$status" "4"
 has "unwritable handoff: block still printed" "$out" "**Next:** Start at Task 1 (First thing)."
 has "unwritable handoff: says so on stderr" "$(cat "$TMP/stderr")" "could not write"
+has "unwritable handoff: says so on stdout" "$out" "next-step: could not write"
 rm -f "$REPO/.superpowers/handoff"
 
 # --- final review clean: finishing is next ---
@@ -212,6 +213,25 @@ run "$REPO" docs/plans/empty.md
 check "no tasks: exits 3" "$status" "3"
 
 git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
+
+# --- failures are visible on stdout ---
+# Every non-zero exit prints on stdout too: a session that surfaces only
+# stdout would otherwise see nothing at all from the script whose job is
+# saying what happens next. Always go through run(): it cds into the fixture
+# repo, so the script cannot resolve the real checkout and overwrite its
+# handoff file.
+run "$REPO" docs/plans/no-such-plan.md
+check "missing plan: exits 2" "$status" "2"
+has "missing plan: says so on stdout" "$out" "next-step: no such file"
+
+printf '# Empty plan\n\n**Goal:** nothing\n' > "$REPO/docs/plans/2026-01-01-empty.md"
+run "$REPO" docs/plans/2026-01-01-empty.md
+check "no tasks: exits 3 (stdout form)" "$status" "3"
+has "no tasks: says so on stdout" "$out" "next-step: no tasks in"
+
+run "$REPO"
+check "no arguments: exits 2" "$status" "2"
+has "no arguments: prints usage on stdout" "$out" "next-step: usage:"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

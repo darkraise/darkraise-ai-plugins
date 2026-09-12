@@ -19,7 +19,16 @@
 #       latest.md could not be written.
 set -euo pipefail
 
-usage() { echo "usage: next-step [--complete] PLAN_FILE | next-step --draft DRAFT_FILE --next ACTION" >&2; exit 2; }
+# Failures print on stdout as well as stderr. A session that surfaces only
+# stdout would otherwise get an empty result from the one script whose whole
+# job is saying what happens next.
+fail() { # fail EXIT MESSAGE
+  printf 'next-step: %s\n' "$2"
+  printf 'next-step: %s\n' "$2" >&2
+  exit "$1"
+}
+
+usage() { fail 2 "usage: next-step [--complete] PLAN_FILE | next-step --draft DRAFT_FILE --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 
 complete=0 draft=0 next_action=""
@@ -34,7 +43,7 @@ case "${1:-}" in
 esac
 [ $# -eq 1 ] || usage
 plan=$1
-[ -f "$plan" ] || { echo "no such file: $plan" >&2; exit 2; }
+[ -f "$plan" ] || fail 2 "no such file: $plan — run it from the repository root, or check the plan path"
 
 root=$(git rev-parse --show-toplevel)
 common=$(git rev-parse --path-format=absolute --git-common-dir)
@@ -55,7 +64,7 @@ if [ "$draft" -eq 1 ]; then
   prompt="Continue from \`$rel\` (the authority): $next_action Read \`.superpowers/handoff/latest.md\` first."
 else
   tasks=$(plan_tasks "$plan")
-  [ -n "$tasks" ] || { echo "no tasks in ${plan} (no heading matching 'Task N')" >&2; exit 3; }
+  [ -n "$tasks" ] || fail 3 "no tasks in ${plan} (no heading matching 'Task N')"
   total=$(wc -l <<<"$tasks" | tr -d ' ')
 
   execution=$(plan_header_line "$plan" Execution)
@@ -179,6 +188,5 @@ write_handoff() {
 }
 if ! write_handoff 2>/dev/null; then
   rm -f "$handoff.tmp" 2>/dev/null || true
-  echo "next-step: could not write $handoff — copy the block above into it by hand" >&2
-  exit 4
+  fail 4 "could not write $handoff — copy the block above into it by hand"
 fi
