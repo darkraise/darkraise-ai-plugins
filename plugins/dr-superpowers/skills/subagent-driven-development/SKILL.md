@@ -57,20 +57,22 @@ ledger and the tool results carry the record.
 
 **Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are the four named below, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
 
-**Rulings, not stalls.** A running plan does not wait on a human. Conflicts,
-ambiguities, plan defects, a cap you would have asked to exceed, a dispatch
-problem — decide them. The spec is the binding authority, the plan is its
-argument, and your judgment settles what neither answers. Record every decision
-in the ledger as `Ruling: <what you decided> — <why> — <what it costs if
-wrong>`, say it aloud, and keep going. A wrong ruling costs rework your human
-partner can see and undo; a session parked on a question costs their whole day
-and buys nothing.
+**Rulings, not stalls.** A running plan does not wait on a human, and it does
+not wait on your judgment either. You decide the mechanical problems yourself —
+the dispatch-problems table, legacy names, resuming or re-dispatching by cache
+state, batching, a report missing a required section, a tool failure — and
+record each in the ledger as `Ruling: <what you decided> — <why> — <what it
+costs if wrong>`, said aloud. Everything that needs judgment about the plan,
+the spec or a finding goes to the ruling seat (see The Ruling Seat): it reads
+the whole plan and the spec, which you never read, and returns a verdict you
+carry out. A wrong ruling costs rework your human partner can see and undo; a
+session parked on a question costs their whole day and buys nothing.
 
 Four things stop you, and only these: an irreversible or destructive
 operation; a security-sensitive action; a side effect outside this worktree
 that norms say you ask about first (a merge, a push to a shared branch, a
-publish); and a plan so broken that every path forward is a guess. For those,
-stop and ask.
+publish); and a ruling-seat `BLOCKED` verdict — a plan so broken that every
+path forward is a guess. For those, stop and ask.
 
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished — one of those four stops, a context-budget handoff, or
@@ -108,9 +110,9 @@ digraph when_to_use {
 - Review after each task (spec, scope, verification, quality), broad review at the end
 - Faster iteration (no human-in-loop between tasks)
 
-Mode switches between this skill and dr-superpowers:executing-plans happen only
-at a task boundary where every earlier task is complete, recorded as a
-`Ruling:` line.
+The plan's `**Execution:**` line decides the mode. Only your human partner's
+explicit instruction switches it, and only at a task boundary where every
+earlier task is complete, recorded as a `Ruling:` line.
 
 ## The Process
 
@@ -127,26 +129,26 @@ digraph process {
         "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)" [shape=box];
         "Verdicts clean and no score 1-8?" [shape=diamond];
         "Finding conflicts with plan text?" [shape=diamond];
-        "Rule on the conflict, ledger the ruling" [shape=box];
+        "Ruling seat rules on the conflict (./references/ruling-prompt.md)" [shape=box];
         "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" [shape=box];
         "Dispatch scoped re-review with progress (./references/re-review-prompt.md)" [shape=box];
         "All findings addressed?" [shape=diamond];
         "R = 5?" [shape=diamond];
-        "Adjudicate each open finding" [shape=box];
-        "Any load-bearing finding?" [shape=diamond];
-        "Rule and continue; stop only if every path forward is a guess" [shape=box];
+        "Ruling seat adjudicates each open finding" [shape=box];
+        "Any CONFIRMED-GAP or AMEND?" [shape=diamond];
+        "Carry the fix or amendment forward; BLOCKED stops" [shape=box];
         "Park findings in ledger with rulings" [shape=box];
         "Append completion to ledger, mark todo complete" [shape=box];
     }
 
-    "Setup: worktree, ledger check, read plan, legacy names, pre-flight review" [shape=box];
+    "Setup: worktree, ledger check, plan header, legacy names, pre-flight ruling" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Final review: code reviewer + Codex round, judge verifies the union" [shape=box];
-    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" [shape=box];
+    "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" [shape=box];
     "Final review clean: ledger it, print rulings" [shape=box];
     "Use dr-superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
-    "Setup: worktree, ledger check, read plan, legacy names, pre-flight review" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
+    "Setup: worktree, ledger check, plan header, legacy names, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
     "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" -> "Implementer asks questions?";
     "Implementer asks questions?" -> "Answer questions, provide context" [label="yes"];
     "Answer questions, provide context" -> "Implementer implements, tests, commits, self-reviews";
@@ -155,24 +157,24 @@ digraph process {
     "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)" -> "Verdicts clean and no score 1-8?";
     "Verdicts clean and no score 1-8?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "Verdicts clean and no score 1-8?" -> "Finding conflicts with plan text?" [label="no"];
-    "Finding conflicts with plan text?" -> "Rule on the conflict, ledger the ruling" [label="yes"];
-    "Rule on the conflict, ledger the ruling" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung";
+    "Finding conflicts with plan text?" -> "Ruling seat rules on the conflict (./references/ruling-prompt.md)" [label="yes"];
+    "Ruling seat rules on the conflict (./references/ruling-prompt.md)" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung";
     "Finding conflicts with plan text?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" [label="no"];
     "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" -> "Dispatch scoped re-review with progress (./references/re-review-prompt.md)";
     "Dispatch scoped re-review with progress (./references/re-review-prompt.md)" -> "All findings addressed?";
     "All findings addressed?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "All findings addressed?" -> "R = 5?" [label="no"];
     "R = 5?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" [label="no - next round"];
-    "R = 5?" -> "Adjudicate each open finding" [label="yes - breaker trips"];
-    "Adjudicate each open finding" -> "Any load-bearing finding?";
-    "Any load-bearing finding?" -> "Rule and continue; stop only if every path forward is a guess" [label="yes"];
-    "Any load-bearing finding?" -> "Park findings in ledger with rulings" [label="no"];
+    "R = 5?" -> "Ruling seat adjudicates each open finding" [label="yes - breaker trips"];
+    "Ruling seat adjudicates each open finding" -> "Any CONFIRMED-GAP or AMEND?";
+    "Any CONFIRMED-GAP or AMEND?" -> "Carry the fix or amendment forward; BLOCKED stops" [label="yes"];
+    "Any CONFIRMED-GAP or AMEND?" -> "Park findings in ledger with rulings" [label="no"];
     "Park findings in ledger with rulings" -> "Append completion to ledger, mark todo complete";
     "Append completion to ledger, mark todo complete" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Final review: code reviewer + Codex round, judge verifies the union" [label="no"];
-    "Final review: code reviewer + Codex round, judge verifies the union" -> "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals";
-    "Final findings? ONE fix dispatch, one scoped re-review, adjudicate residuals" -> "Final review clean: ledger it, print rulings";
+    "Final review: code reviewer + Codex round, judge verifies the union" -> "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals";
+    "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" -> "Final review clean: ledger it, print rulings";
     "Final review clean: ledger it, print rulings" -> "Use dr-superpowers:finishing-a-development-branch";
 }
 ```
@@ -212,11 +214,16 @@ a ledger file, not only in todos.
 - `git clean -fdx` will destroy the workspace (it's git-ignored scratch); if
   that happens, recover from `git log`.
 
-Read the plan once, note its context and Global Constraints, and create a
-todo per task. If the plan names a Spec, read that too: the spec is the
-authority the plan argues from, and conflicts inside the plan resolve
-against it. A plan with no reachable spec gets a ledger note saying so —
-rulings made without one are provisional.
+Read the plan's header, never the whole plan: run
+`scripts/task-brief --header PLAN_FILE`, from the plugin root, and read the
+file it prints (`<workspace>/plan-header.md`). Note the Execution line, the
+Global Constraints and the Contracts, and create a todo per Task index entry.
+A plan written before 1.4.0 may have no Task index: then run
+`scripts/task-brief PLAN_FILE N` for N = 1, 2, … until it exits 3, and take
+each task's title from its brief's first line. You never read the spec: the
+ruling seat, the plan review and the final review do. If the plan's
+`**Spec:**` path is unreachable, note it in the ledger and say so in every
+ruling-seat dispatch; the seat marks its rulings provisional.
 
 **Resolve legacy names.** Plans written before this plugin's 1.2.0 may name
 skills and agents under older plugin prefixes, in the header and in
@@ -226,27 +233,21 @@ plan, and log one `Ruling: translated <old> -> <new> — legacy plugin name —
 none` per distinct name. A header demanding the retired tiered-dispatch skill
 needs nothing further: this skill reads the `**Implementer:**` lines itself.
 
-Before dispatching Task 1, scan the plan once for conflicts, writing down
-what you checked as you check it:
+Before dispatching Task 1, send one `preflight` item to the ruling seat (see
+The Ruling Seat). It scans the whole plan against the spec for:
 
-- tasks that contradict each other or the plan's Global Constraints
+- tasks that contradict each other, the Contracts, or the Global Constraints
 - anything the plan explicitly mandates that the review rubric treats as a
   defect (a test that asserts nothing, verbatim duplication of a logic block)
 
-The scan's output is a table, not a verdict. One row for every pair of tasks
-that share a file or an interface: the two tasks, what one produces against
-what the other consumes, and what you found. One row for every task: whether
-its own text agrees with itself — the tests it specifies against the code it
-specifies, the files it creates against the files it later touches. "The scan
-is clean" without those rows is not a scan you ran.
-
-Write the table to the ledger. Rule on everything you find before execution
-begins — each finding against the plan text that mandates it — and record
-each ruling in the ledger. If the scan is clean, proceed without comment.
-Rule on each conflict it surfaces — the spec is the binding authority, the
-plan is its argument — record the ruling beside its row, and dispatch
-Task 1. The review loop remains the net for conflicts that only emerge from
-implementation.
+The seat returns a table, not a verdict: one row for every pair of tasks that
+share a file or an interface, and one row for every task on whether its own
+text agrees with itself. Verdict blocks follow for the rows that found
+something. Write the whole output to `<workspace>/preflight.md`, carry out
+each verdict, log `Ruling: pre-flight — <clean | K findings, see
+preflight.md> — none`, and dispatch Task 1. A resumed ledger that already
+holds that line skips the dispatch. The review loop remains the net for
+conflicts that only emerge from implementation.
 
 ## Seats
 
@@ -257,6 +258,7 @@ Every seat is named, so nothing silently inherits your session's model.
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
 | External implementer | The task's `**Executor:**` line, via [external-executor.md](../../reference/external-executor.md) | Set by the wrapper |
 | Task reviewer | `dr-superpowers:judge-fable`; `dr-superpowers:judge-opus` when Fable is unavailable or your human partner declined it — say the substitution aloud | None |
+| Ruling seat | `dr-superpowers:judge-fable`; `dr-superpowers:judge-opus` under the same rule | None |
 | Scoped re-review | general-purpose | Explicit, cheap-to-mid |
 | Final review | general-purpose | Explicit, most capable available |
 
@@ -289,6 +291,9 @@ Task <N>: minor (deferred): <one-liner>
 Task <N>: parked — <finding> — Ruling: <why the code stands>
 Task <N>: Ruling: <finding> — <what was decided and why>
 Task <N>: BLOCKED — <agent> exhausted — <what a human must decide>
+Task <N>: BLOCKED — ruling seat — <what a human must decide>
+Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
+Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: complete (commits a..b, review clean | K parked[; scores spec s / scope c / verification v / quality q[, K=3]]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
@@ -306,6 +311,9 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `remaining` the parked findings. A batch report's sections are copied onto
   each task's complete line, attributed per task where the report names one.
 - Write each line in the same message as your other bookkeeping, never later.
+- A ruling-seat `BLOCKED` that belongs to no task (a `preflight` row, a
+  Header amendment) is logged against the lowest-numbered task without a
+  complete line, so recovery reads it as that task's terminal line.
 
 **Recovery.** For task N, take the last line in file order among its
 `Task <N>:` lines and any `Group` line covering N, stepping over
@@ -317,7 +325,7 @@ Then:
 | `complete` | Done; never re-dispatch |
 | `BLOCKED` | Terminal; never re-dispatch. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `fix round R/5` or `review round R/5`, R < 5 | Resume the loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
-| `fix round 5/5` or `review round 5/5` | Go to the breaker and adjudicate |
+| `fix round 5/5` or `review round 5/5` | Go to the breaker |
 | `implementer … (assigned …)` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it; otherwise dispatch the same agent fresh |
 | none | Not started |
 
@@ -328,6 +336,57 @@ merge base for Task 1. An old `(scored at dispatch)` line reads as assigned.
 **Plan state.** Every task complete and no `Final review:` line: go to Final
 Review. A `Final review: clean` line: the review is done — go to
 dr-superpowers:finishing-a-development-branch.
+
+## The Ruling Seat
+
+Judgment belongs to the ruling seat, never to you, whatever model you run on.
+It reads the whole plan, the spec, `amendments.md` and the ledger; you read
+the header and one brief at a time.
+
+**When.** Send the seat an item at each of these points, batching every item
+that arises at one point into one dispatch:
+
+| Kind | Decision point |
+|---|---|
+| `preflight` | Once, before Task 1 (Setup) |
+| `plan-conflict` | A review finding labelled plan-mandated, or one that conflicts with what the plan's text requires |
+| `cannot-verify` | Every "⚠️ Cannot verify from diff" item, before the task completes |
+| `risk3-spread` | A risk-3 criterion whose three scores spread by more than 6 points |
+| `breaker` | Every finding still open after round 5/5 |
+| `blocked-plan` | An implementer BLOCKED because the plan is wrong |
+| `codex-empty-diff` | A Codex fix round that returned DONE with an empty diff and an argument ([external-executor.md](../../reference/external-executor.md)) |
+| `final-residual` | Findings still open after the final review's one fix wave |
+
+**How.** Write `<workspace>/rulings-<point>.md` listing each item: an id, its
+kind, its task (or `plan`), and the paths it needs — brief, report, review
+packages — with the findings copied verbatim. Dispatch
+`dr-superpowers:judge-fable` (`judge-opus` under the Fable-unavailable rule,
+said aloud) with [ruling-prompt.md](references/ruling-prompt.md), expanding
+its placeholders. Codex hosts use a native judge at Astra high or above
+([native-codex.md](../../reference/native-codex.md)).
+
+**Carry out each verdict**, and copy its `Ruling:` line into the ledger
+verbatim:
+
+- **CONFIRMED-GAP** — the finding is real. Mid-task it enters the fix loop
+  with the ruling's smallest fix in the fix message. At the breaker it is
+  logged `Task <N>: Ruling: <finding> — <ruling>` and carried into the next
+  dependent task's dispatch.
+- **PARK** — log `Task <N>: parked — <finding> — Ruling: <why>`; the code
+  stands.
+- **AMEND** — copy the entry, from its `## A?` line through the New fence's
+  closing line, to `<workspace>/amend-<id>.md` and run
+  `scripts/plan-amend PLAN_FILE <workspace>/amend-<id>.md`, from the plugin
+  root. On `amended: A<k> …`, write the amendment ledger line; the next
+  dispatch uses a fresh `task-brief`, which carries the amendment. On
+  `rejected: …`, make one fresh seat dispatch carrying the entry and the
+  rejection output; a second rejection is BLOCKED.
+- **BLOCKED** — log `Task <N>: BLOCKED — ruling seat — <decision>`, name it
+  in your final message, and stop.
+
+Never soften, merge or second-guess a verdict. If you think the seat is
+wrong, carry the verdict out anyway: the ledger line is where your human
+partner sees it.
 
 ## Session Budget
 
@@ -358,6 +417,8 @@ and its change, send the whole batch to a single subagent (the highest tier any
 of its tasks names), and review its diff as one unit. Reserve
 one-dispatch-per-task for work that needs its own judgment, its own tests, or
 its own review surface. A batched task never runs on an external executor.
+Decide batching from the briefs of the contiguous candidate tasks, extracted
+with `task-brief`; you never read task text any other way.
 
 Everything you paste into a dispatch prompt — and everything a subagent
 prints back — stays resident in your context for the rest of the session
@@ -396,11 +457,14 @@ these steps directly.
   dispatch so the brief stays the single source of
   requirements. Your dispatch should contain: (1) one line on where this
   task fits in the project; (2) the brief path, introduced as "read this
-  first — it is your requirements, with the exact values to use verbatim";
+  first — it is your requirements, with the exact values to use verbatim,
+  and it ends with the plan's Global Constraints and Contracts";
   (3) interfaces and decisions from earlier tasks that the brief cannot
-  know; (4) your resolution of any ambiguity you noticed in the brief —
-  including, when the brief names a skill under an old plugin prefix, that
-  legacy names resolve per `reference/legacy-names.md`; (5) the report-file
+  know; (4) the ruling-seat verdicts in the ledger that bear on this task,
+  copied verbatim (an ambiguity you notice in the brief goes to the seat as a
+  `plan-conflict` item before you dispatch) — and, when the brief names a
+  skill under an old plugin prefix, that legacy names resolve per
+  `reference/legacy-names.md`; (5) the report-file
   path and report contract. Exact values (numbers, magic strings, signatures,
   test cases) appear only in the brief. Never make a subagent read the whole
   plan file.
@@ -411,8 +475,8 @@ these steps directly.
 - A dispatch prompt describes one task, not the session's history. Do not
   paste accumulated prior-task summaries ("state after Tasks 1-3") into
   later dispatches — a real session's dispatch hit 42k chars of which 99%
-  was pasted history. A fresh subagent needs its task, the interfaces it
-  touches, and the global constraints. Nothing else.
+  was pasted history. A fresh subagent needs its brief, which already
+  carries its task, the Contracts and the Global Constraints. Nothing else.
 - The dispatch carries the no-subagents contract (it is in the
   implementer template): the implementer never dispatches subagents —
   not helpers, and never a reviewer. Review arrives from you, after the
@@ -446,15 +510,15 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 Run `date +%s` in the same Bash call as `review-package` and keep the value as
 `t0` — the cache rule in step 4 needs it.
 
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
+**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
 
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
 
 **BLOCKED:** The implementer cannot complete the task. Assess the blocker:
 1. If it's a context problem, provide more context and re-dispatch the same agent
 2. If the task requires more reasoning, re-dispatch on the successor rung and write a new assigned line — see [escalation.md](references/escalation.md)
-3. If the task is too large, break it into smaller pieces
-4. If the plan itself is wrong, rule on the correction, ledger it, and re-dispatch with the ruling carried in the dispatch
+3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
+4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
 
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
 
@@ -485,40 +549,35 @@ needed.
   Put the invariant material first and the criteria block last, as the
   template does: on the risk-3 path the three prompts then share a long
   identical prefix.
-- **Reviewer inputs:** the brief file, the report file, and the review
-  package — plus the global constraints that bind the task. Never tell the
-  reviewer which lane produced the diff: a judge that knows the author scores
-  the author.
-- The global-constraints block you hand the reviewer is its attention
-  lens. Copy the binding requirements verbatim from the plan's Global
-  Constraints section or the spec: exact values, exact formats, and the
-  stated relationships between components ("same layout as X", "matches
-  Y"). The reviewer's template already carries the process rules (YAGNI,
-  test hygiene, review method) — the constraints block is for what THIS
-  project's spec demands.
+- **Reviewer inputs:** the brief file (it ends with the plan's Global
+  Constraints and Contracts — the reviewer's attention lens), the report
+  file, and the review package. Never tell the reviewer which lane produced
+  the diff: a judge that knows the author scores the author.
 - Do not add open-ended directives like "check all uses" or "run race tests
   if useful" without a concrete, task-specific reason
 - Do not ask a reviewer to re-run tests the implementer already ran on the
   same code — the implementer's report carries the test evidence
 - Do not pre-judge findings for the reviewer — never instruct a reviewer to
   ignore or not flag a specific issue. If you believe a finding would be a
-  false positive, let the reviewer raise it and adjudicate it in the review
-  loop. If the prompt you are writing contains "do not flag," "don't treat X
+  false positive, let the reviewer raise it; the review loop and, at the
+  cap, the ruling seat decide it. If the prompt you are writing contains "do not flag," "don't treat X
   as a defect," "at most Minor," or "the plan chose" — stop: you are
   pre-judging, usually to spare yourself a review loop.
 
 **Scores are additive.** The judge returns the spec and quality verdicts and
 four scores — spec, scope, verification, quality — each 1 to 20 against
 [task-review.md](../../criteria/task-review.md). Read them as bands: **1-8
-fails** and joins the fix-loop trigger; **9-13** is borderline, recorded and
-adjudicated by you; **14-20 passes**. The verdicts still drive the loop; a
+fails** and joins the fix-loop trigger; **9-13** is borderline, recorded on
+the complete line for the final review to triage, never adjudicated by you;
+**14-20 passes**. The verdicts still drive the loop; a
 judge that returns scores but drops the verdicts has produced an unusable
 review — re-dispatch it.
 
 **Risk 3.** When the task's `**Evaluation:**` line scored risk 3, dispatch three
 independent seats on the same inputs and average each criterion. If the three
-scores for any criterion spread by more than 6 points, read the diff yourself
-rather than trusting the average: the criterion failed to discriminate on this
+scores for any criterion spread by more than 6 points, send a `risk3-spread`
+item with the three reviews to the ruling seat rather than trusting the
+average: the criterion failed to discriminate on this
 diff. One of the three seats is Codex when usable — see
 [external-executor.md](../../reference/external-executor.md) §Risk-3 Codex
 seat; otherwise, or when that seat times out, a third Claude judge. Never
@@ -526,15 +585,15 @@ average two scores as if three had voted.
 
 The task reviewer may report "⚠️ Cannot verify from diff" items — requirements
 that live in unchanged code or span tasks. These do not block the rest of the
-review, but you must resolve each one yourself before marking the task
-complete: you hold the plan and cross-task context the reviewer
-lacks. If you confirm an item is a real gap, treat it as a failed spec
-review — it enters the fix loop with the other findings.
+review, but each goes to the ruling seat as a `cannot-verify` item before
+the task completes: the seat holds the plan and cross-task context the
+reviewer lacks. A CONFIRMED-GAP is a failed spec review — it enters the fix
+loop with the other findings.
 
 ### 4. The fix loop
 
 The loop triggers when the review reports spec ❌, any Critical or Important
-finding, any score of 1-8, or a ⚠️ item you confirmed as a real gap.
+finding, any score of 1-8, or a ⚠️ item the ruling seat confirmed as a gap.
 
 Before the loop starts, two routes leave it immediately:
 
@@ -544,11 +603,10 @@ Before the loop starts, two routes leave it immediately:
   before merge. A roll-up nobody reads is a silent discard. Minor findings
   never enter the loop.
 - A finding labeled plan-mandated — or any finding that conflicts with
-  what the plan's text requires — is yours to rule on: weigh the finding
-  against the plan text, decide with the spec as the binding authority, and
-  ledger the ruling before you act on it. Do not dismiss the finding because
-  the plan mandates it, and do not dispatch a fix that contradicts the plan
-  without a recorded ruling.
+  what the plan's text requires — goes to the ruling seat as a
+  `plan-conflict` item before you act on it. Do not dismiss the finding
+  because the plan mandates it, and do not dispatch a fix that contradicts
+  the plan without the seat's verdict in the ledger.
 
 Everything else enters the loop. A fix round is one fix dispatch plus one
 scoped re-review. Five rounds maximum per task:
@@ -618,24 +676,17 @@ Never fix findings yourself in the controller session — your context stays
 clean for coordination, and controller fixes skip review.
 
 **The breaker.** When round 5's re-review still leaves findings open, stop
-dispatching. Adjudicate each open finding yourself — you hold the plan and
-the cross-task context the reviewer lacks:
+dispatching and send every open finding to the ruling seat in one `breaker`
+dispatch. The seat parks a finding that is wrong, contestable, or real but
+built on by nothing downstream; returns CONFIRMED-GAP with the smallest
+unblocking change for one a later task builds on; AMEND for a plan defect;
+and BLOCKED when every path forward is a guess. Carry out each verdict (see
+The Ruling Seat). Parking a structural failure silently lets every dependent
+task build on it, which is why the seat, not you, decides.
 
-- **The reviewer is wrong, or the point is contestable:** park it —
-  `Task <N>: parked — <finding> — Ruling: <why the code stands>`. The final
-  review sees both sides.
-- **Real, but nothing downstream builds on it:** park it the same way, with
-  a ruling that says it's real and deferred.
-- **Real and load-bearing** — a later task builds on it, or it reveals a
-  plan defect: rule on the smallest change that unblocks the dependent work,
-  ledger it as `Task <N>: Ruling: <finding> — <what you decided and why>`,
-  and carry it into the next task's dispatch. Parking a structural failure
-  silently lets every dependent task build on it. Stop only when the defect
-  leaves every path forward a guess.
-
-Adjudicate only at the cap. Adjudicating earlier to end a loop is
-pre-judging with a different name. Every adjudication is a ledger entry —
-a silent discard is forbidden.
+Send findings to the breaker only at the cap. Ending a loop earlier is
+pre-judging with a different name. Every verdict is a ledger entry — a silent
+discard is forbidden.
 
 ### 5. Complete the task
 
@@ -665,20 +716,19 @@ one file instead of re-deriving the branch diff with git commands.
 1. **Claude review.** Dispatch a general-purpose agent on the most capable
    available model, using dr-superpowers:requesting-code-review's
    [code-reviewer.md](../requesting-code-review/references/code-reviewer.md).
-   Point it at the ledger's deferred-minor and parked lines and the complete
-   lines' `discovered:` fields, so it can triage which must be fixed before
-   merge.
+   Point it at the ledger's deferred-minor and parked lines, the complete
+   lines' `discovered:` fields, and every borderline (9-13) score, so it can
+   triage which must be fixed before merge.
 2. **Codex round.** When Codex is usable, run the round in
    [external-executor.md](../../reference/external-executor.md) §Final-review
    Codex round. If it is not usable, or it times out, skip it and say so.
-3. **Dedupe** into one list, tagging each finding `claude`, `codex`, or `both`.
-   Two findings are the same when they name the same defect in the same place,
-   not merely the same file.
-4. **Verify** every finding with `dr-superpowers:judge-fable` (`judge-opus`
-   under the Fable-unavailable rule) in one dispatch for the whole list,
-   returning `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a
-   third seat, so neither reviewer grades its own work.
-5. **Report** confirmed findings ranked most severe first, then the rejected
+3. **Dedupe and verify** in one dispatch of `dr-superpowers:judge-fable`
+   (`judge-opus` under the Fable-unavailable rule) given both reviewers'
+   lists. It merges findings that name the same defect in the same place (not
+   merely the same file), tags each `claude`, `codex`, or `both`, and returns
+   `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a third
+   seat, so neither reviewer grades its own work.
+4. **Report** confirmed findings ranked most severe first, then the rejected
    ones with the reason each was rejected. A finding both reviewers raised and
    the judge confirmed is the strongest signal available in this loop; say so.
 
@@ -688,22 +738,27 @@ complete list — not one fixer per finding. Per-finding fixers each rebuild
 context and re-run suites; a real session's final-review fix wave cost more
 than all its tasks combined. Then run exactly one scoped re-review of the fix
 wave (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range,
-[re-review-prompt.md](references/re-review-prompt.md)). Adjudicate any residual
-findings as in the task loop's breaker: park with rulings, or rule on the
-load-bearing ones and ledger what you decided. Only the four classes above stop
+[re-review-prompt.md](references/re-review-prompt.md)). Send any residual
+findings to the ruling seat as `final-residual` items and carry out its
+verdicts. Only the four classes above stop
 you here. There is no second fix wave — residual load-bearing findings surface
 to your human partner when finishing-a-development-branch presents the options.
 
 ## Finish
 
 Before you leave this skill, collect every ledger line containing `Ruling:` —
-preflight rulings, dispatch rulings, translations, parked findings, breaker
-adjudications, all of them — into your final message under "Rulings I made",
+preflight rulings, dispatch rulings, translations, parked findings, ruling-seat
+verdicts, all of them — into your final message under "Rulings I made",
 in the order you made them, each with what it costs if wrong. The list is
 exhaustive: if the ledger holds a ruling, the list holds it. That list is the
 only place the decisions you took on your human partner's behalf reach them —
 they read it and rework whatever you got wrong. A ruling that dies with the
 workspace was a decision made in secret. Name every `BLOCKED` task there too.
+
+Then, under "Amendments made", print every entry of `<workspace>/amendments.md`
+in full, if the file exists. The workspace is deleted after a merge, so this
+printed list is the only lasting record of how the plan changed during
+execution.
 
 When the final whole-branch review is clean and its fixes are committed,
 append `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to
@@ -719,11 +774,12 @@ Use dr-superpowers:finishing-a-development-branch.
 
 | Excuse | Reality |
 |--------|---------|
-| "Close enough on spec compliance" | Reviewer found spec gaps = not done. Fix or hit the cap and adjudicate — those are the only exits. |
+| "Close enough on spec compliance" | Reviewer found spec gaps = not done. Fix, or hit the cap and send it to the ruling seat — those are the only exits. |
 | "I'll fix it myself, dispatching is overhead" | Controller fixes pollute your context and skip review. Resume or re-dispatch the implementer. |
-| "One more round will converge" | Past the cap, rounds don't converge — the failure is structural. Adjudicate and route. |
+| "One more round will converge" | Past the cap, rounds don't converge — the failure is structural. Send it to the breaker and carry out the seat's verdicts. |
 | "The reviewer will just find something new anyway" | Scoped re-reviews verify fixes; they cannot wander. New findings on untouched code go to the ledger, not the loop. |
-| "This finding is obviously wrong, I'll drop it" | You adjudicate only at the cap, and every ruling is a ledger entry. Silent discards are forbidden. |
+| "This finding is obviously wrong, I'll drop it" | The ruling seat adjudicates, only at the cap, and every verdict is a ledger entry. Silent discards are forbidden. |
+| "I can see the plan is wrong, I'll rule on it myself" | You read the header and one brief; the seat reads the plan and the spec. Send it a plan-conflict item. |
 | "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. Every round ends with a scoped re-review. |
 | "Reviews slow the loop down" | The loop without reviews is just unverified churn. Reviews are the loop's brakes and steering. |
 | "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Controllers without one have re-dispatched entire completed task sequences. |
@@ -738,9 +794,10 @@ Use dr-superpowers:finishing-a-development-branch.
 You: I'm using Subagent-Driven Development to execute this plan.
 
 [Setup: worktree verified]
-[Read plan file once: docs/superpowers/plans/feature-plan.md]
+[task-brief --header docs/superpowers/plans/feature-plan.md; read plan-header.md, never the whole plan]
 [Resolve workspace: scripts/sdd-workspace docs/superpowers/plans/feature-plan.md — no ledger inside, fresh start]
 [Create todos for all tasks]
+[Pre-flight: ruling seat returns preflight.md — clean; ledger the pre-flight ruling]
 
 Task 1: Hook installation script  (**Implementer:** dr-superpowers:impl-sonnet-low)
 
@@ -783,7 +840,7 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 
 [Fresh session: dr-superpowers:resume-execution → Final Review]
 [review-package PLAN_FILE MERGE_BASE HEAD; general-purpose final reviewer on the most capable model; Codex round in the background]
-[Dedupe; judge-fable verifies the union: 1 CONFIRMED (both), 1 REJECTED]
+[judge-fable dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
 [Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); print Rulings I made; budget ok — continue]
