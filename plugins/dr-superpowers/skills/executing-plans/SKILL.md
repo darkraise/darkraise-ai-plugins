@@ -188,15 +188,15 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
 | `complete` | Done; never redo |
 | `BLOCKED` | Terminal. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `fix round R/3`, R < 3 | Resume the loop at round R+1 |
-| a fix-round line ending `escalated inline -> subagent` | This plan has left inline mode: use dr-superpowers:subagent-driven-development |
+| a fix-round line carrying `escalated inline -> subagent` | This plan has left inline mode: use dr-superpowers:subagent-driven-development |
 | `fix round 3/3` | Go to Switching to subagent mode |
 | `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
 | none | Not started |
 
-**Plan state.** First, whatever the per-task lines say: if the ledger holds an
-`escalated inline -> subagent` line with no later `implementer inline` line,
-this plan has left inline mode - use
-dr-superpowers:subagent-driven-development, exactly as `scripts/next-step`
+**Plan state.** First, whatever the per-task lines say: if the ledger holds a
+fix-round line carrying `escalated inline -> subagent` with no later
+`implementer inline (assigned` line after it, this plan has left inline mode -
+use dr-superpowers:subagent-driven-development, exactly as `scripts/next-step`
 reads the same ledger. Otherwise: every task complete and no `Final review:`
 line: go to Final Review. A `Final review: clean` line: go to
 dr-superpowers:finishing-a-development-branch.

@@ -278,5 +278,37 @@ run "$REPO" docs/plans/2026-01-01-inline.md
 has "returned to inline: launches the inline pair" "$out" "claude --model sonnet --effort low"
 lacks "returned to inline: drops the escalation sentence" "$out" "This plan escalated to subagent mode"
 
+# --- a ledger that merely quotes the escalation clause must not escalate ---
+# The clause is a marker on a fix-round line, not a substring match anywhere
+# in the ledger; a deferred-minor sentence describing the grammar is not an
+# escalation.
+QUOTE="$REPO/docs/plans/2026-01-01-quote.md"
+cat > "$QUOTE" <<'PLAN'
+# Quote plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** inline — `claude --model sonnet --effort low` — every task scores 2
+
+## Task index
+
+1. First
+
+### Task 1: First
+PLAN
+QUOTE_LEDGER="$REPO/.superpowers/sdd/2026-01-01-quote"
+mkdir -p "$QUOTE_LEDGER"
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-quote.md"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: minor (deferred): the Recovery row calls this a line ending \`escalated inline -> subagent\`, harmless"
+} > "$QUOTE_LEDGER/progress.md"
+
+run "$REPO" docs/plans/2026-01-01-quote.md
+lacks "quoted clause: does not launch the subagent pair" "$out" "--effort high"
+lacks "quoted clause: does not say the plan escalated" "$out" "This plan escalated to subagent mode"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

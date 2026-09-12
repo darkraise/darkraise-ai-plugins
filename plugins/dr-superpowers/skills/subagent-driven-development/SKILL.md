@@ -329,7 +329,7 @@ Then:
 | `BLOCKED` | Terminal; never re-dispatch. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `fix round R/5` or `review round R/5`, R < 5 | Resume the loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
 | `fix round 5/5` or `review round 5/5` | Go to the breaker |
-| a fix-round line ending `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the task's `**Implementer:**` agent fresh at round 1 of 5, with the brief, the open findings that line names, and the commits it names |
+| a fix-round line carrying `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the task's `**Implementer:**` agent fresh at round 1 of 5, with the brief, the open findings that line names, and the commits it names |
 | `implementer … (assigned …)` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it; otherwise dispatch the same agent fresh |
 | none | Not started |
 
