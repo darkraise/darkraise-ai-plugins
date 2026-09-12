@@ -10,10 +10,13 @@ _PLAN_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # returns 1 for fence markers and fenced lines. is_task(line) returns the task
 # number of a task heading, or -1.
 _PLAN_AWK='
-function in_fence(line,   t, mk) {
+function close_marker(t, open) {
+  sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+  return t ~ /^(`+|~+)$/ && substr(t, 1, 1) == substr(open, 1, 1) && length(t) >= length(open)
+}
+function in_fence(line,   mk) {
   if (FENCE != "") {
-    t = line; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
-    if (t ~ /^(`+|~+)$/ && substr(t, 1, 1) == substr(FENCE, 1, 1) && length(t) >= length(FENCE)) FENCE = ""
+    if (close_marker(line, FENCE)) FENCE = ""
     return 1
   }
   if (match(line, /^ ? ? ?(`+|~+)/)) {
@@ -85,10 +88,6 @@ plan_task_text() {
 plan_apply_amendments() {
   if [ ! -s "${2:-}" ]; then tr -d '\r' < "$1"; return 0; fi
   awk "$_PLAN_AWK"'
-    function close_marker(t, open) {
-      sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
-      return t ~ /^(`+|~+)$/ && substr(t, 1, 1) == substr(open, 1, 1) && length(t) >= length(open)
-    }
     function bounds(ent,   i, k) {
       FENCE = ""; S = 0; E = 0
       for (i = 1; i <= n; i++) {
