@@ -110,9 +110,12 @@ digraph when_to_use {
 - Review after each task (spec, scope, verification, quality), broad review at the end
 - Faster iteration (no human-in-loop between tasks)
 
-The plan's `**Execution:**` line decides the mode. Only your human partner's
-explicit instruction switches it, and only at a task boundary where every
-earlier task is complete, recorded as a `Ruling:` line.
+The plan's `**Execution:**` line decides the mode. Your human partner's explicit
+instruction switches it in either direction, and only at a task boundary where
+every earlier task is complete, recorded as a `Ruling:` line. Inline mode also
+escalates here on its own when a task will not converge; it arrives with an
+`escalated inline -> subagent` clause on that task's fix-round line, and the
+Recovery table below says what to do with it.
 
 ## The Process
 
@@ -326,6 +329,7 @@ Then:
 | `BLOCKED` | Terminal; never re-dispatch. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `fix round R/5` or `review round R/5`, R < 5 | Resume the loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
 | `fix round 5/5` or `review round 5/5` | Go to the breaker |
+| a fix-round line ending `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the task's `**Implementer:**` agent fresh at round 1 of 5, with the brief, the open findings that line names, and the commits it names |
 | `implementer … (assigned …)` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it; otherwise dispatch the same agent fresh |
 | none | Not started |
 
@@ -710,42 +714,10 @@ parked-with-ruling at the cap.
 This runs in a fresh session: after the last task's complete line you handed
 off, and dr-superpowers:resume-execution brought the next session here.
 
-The final whole-branch review gets a package too: run
-`scripts/review-package PLAN_FILE MERGE_BASE HEAD` (MERGE_BASE = the commit the
-branch started from, e.g. `git merge-base main HEAD`) and include the
-printed path in the final review dispatch, so the final reviewer reads
-one file instead of re-deriving the branch diff with git commands.
-
-1. **Claude review.** Dispatch a general-purpose agent on the most capable
-   available model, using dr-superpowers:requesting-code-review's
-   [code-reviewer.md](../requesting-code-review/references/code-reviewer.md).
-   Point it at the ledger's deferred-minor and parked lines, the complete
-   lines' `discovered:` fields, and every borderline (9-13) score, so it can
-   triage which must be fixed before merge.
-2. **Codex round.** When Codex is usable, run the round in
-   [external-executor.md](../../reference/external-executor.md) §Final-review
-   Codex round. If it is not usable, or it times out, skip it and say so.
-3. **Dedupe and verify** in one dispatch of `dr-superpowers:judge-fable`
-   (`judge-opus` under the Fable-unavailable rule) given both reviewers'
-   lists. It merges findings that name the same defect in the same place (not
-   merely the same file), tags each `claude`, `codex`, or `both`, and returns
-   `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a third
-   seat, so neither reviewer grades its own work.
-4. **Report** confirmed findings ranked most severe first, then the rejected
-   ones with the reason each was rejected. A finding both reviewers raised and
-   the judge confirmed is the strongest signal available in this loop; say so.
-
-A confirmed finding gates the handoff whichever reviewer raised it; a rejected
-one never does. If confirmed findings remain, dispatch ONE fix subagent with the
-complete list — not one fixer per finding. Per-finding fixers each rebuild
-context and re-run suites; a real session's final-review fix wave cost more
-than all its tasks combined. Then run exactly one scoped re-review of the fix
-wave (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range,
-[re-review-prompt.md](references/re-review-prompt.md)). Send any residual
-findings to the ruling seat as `final-residual` items and carry out its
-verdicts. Only the four classes above stop
-you here. There is no second fix wave — residual load-bearing findings surface
-to your human partner when finishing-a-development-branch presents the options.
+Follow [final-review.md](../../reference/final-review.md), the procedure both
+execution skills share. Point the reviewer at the ledger's deferred-minor and
+parked lines, the complete lines' `discovered:` fields, and every borderline
+(9-13) score, so it can triage which findings must be fixed before merge.
 
 ## Finish
 
@@ -842,7 +814,7 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 [After the last task's complete line: dr-superpowers:handoff prints the resume guide]
 
 [Fresh session: dr-superpowers:resume-execution → Final Review]
-[review-package PLAN_FILE MERGE_BASE HEAD; general-purpose final reviewer on the most capable model; Codex round in the background]
+[final-review.md: package the branch; general-purpose final reviewer on the most capable model; Codex round in the background]
 [judge-fable dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
