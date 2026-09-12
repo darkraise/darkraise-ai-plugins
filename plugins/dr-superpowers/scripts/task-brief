@@ -1,42 +1,60 @@
 #!/usr/bin/env bash
 # Extract one task's full text from an implementation plan into a file the
 # implementer reads in one call, so the task text never has to be pasted
-# through the controller's context.
+# through the controller's context. The brief ends with the plan header's
+# Global Constraints and Contracts, so every reader of the brief sees the
+# cross-task names it uses. --header writes the whole header instead.
+# Amendments in <workspace>/amendments.md are applied first.
 #
 # Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
+#        task-brief --header PLAN_FILE [OUTFILE]
 # Default OUTFILE: <repo-root>/.superpowers/sdd/<plan-basename>/task-<N>-brief.md
-# (per plan and per worktree; concurrent runs of the SAME plan in the same
-# working tree share it).
+# or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
+# plan in the same working tree share it).
+# Exit: 0 ok; 2 usage; 3 no such task; 4 an amendment does not apply.
 # Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
 
-if [ $# -lt 2 ] || [ $# -gt 3 ]; then
-  echo "usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]" >&2
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+header=0
+if [ "${1:-}" = "--header" ]; then header=1; shift; fi
+if { [ "$header" -eq 1 ] && { [ $# -lt 1 ] || [ $# -gt 2 ]; }; } \
+   || { [ "$header" -eq 0 ] && { [ $# -lt 2 ] || [ $# -gt 3 ]; }; }; then
+  echo "usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE] | task-brief --header PLAN_FILE [OUTFILE]" >&2
   exit 2
 fi
 
 plan=$1
-n=$2
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
 
-if [ $# -eq 3 ]; then
-  out=$3
+if [ -n "$given" ]; then
+  out=$given
 else
-  dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
-  out="$dir/task-${n}-brief.md"
+  dir=$("$HERE/sdd-workspace" "$plan")
+  if [ "$header" -eq 1 ]; then out="$dir/plan-header.md"; else out="$dir/task-${n}-brief.md"; fi
 fi
 
-awk -v n="$n" '
-  /^```/ { infence = !infence }
-  !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
-    intask = ($0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)"))
-  }
-  intask { print }
-' "$plan" > "$out"
+src=$(mktemp)
+trap 'rm -f "$src" "$src.err"' EXIT
+if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2> "$src.err"; then
+  cat "$src.err" >&2
+  exit 4
+fi
 
-if [ ! -s "$out" ]; then
-  echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
-  exit 3
+if [ "$header" -eq 1 ]; then
+  plan_header "$src" > "$out"
+else
+  if ! plan_task_text "$src" "$n" > "$out"; then
+    echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
+    exit 3
+  fi
+  excerpt=$(plan_header "$src" | awk '/^## / { on = ($0 == "## Global Constraints" || $0 == "## Contracts") } on { print }')
+  if [ -n "$excerpt" ]; then
+    printf '\n## Plan header excerpt\n\n%s\n' "$excerpt" >> "$out"
+  fi
 fi
 
 echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
@@ -44,4 +62,4 @@ echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
 # The budget line rides on a call the controller already makes before every
 # task, so checking the session budget costs no extra request. It must never
 # fail the brief.
-"$(cd "$(dirname "$0")" && pwd)/context-size" 2>/dev/null || true
+"$HERE/context-size" 2>/dev/null || true
