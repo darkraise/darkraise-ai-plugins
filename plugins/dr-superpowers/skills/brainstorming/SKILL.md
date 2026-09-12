@@ -21,10 +21,15 @@ the approval gate never does.
 
 ## Three Paths
 
-Before your first question, classify the request and say the
-classification out loud — "this looks bounded, so I'll present a short
-design here rather than write a spec" — so your human partner can
-override it:
+Before your first question, classify the request and say it in one
+line — `Process: <spike|bounded|architectural>, <inline|subagent> —
+<trigger | no trigger>` — so your human partner can override it. The
+triggers are the seven in dr-superpowers:using-superpowers' Process Depth:
+a new project or subsystem; an interface that something outside its own
+files depends on changes; the files touched cannot be enumerated after
+exploring; a load-bearing approach question is open; irreducible risk
+(security, data loss, migration, concurrency); behaviour too intricate for
+a chat design; or your human partner asked for a spec.
 
 - **Spike** — a feasibility question ("can we...", "is it possible...",
   "quick and dirty is fine") whose output is an answer, not code you
@@ -32,23 +37,19 @@ override it:
   a nod, then find out as cheaply as correctness allows. No design
   doc, no spec file. Report findings as a recommendation; anything you
   built stays labeled throwaway.
-- **Bounded** — a well-scoped change to code that already exists in
-  this repo: a new flag, a small endpoint, a one-file fix.
-  Understanding the kind of app is not enough — bounded means the flow
-  you are changing is already here to read. If there is no existing
-  flow to change, the task is not bounded. Ask the clarifying
+- **Bounded** — no trigger holds: a new flag, a small endpoint, a
+  one-file fix, or a small feature that adds a new flow. Ask the clarifying
   questions that matter, present a short design IN CHAT (a few
   sentences to a few short paragraphs), and STOP. Implementation
   starts only after your human partner says yes to that design — a
   bounded task's approval is as hard a gate as an architectural
   one. No spec file, no implementation plan document.
-- **Architectural** — new projects, new subsystems, changes that
-  restructure how components fit together or alter interfaces others
-  depend on. Follow the full process: questions, approaches, sectioned
+- **Architectural** — at least one trigger holds; name it. Follow the
+  full process: questions, approaches, sectioned
   design, written spec, then the writing-plans skill.
 
-When in doubt between two paths, take the heavier one. The ratchet is
-one-way: hidden complexity discovered mid-task upgrades the path —
+Doubt means check the trigger list, not jump to the heavier path. The
+ratchet is one-way: a trigger discovered mid-task upgrades the path —
 stop, say so, and step up. Nothing downgrades mid-task.
 
 ## Anti-Pattern: "Too Simple To Need Approval"
@@ -65,9 +66,9 @@ artifact, never the approval.
 | Thought | Reality |
 |---------|---------|
 | "This is too simple to need a design" | Simple means a short design, not no design. Two sentences in chat, then approval. |
-| "I'll call it bounded and skip the spec" | Reaching for a label to skip work IS the doubt — take the heavier path. |
+| "I'll call it bounded and skip the spec" | Name, for each of the seven triggers, why it fails — or take the architectural path. |
 | "It's bounded and the design is obvious — I'll start while they read it" | The gate is the approval, not the design's length. Present, then stop until you hear yes. |
-| "I understand this kind of app, so it's bounded" | Bounded measures the repo, not your familiarity. A new project has no existing flow — it is architectural. |
+| "I understand this kind of app, so it's bounded" | Bounded is decided by the trigger list, not by familiarity. A new project is a trigger. |
 | "The spike works, so I'll keep the code" | A spike's output is an answer. Keeping the code is a new request — classify it. |
 | "It grew, but I'm almost done — no need to re-classify" | Hidden complexity upgrades the path mid-task. Stop and say so. |
 | "They approved the spike, so the follow-up change is approved too" | Each task gets its own classification and its own approval. |

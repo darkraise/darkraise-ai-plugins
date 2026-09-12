@@ -116,5 +116,10 @@ check "hooks.json has no PreToolUse entry" \
 check "session-start.sh parses" \
   "$(bash -n "$SCRIPT" 2>/dev/null && echo yes || echo no)" "yes"
 
+# The entry point rides in every session's baseline and shares the hook's
+# 10,000-character cap with the compaction snapshot.
+check "entry point is at most 4,800 bytes" \
+  "$([ "$(wc -c < "$HERE/../skills/using-superpowers/SKILL.md")" -le 4800 ] && echo yes || echo no)" "yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
