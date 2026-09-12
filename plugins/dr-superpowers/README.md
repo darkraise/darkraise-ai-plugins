@@ -1,59 +1,51 @@
 # dr-superpowers
 
-Available for Claude Code and Codex. Install `dr-superpowers@darkraise` from the
-repository-root marketplace. Claude uses its registered fleet and hooks; Codex
-uses native agent tools and explicit model/effort pairs, with Claude hooks
-disabled in its native manifest. The fleet details below describe Claude.
-
-For Codex, read [native-codex.md](reference/native-codex.md). Its `codex-v2` policy
-routes scores 0–9 through Luna, Terra, Sol, and Astra. The selector calculates
-files + spec + coupling + twice risk from the four raw axes, preserving the
-existing split gate. Scouts start at Sol medium; judges start at Astra high.
-It filters advertised capabilities at planning and dispatch, preserves human
-pins, and records promotions and actual attempts.
-
-Upgrading from a version before 0.6.0 required explicit conversion of old Codex
-or Claude plans: preserve the raw axes and original assignments, preview the
-recalculated score and proposed assignment, and obtain approval. Old policy
-ranks cannot be reused as v2 history.
-Claude translates skill and agent names written under older plugin prefixes at
-read time, per [legacy-names.md](reference/legacy-names.md); disable the older
-plugins before enabling this one. Original assignments and evaluations remain
-intact.
-
-Native reviewers have independent contexts, without a promised cross-provider
-seat. Enforce read-only tool restrictions when available; otherwise disclose
-instruction-only restrictions and compare complete snapshots without concurrent
-writers. A mutation blocks continuation and is preserved for inspection.
-
-The Claude-hosted external CLI lane requires an exclusively assigned linked
-worktree, stable task IDs, approved file paths, and durable recovery. Read
-[external-task-recovery.md](reference/external-task-recovery.md) before offload.
-It refuses the primary checkout and initial staged, unstaged, or untracked work.
-Only the verified task diff is staged. Other writing agents/watchers and manual
-editing must stop in this worktree; fingerprints cannot establish authorship.
-
 A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
-(MIT — see `LICENSES/`) that also records, for every task in an implementation
-plan, which implementer subagent runs it, chosen from a grid of model and
-reasoning-effort pairings.
+(MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
+strong model writes the plan, a Sonnet-class session or small tiered
+implementers execute it literally, and every judgment call goes to one strong
+ruling seat. Install `dr-superpowers@darkraise` from the repository-root
+marketplace, then disable the upstream `superpowers` plugin,
+`dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
+two enabled plugins can double-trigger.
 
 ## Why
 
-Superpowers already advises picking cheap, standard, or capable models per task.
-Two things were missing.
+Four findings from real transcripts drove the fork; the numbers are in
+`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`.
 
-`writing-plans` has no field for the choice, so the decision is invisible in the
-plan and re-derived from memory at dispatch. And reasoning effort is unreachable
-at dispatch time: the Agent tool exposes a `model` parameter but no `effort`
-parameter, so effort can only be set in a subagent definition's frontmatter.
-Superpowers dispatches the built-in `general-purpose` agent, so every implementer
-runs at the session's effort level regardless of task difficulty.
+- **Cost.** The main session was 92% of token spend, most of it re-reading a
+  400–700k context. The plugin hands off at a 475k budget printed by its own
+  scripts, keeps the execution controller on Sonnet, and reads the plan one
+  task at a time instead of whole.
+- **Small models executing literally.** Upstream advises picking a model per
+  task but has no field for the choice, and the Agent tool cannot pass
+  reasoning effort. Here every task records an implementer from a model ×
+  effort grid, the plan's `**Execution:**` line decides inline or subagent
+  mode, and `plan-lint` checks the header, the scores and the mode before a
+  plan is saved.
+- **Judgment in one seat.** Executors and controllers rule only on mechanical
+  conflicts and log every ruling. Plan defects, contested findings and
+  cannot-verify items go to a Fable (or Opus) judge whose verdicts —
+  CONFIRMED-GAP, PARK, AMEND, BLOCKED — are carried out verbatim; AMEND edits
+  the plan through `scripts/plan-amend` so the plan on disk stays immutable.
+- **Karpathy guidelines baked in.** Think before coding, simplicity first,
+  surgical changes, goal-driven verification: in the entry point, the plan
+  template, the implementer template and TDD.
 
-This plugin ships pre-baked agent definitions, which makes effort reachable.
-`writing-plans` writes the choice into the plan, `subagent-driven-development`
-reads it back and dispatches it, and `selecting-approaches` settles an open
-approach decision before the choice is made.
+**Codex host.** Read [native-codex.md](reference/native-codex.md). Its
+`codex-v2` policy routes scores 0–9 through Luna, Terra, Sol and Astra with
+the same four raw axes; scouts start at Sol medium, judges at Astra high; the
+Claude hooks are disabled in the native manifest. Native reviewers have
+independent contexts; enforce read-only restrictions where the host allows and
+disclose instruction-only restrictions where it does not.
+
+**External CLI lane.** On Claude, a task scoring 2–4 at risk ≤ 1 may run on the
+Codex CLI instead of a Claude implementer. The lane needs an exclusively
+assigned linked worktree, stable task IDs, approved file paths and durable
+recovery; read [external-task-recovery.md](reference/external-task-recovery.md)
+before offloading. Names written under older plugin prefixes are translated at
+read time per [legacy-names.md](reference/legacy-names.md).
 
 ## What you get
 
@@ -107,8 +99,9 @@ guesses into a confident pick.
 **Two execution modes, chosen by the plan.** The `**Execution:**` line decides
 whether a plan runs under subagent-driven-development, a dispatch and a scored
 review per task, or under executing-plans, where one session implements every
-task itself. Inline mode is available only when every task scores 3 or less
-with none at risk 3 - `plan-lint` refuses the line otherwise - and it trades
+task itself. Inline mode is available only when every task scores 4 or less
+with none at risk 3 - `plan-lint` refuses the line otherwise, and requires
+`--model opus` once any task scores 4 - and it trades
 per-task review for one whole-branch review at the end, which both modes now
 share. A task that will not converge after three fix rounds escalates to
 subagent mode at the next task boundary, recorded in the ledger both modes

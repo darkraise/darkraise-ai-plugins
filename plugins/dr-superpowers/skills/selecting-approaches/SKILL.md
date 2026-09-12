@@ -7,18 +7,12 @@ description: Use when an approach decision is open - during brainstorming, or wh
 
 ## Select the host first
 
-Read [native-codex.md](../../reference/native-codex.md) before selecting agents.
-Identify the active host from callable native tools, not installed executables.
-On Codex, retain the gate and best-of-three procedure below, replacing Claude
-scout/judge dispatch with the reference's `codex-v2` roles and capability-filtered
-pairs: scouts start at Sol medium, judges at Astra high. Evaluate the bounded
-role brief using the reference's raw-axis contract; the unresolved implementer
-task is not the scout task being scored. Include role, criteria, and verification
-instructions explicitly. Apply enforced read-only restrictions when available,
-otherwise the disclosed snapshot
-guard with no concurrent writers; stop if policy requires enforced isolation.
-On Claude, retain the registered fleet. Required Superpowers skills and host
-tools must be available before any delegated approach work.
+Identify the active host from callable native tools, not installed
+executables. On Codex, keep the gate and the best-of-three procedure below but
+dispatch scouts and judges as [native-codex.md](../../reference/native-codex.md)
+describes: scouts start at Sol medium, judges at Astra high, read-only
+restrictions enforced where the host allows and disclosed where it does not.
+On Claude, use the registered fleet.
 
 Settle an open approach decision at a cost that matches what the decision is
 worth. Most decisions are settled inline; a few earn one advisory pass; a small

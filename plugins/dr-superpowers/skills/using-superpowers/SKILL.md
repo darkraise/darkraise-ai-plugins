@@ -43,12 +43,13 @@ If a skill might apply to what you are doing, invoke it before any response or a
 
 ## Process Depth
 
-Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>`, and still get approval. Execute inline by default when the plan allows it (every task scores 3 or less, none at risk 3). Bugs go to systematic-debugging first.
+Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>` (the mode is your expectation; the plan's Execution line, checked by `plan-lint`, decides), and still get approval. Execute inline by default when the plan allows it (every task scores 4 or less, none at risk 3). Bugs go to systematic-debugging first.
 
 Prefer an indexed code tool (for example darkmem `code_search`) over Explore subagents when one is available.
 
 ## Session Budget
 
+- Every `scripts/…` command runs from the plugin root, the path printed under this entry point (on Codex: the directory two levels above any skill file).
 - `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `handoff` means: finish the step in flight, then use dr-superpowers:handoff. See [session-budget.md](../../reference/session-budget.md).
 - Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger continues through dr-superpowers:resume-execution.
 - After more than an hour idle, start fresh from `.superpowers/handoff/latest.md`: the prompt cache is cold.

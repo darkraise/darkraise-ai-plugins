@@ -34,7 +34,7 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 
 1. **Make the durable record current.**
    - Execution: the ledger's last line records where you are (a
-     `Task N: complete`, a `fix round R/5`, or an assigned line). Update
+     `Task N: complete`, a fix-round line, or an assigned line). Update
      `<workspace>/handoff.md` (below); `<workspace>` is the directory
      `scripts/sdd-workspace PLAN_FILE` prints.
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
@@ -63,8 +63,8 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    ```
 
    In a design phase, `State` names the draft instead of a plan and ledger.
-4. **Run `scripts/next-step`**, from the plugin root (two levels above this
-   skill's directory):
+4. **Run `scripts/next-step`**, from the plugin root (the path the session's entry point
+   names; two levels above this skill's directory):
    - Execution: `scripts/next-step PLAN_FILE`.
    - Design phase: `scripts/next-step --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
      for example `--next "Write the implementation plan with dr-superpowers:writing-plans."`
@@ -94,9 +94,9 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 - <a question for your human partner, and what you assumed meanwhile>
 ```
 
-dr-superpowers:subagent-driven-development writes it at Setup and updates it
-in the same message as a ledger write whenever one of these sections changes —
-not after every task: task state lives in the ledger and git.
+Both execution skills write it at Setup and update it in the same message as
+a ledger write whenever one of these sections changes — not after every task:
+task state lives in the ledger and git.
 
 ## Red Flags
 

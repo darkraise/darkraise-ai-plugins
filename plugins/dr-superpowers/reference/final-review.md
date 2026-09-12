@@ -25,7 +25,9 @@ re-deriving the branch diff with git commands.
 
 1. **Claude review.** Dispatch a general-purpose agent on the most capable
    available model, using dr-superpowers:requesting-code-review's
-   [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md).
+   [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
+   with `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
+   spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`.
 2. **Codex round.** When Codex is usable, run the round in
    [external-executor.md](external-executor.md) §Final-review Codex round. If it
    is not usable, or it times out, skip it and say so.
@@ -50,9 +52,13 @@ subagent mode one fix subagent, in inline mode one pass of your own. Never one
 fixer per finding: per-finding fixers each rebuild context and re-run suites, and
 a real session's final-review fix wave cost more than all its tasks combined.
 
-Then run exactly one scoped re-review of the fix wave
+Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
+finding, the covering tests, the command and its output. In subagent mode the
+fix subagent writes it as its report file; in inline mode you write it before
+the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
-[re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md)).
+[re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
+its `[REPORT_FILE]` being that file).
 Send any residual findings to the ruling seat as `final-residual` items and carry
 out its verdicts.
 

@@ -117,10 +117,11 @@ names the native pair: `**Execution:** <inline|subagent> — codex <model> / <ef
 
 **Choosing the Execution line.** The plan decides its execution mode:
 
-- `inline` when every task's total is 3 or less and no task is at risk 3 —
-  the default then: `claude --model sonnet --effort <e>`, where `<e>` is the
-  effort of the highest-scoring task's assigned tier (`impl-haiku` counts as
-  `low`).
+- `inline` when every task's total is 4 or less and no task is at risk 3 —
+  the default then. The model follows the highest total: `sonnet` when every
+  task is 3 or less, `opus` when any task scores 4 (the Opus-low band).
+  `<e>` is the effort of the highest-scoring task's assigned tier
+  (`impl-haiku` counts as `low`): `claude --model <sonnet|opus> --effort <e>`.
 - Otherwise `subagent`: `claude --model sonnet --effort high`. The controller
   owns no judgment calls — the ruling seat does — so it needs no stronger
   model.
@@ -156,12 +157,17 @@ def test_specific_behavior():
 Run: `pytest tests/path/test.py::test_name -v`
 Expected: FAIL with "function not defined"
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write the implementation**
 
 ```python
 def function(input):
-    return expected
+    # the complete, real implementation - every line the implementer types
+    ...
 ```
+
+Step 3 carries the whole implementation. A body that returns a constant to
+satisfy the test is a plan failure: `plan-review.md` scores it LOW, and the
+implementer will transcribe it literally.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -266,7 +272,7 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Lint and Review
 
-1. **Lint.** Run `scripts/plan-lint PLAN_FILE`, from the plugin root (two
+1. **Lint.** Run `scripts/plan-lint PLAN_FILE`, from the plugin root (the path the session's entry point names; two
    levels above this skill's directory), until it reports `0 errors`. Fix each
    WARN, or explain it in one line of the plan's Assumptions. The checker
    covers the header sections, the task headings and index, the Execution

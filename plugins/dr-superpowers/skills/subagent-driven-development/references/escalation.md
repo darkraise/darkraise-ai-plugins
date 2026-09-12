@@ -49,15 +49,37 @@ re-derive every escalated agent after a crash.
 
 The ladder's top rung is `impl-opus-high`, whose successor is `SPLIT` - an
 action, not an agent. When it is exhausted, do not report BLOCKED yet, and do
-not decide the decomposition yourself: send a `blocked-plan` item; the seat's
-CONFIRMED-GAP names the halves, which you score against Rule S and dispatch
-fresh, logged as a ruling in the ledger:
+not decide the decomposition yourself: send a `blocked-plan` item. The seat
+answers with an AMEND that rewrites Task N's body into ordered parts under the
+same heading and number:
+
+```markdown
+### Task N: <title>          (unchanged)
+
+#### Part A: <title>
+**Files:** …
+**Interfaces:** …
+**Implementer:** dr-superpowers:impl-<tier>
+**Evaluation:** files a - spec b - coupling c - risk d = t
+- [ ] steps…
+
+#### Part B: <title>
+(the same blocks; Part B may consume Part A's output)
+```
+
+Each part is a unit `scripts/plan-lint` checks on its own against Rule S, and
+`scripts/task-brief PLAN_FILE N` carries both. Apply the amendment through
+`scripts/plan-amend` as any AMEND, then dispatch the parts in order, one
+dispatch per part, each with a fresh brief and the instruction "Part A only"
+(then "Part B only"). Each part gets its own review; the ledger's assigned and
+fix-round lines carry `; part A` / `; part B`, and one complete line closes the
+task after the last part, with `parts A, B` in its parenthesis. Log the split:
 
 ```
-Ruling: split Task <N> at the top rung into <N>a and <N>b - impl-opus-high exhausted after 5 rounds - if wrong, the halves review separately and merge back
+Ruling: split Task <N> at the top rung into parts A and B (amendment A<k>) - impl-opus-high exhausted after 5 rounds - if wrong, the parts review separately and merge back
 ```
 
-**A task may be split-escalated once.** If a split half also exhausts
+**A task may be split-escalated once.** If a part also exhausts
 `impl-opus-high`, the task has resisted both capability and decomposition, and
 only then does it enter the reserve chain in
 [ladder.md](../../../reference/ladder.md). It enters at `impl-opus-xhigh` and
@@ -65,7 +87,7 @@ walks one successor per further exhaustion. Record the entry as its own ruling,
 and say it aloud:
 
 ```
-Ruling: Task <N>a enters the reserve at impl-opus-xhigh - impl-opus-high exhausted again after the split - if wrong, the task is BLOCKED instead and waits for a human
+Ruling: Task <N> part A enters the reserve at impl-opus-xhigh - impl-opus-high exhausted again after the split - if wrong, the task is BLOCKED instead and waits for a human
 ```
 
 A reserve dispatch is the one place this loop spends above the tier the plan

@@ -20,10 +20,12 @@ Subagent (general-purpose):
 
     [PLAN_OR_REQUIREMENTS]
 
-    ## Git Range to Review
+    ## The Diff
 
-    **Base:** [BASE_SHA]
-    **Head:** [HEAD_SHA]
+    Read this file first: [DIFF_FILE]
+    It holds the commit list, a stat summary and the full diff with context
+    for [BASE_SHA]..[HEAD_SHA], and it is your view of the change. Only if
+    the line above says "none" derive it yourself:
 
     ```bash
     git diff --stat [BASE_SHA]..[HEAD_SHA]
@@ -137,6 +139,8 @@ Subagent (general-purpose):
 **Placeholders:**
 - `[DESCRIPTION]` — brief summary of what was built
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (plan file path, task text, or requirements)
+- `[DIFF_FILE]` — the path `scripts/review-package` printed, or `none` for an
+  ad-hoc review outside a plan
 - `[BASE_SHA]` — starting commit
 - `[HEAD_SHA]` — ending commit
 

@@ -11,8 +11,8 @@ If this session was compacted - a compaction snapshot or summary sits above -
 your memory of the run is gone, and only the start of this file may have come
 back. Before anything else:
 
-1. Run `scripts/sdd-workspace PLAN_FILE`, from the plugin root (two levels
-   above this skill's directory), and read `progress.md` and `handoff.md` in
+1. Run `scripts/sdd-workspace PLAN_FILE`, from the plugin root (the path the session's entry point names; two
+   levels above this skill's directory), and read `progress.md` and `handoff.md` in
    the directory it prints.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides; see the Recovery table under The Ledger.
@@ -35,10 +35,12 @@ the gate.
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
 **Why this mode.** The plan's `**Execution:**` line chose it because every task
-scores 3 or less with none at risk 3: each is a small change whose text carries
+scores 4 or less with none at risk 3: each is a small change whose text carries
 the code, and a subagent per task would cost more in context rebuild than the
-task itself. Subagent availability has nothing to do with it - the line
-decides, and only your human partner overrides it.
+task itself. The line's model follows the highest score: Sonnet when every
+task is 3 or less, Opus when any task scores 4. Subagent availability has
+nothing to do with it - the line decides, and only your human partner
+overrides it.
 
 **Why no per-task review.** The eligibility bar is the gate, applied before
 execution starts. A task too large, too vague or too risky for this mode never
@@ -98,7 +100,8 @@ file, not only in todos.
   at the old flat path `.superpowers/sdd/progress.md` - is another plan's
   progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
-  `# SDD ledger — plan: <plan file path>`.
+  `# SDD ledger — plan: <plan file path>` — the path exactly as you pass it to
+  the scripts (checkout-relative or absolute; `next-step` resolves both).
 - Create `<workspace>/handoff.md` from the template in dr-superpowers:handoff
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes.
@@ -149,12 +152,14 @@ mode writes:
 ```
 # SDD ledger — plan: <path>
 Task <N>: implementer inline (assigned; base <sha7>)
-Task <N>: fix round R/3 (X addressed, Y open — <one-liners>; commits a..b; inline | escalated inline -> subagent)
+Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)
+Task <N>: escalated inline -> subagent — <trigger>
 Task <N>: minor (deferred): <one-liner>
 Task <N>: parked — <finding> — Ruling: <why the code stands>
 Task <N>: Ruling: <finding> — <what was decided and why>
 Task <N>: Ruling: (unseated) <item> — <decision> — <cost if wrong>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
+Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
 Task <N>: complete (commits a..b, unreviewed | K parked) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
@@ -171,7 +176,16 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   the task.
 - The fix cap is 3, not subagent mode's 5. You are fixing your own work, so a
   fourth round is not a better round - it is the trigger in Switching to
-  subagent mode.
+  subagent mode. A fix-round line is written after the round, with its
+  outcome, exactly as subagent mode writes its own: `passing` when the
+  task's verifications now pass, `still failing` otherwise.
+- The escalated line is the switch itself. Every trigger in Switching to
+  subagent mode writes it, whether or not a fix round preceded it, and it is
+  the only line `scripts/next-step` and subagent mode's recovery read as a
+  switch.
+- A ruling-seat `BLOCKED` that belongs to no task (a Header amendment) is
+  logged against the lowest-numbered task without a complete line, so
+  recovery reads it as that task's terminal line.
 - The checkpoint after the `—` is yours to write, and the final review reads it
   as a claim to check rather than a finding. `done` is a one-line summary of
   the deliverable, `verified` the covering command and its result, `remaining`
@@ -187,14 +201,15 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
 |---|---|
 | `complete` | Done; never redo |
 | `BLOCKED` | Terminal. It is a stop of the fourth class for any task that depends on it; name it in your final message |
-| `fix round R/3`, R < 3 | Resume the loop at round R+1 |
-| a fix-round line carrying `escalated inline -> subagent` | This plan has left inline mode: use dr-superpowers:subagent-driven-development |
-| `fix round 3/3` | Go to Switching to subagent mode |
+| `escalated inline -> subagent` | This plan has left inline mode: use dr-superpowers:subagent-driven-development |
+| `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted and write the complete line, else treat as `still failing` |
+| `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
+| `fix round 3/3 (…; still failing)` | Go to Switching to subagent mode |
 | `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
 | none | Not started |
 
 **Plan state.** First, whatever the per-task lines say: if the ledger holds a
-fix-round line carrying `escalated inline -> subagent` with no later
+`Task <N>: escalated inline -> subagent` line with no later
 `implementer inline (assigned` line after it, this plan has left inline mode -
 use dr-superpowers:subagent-driven-development, exactly as `scripts/next-step`
 reads the same ledger. Otherwise: every task complete and no `Final review:`
@@ -250,10 +265,11 @@ For each task, in order:
    same message as your other bookkeeping, and mark the todo complete.
 8. **Check the budget.** Run `scripts/context-size`.
 
-**When a verification will not pass.** Append `Task <N>: fix round R/3 (…)`,
-fix, and re-run. Rounds 1 through 3 are yours. A task still failing after `3/3`
-goes to Switching to subagent mode - not to a fourth round, and not to a
-complete line.
+**When a verification will not pass.** Fix, re-run, then append
+`Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`
+with the round's outcome. Rounds 1 through 3 are yours. A task still failing
+after `3/3` goes to Switching to subagent mode - not to a fourth round, and
+not to a complete line.
 
 **When the plan is silent** - it does not say which of two reasonable things to
 do - rule, log it, and carry on.
@@ -335,8 +351,11 @@ The trigger is mechanical, so the switch is your ruling, not a seat verdict:
 the seat's four verdicts say nothing about execution mode. It happens only at a
 task boundary where every earlier task is complete.
 
-1. Append the escalation clause to the task's fix-round line:
-   `Task <N>: fix round 3/3 (…; commits a..b; escalated inline -> subagent)`.
+1. Append `Task <N>: escalated inline -> subagent — <trigger>`, where `<N>` is
+   the task that will run first under subagent mode - the failing task, or,
+   on your human partner's instruction, the next task not yet started. This
+   line is the switch: every trigger writes it, with or without a preceding
+   fix-round line.
 2. Log, and say aloud, `Ruling: switch to subagent mode at Task <N> —
    <trigger> — if wrong, the remaining tasks each cost one dispatch that inline
    would not have spent`.
@@ -394,6 +413,7 @@ Use dr-superpowers:finishing-a-development-branch.
 | "Subagents are available, so I should switch to the other skill" | The Execution line chose this mode, not the absence of subagents. Only your human partner overrides it. |
 | "I'll read the whole plan, it's faster than one brief at a time" | The plan on disk has no amendments applied. `task-brief` is how corrections reach you. |
 | "This task is harder than it scored - I'll just take more rounds" | Three rounds, then the switch. A fourth round on your own work is what not converging looks like. |
+| "The owner said switch, but there is no fix round to mark" | The escalated line is its own ledger line. Write it; nothing else records the switch. |
 | "The plan is wrong here, I'll fix it as I go" | You read one brief; the seat reads the plan and the spec. Send a blocked-plan item. |
 | "No reviewer is watching, so the self-review is optional" | It is the only per-task gate this mode has. Skipping it makes the final review the first time anyone reads the diff. |
 | "I'll mention the ruling in my final message instead of the ledger" | Your message dies with the session; the ledger survives compaction. |

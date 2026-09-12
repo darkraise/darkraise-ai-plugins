@@ -11,8 +11,8 @@ If this session was compacted — a compaction snapshot or summary sits above �
 your memory of the run is gone, and only the start of this file may have come
 back. Before anything else:
 
-1. Run `scripts/sdd-workspace PLAN_FILE`, from the plugin root (two levels
-   above this skill's directory), and read `progress.md` and `handoff.md` in
+1. Run `scripts/sdd-workspace PLAN_FILE`, from the plugin root (the path the session's entry point names; two
+   levels above this skill's directory), and read `progress.md` and `handoff.md` in
    the directory it prints.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides: `complete` is done; `fix round R/5` resumes at round
@@ -23,19 +23,11 @@ back. Before anything else:
 
 ## Select the host first
 
-Identify the host through its native tool schemas. On Codex, follow
-[native-codex.md](../../reference/native-codex.md): its `codex-v2`
-dispatch/review protocol replaces every Claude agent and external-CLI
-invocation below, including the final branch review. Supply the raw axes for
-rubric selection; validate any recorded weighted 0–9 score. Old policy versions
-require explicit conversion before dispatch. Preserve the raw risk axis for
-three independent risk-3 evaluations, criteria, progress triggers, and the
-five-round review cap. Reuse recorded assignments for transport retries; never
-clear attempt history to rerun initial selection or escape exhausted reserve.
-On Claude, use the seats and loop below. The presence of a Codex executable does
-not identify the host. Missing native tools, advertised model metadata, or
-required skills block dispatch with a named prerequisite. Honor any user
-instruction to execute inline.
+Identify the host through its native tool schemas, never by which executables
+are installed. On Codex, follow [native-codex.md](../../reference/native-codex.md):
+its `codex-v2` protocol replaces every Claude agent and external-CLI
+invocation below, including the final branch review, and carries its own
+conversion, retry and reserve rules. On Claude, use the seats and loop below.
 
 ## Overview
 
@@ -77,7 +69,7 @@ path forward is a guess. For those, stop and ask.
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished — one of those four stops, a context-budget handoff, or
 your human partner asking you to stop — run `scripts/next-step PLAN_FILE`,
-from the plugin root (two levels above this skill's directory), as your last
+from the plugin root (the path the session's entry point names; two levels above this skill's directory), as your last
 action. The last thing in your final message is the block it prints,
 verbatim. It also rewrites the `## Next session` section of the primary
 checkout's `.superpowers/handoff/latest.md`; if it exits 4, say the handoff
@@ -86,35 +78,17 @@ dr-superpowers:finishing-a-development-branch runs it instead.
 
 ## When to Use
 
-```dot
-digraph when_to_use {
-    "Have implementation plan?" [shape=diamond];
-    "Tasks mostly independent?" [shape=diamond];
-    "Plan's Execution line?" [shape=diamond];
-    "subagent-driven-development" [shape=box];
-    "executing-plans" [shape=box];
-    "Manual execution or brainstorm first" [shape=box];
-
-    "Have implementation plan?" -> "Tasks mostly independent?" [label="yes"];
-    "Have implementation plan?" -> "Manual execution or brainstorm first" [label="no"];
-    "Tasks mostly independent?" -> "Plan's Execution line?" [label="yes"];
-    "Tasks mostly independent?" -> "Manual execution or brainstorm first" [label="no - tightly coupled"];
-    "Plan's Execution line?" -> "subagent-driven-development" [label="subagent"];
-    "Plan's Execution line?" -> "executing-plans" [label="inline"];
-}
-```
-
-**vs. Executing Plans:**
-- Fresh subagent per task (no context pollution)
-- Review after each task (spec, scope, verification, quality), broad review at the end
-- Faster iteration (no human-in-loop between tasks)
+When a plan's `**Execution:**` line names `subagent`. Without a plan, use
+dr-superpowers:brainstorming first; with a line that names `inline`, use
+dr-superpowers:executing-plans. What this mode adds over inline is a fresh
+implementer per task and a judge-scored review after each one.
 
 The plan's `**Execution:**` line decides the mode. Your human partner's explicit
 instruction switches it in either direction, and only at a task boundary where
 every earlier task is complete, recorded as a `Ruling:` line. Inline mode also
-escalates here on its own when a task will not converge; it arrives with an
-`escalated inline -> subagent` clause on that task's fix-round line, and the
-Recovery table below says what to do with it.
+escalates here on its own when a task will not converge; it arrives with a
+`Task <N>: escalated inline -> subagent` ledger line, and the Recovery table
+below says what to do with it.
 
 ## The Process
 
@@ -125,8 +99,8 @@ digraph process {
     subgraph cluster_per_task {
         label="Per Task";
         "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" [shape=box];
-        "Implementer asks questions?" [shape=diamond];
-        "Answer questions, provide context" [shape=box];
+        "Implementer reports NEEDS_CONTEXT?" [shape=diamond];
+        "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [shape=box];
         "Implementer implements, tests, commits, self-reviews" [shape=box];
         "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)" [shape=box];
         "Verdicts clean and no score 1-8?" [shape=diamond];
@@ -151,10 +125,10 @@ digraph process {
     "Use dr-superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Setup: worktree, ledger check, plan header, legacy names, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
-    "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" -> "Implementer asks questions?";
-    "Implementer asks questions?" -> "Answer questions, provide context" [label="yes"];
-    "Answer questions, provide context" -> "Implementer implements, tests, commits, self-reviews";
-    "Implementer asks questions?" -> "Implementer implements, tests, commits, self-reviews" [label="no"];
+    "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" -> "Implementer reports NEEDS_CONTEXT?";
+    "Implementer reports NEEDS_CONTEXT?" -> "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [label="yes"];
+    "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" -> "Implementer implements, tests, commits, self-reviews";
+    "Implementer reports NEEDS_CONTEXT?" -> "Implementer implements, tests, commits, self-reviews" [label="no"];
     "Implementer implements, tests, commits, self-reviews" -> "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)";
     "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)" -> "Verdicts clean and no score 1-8?";
     "Verdicts clean and no score 1-8?" -> "Append completion to ledger, mark todo complete" [label="yes"];
@@ -194,8 +168,8 @@ sequences — the single most expensive failure observed. Track progress in
 a ledger file, not only in todos.
 
 - Each plan owns a workspace: at skill start, run
-  `scripts/sdd-workspace PLAN_FILE`, from the plugin root (two levels
-  above this skill's directory) — it prints the plan's git-ignored
+  `scripts/sdd-workspace PLAN_FILE`, from the plugin root (the path the session's entry point names; two
+  levels above this skill's directory) — it prints the plan's git-ignored
   directory (`<repo-root>/.superpowers/sdd/<plan-basename>/`), home to
   every artifact for THIS plan: ledger, briefs, reports, review packages.
   Another plan's directory is never yours to read or write.
@@ -205,7 +179,8 @@ a ledger file, not only in todos.
   file — or a stray ledger at the old flat path `.superpowers/sdd/progress.md`
   — is another plan's progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
-  `# SDD ledger — plan: <plan file path>`.
+  `# SDD ledger — plan: <plan file path>` — the path exactly as you pass it to
+  the scripts (checkout-relative or absolute; `next-step` resolves both).
 - Create `<workspace>/handoff.md` from the template in dr-superpowers:handoff
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes —
@@ -286,9 +261,10 @@ This skill owns every line in `<workspace>/progress.md`. The grammar:
 
 ```
 # SDD ledger — plan: <path>
-Task <N>: implementer <agent> (assigned; base <sha7>[; reserve tier][; scored at dispatch][; executor codex <m>/<e>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
+Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; executor codex <m>/<e>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
 Task <N>: fix round R/5 (X addressed, Y open — <one-liners>; commits a..b[; progress p -> q]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
 Group <a>-<b>: review round R/5 (<same fields as a fix round>)
+Task <N>: escalated inline -> subagent — <trigger>          (written by inline mode only)
 Task <N>: minor (deferred): <one-liner>
 Task <N>: parked — <finding> — Ruling: <why the code stands>
 Task <N>: Ruling: <finding> — <what was decided and why>
@@ -296,7 +272,7 @@ Task <N>: BLOCKED — <agent> exhausted — <what a human must decide>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
-Task <N>: complete (commits a..b, review clean | K parked[; scores spec s / scope c / verification v / quality q[, K=3]]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
+Task <N>: complete (commits a..b, review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q[, K=3]]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
@@ -328,7 +304,7 @@ Then:
 | `BLOCKED` | Terminal; never re-dispatch. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `fix round R/5` or `review round R/5`, R < 5 | Resume the loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
 | `fix round 5/5` or `review round 5/5` | Go to the breaker |
-| a fix-round line carrying `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the task's `**Implementer:**` agent fresh at round 1 of 5, with the brief, the open findings that line names, and the commits it names |
+| `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the successor rung of the task's `**Implementer:**` agent ([escalation.md](references/escalation.md)) fresh at round 1 of 5, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
 | `implementer … (assigned …)` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it; otherwise dispatch the same agent fresh |
 | none | Not started |
 
@@ -455,7 +431,7 @@ these steps directly.
   `max` agent, or any Fable tier — is a human ruling: dispatch it as written
   and note `reserve tier`. See [escalation.md](references/escalation.md).
 - **Task brief:** run `scripts/task-brief PLAN_FILE N`, from the plugin root
-  (two levels above this skill's directory) — it extracts the task's full text
+  (the path the session's entry point names) — it extracts the task's full text
   to a uniquely named file and prints `wrote <path>: <N> lines`, then the
   budget line (see Session Budget). Read the path out of the first line; do
   not pipe the output into a prompt as if it were a filename. Compose the
@@ -472,7 +448,9 @@ these steps directly.
   `reference/legacy-names.md`; (5) the report-file
   path and report contract. Exact values (numbers, magic strings, signatures,
   test cases) appear only in the brief. Never make a subagent read the whole
-  plan file.
+  plan file. A brief whose task the seat split into `#### Part` units is
+  dispatched one part at a time, in order, the dispatch naming the part;
+  the assigned line carries `; part <X>`.
 - **Report file:** name the implementer's report file after the brief
   (brief `…/task-N-brief.md` → report `…/task-N-report.md`) and put it in
   the dispatch prompt. The implementer writes the full report there and
@@ -517,7 +495,13 @@ Run `date +%s` in the same Bash call as `review-package` and keep the value as
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
 
-**NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
+**NEEDS_CONTEXT:** The implementer needs information that wasn't provided.
+If the answer is mechanical - a path, a name, a value that the header, an
+earlier task's report or the ledger already holds - supply it and re-dispatch
+the same agent, and log `Task <N>: Ruling: supplied <what> — <where it came
+from> — none`. Anything else is a question about what the plan means: send it
+to the ruling seat as a `blocked-plan` item and re-dispatch with the verdict.
+You never answer a requirements question from your own reading of one brief.
 
 **BLOCKED:** The implementer cannot complete the task. Assess the blocker:
 1. If it's a context problem, provide more context and re-dispatch the same agent
@@ -526,10 +510,6 @@ Run `date +%s` in the same Bash call as `review-package` and keep the value as
 4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
 
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
-
-If the implementer asks questions — before starting or mid-task — answer
-clearly and completely, provide additional context if needed, and don't
-rush it into implementation.
 
 ### 3. Review the task
 
@@ -541,7 +521,7 @@ needed.
 
 - Hand the reviewer its diff as a file: run
   `scripts/review-package PLAN_FILE BASE HEAD`, from the plugin root
-  (two levels above this skill's directory), and pass the reviewer the
+  (the path the session's entry point names), and pass the reviewer the
   file path it prints (or, without bash: `git log --oneline`, `git diff --stat`,
   and `git diff -U10` for the range, redirected to one uniquely named
   file). The output never enters your own context. Use the BASE you recorded
@@ -650,9 +630,10 @@ later than round 4. Record the reading on the fix-round line
 (`progress 11 -> 9`).
 
 **Split and reserve.** The top rung `impl-opus-high` escalates to `SPLIT`:
-send a `blocked-plan` item and break the remaining work into the smaller
-tasks the seat's CONFIRMED-GAP names, each scored against Rule S. A task
-is split once; a half that exhausts `impl-opus-high` again enters the reserve
+send a `blocked-plan` item; the seat's AMEND rewrites the task's body into
+`#### Part A` / `#### Part B` units under the same number, which you apply
+with `scripts/plan-amend` and dispatch in order, one part per dispatch. A task
+is split once; a part that exhausts `impl-opus-high` again enters the reserve
 at `impl-opus-xhigh`, said aloud; `impl-fable-max` exhausted is
 `Task <N>: BLOCKED`. Both splits and reserve entries are `Ruling:` lines. The
 details are in [escalation.md](references/escalation.md).
@@ -778,11 +759,7 @@ Task 1: Hook installation script  (**Implementer:** dr-superpowers:impl-sonnet-l
 [BASE=a1b2c3d; run task-brief for Task 1; dispatch impl-sonnet-low, no model argument]
 [Ledger: Task 1: implementer impl-sonnet-low (assigned; base a1b2c3d)]
 
-Implementer: "Before I begin - should the hook be installed at user or system level?"
-
-You: "User level (~/.config/example/hooks/)"
-
-Implementer: [Later] DONE — 5/5 passing; report file written
+Implementer: DONE — 5/5 passing; report file written; assumptions: user-level install (brief silent)
 
 [date +%s; review-package PLAN_FILE a1b2c3d HEAD; dispatch judge-fable with the printed path]
 Judge: Spec ✅. Task quality: Approved.

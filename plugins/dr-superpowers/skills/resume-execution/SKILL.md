@@ -13,7 +13,7 @@ session from memory or from a summary.
 
 ## Steps
 
-1. **Orient in one call.** Run `scripts/repo-audit`, from the plugin root (two
+1. **Orient in one call.** Run `scripts/repo-audit`, from the plugin root (the path the session's entry point names; two
    levels above this skill's directory). Read
    `<primary checkout>/.superpowers/handoff/latest.md`; the audit prints its path.
 2. **Verify the worktree** named in latest.md's `## State` against
@@ -30,7 +30,8 @@ session from memory or from a summary.
      asking.
 3. **Enter the worktree** (EnterWorktree with its path on Claude Code; `cd`
    elsewhere). Take the head commit of the ledger's last `Task N: complete`
-   line and check `git merge-base --is-ancestor <sha> HEAD`. If it fails, the
+   line (or the branch's merge base with main when no task has completed) and
+   check `git merge-base --is-ancestor <sha> HEAD`. If it fails, the
    history was rewritten after the handoff: log
    `Ruling: HEAD no longer descends from <sha> — history rewritten after the handoff — tasks re-verified from git log`
    and continue from the ledger plus `git log`.

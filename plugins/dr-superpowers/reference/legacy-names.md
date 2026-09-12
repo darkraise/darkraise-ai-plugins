@@ -15,8 +15,10 @@ prefixes literally; `scripts/validate-repository.mjs` enforces that.
 - Log one ledger line per distinct name translated:
   `Ruling: translated <old> -> <new> — legacy plugin name — none`
 - A suffix not in the tables below is not a legacy name. It is an unknown name:
-  dr-superpowers:subagent-driven-development handles it through its Dispatch
-  rulings; any other reader stops and asks.
+  on an `**Implementer:**` line, dr-superpowers:subagent-driven-development
+  handles it through its Dispatch rulings; anywhere else, treat it as absent,
+  log `Ruling: unknown name <name> ignored — not in legacy-names.md — <cost if
+  wrong>`, and carry on. A running plan never stops on a name.
 
 ## Skills
 

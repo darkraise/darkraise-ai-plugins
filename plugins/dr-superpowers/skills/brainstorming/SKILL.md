@@ -23,7 +23,8 @@ the approval gate never does.
 
 Before your first question, classify the request and say it in one
 line — `Process: <spike|bounded|architectural>, <inline|subagent> —
-<trigger | no trigger>` — so your human partner can override it. The
+<trigger | no trigger>` — so your human partner can override it. The mode
+slot is your expectation only; the plan's Execution line decides. The
 triggers are the seven in dr-superpowers:using-superpowers' Process Depth:
 a new project or subsystem; an interface that something outside its own
 files depends on changes; the files touched cannot be enumerated after
@@ -228,8 +229,8 @@ Wait for the user's response. If they request changes, make them and re-run the 
 
 **Implementation:**
 
-- Run `scripts/context-size`, from the plugin root (two levels above this
-  skill's directory). On exit 5 (handoff), invoke dr-superpowers:handoff with
+- Run `scripts/context-size`, from the plugin root (the path the session's entry point
+  names; two levels above this skill's directory). On exit 5 (handoff), invoke dr-superpowers:handoff with
   the spec as the draft and the next action "Write the implementation plan
   with dr-superpowers:writing-plans." — the plan is written in a fresh session.
 - Otherwise invoke the writing-plans skill to create a detailed implementation plan.

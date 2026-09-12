@@ -282,6 +282,17 @@ inline-to-subagent direction, and always runs a handoff. The final review moves 
 `reference/final-review.md`, shared by both execution skills. Details:
 `docs/superpowers/specs/2026-09-12-dr-superpowers-inline-mode-design.md`.
 
+**Amendment 2026-09-12 (plugin 1.6.0, post-review).** A whole-plugin review found that R5's
+gate had never fired: all five sub-project plans carried one or more score-4 tasks and so ran in
+subagent mode. R5 now reads: inline when every task totals 4 or less and none is at risk 3; the
+Execution line's model follows the highest total (Sonnet at 3 or less, Opus once a task scores 4),
+which `plan-lint` enforces. R1's mode switch is a dedicated ledger line,
+`Task <N>: escalated inline -> subagent — <trigger>`, written by every trigger; inline fix-round
+lines are written after the round with `passing | still failing`, matching subagent mode's
+timing. `next-step` treats a BLOCKED task as terminal and prints no launch. The implementer
+template no longer invites questions or adjacent improvement (R3, R12); a NEEDS_CONTEXT the
+controller cannot answer mechanically goes to the seat as `blocked-plan`.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`

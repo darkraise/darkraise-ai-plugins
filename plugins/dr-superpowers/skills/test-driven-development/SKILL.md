@@ -26,6 +26,11 @@ Write the test first. Watch it fail. Write minimal code to pass.
 - Generated code
 - Configuration files
 
+**Under a plan, the task's steps decide.** An implementer dispatched with a
+brief cannot ask: where the brief's steps call for a test first, follow this
+skill; where they do not, the plan's author already chose, and the agent file
+says so.
+
 Thinking "skip TDD just this once"? Stop. That's rationalization.
 
 ## The Iron Law

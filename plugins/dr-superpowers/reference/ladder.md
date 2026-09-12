@@ -154,8 +154,9 @@ reserve.
 
 Every reserve agent is a source exactly once, so a hand-assigned
 `impl-fable-low` has somewhere to escalate. `BLOCKED` is the terminal and is not
-an agent: a task that exhausts `impl-fable-max` is reported BLOCKED through
-superpowers' existing contract. There is no rung above it and no second split.
+an agent: a task that exhausts `impl-fable-max` is logged
+`Task <N>: BLOCKED — impl-fable-max exhausted — <what a human must decide>`.
+There is no rung above it and no second split.
 
 Ranking Fable above Opus puts `impl-fable-low` above `impl-opus-max` in the walk
 order. That is a statement about how the chain is traversed, not a claim that

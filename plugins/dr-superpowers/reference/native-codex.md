@@ -186,7 +186,7 @@ On a Claude host only, translate legacy skill and agent names per
 name; it is handled as an unknown name. Preserve effort, Evaluation, and
 reserve overrides and record the namespace translation in the ledger without
 rewriting the plan.
-New Claude plans use `Host: claude` and `Routing policy: claude-v1`, with the
-same assignment-source field. Native-to-Claude conversion uses the explicit
+Claude plans carry no Host or Routing policy line: `scripts/plan-lint` reads a
+plan without `Host: codex` as a Claude plan. Native-to-Claude conversion uses the explicit
 preview/approval process above: preserve raw axes and previous assignments, and
 explicitly recalculate Claude's unweighted total for its own policy.

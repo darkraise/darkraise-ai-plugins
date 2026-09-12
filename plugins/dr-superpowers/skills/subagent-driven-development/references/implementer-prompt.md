@@ -19,19 +19,17 @@ Subagent ([IMPLEMENTER]):
 
     [Scene-setting: where this fits, dependencies, architectural context]
 
-    ## Before You Begin
+    ## The Brief Is Complete
 
-    If you have questions about:
-    - The requirements or acceptance criteria
-    - The approach or implementation strategy
-    - Dependencies or assumptions
-    - Anything unclear in the task description
-
-    **Ask them now.** Raise any concerns before starting work.
+    The brief carries the code, the names and the values to use. Where it is
+    silent on a detail, take the smallest reading that satisfies its steps
+    and record it under `## Assumptions made` in your report. Where a choice
+    is not safely yours - two readings lead to different code that other
+    tasks would build on - stop and report NEEDS_CONTEXT with the exact
+    question. Never rewrite the task to what you think it meant.
 
     ## Your Job
 
-    Once you're clear on requirements:
     1. Implement exactly what the task specifies
     2. Write tests (following TDD if task says to)
     3. Verify implementation works
@@ -44,8 +42,11 @@ Subagent ([IMPLEMENTER]):
     **Keep it small and surgical:** do the simplest thing the brief allows,
     and touch only the files and lines the task needs.
 
-    **While you work:** If you encounter something unexpected or unclear, **ask questions**.
-    It's always OK to pause and clarify. Don't guess or make assumptions.
+    **While you work:** something unexpected - a file that is not where the
+    brief says, a test that fails for a reason outside your task - is a
+    report item, not a detour. Note it under `## Discovered issues (not
+    fixed)` and continue if your task can proceed; report BLOCKED if it
+    cannot.
 
     While iterating, run the focused test for what you're changing; run the
     full suite once before committing, not after every edit.
@@ -72,8 +73,10 @@ Subagent ([IMPLEMENTER]):
       it as DONE_WITH_CONCERNS — don't split files on your own without plan guidance
     - If an existing file you're modifying is already large or tangled, work carefully
       and note it as a concern in your report
-    - In existing codebases, follow established patterns. Improve code you're touching
-      the way a good developer would, but don't restructure things outside your task.
+    - In existing codebases, follow established patterns. Do not improve,
+      reformat or refactor code the task did not ask you to change - an
+      adjacent problem goes in `## Discovered issues (not fixed)`; the
+      review scores unrequested changes as scope drift.
 
     ## When You're in Over Your Head
 
@@ -101,9 +104,9 @@ Subagent ([IMPLEMENTER]):
     Review your work with fresh eyes. Ask yourself:
 
     **Completeness:**
-    - Did I fully implement everything in the spec?
-    - Did I miss any requirements?
-    - Are there edge cases I didn't handle?
+    - Did I fully implement every step in the brief?
+    - Did I miss any requirement the brief states?
+    - Did I add anything the brief does not ask for?
 
     **Quality:**
     - Is this my best work?

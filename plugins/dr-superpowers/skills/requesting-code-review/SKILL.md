@@ -12,9 +12,12 @@ Dispatch a code reviewer subagent to catch issues before they cascade. The revie
 ## When to Request Review
 
 **Mandatory:**
-- After each task in subagent-driven development
-- After completing major feature
+- After completing a major feature outside a plan
 - Before merge to main
+
+Under a plan, the execution skills own review: subagent mode's per-task judge
+and both modes' final review ([final-review.md](../../reference/final-review.md))
+dispatch their own templates, and this skill's steps do not apply.
 
 **Optional but valuable:**
 - When stuck (fresh perspective)
@@ -25,7 +28,7 @@ Dispatch a code reviewer subagent to catch issues before they cascade. The revie
 
 **1. Get git SHAs:**
 ```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
+BASE_SHA=$(git merge-base origin/main HEAD)  # the commit the work started from; never HEAD~1, which truncates multi-commit work
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
@@ -34,16 +37,18 @@ HEAD_SHA=$(git rev-parse HEAD)
 Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md](references/code-reviewer.md)
 
 **Placeholders:**
-- `{DESCRIPTION}` - Brief summary of what you built
-- `{PLAN_OR_REQUIREMENTS}` - What it should do
-- `{BASE_SHA}` - Starting commit
-- `{HEAD_SHA}` - Ending commit
+- `[DESCRIPTION]` - Brief summary of what you built
+- `[PLAN_OR_REQUIREMENTS]` - What it should do
+- `[DIFF_FILE]` - `none`, or a diff file you wrote for the reviewer
+- `[BASE_SHA]` - Starting commit
+- `[HEAD_SHA]` - Ending commit
 
 **3. Act on feedback:**
 - Fix Critical issues immediately
 - Fix Important issues before proceeding
 - Note Minor issues for later
-- Push back if reviewer is wrong (with reasoning)
+- Push back if the reviewer is wrong, with reasoning — outside a plan only;
+  under a plan the ruling seat adjudicates, never you
 
 ## Example
 

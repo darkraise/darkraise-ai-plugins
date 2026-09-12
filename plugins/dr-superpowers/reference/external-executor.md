@@ -16,7 +16,7 @@ Run this once per plan, after scoring every task and before writing any
 assignment line:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"
+bash "<plugin-root>/scripts/detect-executors.sh"
 ```
 
 Render the roster as a multi-select question: one tickable option per executor
@@ -92,7 +92,7 @@ unreconciled worktree. Read [external-task-recovery.md](external-task-recovery.m
 for ownership, artifacts, approved write sets, and recovery operations.
 
 1. **Guard the roster.** Run
-   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"` and read the entry
+   `bash "<plugin-root>/scripts/detect-executors.sh"` and read the entry
    for the named executor. **Never trust the plan's copy** - it records what was
    available when the plan was written.
 
@@ -110,7 +110,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    worktree's repository root:
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh" \
+   bash "<plugin-root>/scripts/run-codex-task.sh" \
      --brief <brief> --report <workspace>/task-<N>-report.md \
      --cwd <worktree-root> --task-id <stable-task-id> --write-set <approved-paths.json> --model <model> --effort <effort>
    ```
@@ -237,7 +237,7 @@ findings verbatim into a file and pass that file as the brief - the wrapper
 appends the task contract to every run, resume included:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh" \
+bash "<plugin-root>/scripts/run-codex-task.sh" \
   --brief <feedback-file> --report <workspace>/task-<N>-report-r<K>.md \
   --cwd <worktree-root> --task-id <stable-task-id> --write-set <approved-paths.json> --model <model> --effort <effort> --resume <thread-id> --review-round <K>
 ```
@@ -315,7 +315,7 @@ On a risk-3 task, one of the three independent review seats is Codex when it is
 usable. Risk-3 tasks are excluded from the executor lane by `max_risk 1` in the
 `gate` block of [ladder.md](ladder.md), so this seat never reviews Codex's own
 work - a property the final-review Codex round does not share. Establish
-usability by running `bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-executors.sh"`
+usability by running `bash "<plugin-root>/scripts/detect-executors.sh"`
 and reading the `usable` field for `codex`; never trust the plan's copy.
 
 Run it as a background Bash call, for the reason Dispatch gives: the Bash tool's
@@ -332,7 +332,7 @@ nothing but the round.
 
 ```bash
 timeout 1800 codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
-  --output-schema "${CLAUDE_PLUGIN_ROOT}/criteria/codex-review-schema.json" \
+  --output-schema "<plugin-root>/criteria/codex-review-schema.json" \
   -o <workspace>/task-<N>-review-codex.json \
   -C <worktree-root> < <prompt-file>
 ```

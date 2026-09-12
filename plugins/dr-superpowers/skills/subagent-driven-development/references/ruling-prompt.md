@@ -1,8 +1,9 @@
 # Ruling Seat Prompt Template
 
-Use this template when dr-superpowers:subagent-driven-development sends
-judgment items to the ruling seat. That skill's The Ruling Seat section says
-when, and how each verdict is carried out.
+Use this template when dr-superpowers:subagent-driven-development or
+dr-superpowers:executing-plans sends judgment items to the ruling seat. Each
+skill's The Ruling Seat section says when, and how each verdict is carried
+out.
 
 ```
 Subagent ([JUDGE]):
@@ -61,8 +62,12 @@ Subagent ([JUDGE]):
       Old must occur exactly once in that task (its heading through the line
       before the next task heading) or in the header (everything before the
       first task). Never touch the Spec, Execution, Program, Plan review,
-      Host or Routing policy lines. Never add or remove a task: a task that
-      is too large is a CONFIRMED-GAP naming the split.
+      Host or Routing policy lines. Never add or remove a task heading. A
+      task that is too large is an AMEND that rewrites its body into
+      `#### Part A: <title>` and `#### Part B: <title>` units under the same
+      heading, each with its own Files, Interfaces, Implementer, Evaluation
+      and steps, Part B free to consume Part A's output; each part must
+      satisfy Rule S on its own.
     - BLOCKED: every path forward is a guess. After the Ruling line, write
       `Decision needed: <what a human must decide>`.
 

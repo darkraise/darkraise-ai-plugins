@@ -230,7 +230,7 @@ provides a workspace-exit tool, use it.
 gone, so nothing follows from it.
 
 If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`,
-from the plugin root (two levels above this skill's directory), with the
+from the plugin root (the path the session's entry point names; two levels above this skill's directory), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
 the next program sub-project with its launch command and first prompt, or
