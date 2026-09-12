@@ -272,6 +272,16 @@ the fourth stop class for a plan defect. writing-plans no longer offers an execu
 Execution line decides. Details:
 `docs/superpowers/specs/2026-09-12-dr-superpowers-small-model-planning-design.md`.
 
+**Amendment 2026-09-12 (sub-project 5 spec).** Inline mode has no per-task and no per-group
+review: the whole-branch final review is its only review gate, so R1's `Group <a>-<b>: review
+round R/<cap>` line belongs to subagent mode's batching alone. R3's seat serves three kinds
+inline — `blocked-plan`, `plan-conflict`, `final-residual` — and the executor rules unseated, with
+the ledger marker `(unseated)`, only where no subagent facility exists. R1's cap parameter is
+realized as 3 inline and 5 in subagent mode. R1's mode switch is one-way and automatic in the
+inline-to-subagent direction, and always runs a handoff. The final review moves to
+`reference/final-review.md`, shared by both execution skills. Details:
+`docs/superpowers/specs/2026-09-12-dr-superpowers-inline-mode-design.md`.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`
