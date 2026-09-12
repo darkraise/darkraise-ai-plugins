@@ -645,7 +645,8 @@ later than round 4. Record the reading on the fix-round line
 (`progress 11 -> 9`).
 
 **Split and reserve.** The top rung `impl-opus-high` escalates to `SPLIT`:
-break the remaining work into smaller tasks, each scored against Rule S. A task
+send a `blocked-plan` item and break the remaining work into the smaller
+tasks the seat's CONFIRMED-GAP names, each scored against Rule S. A task
 is split once; a half that exhausts `impl-opus-high` again enters the reserve
 at `impl-opus-xhigh`, said aloud; `impl-fable-max` exhausted is
 `Task <N>: BLOCKED`. Both splits and reserve entries are `Ruling:` lines. The
