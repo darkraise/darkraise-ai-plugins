@@ -55,6 +55,19 @@ check "the shared final review exists" \
 check "the ruling prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/ruling-prompt.md" ] && echo yes || echo no)" "yes"
 
+# final-review.md's own links are outside validate-repository.mjs's coverage
+# (it walks skills/, not reference/), so this suite is the only thing pinning
+# them.
+present "final review links the code reviewer" "$FINAL" "../skills/requesting-code-review/references/code-reviewer.md"
+check "the code reviewer reference exists" \
+  "$([ -f "$P/skills/requesting-code-review/references/code-reviewer.md" ] && echo yes || echo no)" "yes"
+present "final review links the external executor" "$FINAL" "external-executor.md"
+check "the external executor reference exists" \
+  "$([ -f "$P/reference/external-executor.md" ] && echo yes || echo no)" "yes"
+present "final review links the re-review prompt" "$FINAL" "../skills/subagent-driven-development/references/re-review-prompt.md"
+check "the re-review prompt exists" \
+  "$([ -f "$P/skills/subagent-driven-development/references/re-review-prompt.md" ] && echo yes || echo no)" "yes"
+
 # The mode is chosen by the plan, not by whether subagents exist.
 absent "drops the upstream subagent-availability note" "$INLINE" \
   "works much better with access to subagents"
