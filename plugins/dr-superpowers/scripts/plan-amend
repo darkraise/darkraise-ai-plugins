@@ -37,12 +37,8 @@ grep -qE '^Reason: .+' "$TMP/block" || reject "missing 'Reason:' line"
 grep -qE '^Cost if wrong: .+' "$TMP/block" || reject "missing 'Cost if wrong:' line"
 
 # Split out the Old and New fence bodies; report which one is malformed.
-awk -v dir="$TMP" '
-  function closes(t, open) {
-    sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
-    return t ~ /^(`+|~+)$/ && substr(t, 1, 1) == substr(open, 1, 1) && length(t) >= length(open)
-  }
-  mode != "" { if (closes($0, open)) { done[mode] = 1; mode = "" } else print > (dir "/" mode); next }
+awk -v dir="$TMP" "$_PLAN_AWK"'
+  mode != "" { if (close_marker($0, open)) { done[mode] = 1; mode = "" } else print > (dir "/" mode); next }
   /^### Old[ \t]*$/ { sect = "old"; next }
   /^### New[ \t]*$/ { sect = "new"; next }
   sect != "" && match($0, /^(````+|~~~~+)/) { open = substr($0, RSTART, RLENGTH); mode = sect; sect = ""; printf "" > (dir "/" mode); next }
