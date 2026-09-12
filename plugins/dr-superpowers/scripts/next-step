@@ -54,7 +54,7 @@ plan_abs="$(cd "$(dirname "$plan")" && pwd)/$(basename "$plan")"
 rel=${plan_abs#"$root_posix"/}
 slug=$(basename "$plan" .md)
 
-status_line="" next_line="" prompt="" launch=1 dir="$primary" launch_cmd=""
+status_line="" next_line="" prompt="" launch=1 dir="$primary" launch_cmd="" escalated_at=""
 
 if [ "$draft" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
@@ -86,6 +86,16 @@ else
       has_ledger=1
       ledger_note="ledger \`$ledger_shown\`"
       done_tasks=$(ledger_done "$ledger_file")
+      # A ledger outranks the Execution line on which mode the run is in: a
+      # switch is recorded there and the plan is never edited. The escalation
+      # holds until a later inline assignment shows the plan came back.
+      esc=$(grep -n 'escalated inline -> subagent' <<<"$ledger_text" | tail -n 1 | cut -d: -f1 || true)
+      if [ -n "$esc" ]; then
+        back=$(grep -n 'implementer inline' <<<"$ledger_text" | tail -n 1 | cut -d: -f1 || true)
+        if [ -z "$back" ] || [ "$back" -lt "$esc" ]; then
+          escalated_at=$(sed -n "${esc}p" <<<"$ledger_text" | sed -E 's/^Task ([0-9]+):.*/\1/')
+        fi
+      fi
     else
       ledger_note="the ledger at \`$ledger_shown\` belongs to another plan and is ignored"
     fi
@@ -138,6 +148,11 @@ else
     else
       status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
       next_line="Resume at Task $first_open ($open_title)."
+    fi
+
+    if [ -n "$escalated_at" ]; then
+      launch_cmd="claude --model sonnet --effort high"
+      next_line="$next_line This plan escalated to subagent mode at Task $escalated_at."
     fi
 
     # With a ledger there is state to verify before continuing, which is

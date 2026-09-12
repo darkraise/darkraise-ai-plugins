@@ -233,5 +233,50 @@ run "$REPO"
 check "no arguments: exits 2" "$status" "2"
 has "no arguments: prints usage on stdout" "$out" "next-step: usage:"
 
+# --- a plan that escalated out of inline mode ---
+# The ledger, not the Execution line, says which mode a run is in after a
+# switch. The launch command has to follow it, or the resumed session starts at
+# inline mode's model and effort.
+INL="$REPO/docs/plans/2026-01-01-inline.md"
+cat > "$INL" <<'PLAN'
+# Inline plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** inline — `claude --model sonnet --effort low` — every task scores 2
+
+## Task index
+
+1. First
+2. Second
+
+### Task 1: First
+
+### Task 2: Second
+PLAN
+INL_LEDGER="$REPO/.superpowers/sdd/2026-01-01-inline"
+mkdir -p "$INL_LEDGER"
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-inline.md"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+  echo "Task 2: implementer inline (assigned; base bbbbbbb)"
+  echo "Task 2: fix round 3/3 (0 addressed, 1 open — still red; commits bbbbbbb..ccccccc; escalated inline -> subagent)"
+} > "$INL_LEDGER/progress.md"
+
+run "$REPO" docs/plans/2026-01-01-inline.md
+has "escalated: launches the subagent pair" "$out" "claude --model sonnet --effort high"
+lacks "escalated: drops the inline pair" "$out" "--effort low"
+has "escalated: says the plan escalated" "$out" "This plan escalated to subagent mode at Task 2."
+
+# A later inline assignment means the plan came back; the Execution line rules
+# again.
+echo "Task 2: implementer inline (assigned; base ccccccc)" >> "$INL_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-inline.md
+has "returned to inline: launches the inline pair" "$out" "claude --model sonnet --effort low"
+lacks "returned to inline: drops the escalation sentence" "$out" "This plan escalated to subagent mode"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
