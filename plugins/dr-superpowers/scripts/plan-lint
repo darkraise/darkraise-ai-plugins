@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# Check an implementation plan's shape mechanically, so a planner of any size
+# gets the same verdict: the header block, task headings and index, the
+# Execution line, placeholders, and every task's assignment lines against
+# reference/ladder.md (Claude) or reference/codex-routing.json (Codex).
+#
+# Usage: plan-lint PLAN_FILE [--amendments FILE]
+# Default amendments: <workspace>/amendments.md inside a git repository.
+# Output: "ERROR|WARN <header|Task N>: <what>" lines, then a summary line.
+# Exit: 0 no errors; 1 errors; 2 usage or missing file.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+LADDER="$HERE/../reference/ladder.md"
+ROUTING="$HERE/../reference/codex-routing.json"
+
+usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE]" >&2; exit 2; }
+[ $# -eq 1 ] || [ $# -eq 3 ] || usage
+plan=$1
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+amend=""
+if [ $# -eq 3 ]; then
+  [ "$2" = "--amendments" ] || usage
+  amend=$3
+else
+  amend=$(plan_amendments_file "$plan")
+fi
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+src="$TMP/plan.md"
+findings="$TMP/findings"
+: > "$findings"
+say() { printf '%s %s: %s\n' "$1" "$2" "$3" >> "$findings"; } # say SEV WHERE WHAT
+
+if ! plan_apply_amendments "$plan" "$amend" > "$src" 2> "$TMP/amend.err"; then
+  say ERROR header "$(head -n 1 "$TMP/amend.err")"
+  tr -d '\r' < "$plan" > "$src"
+fi
+
+root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || pwd)
+SEP='( — | – | - | -- )'
+header=$(plan_header "$src")
+block() { tr -d '\r' < "$LADDER" | awk -v b="$1" '$0 == "```" b { on = 1; next } on && /^```/ { exit } on { print }'; }
+
+codex=0
+grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
+
+# --- header labels and sections ---
+for label in Goal Spec Execution; do
+  [ -n "$(plan_header_line "$src" "$label")" ] || say ERROR header "missing **$label:** line"
+done
+for section in "Global Constraints" "Contracts" "Assumptions (evidence)" "Task index"; do
+  grep -qxF "## $section" <<<"$header" || say ERROR header "missing '## $section' section"
+done
+[ -n "$(plan_header_line "$src" 'Plan review')" ] || say WARN header "no **Plan review:** line yet"
+
+spec_line=$(plan_header_line "$src" Spec)
+if [ -n "$spec_line" ]; then
+  spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$spec_line")
+  [ -f "$root/$spec_path" ] || say ERROR header "Spec path does not exist: $spec_path"
+fi
+
+program=$(plan_header_line "$src" Program)
+if [ -n "$program" ]; then
+  if [[ "$program" =~ ^\*\*Program:\*\*\ \`?([^\`\ ]+)\`?$SEP"sub-project "([0-9]+)" of "([0-9]+)$SEP(next:\ .+|last)$ ]]; then
+    ppath=${BASH_REMATCH[1]} k=${BASH_REMATCH[3]} n=${BASH_REMATCH[4]}
+    [ "$k" -le "$n" ] || say ERROR header "Program line: sub-project $k of $n"
+    [ -f "$root/$ppath" ] || say ERROR header "Program path does not exist: $ppath"
+  else
+    say ERROR header "Program line does not match '**Program:** <path> — sub-project <k> of <n> — next: <title>' or '… — last'"
+  fi
+fi
+
+# --- task headings and index ---
+tasks=$(plan_tasks "$src")
+[ -n "$tasks" ] || say ERROR header "no task headings ('### Task N: <title>')"
+nums=$(cut -f1 <<<"$tasks" | grep -v '^$' || true)
+i=0
+for n in $nums; do
+  i=$((i + 1))
+  [ "$n" -eq "$i" ] || { say ERROR header "task numbers must run 1..N in order: found Task $n at position $i"; break; }
+done
+
+awk "$_PLAN_AWK"'
+  in_fence($0) { next }
+  /^#+[ \t]+/ {
+    t = $0; sub(/^#+[ \t]+/, "", t)
+    if ((tolower(t) ~ /^task[^a-z]*[0-9]/ && t !~ /^Task[ \t]+[0-9]+/) || t ~ /\(Task [0-9]+\)[ \t]*$/)
+      print "ERROR header: malformed task heading: " $0
+  }
+' "$src" >> "$findings"
+
+index_lines=$(awk '$0 == "## Task index" { on = 1; next } on && /^## / { exit } on && /^[0-9]+\. / { print }' <<<"$header" \
+  | sed -E 's/^([0-9]+)\. /\1\t/')
+[ "$index_lines" = "$tasks" ] || say ERROR header "Task index does not match the task headings (numbers and titles, in order)"
+
+# --- Execution line (R6) ---
+execution=$(plan_header_line "$src" Execution)
+mode=""
+if [ -n "$execution" ]; then
+  if [ "$codex" -eq 1 ]; then
+    if [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?$SEP.+ ]]; then
+      mode=${BASH_REMATCH[1]}
+      m=${BASH_REMATCH[3]} e=${BASH_REMATCH[4]}
+      jq -e --arg m "$m" --arg e "$e" '[.execution[], .reserve[]] | any(.model == $m and .effort == $e)' "$ROUTING" >/dev/null 2>&1 \
+        || say ERROR header "Execution pair codex $m / $e is not in codex-routing.json"
+    else
+      say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — codex <model> / <effort> — <reason>'"
+    fi
+  elif [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?claude\ --model\ (haiku|sonnet|opus|fable|claude-[a-z0-9.-]+)\ --effort\ (low|medium|high|xhigh|max)\`?$SEP.+ ]]; then
+    mode=${BASH_REMATCH[1]}
+  else
+    say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — claude --model <m> --effort <e> — <reason>'"
+  fi
+fi
+
+# --- placeholders ---
+awk "$_PLAN_AWK"'
+  {
+    f = in_fence($0); k = f ? -1 : is_task($0)
+    if (k >= 0) where = "Task " k
+    s = $0; gsub(/`[^`]*`/, "", s); low = tolower(s)
+    hard = (s ~ /(^|[^A-Za-z])(TBD|TODO)([^A-Za-z]|$)/ || low ~ /implement later|fill in (the )?details|similar to task [0-9]+/)
+    soft = (low ~ /add appropriate error handling|handle edge cases/)
+    if (hard) print (f ? "WARN " : "ERROR ") where ": placeholder: " $0
+    else if (soft) print "WARN " where ": placeholder: " $0
+  }
+' where=header "$src" >> "$findings"
+
+# --- per task ---
+assignment=$(block assignment)
+reserve=$(block reserve | awk '{ print $1 }' | grep -vxF BLOCKED | grep -vxF -f <(awk '{ print $2 }' <<<"$assignment") || true)
+gate=$(block gate)
+min_score=$(awk '$1 == "min_score" { print $2 }' <<<"$gate")
+max_risk=$(awk '$1 == "max_risk" { print $2 }' <<<"$gate")
+externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
+r5_bad=""
+
+for n in $nums; do
+  where="Task $n"
+  text=$(plan_task_text "$src" "$n")
+  line() { grep -m 1 -E "^\*\*$1:\*\*" <<<"$text" || true; }
+  sev=ERROR
+  [ -n "$(line Override)" ] && sev=WARN
+  grep -qE '^\*\*Files:\*\*' <<<"$text" || say ERROR "$where" "missing **Files:** block"
+  impl=$(line Implementer)
+  ev=$(line Evaluation)
+  [ -n "$impl" ] || say ERROR "$where" "missing **Implementer:** line"
+  [ -n "$ev" ] || { say ERROR "$where" "missing **Evaluation:** line"; continue; }
+
+  if [ "$codex" -eq 1 ]; then
+    if [[ "$ev" =~ files=([0-9]+),\ spec=([0-9]+),\ coupling=([0-9]+),\ risk=([0-9]+)\;\ weighted\ routing\ score=([0-9]+) ]]; then
+      a=${BASH_REMATCH[1]} b=${BASH_REMATCH[2]} c=${BASH_REMATCH[3]} d=${BASH_REMATCH[4]} s=${BASH_REMATCH[5]}
+    else
+      say ERROR "$where" "Evaluation does not match 'files=a, spec=b, coupling=c, risk=d; weighted routing score=s'"; continue
+    fi
+    [ "$s" -eq $((a + b + c + 2 * d)) ] || say ERROR "$where" "weighted routing score $s is not files+spec+coupling+2*risk = $((a + b + c + 2 * d))"
+    source=$(line 'Assignment source')
+    [[ "$source" =~ ^\*\*Assignment\ source:\*\*\ (rubric|human)[[:space:]]*$ ]] || say ERROR "$where" "missing or invalid **Assignment source:** (rubric|human)"
+    if [[ "$source" == *rubric* ]]; then
+      if [[ "$impl" =~ ^\*\*Implementer:\*\*\ \`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?[[:space:]]*$ ]]; then
+        rank=$(jq -r --arg m "${BASH_REMATCH[1]}" --arg e "${BASH_REMATCH[2]}" \
+          '.execution[] | select(.model == $m and .effort == $e) | .rank' "$ROUTING" 2>/dev/null | tr -d '\r')
+        if [ -z "$rank" ]; then say "$sev" "$where" "Implementer pair is not an execution tier in codex-routing.json"
+        elif [ "$rank" -lt "$s" ]; then say "$sev" "$where" "Implementer rank $rank is below routing score $s"
+        elif [ "$rank" -gt "$s" ]; then say WARN "$where" "Implementer rank $rank is above routing score $s (promotion)"
+        fi
+      else
+        say ERROR "$where" "Implementer does not match 'codex <model> / <effort>'"
+      fi
+    fi
+  else
+    if [[ "$ev" =~ ^\*\*Evaluation:\*\*\ files\ ([0-9]+)$SEP"spec "([0-9]+)$SEP"coupling "([0-9]+)$SEP"risk "([0-9]+)\ =\ ([0-9]+) ]]; then
+      a=${BASH_REMATCH[1]} b=${BASH_REMATCH[3]} c=${BASH_REMATCH[5]} d=${BASH_REMATCH[7]} t=${BASH_REMATCH[8]}
+    else
+      say ERROR "$where" "Evaluation does not match 'files a — spec b — coupling c — risk d = t'"; continue
+    fi
+    [ "$t" -eq $((a + b + c + d)) ] || say ERROR "$where" "scores sum to $((a + b + c + d)), not $t"
+    if [ -n "$impl" ]; then
+      name=$(sed -E 's/^\*\*Implementer:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$impl")
+      if [[ "$name" != *:* ]]; then
+        say ERROR "$where" "Implementer '$name' is not fully qualified"
+      else
+        suffix=${name##*:} prefix=${name%%:*}
+        [ "$prefix" = "dr-superpowers" ] || say WARN "$where" "legacy prefix '$prefix:' (resolved by suffix per legacy-names.md)"
+        want=$(awk -v t="$t" '$1 == t { print $2 }' <<<"$assignment")
+        if grep -qxF "$suffix" <<<"$reserve"; then
+          say "$sev" "$where" "$suffix is a reserve tier; it needs a human **Override:**"
+        elif [ "$suffix" != "$want" ]; then
+          say "$sev" "$where" "Implementer $suffix does not match the assignment table's ${want:-no row} for total $t"
+        fi
+      fi
+    fi
+    approach=$(line Approach)
+    if [ -n "$approach" ]; then
+      if [[ "$approach" =~ ^\*\*Approach:\*\*\ (inline|advisor|best-of-3)$SEP.+ ]]; then
+        [ "${BASH_REMATCH[1]}" != inline ] || [[ "$approach" =~ skip\ [0-9]+ ]] \
+          || say ERROR "$where" "an inline Approach must cite 'skip <n>'"
+      else
+        say ERROR "$where" "Approach does not match '<inline|advisor|best-of-3> — <reason>'"
+      fi
+    fi
+    executor=$(line Executor)
+    if [ -n "$executor" ]; then
+      [ "$sev" = ERROR ] || say ERROR "$where" "an Executor line on an overridden task fails the lane gate"
+      { [ "$t" -ge "$min_score" ] && [ "$d" -le "$max_risk" ]; } \
+        || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $min_score, max_risk $max_risk)"
+      rung=$(awk -v t="$t" '$1 == t { print $2 " / " $3 }' <<<"$(block codex-assignment)")
+      { [ -n "$rung" ] && [[ "$executor" == *"codex $rung"* ]]; } || say ERROR "$where" "Executor does not name the codex-assignment rung for total $t (codex ${rung:-none})"
+      [[ "$externals" == *codex* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name codex"
+    fi
+  fi
+  for v in "$a" "$b" "$c" "$d"; do
+    [ "$v" -le 3 ] || { say ERROR "$where" "each axis must be 0-3"; break; }
+  done
+  [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] || say "$sev" "$where" "Rule S: files+spec+coupling must be below 4 and spec below 3"
+  { [ $((a + b + c + d)) -le 3 ] && [ "$d" -lt 3 ]; } || r5_bad="$r5_bad $n"
+done
+
+if [ "$mode" = inline ] && [ -n "$r5_bad" ]; then
+  say ERROR header "inline execution needs every task at total <= 3 and risk < 3; fails on Task${r5_bad}"
+fi
+
+cat "$findings"
+errors=$(grep -c '^ERROR' "$findings" || true)
+warnings=$(grep -c '^WARN' "$findings" || true)
+echo "plan-lint: ${errors} errors, ${warnings} warnings"
+[ "$errors" -eq 0 ]
