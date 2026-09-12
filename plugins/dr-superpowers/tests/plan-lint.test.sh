@@ -183,8 +183,28 @@ lint v8.md
 has "Execution grammar" "$out" "ERROR header: Execution line does not match"
 variant v9.md 's/^\*\*Execution:\*\* .*/**Execution:** inline -- claude --model sonnet --effort medium -- all small/'
 lint v9.md
-has "inline breaks R5" "$out" "ERROR header: inline execution needs every task at total <= 3 and risk < 3; fails on Task 2"
+has "inline at total 4 needs opus" "$out" "ERROR header: inline execution with a task at total 4 needs --model opus (highest total 4)"
+lacks "inline at total 4 passes R5" "$out" "inline execution needs every task"
 lacks "double-hyphen separators and bare command parse" "$out" "Execution line does not match"
+variant v9b.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — Task 2 scores 4/'
+lint v9b.md
+lacks "inline at total 4 on opus is clean" "$out" "ERROR header: inline"
+variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
+lint v9c.md
+has "inline breaks R5 at total 5" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 2"
+variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
+lint v9d.md
+has "inline breaks R5 at risk 3" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 2"
+variant v9e.md 's/^### Task 1: First thing$/### Task 1: -v flag/; s/^1\. First thing$/1. -v flag/'
+lint v9e.md
+lacks "leading punctuation in a title survives the index check" "$out" "Task index does not match"
+variant v9f.md '/^## Contracts$/{N;N;s/.*/```text\n## Contracts\n```/}'
+lint v9f.md
+has "a fenced section heading does not count" "$out" "ERROR header: missing '## Contracts' section"
+variant v9g.md 's/^\*\*Implementer:\*\* dr-superpowers:impl-opus-low$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-high/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+lint v9g.md
+has "split parts: part B is missing its Evaluation" "$out" "ERROR Task 2 part B: missing **Evaluation:** line"
+lacks "split parts: part A is clean" "$out" "Task 2 part A"
 variant v10.md 's/^\*\*Program:\*\* .*/**Program:** `docs\/program.md` — sub-project 3 of 2 — last/'
 lint v10.md
 has "Program k > n" "$out" "ERROR header: Program line: sub-project 3 of 2"

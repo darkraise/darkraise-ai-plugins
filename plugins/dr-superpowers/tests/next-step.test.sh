@@ -263,7 +263,8 @@ mkdir -p "$INL_LEDGER"
   echo "Task 1: implementer inline (assigned; base aaaaaaa)"
   echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
   echo "Task 2: implementer inline (assigned; base bbbbbbb)"
-  echo "Task 2: fix round 3/3 (0 addressed, 1 open — still red; commits bbbbbbb..ccccccc; escalated inline -> subagent)"
+  echo "Task 2: fix round 3/3 (build still red; commits bbbbbbb..ccccccc; still failing)"
+  echo "Task 2: escalated inline -> subagent — still failing after fix round 3/3  "
 } > "$INL_LEDGER/progress.md"
 
 run "$REPO" docs/plans/2026-01-01-inline.md
@@ -278,9 +279,9 @@ run "$REPO" docs/plans/2026-01-01-inline.md
 has "returned to inline: launches the inline pair" "$out" "claude --model sonnet --effort low"
 lacks "returned to inline: drops the escalation sentence" "$out" "This plan escalated to subagent mode"
 
-# --- a ledger that merely quotes the escalation clause must not escalate ---
-# The clause is a marker on a fix-round line, not a substring match anywhere
-# in the ledger; a deferred-minor sentence describing the grammar is not an
+# --- a ledger that merely quotes the escalation marker must not escalate ---
+# The marker is its own ledger line, not a substring match anywhere in the
+# ledger; a deferred-minor sentence describing the grammar is not an
 # escalation.
 QUOTE="$REPO/docs/plans/2026-01-01-quote.md"
 cat > "$QUOTE" <<'PLAN'
@@ -303,12 +304,94 @@ mkdir -p "$QUOTE_LEDGER"
 {
   echo "# SDD ledger — plan: docs/plans/2026-01-01-quote.md"
   echo "Task 1: implementer inline (assigned; base aaaaaaa)"
-  echo "Task 1: minor (deferred): the Recovery row calls this a line ending \`escalated inline -> subagent\`, harmless"
+  echo "Task 1: minor (deferred): the Recovery row calls this a line \`Task N: escalated inline -> subagent\`, harmless"
 } > "$QUOTE_LEDGER/progress.md"
 
 run "$REPO" docs/plans/2026-01-01-quote.md
 lacks "quoted clause: does not launch the subagent pair" "$out" "--effort high"
 lacks "quoted clause: does not say the plan escalated" "$out" "This plan escalated to subagent mode"
+
+# --- the ledger identity may carry an absolute or Windows-form path ---
+ABS_LEDGER="$REPO/.superpowers/sdd/2026-01-01-quote"
+abs_plan="$(cd "$REPO" && pwd)/docs/plans/2026-01-01-quote.md"
+{
+  echo "# SDD ledger — plan: $abs_plan"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+} > "$ABS_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-quote.md
+has "absolute identity path: ledger recognised" "$out" "all 1 tasks complete"
+lacks "absolute identity path: not treated as another plan's" "$out" "belongs to another plan"
+
+# --- a Program next-title ending in "last" is not the final sub-project ---
+LASTP="$REPO/docs/plans/2026-01-01-lastword.md"
+cat > "$LASTP" <<'PLAN'
+# Last-word plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** subagent — `claude --model sonnet --effort high` — x
+
+**Program:** `docs/spec.md` — sub-project 1 of 3 — next: Cleanup at last
+
+## Task index
+
+1. First
+
+### Task 1: First
+PLAN
+run "$REPO" --complete docs/plans/2026-01-01-lastword.md
+has "next title ending in last: names the next sub-project" "$out" "Sub-project 2 (Cleanup at last)"
+lacks "next title ending in last: not read as the final one" "$out" "every sub-project of"
+
+# --- outside a repository the documented exit is 2 ---
+out=$(cd "$TMP" && bash "$SCRIPT" "$(cd "$REPO" && pwd)/docs/plans/2026-01-01-quote.md" 2>/dev/null); status=$?
+check "outside a repository: exits 2" "$status" "2"
+
+# --- a BLOCKED task is terminal: no launch, a human decides ---
+# The skills say never re-dispatch a BLOCKED task; a resume guide that said
+# "Start at Task 2" would do exactly that.
+BLK="$REPO/docs/plans/2026-01-01-blocked.md"
+cat > "$BLK" <<'PLAN'
+# Blocked plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+
+## Task index
+
+1. First
+2. Second
+3. Third
+
+### Task 1: First
+
+### Task 2: Second
+
+### Task 3: Third
+PLAN
+BLK_LEDGER="$REPO/.superpowers/sdd/2026-01-01-blocked"
+mkdir -p "$BLK_LEDGER"
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-blocked.md"
+  echo "Task 1: implementer impl-sonnet-low (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, review clean) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+  echo "Task 2: implementer impl-opus-low (assigned; base bbbbbbb)"
+  echo "Task 2: BLOCKED — ruling seat — whether the export keeps the legacy field"
+} > "$BLK_LEDGER/progress.md"
+
+run "$REPO" docs/plans/2026-01-01-blocked.md
+check "blocked: exits 0" "$status" "0"
+has "blocked: status names the task" "$out" "1 of 3 tasks complete; Task 2 is BLOCKED"
+has "blocked: next carries the decision" "$out" "Your human partner decides: whether the export keeps the legacy field."
+lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
+lacks "blocked: no launch command" "$out" "Launch in"
+has "blocked: latest.md carries the block" "$(cat "$REPO/.superpowers/handoff/latest.md")" "Task 2 is BLOCKED"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

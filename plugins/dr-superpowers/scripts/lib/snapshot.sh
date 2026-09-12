@@ -6,12 +6,13 @@
 # Capped because hook output over 10,000 characters is replaced by a file
 # reference, and the injected entry point already takes about 3,400.
 
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plan.sh"
+
 SNAPSHOT_CAP=5500
 
 snapshot_latest() { # CWD — the Next session block of the primary checkout's latest.md
-  local common primary latest
-  common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
-  primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || return 0
+  local primary latest
+  primary=$(plan_primary_root "$1") || return 0
   latest="$primary/.superpowers/handoff/latest.md"
   [ -f "$latest" ] || return 0
   echo "### From \`$latest\`"
@@ -24,7 +25,7 @@ snapshot_ledgers() { # CWD — every worktree's ledgers: last 8 lines, last 10 r
   while IFS= read -r wt; do
     for ledger in "$wt"/.superpowers/sdd/*/progress.md; do
       [ -f "$ledger" ] || continue
-      plan_rel=$(head -n 1 "$ledger" | tr -d '\r' | sed -n 's/^# SDD ledger — plan: //p')
+      plan_rel=$(ledger_plan "$ledger")
       echo "### Ledger \`$ledger\` (plan \`${plan_rel:-unknown}\`)"
       echo "Last lines:"
       tr -d '\r' < "$ledger" | grep -v '^[[:space:]]*$' | tail -n 8 | sed 's/^/    /'

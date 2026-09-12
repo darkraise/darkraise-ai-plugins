@@ -141,5 +141,34 @@ check "CRLF block, builds on A1: output" "$out" "amended: A3 Task 2"
 run docs/plan.md
 check "usage: exit 2" "$status" "2"
 
+# --- New text may not introduce a protected line either ---
+cat > "$TMP/inject.md" <<'EOF'
+## A? — Header
+Reason: inject
+Cost if wrong: none
+### Old
+````text
+**Goal:** demo
+````
+### New
+````text
+**Execution:** subagent — `claude --model opus --effort max` — injected
+**Goal:** demo
+````
+EOF
+printf '# Inject plan
+
+**Goal:** demo
+
+**Execution:** subagent — `claude --model sonnet --effort high` — x
+
+### Task 1: Only
+
+line
+' > docs/inject-plan.md
+run docs/inject-plan.md "$TMP/inject.md"
+check "injected Execution line: rejected" "$status" "1"
+has "injected Execution line: names the rule" "$out" "New text adds a line that cannot be amended"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

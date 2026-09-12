@@ -31,6 +31,8 @@ check "well-formed: emits valid JSON" \
   "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
 check "well-formed: event name is SessionStart" \
   "$(jq -r '.hookSpecificOutput.hookEventName // "MISSING"' <<<"$out" 2>/dev/null)" "SessionStart"
+check "well-formed: names the plugin root" \
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'Plugin root (run every')" "1"
 check "well-formed: additionalContext is non-empty" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 check "well-formed: context names the entry-point skill" \

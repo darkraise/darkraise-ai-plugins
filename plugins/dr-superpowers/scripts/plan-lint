@@ -12,7 +12,6 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
-LADDER="$HERE/../reference/ladder.md"
 ROUTING="$HERE/../reference/codex-routing.json"
 
 usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE]" >&2; exit 2; }
@@ -42,7 +41,6 @@ fi
 root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || pwd)
 SEP='( — | – | - | -- )'
 header=$(plan_header "$src")
-block() { tr -d '\r' < "$LADDER" | awk -v b="$1" '$0 == "```" b { on = 1; next } on && /^```/ { exit } on { print }'; }
 
 codex=0
 grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
@@ -51,8 +49,9 @@ grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
 for label in Goal Spec Execution; do
   [ -n "$(plan_header_line "$src" "$label")" ] || say ERROR header "missing **$label:** line"
 done
+header_headings=$(awk "$_PLAN_AWK"'in_fence($0) { next } /^## / { print }' <<<"$header")
 for section in "Global Constraints" "Contracts" "Assumptions (evidence)" "Task index"; do
-  grep -qxF "## $section" <<<"$header" || say ERROR header "missing '## $section' section"
+  grep -qxF "## $section" <<<"$header_headings" || say ERROR header "missing '## $section' section"
 done
 [ -n "$(plan_header_line "$src" 'Plan review')" ] || say WARN header "no **Plan review:** line yet"
 
@@ -98,7 +97,7 @@ index_lines=$(awk '$0 == "## Task index" { on = 1; next } on && /^## / { exit } 
 
 # --- Execution line (R6) ---
 execution=$(plan_header_line "$src" Execution)
-mode=""
+mode="" exec_model=""
 if [ -n "$execution" ]; then
   if [ "$codex" -eq 1 ]; then
     if [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?$SEP.+ ]]; then
@@ -110,7 +109,7 @@ if [ -n "$execution" ]; then
       say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — codex <model> / <effort> — <reason>'"
     fi
   elif [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?claude\ --model\ (haiku|sonnet|opus|fable|claude-[a-z0-9.-]+)\ --effort\ (low|medium|high|xhigh|max)\`?$SEP.+ ]]; then
-    mode=${BASH_REMATCH[1]}
+    mode=${BASH_REMATCH[1]} exec_model=${BASH_REMATCH[3]}
   else
     say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — claude --model <m> --effort <e> — <reason>'"
   fi
@@ -130,17 +129,27 @@ awk "$_PLAN_AWK"'
 ' where=header "$src" >> "$findings"
 
 # --- per task ---
-assignment=$(block assignment)
-reserve=$(block reserve | awk '{ print $1 }' | grep -vxF BLOCKED | grep -vxF -f <(awk '{ print $2 }' <<<"$assignment") || true)
-gate=$(block gate)
+assignment=$(ladder_block assignment)
+reserve=$(ladder_block reserve | awk '{ print $1 }' | grep -vxF BLOCKED | grep -vxF -f <(awk '{ print $2 }' <<<"$assignment") || true)
+gate=$(ladder_block gate)
 min_score=$(awk '$1 == "min_score" { print $2 }' <<<"$gate")
 max_risk=$(awk '$1 == "max_risk" { print $2 }' <<<"$gate")
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
-r5_bad=""
+r5_bad="" max_total=0
 
+# A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
+# sections, each a unit with its own Files, Implementer and Evaluation lines;
+# every unit is checked on its own.
 for n in $nums; do
-  where="Task $n"
-  text=$(plan_task_text "$src" "$n")
+  full=$(plan_task_text "$src" "$n")
+  parts=$(grep -oE '^#### Part [A-Z]:' <<<"$full" | awk '{ print substr($3, 1, 1) }' || true)
+  for part in ${parts:--}; do
+  if [ "$part" = - ]; then
+    where="Task $n" text=$full
+  else
+    where="Task $n part $part"
+    text=$(awk -v p="$part" '/^#### Part [A-Z]:/ { on = (substr($3, 1, 1) == p) } on' <<<"$full")
+  fi
   line() { grep -m 1 -E "^\*\*$1:\*\*" <<<"$text" || true; }
   sev=ERROR
   [ -n "$(line Override)" ] && sev=WARN
@@ -207,7 +216,7 @@ for n in $nums; do
       [ "$sev" = ERROR ] || say ERROR "$where" "an Executor line on an overridden task fails the lane gate"
       { [ "$t" -ge "$min_score" ] && [ "$d" -le "$max_risk" ]; } \
         || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $min_score, max_risk $max_risk)"
-      rung=$(awk -v t="$t" '$1 == t { print $2 " / " $3 }' <<<"$(block codex-assignment)")
+      rung=$(awk -v t="$t" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block codex-assignment)")
       { [ -n "$rung" ] && [[ "$executor" == *"codex $rung"* ]]; } || say ERROR "$where" "Executor does not name the codex-assignment rung for total $t (codex ${rung:-none})"
       [[ "$externals" == *codex* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name codex"
     fi
@@ -216,11 +225,19 @@ for n in $nums; do
     [ "$v" -le 3 ] || { say ERROR "$where" "each axis must be 0-3"; break; }
   done
   [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] || say "$sev" "$where" "Rule S: files+spec+coupling must be below 4 and spec below 3"
-  { [ $((a + b + c + d)) -le 3 ] && [ "$d" -lt 3 ]; } || r5_bad="$r5_bad $n"
+  { [ $((a + b + c + d)) -le 4 ] && [ "$d" -lt 3 ]; } || r5_bad="$r5_bad $n"
+  [ $((a + b + c + d)) -le "$max_total" ] || max_total=$((a + b + c + d))
+  done
 done
 
-if [ "$mode" = inline ] && [ -n "$r5_bad" ]; then
-  say ERROR header "inline execution needs every task at total <= 3 and risk < 3; fails on Task${r5_bad}"
+# R5: inline eligibility, and the inline model follows the highest total —
+# Sonnet for the Sonnet band (<= 3), Opus once a task reaches the Opus-low band.
+if [ "$mode" = inline ]; then
+  if [ -n "$r5_bad" ]; then
+    say ERROR header "inline execution needs every task at total <= 4 and risk < 3; fails on Task${r5_bad}"
+  elif [ "$codex" -eq 0 ] && [ "$max_total" -eq 4 ] && [ "$exec_model" != opus ]; then
+    say ERROR header "inline execution with a task at total 4 needs --model opus (highest total $max_total)"
+  fi
 fi
 
 cat "$findings"

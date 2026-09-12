@@ -46,8 +46,12 @@ awk -v dir="$TMP" "$_PLAN_AWK"'
 ' "$TMP/block"
 [ ! -s "$TMP/bad" ] || reject "'### Old' and '### New' must each be followed by a closed fence of 4 or more backticks (bad: $(tr '\n' ' ' < "$TMP/bad"))"
 grep -q '[^[:space:]]' "$TMP/old" || reject "Old text is empty"
-if grep -qE '^(\*\*(Spec|Execution|Program|Plan review):\*\*|(\*\*)?(Host|Routing policy):)' "$TMP/old"; then
+protected='^(\*\*(Spec|Execution|Program|Plan review):\*\*|(\*\*)?(Host|Routing policy):)'
+if grep -qE "$protected" "$TMP/old"; then
   reject "Old text touches a line that cannot be amended (Spec, Execution, Program, Plan review, Host, Routing policy)"
+fi
+if grep -qE "$protected" "$TMP/new"; then
+  reject "New text adds a line that cannot be amended (Spec, Execution, Program, Plan review, Host, Routing policy)"
 fi
 
 [ -f "$amend" ] && tr -d '\r' < "$amend" > "$TMP/before" || : > "$TMP/before"

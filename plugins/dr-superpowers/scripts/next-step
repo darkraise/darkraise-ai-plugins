@@ -45,9 +45,8 @@ esac
 plan=$1
 [ -f "$plan" ] || fail 2 "no such file: $plan — run it from the repository root, or check the plan path"
 
-root=$(git rev-parse --show-toplevel)
-common=$(git rev-parse --path-format=absolute --git-common-dir)
-primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel)
+root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
+primary=$(plan_primary_root "$root")
 
 root_posix=$(cd "$root" && pwd)
 plan_abs="$(cd "$(dirname "$plan")" && pwd)/$(basename "$plan")"
@@ -79,17 +78,27 @@ else
   ledger_note="no ledger at \`$ledger_shown\`"
   ledger_text=""
   done_tasks=""
+  blocked_tasks=""
   has_ledger=0
   if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
     ledger_text=$(tr -d '\r' < "$ledger_file")
-    if head -n 1 <<<"$ledger_text" | grep -qF "plan: $rel"; then
+    # The identity line may carry the path as given on the command line: relative
+    # to the checkout, absolute, or in Windows form. Compare resolved paths.
+    ledger_plan_path=$(ledger_plan "$ledger_file")
+    if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
+      ledger_plan_path=$(cygpath -u "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
+    fi
+    case $ledger_plan_path in /*) ;; *) ledger_plan_path="$root_posix/$ledger_plan_path" ;; esac
+    ledger_plan_abs=$(cd "$(dirname "$ledger_plan_path")" 2>/dev/null && pwd)/$(basename "$ledger_plan_path")
+    if [ "$ledger_plan_abs" = "$plan_abs" ]; then
       has_ledger=1
       ledger_note="ledger \`$ledger_shown\`"
       done_tasks=$(ledger_done "$ledger_file")
+      blocked_tasks=$(ledger_blocked "$ledger_file")
       # A ledger outranks the Execution line on which mode the run is in: a
       # switch is recorded there and the plan is never edited. The escalation
       # holds until a later inline assignment shows the plan came back.
-      esc=$(grep -nE '^Task [0-9]+: fix round [0-9]/3 .*escalated inline -> subagent\)$' <<<"$ledger_text" | tail -n 1 | cut -d: -f1 || true)
+      esc=$(grep -nE '^Task [0-9]+: escalated inline -> subagent[ \t]*(—|-|$)' <<<"$ledger_text" | tail -n 1 | cut -d: -f1 || true)
       if [ -n "$esc" ]; then
         back=$(grep -nE '^Task [0-9]+: implementer inline \(assigned' <<<"$ledger_text" | tail -n 1 | cut -d: -f1 || true)
         if [ -z "$back" ] || [ "$back" -lt "$esc" ]; then
@@ -105,12 +114,12 @@ else
     spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$program")
     k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
     n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
-    next_title=$(sed -nE 's/.*[Nn]ext:[ \t]*(.*[^ \t])[ \t]*$/\1/p' <<<"$program")
+    next_title=$(sed -nE 's/.*( — | – | - | -- )next:[ \t]*(.*[^ \t])[ \t]*$/\2/p' <<<"$program")
     launch=0
     if [ -z "$program" ]; then
       status_line="Plan \`$rel\` is complete."
       next_line="Nothing — the plan records no follow-on work."
-    elif grep -qiE '(^|[^a-z])last[ \t.]*$' <<<"$program" || { [ -n "$k" ] && [ "$k" -ge "$n" ]; }; then
+    elif grep -qE '( — | – | - | -- )last[ \t]*$' <<<"$program" || { [ -n "$k" ] && [ "$k" -ge "$n" ]; }; then
       status_line="Plan \`$rel\` is complete${k:+; sub-project $k of $n is done}."
       next_line="Nothing — every sub-project of \`$spec\` is done."
     elif [ -n "$next_title" ] && [ -n "$k" ]; then
@@ -134,7 +143,17 @@ else
       fi
     done <<<"$tasks"
 
-    if [ -z "$first_open" ]; then
+    blocked_num=$(head -n 1 <<<"$blocked_tasks")
+    if [ -n "$blocked_num" ]; then
+      # BLOCKED is terminal: the next session must not be told to start the
+      # task. The line's last dash-separated field names what a human must
+      # decide (`BLOCKED — <who> — <decision>`).
+      blocked_why=$(grep -E "^Task ${blocked_num}: BLOCKED" <<<"$ledger_text" | tail -n 1 \
+        | awk -F' (—|-) ' '{ sub(/[ \t]+$/, "", $NF); print $NF }')
+      status_line="Plan \`$rel\`: $done_count of $total tasks complete; Task $blocked_num is BLOCKED ($ledger_note)."
+      next_line="Your human partner decides: ${blocked_why:-see the BLOCKED line in the ledger}. Record the ruling in the ledger, then run next-step again."
+      launch=0
+    elif [ -z "$first_open" ]; then
       if [ "$has_ledger" -eq 1 ] && grep -q '^Final review: clean' <<<"$ledger_text"; then
         status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
         next_line="Run dr-superpowers:finishing-a-development-branch."
@@ -150,14 +169,16 @@ else
       next_line="Resume at Task $first_open ($open_title)."
     fi
 
-    if [ -n "$escalated_at" ]; then
+    if [ -n "$escalated_at" ] && [ "$launch" -eq 1 ]; then
       launch_cmd="claude --model sonnet --effort high"
       next_line="$next_line This plan escalated to subagent mode at Task $escalated_at."
     fi
 
     # With a ledger there is state to verify before continuing, which is
     # resume-execution's job; without one the plan simply starts.
-    if [ "$has_ledger" -eq 1 ]; then
+    if [ "$launch" -eq 0 ]; then
+      prompt=""
+    elif [ "$has_ledger" -eq 1 ]; then
       prompt="Resume \`$rel\` with dr-superpowers:resume-execution. $next_line"
     else
       prompt="Continue \`$rel\` with dr-superpowers:$skill. $next_line"

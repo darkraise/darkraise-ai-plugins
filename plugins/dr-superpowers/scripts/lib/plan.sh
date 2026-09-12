@@ -40,7 +40,7 @@ plan_tasks() {
       line = $0
       sub(/^#+[ \t]+Task[ \t]+/, "", line)
       n = line; sub(/[^0-9].*$/, "", n)
-      t = line; sub(/^[0-9]+[: \t.-]*/, "", t)
+      t = line; sub(/^[0-9]+[ \t]*[:.-]?[ \t]*/, "", t)
       print n "\t" t
     }
   '
@@ -50,6 +50,32 @@ plan_tasks() {
 # unique.
 ledger_done() {
   tr -d '\r' < "$1" | sed -n 's/^Task \([0-9][0-9]*\): complete.*/\1/p' | sort -un
+}
+
+# ledger_plan FILE — the plan path the ledger's identity line names, or nothing.
+ledger_plan() {
+  head -n 1 "$1" | tr -d '\r' | sed -n 's/^# SDD ledger — plan: //p'
+}
+
+# plan_primary_root [DIR] — the primary checkout's top level for the worktree
+# containing DIR (default: the current directory); nothing outside a repository.
+plan_primary_root() {
+  local common
+  common=$(git -C "${1:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null
+}
+
+# ladder_block TAG — the lines of reference/ladder.md's ```TAG fenced block,
+# blank lines dropped.
+ladder_block() {
+  tr -d '\r' < "$_PLAN_LIB_DIR/../../reference/ladder.md" \
+    | awk -v tag="$1" '$0 == "```" tag { f = 1; next } f && /^```/ { exit } f && NF { print }'
+}
+
+# ledger_blocked FILE — the task numbers with a "Task N: BLOCKED" line, sorted,
+# unique. BLOCKED is terminal: a resumed session must not start the task.
+ledger_blocked() {
+  tr -d '\r' < "$1" | sed -n 's/^Task \([0-9][0-9]*\): BLOCKED.*/\1/p' | sort -un
 }
 
 # plan_header_line FILE LABEL — the first line outside fences that begins
@@ -144,12 +170,13 @@ plan_apply_amendments() {
 }
 
 # plan_amendments_file PLAN — <workspace>/amendments.md when PLAN is inside a
-# git repository and that file is non-empty; otherwise nothing.
+# git repository and that file is non-empty; otherwise nothing. Computed, not
+# created: readers never bring the workspace into being.
 plan_amendments_file() {
-  local dir
-  dir=$(cd "$(dirname "$1")" 2>/dev/null \
-    && git rev-parse --show-toplevel >/dev/null 2>&1 \
-    && "$_PLAN_LIB_DIR/../sdd-workspace" "$(basename "$1")" 2>/dev/null) || return 0
-  [ -s "$dir/amendments.md" ] && printf '%s\n' "$dir/amendments.md"
+  local root slug
+  root=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || return 0
+  slug=$(basename "$1" .md)
+  [ -s "$root/.superpowers/sdd/$slug/amendments.md" ] \
+    && printf '%s\n' "$root/.superpowers/sdd/$slug/amendments.md"
   return 0
 }

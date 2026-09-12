@@ -286,9 +286,15 @@ dr_task_update '.processes = [{pid:$pid,winpid:$winpid,start:$start,group:$pid}]
 # taskkill's native tree-walk (see codex_winpid above).
 timed_out=no
 waited=0
+thread_persisted=no
 while [ "$waited" -lt "$timeout_s" ] && kill -0 "$codex_pid" 2>/dev/null; do
-  discovered_thread="$(jq -r '.thread_id // .threadId // .session_id // .sessionId // empty' "$jsonl" 2>/dev/null | head -1)"
-  if [ -n "$discovered_thread" ]; then dr_task_update '.thread = $thread' --arg thread "$discovered_thread" || die 'cannot persist thread'; fi
+  if [ "$thread_persisted" = no ]; then
+    discovered_thread="$(jq -r '.thread_id // .threadId // .session_id // .sessionId // empty' "$jsonl" 2>/dev/null | head -1)"
+    if [ -n "$discovered_thread" ]; then
+      dr_task_update '.thread = $thread' --arg thread "$discovered_thread" || die 'cannot persist thread'
+      thread_persisted=yes
+    fi
+  fi
   sleep 1
   waited=$((waited + 1))
 done

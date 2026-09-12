@@ -13,8 +13,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) \
   || { echo "repo-audit: not inside a git repository" >&2; exit 2; }
-common=$(git rev-parse --path-format=absolute --git-common-dir)
-primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel)
+primary=$(plan_primary_root "$root")
 
 branch=$(git symbolic-ref --short -q HEAD || echo "(detached)")
 head=$(git log -1 --format='%h %s' 2>/dev/null || echo "(no commits)")
@@ -55,7 +54,7 @@ while IFS= read -r wt; do
   for ledger in "$wt"/.superpowers/sdd/*/progress.md; do
     [ -f "$ledger" ] || continue
     found=1
-    plan_rel=$(head -n 1 "$ledger" | tr -d '\r' | sed -n 's/^# SDD ledger — plan: //p')
+    plan_rel=$(ledger_plan "$ledger")
     total="?"
     if [ -n "$plan_rel" ] && [ -f "$wt/$plan_rel" ]; then
       total=$(plan_tasks "$wt/$plan_rel" | grep -c . || true)

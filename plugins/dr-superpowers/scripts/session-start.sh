@@ -48,7 +48,10 @@ escape_for_json() {
 }
 
 escaped=$(escape_for_json "$content")
-context="<EXTREMELY_IMPORTANT>\nYou have dr-superpowers.\n\n**Below is the full content of your 'dr-superpowers:using-superpowers' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n</EXTREMELY_IMPORTANT>"
+# The skills say "from the plugin root"; this line is where the root is named.
+plugin_root_shown=$PLUGIN_ROOT
+if command -v cygpath >/dev/null 2>&1; then plugin_root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
+context="<EXTREMELY_IMPORTANT>\nYou have dr-superpowers.\n\n**Below is the full content of your 'dr-superpowers:using-superpowers' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n\nPlugin root (run every \`scripts/…\` command from here): $(escape_for_json "$plugin_root_shown")\n</EXTREMELY_IMPORTANT>"
 
 # The compact source is detected without jq, so a machine without jq still
 # gets the handoff and ledger sections. Hook output over 10,000 characters is

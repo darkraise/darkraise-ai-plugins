@@ -83,8 +83,10 @@ present "names the kinds it does not run" "$INLINE" "no task reviewer"
 
 # The fix cap, and the escalation clause both skills key on.
 present "states the fix cap" "$INLINE" "fix round R/3"
-present "inline writes the escalation clause" "$INLINE" "escalated inline -> subagent"
-present "subagent mode reads the escalation clause" "$SDD" "escalated inline -> subagent"
+present "inline writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
+present "subagent mode reads the escalation line" "$SDD" "escalated inline -> subagent"
+present "inline fix rounds record their outcome" "$INLINE" "passing | still failing"
+absent "inline no longer marks the switch on a fix-round line" "$INLINE" "escalated inline -> subagent)"
 
 # One ledger grammar for both modes.
 for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean'; do
