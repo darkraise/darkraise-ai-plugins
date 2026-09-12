@@ -357,7 +357,9 @@ that arises at one point into one dispatch:
 | `codex-empty-diff` | A Codex fix round that returned DONE with an empty diff and an argument ([external-executor.md](../../reference/external-executor.md)) |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
-**How.** Write `<workspace>/rulings-<point>.md` listing each item: an id, its
+**How.** Write `<workspace>/rulings-<point>-<task>.md` — `<task>` is the task
+number the items concern, or `plan` for a plan-level point, so a recurring
+point never overwrites an earlier file — listing each item: an id, its
 kind, its task (or `plan`), and the paths it needs — brief, report, review
 packages — with the findings copied verbatim. Dispatch
 `dr-superpowers:judge-fable` (`judge-opus` under the Fable-unavailable rule,

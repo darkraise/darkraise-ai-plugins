@@ -73,7 +73,7 @@ Constraints and Contracts.
 
 **Tech Stack:** [Key technologies/libraries]
 
-**Spec:** [path to the spec/design doc this plan implements]
+**Spec:** [repository-relative path to the spec/design doc this plan implements]
 
 **Execution:** [inline|subagent] — `claude --model <model> --effort <effort>` — [why]
 

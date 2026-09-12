@@ -109,9 +109,10 @@ Subagent ([JUDGE]):
   and `<workspace>/progress.md`.
 - `[PROVISIONAL_NOTE]` — when the plan's Spec path is unreachable, "The spec is
   unreachable. Mark every Ruling (provisional)."; otherwise delete the line.
-- `[ITEMS_FILE]` — REQUIRED: `<workspace>/rulings-<point>.md`, one entry per
-  item: its id, kind, task (or `plan`), and the paths it needs — brief,
-  report, review packages — with the findings copied verbatim.
+- `[ITEMS_FILE]` — REQUIRED: `<workspace>/rulings-<point>-<task>.md`, where
+  `<task>` is the task number the items concern, or `plan` for a plan-level
+  point. One entry per item: its id, kind, task (or `plan`), and the paths it
+  needs — brief, report, review packages — with the findings copied verbatim.
 
 **The seat returns** one verdict block per item (a table first for
 `preflight`). Copy an AMEND entry from its `## A?` line through the New

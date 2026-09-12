@@ -48,9 +48,10 @@ re-derive every escalated agent after a crash.
 ## The top rung is SPLIT
 
 The ladder's top rung is `impl-opus-high`, whose successor is `SPLIT` - an
-action, not an agent. When it is exhausted, do not report BLOCKED yet: break the
-task's remaining work into smaller tasks, score each against Rule S, and
-dispatch them fresh. Record it as a ruling in the ledger:
+action, not an agent. When it is exhausted, do not report BLOCKED yet, and do
+not decide the decomposition yourself: send a `blocked-plan` item; the seat's
+CONFIRMED-GAP names the halves, which you score against Rule S and dispatch
+fresh, logged as a ruling in the ledger:
 
 ```
 Ruling: split Task <N> at the top rung into <N>a and <N>b - impl-opus-high exhausted after 5 rounds - if wrong, the halves review separately and merge back
