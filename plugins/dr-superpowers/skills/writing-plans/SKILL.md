@@ -9,7 +9,9 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
 
-Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
+Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well. Small models execute these plans literally: each task's implementer sees only that task's text plus the header's Global Constraints and Contracts.
+
+**Keep it minimal and checkable:** no speculative abstractions; each task is the minimum that meets the spec; each task ends with a check that proves it.
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
@@ -33,6 +35,8 @@ Before defining tasks, map out which files will be created or modified and what 
 
 This structure informs the task decomposition. Each task should produce self-contained changes that make sense independently.
 
+**Walking skeleton:** for a greenfield system, Task 1 builds the thinnest end-to-end path through every layer, with its test, before any layer is fleshed out.
+
 ## Task Right-Sizing
 
 A task is the smallest unit that carries its own test cycle and is worth a
@@ -53,12 +57,15 @@ independently testable deliverable.
 
 ## Plan Document Header
 
-**Every plan MUST start with this header:**
+**Every plan MUST start with this header.** Everything before the first
+`### Task` heading is the header. Execution controllers read only the header
+and one task at a time, and every task brief carries the header's Global
+Constraints and Contracts.
 
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use dr-superpowers:subagent-driven-development (recommended) or dr-superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: the skill the **Execution:** line names — dr-superpowers:subagent-driven-development for `subagent`, dr-superpowers:executing-plans for `inline`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -66,8 +73,7 @@ independently testable deliverable.
 
 **Tech Stack:** [Key technologies/libraries]
 
-**Spec:** [path to the spec/design doc this plan implements — the plan
-argues from the spec, so the spec travels with it; executors read both]
+**Spec:** [path to the spec/design doc this plan implements]
 
 **Execution:** [inline|subagent] — `claude --model <model> --effort <effort>` — [why]
 
@@ -83,8 +89,43 @@ naming and copy rules, platform requirements — one line each, with exact
 values copied verbatim from the spec. Every task's requirements implicitly
 include this section.]
 
+## Contracts
+
+[Every name, signature, file path, format or exit code that one task
+produces and another consumes, stated once. Task Interfaces blocks cite this
+section rather than restate it. Write `None` when no task consumes another's
+output.]
+
+## Assumptions (evidence)
+
+[One bullet per assumption the plan relies on, each with its evidence: a
+command and the date it ran, a `file:line`, or a documentation URL. An
+assumption you could not verify reads `unverified — Task N verifies it`, and
+Task N contains the verifying step.]
+
+## Task index
+
+1. [Task 1 title, identical to its heading]
+2. [...]
+
 ---
 ```
+
+Codex plans also carry `Host: codex` and `Routing policy: codex-v2` lines
+([native-codex.md](../../reference/native-codex.md)), and their Execution line
+names the native pair: `**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
+
+**Choosing the Execution line.** The plan decides its execution mode:
+
+- `inline` when every task's total is 3 or less and no task is at risk 3 —
+  the default then: `claude --model sonnet --effort <e>`, where `<e>` is the
+  effort of the highest-scoring task's assigned tier (`impl-haiku` counts as
+  `low`).
+- Otherwise `subagent`: `claude --model sonnet --effort high`. The controller
+  owns no judgment calls — the ruling seat does — so it needs no stronger
+  model.
+- Your human partner may override the line; `plan-lint` checks its grammar and
+  the inline rule.
 
 ## Task Structure
 
@@ -97,10 +138,10 @@ include this section.]
 - Test: `tests/exact/path/to/test.py`
 
 **Interfaces:**
-- Consumes: [what this task uses from earlier tasks — exact signatures]
-- Produces: [what later tasks rely on — exact function names, parameter
-  and return types. A task's implementer sees only their own task; this
-  block is how they learn the names and types neighboring tasks use.]
+- Consumes: [what this task uses from earlier tasks — cite the Contracts entry]
+- Produces: [what later tasks rely on — cite the Contracts entry. A task's
+  implementer sees only their own task plus Global Constraints and
+  Contracts; this block is how they learn which names they touch.]
 
 - [ ] **Step 1: Write the failing test**
 
@@ -152,8 +193,9 @@ user's inline or delegation preference on either host.
 1. **Score** each task on the four axes in
    [ladder.md](../../reference/ladder.md) — files, spec completeness,
    coupling, risk. Never restate its tables or work from memory. Score the
-   task as the plan describes it: if its steps contain the complete code, spec
-   completeness is 0. Count file shapes, not file instances.
+   task as its brief will carry it — the task text plus the header's Global
+   Constraints and Contracts: if those contain the complete code and exact
+   signatures, spec completeness is 0. Count file shapes, not file instances.
 2. **Apply Rule S before the table.** If `files + spec + coupling >= 4`, split
    the task where a reviewer could reject one half while approving the other,
    and re-score both halves. If `spec = 3`, the approach is undecided: settle
@@ -190,34 +232,13 @@ user's inline or delegation preference on either host.
 A human may edit any `**Implementer:**` line by hand;
 dr-superpowers:subagent-driven-development obeys it and never recomputes.
 Leave the `**Evaluation:**` line in place — the gap between the score and the
-choice is the interesting part. Under dr-superpowers:executing-plans the lines
-are inert. [assigning-implementers.md](references/assigning-implementers.md)
-explains why each of these rules exists.
-
-**Check your work** before saving the plan:
-
-- Every task has an `**Implementer:**` line and an `**Evaluation:**` line,
-  plus an `**Approach:**` line whenever the task involved an approach
-  decision.
-- Every agent name is fully qualified and appears in `ladder.md`'s assignment
-  table, or in its reserve table when your human partner overrode the
-  assignment by hand. A reserve name you wrote yourself is an error, not an
-  override.
-- Every `**Evaluation:**` line's four scores sum to the stated total, and that
-  total maps to the named agent — except under the spec-3 floor in
-  `ladder.md` or a hand-edited override.
-- Every task clears Rule S: `files + spec + coupling` below 4 and spec below 3.
-  A total above 6 anywhere means the gate was skipped.
-- Every `**Approach:**` line names `inline`, `advisor`, or `best-of-3`, and
-  every `inline` cites a skip condition by number.
-- Every task heading begins with `Task <N>`. Check them as a set:
-  `grep -cE '^#+[[:space:]]+Task[[:space:]]+[0-9]' PLAN_FILE` must equal the
-  number of tasks.
-- Every `**Executor:**` line names a rung in `ladder.md`'s `codex-assignment`
-  block matching the task's total, sits on a task that also has an
-  `**Implementer:**` line, passed the lane gate without a human Rule S
-  override, and names an executor listed in the plan header's
-  `> **External executors:**` line.
+choice is the interesting part. A hand edit that breaks a checked rule — a
+reserve tier, a kept `spec = 3`, a table mismatch — carries an
+`**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
+reports it as a warning. Never write an Override line yourself. Under
+dr-superpowers:executing-plans the lines are inert.
+[assigning-implementers.md](references/assigning-implementers.md) explains why
+each of these rules exists.
 
 ## No Placeholders
 
@@ -237,35 +258,42 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
 
-**3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
+**3. Contracts:** Every cross-task name appears in Contracts, and every task uses it exactly as stated there. A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
-**4. Assignments:** Run the Check your work list under Assign an implementer to every task.
+**4. Lint:** Run the checker under Lint and Review.
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
+## Lint and Review
+
+1. **Lint.** Run `scripts/plan-lint PLAN_FILE`, from the plugin root (two
+   levels above this skill's directory), until it reports `0 errors`. Fix each
+   WARN, or explain it in one line of the plan's Assumptions. The checker
+   covers the header sections, the task headings and index, the Execution
+   line, placeholders, and every task's assignment lines.
+2. **Review.** Write the lint output to the plan's workspace:
+   `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
+   `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
+   Dispatch the judge with
+   [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). It scores
+   executability, coherence, coverage and assumptions (1-20) against
+   [plan-review.md](../../criteria/plan-review.md) and lists findings.
+3. **Fix and repeat.** Any score of 8 or below, or any Critical or Important
+   finding: fix the plan, re-lint, and dispatch a fresh full review. At most 3
+   review rounds; after the third, show the remaining findings to your human
+   partner. A borderline score (9-13) gets a one-line decision in the plan's
+   Assumptions.
+4. **Record.** Only now, add the header line
+   `**Plan review:** <YYYY-MM-DD> — <judge agent> — executability e / coherence c / coverage v / assumptions a (round r)`
+   below the `**Program:**` line (below `**Execution:**` when there is no
+   Program line). The header template deliberately omits it, so `plan-lint`
+   warns until the review has run.
+
 ## Execution Handoff
 
-After saving the plan, run `scripts/next-step PLAN_FILE`, from the plugin
-root (two levels above this skill's directory). It prints the block for
-starting Task 1 in a fresh session — launch command from the Execution line
-and a first prompt — and records it in the primary checkout's
-`.superpowers/handoff/latest.md`. End your message with that block, verbatim,
-after the execution choice below.
-
-Offer execution choice:
-
-**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
-
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
-
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
-
-**Which approach?"**
-
-**If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use dr-superpowers:subagent-driven-development
-- Fresh subagent per task + two-stage review
-
-**If Inline Execution chosen:**
-- **REQUIRED SUB-SKILL:** Use dr-superpowers:executing-plans
-- Batch execution with checkpoints for review
+A saved, reviewed plan is a hard stop: execution starts in a fresh session.
+Invoke dr-superpowers:handoff. It commits the plan and the spec, writes
+`.superpowers/handoff/latest.md`, runs `scripts/next-step PLAN_FILE`, and ends
+your message with the resume guide — the launch command from the Execution
+line and the first prompt for the skill that line names. Offer no execution
+choice: the Execution line already made it.

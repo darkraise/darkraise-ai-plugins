@@ -68,7 +68,7 @@ The damage is not confined to that task. `task-brief` only stops copying when it
 meets the *next* heading it recognizes, so a malformed heading silently appends
 its whole task body to the **previous** task's brief. One bad heading breaks one
 task and corrupts its neighbor, and the neighbor's brief still exits 0 and looks
-fine. That is why the check runs over all headings as a set: a single
+fine. That is why `scripts/plan-lint` checks all headings as a set: a single
 `task-brief` run only inspects the heading you asked for.
 
 ## Overriding
@@ -78,3 +78,19 @@ subagent-driven-development obeys the line and never recomputes when it is
 present, so a human ruling always wins over the rubric. The `**Evaluation:**`
 line stays, because the gap between the score and the choice is the interesting
 part.
+
+A hand edit that breaks a rule the checker enforces - a reserve tier, a kept
+`spec = 3`, a table mismatch - carries an `**Override:** <reason>` line below
+the Evaluation line, and `plan-lint` reports those findings on that task as
+warnings instead of errors. Planners never write the line: it is how a human
+ruling stays legal without the checker guessing who wrote it. An Executor line
+on an overridden task still fails, because the lane gate excludes human
+Rule S overrides.
+
+## Why a script checks the plan
+
+These rules used to be a checklist the planner ran against its own work, and a
+planner grading itself passes what it meant rather than what it wrote.
+`scripts/plan-lint` applies the same checks the same way whichever model wrote
+the plan, and it reads `ladder.md`'s tables at run time, so the checks cannot
+drift from the tables they enforce.

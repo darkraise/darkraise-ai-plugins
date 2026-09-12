@@ -49,8 +49,7 @@ so checking before every task and every review costs no extra request.
 
 - **Hard:** the plan is saved; every plan task is complete under
   subagent-driven-development (the final review runs in a fresh session).
-  The plan-saved stop is not yet wired into `writing-plans` — invoking
-  dr-superpowers:handoff there is a follow-up, not part of this release.
+  writing-plans runs dr-superpowers:handoff once the plan is reviewed.
 - **Soft:** the final review is clean; executing-plans' last task is complete.
   Finishing follows in the same session unless the budget line says `handoff`.
 - **Budget:** a `handoff` verdict at any checkpoint.
