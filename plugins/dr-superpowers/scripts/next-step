@@ -54,16 +54,12 @@ if [ "$draft" -eq 1 ]; then
   launch_cmd="claude --model opus --effort high"
   prompt="Continue from \`$rel\` (the authority): $next_action Read \`.superpowers/handoff/latest.md\` first."
 else
-  plan_text=$(tr -d '\r' < "$plan")
   tasks=$(plan_tasks "$plan")
   [ -n "$tasks" ] || { echo "no tasks in ${plan} (no heading matching 'Task N')" >&2; exit 3; }
   total=$(wc -l <<<"$tasks" | tr -d ' ')
 
-  header_line() { # first unfenced line starting with **<label>:**
-    awk -v p="^\\\\*\\\\*$1:\\\\*\\\\*" '/^```/ { f = !f } !f && $0 ~ p { print; exit }' <<<"$plan_text"
-  }
-  execution=$(header_line Execution)
-  program=$(header_line Program)
+  execution=$(plan_header_line "$plan" Execution)
+  program=$(plan_header_line "$plan" Program)
 
   launch_cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$execution" | head -n 1 || true)
   skill=subagent-driven-development
