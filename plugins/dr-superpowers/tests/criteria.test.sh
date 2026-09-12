@@ -74,5 +74,13 @@ if [ -f "$SCHEMA" ] && [ -f "$TR" ]; then
     "$(jq -r '.properties.findings.items | (.additionalProperties == false) and ((((.properties|keys)-(.required))|length) == 0)' "$SCHEMA" | tr -d '\r')" "true"
 fi
 
+# plan-review.md is named by writing-plans, so its ids are a contract.
+PR="$CRITERIA/plan-review.md"
+check "plan-review.md exists" "$([ -f "$PR" ] && echo yes || echo no)" "yes"
+if [ -f "$PR" ]; then
+  got=$(grep -o '{#[a-z0-9_]\{1,\}}' "$PR" | tr -d '{#}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+  check "plan-review exposes the four contracted ids" "$got" "assumptions coherence coverage executability"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
