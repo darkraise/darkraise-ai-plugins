@@ -223,8 +223,8 @@ over `minor (deferred)`, `parked`, `Task <N>: Ruling:` and bare `Ruling:` lines:
 | `complete` | Done; never redo |
 | `BLOCKED` | Terminal; a stop of the fourth class for any task depending on it; name it in the final message |
 | `fix round R/3`, R < 3 | Resume at round R+1 |
-| `fix round 3/3` | Go to §6's non-convergence trigger |
 | `fix round …; escalated inline -> subagent` | This plan has left inline mode: invoke dr-superpowers:subagent-driven-development |
+| `fix round 3/3` | Go to §6's non-convergence trigger |
 | `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where the commits leave it; otherwise start the task |
 | none | Not started |
 
@@ -331,12 +331,22 @@ Two changes, both testable:
   plan has no `Task N` heading) and 4 (`latest.md` could not be written) currently print nothing on
   stdout, so a session that surfaces only stdout sees an empty result from the one script whose job
   is saying what happens next. Observed 2026-09-12: pointed at a plan path that no longer resolved,
-  the script "returned nothing". Exit codes and stderr text do not change.
-- **Escalated-mode routing.** `next-step` derives the resume skill from the Execution line
-  (`scripts/next-step:65-66`). When the plan's ledger exists and its last
-  `escalated inline -> subagent` line is not followed by a later `implementer inline` line, the
-  prompt names dr-superpowers:subagent-driven-development instead, so a handed-off switch resumes
-  in the mode it switched to. The `--complete` and `--draft` paths are unaffected.
+  the script "returned nothing". Exit codes do not change. Both streams carry the same
+  `next-step: `-prefixed line, so the two messages that lacked the prefix gain it on stderr as well,
+  and the missing-plan message gains a remedy clause — one message per failure, identical on both
+  streams, beats keeping stderr byte-stable for no reader that depends on it.
+- **Escalated-mode routing.** `next-step` derives a resume skill from the Execution line
+  (`scripts/next-step:65-66`), but that `$skill` reaches the prompt only when there is no ledger:
+  with one, the prompt already names dr-superpowers:resume-execution, which routes by the
+  Execution line and lands in executing-plans, whose Recovery table (§4) sends the run on to
+  subagent mode. The chain is therefore correct as it stands, and naming the skill differently
+  here would be dead code. What is wrong after an escalation is the **launch command**: it is
+  copied from an `inline` Execution line, so a resumed session starts at inline mode's model and
+  effort rather than subagent mode's. So: when the ledger exists and its last
+  `escalated inline -> subagent` line is not followed by a later `implementer inline` line,
+  `launch_cmd` becomes `claude --model sonnet --effort high` (R6's subagent default) and the
+  prompt gains one sentence — `This plan escalated to subagent mode at Task <N>.` The
+  `--complete` and `--draft` paths are unaffected.
 
 ## 9. Verification
 
@@ -370,8 +380,8 @@ Tests (new `.test.sh` files are picked up by `test-all.mjs` automatically):
     `parked`, `BLOCKED`, `Ruling:`, `Final review: clean`).
 - `next-step.test.sh`: a missing plan file, a plan with no tasks and an unwritable `latest.md` each
   print a `next-step:` line on stdout and keep their exit codes; a ledger whose last fix-round line
-  carries `escalated inline -> subagent` produces a prompt naming subagent-driven-development; the
-  same ledger with a later `implementer inline` line goes back to naming executing-plans; existing
+  carries `escalated inline -> subagent` gives the subagent launch command and the escalation
+  sentence; the same ledger with a later `implementer inline` line keeps the inline command; existing
   expectations unchanged.
 - `validate-repository.mjs`' reference check covers every new `dr-superpowers:` name and the new
   cross-skill relative links.
