@@ -51,7 +51,7 @@ else
     echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
     exit 3
   fi
-  excerpt=$(plan_header "$src" | awk '/^## / { on = ($0 == "## Global Constraints" || $0 == "## Contracts") } on { print }')
+  excerpt=$(plan_header "$src" | awk "$_PLAN_AWK"'in_fence($0) { if (on) print; next } /^## / { on = ($0 == "## Global Constraints" || $0 == "## Contracts") } on { print }')
   if [ -n "$excerpt" ]; then
     printf '\n## Plan header excerpt\n\n%s\n' "$excerpt" >> "$out"
   fi

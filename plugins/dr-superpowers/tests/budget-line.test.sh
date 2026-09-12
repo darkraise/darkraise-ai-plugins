@@ -88,6 +88,38 @@ check "task-brief: excerpt carries Global Constraints" "$(grep -c '^- Bash only.
 check "task-brief: brief ends with Contracts" "$(tail -n 1 "$TMP/b1.md")" '- `greet NAME` prints `hello NAME`.'
 check "task-brief: excerpt carries Contracts" "$(grep -c '^- `greet NAME` prints `hello NAME`.$' "$TMP/b1.md")" "1"
 check "task-brief: excerpt omits Task index" "$(grep -c '^## Task index$' "$TMP/b1.md")" "0"
+
+# A fenced `## ` line inside Contracts must not end the excerpt.
+cat > docs/fenced.md <<'EOF'
+# Plan
+
+## Global Constraints
+
+- Bash only.
+
+## Contracts
+
+- k1
+```text
+## not a section
+```
+- k2
+
+## Task index
+
+1. One
+
+### Task 1: One
+
+Body.
+EOF
+out=$(bash "$P/scripts/task-brief" docs/fenced.md 1 "$TMP/b4.md" 2>/dev/null); status=$?
+check "task-brief: fenced-heading plan exit 0" "$status" "0"
+check "task-brief: excerpt keeps Contracts before the fence" "$(grep -c '^- k1$' "$TMP/b4.md")" "1"
+check "task-brief: excerpt keeps the fenced heading" "$(grep -c '^## not a section$' "$TMP/b4.md")" "1"
+check "task-brief: excerpt survives the fence" "$(grep -c '^- k2$' "$TMP/b4.md")" "1"
+check "task-brief: excerpt fence is closed" "$(grep -c '^```text$\|^```$' "$TMP/b4.md")" "2"
+check "task-brief: fenced-heading excerpt omits Task index" "$(grep -c '^## Task index$' "$TMP/b4.md")" "0"
 out=$(bash "$P/scripts/task-brief" --header docs/full.md 2>/dev/null); status=$?
 check "task-brief --header: exit 0" "$status" "0"
 check "task-brief --header: default path" "$(sed -n 1p <<<"$out" | grep -c 'plan-header.md: ')" "1"

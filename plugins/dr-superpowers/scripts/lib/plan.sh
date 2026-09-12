@@ -11,7 +11,7 @@ _PLAN_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # number of a task heading, or -1.
 _PLAN_AWK='
 function close_marker(t, open) {
-  sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+  sub(/^ ? ? ?/, "", t); sub(/[ \t]+$/, "", t)
   return t ~ /^(`+|~+)$/ && substr(t, 1, 1) == substr(open, 1, 1) && length(t) >= length(open)
 }
 function in_fence(line,   mk) {
