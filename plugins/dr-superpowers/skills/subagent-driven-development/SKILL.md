@@ -568,7 +568,7 @@ needed.
 four scores — spec, scope, verification, quality — each 1 to 20 against
 [task-review.md](../../criteria/task-review.md). Read them as bands: **1-8
 fails** and joins the fix-loop trigger; **9-13** is borderline, recorded on
-the complete line for the final review to triage, never adjudicated by you;
+the complete line for the final review to triage, never settled by you;
 **14-20 passes**. The verdicts still drive the loop; a
 judge that returns scores but drops the verdicts has produced an unusable
 review — re-dispatch it.
