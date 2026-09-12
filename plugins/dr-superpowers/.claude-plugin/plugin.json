@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dr-superpowers",
   "description": "Standalone fork of superpowers 6.3.0: brainstorming, planning, and tiered subagent execution with task scoring, explicit model and effort assignment, criteria-based review, and a Claude-hosted external Codex executor.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": {
     "name": "Darkraise"
   },

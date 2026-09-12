@@ -1,6 +1,6 @@
 {
   "name": "dr-superpowers",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Standalone fork of superpowers 6.3.0: brainstorming, planning, and tiered subagent execution with task scoring, explicit model and effort assignment, criteria-based review, and a Claude-hosted external Codex executor.",
   "author": {
     "name": "Darkraise"
