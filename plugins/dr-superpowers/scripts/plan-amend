@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Append one amendment, as the ruling seat returned it, to the plan's
+# <workspace>/amendments.md — validated, numbered, and lint-checked — so the
+# controller transcribes a plan correction without composing it. The plan file
+# itself is never edited during execution.
+#
+# Usage: plan-amend PLAN_FILE BLOCK_FILE
+# BLOCK_FILE heading: "## A? — Task N", "## Task N", "## A? — Header" or
+# "## Header" ("-" accepted for the dash), then "Reason:", "Cost if wrong:",
+# "### Old" and "### New", each followed by a fence of 4 or more backticks.
+# Exit: 0 appended ("amended: A<k> <target>"); 1 rejected; 2 usage.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+[ $# -eq 2 ] || { echo "usage: plan-amend PLAN_FILE BLOCK_FILE" >&2; exit 2; }
+plan=$1 block=$2
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+[ -f "$block" ] || { echo "no such block file: $block" >&2; exit 2; }
+dir=$(cd "$(dirname "$plan")" && "$HERE/sdd-workspace" "$(basename "$plan")") \
+  || { echo "plan-amend needs the plan inside a git repository" >&2; exit 2; }
+amend="$dir/amendments.md"
+reject() { echo "rejected: $1"; exit 1; }
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+tr -d '\r' < "$block" > "$TMP/block"
+
+head_line=$(grep -m 1 -E '^## ' "$TMP/block" || true)
+if [[ "$head_line" =~ ^##\ (A\?\ (—|-)\ )?(Task\ ([0-9]+)|Header)[[:space:]]*$ ]]; then
+  if [ "${BASH_REMATCH[3]}" = Header ]; then target=Header n=""; else n=${BASH_REMATCH[4]} target="Task $n"; fi
+else
+  reject "heading must be '## A? — Task N' or '## A? — Header', got: ${head_line:-nothing}"
+fi
+grep -qE '^Reason: .+' "$TMP/block" || reject "missing 'Reason:' line"
+grep -qE '^Cost if wrong: .+' "$TMP/block" || reject "missing 'Cost if wrong:' line"
+
+# Split out the Old and New fence bodies; report which one is malformed.
+awk -v dir="$TMP" '
+  function closes(t, open) {
+    sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+    return t ~ /^(`+|~+)$/ && substr(t, 1, 1) == substr(open, 1, 1) && length(t) >= length(open)
+  }
+  mode != "" { if (closes($0, open)) { done[mode] = 1; mode = "" } else print > (dir "/" mode); next }
+  /^### Old[ \t]*$/ { sect = "old"; next }
+  /^### New[ \t]*$/ { sect = "new"; next }
+  sect != "" && match($0, /^(````+|~~~~+)/) { open = substr($0, RSTART, RLENGTH); mode = sect; sect = ""; printf "" > (dir "/" mode); next }
+  END { if (!done["old"]) print "old" > (dir "/bad"); if (!done["new"]) print "new" >> (dir "/bad") }
+' "$TMP/block"
+[ ! -s "$TMP/bad" ] || reject "'### Old' and '### New' must each be followed by a closed fence of 4 or more backticks (bad: $(tr '\n' ' ' < "$TMP/bad"))"
+grep -q '[^[:space:]]' "$TMP/old" || reject "Old text is empty"
+if grep -qE '^(\*\*(Spec|Execution|Program|Plan review):\*\*|(\*\*)?(Host|Routing policy):)' "$TMP/old"; then
+  reject "Old text touches a line that cannot be amended (Spec, Execution, Program, Plan review, Host, Routing policy)"
+fi
+
+[ -f "$amend" ] && tr -d '\r' < "$amend" > "$TMP/before" || : > "$TMP/before"
+plan_apply_amendments "$plan" "$TMP/before" > "$TMP/current" 2>/dev/null \
+  || reject "the existing amendments no longer apply"
+if [ -n "$n" ]; then
+  plan_task_text "$TMP/current" "$n" > /dev/null || reject "no Task $n in the plan"
+fi
+
+k=$(( $(sed -n 's/^## A\([0-9][0-9]*\) .*/\1/p' "$TMP/before" | sort -n | tail -n 1) + 0 + 1 ))
+{
+  cat "$TMP/before"
+  [ -s "$TMP/before" ] && echo
+  echo "## A$k — $target"
+  awk 'seen { lines[++c] = $0; if (NF) last = c } /^## / && !seen { seen = 1 }
+       END { for (i = 1; i <= last; i++) print lines[i] }' "$TMP/block"
+} > "$TMP/after"
+
+plan_apply_amendments "$plan" "$TMP/after" > /dev/null 2>&1 \
+  || reject "Old text does not match exactly once in $target"
+
+bash "$HERE/plan-lint" "$plan" --amendments "$TMP/before" | grep '^ERROR' | sort > "$TMP/lint-before"
+bash "$HERE/plan-lint" "$plan" --amendments "$TMP/after" | grep '^ERROR' | sort > "$TMP/lint-after"
+new_errors=$(comm -13 "$TMP/lint-before" "$TMP/lint-after")
+[ -z "$new_errors" ] || { echo "rejected: the amendment introduces lint errors:"; printf '%s\n' "$new_errors"; exit 1; }
+
+cp "$TMP/after" "$amend"
+echo "amended: A$k $target"
