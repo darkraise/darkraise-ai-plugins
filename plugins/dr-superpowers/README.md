@@ -181,7 +181,7 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 `dr-superpowers:verification-before-completion` through its `skills:`
 frontmatter, and writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
-`context-size`, and `repo-audit` — `next-step` ends every session with its next
+`context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
 action and keeps `.superpowers/handoff/latest.md` pointing at it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
@@ -261,6 +261,12 @@ needs. dr-superpowers hands off instead.
 
 ## What a plan looks like
 
+A plan opens with a header block: Goal, Spec, the `**Execution:**` line that
+decides inline or subagent execution, Global Constraints, Contracts (every name
+one task produces and another consumes), Assumptions with evidence, and a Task
+index. `scripts/plan-lint` checks it, and a judge reviews it against
+`criteria/plan-review.md` before it is saved. Each task then reads:
+
 ```markdown
 ### Task 4: Wire the export pipeline
 
@@ -277,7 +283,9 @@ needs. dr-superpowers hands off instead.
 ```
 
 Edit the `**Implementer:**` line to override. `subagent-driven-development`
-obeys the line and never recomputes when it is present.
+obeys the line and never recomputes when it is present. Add
+`**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
+the deviation as a warning instead of an error.
 
 The heading keeps superpowers' `### Task N: <name>` form on purpose.
 `scripts/task-brief` finds a task by matching a heading that starts with
@@ -289,7 +297,7 @@ previous task's brief.
 ## Differences from upstream 6.3.0
 
 The superpowers loop is kept - the brief and report protocol, the review
-package, the five-round cap, the breaker and its adjudication rules, and the
+package, the five-round cap, the breaker (whose adjudication now goes to the ruling seat), and the
 handoff to dr-superpowers:finishing-a-development-branch - with these
 differences:
 
@@ -318,6 +326,12 @@ differences:
 8. **Session budget.** A budget line, a compaction snapshot, and the
    dr-superpowers:handoff / dr-superpowers:resume-execution pair replace
    upstream's unmeasured sessions - see [Session budget](#session-budget).
+9. **Small-model planning.** A strong model plans once; small models execute.
+   Every task brief carries the header's Global Constraints and Contracts, the
+   controller reads only the header and one brief at a time, and judgment
+   calls go to a read-only ruling seat (`judge-fable`). Its plan corrections
+   land in an append-only `amendments.md` through `scripts/plan-amend`; the
+   plan file is never edited during execution.
 
 Names written under older plugin prefixes resolve through
 [legacy-names.md](reference/legacy-names.md).
@@ -352,8 +366,8 @@ validates raw scores and history before returning a native routing decision.
 prefixes, and `reference/session-budget.md` holds the budget numbers,
 checkpoints, stops and the Compact Instructions block.
 
-`criteria/` holds the verifier criteria, including `codex-review-schema.json`
-for the risk-3 Codex seat; `criteria/TEMPLATE.md` documents the format.
+`criteria/` holds the verifier criteria, including `plan-review.md` for plan
+review and `codex-review-schema.json` for the risk-3 Codex seat; `criteria/TEMPLATE.md` documents the format.
 `tests/criteria.test.sh` validates every file in that directory.
 
 `scripts/` holds the external executor lane:
