@@ -19,6 +19,10 @@ has() { # has <name> <haystack> <needle>
 }
 
 TMP="$(mktemp -d)"
+# MSYS_NO_PATHCONV is exported below so jq --arg values stay opaque, which
+# also stops Git Bash converting a POSIX TMP for native git; hand git a
+# mixed-form path it understands on every host.
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
@@ -80,7 +84,8 @@ check "whole-file fallback: line" "$out" "budget: 50k of 475k (10%) — ok — s
 userline > "$T"
 run
 check "no usage: exit 3" "$status" "3"
-check "no usage: line" "$out" "budget: unknown of 475k — unknown — no usage entry in $T"
+posix() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
+check "no usage: line" "$out" "budget: unknown of 475k — unknown — no usage entry in $(posix "$T")"
 
 # --- budget override ---
 asst 285000 > "$T"

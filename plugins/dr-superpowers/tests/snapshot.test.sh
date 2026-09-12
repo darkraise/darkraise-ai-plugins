@@ -23,6 +23,10 @@ lacks() { # lacks <name> <haystack> <needle>
 }
 
 TMP="$(mktemp -d)"
+# MSYS_NO_PATHCONV is exported below so jq --arg values stay opaque, which
+# also stops Git Bash converting a POSIX TMP for native git; hand git a
+# mixed-form path it understands on every host.
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
