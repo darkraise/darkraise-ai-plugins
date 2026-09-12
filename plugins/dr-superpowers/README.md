@@ -104,6 +104,16 @@ decisions to inline, including bug fixes with a located root cause - where
 ranking candidates generated before the root cause is known would launder
 guesses into a confident pick.
 
+**Two execution modes, chosen by the plan.** The `**Execution:**` line decides
+whether a plan runs under subagent-driven-development, a dispatch and a scored
+review per task, or under executing-plans, where one session implements every
+task itself. Inline mode is available only when every task scores 3 or less
+with none at risk 3 - `plan-lint` refuses the line otherwise - and it trades
+per-task review for one whole-branch review at the end, which both modes now
+share. A task that will not converge after three fix rounds escalates to
+subagent mode at the next task boundary, recorded in the ledger both modes
+write.
+
 **An external executor lane.** A task scoring 2 to 4 with `risk <= 1` can run on
 the Codex CLI instead of a Claude implementer, for quota offload onto a separate
 ChatGPT subscription and for a second model family in the loop. The lane is a
@@ -122,8 +132,9 @@ wrapper costs more to orchestrate than it saves.
 an override on a second line, which is what makes a machine without Codex, a cold
 session, and an executor whose auth has lapsed all degrade by reading a line that
 is already there rather than re-deriving the assignment at dispatch. Under
-`dr-superpowers:executing-plans`, which never dispatches subagents, both lines are
-simply inert instead - nothing dispatches, so nothing falls back.
+`dr-superpowers:executing-plans`, which dispatches only the ruling seat and the
+final review, both lines are simply inert instead - no task is dispatched, so
+nothing falls back.
 
 The following observations were made against the external CLI lane on Windows
 with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy
@@ -226,11 +237,13 @@ needs. dr-superpowers hands off instead.
   `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
   skill writes `latest.md` and the plan's `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
-- **Stops.** A saved plan and a finished task list are hard stops under
-  subagent-driven-development; executing-plans' finished task list is a soft
-  stop, continuing in-session unless the budget says otherwise. The final
-  review always runs in a fresh session; see
-  [session-budget.md](reference/session-budget.md) for the full Stops table.
+- **Stops.** A saved plan, a finished task list under
+  subagent-driven-development, and a switch from inline to subagent mode are
+  hard stops; executing-plans' finished task list is a soft stop, continuing
+  in-session unless the budget says otherwise. So the final whole-branch review
+  runs in a fresh session under subagent mode and in the same session under
+  inline mode; see [session-budget.md](reference/session-budget.md) for the
+  full Stops table.
 - **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
   snapshot of branch, worktrees, dirty files, plans in flight and handoff
   staleness — verifies the worktree, and hands control back to the plan's
@@ -265,7 +278,9 @@ A plan opens with a header block: Goal, Spec, the `**Execution:**` line that
 decides inline or subagent execution, Global Constraints, Contracts (every name
 one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
-`criteria/plan-review.md` before it is saved. Each task then reads:
+`criteria/plan-review.md` before it is saved. That Execution line is binding: a
+session does not change mode because subagents happen to be available, and only
+your explicit instruction overrides it. Each task then reads:
 
 ```markdown
 ### Task 4: Wire the export pipeline
@@ -332,6 +347,14 @@ differences:
    calls go to a read-only ruling seat (`judge-fable`). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
+10. **Two modes, chosen by the plan.** Upstream picks `executing-plans` when
+    subagents are unavailable and recommends subagent execution otherwise. Here
+    the `**Execution:**` line decides and is binding: `executing-plans` is a
+    full inline mode that writes the same ledger, sends its judgment to the
+    same ruling seat, and ends at the same shared
+    [final-review.md](reference/final-review.md), with no per-task review. A
+    task it cannot land in three fix rounds escalates to subagent mode at the
+    next task boundary.
 
 Names written under older plugin prefixes resolve through
 [legacy-names.md](reference/legacy-names.md).
@@ -363,8 +386,9 @@ validates raw scores and history before returning a native routing decision.
 
 `reference/external-executor.md` holds the Claude-hosted Codex CLI lane,
 `reference/legacy-names.md` translates names written under older plugin
-prefixes, and `reference/session-budget.md` holds the budget numbers,
-checkpoints, stops and the Compact Instructions block.
+prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
+stops and the Compact Instructions block, and `reference/final-review.md` holds
+the whole-branch review both execution skills end at.
 
 `criteria/` holds the verifier criteria, including `plan-review.md` for plan
 review and `codex-review-schema.json` for the risk-3 Codex seat; `criteria/TEMPLATE.md` documents the format.
