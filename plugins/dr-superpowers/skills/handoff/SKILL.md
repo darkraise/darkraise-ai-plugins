@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when a budget line says handoff, at a hard phase stop (plan saved, every plan task complete under subagent-driven-development), after 3 Codex tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
+description: Use when a budget line says handoff, at a hard phase stop (plan saved, every plan task complete under subagent-driven-development, or a switch from inline to subagent mode), after 3 Codex tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
 ---
 
 # Handoff
@@ -19,9 +19,12 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   and `scripts/context-size` — said `handoff`. Act at the next ledger write,
   never mid-dispatch: finish the step you are in, write the ledger line that
   records it, then hand off.
-- A hard stop: the plan is saved, or every plan task is complete under
-  subagent-driven-development (the final whole-branch review runs in a fresh
-  session).
+- A hard stop: the plan is saved; every plan task is complete under
+  dr-superpowers:subagent-driven-development (the final whole-branch review
+  runs in a fresh session); or a plan has just switched from inline to subagent
+  mode. Under dr-superpowers:executing-plans the last task is a soft stop
+  instead: the final review runs in the same session unless the budget line
+  says `handoff`.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds.
 - Your human partner says they are stepping away for more than an hour, or

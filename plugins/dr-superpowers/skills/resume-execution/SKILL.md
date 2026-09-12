@@ -42,9 +42,10 @@ session from memory or from a summary.
    - Start or resume at Task N: invoke the skill the plan's `**Execution:**`
      line names — dr-superpowers:subagent-driven-development for `subagent`,
      dr-superpowers:executing-plans for `inline`. Its ledger recovery takes over.
-   - Run the final whole-branch review: invoke
-     dr-superpowers:subagent-driven-development; with every task complete it
-     goes straight to its Final Review section.
+   - Run the final whole-branch review: invoke the skill the plan's
+     `**Execution:**` line names, as the previous bullet does. With every task
+     complete, each goes straight to its Final Review section, and both follow
+     the same [final-review.md](../../reference/final-review.md).
    - Run finishing: invoke dr-superpowers:finishing-a-development-branch.
 
 ## Red Flags

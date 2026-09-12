@@ -41,15 +41,17 @@ so checking before every task and every review costs no extra request.
 
 - **subagent-driven-development:** every `task-brief` and `review-package`. On
   `handoff`, act at the next ledger write.
-- **executing-plans:** `context-size` after each `Task N: complete` line.
+- **executing-plans:** the budget line on every `task-brief`, and
+  `context-size` after each `Task N: complete` line.
 - **brainstorming:** `context-size` once, after the spec is committed.
 - **Anywhere:** `context-size` when in doubt.
 
 ## Stops
 
 - **Hard:** the plan is saved; every plan task is complete under
-  subagent-driven-development (the final review runs in a fresh session).
-  writing-plans runs dr-superpowers:handoff once the plan is reviewed.
+  subagent-driven-development (the final review runs in a fresh session); a
+  plan switches from inline to subagent mode. writing-plans runs
+  dr-superpowers:handoff once the plan is reviewed.
 - **Soft:** the final review is clean; executing-plans' last task is complete.
   Finishing follows in the same session unless the budget line says `handoff`.
 - **Budget:** a `handoff` verdict at any checkpoint.
