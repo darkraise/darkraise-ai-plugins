@@ -209,6 +209,11 @@ When writing or changing any test, read [writing-good-tests.md](references/writi
 - Keep test-only code in test utilities, out of production classes
 - Understand a dependency's side effects before mocking it
 
+**The quality bar:** a test that still passes when the implementation returns
+a constant (`return <constant>`), or when the implementation is deleted, is
+invalid — it proves nothing. Before you rely on a test, name the constant or
+the deletion that would make it fail.
+
 ## Common Rationalizations
 
 | Excuse | Reality |
@@ -230,6 +235,7 @@ When writing or changing any test, read [writing-good-tests.md](references/writi
 - Code before test
 - Test after implementation
 - Test passes immediately
+- Test still passes with `return <constant>`, or with the implementation deleted
 - Can't explain why test failed
 - Tests added "later"
 - Rationalizing "just this once"

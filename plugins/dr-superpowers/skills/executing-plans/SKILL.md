@@ -16,6 +16,11 @@ without a `Task <N>: complete` line.
 
 Load plan, review critically, execute all tasks, report when complete.
 
+**Surgical execution:** change only what the task names. Note adjacent
+problems in the ledger as `Task <N>: minor (deferred): <one-liner>` instead of
+fixing them, and write each assumption you make where the plan is silent to
+the ledger as `Ruling: <assumption> — plan silent — <cost if wrong>`.
+
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
 **Note:** Tell your human partner that Superpowers works much better with access to subagents (Claude Code and Codex both qualify; see `../using-superpowers/references/codex-tools.md` for Codex). If subagents are available, use dr-superpowers:subagent-driven-development instead of this skill.
