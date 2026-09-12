@@ -11,7 +11,9 @@ Subagent ([IMPLEMENTER]):
     ## Task Description
 
     Read your task brief first: [BRIEF_FILE]
-    It contains the full task text from the plan.
+    It contains the full task text from the plan, and ends with the plan
+    header's Global Constraints and Contracts: the exact names, signatures
+    and values other tasks use. Use them verbatim.
 
     ## Context
 
@@ -38,6 +40,9 @@ Subagent ([IMPLEMENTER]):
     6. Report back
 
     Work from: [directory]
+
+    **Keep it small and surgical:** do the simplest thing the brief allows,
+    and touch only the files and lines the task needs.
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It's always OK to pause and clarify. Don't guess or make assumptions.
@@ -81,6 +86,10 @@ Subagent ([IMPLEMENTER]):
     - You feel uncertain about whether your approach is correct
     - The task involves restructuring existing code in ways the plan didn't anticipate
     - You've been reading file after file trying to understand the system without progress
+    - You are about to try a third fix for the same failure: stop and question
+      the assumption behind the first two
+    - The same test still fails after three edits: report BLOCKED with what
+      you tried
 
     **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
     specifically what you're stuck on, what you've tried, and what kind of help you need.

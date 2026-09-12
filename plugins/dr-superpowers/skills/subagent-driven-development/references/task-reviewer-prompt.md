@@ -20,8 +20,8 @@ Subagent ([JUDGE]):
 
     Read the task brief: [BRIEF_FILE]
 
-    Global constraints from the spec/design that bind this task:
-    [GLOBAL_CONSTRAINTS]
+    The brief ends with the plan header's Global Constraints and Contracts.
+    They bind this task: exact values, formats, and the names other tasks use.
 
     ## What the Implementer Claims They Built
 
@@ -152,7 +152,7 @@ Subagent ([JUDGE]):
     defect (a test that asserts nothing, verbatim duplication of a logic
     block), that IS a finding — report it as Important, labeled
     plan-mandated. The plan's authorship does not grade its own work; the
-    human decides.
+    ruling seat decides.
     Acknowledge what was done well before listing issues — accurate praise
     helps the implementer trust the rest of the feedback.
 
@@ -212,10 +212,6 @@ Subagent ([JUDGE]):
   criteria file
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N`
   prints the path; same file the implementer worked from)
-- `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from
-  the plan's Global Constraints section or the spec: exact values, formats,
-  and stated relationships between components (not process rules — those
-  are already in this template)
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed
   report to
 - `[BASE_SHA]` — commit before this task

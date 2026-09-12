@@ -57,9 +57,10 @@ Confirm before merging: merging into the wrong base is expensive to undo.
 
 **Rulings first.** If this work came from a plan with a ledger (`progress.md`
 in the directory `scripts/sdd-workspace PLAN_FILE` prints) and this session
-has not yet printed its "Rulings I made" list, print it now: every ledger line
-containing `Ruling:`, in order. Your human partner chooses how to integrate
-with those decisions in view.
+has not yet printed its "Rulings I made" and "Amendments made" lists, print
+them now: every ledger line containing `Ruling:`, in order, then every entry
+of `amendments.md` in the same directory, in full. Your human partner chooses
+how to integrate with those decisions in view.
 
 ## Step 4: Present Options
 

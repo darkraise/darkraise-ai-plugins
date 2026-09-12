@@ -294,9 +294,9 @@ bounded by their own rule below and by the five-round cap.
 initial run, where producing nothing means the agent could not start. A fix round
 that returns `DONE` with an empty diff has read the findings and elected to
 change nothing, which is a position, not a failure. Read the report's summary:
-if it argues the findings are already addressed or wrong, adjudicate that claim
-yourself the way subagent-driven-development has you adjudicate any disputed
-finding, and record the ruling. Do not re-dispatch the round to force a diff. Two
+if it argues the findings are already addressed or wrong, send that claim to
+the ruling seat as a `codex-empty-diff` item (subagent-driven-development, The
+Ruling Seat) and carry out its verdict. Do not re-dispatch the round to force a diff. Two
 consecutive empty-diff rounds are a stalled loop - `HANDBACK`.
 
 Record any of this inside the fix-round line the loop is already writing, never
@@ -398,7 +398,7 @@ verified by a judge that wrote none of the code.
 | Wrapper exits 2 on an initial run with any other message | It refused before launching Codex: a validation error, not a run failure. Ruling: `HANDBACK` to the `**Implementer:**` agent; never retry it unchanged |
 | Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
-| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Adjudicate the report's argument rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
+| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as a `codex-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
 
 Every ruling above is logged as `Ruling: <what> — <why> — <cost if wrong>` and
 said aloud. None of them stops the run.

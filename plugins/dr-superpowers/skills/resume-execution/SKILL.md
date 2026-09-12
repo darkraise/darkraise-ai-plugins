@@ -34,8 +34,9 @@ session from memory or from a summary.
    history was rewritten after the handoff: log
    `Ruling: HEAD no longer descends from <sha> — history rewritten after the handoff — tasks re-verified from git log`
    and continue from the ledger plus `git log`.
-4. **Reload** `<workspace>/handoff.md`, the plan's header (everything above its
-   first `### Task`), and the ledger. The owner constraints and do-nots in
+4. **Reload** `<workspace>/handoff.md`, the plan's header (run
+   `scripts/task-brief --header PLAN_FILE` and read the file it prints), and
+   the ledger. The owner constraints and do-nots in
    `handoff.md` bind you as if your human partner had just said them.
 5. **Continue** with what latest.md's `**Next:**` line says:
    - Start or resume at Task N: invoke the skill the plan's `**Execution:**`
