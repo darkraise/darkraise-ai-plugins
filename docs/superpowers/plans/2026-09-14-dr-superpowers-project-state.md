@@ -85,7 +85,7 @@ Paths below are repository-relative. Paths inside skill bodies are relative to t
 
 ## Assumptions (evidence)
 
-- `plugins/dr-superpowers/tests/hook.test.sh:124` caps `using-superpowers/SKILL.md` at 4,800 bytes; the file is 4,135 bytes — `wc -c`, 2026-09-14. Three routing rows are about 180 bytes, so they fit.
+- `plugins/dr-superpowers/tests/hook.test.sh:124` caps `using-superpowers/SKILL.md` at 4,800 bytes; the file is 4,135 bytes — `wc -c`, 2026-09-14. The three routing rows are about 230 bytes with newlines, projecting to roughly 4,368 — inside the cap.
 - All sixteen `plugins/dr-superpowers/agents/impl-*.md` carry `skills: - dr-superpowers:verification-before-completion` in frontmatter — `grep -l`, 2026-09-14.
 - `plugins/dr-superpowers/skills/finishing-a-development-branch/SKILL.md:173` states Step 6 "Runs for Option 1 and confirmed discards"; Options 2 and 3 preserve the worktree — read 2026-09-14. Task 11 binds the completed-index write to the outcome for this reason.
 - `plugins/dr-superpowers/scripts/lib/plan.sh` defines `plan_tasks` (task headings outside fences) and `scripts/next-step:65-66` fails with "no tasks" when it is empty — read 2026-09-14.
@@ -93,17 +93,13 @@ Paths below are repository-relative. Paths inside skill bodies are relative to t
 - `plugins/dr-superpowers/agents/judge-fable.md:6` grants `tools: Read, Grep, Glob, WebFetch` and no Bash — read 2026-09-14. Task 6's judge contract depends on it.
 - `scripts/detect-executors.sh` reports Codex 0.153.4 authenticated and usable — run 2026-09-14. The external lane is not used: the Execution line is `inline`, under which `**Implementer:**` and `**Executor:**` lines are inert, so no task carries an Executor line.
 - Repository files use LF line endings. Task 4's validator keys on `^$` and on
-  trailing whitespace, and `scripts/lib/plan.sh:37` strips `
-` for the same
-  reason; Task 4's test pipes the template through `tr -d '
-'` so a CRLF
+  trailing whitespace, and `scripts/lib/plan.sh:37` strips `\r` for the same
+  reason; Task 4's test pipes the template through `tr -d '\r'` so a CRLF
   checkout cannot turn every blank line into a stray-line error.
 - `scripts/test-all.mjs` exists at the repository root, and
   `tests/ui-discovery.test.mjs` has a pre-existing failure on this machine
   (`bash: rg: command not found`) that predates this plan — verified 2026-09-14.
   Task 12 Step 6 relies on both.
-- The three routing rows are about 230 bytes with newlines, not 180, leaving the
-  entry point near 4,365 of its 4,800-byte cap.
 - No task depends on a network call, a game install, or a corpus path.
 
 ## Task index
@@ -161,11 +157,6 @@ present() { # present <name> <file> <needle>
   if grep -qF -- "$3" "$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
-  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
-}
-
 check "exists: reference/project-state.md" \
   "$([ -f "$STATE" ] && echo yes || echo no)" "yes"
 
@@ -328,7 +319,7 @@ present "status forbids next-step" "$SKILL" 'never calls `scripts/next-step`'
 # The plan discriminator. Most plans predate the Execution header, so keying on
 # it would make the skill ignore them.
 present "status uses the task-heading discriminator" "$SKILL" 'plan_tasks'
-present "status rejects the Execution header" "$SKILL" 'Do **not** use the `**Execution:**` header'
+present "status rejects the Execution header" "$SKILL" 'Do **not** use the `**Execution:**` header as the discriminator'
 
 # completed.md is the only completion signal, and it gates rules 4 and 5.
 present "status names the completed index" "$SKILL" 'docs/superpowers/plans/completed.md'
@@ -391,9 +382,10 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
 3. **Classify each plan.** A file under `docs/superpowers/plans/` is a plan when
    it has at least one `Task N` heading outside a fenced block — what
    `plan_tasks` in `scripts/lib/plan.sh` extracts, and the test `scripts/next-step`
-   applies when it fails with "no tasks". Do **not** use the `**Execution:**`
-   header: `plan-lint` requires it, but only plans written since 1.4.0 have one,
-   so it would hide most plans. Then, in order:
+   applies when it fails with "no tasks".
+   Do **not** use the `**Execution:**` header as the discriminator:
+   `plan-lint` requires it, but only plans written since 1.4.0 have one, so it
+   would hide most plans. Then, in order:
    - **In flight** — `<worktree>/.superpowers/sdd/<basename minus .md>/progress.md`
      exists with incomplete tasks, checked under every worktree the audit lists,
      because a ledger lives in the worktree executing it. Compute that path
@@ -419,7 +411,8 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
    conversation or upstream to derive it from.
 6. **Read the open constraints.** When `docs/superpowers/distilled/constraints.md`
    exists, take the entries whose scope covers the current work.
-7. **Report** the shape below, then stop.
+7. **Report** the shape below, then stop. There is no memory-store step: every
+   line comes from the audit or the tree.
 
 ## Output
 
@@ -573,7 +566,6 @@ present "every gate also requires exit 0" "$SKILL" 'exit 0'
 # Branch-level only. A pointer from verification-before-completion would reach
 # all sixteen implementer agents.
 present "gates are branch level" "$SKILL" 'branch level'
-absent "gates does not claim per-task use" "$SKILL" 'per task, run'
 
 # The rules that stop a rotted or flaky manifest passing silently.
 present "stop at the first red" "$SKILL" 'first red'
@@ -802,8 +794,7 @@ awk_out=$(awk '
   }
   { print "stray line: " $0 }
   END { if (seen_gate && !(cmd && grn)) print "gate " prev " missing Command or Green" }
-' <(tr -d '
-' < "$TPL"))
+' <(tr -d '\r' < "$TPL"))
 check "template satisfies the documented format" "$awk_out" ""
 
 present "template shows the fenced Setup form" "$TPL" 'Setup:'
@@ -889,9 +880,28 @@ Run:
 plugins/dr-superpowers/tests/gates-manifest.test.sh
 ```
 
-Expected: the summary line ends `0 failed`. If `template satisfies the documented format` fails, the awk output names the offending line — fix the template, not the validator.
+Expected: the summary line ends `0 failed`. If `template satisfies the documented
+format` fails, the awk output names the offending line — fix the template, not
+the validator.
 
-- [ ] **Step 5: Verify the skill's link resolves**
+- [ ] **Step 5: Prove the format check can fail**
+
+A check that never fires is worse than no check. Run this negative control from
+the repository root:
+
+```bash
+printf '# G\n\n## 2. X\nCommand: `x`\nGreen: ok\n' > /tmp/bad-gates.md
+sed -n "/^awk_out=/,/^' <(tr/p" plugins/dr-superpowers/tests/gates-manifest.test.sh \
+  | sed '1d;$d' > /tmp/v.awk
+awk -f /tmp/v.awk /tmp/bad-gates.md
+rm -f /tmp/bad-gates.md /tmp/v.awk
+```
+
+Expected: `non-contiguous: want 1 got 2`. Empty output means the validator is
+inert — most likely the `tr -d` argument lost its escape — and Step 4's pass was
+meaningless.
+
+- [ ] **Step 6: Verify the skill's link resolves**
 
 Run:
 
@@ -901,7 +911,7 @@ cd plugins/dr-superpowers/skills/running-gates && test -f references/gates-templ
 
 Expected: `resolves`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add plugins/dr-superpowers/skills/running-gates/references/gates-template.md plugins/dr-superpowers/tests/gates-manifest.test.sh
@@ -1118,7 +1128,10 @@ SHA it was given. A verdict returned against an edited tree is void; re-judge.
 
 Dispatch dr-superpowers:judge-fable (dr-superpowers:judge-opus when Fable is
 unavailable or your human partner declined it — say the substitution aloud) with
-[distil-judge.md](references/distil-judge.md).
+[distil-judge.md](references/distil-judge.md). It must work in one order:
+enumerate every fact in each source as a numbered list first, then map each
+numbered fact to the entry that carries it, and only then return a verdict. A
+judge that reads holistically grades the summary it was handed.
 
 | Verdict | Meaning | Consequence |
 |---|---|---|
@@ -1781,7 +1794,7 @@ present "finishing verifies the merged result with gates" "$FIN" 'gates when the
 present "finishing writes the completed index" "$FIN" 'docs/superpowers/plans/completed.md'
 present "index write is bound to the outcome" "$FIN" 'not to Step 6'
 present "option 2 records via PR" "$FIN" 'via PR'
-present "a discard records nothing" "$FIN" 'writes nothing'
+present "a discard records nothing" "$FIN" 'write nothing'
 
 # All sixteen implementer agents preload verification-before-completion. A
 # gates pointer there would tell every task implementer to run a branch-level
@@ -1837,9 +1850,11 @@ with:
 - [ ] **Step 5: Add the completed-index section**
 
 In the same file, immediately **before** the `## Step 6: Cleanup Workspace`
-heading, insert this section:
+heading, insert this section. The outer fence here is four backticks because the
+section contains a three-backtick block; write the section with an ordinary
+three-backtick fence around the two line forms and none around the section:
 
-```markdown
+````markdown
 ## Step 5b: Record the plan as completed
 
 A merged plan leaves no committed trace that it ran: its ledger lives in the
@@ -1879,9 +1894,27 @@ is missing that line.
 
 There is no index when a project adopted the plugin mid-programme. Create it
 with this first line; do not backfill plans whose outcome you cannot verify.
+
+The date is the date the plan landed, which is today's date when you write the
+line — not the plan file's own date. Commit an Option 1 index line as
+`docs(plans): record <plan basename> as completed`.
+````
+
+- [ ] **Step 6: Name the new step in the skill's own summary**
+
+A step the overview omits is a step a reader skips. In the same file, replace:
+
+```markdown
+**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up → Report the next step.
 ```
 
-- [ ] **Step 6: Route Option 1 into the new step**
+with:
+
+```markdown
+**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Record the plan → Clean up → Report the next step.
+```
+
+- [ ] **Step 7: Route Option 1 into the new step**
 
 A section nothing reaches is dead text. In the same file, in Step 5's Option 1
 block, replace:
@@ -1898,7 +1931,7 @@ Once the merged result is green: record the plan (Step 5b), clean up the
 worktree (Step 6), then delete the branch:
 ```
 
-- [ ] **Step 7: Route Option 2 into the new step**
+- [ ] **Step 8: Route Option 2 into the new step**
 
 In the same file, in Step 5's Option 2 block, insert this line immediately
 before the fenced `bash` block that runs `git push`:
@@ -1908,7 +1941,7 @@ First record the plan in the completed index (Step 5b) and commit it on the
 branch, so the line travels with the PR. Then:
 ```
 
-- [ ] **Step 8: Run the test and verify it passes**
+- [ ] **Step 9: Run the test and verify it passes**
 
 Run:
 
@@ -1918,7 +1951,7 @@ plugins/dr-superpowers/tests/gates-manifest.test.sh
 
 Expected: the summary line ends `0 failed`.
 
-- [ ] **Step 9: Verify no step numbering was broken**
+- [ ] **Step 10: Verify no step numbering was broken**
 
 Run:
 
@@ -1929,7 +1962,7 @@ grep -n '^## Step' plugins/dr-superpowers/skills/finishing-a-development-branch/
 Expected: Steps 1 through 5, then `Step 5b: Record the plan as completed`, then
 Step 6 and any later step, in ascending order with nothing renumbered.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add plugins/dr-superpowers/skills/finishing-a-development-branch/SKILL.md plugins/dr-superpowers/tests/gates-manifest.test.sh
@@ -1974,7 +2007,8 @@ Expected: two identical `"version": "1.7.0",` lines.
 In `plugins/dr-superpowers/README.md`, the "What you get" section is a sequence
 of paragraphs each opening with a bold lead, not a list. Insert this paragraph
 immediately after the one beginning `**Cross-family review.**` and immediately
-before the `## Requirements` heading, in the same style:
+before the `## Requirements` heading. Match the surrounding style: a single
+paragraph with no indented continuation lines.
 
 ```markdown
 **Project state.** `docs/superpowers/` holds what a project knows about
