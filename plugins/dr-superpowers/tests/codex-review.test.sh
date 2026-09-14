@@ -150,7 +150,7 @@ case "\$CODEX_STUB_MODE" in
       echo 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The gpt-6-astra model is not supported when using Codex with a ChatGPT account."}}' >&2; exit 1
     fi
     printf 'a review\n' > "\$outfile"; exit 0 ;;
-  refuse-always) echo "ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The \$model model is not supported when using Codex with a ChatGPT account."}}" >&2; exit 1 ;;
+  refuse-always) printf 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The %s model is not supported when using Codex with a ChatGPT account."}}\n' "\$model" >&2; exit 1 ;;
   # A run that merely mentions a refusal in its prose - what every review of
   # this plugin's own tests looks like - is not a refusal.
   prose-fail) echo "the diff mentions an unsupported model" >&2; exit 1 ;;
