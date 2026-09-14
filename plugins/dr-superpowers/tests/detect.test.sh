@@ -130,5 +130,66 @@ out=$(run)
 check "reason is set exactly when usable is false" \
   "$(jq '[.[] | select((.usable == false) != (.reason != null))] | length' <<<"$out")" "0"
 
+# --- advertised model pairs --------------------------------------------------
+# The cache is a negative filter: a pair it does not list is never attempted.
+# It is not entitlement — gpt-5.6-luna and gpt-5.6-terra were listed on
+# 2026-09-14 and were rejected with HTTP 400 on this account on 2026-08-31.
+cat > "$TMP/bin/codex" <<STUB
+#!$BASH_BIN
+case "\$1" in
+  login) echo "Logged in using ChatGPT" ;;
+  *) echo "codex-cli 0.153.4" ;;
+esac
+STUB
+chmod +x "$TMP/bin/codex"
+
+write_cache() { printf '%s' "$1" > "$TMP/codexhome/models_cache.json"; }
+
+write_cache '{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","models":[
+  {"slug":"gpt-6-astra","visibility":"list","supported_reasoning_levels":[{"effort":"high"},{"effort":"xhigh"}]},
+  {"slug":"gpt-5.6-sol","visibility":"list","supported_reasoning_levels":[{"effort":"high"}]},
+  {"slug":"gpt-reserve","visibility":"hide","supported_reasoning_levels":[{"effort":"high"}]}]}'
+out=$(run)
+check "advertised: fetched_at" "$(field codex advertised "$out" | jq -r '.fetched_at')" "2026-09-14T13:35:00Z"
+check "advertised: client_version" "$(field codex advertised "$out" | jq -r '.client_version')" "0.153.4"
+check "advertised: astra/high is listed" \
+  "$(field codex advertised "$out" | jq '[.pairs[] | select(.model=="gpt-6-astra" and .effort=="high")] | length')" "1"
+check "advertised: hidden models are filtered out" \
+  "$(field codex advertised "$out" | jq '[.pairs[] | select(.model=="gpt-reserve")] | length')" "0"
+# jq -r prints "null" for a key that does not exist, so a value check alone
+# would pass against the unmodified script. Assert the key is present too.
+has_field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | has($f)' <<< "$3"; }
+check "advertised: the key exists on every row" "$(has_field cursor-agent advertised "$out")" "true"
+check "advertised: non-codex rows are null" "$(field cursor-agent advertised "$out")" "null"
+
+# A cache that lists nothing is not the same fact as no cache at all.
+write_cache '{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","models":[]}'
+out=$(run)
+check "advertised: empty catalog is an empty pair list" \
+  "$(field codex advertised "$out" | jq -c '.pairs')" "[]"
+
+write_cache 'not json at all'
+out=$(run)
+check "advertised: malformed cache is null" "$(field codex advertised "$out")" "null"
+check "malformed cache still emits the key" "$(has_field codex advertised "$out")" "true"
+check "malformed cache does not break the roster" \
+  "$(jq -e 'type=="array"' >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
+
+# A half-written cache during a concurrent codex run: valid JSON followed by
+# garbage. jq emits the object and then fails, so an unguarded extraction
+# yields "{...}null", which --argjson rejects - and the whole codex row
+# disappears from the roster, silently losing the lane.
+write_cache '{"fetched_at":"x","client_version":"y","models":[]} trailing garbage'
+out=$(run)
+check "advertised: trailing garbage is null" "$(field codex advertised "$out")" "null"
+check "trailing garbage keeps the codex row" \
+  "$(jq -r '[.[] | select(.id=="codex")] | length' <<<"$out")" "1"
+
+rm -f "$TMP/codexhome/models_cache.json"
+out=$(run)
+check "advertised: absent cache is null" "$(field codex advertised "$out")" "null"
+check "absent cache still emits the key" "$(has_field codex advertised "$out")" "true"
+check "absent cache leaves codex usable" "$(field codex usable "$out")" "true"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
