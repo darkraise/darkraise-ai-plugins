@@ -8,7 +8,8 @@ starts recursive CLI offload in a Codex host.
 
 The lane is a gate in front of the Claude assignment table, never a rung on the
 escalation ladder. [ladder.md](ladder.md) explains why, and holds the `gate`,
-`codex-assignment`, `codex-successor`, and `codex-timeout` blocks read below.
+`codex-assignment`, `codex-successor`, and `codex-timeout` blocks read below,
+plus the `codex-judge` block the review seats' runner reads.
 
 ## Planning
 
@@ -314,31 +315,42 @@ ordinary Claude ladder govern from there.
 On a risk-3 task, one of the three independent review seats is Codex when it is
 usable. Risk-3 tasks are excluded from the executor lane by `max_risk 1` in the
 `gate` block of [ladder.md](ladder.md), so this seat never reviews Codex's own
-work - a property the final-review Codex round does not share. Establish
-usability by running `bash "<plugin-root>/scripts/detect-executors.sh"`
-and reading the `usable` field for `codex`; never trust the plan's copy.
+work - a property the final-review Codex round does not share.
 
-Run it as a background Bash call, for the reason Dispatch gives: the Bash tool's
-`timeout` caps at ten minutes, this rung's `codex-timeout` row is 1800 seconds,
-and a background call is not bound by `timeout` at all.
-
-**This seat needs its own bound, unlike the task wrapper.** It calls `codex`
-directly, so there is no wrapper poll loop to kill a run that never returns.
-Wrap it in coreutils `timeout` at the rung's value. The task wrapper avoids
-`timeout` deliberately - a process between it and node breaks `taskkill`'s tree
-walk - but that reasoning is about killing a *writing* Codex cleanly before a
-commit. This seat is `-s read-only` and commits nothing, so a blunt kill costs
-nothing but the round.
+The runner establishes usability from the roster itself and never trusts the
+plan's copy, applies the `codex-judge` row's bound with coreutils `timeout`, and
+reports `FAILED` with the roster's own `reason` when Codex is not usable. Run it
+as a background Bash call: the Bash tool's `timeout` caps at ten minutes, the
+rung's bound is longer, and a background call is not bound by it at all.
 
 ```bash
-timeout 1800 codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=high \
-  --output-schema "<plugin-root>/criteria/codex-review-schema.json" \
-  -o <workspace>/task-<N>-review-codex.json \
-  -C <worktree-root> < <prompt-file>
+bash "<plugin-root>/scripts/run-codex-review.sh" --kind risk3 \
+  --cwd <worktree-root> --out <workspace>/task-<N>-review-codex.json \
+  --prompt <prompt-file>
 ```
 
-A `timeout` exit of 124 is a seat that produced no score. Fall back to a third
-Claude judge rather than averaging two scores as if three had voted.
+The runner owns the model, the effort, the bound and the outcome. It takes the
+first row of [ladder.md](ladder.md)'s `codex-judge` block that the local model
+catalog advertises, falls back to that block's last row whenever the catalog is
+absent, unreadable or silent, and prints one status line:
+
+```
+codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<fetched_at>
+```
+
+Read that line and nothing else. `OK` and `FALLBACK` are a seat that scored;
+`FALLBACK` additionally means the preferred rung refused the run, so say the
+substitution aloud and record it in the task's ledger line with the reason the
+runner prints in its own `refused (...)` message — it reads that line from
+`<out>.stderr` or `<out>.stdout`, because an API-level refusal arrives on the
+JSON stream rather than on stderr. `TIMEOUT` and `FAILED` are a seat that
+produced no score.
+
+`TIMEOUT` or `FAILED` is a seat that produced no score. Fall back to a third
+Claude judge rather than averaging two scores as if three had voted. Never read
+an absent or malformed report as a clean review, and never count it as a third
+vote: the runner has already distinguished a report that is missing from one
+that is merely unfavourable.
 
 Use `codex exec`, not `codex exec review`: the latter imposes its own report
 shape, and this seat must return the criteria the other two judges return. The
@@ -399,6 +411,7 @@ verified by a judge that wrote none of the code.
 | Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
 | A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as a `codex-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
+| A review seat's status line says `FALLBACK` | The preferred judge rung refused the run and the runner already used the fallback once. Not a failure: record the substitution and its reason in the ledger line you are already writing |
 
 Every ruling above is logged as `Ruling: <what> — <why> — <cost if wrong>` and
 said aloud. None of them stops the run.
