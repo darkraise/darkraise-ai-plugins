@@ -57,5 +57,22 @@ present "exactly one removal commit" "$SKILL" 'exactly one removal commit'
 present "never squashed" "$SKILL" 'never squashed on integration'
 present "waves are bounded" "$SKILL" 'never the whole tree'
 
+JUDGE="$P/skills/distilling-docs/references/distil-judge.md"
+check "exists: references/distil-judge.md" \
+  "$([ -f "$JUDGE" ] && echo yes || echo no)" "yes"
+
+# The contract must force enumeration first. A holistic judge grades the summary
+# it was handed and cannot notice a fact absent from both the summary and its
+# own attention.
+present "judge enumerates facts first" "$JUDGE" 'numbered list'
+present "judge maps each fact to an entry" "$JUDGE" 'maps to'
+for v in CARRIED MISSING DISTORTED; do
+  present "judge contract verdict $v" "$JUDGE" "$v"
+done
+present "judge returns one verdict per source file" "$JUDGE" 'one verdict per source file'
+present "judge names the SHA it was given" "$JUDGE" 'Name [COMMIT] in your report'
+present "judge is read-only" "$JUDGE" 'read-only'
+present "judge rules on rewritten entries too" "$JUDGE" 'rewrite'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
