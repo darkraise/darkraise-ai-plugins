@@ -293,6 +293,26 @@ timing. `next-step` treats a BLOCKED task as terminal and prints no launch. The 
 template no longer invites questions or adjacent improvement (R3, R12); a NEEDS_CONTEXT the
 controller cannot answer mechanically goes to the seat as `blocked-plan`.
 
+**Amendment 2026-09-14 (sub-project 6 spec).** The decomposition gains a sixth
+sub-project, "Project state", after inline mode. `docs/superpowers/` becomes
+project-declared state as well as an archive: `gates.md` declares the project's
+verification gates in order, `plans/completed.md` indexes merged plans (the
+workspace and its ledger are deleted on integration, so nothing committed
+otherwise records that a plan ran; the line is written on a local merge and on a
+PR, never on a keep or a discard), and `distilled/` holds four durable files
+(constraints, gotchas, reference, rejected) distilled from session notes, whose
+tracked Markdown sources are deleted once an independent judge confirms every
+enumerated fact was carried. Three skills use it — `project-status` reads,
+`running-gates` reads, `distilling-docs` reads and writes — and `brainstorming`,
+both execution skills and `resume-execution` load `distilled/constraints.md`,
+which binds like `handoff.md`'s owner constraints and yields to them on conflict.
+Gates are branch-level: they are reached from `finishing-a-development-branch`
+and `reference/final-review.md`, never from `verification-before-completion`,
+which every implementer agent preloads. Sources: the `status` and `gate` skills
+of `darkraise-modder`; its `handoff`, `resume`, `fable-review` and `merge-local`
+skills are not imported. Details:
+`docs/superpowers/specs/2026-09-14-dr-superpowers-project-state-design.md`.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`

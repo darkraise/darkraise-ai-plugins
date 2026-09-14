@@ -177,6 +177,19 @@ reviews Codex's own work. The final whole-branch round is different: the branch
 contains whatever the executor lane produced, so that round is not
 self-review-free, which is why every finding goes through a third seat.
 
+**Project state.** `docs/superpowers/` holds what a project knows about
+  itself, not just its specs and plans: `gates.md` declares the verification
+  gates in order, `plans/completed.md` indexes merged plans, and `distilled/`
+  holds four durable files — constraints, gotchas, reference, rejected —
+  collapsed from session notes. Three skills use it. `project-status` reports
+  where the work stands and exactly one next step, and writes nothing.
+  `running-gates` runs the declared gates in order and stops at the first red,
+  judging each by its `Evidence` type so a gate whose proof is a picture is
+  never passed off a metric. `distilling-docs` distils notes into the four files
+  and deletes the tracked sources it absorbed, once an independent judge has
+  confirmed every enumerated fact was carried. Every one of these files is
+  optional; a project without them behaves exactly as before.
+
 ## Requirements
 
 **The superpowers workflow ships in-plugin.** The fork carries the full skill
@@ -367,7 +380,9 @@ for t in plugins/dr-superpowers/tests/*.test.sh; do bash "$t"; done
 ```
 
 Requires `jq` and `git`. No model calls: the executor suites run against a stub
-`codex` on `PATH` and a synthetic roster, never the real CLI.
+`codex` on `PATH` and a synthetic roster, never the real CLI. `project-status.test.sh`,
+`gates-manifest.test.sh` and `distilling-docs.test.sh` check the project-state
+skills the same way — structurally, against the documents themselves.
 
 ## Reference
 
@@ -382,6 +397,10 @@ validates raw scores and history before returning a native routing decision.
 prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
 stops and the Compact Instructions block, and `reference/final-review.md` holds
 the whole-branch review both execution skills end at.
+
+`reference/project-state.md` describes the committed project-declared state —
+`gates.md`, `plans/completed.md` and `distilled/` — and the precedence order that
+settles a disagreement between them.
 
 `criteria/` holds the verifier criteria, including `plan-review.md` for plan
 review and `codex-review-schema.json` for the risk-3 Codex seat; `criteria/TEMPLATE.md` documents the format.
