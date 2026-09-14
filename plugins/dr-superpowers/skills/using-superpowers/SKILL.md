@@ -33,6 +33,9 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | Work complete | dr-superpowers:finishing-a-development-branch |
 | Stopping mid-work, or picking it up | dr-superpowers:handoff, dr-superpowers:resume-execution |
 | Writing a skill | dr-superpowers:writing-skills |
+| Where the work stands, what to do next | dr-superpowers:project-status |
+| Before the final review or merge, when `gates.md` exists | dr-superpowers:running-gates |
+| Session notes have accumulated | dr-superpowers:distilling-docs |
 
 ## Principles
 
