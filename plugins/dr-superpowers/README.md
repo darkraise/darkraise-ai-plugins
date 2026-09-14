@@ -159,6 +159,11 @@ evidence, not native Codex capability declarations:
   argv put every flag after the subcommand, so each fix round on this lane died
   at argument parsing and was reported as an ordinary `BLOCKED`.
 
+That probe is a dated observation, not a standing fact: the same two models were
+listed in the local catalog on 2026-09-14, and `gpt-6-astra` ran there on that
+date. Catalog listing is not entitlement, which is why the judge seats fall back
+at runtime rather than trusting either list.
+
 A different machine, account, or Codex version must verify advertised capabilities
 and supported CLI flags before using the tables. Do not make paid capability
 probes. The flag-position fact above is the one that has
@@ -169,13 +174,19 @@ composed and the spawned argv, but a stub cannot notice a flag the real CLI stop
 accepting; only a re-probe can.
 
 **Cross-family review.** On a risk-3 task one of the three judges is Codex, and
-the final whole-branch review gains a `codex exec review` round whose findings
+the final whole-branch review gains a Codex round whose findings
 are deduped with the Claude reviewer's and then verified by `judge-fable` - or
 `judge-opus` when Fable is unavailable, the same fallback every judge seat uses. Risk-3
 tasks are excluded from the executor lane, so the risk-3 judge seat never
 reviews Codex's own work. The final whole-branch round is different: the branch
 contains whatever the executor lane produced, so that round is not
 self-review-free, which is why every finding goes through a third seat.
+Both review seats run through `scripts/run-codex-review.sh`, which judges at
+`gpt-6-astra` — the rung the native Codex policy already floors judges at —
+and falls back to `gpt-5.6-sol` whenever the local model catalog does not
+advertise Astra. Selection, the run bound and the four outcomes live in that
+script rather than in prose, so a refused model is a recorded substitution
+instead of a silently missing seat.
 
 **Project state.** `docs/superpowers/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
@@ -383,6 +394,9 @@ Requires `jq` and `git`. No model calls: the executor suites run against a stub
 `codex` on `PATH` and a synthetic roster, never the real CLI. `project-status.test.sh`,
 `gates-manifest.test.sh` and `distilling-docs.test.sh` check the project-state
 skills the same way — structurally, against the documents themselves.
+`codex-review.test.sh` covers the judge seats' selection and outcome policy
+against a stub `codex`, so every branch — refusal, fallback, timeout, empty
+report — is exercised without a model call.
 
 ## Reference
 
@@ -397,6 +411,9 @@ validates raw scores and history before returning a native routing decision.
 prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
 stops and the Compact Instructions block, and `reference/final-review.md` holds
 the whole-branch review both execution skills end at.
+`scripts/run-codex-review.sh` runs one Codex review seat for both of them: it
+selects the judge rung from `codex-judge`, bounds the run, and classifies the
+outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
 
 `reference/project-state.md` describes the committed project-declared state —
 `gates.md`, `plans/completed.md` and `distilled/` — and the precedence order that

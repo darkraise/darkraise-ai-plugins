@@ -313,6 +313,25 @@ of `darkraise-modder`; its `handoff`, `resume`, `fable-review` and `merge-local`
 skills are not imported. Details:
 `docs/superpowers/specs/2026-09-14-dr-superpowers-project-state-design.md`.
 
+**Amendment 2026-09-14 (sub-project 7 spec).** The decomposition gains a seventh
+sub-project, "Codex judge seats", after project state. Both Claude-hosted Codex
+review seats — the risk-3 seat and the final-review round — move from
+`gpt-5.6-sol / high` to `gpt-6-astra / high`, the rung `codex-routing.json`
+already floors native judges at, with `gpt-5.6-sol / high` as a fallback declared
+in a new `codex-judge` block in `reference/ladder.md`. Execution admission is
+unchanged: the block is separate because `run-codex-task.sh` validates `--model`
+against `codex-assignment`. `scripts/detect-executors.sh` gains an `advertised`
+field of model/effort pairs read from the local Codex model cache, used strictly
+as a negative filter — catalog listing is not entitlement — and selection falls
+closed to the fallback row whenever the cache is absent, malformed or silent. A
+new `scripts/run-codex-review.sh` owns selection, the run bound and the outcome
+policy for both seats, so the rule is executable and testable rather than prose.
+The official OpenAI `codex` plugin is deliberately not adopted as the substrate:
+its review path accepts no caller schema and no caller prompt, drops the selected
+reasoning effort, imposes no deadline, does not background, returns no job id to
+cancel with, and leaves a detached broker daemon its own session hook owns.
+Details: `docs/superpowers/specs/2026-09-14-dr-superpowers-judge-seats-design.md`.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`
