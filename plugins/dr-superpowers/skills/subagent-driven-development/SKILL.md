@@ -185,6 +185,10 @@ a ledger file, not only in todos.
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes —
   not after every task.
+- Read `docs/superpowers/distilled/constraints.md` when the project has one. Its
+  entries bind like the owner constraints in `handoff.md` and yield to them
+  wherever both speak; an absent file is not an error. See
+  [project-state.md](../../reference/project-state.md).
 - The ledger is your recovery map: the commits it names exist in git even
   when your context no longer remembers creating them. After compaction,
   trust the ledger and `git log` over your own recollection.

@@ -106,5 +106,13 @@ present "the shared reference spells out the package call" "$FINAL" \
   "review-package PLAN_FILE MERGE_BASE HEAD"
 present "the shared reference names both modes" "$FINAL" "Inline mode"
 
+# A standing project constraint outranks a spec, so both execution skills read
+# it at Setup. Without this, a plan can be executed against a constraint and
+# nothing notices until a handoff.
+for f in "$INLINE" "$SDD"; do
+  present "setup loads distilled constraints: $(basename "$(dirname "$f")")" \
+    "$f" 'distilled/constraints.md'
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

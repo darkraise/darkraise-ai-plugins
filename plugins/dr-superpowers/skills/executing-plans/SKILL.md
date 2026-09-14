@@ -105,6 +105,10 @@ file, not only in todos.
 - Create `<workspace>/handoff.md` from the template in dr-superpowers:handoff
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes.
+- Read `docs/superpowers/distilled/constraints.md` when the project has one. Its
+  entries bind like the owner constraints in `handoff.md` and yield to them
+  wherever both speak; an absent file is not an error. See
+  [project-state.md](../../reference/project-state.md).
 - `git clean -fdx` will destroy the workspace (it is git-ignored scratch); if
   that happens, recover from `git log`.
 
