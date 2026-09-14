@@ -39,6 +39,11 @@ sessions read it the same way.
   directory. Each repository has its own base and its own change set. Omitted
   means the manifest's own repository. This is what lets a manifest order a
   framework's gates before its consumer's.
+- **`Setup`/`Teardown`:** run `Setup`, `Command` and `Teardown` in one shell
+  process, in that order, so state `Setup` creates reaches `Command` — an
+  environment variable set in a separate call dies with it, and the gate then
+  runs the reduced thing it exists to catch and reports green. `Teardown` runs
+  whatever `Command` returned.
 
 A complete example, and a blank skeleton, are in
 [gates-template.md](references/gates-template.md).
@@ -69,8 +74,13 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
    say so, offer the bootstrap below, and fall back to the project's full test
    suite for this run. A missing manifest is not an error.
 2. **Compute the base and the change set.** Determine the base yourself — the
-   plan's base when a plan is in force, else `git merge-base <default branch> HEAD`,
-   else ask — and state it in the report. Never expect a caller to supply one:
+   branch's fork point, `git merge-base <default branch> HEAD`, the same
+   MERGE_BASE [final-review.md](../../reference/final-review.md) computes, else
+   ask. A ledger's `base <sha7>` is one task's starting commit, never the
+   branch's: using one narrows the change set to the last task and skips every
+   conditional gate for the files the earlier ones touched, in a report that
+   reads as correct. State the base in the report. Never expect a caller to
+   supply one:
    dr-superpowers:finishing-a-development-branch establishes its base in Step 3,
    after the Step 1 that invokes this skill. The change set is
    `git diff --name-only <base>...HEAD` plus `git status --short`, computed per
@@ -95,8 +105,9 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
 
 A gate whose command cannot launch at all — missing script, bad path — is a
 **manifest defect**, not a red gate. Report it as one and say the manifest needs
-updating. A manifest that has rotted silently is worse than no manifest, because
-it turns a real check into a green line.
+updating. A manifest defect stops the run as a red gate does — fix the manifest
+and re-run before any caller proceeds. A manifest that has rotted silently is
+worse than no manifest, because it turns a real check into a green line.
 
 ## Bootstrap
 

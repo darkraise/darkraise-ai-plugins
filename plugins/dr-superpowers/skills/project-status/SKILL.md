@@ -48,10 +48,12 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
    body decomposes a programme into sub-projects is a program design and is
    never unplanned — its plans belong to the sub-projects.
 5. **Find unmerged work with no plan.** `git branch --no-merged <base>` plus the
-   audit's worktrees. `<base>` is the plan's recorded base when a ledger names
-   one, else `git symbolic-ref refs/remotes/origin/HEAD`, else `main` — say
-   which you used, since unlike finishing-a-development-branch you have no plan,
-   conversation or upstream to derive it from.
+   audit's worktrees. `<base>` is the integration branch —
+   `git symbolic-ref refs/remotes/origin/HEAD`, else `main` — never a ledger's
+   `base <sha7>`, which is one task's starting commit and would make both this
+   check and rule 3 call every branch unmerged. Say which you used, since unlike
+   finishing-a-development-branch you have no plan, conversation or upstream to
+   derive it from.
 6. **Read the open constraints.** When `docs/superpowers/distilled/constraints.md`
    exists, take the entries whose scope covers the current work.
 7. **Report** the shape below, then stop. There is no memory-store step: every

@@ -149,8 +149,8 @@ commit and judge round.
 
 A wave that edits entries carried by an **earlier** wave is editing facts whose
 sources may already be deleted, and its own judge sees only its own sources. When
-that happens, include the touched entry's diff and a `git show` extract of the
-source named in its `Source:` line in the dispatch, so the judge rules on the
+that happens, include the touched entry's diff and a `git show` extract of every
+source named in its `Source:` lines in the dispatch, so the judge rules on the
 rewrite too. Without that, a fact can be rewritten out of the corpus with no seat
 having checked it.
 

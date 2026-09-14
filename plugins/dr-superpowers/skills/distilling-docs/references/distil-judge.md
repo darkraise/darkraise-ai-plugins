@@ -10,8 +10,8 @@ instruction set: the judge has no other context.
 - `[DISTILLED]` — the four `docs/superpowers/distilled/*.md` paths.
 - `[COMMIT]` — the SHA of the commit that added this wave's distilled entries.
 - `[REWRITES]` — for each pre-existing entry this wave edited, its diff and a
-  `git show` extract of the source named in its `Source:` line. `none` when the
-  wave added entries only.
+  `git show` extract of every source named in its `Source:` lines. `none` when
+  the wave added entries only.
 
 ## The prompt
 
