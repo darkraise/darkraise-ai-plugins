@@ -676,8 +676,10 @@ existing row or principle is touched. **[S12]**
 Three structural suites in the house pattern: the claims that make a prose skill work are checkable
 without a model, so they are checked here rather than in a review.
 
-- **`tests/project-status.test.sh`** — the skill names `scripts/repo-audit`; it does **not** name
-  `scripts/next-step` or `scripts/sdd-workspace` **[R1]**; it routes to
+- **`tests/project-status.test.sh`** — the skill names `scripts/repo-audit`; it states that it never calls
+  `scripts/next-step` or `scripts/sdd-workspace` **[R1]** — both names appear in
+  the body explaining why, so the assertion is on the prohibition, not on the
+  absence of the string; it routes to
   `dr-superpowers:resume-execution`; rules 0–7 of §4.3 appear in that order, with `BLOCKED` first
   and reading each task's last line **[S19]**; the five output sections appear in order;
   `completed.md` is named as the completion signal and as the precondition of rules 4 and 5
