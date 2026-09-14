@@ -7,13 +7,16 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
-**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up → Report the next step.
+**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Record the plan → Clean up → Report the next step.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
 ## Step 1: Verify Tests
 
-Run the project's full test suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
+When the project declares `docs/superpowers/gates.md`, run
+dr-superpowers:running-gates — it determines its own base, so it works here even
+though Step 3 has not established one yet. Otherwise run the project's full test
+suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
 
 **If tests fail**, report the failures and stop — the menu comes after a green suite:
 
@@ -107,7 +110,9 @@ git checkout <base-branch>
 git pull
 git merge <feature-branch>
 
-# Verify tests on merged result
+# Verify the merged result: gates when the project declares a manifest
+# (dr-superpowers:running-gates), otherwise the full test suite. Gates that
+# passed on the branch say nothing about the merged tree.
 <test command>
 ```
 
@@ -115,7 +120,8 @@ If tests fail on the merged result: stop, leave the worktree and branch in
 place, and investigate — nothing has been pushed, so the merge is local
 and recoverable.
 
-Once the merged result is green: clean up the worktree (Step 6), then
+Once the merged result is green: record the plan (Step 5b), clean up the
+worktree (Step 6), then
 delete the branch:
 
 ```bash
@@ -123,6 +129,9 @@ git branch -d <feature-branch>
 ```
 
 ### Option 2: Push and Create PR
+
+First record the plan in the completed index (Step 5b) and commit it on the
+branch, so the line travels with the PR. Then:
 
 ```bash
 git push -u origin <feature-branch>
@@ -167,6 +176,51 @@ Then clean up the worktree (Step 6) and force-delete the branch:
 ```bash
 git branch -D <feature-branch>
 ```
+
+## Step 5b: Record the plan as completed
+
+A merged plan leaves no committed trace that it ran: its ledger lives in the
+gitignored workspace that Step 6 deletes, and its branch is deleted with it.
+Without a record, dr-superpowers:project-status cannot tell a merged plan from
+one nobody ever started, and will recommend re-executing finished work.
+
+So append one line to `docs/superpowers/plans/completed.md` in the adopting
+project. The write is bound to the **outcome**, not to Step 6 — Step 6 also runs
+for a confirmed discard, and never runs for Options 2 and 3.
+
+The two line forms:
+
+```markdown
+- 2026-09-12 `docs/superpowers/plans/2026-09-12-example.md` — merged into `main` at 6a4619a
+- 2026-09-12 `docs/superpowers/plans/2026-09-12-example.md` — via PR
+```
+
+| Path | When | Which form |
+|---|---|---|
+| Option 1, merge locally | On the base branch, as its own commit, after Step 5's merged-result verification passes | the `merged into` form |
+| Option 2, push and PR | On the branch, before the push | the `via PR` form |
+| Option 3, keep as-is | Never | — |
+| Confirmed discard | Never | — |
+
+Option 3 and a confirmed discard write nothing. Step 6 runs for a discard, which
+is exactly why this write is bound to the outcome and not to Step 6.
+
+The SHA on an Option 1 line is the base branch head after the merge, not the
+merge commit's own hash — a commit cannot contain its own hash, and the merge
+fast-forwards when it can, leaving no merge commit at all.
+
+Two branches each appending a last line conflict on integration. Adopting
+projects add `docs/superpowers/plans/completed.md merge=union` to
+`.gitattributes` so those appends resolve without one; say so once if the file
+is missing that line.
+
+There is no index when a project adopted the plugin mid-programme. Create it
+with this first line; do not backfill plans whose outcome you cannot verify.
+
+The date is the date the plan landed, which is today's date when you write the
+line — not the plan file's own date. Commit an Option 1 index line as
+`docs(plans): complete <slug>`, which fits the 50-character subject limit where
+a full basename would not.
 
 ## Step 6: Cleanup Workspace
 

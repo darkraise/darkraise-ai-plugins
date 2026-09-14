@@ -108,5 +108,20 @@ present "template shows the fenced Setup form" "$TPL" 'Setup:'
 present "template shows an image gate" "$TPL" 'Evidence: image'
 present "template carries a blank skeleton" "$TPL" 'Copy the block below for a new gate'
 
+FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+VBC="$P/skills/verification-before-completion/SKILL.md"
+
+present "finishing prefers the gates manifest" "$FIN" 'dr-superpowers:running-gates'
+present "finishing verifies the merged result with gates" "$FIN" 'gates when the project declares a manifest'
+present "finishing writes the completed index" "$FIN" 'docs/superpowers/plans/completed.md'
+present "index write is bound to the outcome" "$FIN" 'not to Step 6'
+present "option 2 records via PR" "$FIN" 'via PR'
+present "a discard records nothing" "$FIN" 'write nothing'
+
+# All sixteen implementer agents preload verification-before-completion. A
+# gates pointer there would tell every task implementer to run a branch-level
+# manifest.
+absent "verification-before-completion never names running-gates" "$VBC" 'running-gates'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
