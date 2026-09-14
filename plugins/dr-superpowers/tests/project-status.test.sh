@@ -40,5 +40,40 @@ present "project-state ranks CLAUDE.md first" "$STATE" "anything your human part
 present "project-state ranks handoff above distilled" "$STATE" "yields to"
 present "project-state says every file is optional" "$STATE" "Every one of these is optional"
 
+SKILL="$P/skills/project-status/SKILL.md"
+check "exists: skills/project-status/SKILL.md" \
+  "$([ -f "$SKILL" ] && echo yes || echo no)" "yes"
+
+# The one script it may call, and the two it must not. Both forbidden names
+# appear in the body explaining why, so assert the prohibition rather than the
+# absence: sdd-workspace runs mkdir -p and rewrites a .gitignore, and next-step
+# rewrites latest.md. This skill writes nothing.
+present "status calls repo-audit" "$SKILL" 'scripts/repo-audit'
+present "status forbids sdd-workspace" "$SKILL" 'never call `scripts/sdd-workspace`'
+present "status forbids next-step" "$SKILL" 'never calls `scripts/next-step`'
+
+# The plan discriminator. Most plans predate the Execution header, so keying on
+# it would make the skill ignore them.
+present "status uses the task-heading discriminator" "$SKILL" 'plan_tasks'
+present "status rejects the Execution header" "$SKILL" 'Do **not** use the `**Execution:**` header as the discriminator'
+
+# completed.md is the only completion signal, and it gates rules 4 and 5.
+present "status names the completed index" "$SKILL" 'docs/superpowers/plans/completed.md'
+present "status gates rules 4 and 5 on the index" "$SKILL" 'Rules 4 and 5 require'
+
+# The recommendation table must stay ordered: two sessions on one repo reach
+# the same step only if the rules are read in a fixed order.
+rules=$(grep -oE '^\| [0-7] \|' "$SKILL" | grep -oE '[0-7]' | tr '\n' ' ')
+check "status rules run 0 to 7 in order" "$rules" "0 1 2 3 4 5 6 7 "
+present "status rule 0 reads the last line per task" "$SKILL" "A task's **last** ledger line is"
+present "status routes to resume-execution" "$SKILL" 'dr-superpowers:resume-execution'
+
+# The five output sections, in order.
+sections=$(grep -oE '^- \*\*(Repos|In flight|Not started|Owner-only items|Next step)\*\*' "$SKILL" \
+  | sed 's/^- \*\*//; s/\*\*$//' | tr '\n' '|')
+check "status output sections in order" "$sections" "Repos|In flight|Not started|Owner-only items|Next step|"
+
+present "status links project-state" "$SKILL" 'project-state.md'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
