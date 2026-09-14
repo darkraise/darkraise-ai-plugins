@@ -117,5 +117,110 @@ check "final without --base is a usage error" "$rc" "2"
 run --kind bogus --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run >/dev/null; rc=$?
 check "an unknown kind is a usage error" "$rc" "2"
 
+# --- the outcome policy ------------------------------------------------------
+# A stub codex whose behaviour is chosen per case by CODEX_STUB_MODE. The
+# fallback cases need the stub to behave differently on its second invocation,
+# so it counts its own calls.
+cat > "$TMP/bin/codex" <<STUB
+#!$BASH_BIN
+n=\$(cat "$TMP/calls" 2>/dev/null || echo 0); n=\$((n + 1)); printf '%s' "\$n" > "$TMP/calls"
+model=""; prev=""
+for a in "\$@"; do [ "\$prev" = "-m" ] && model="\$a"; prev="\$a"; done
+outfile=""; prev=""
+for a in "\$@"; do [ "\$prev" = "-o" ] && outfile="\$a"; prev="\$a"; done
+case "\$CODEX_STUB_MODE" in
+  ok) printf '{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}' > "\$outfile"; exit 0 ;;
+  ok-final) printf 'a review\n' > "\$outfile"; exit 0 ;;
+  empty) : > "\$outfile"; exit 0 ;;
+  noout) exit 0 ;;
+  refuse-then-ok)
+    if [ "\$model" = gpt-6-astra ]; then
+      echo "stream error: unsupported model gpt-6-astra" >&2; exit 1
+    fi
+    printf 'a review\n' > "\$outfile"; exit 0 ;;
+  refuse-always) echo "stream error: unsupported model \$model" >&2; exit 1 ;;
+  # An API-level refusal arrives on the JSON event stream, which is stdout.
+  refuse-stdout)
+    if [ "\$model" = gpt-6-astra ]; then
+      echo '{"type":"error","message":"http 400: model not available"}'; exit 1
+    fi
+    printf 'a review\n' > "\$outfile"; exit 0 ;;
+  authfail) echo "stream error: 401 unauthorized" >&2; exit 1 ;;
+  cancel) exit 130 ;;
+  # 124 is what coreutils timeout returns after it kills the child; the stub
+  # returns it directly, so this asserts the classification, not the deadline.
+  hang) exit 124 ;;
+esac
+exit 1
+STUB
+chmod +x "$TMP/bin/codex"
+
+seat() { # seat <mode> <kind> <extra-args...>
+  rm -f "$TMP/calls" "$TMP"/o.md* "$TMP"/o.json*
+  local mode="$1" k="$2"; shift 2
+  CODEX_STUB_MODE="$mode" run --kind "$k" --cwd "$TMP/work" "$@"
+}
+
+write_roster "$ASTRA"
+
+out=$(seat ok-final final --out "$TMP/o.md" --base main); rc=$?
+present "a complete run with output is OK" "$out" "status=OK"
+check "OK exits 0" "$rc" "0"
+
+out=$(seat empty final --out "$TMP/o.md" --base main); rc=$?
+present "exit 0 with an empty report is FAILED" "$out" "status=FAILED"
+check "FAILED exits 1" "$rc" "1"
+
+out=$(seat noout final --out "$TMP/o.md" --base main)
+present "exit 0 with no report at all is FAILED" "$out" "status=FAILED"
+
+out=$(seat ok risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "a schema-shaped risk3 report is OK" "$out" "status=OK"
+
+out=$(seat ok-final risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "risk3 output that is not schema-shaped is FAILED" "$out" "status=FAILED"
+
+out=$(seat hang final --out "$TMP/o.md" --base main); rc=$?
+present "exit 124 is TIMEOUT, never a model change" "$out" "status=TIMEOUT"
+check "TIMEOUT exits 1" "$rc" "1"
+check "TIMEOUT does not run a second seat" "$(cat "$TMP/calls")" "1"
+
+out=$(seat refuse-then-ok final --out "$TMP/o.md" --base main); rc=$?
+present "a refused model falls back once" "$out" "status=FALLBACK"
+present "the fallback line names the model that ran" "$out" "codex-judge gpt-5.6-sol/high"
+check "FALLBACK exits 0" "$rc" "0"
+check "the fallback runs exactly one extra seat" "$(cat "$TMP/calls")" "2"
+
+out=$(seat refuse-always final --out "$TMP/o.md" --base main)
+present "a fallback that also fails is FAILED" "$out" "status=FAILED"
+check "the fallback is attempted at most once" "$(cat "$TMP/calls")" "2"
+
+out=$(seat authfail final --out "$TMP/o.md" --base main)
+present "an auth failure is FAILED, not a model change" "$out" "status=FAILED"
+check "an auth failure runs no second seat" "$(cat "$TMP/calls")" "1"
+
+# A cancelled run is the owner's decision, not a capability signal.
+out=$(seat cancel final --out "$TMP/o.md" --base main)
+present "a cancelled run is FAILED, not a model change" "$out" "status=FAILED"
+check "a cancelled run runs no second seat" "$(cat "$TMP/calls")" "1"
+
+# Already on the fallback row: there is nothing to fall back to.
+write_roster "$SOL_ONLY"
+out=$(seat refuse-always final --out "$TMP/o.md" --base main)
+present "a refusal on the fallback row is FAILED" "$out" "status=FAILED"
+check "the fallback row is never retried against itself" "$(cat "$TMP/calls")" "1"
+
+write_roster "$ASTRA"
+out=$(seat refuse-stdout final --out "$TMP/o.md" --base main)
+present "a refusal on stdout also falls back" "$out" "status=FALLBACK"
+check "the stdout refusal runs exactly one extra seat" "$(cat "$TMP/calls")" "2"
+
+# The refusal must survive the fallback run, because the ledger quotes it.
+seat refuse-then-ok final --out "$TMP/o.md" --base main >/dev/null
+check "the refusal's own logs are kept" \
+  "$([ -s "$TMP/o.md.stderr" ] && echo yes || echo no)" "yes"
+check "the fallback writes its own logs" \
+  "$([ -f "$TMP/o.md.fallback.stderr" ] && echo yes || echo no)" "yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

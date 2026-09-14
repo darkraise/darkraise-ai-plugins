@@ -129,4 +129,79 @@ if [ "$dry_run" = true ]; then
   exit 0
 fi
 
-die "only --dry-run is implemented; see Task 4"
+# Valid output is defined per kind. risk3 must parse as the criteria the other
+# two judges return; final has no schema and only has to be non-empty.
+valid_output() {
+  if [ "$kind" = risk3 ]; then
+    jq -e 'has("spec_verdict") and has("task_quality") and has("cannot_verify")' \
+      "$out" >/dev/null 2>&1
+  else
+    [ -s "$out" ]
+  fi
+}
+
+# A refusal is the one failure a different model repairs. An expired token, an
+# exhausted quota, a bad working directory and a cancelled run are not refusals:
+# the fallback would fail identically and would cost a second full round.
+#
+# Both streams are searched. Codex reports API failures as events on its JSON
+# stream, which is stdout - see external-executor.md, "Read `## Codex error` in
+# the report, not `<report>.stderr`" - while stderr carries the CLI's own
+# complaints. A model refusal can arrive on either, and searching only stderr
+# would make this whole rule unreachable for the API-level case.
+is_refusal() { # is_refusal <log-prefix>
+  grep -qiE '(unsupported|unknown|invalid|not (supported|available|found)).*(model|effort)|(model|effort).*(unsupported|unknown|invalid|not (supported|available|found))|http 400|status 400' \
+    "$1.stdout" "$1.stderr" 2>/dev/null
+}
+
+refusal_line() { # refusal_line <log-prefix>
+  cat "$1.stderr" "$1.stdout" 2>/dev/null | grep -m1 . | tr -d '\r'
+}
+
+# Each attempt writes its own pair of logs. Sharing one would let the fallback's
+# (usually empty) output overwrite the refusal that explains why the fallback
+# ran at all, which is the line the ledger substitution quotes.
+run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the exit code
+  local argv=() line
+  while IFS= read -r line; do argv+=("$line"); done < <(build_argv "$1" "$2")
+  rm -f "$out"
+  ( cd "$cwd" && timeout "$3" "${argv[@]}" >"$4.stdout" 2>"$4.stderr" \
+      < "${prompt:-/dev/null}" )
+  printf '%s' "$?"
+}
+
+status() { # status <model> <effort> <state> <exit>
+  printf 'codex-judge %s/%s status=%s exit=%s out=%s evidence=%s\n' \
+    "$1" "$2" "$3" "$4" "$out" "$evidence"
+}
+
+rc=$(run_seat "$model" "$effort" "$secs" "$out")
+
+# Deadline expiry is tracked apart from every other non-zero exit: a hang and a
+# refusal both exit non-zero, and only one of them is worth a second run.
+if [ "$rc" -eq 124 ]; then
+  status "$model" "$effort" TIMEOUT "$rc"; exit 1
+fi
+
+if [ "$rc" -eq 0 ] && valid_output; then
+  status "$model" "$effort" OK "$rc"; exit 0
+fi
+
+# The fallback is attempted at most once, and never when the row that just ran
+# is already the fallback row.
+if is_refusal "$out" \
+   && { [ "$model" != "$back_model" ] || [ "$effort" != "$back_effort" ]; }; then
+  printf 'run-codex-review: %s/%s refused (%s); falling back to %s/%s\n' \
+    "$model" "$effort" "$(refusal_line "$out")" "$back_model" "$back_effort" >&2
+  back_secs=$(secs_of "$back_model" "$back_effort")
+  rc=$(run_seat "$back_model" "$back_effort" "$back_secs" "$out.fallback")
+  if [ "$rc" -eq 124 ]; then
+    status "$back_model" "$back_effort" TIMEOUT "$rc"; exit 1
+  fi
+  if [ "$rc" -eq 0 ] && valid_output; then
+    status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
+  fi
+  status "$back_model" "$back_effort" FAILED "$rc"; exit 1
+fi
+
+status "$model" "$effort" FAILED "$rc"; exit 1
