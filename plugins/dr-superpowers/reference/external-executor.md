@@ -343,14 +343,19 @@ Read that line and nothing else. `OK` and `FALLBACK` are a seat that scored;
 substitution aloud and record it in the task's ledger line with the reason the
 runner prints in its own `refused (...)` message — it reads that line from
 `<out>.stderr` or `<out>.stdout`, because an API-level refusal arrives on the
-JSON stream rather than on stderr. `TIMEOUT` and `FAILED` are a seat that
-produced no score.
+JSON stream rather than on stderr.
 
 `TIMEOUT` or `FAILED` is a seat that produced no score. Fall back to a third
 Claude judge rather than averaging two scores as if three had voted. Never read
 an absent or malformed report as a clean review, and never count it as a third
 vote: the runner has already distinguished a report that is missing from one
 that is merely unfavourable.
+
+A status line naming the block's last row with `status=OK` is a substitution as
+well: the catalog did not advertise the preferred rung, so selection fell closed
+before the run. Say that aloud too, quoting the line's `evidence=` value, which
+is the catalog's own date or `unknown`. It is not `FALLBACK`, because nothing
+refused anything.
 
 Use `codex exec`, not `codex exec review`: the latter imposes its own report
 shape, and this seat must return the criteria the other two judges return. The
@@ -396,6 +401,12 @@ substitution aloud, because the round was judged by the fallback rung rather
 than the preferred one. `TIMEOUT` and `FAILED` mean this round produced
 nothing: skip it, say so, and report the Claude review alone, exactly as a
 missing Codex has always been reported.
+
+A status line naming the block's last row with `status=OK` is a substitution as
+well: the catalog did not advertise the preferred rung, so selection fell closed
+before the run. Say that aloud too, quoting the line's `evidence=` value, which
+is the catalog's own date or `unknown`. It is not `FALLBACK`, because nothing
+refused anything.
 
 `codex exec review` is purpose-built for this and takes no sandbox flag, because
 review is read-only by nature. Run the runner as a background Bash call: the

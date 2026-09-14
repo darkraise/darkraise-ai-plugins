@@ -144,18 +144,29 @@ valid_output() {
 # exhausted quota, a bad working directory and a cancelled run are not refusals:
 # the fallback would fail identically and would cost a second full round.
 #
-# Both streams are searched. Codex reports API failures as events on its JSON
-# stream, which is stdout - see external-executor.md, "Read `## Codex error` in
-# the report, not `<report>.stderr`" - while stderr carries the CLI's own
-# complaints. A model refusal can arrive on either, and searching only stderr
-# would make this whole rule unreachable for the API-level case.
-is_refusal() { # is_refusal <log-prefix>
-  grep -qiE '(unsupported|unknown|invalid|not (supported|available|found)).*(model|effort)|(model|effort).*(unsupported|unknown|invalid|not (supported|available|found))|http 400|status 400' \
-    "$1.stdout" "$1.stderr" 2>/dev/null
+# Only error-shaped lines are searched, and only at column 0. Codex writes its
+# whole session transcript - every file the model read, and the review text
+# itself - to stderr, and the report to stdout: a 2026-09-14 `--kind final` run
+# on this repository left 10,590 stderr lines carrying 20 matches for an
+# unanchored search, because this plugin's own tests and prose quote refusal
+# messages. Matching those would declare a refusal on a clean run and buy a
+# second full round. Both streams are still read: an API-level refusal arrives
+# as a JSON event, which can reach either.
+REFUSAL='(unsupported|unknown|invalid|not (supported|available|found)).*(model|effort)|(model|effort).*(unsupported|unknown|invalid|not (supported|available|found))'
+
+error_lines() { # error_lines <log-prefix>
+  grep -hE '^ERROR:|^\{"type": ?"error"' "$1.stdout" "$1.stderr" 2>/dev/null
 }
 
+is_refusal() { # is_refusal <log-prefix>
+  error_lines "$1" | grep -qiE "$REFUSAL"
+}
+
+# The same line the match came from, not merely the first line of stderr - that
+# is the CLI banner, which would make every substitution read as "refused
+# (OpenAI Codex v0.154.0)".
 refusal_line() { # refusal_line <log-prefix>
-  cat "$1.stderr" "$1.stdout" 2>/dev/null | grep -m1 . | tr -d '\r'
+  error_lines "$1" | grep -m1 . | tr -d '\r'
 }
 
 # Each attempt writes its own pair of logs. Sharing one would let the fallback's

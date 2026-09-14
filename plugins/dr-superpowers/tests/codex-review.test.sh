@@ -68,19 +68,29 @@ if tok x "$out" '--base' && tok x "$out" main; then
   printf 'ok   - final kind passes the base\n'; pass=$((pass + 1))
 else printf 'FAIL - final kind passes the base\n'; fail=$((fail + 1)); fi
 present "selected effort reaches the command" "$out" "model_reasoning_effort=high"
+# Both judge rows run at high, so the effort check cannot tell them apart. Only
+# a token check on -m proves the selected model is the one that runs.
+if tok x "$out" gpt-6-astra; then printf 'ok   - the selected model reaches -m\n'; pass=$((pass + 1))
+else printf 'FAIL - the selected model reaches -m\n'; fail=$((fail + 1)); fi
 
 # Fail closed: three distinct states, one outcome.
 write_roster "$SOL_ONLY"
 out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
 present "catalog without astra falls back to sol" "$out" "codex-judge gpt-5.6-sol/high"
+if tok x "$out" gpt-5.6-sol; then printf 'ok   - the sol row reaches -m\n'; pass=$((pass + 1))
+else printf 'FAIL - the sol row reaches -m\n'; fail=$((fail + 1)); fi
 
 write_roster "$EMPTY"
 out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
 present "empty catalog falls back to sol" "$out" "codex-judge gpt-5.6-sol/high"
+if tok x "$out" gpt-5.6-sol; then printf 'ok   - the empty-catalog sol row reaches -m\n'; pass=$((pass + 1))
+else printf 'FAIL - the empty-catalog sol row reaches -m\n'; fail=$((fail + 1)); fi
 
 write_roster null
 out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
 present "absent catalog falls back to sol" "$out" "codex-judge gpt-5.6-sol/high"
+if tok x "$out" gpt-5.6-sol; then printf 'ok   - the absent-catalog sol row reaches -m\n'; pass=$((pass + 1))
+else printf 'FAIL - the absent-catalog sol row reaches -m\n'; fail=$((fail + 1)); fi
 present "absent catalog reports unknown evidence" "$out" "evidence=unknown"
 
 # --- the two kinds differ ----------------------------------------------------
@@ -133,12 +143,17 @@ case "\$CODEX_STUB_MODE" in
   ok-final) printf 'a review\n' > "\$outfile"; exit 0 ;;
   empty) : > "\$outfile"; exit 0 ;;
   noout) exit 0 ;;
+  # The observed form: a real refusal from codex 0.154.0, captured on
+  # 2026-09-14, arrives on stderr as a column-0 ERROR: line.
   refuse-then-ok)
     if [ "\$model" = gpt-6-astra ]; then
-      echo "stream error: unsupported model gpt-6-astra" >&2; exit 1
+      echo 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The gpt-6-astra model is not supported when using Codex with a ChatGPT account."}}' >&2; exit 1
     fi
     printf 'a review\n' > "\$outfile"; exit 0 ;;
-  refuse-always) echo "stream error: unsupported model \$model" >&2; exit 1 ;;
+  refuse-always) echo "ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The \$model model is not supported when using Codex with a ChatGPT account."}}" >&2; exit 1 ;;
+  # A run that merely mentions a refusal in its prose - what every review of
+  # this plugin's own tests looks like - is not a refusal.
+  prose-fail) echo "the diff mentions an unsupported model" >&2; exit 1 ;;
   # An API-level refusal arrives on the JSON event stream, which is stdout.
   refuse-stdout)
     if [ "\$model" = gpt-6-astra ]; then
@@ -194,6 +209,10 @@ check "the fallback runs exactly one extra seat" "$(cat "$TMP/calls")" "2"
 out=$(seat refuse-always final --out "$TMP/o.md" --base main)
 present "a fallback that also fails is FAILED" "$out" "status=FAILED"
 check "the fallback is attempted at most once" "$(cat "$TMP/calls")" "2"
+
+out=$(seat prose-fail final --out "$TMP/o.md" --base main)
+present "prose that mentions a refusal is not a refusal" "$out" "status=FAILED"
+check "a prose mention runs no second seat" "$(cat "$TMP/calls")" "1"
 
 out=$(seat authfail final --out "$TMP/o.md" --base main)
 present "an auth failure is FAILED, not a model change" "$out" "status=FAILED"
