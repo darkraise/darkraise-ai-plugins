@@ -114,5 +114,10 @@ for f in "$INLINE" "$SDD"; do
     "$f" 'distilled/constraints.md'
 done
 
+# Gates run before the reviewers are dispatched: reviewing a branch that does
+# not build wastes both reviewer seats.
+present "final review runs gates first" "$FINAL" 'dr-superpowers:running-gates'
+present "a red gate stops the review" "$FINAL" 'A red gate stops'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

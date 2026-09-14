@@ -23,6 +23,11 @@ the branch started from, for example `git merge-base main HEAD`) and include the
 printed path in each dispatch, so a reviewer reads one file instead of
 re-deriving the branch diff with git commands.
 
+0. **Gates.** When the project declares `docs/superpowers/gates.md`, run
+   dr-superpowers:running-gates before dispatching any reviewer. A red gate stops
+   the review: reviewing a branch that does not build, or whose suites fail,
+   spends both reviewer seats on findings the gate already made. When the
+   project has no manifest, say so in one line and go to step 1.
 1. **Claude review.** Dispatch a general-purpose agent on the most capable
    available model, using dr-superpowers:requesting-code-review's
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
