@@ -14,6 +14,8 @@
 
 **Program:** `docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md` — sub-project 6 of 6 — last
 
+**Plan review:** 2026-09-14 — dr-superpowers:judge-fable — executability 17 / coherence 16 / coverage 17 / assumptions 16 (round 3)
+
 ## Global Constraints
 
 - Plugin version is `1.7.0` on both `plugins/dr-superpowers/.claude-plugin/plugin.json` and `plugins/dr-superpowers/.codex-plugin/plugin.json`. The two must stay equal.
@@ -69,6 +71,11 @@ Paths below are repository-relative. Paths inside skill bodies are relative to t
 
 **Distilled entry field names**, per file: `constraints.md` uses `Set by`, `Scope`, `Source`; `gotchas.md` uses `Cause`, `Workaround`, `Verified`, `Source`; `reference.md` uses `Measured`, `Authority`, `Verified`, `Source`; `rejected.md` uses `Tried`, `Why it looked right`, `Why it failed`, `Would change if`, `Source`. Every entry carries `Source`.
 
+**Test-suite helpers.** `tests/gates-manifest.test.sh` defines `check`, `present`
+and `absent`. `absent` is defined by Task 3 and called only by Task 11 — it is a
+cross-task interface, so Task 3 keeps it even though Task 3 itself never calls
+it. The other two suites define only the helpers they use.
+
 **Judge verdicts** — exactly three, upper case: `CARRIED`, `MISSING`, `DISTORTED`.
 
 **Judge agents:** `dr-superpowers:judge-fable`, with `dr-superpowers:judge-opus` as the stated substitute.
@@ -100,6 +107,13 @@ Paths below are repository-relative. Paths inside skill bodies are relative to t
   `tests/ui-discovery.test.mjs` has a pre-existing failure on this machine
   (`bash: rg: command not found`) that predates this plan — verified 2026-09-14.
   Task 12 Step 6 relies on both.
+- Facts about existing files that Tasks 7, 9, 10 and 12 rely on, all read
+  2026-09-14: `tests/hook.test.sh` defines `pass`, `fail` and `HERE` but no
+  `present`, so Task 7's block uses raw `grep`; `tests/inline-mode.test.sh`
+  defines `present` and the variables `INLINE`, `SDD` and `FINAL`; README's
+  "What you get" ends with the `**Cross-family review.**` paragraph, followed by
+  `## Requirements`; the fork-design spec's §6 ends with its 2026-09-12
+  amendment, followed by `## 7`.
 - No task depends on a network call, a game install, or a corpus path.
 
 ## Task index
@@ -175,9 +189,9 @@ done
 # The precedence order is the whole point of the document: a skill that acts on
 # the losing side of it has made an error, not a judgment call.
 present "project-state states precedence" "$STATE" "## Precedence"
-present "project-state ranks CLAUDE.md first" "$STATE" "CLAUDE.md"
+present "project-state ranks CLAUDE.md first" "$STATE" "anything your human partner says directly"
 present "project-state ranks handoff above distilled" "$STATE" "yields to"
-present "project-state says every file is optional" "$STATE" "optional"
+present "project-state says every file is optional" "$STATE" "Every one of these is optional"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
@@ -279,6 +293,12 @@ Expected: the summary line ends `0 failed`.
 
 - [ ] **Step 5: Commit**
 
+`scripts/validate-repository.mjs` resolves every `dr-superpowers:<name>` mention
+against a real skill directory. This commit names `project-status`,
+`running-gates` and `distilling-docs`, which do not exist until Tasks 2, 3 and 5,
+so the validator is red between here and Task 5. That is expected; no step runs
+it before Task 12.
+
 ```bash
 git add plugins/dr-superpowers/reference/project-state.md plugins/dr-superpowers/tests/project-status.test.sh
 git commit -m "feat(superpowers): add project-state reference"
@@ -352,7 +372,9 @@ Expected: FAIL — `exists: skills/project-status/SKILL.md` reports `no`.
 
 - [ ] **Step 3: Write the skill**
 
-Create `plugins/dr-superpowers/skills/project-status/SKILL.md`:
+Create `plugins/dr-superpowers/skills/project-status/SKILL.md`. The outer fence
+below is four backticks; the file itself starts at the `---` frontmatter line and
+carries no outer fence.
 
 ````markdown
 ---
@@ -513,7 +535,10 @@ git commit -m "feat(superpowers): add project-status skill"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `plugins/dr-superpowers/tests/gates-manifest.test.sh`:
+Create `plugins/dr-superpowers/tests/gates-manifest.test.sh`. It defines
+`absent` even though nothing in this task calls it: Task 11 appends the one
+assertion that does. Do not remove it as unused — see the Contracts entry on
+test-suite helpers.
 
 ```bash
 #!/usr/bin/env bash
@@ -553,7 +578,7 @@ done
 for f in Applies Evidence Repo Setup Teardown Known-flaky Why; do
   present "optional field $f" "$SKILL" "**\`$f\`**"
 done
-present "gates says seven optional fields" "$SKILL" 'seven'
+present "gates says seven optional fields" "$SKILL" 'Optional, seven of them'
 
 # The four evidence values and the default. Defaulting to exit would make every
 # Green line decorative in a manifest that omits the field.
@@ -561,7 +586,8 @@ for v in output exit image judgment; do
   present "evidence value $v" "$SKILL" "\`$v\`"
 done
 present "evidence default is output" "$SKILL" 'default is `output`'
-present "every gate also requires exit 0" "$SKILL" 'exit 0'
+present "output evidence needs the Green text" "$SKILL" 'The declared `Green` text appears in this run'
+present "every gate also requires exit 0" "$SKILL" 'requires its command to exit 0'
 
 # Branch-level only. A pointer from verification-before-completion would reach
 # all sixteen implementer agents.
@@ -590,7 +616,9 @@ Expected: FAIL — `exists: skills/running-gates/SKILL.md` reports `no`.
 
 - [ ] **Step 3: Write the skill**
 
-Create `plugins/dr-superpowers/skills/running-gates/SKILL.md`:
+Create `plugins/dr-superpowers/skills/running-gates/SKILL.md`. The outer fence
+below is four backticks; the file itself starts at the `---` frontmatter line and
+carries no outer fence.
 
 ````markdown
 ---
@@ -794,7 +822,7 @@ awk_out=$(awk '
   }
   { print "stray line: " $0 }
   END { if (seen_gate && !(cmd && grn)) print "gate " prev " missing Command or Green" }
-' <(tr -d '\r' < "$TPL"))
+' <(tr -d '\r' < "$TPL") 2>&1)
 check "template satisfies the documented format" "$awk_out" ""
 
 present "template shows the fenced Setup form" "$TPL" 'Setup:'
@@ -815,12 +843,15 @@ Expected: FAIL — `exists: references/gates-template.md` reports `no`.
 - [ ] **Step 3: Write the template**
 
 Create `plugins/dr-superpowers/skills/running-gates/references/gates-template.md`.
-Write exactly the content below — it must satisfy the validator from Step 1, so
-three things are deliberate: no prose line begins `word:` (a line starting
+The outer fence below is four backticks; the file starts at `# Gates` and carries
+no outer fence — including the fence line itself would toggle the validator's
+fence state on line 1 and make every check vacuous. Write exactly the content
+inside it. Three things are deliberate, because the file must satisfy the
+validator from Step 1: no prose line begins `word:` (a line starting
 `dr-superpowers:` would be read as an unknown field), the gates are numbered 1
 to 4 with no gaps, and the skeleton sits inside a fenced block with no heading
-of its own so the checker skips it entirely. The `Setup:` field in gate 3 shows
-the fenced-block form for a multi-line value.
+of its own so the checker skips it. The `Setup:` field in gate 3 shows the
+fenced-block form for a multi-line value.
 
 ````markdown
 # Gates
@@ -970,11 +1001,11 @@ present "every entry carries Source" "$SKILL" 'Source:'
 # The three eligibility conditions. Each one closes a path by which a fact
 # could be destroyed with no way back.
 present "eligible paths are notes and findings" "$SKILL" 'docs/superpowers/findings/'
-present "eligible is markdown only" "$SKILL" 'Markdown'
+present "eligible is markdown only" "$SKILL" 'Markdown files (`*.md`) under'
 present "condition: tracked" "$SKILL" 'git ls-files --error-unmatch'
 present "condition: clean" "$SKILL" 'git status --porcelain'
 present "condition: unreferenced" "$SKILL" 'git grep'
-present "ancestor directories count as references" "$SKILL" 'ancestor'
+present "ancestor directories count as references" "$SKILL" 'nor any **ancestor**'
 
 # Never-eligible. A judge cannot enumerate facts in a PNG, so CARRIED is
 # unreachable for one by construction.
@@ -988,13 +1019,13 @@ present "names judge-opus as the substitute" "$SKILL" 'dr-superpowers:judge-opus
 for v in CARRIED MISSING DISTORTED; do
   present "verdict $v" "$SKILL" "$v"
 done
-present "judge enumerates before mapping" "$SKILL" 'enumerated'
+present "judge enumerates before mapping" "$SKILL" 'enumerate every fact in each source as a numbered list first'
 present "commit before judging" "$SKILL" 'before the judge runs'
 present "judge reads the working tree, not the commit" "$SKILL" 'no Bash'
 
 # The commit shape.
 present "exactly one removal commit" "$SKILL" 'exactly one removal commit'
-present "never squashed" "$SKILL" 'squash'
+present "never squashed" "$SKILL" 'never squashed on integration'
 present "waves are bounded" "$SKILL" 'never the whole tree'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
@@ -1242,7 +1273,7 @@ for v in CARRIED MISSING DISTORTED; do
   present "judge contract verdict $v" "$JUDGE" "$v"
 done
 present "judge returns one verdict per source file" "$JUDGE" 'one verdict per source file'
-present "judge names the SHA it was given" "$JUDGE" 'COMMIT'
+present "judge names the SHA it was given" "$JUDGE" 'Name [COMMIT] in your report'
 present "judge is read-only" "$JUDGE" 'read-only'
 present "judge rules on rewritten entries too" "$JUDGE" 'rewrite'
 ```
@@ -1897,7 +1928,8 @@ with this first line; do not backfill plans whose outcome you cannot verify.
 
 The date is the date the plan landed, which is today's date when you write the
 line — not the plan file's own date. Commit an Option 1 index line as
-`docs(plans): record <plan basename> as completed`.
+`docs(plans): complete <slug>`, which fits the 50-character subject limit where
+a full basename would not.
 ````
 
 - [ ] **Step 6: Name the new step in the skill's own summary**
@@ -2007,8 +2039,8 @@ Expected: two identical `"version": "1.7.0",` lines.
 In `plugins/dr-superpowers/README.md`, the "What you get" section is a sequence
 of paragraphs each opening with a bold lead, not a list. Insert this paragraph
 immediately after the one beginning `**Cross-family review.**` and immediately
-before the `## Requirements` heading. Match the surrounding style: a single
-paragraph with no indented continuation lines.
+before the `## Requirements` heading. The paragraph below is written flush left,
+matching the surrounding paragraphs; copy it as it stands.
 
 ```markdown
 **Project state.** `docs/superpowers/` holds what a project knows about
@@ -2045,8 +2077,9 @@ Requires `jq` and `git`. No model calls: the executor suites run against a stub
 skills the same way — structurally, against the documents themselves.
 ```
 
-The Reference section is prose paragraphs, not a list. Append this sentence as a
-new paragraph at the end of that section:
+The Reference section ends with a bullet list of `scripts/`, so "the end" would
+put this beside the wrong thing. Insert it as a new paragraph immediately after
+the paragraph that ends `both execution skills end at.`:
 
 ```markdown
 `reference/project-state.md` describes the committed project-declared state —
