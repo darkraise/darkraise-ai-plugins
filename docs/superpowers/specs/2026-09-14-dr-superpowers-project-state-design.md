@@ -3,8 +3,9 @@
 Date: 2026-09-14. Program design:
 `docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md` (§6 listed five sub-projects;
 this is a sixth, recorded as a dated amendment under that §6 — see §12). Revised 2026-09-14 after
-an independent Fable review returned REJECT with 30 findings; every one is resolved here, and the
-changes they forced are marked **[R<n>]**.
+two independent Fable reviews. Round one returned REJECT with 30 findings, resolved and marked
+**[R<n>]**; round two confirmed 23 of those resolved and returned REJECT with 27 further findings,
+resolved and marked **[S<n>]**.
 
 Goal: make `docs/superpowers/` hold what a project knows about itself, not just the archive of
 what it planned. Three skills read and write that state — one reports where the work stands, one
@@ -36,7 +37,8 @@ produced but never solved: 51 Markdown files under `docs/superpowers/notes/` and
   commits it, so a manifest there could not travel with the repo **[R8]**; and a root `GATES.md`,
   which puts a top-level file in every adopting project.
 - **Gates run at branch level, never inside the per-task loop.** `running-gates` is invoked from
-  `reference/final-review.md` and from `finishing-a-development-branch`, and from nowhere else. In
+  `reference/final-review.md` and from `finishing-a-development-branch`, and from no other skill
+  (`using-superpowers` routes to it, which is not an invocation). **[S14]** In
   particular it is **not** referenced from `verification-before-completion`, which all sixteen
   `agents/impl-*.md` preload — a pointer there would tell every task implementer to run the whole
   branch manifest. **[R9]** A task's own tests stay its gate.
@@ -48,7 +50,8 @@ produced but never solved: 51 Markdown files under `docs/superpowers/notes/` and
   anything untracked. §6.2 fixes the eligible set by path.
 - **The distilled constraints are loaded wherever they can bind** (owner answer, option 2 of
   three), not only on resume: §3 ranks `distilled/constraints.md` above a spec, so `brainstorming`,
-  both execution skills' Setup and `resume-execution` all read it. **[R25]** Rejected: on-demand
+  both execution skills' Setup and `resume-execution` all read it, below `handoff.md`'s constraints and yielding to them on conflict. **[R25, S13]**
+  Rejected: on-demand
   only, which reproduces today's failure where a note exists and nothing reads it; and naming them
   in `using-superpowers`, which would put project documents in every session's always-on context,
   in every repo, including those that have none.
@@ -61,8 +64,9 @@ produced but never solved: 51 Markdown files under `docs/superpowers/notes/` and
   ledger paths directly, and reads the docs tree. It does not call `scripts/next-step` (which
   rewrites `latest.md`) and it does not call `scripts/sdd-workspace` (which runs `mkdir -p` and
   rewrites a `.gitignore`, so calling it per plan would create an empty workspace for every plan in
-  the repo). **[R1]** Rejected: teaching `repo-audit` to enumerate un-started plans — two skills,
-  two library scripts and the snapshot hook depend on its output shape **[R6]**, and the new data
+  the repo). **[R1]** Rejected: teaching `repo-audit` to enumerate un-started plans — `resume-execution`,
+  `using-superpowers`, `reference/session-budget.md`, `README.md` and `tests/repo-audit.test.sh`
+  name it **[R6, S11]**, and the new data
   serves one reader.
 - **Version 1.7.0** on both manifests. Every change is additive; no existing plan, ledger or
   manifest format changes.
@@ -91,6 +95,8 @@ Changed:
 - `skills/finishing-a-development-branch/SKILL.md` — Step 1 prefers the manifest; Step 6 appends to
   the completed index (§7.2)
 - `reference/final-review.md` — gates run before the review (§7.4) **[R10]**
+- `.gitattributes` (adopting project, not the plugin) — `docs/superpowers/plans/completed.md merge=union`,
+  so two branches appending a line do not conflict (§4.4) **[S2]**
 - `README.md` — What you get, Tests, Reference
 - `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` — 1.7.0
 
@@ -125,7 +131,8 @@ that reads one states what it does when the file is absent, and none of them is 
 
 Precedence when two sources disagree: `CLAUDE.md` and a direct instruction from the human partner
 outrank everything; then `handoff.md`'s owner constraints for the run in flight; then
-`distilled/constraints.md`; then a spec; then a distilled `reference.md` fact. A skill that acts on
+`distilled/constraints.md` (which yields to `handoff.md` whenever both speak) **[S13]**; then a
+spec; then a distilled `reference.md` fact. A skill that acts on
 the losing side of that order has made an error, not a judgment call. §7.3 places the read in every
 skill where that precedence can be exercised — a constraint that only loads on resume would rank
 above a spec in this table and below it in practice. **[R25]**
@@ -151,32 +158,44 @@ nothing.`
    and no `BLOCKED` line, say so, name the plan and the task reached, and route to
    `dr-superpowers:resume-execution` instead of continuing. Status orients a session with no
    obvious thread; it never duplicates the resume path.
-3. **Classify each plan.** A file under `docs/superpowers/plans/` is a plan only if it carries an
-   `**Execution:**` header line — the line `plan-lint` requires — which excludes notes filed
-   beside plans, such as `2026-08-09-reply-back-spike-results.md`. **[R2, R3]** For each plan, in
-   this order:
-   - **In flight** — `<root>/.superpowers/sdd/<basename minus .md>/progress.md` exists with
-     incomplete tasks. That path is computed directly, never by calling `scripts/sdd-workspace`.
-     **[R1]**
-   - **Complete** — listed in `docs/superpowers/plans/completed.md` (§4.4), or its ledger records
-     every task complete. Reported only if merged within the last seven days.
-   - **Not started** — neither of the above. A plan is called not started only when the committed
-     index does not list it; "no ledger" alone never means "never ran", because
-     `finishing-a-development-branch` deletes the workspace on merge. **[R2]**
+3. **Classify each plan.** A file under `docs/superpowers/plans/` is a plan when it contains at
+   least one `Task N` heading outside a fenced block — what `plan_tasks` in `scripts/lib/plan.sh`
+   extracts, and the same test `scripts/next-step` applies when it fails with "no tasks". **[S1]**
+   Not the `**Execution:**` header: `plan-lint` requires it, but only plans written since 1.4.0
+   have one — 5 of 20 plans in this repo and 9 of 78 in the modder repo — so that discriminator
+   would ignore most real plans while excluding the one file it was aimed at.
+   `2026-08-09-reply-back-spike-results.md` has no task headings and is correctly excluded by the
+   task test. For each plan, in this order:
+   - **In flight** — `<worktree>/.superpowers/sdd/<basename minus .md>/progress.md` exists with
+     incomplete tasks, checked under **every** worktree `repo-audit` lists, not only the current
+     root: a ledger lives in the worktree executing it, which is why the audit walks them all.
+     **[S5]** That path is computed directly, never by calling `scripts/sdd-workspace`. **[R1]**
+     A plan whose every task is complete but which is not yet indexed as merged is also In flight —
+     it still has a final review or an integration ahead of it. **[S4]**
+   - **Complete** — listed in `docs/superpowers/plans/completed.md` (§4.4). That index is the only
+     completion signal; a ledger recording every task complete is not one, because the work may
+     still be unmerged. **[S4]**
+   - **Not started** — neither of the above, and only when `completed.md` exists (§4.4). "No ledger"
+     alone never means "never ran", because `finishing-a-development-branch` deletes the workspace
+     on integration. **[R2]**
 4. **Match specs to plans.** The slug of a spec is its filename minus the leading `YYYY-MM-DD-`
    and the trailing `-design`; a plan matches if its filename minus its own date prefix equals that
-   slug, or begins with it. Dates need not agree. A spec whose body contains a decomposition
+   slug. Dates need not agree. A prefix match counts only when no other spec claims that plan by
+   exact match — otherwise spec `dcc-statusline` would count `2026-07-28-dcc-statusline-visual-redesign`,
+   which belongs to a different spec. **[S25]** A spec whose body contains a decomposition
    section listing sub-projects is a program design and is never reported as unplanned — its plans
    are the sub-projects'. **[R3]**
 5. **Find unmerged work with no plan.** `git branch --no-merged <base>` and the audit's worktree
    list: a branch carrying commits that is not merged into its base is open work even when no plan
-   names it. **[R29]**
+   names it. **[R29]** `<base>` is the plan's recorded base when a ledger names one, else the
+   repository default branch from `git symbolic-ref refs/remotes/origin/HEAD`, else `main`; status
+   states which it used, because unlike `finishing-a-development-branch` it has no plan, no
+   conversation and no upstream to derive one from. **[S6]**
 6. **Read the open constraints.** If `docs/superpowers/distilled/constraints.md` exists, take the
    entries whose scope covers the current work — the owner-only items still in force.
-7. **Recall, if available.** When an indexed memory tool is present (for example darkmem
-   `memory_search`), search the project name for milestones, newest first. When it is absent, skip
-   the step silently; the output does not depend on it.
-8. **Report** in the shape below, then stop.
+7. **Report** in the shape below, then stop. There is no memory-store step: §4.2 fixes five
+   sections with no home for recalled milestones, and §4.5 forbids reporting anything not read from
+   the audit or the tree. **[S18]**
 
 ### 4.2 Output
 
@@ -190,8 +209,10 @@ Five sections, in this order, nothing else:
   including every `BLOCKED` ledger line (§4.3 rule 0).
 - **Next step** — exactly one, naming the skill or command that starts it.
 
-Unfinished work always appears; finished work appears only when touched in the last seven days,
-where touched means `git log -1 --format=%cs -- <path>` is within seven days of today. **[R5]** A
+Unfinished work always appears; finished work appears only when touched in the last seven days.
+For an indexed plan, touched means the date on its `completed.md` line — a merged plan's file date
+is when it was authored, not when it landed, and its ledger is gitignored. For anything else it
+means `git log -1 --format=%cs -- <path>` within seven days of today. **[R5, S21]** A
 status report that lists every plan the project ever had has told the reader nothing.
 
 ### 4.3 The recommendation is ordered, not chosen
@@ -201,19 +222,26 @@ wins, and the report names the rule that matched:
 
 | # | Condition | Recommendation |
 |---|---|---|
-| 0 | A ledger has a `Task N: BLOCKED` line | No skill. The decision the line names goes under Owner-only items **[R4]** |
+| 0 | A task's **last** ledger line is `Task N: BLOCKED` | No skill. The decision the line names goes under Owner-only items **[R4, S19]** |
 | 1 | A ledger has incomplete tasks and no `BLOCKED` line | `dr-superpowers:resume-execution` (reached at step 2) |
 | 2 | Every task complete, no `Final review: clean` line in the ledger | the final review, via the plan's `**Execution:**` skill |
 | 3 | Final review clean, branch unmerged — `git merge-base --is-ancestor <branch> <base>` exits non-zero **[R5]** | `dr-superpowers:finishing-a-development-branch` |
-| 4 | A spec approved with no plan (§4.1 step 4) | `dr-superpowers:writing-plans` |
-| 5 | A plan absent from `completed.md` with no ledger | `dr-superpowers:using-git-worktrees`, then the plan's execution skill |
+| 4 | `completed.md` exists and a spec has no plan (§4.1 step 4) | `dr-superpowers:writing-plans` |
+| 5 | `completed.md` exists and a plan is absent from it with no ledger | `dr-superpowers:using-git-worktrees`, then the plan's execution skill **[S3]** |
 | 6 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
 | 7 | None of the above | say the project is between programmes, and offer `dr-superpowers:brainstorming` |
 
 `BLOCKED` outranks everything because `scripts/next-step` already treats it as terminal — it sets
 `launch=0` and hands the decision to the human partner — and status must not contradict the script
-the rest of the plugin uses. **[R4]** When a rule matches in more than one worktree, report each
-and recommend the one whose branch has the newest commit, saying why.
+the rest of the plugin uses. **[R4]** Rule 0 reads the **last** line for each task, as both
+execution skills' recovery tables do, so a task that was BLOCKED and later ruled and completed no
+longer matches. **[S19]**
+
+Rules 4 and 5 require `completed.md` to exist. Without it no plan can be shown to have finished, so
+firing rule 5 would recommend re-executing arbitrary merged work; status falls to rule 7 and says
+the index is absent. **[S3]** When several plans match one rule, take the newest filename date and
+say so. When a rule matches in more than one worktree, report each and recommend the one whose
+branch has the newest commit, saying why.
 
 ### 4.4 `docs/superpowers/plans/completed.md`
 
@@ -223,10 +251,28 @@ Append-only, one line per merged plan, written by `finishing-a-development-branc
 - 2026-09-12 `docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md` — merged into `main` at 6a4619a
 ```
 
+A line is written on exactly two of `finishing-a-development-branch`'s paths, and the format
+differs because the available evidence does. **[S2]**
+
+| Path | When the line is written | Form |
+|---|---|---|
+| Option 1, merge locally | On the base branch, as its own commit, after Step 5's merged-result verification passes | `merged into <base> at <sha7>`, the SHA being the base head at that moment |
+| Option 2, push and PR | On the branch, before the push | `via PR` and no SHA |
+| Option 3, keep as-is | Never | — |
+| Confirmed discard | Never | — |
+
+The SHA cannot be the merge commit's own — a commit cannot contain its own hash, and Step 5's
+`git merge` fast-forwards when it can, leaving no merge commit at all. A discard runs Step 6 too,
+so the write is bound to the outcome rather than to the step. Two branches each appending a last
+line collide on integration, which
+`docs/superpowers/plans/completed.md merge=union` in the adopting project's `.gitattributes`
+resolves without a conflict.
+
 It exists because a merged plan leaves no committed trace that it ran: the ledger is deleted with
 the workspace, and the branch is deleted with it. A project that adopts the plugin mid-programme
-has no index, so status treats an absent `completed.md` as "no plans are known complete" and says
-so in the Not started section rather than claiming twenty-five plans were never started. **[R2]**
+has no index, so status treats an absent `completed.md` as "no plans are known complete", says so,
+and suppresses rules 4 and 5 (§4.3) rather than declaring every plan in the repository
+unstarted. **[R2, S3, S23]**
 
 ### 4.5 Red flags
 
@@ -261,15 +307,20 @@ it is tight enough that two sessions write and read it the same way.
   `output`, `image`, `judgment`; **`Repo`**; **`Setup`**; **`Teardown`**; **`Known-flaky`** — the
   specific failure that is known noise; **`Why`** — the reason the gate exists, which is what stops
   a later session deleting it.
-- **Value form** **[R17]**: backticks delimit a value and are not part of it, so
-  ``Green: `Passed!` `` matches the text `Passed!`.
+- **Value form** **[R17, S16]**: when a value both begins and ends with a backtick, those two
+  delimiters are stripped and the rest is the value, so ``Green: `Passed!` `` matches `Passed!`.
+  Otherwise the value is the remainder of the line verbatim, backticks included — a `Why` line that
+  quotes two command names mid-sentence is prose, not a quoted value.
 - **Continuation** **[R13]**: a value may continue on following lines indented by two spaces, or —
   when it contains its own newlines, such as a shell snippet — be given as an empty `Field:` line
   followed immediately by a fenced code block. Those two forms are the only ones.
 - **`Repo`** **[R15]**: a path relative to the manifest's repository root. The gate's `Command`,
   `Setup` and `Teardown` run with that repository as the working directory; step 2 computes a
   change set in every distinct `Repo` named by the manifest, and a conditional gate applies when
-  the change set of *its own* `Repo` matches. Omitted means the manifest's own repository. This is
+  the change set of *its own* `Repo` matches. Each repository has its own base — `git merge-base`
+  against that repository's default branch, run inside it, unless the gate supplies one — since the
+  manifest's base says nothing about a sibling checkout. **[S17]** Omitted means the manifest's own
+  repository. This is
   what lets a manifest order a framework's gates before its consumer's.
 
 ~~~markdown
@@ -315,7 +366,9 @@ The default is `output`, not `exit` **[R16]**: a gate that declares `Green: `Pas
 `Evidence` must be judged against that text. Defaulting to `exit` would have made every `Green`
 line in a minimal manifest decorative — which is the exact failure §5.2 exists to prevent.
 
-An `image` gate is never passed off numbers. The numbers say where to look.
+Every gate additionally requires its command to exit 0, `image` and `judgment` included: a crashed
+run that happened to leave a readable artifact is red. **[S24]** An `image` gate is never passed off
+numbers — the numbers say where to look.
 
 ### 5.3 Steps
 
@@ -427,7 +480,11 @@ step, never something done after that wave's judge has ruled (§6.4). **[R21]**
 
 ### 6.2 What may be deleted
 
-Eligible **by path**: `docs/superpowers/notes/**` and `docs/superpowers/findings/**`. **[R22]**
+Eligible **by path and extension**: `*.md` directly under `docs/superpowers/notes/**` and
+`docs/superpowers/findings/**`. **[R22, S7]** Every non-Markdown file under those paths is never
+eligible — the modder repo holds 52 PNG captures and 25 `.svr` fixtures there, and a judge whose
+tools are `Read, Grep, Glob, WebFetch` cannot enumerate the facts in a binary, so `CARRIED` is
+unreachable for one by construction.
 
 Three conditions, each checked per file, all required:
 
@@ -440,9 +497,12 @@ Three conditions, each checked per file, all required:
 2. **Clean** — `git status --porcelain -- <path>` is empty. **[R20]** A file with uncommitted edits
    would get a `Source:` SHA pointing at older content while the distilled working-tree content
    went unrecoverable. A dirty source is not in the wave; commit it first or leave it.
-3. **Unreferenced** — `grep` for the file's path and its basename across the repository outside
-   `docs/superpowers/notes/` and `findings/` returns nothing. **[R22]** A note read by a test, a
-   script or a spec is a dependency, not detritus, whatever its extension.
+3. **Unreferenced** — `git grep` over tracked files outside `docs/superpowers/notes/` and
+   `findings/`, plus the primary checkout's `.superpowers/handoff/latest.md`, finds neither the
+   file's path, nor its basename, nor any ancestor directory path beneath those two roots.
+   **[R22, S27]** The ancestor check matters: a plan that names `notes/p4-captures/` as a directory
+   references every file in it without naming one. **[S7]** A note read by a test, a script or a
+   spec is a dependency, not detritus.
 
 **Never eligible**, whatever a judge says: specs, plans, `completed.md`, `README`, `CLAUDE.md`,
 `AGENTS.md`, licence files, everything outside the two eligible paths — including hand-written
@@ -466,6 +526,13 @@ the four files, then §6.4.
 the judge is given that commit's SHA. **[R21]** A judge that reads uncommitted files can be
 invalidated by any later edit — a merge under §6.6, a split under §6.1, or a fix made for another
 file's `MISSING` verdict — and its verdict would then attest to text that no longer exists.
+
+**The judge reads the working tree, not the commit.** `agents/judge-fable.md` grants
+`Read, Grep, Glob, WebFetch` and no Bash, so it cannot run `git show <sha>:<path>`. Committing first
+therefore binds the verdict only under three conditions the dispatcher must hold: the working tree
+is clean at that SHA when the judge is dispatched, nothing is edited until the verdict returns, and
+the verdict names the SHA it was given. A verdict returned against an edited tree is void and the
+wave is re-judged. **[S8]**
 
 Dispatch `dr-superpowers:judge-fable` (`dr-superpowers:judge-opus` when Fable is unavailable or the
 human partner declined it — say the substitution aloud) with `references/distil-judge.md`. It
@@ -491,7 +558,8 @@ docs(<scope>): distil <area> notes            # adds the distilled entries — n
 docs(<scope>): remove absorbed <area> notes   # git rm only — no content changes
 ```
 
-Never combined, and **never squashed on integration** — a squash merge collapses the two commits
+One or more distil commits — §6.4's `MISSING` and `DISTORTED` verdicts each produce another — then
+exactly one removal commit. **[S10]** Never combined, and **never squashed on integration** — a squash merge collapses the two commits
 the recovery story depends on, so a distillation branch is merged with `--no-ff` or fast-forwarded,
 never squashed. **[R24]** Reverting a deletion that turns out to be wrong is then one `git revert`
 that keeps the distillation.
@@ -507,6 +575,12 @@ fact that duplicates an existing entry updates it and adds its `Source:` line. A
 both are reported to the human partner and neither is silently dropped. A distilled corpus that
 contains two opposed facts is worse than one that contains neither. Every such merge happens during
 a wave's extraction step, before that wave's commit and judge round (§6.4).
+
+A wave that edits entries carried by an **earlier** wave is editing facts whose sources may already
+be deleted, and its own judge sees only its own sources. So when a wave touches a pre-existing
+entry, the dispatcher includes that entry's diff and a `git show` extract of the source named in its
+`Source:` line, and the judge rules on the rewrite as well as on the new material. **[S9]** Without
+it a fact can be rewritten out of the corpus with no seat having checked it.
 
 ### 6.7 Relationship to an external memory store
 
@@ -543,10 +617,16 @@ today. The failure path is unchanged — report and stop before the menu. `runni
 own base (§5.3 step 2), so this works at Step 1 despite the base being established at Step 3.
 **[R11]**
 
-**Step 6**, which deletes the plan's workspace on a local merge or PR, first appends the plan's line
-to `docs/superpowers/plans/completed.md` (§4.4) and includes that file in the merge commit or the
-branch. Deleting the only committed evidence that a plan ran, without recording that it ran, is what
-makes `project-status` unable to tell a merged plan from an untouched one. **[R2]**
+**Step 5 Option 1's merged-result verification** ("Verify tests on merged result") uses the manifest
+too when one exists. Gates that passed on the branch say nothing about the merged tree. **[S22]**
+
+**The completed-index write is bound to the outcome, not to Step 6.** Step 6 runs for Option 1 *and*
+for a confirmed discard, and never for Options 2 and 3, so attaching the write to it would both miss
+every PR and record discarded work as merged. The three cases and their line forms are in §4.4:
+Option 1 writes its own commit on the base after Step 5 passes; Option 2 writes on the branch before
+the push; Option 3 and discard write nothing. **[S2]** Deleting the only committed evidence that a
+plan ran, without recording that it ran, is what makes `project-status` unable to tell a merged plan
+from an untouched one. **[R2]**
 
 ### 7.3 Skills that load the distilled constraints **[R25]**
 
@@ -555,7 +635,7 @@ where it already reads project context, when it exists:
 
 | Skill | Where | What it loads |
 |---|---|---|
-| `resume-execution` | Step 4, beside `handoff.md`, with the same binding force | constraints, gotchas |
+| `resume-execution` | Step 4, beside `handoff.md`; binds the same way but yields to `handoff.md` on conflict (§3) **[S13]** | constraints, gotchas |
 | `subagent-driven-development` | Setup (`SKILL.md:184` area, where `handoff.md` is created) | constraints |
 | `executing-plans` | Setup (`SKILL.md:105` area) | constraints |
 | `brainstorming` | the explore-project-context step | constraints, rejected |
@@ -585,6 +665,12 @@ The gates row is worded by position in the workflow rather than by "proving a ch
 would overlap the existing "Before claiming done → verification-before-completion" row. The Process
 Depth and Session Budget sections are unchanged.
 
+**Byte budget.** `tests/hook.test.sh:124` caps this file at 4,800 bytes because it rides in every
+session's baseline and shares the hook's 10,000-character budget with the compaction snapshot. It
+is 4,135 bytes today, so the three rows have about 665 bytes of headroom and fit. If a later edit
+pushes it over, the routing table's three new rows are shortened to their skill names before any
+existing row or principle is touched. **[S12]**
+
 ## 9. Tests
 
 Three structural suites in the house pattern: the claims that make a prose skill work are checkable
@@ -592,25 +678,37 @@ without a model, so they are checked here rather than in a review.
 
 - **`tests/project-status.test.sh`** — the skill names `scripts/repo-audit`; it does **not** name
   `scripts/next-step` or `scripts/sdd-workspace` **[R1]**; it routes to
-  `dr-superpowers:resume-execution`; rules 0–7 of §4.3 appear in that order, with `BLOCKED` first;
-  the five output sections appear in order; `completed.md` is named as the completion signal.
+  `dr-superpowers:resume-execution`; rules 0–7 of §4.3 appear in that order, with `BLOCKED` first
+  and reading each task's last line **[S19]**; the five output sections appear in order;
+  `completed.md` is named as the completion signal and as the precondition of rules 4 and 5
+  **[S3]**; the plan discriminator is the task-heading test, and `**Execution:**` is **not** named
+  as one **[S1]**; `reference/project-state.md` exists **[S26]**.
 - **`tests/gates-manifest.test.sh`** — the skill documents both required fields and all seven
   optional ones **[R14]**; the four `Evidence` values appear with their proof rules and `output` is
   stated as the default **[R16]**; `references/gates-template.md` satisfies the documented format,
   checked by awk: contiguous numbering from 1 **[R12]**, `Command` and `Green` present under every
-  gate heading, every `Evidence` value one of the four, every non-field line either a two-space
-  continuation or inside a fenced block **[R13]**.
+  gate heading, and every `Evidence` value one of the four in lower case. The line check enumerates
+  the admitted classes rather than rejecting by exclusion **[S15]**: the H1, prose before the first
+  gate heading, a `## <n>. <title>` heading, a blank line, a `Field:` line whose name is one of the
+  nine, a two-space continuation, or any line inside a fenced block — anything else fails.
+  `references/gates-template.md` exists **[S26]**.
 - **`tests/distilling-docs.test.sh`** — the four distilled filenames; the three eligibility
   conditions including `git ls-files --error-unmatch` **[R19]** and the clean check **[R20]**; the
-  never-eligible list including specs, plans and `docs/reverse-engineering`; both judge agent names;
-  the `CARRIED`/`MISSING`/`DISTORTED` verdicts; enumerate-then-map **[R23]**; commit-before-judge
-  **[R21]**; the two-commit and no-squash rules **[R24]**.
-- **Cross-skill assertions** added to the existing suites rather than a fourth file **[R27]**:
-  `resume-execution`, both execution skills and `brainstorming` name
-  `docs/superpowers/distilled/constraints.md`; `finishing-a-development-branch` names
-  `running-gates` and `completed.md`; `final-review.md` names `running-gates`;
-  `verification-before-completion` does **not** name it; `using-superpowers` carries the three
-  routing rows.
+  `*.md`-only rule and the ancestor-directory reference check **[S7, S27]**; the never-eligible list
+  including specs, plans and `docs/reverse-engineering`; both judge agent names; the
+  `CARRIED`/`MISSING`/`DISTORTED` verdicts; enumerate-then-map **[R23]**; commit-before-judge with
+  its three tree conditions **[R21, S8]**; one-or-more distil commits and exactly one removal commit
+  **[S10]**; the no-squash rule **[R24]**; `references/distil-judge.md` exists **[S26]**.
+- **Cross-skill assertions**, each named to a host suite, because no existing suite reads most of
+  these files **[R27, S20]**: `inline-mode.test.sh` already reads `executing-plans`,
+  `subagent-driven-development` and `final-review.md`, so their assertions go there — both execution
+  skills name `distilled/constraints.md`, and `final-review.md` names `running-gates`.
+  `hook.test.sh` already reads `using-superpowers` and enforces its byte cap, so the three routing
+  rows are asserted there **[S12]**. The rest have no host and go into the three new suites:
+  `project-status.test.sh` asserts `resume-execution` and `brainstorming` name
+  `distilled/constraints.md`; `gates-manifest.test.sh` asserts `finishing-a-development-branch`
+  names `running-gates` and `completed.md` and that `verification-before-completion` does **not**
+  name `running-gates` **[R9]**.
 
 Plus the existing repository validation: `node scripts/validate-repository.mjs`,
 `claude plugin validate` on the marketplace and each Claude plugin, and the maintained suites.
@@ -649,7 +747,18 @@ Plus the existing repository validation: `node scripts/validate-repository.mjs`,
   repo that has the file. Accepted because §3's precedence is otherwise a claim no file honours,
   and mitigated by loading only the one or two files each skill can act on.
 - **Three more skills in the routing table.** A permanent cost in every session's context, against
-  three gaps currently filled by improvisation.
+  three gaps currently filled by improvisation, with 665 bytes of headroom under the 4,800-byte cap
+  (§8). **[S12]**
+- **The judge cannot verify what it was told to verify.** `judge-fable` has no Bash, so
+  commit-before-judge (§6.4) rests on the dispatcher holding the tree still rather than on the judge
+  reading the commit. A dispatcher that edits mid-round voids the verdict silently unless it follows
+  §6.4's three conditions. **[S8]**
+
+**Adjacent defect, not fixed here.** `scripts/next-step` (via `ledger_blocked` in
+`scripts/lib/plan.sh`) matches *any* `Task N: BLOCKED` line rather than a task's last line, so once
+a task is blocked its own instruction — "record the ruling in the ledger, then run next-step again"
+— can never clear it. §4.3 rule 0 avoids the bug rather than inheriting it. **[S19]** The fix
+belongs to a `next-step` change, not to this sub-project.
 
 ## 12. Program design amendment
 
@@ -659,12 +768,14 @@ To be added under §6 of `docs/superpowers/specs/2026-09-11-dr-superpowers-fork-
 > "Project state", after inline mode. `docs/superpowers/` becomes project-declared state as well as
 > an archive: `gates.md` declares the project's verification gates in order, `plans/completed.md`
 > indexes merged plans (the workspace and its ledger are deleted on integration, so nothing
-> committed otherwise records that a plan ran), and `distilled/` holds four durable files
+> committed otherwise records that a plan ran; the line is written on a local merge and on a PR,
+> never on a keep or a discard), and `distilled/` holds four durable files
 > (constraints, gotchas, reference, rejected) distilled from session notes, whose tracked sources
 > are deleted once an independent judge confirms every enumerated fact was carried. Three skills
 > use it — `project-status` reads, `running-gates` reads, `distilling-docs` reads and writes
 > **[R28]** — and `brainstorming`, both execution skills and `resume-execution` load
-> `distilled/constraints.md` with the same binding force as `handoff.md`'s owner constraints.
+> `distilled/constraints.md`, which binds like `handoff.md`'s owner constraints and yields to them
+> on conflict.
 > Gates are branch-level: they are reached from `finishing-a-development-branch` and
 > `reference/final-review.md`, never from `verification-before-completion`, which every implementer
 > agent preloads. Sources: the `status` and `gate` skills of `darkraise-modder`; its `handoff`,
