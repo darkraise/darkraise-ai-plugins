@@ -222,5 +222,15 @@ check "the refusal's own logs are kept" \
 check "the fallback writes its own logs" \
   "$([ -f "$TMP/o.md.fallback.stderr" ] && echo yes || echo no)" "yes"
 
+# The caller must defer to the runner's outcome rather than running its own
+# retry rule: a FAILED seat that redispatches turns one refused run into two.
+SDD="$HERE/../skills/subagent-driven-development/SKILL.md"
+sdd=$(cat "$SDD")
+present "the risk-3 caller names the runner" "$sdd" "run-codex-review.sh"
+present "the risk-3 caller defers on FAILED" "$sdd" "TIMEOUT or FAILED"
+# Needle must be unique to the new text: SKILL.md's recovery table already
+# carries a bare "never re-dispatch", so a shorter needle would pass untouched.
+present "the risk-3 caller does not redispatch a decided seat" "$sdd" "never re-dispatch the Codex seat"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

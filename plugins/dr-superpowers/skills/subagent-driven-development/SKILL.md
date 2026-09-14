@@ -567,10 +567,16 @@ independent seats on the same inputs and average each criterion. If the three
 scores for any criterion spread by more than 6 points, send a `risk3-spread`
 item with the three reviews to the ruling seat rather than trusting the
 average: the criterion failed to discriminate on this
-diff. One of the three seats is Codex when usable — see
+diff. One of the three seats is Codex, run through
+`scripts/run-codex-review.sh`, which decides for itself whether Codex is usable
+and which judge rung to use — see
 [external-executor.md](../../reference/external-executor.md) §Risk-3 Codex
-seat; otherwise, or when that seat times out, a third Claude judge. Never
-average two scores as if three had voted.
+seat. Never average two scores as if three had voted. Read the runner's status
+line and take its word: `OK` and `FALLBACK` are a seat that scored, and
+`TIMEOUT or FAILED` is a seat that did not — dispatch a third Claude judge for
+it and never re-dispatch the Codex seat. The runner has already applied its own
+one-shot fallback, so a second attempt here would turn one refused run into
+two. A seat that produced no report is never averaged in as if it had voted.
 
 The task reviewer may report "⚠️ Cannot verify from diff" items — requirements
 that live in unchanged code or span tasks. These do not block the rest of the
