@@ -34,9 +34,13 @@ re-deriving the branch diff with git commands.
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
    with `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
    spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`.
-2. **Codex round.** When Codex is usable, run the round in
-   [external-executor.md](external-executor.md) §Final-review Codex round. If it
-   is not usable, or it times out, skip it and say so.
+2. **Codex round.** Run the round in
+   [external-executor.md](external-executor.md) §Final-review Codex round. Its
+   runner reports one of four outcomes: `OK` and `FALLBACK` produce findings
+   for step 3, and `FALLBACK` also means the preferred judge rung refused the
+   run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say
+   which, and go to step 3 with the Claude review alone. An absent or empty
+   report is never a clean round.
 3. **Dedupe and verify** in one dispatch of `dr-superpowers:judge-fable`
    (`dr-superpowers:judge-opus` when Fable is unavailable or your human partner
    declined it — say the substitution aloud) given both reviewers' lists. It

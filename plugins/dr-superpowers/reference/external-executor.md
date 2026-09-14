@@ -373,26 +373,40 @@ changes who scores, not how the scores are read.
 
 ## Final-review Codex round
 
-The final whole-branch review adds this round when Codex is usable. Run it as a
-background Bash call:
+The final whole-branch review adds this round. The runner decides whether Codex
+is usable:
 
 ```bash
-(cd <worktree-root> && timeout 1800 codex exec review --base <base-branch> \
-  -m gpt-5.6-sol -c model_reasoning_effort=high \
-  -o <workspace>/final-review-codex.md)
+bash "<plugin-root>/scripts/run-codex-review.sh" --kind final \
+  --cwd <worktree-root> --out <workspace>/final-review-codex.md \
+  --base <base-branch>
 ```
 
-`codex exec review` is purpose-built for this and takes no sandbox flag,
-because review is read-only by nature. It takes no `-C` either, so the working
-directory is the only way to point it at the worktree - hence the subshell.
-Bound it with coreutils `timeout`, not the Bash tool's: this is a direct `codex`
-call with no wrapper poll loop behind it, and the tool's own `timeout` caps at
-ten minutes while a whole-branch round needs more. 1800 seconds matches the
-`gpt-5.6-sol/high` row in `codex-timeout`, which is the closest thing to a figure
-for a round that block has no row for, and a whole branch is more to read than
-one task. Establish usability with the same `detect-executors.sh` check the
-risk-3 seat uses; if Codex is not usable, or if `timeout` returns 124, skip this
-round, say so, and report the Claude review alone.
+`<base-branch>` is the branch this one forked from, not the review package's
+`MERGE_BASE` sha: whether `--base` resolves a sha is unverified, and a branch
+name is what this round has always passed. The runner owns the model, the
+effort, the bound and the outcome, and prints one status line:
+
+```
+codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<fetched_at>
+```
+
+`OK` and `FALLBACK` are a round that produced findings; on `FALLBACK` say the
+substitution aloud, because the round was judged by the fallback rung rather
+than the preferred one. `TIMEOUT` and `FAILED` mean this round produced
+nothing: skip it, say so, and report the Claude review alone, exactly as a
+missing Codex has always been reported.
+
+`codex exec review` is purpose-built for this and takes no sandbox flag, because
+review is read-only by nature. Run the runner as a background Bash call: the
+Bash tool's own `timeout` caps at ten minutes while a whole-branch round needs
+more, and a background call is not bound by it at all. The bound is the
+`codex-judge` row's third field, applied by the runner with coreutils `timeout`.
+
+The runner establishes usability itself from the same `detect-executors.sh`
+roster the risk-3 seat uses, so this round needs no separate guard; a Codex that
+is not usable comes back as `status=FAILED` with the roster's own reason on
+stderr.
 
 Unlike the risk-3 seat, this round is **not** self-review-free. The branch
 contains whatever the executor lane produced, so Codex is reviewing some of its
