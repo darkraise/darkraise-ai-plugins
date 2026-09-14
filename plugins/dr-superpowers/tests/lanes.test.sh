@@ -120,5 +120,51 @@ while read -r from to; do
 done <<< "$successor"
 check "every rung named anywhere has a numeric timeout" "$bad_timeout" "NONE"
 
+# --- codex-judge -------------------------------------------------------------
+# The judge rung is policy for the two review seats, not a rung on the
+# execution ladder: run-codex-task.sh:93 validates --model against
+# codex-assignment, so a judge model there would widen execution admission.
+# Its allowlist is therefore separate from VALID_MODELS on purpose.
+JUDGE_MODELS="gpt-6-astra gpt-5.6-sol"
+
+judge=$(block codex-judge)
+check "codex-judge block is present" "$([ -n "$judge" ] && echo yes || echo no)" "yes"
+
+rows=$(printf '%s\n' "$judge" | grep -c .)
+check "codex-judge has exactly two rows" "$rows" "2"
+
+# Exact pairs, not merely "two distinct rows". A test that only asserts
+# distinctness admits a fallback the owner never approved, and admits a row
+# that does not run at high.
+check "codex-judge preferred row" "$(printf '%s\n' "$judge" | sed -n 1p)" "gpt-6-astra high 1800"
+check "codex-judge fallback row" "$(printf '%s\n' "$judge" | sed -n 2p)" "gpt-5.6-sol high 1800"
+
+bad_judge=NONE
+while read -r model effort secs extra; do
+  [ -n "$model" ] || continue
+  [ -z "$extra" ] || bad_judge="extra-field:$model"
+  in_list "$model" "$JUDGE_MODELS" || bad_judge="model:$model"
+  in_list "$effort" "$VALID_EFFORTS" || bad_judge="effort:$effort"
+  printf '%s' "$secs" | grep -qE '^[1-9][0-9]*$' || bad_judge="timeout:$model"
+done <<< "$judge"
+check "codex-judge rows are well formed" "$bad_judge" "NONE"
+
+# The third column duplicates a constant that also lives in codex-timeout.
+# Nothing else would notice the two drifting apart.
+drift=NONE
+while read -r model effort secs _; do
+  [ -n "$model" ] || continue
+  t=$(printf '%s\n' "$timeouts" | awk -v k="$model/$effort" '$1 == k {print $2}')
+  [ -z "$t" ] && continue
+  [ "$t" = "$secs" ] || drift="$model/$effort:$secs!=$t"
+done <<< "$judge"
+check "codex-judge agrees with codex-timeout" "$drift" "NONE"
+
+# The judge block must not leak into execution admission.
+leak=NONE
+printf '%s\n' "$assignment" | awk '{print $2}' | grep -qxF gpt-6-astra && leak=assignment
+printf '%s\n' "$successor" | tr ' ' '\n' | grep -qF gpt-6-astra && leak=successor
+check "no judge model appears in the execution blocks" "$leak" "NONE"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

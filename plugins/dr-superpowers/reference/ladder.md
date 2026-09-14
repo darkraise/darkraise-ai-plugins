@@ -217,7 +217,8 @@ costs less to run than the wrapper costs to orchestrate.
 4 gpt-5.6-sol high
 ```
 
-Only `gpt-5.5` and `gpt-5.6-sol` appear in this external CLI policy. On 2026-08-31,
+Only `gpt-5.5` and `gpt-5.6-sol` appear in this external CLI *execution* policy;
+the review seats take `gpt-6-astra` from the `codex-judge` block below. On 2026-08-31,
 Codex 0.151.0 on Windows with ChatGPT-subscription authentication rejected Luna
 and Terra with HTTP 400 and provided no metadata for them. Those historical
 observations do not establish current access on another account, CLI version,
@@ -264,3 +265,31 @@ gpt-5.6-sol/xhigh 2400
 ```
 
 Seconds. One constant cannot serve both a `medium` and an `xhigh` run.
+
+### Codex judge rung
+
+The two Claude-hosted review seats — the risk-3 seat and the final-review
+round — take their model from this block, not from `codex-assignment`. The
+first row is preferred; the last row is the fallback.
+
+```codex-judge
+gpt-6-astra high 1800
+gpt-5.6-sol high 1800
+```
+
+It is a separate block for two mechanical reasons. `scripts/run-codex-task.sh`
+validates `--model` against `codex-assignment`, so a judge model there would
+widen execution admission. And `tests/lanes.test.sh` ranks only the execution
+models, so a judge row in `codex-successor` would fail the termination proof.
+Judges are excluded from the implementer ladder anyway: nothing escalates into
+a review seat.
+
+`gpt-6-astra` is the rung `reference/codex-routing.json` already floors native
+judges at, so both hosts now judge at the same tier. Selection is not automatic:
+`scripts/run-codex-review.sh` takes the first row the local model catalog
+advertises and otherwise falls back to the last row, because a catalog listing
+is not an entitlement.
+
+1800 seconds is a provisional operational budget, not a derived figure. The only
+measurement is a `gpt-5.6-sol/high` whole-branch round at roughly four minutes on
+2026-09-14. Revise it when real runs warrant it.
