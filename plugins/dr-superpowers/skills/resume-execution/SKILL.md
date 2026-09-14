@@ -38,7 +38,11 @@ session from memory or from a summary.
 4. **Reload** `<workspace>/handoff.md`, the plan's header (run
    `scripts/task-brief --header PLAN_FILE` and read the file it prints), and
    the ledger. The owner constraints and do-nots in
-   `handoff.md` bind you as if your human partner had just said them.
+   `handoff.md` bind you as if your human partner had just said them. When the
+   project has them, read `docs/superpowers/distilled/constraints.md` and
+   `docs/superpowers/distilled/gotchas.md` in the same step: they bind the same
+   way, and yield to `handoff.md` wherever both speak. Neither is an error when
+   absent. See [project-state.md](../../reference/project-state.md).
 5. **Continue** with what latest.md's `**Next:**` line says:
    - Start or resume at Task N: invoke the skill the plan's `**Execution:**`
      line names — dr-superpowers:subagent-driven-development for `subagent`,

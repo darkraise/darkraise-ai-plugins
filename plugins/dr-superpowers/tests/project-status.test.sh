@@ -75,5 +75,15 @@ check "status output sections in order" "$sections" "Repos|In flight|Not started
 
 present "status links project-state" "$SKILL" 'project-state.md'
 
+# A constraint that outranks a spec must load where it can still bind. These
+# two skills are the pick-up seat and the design seat.
+RESUME="$P/skills/resume-execution/SKILL.md"
+BRAIN="$P/skills/brainstorming/SKILL.md"
+present "resume loads distilled constraints" "$RESUME" 'distilled/constraints.md'
+present "resume loads distilled gotchas" "$RESUME" 'distilled/gotchas.md'
+present "resume says constraints yield to handoff" "$RESUME" 'yield to'
+present "brainstorming loads distilled constraints" "$BRAIN" 'distilled/constraints.md'
+present "brainstorming loads rejected approaches" "$BRAIN" 'distilled/rejected.md'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -165,6 +165,11 @@ is the whole process.
 **Understanding the idea:**
 
 - Check out the current project state first (files, docs, recent commits)
+- Read `docs/superpowers/distilled/constraints.md` and
+  `docs/superpowers/distilled/rejected.md` when the project has them: a
+  constraint outranks the spec you are about to write, and a rejected approach
+  is the one a fresh design most reliably re-proposes. Neither is an error when
+  absent.
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
