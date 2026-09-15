@@ -39,7 +39,7 @@ it does without it.
 |---|---|---|
 | `gates.md` | a human, or dr-superpowers:running-gates' bootstrap on approval | dr-superpowers:running-gates |
 | `plans/completed.md` | dr-superpowers:finishing-a-development-branch | dr-superpowers:project-status |
-| `distilled/*.md` | dr-superpowers:distilling-docs | dr-superpowers:project-status, dr-superpowers:brainstorming, dr-superpowers:resume-execution, both execution skills |
+| `distilled/*.md` | dr-superpowers:distilling-docs, or a human recording an approved spec's owner decision | dr-superpowers:project-status, dr-superpowers:brainstorming, dr-superpowers:resume-execution, both execution skills; `constraints.md` also dr-superpowers:writing-plans |
 
 ## Precedence
 
@@ -57,8 +57,10 @@ judgment call.
 
 ## What never happens to these files
 
-`distilled/*.md` are written only by dr-superpowers:distilling-docs, which
-deletes sources under its own rules and never touches a spec, a plan,
-`completed.md`, or anything outside `docs/superpowers/notes/` and
-`docs/superpowers/findings/`. `gates.md` is edited by a human or by an approved
-bootstrap, never silently. `completed.md` is append-only.
+`distilled/*.md` are written only by dr-superpowers:distilling-docs, with one
+exception: a human may add an entry that an approved spec's owner decisions
+name, citing that spec as its `Source`. distilling-docs deletes sources under
+its own rules and never touches a spec, a plan, `completed.md`, or anything
+outside `docs/superpowers/notes/` and `docs/superpowers/findings/`. `gates.md`
+is edited by a human or by an approved bootstrap, never silently.
+`completed.md` is append-only.

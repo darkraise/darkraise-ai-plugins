@@ -85,5 +85,18 @@ present "resume says constraints yield to handoff" "$RESUME" 'yield to'
 present "brainstorming loads distilled constraints" "$BRAIN" 'distilled/constraints.md'
 present "brainstorming loads rejected approaches" "$BRAIN" 'distilled/rejected.md'
 
+# An approved spec's owner decision may land in constraints.md by hand; the
+# writer rule must say so, or the first such entry breaks it. The last five
+# checks read this repository's own docs tree, not a plugin file.
+present "project-state allows an owner-decision entry" "$STATE" "a human may add an entry that an approved spec's owner decisions"
+present "project-state names writing-plans as a constraints reader" "$STATE" '`constraints.md` also dr-superpowers:writing-plans'
+CONSTRAINTS="$P/../../docs/superpowers/distilled/constraints.md"
+check "exists: docs/superpowers/distilled/constraints.md" \
+  "$([ -f "$CONSTRAINTS" ] && echo yes || echo no)" "yes"
+present "the Codex lane is declared on" "$CONSTRAINTS" "### The Codex executor lane is on"
+present "the lane entry cites the review-routing spec" "$CONSTRAINTS" "Source: docs/superpowers/specs/2026-09-15-dr-superpowers-review-routing-design.md@"
+present "the lane entry records who set it" "$CONSTRAINTS" "Set by: owner"
+present "the lane entry waits for the session gate" "$CONSTRAINTS" 'When `scripts/codex-gate` reports `lane=true`'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
