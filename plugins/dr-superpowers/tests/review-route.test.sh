@@ -246,5 +246,10 @@ present "the delta template takes the delta file" "$PRP" '[DELTA_FILE]'
 present "the delta template verdicts prior findings" "$PRP" '[ADDRESSED|NOT ADDRESSED]'
 present "the delta template may read beyond the delta" "$PRP" 'The delta is where to look first, not the limit of'
 
+# --- the session gate in writing-plans -------------------------------------------
+present "writing-plans runs the gate before each round" "$WP" 'run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),'
+present "writing-plans sends a codex-off round 1 to Fable" "$WP" '**`primary=dr-superpowers:judge-fable` with `reason=codex-off`**'
+present "writing-plans offers the lane only on lane=true" "$WP" 'offers Codex only when'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

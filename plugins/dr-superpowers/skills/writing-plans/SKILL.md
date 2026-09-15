@@ -212,8 +212,9 @@ user's inline or delegation preference on either host.
    Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
    tier. Only a human edit puts one in a plan.
 4. **Offer an external executor** once per plan and apply the lane gate — see
-   [external-executor.md](../../reference/external-executor.md) §Planning. If
-   no executor is usable, ask nothing.
+   [external-executor.md](../../reference/external-executor.md) §Planning,
+   which runs `scripts/codex-gate` before the roster and offers Codex only when
+   the gate prints `lane=true`. If no executor is usable, ask nothing.
 5. **Write the lines** directly below the task's `**Interfaces:**` block, in
    this order:
    - `**Implementer:**` — always; the fully qualified agent, for example
@@ -281,7 +282,8 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
    `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
    `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
    Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`,
-   run `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
+   run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),
+   then `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
    seat it prints, using
    [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). Every seat
    scores executability, coherence, coverage and assumptions (1-20) against
@@ -309,6 +311,13 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
      the full-plan template, save its reply to
      `<workspace>/plan-review-round-1.md`, and say why. Never run the Codex seat
      twice in one round.
+   - **`primary=dr-superpowers:judge-fable` with `reason=codex-off`** (round 1
+     while the gate has not opened the review surface). No Codex seat runs.
+     Dispatch it (`dr-superpowers:judge-opus` when Fable is unavailable or
+     declined) with the full-plan template, save its reply to
+     `<workspace>/plan-review-round-1.md`, and say `codex off — <reason>`,
+     quoting the gate line's `reason` (`untrusted` when it printed
+     `usable=true`).
    - **`primary=dr-superpowers:judge-opus`** (rounds 2 and 3). Write
      `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
      dispatch the seat with the Rounds 2 and 3 template, passing that file and
