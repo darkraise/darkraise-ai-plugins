@@ -176,5 +176,21 @@ sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)
 check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
 
+# --- plan review prose ---------------------------------------------------------
+WP="$P/skills/writing-plans/SKILL.md"
+PRP="$P/skills/writing-plans/references/plan-reviewer-prompt.md"
+present "writing-plans routes each round" "$WP" 'scripts/review-route PLAN_FILE --plan-round <r>'
+present "writing-plans snapshots the plan before each round" "$WP" '<workspace>/plan-round-<r>.md'
+present "writing-plans runs the Codex plan kind" "$WP" '--kind plan'
+present "writing-plans writes the delta" "$WP" '<workspace>/plan-delta-<r>.diff'
+present "writing-plans keeps the round cap" "$WP" 'replaces a fresh full review; rounds are not cut.'
+absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'
+present "the prompt file has a Codex round-1 section" "$PRP" '## Round 1 on Codex'
+present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-schema.json'
+present "the prompt file has a delta template" "$PRP" '## Rounds 2 and 3'
+present "the delta template takes the delta file" "$PRP" '[DELTA_FILE]'
+present "the delta template verdicts prior findings" "$PRP" '[ADDRESSED|NOT ADDRESSED]'
+present "the delta template may read beyond the delta" "$PRP" 'The delta is where to look first, not the limit of'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

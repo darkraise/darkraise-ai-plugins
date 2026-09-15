@@ -280,20 +280,52 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 2. **Review.** Write the lint output to the plan's workspace:
    `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
    `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
-   Dispatch the judge with
-   [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). It scores
-   executability, coherence, coverage and assumptions (1-20) against
-   [plan-review.md](../../criteria/plan-review.md) and lists findings.
+   Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`,
+   run `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
+   seat it prints, using
+   [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). Every seat
+   scores executability, coherence, coverage and assumptions (1-20) against
+   [plan-review.md](../../criteria/plan-review.md) and lists findings. If
+   `review-route` exits 2 naming `native-codex.md`, the plan is a Codex-host
+   plan: dispatch the native judge the prompt's `[JUDGE]` placeholder
+   describes. On any other exit 2, review with `dr-superpowers:judge-fable`
+   and say why, quoting its message.
+   - **`primary=codex:plan`** (round 1). Write the prompt its Round 1 on Codex
+     section describes to `<workspace>/plan-review-prompt.md`, then run, as a
+     background Bash call with no timeout (the rung's bound is longer than the
+     Bash tool's ten-minute cap, and a background call is not bound by it):
+
+     ```bash
+     bash scripts/run-codex-review.sh --kind plan --cwd <repository-root> \
+       --out <workspace>/plan-review-round-1.json --prompt <workspace>/plan-review-prompt.md
+     ```
+
+     Read its one status line. `OK` and `FALLBACK` are a review: read the four
+     scores and `findings` from the JSON. On `FALLBACK`, or a line naming
+     `gpt-5.6-sol/high` with `status=OK`, say the substitution aloud with the
+     runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
+     no review: dispatch the printed `fallback`, `dr-superpowers:judge-fable`
+     (`dr-superpowers:judge-opus` when Fable is unavailable or declined), with
+     the full-plan template, save its reply to
+     `<workspace>/plan-review-round-1.md`, and say why. Never run the Codex seat
+     twice in one round.
+   - **`primary=dr-superpowers:judge-opus`** (rounds 2 and 3). Write
+     `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
+     dispatch the seat with the Rounds 2 and 3 template, passing that file and
+     the previous round's findings file, and save its reply to
+     `<workspace>/plan-review-round-<r>.md`.
 3. **Fix and repeat.** Any score of 8 or below, or any Critical or Important
-   finding: fix the plan, re-lint, and dispatch a fresh full review. At most 3
-   review rounds; after the third, show the remaining findings to your human
-   partner. A borderline score (9-13) gets a one-line decision in the plan's
-   Assumptions.
+   finding: fix the plan, re-lint, and run the next round. A delta round
+   replaces a fresh full review; rounds are not cut. At most 3 review rounds;
+   after the third, show the remaining findings to your human partner. A
+   borderline score (9-13) gets a one-line decision in the plan's Assumptions.
 4. **Record.** Only now, add the header line
-   `**Plan review:** <YYYY-MM-DD> — <judge agent> — executability e / coherence c / coverage v / assumptions a (round r)`
+   `**Plan review:** <YYYY-MM-DD> — <seat> — executability e / coherence c / coverage v / assumptions a (round r)`
    below the `**Program:**` line (below `**Execution:**` when there is no
-   Program line). The header template deliberately omits it, so `plan-lint`
-   warns until the review has run.
+   Program line). `<seat>` is the seat that ran the last round:
+   `codex <model> / <effort>` from the runner's status line, or the judge
+   agent. The header template deliberately omits it, so `plan-lint` warns
+   until the review has run.
 
 ## Execution Handoff
 
