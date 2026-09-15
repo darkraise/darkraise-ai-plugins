@@ -141,6 +141,7 @@ for a in "\$@"; do [ "\$prev" = "-o" ] && outfile="\$a"; prev="\$a"; done
 case "\$CODEX_STUB_MODE" in
   ok) printf '{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}' > "\$outfile"; exit 0 ;;
   ok-final) printf 'a review\n' > "\$outfile"; exit 0 ;;
+  ok-plan) printf '{"executability":17,"coherence":16,"coverage":17,"assumptions":16,"findings":[]}' > "\$outfile"; exit 0 ;;
   empty) : > "\$outfile"; exit 0 ;;
   noout) exit 0 ;;
   # The observed form: a real refusal from codex 0.154.0, captured on
@@ -240,6 +241,52 @@ check "the refusal's own logs are kept" \
   "$([ -s "$TMP/o.md.stderr" ] && echo yes || echo no)" "yes"
 check "the fallback writes its own logs" \
   "$([ -f "$TMP/o.md.fallback.stderr" ] && echo yes || echo no)" "yes"
+
+# --- task and plan kinds, and the light tier ---------------------------------
+write_roster "$ASTRA"
+out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+present "task passes the task-review schema" "$out" "codex-review-schema.json"
+present "task defaults to the heavy tier" "$out" "codex-judge gpt-6-astra/high"
+if tok x "$out" review; then printf 'FAIL - task never uses codex exec review\n'; fail=$((fail + 1))
+else printf 'ok   - task never uses codex exec review\n'; pass=$((pass + 1)); fi
+
+out=$(run --kind task --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+present "the light tier selects the last judge row" "$out" "codex-judge gpt-5.6-sol/high"
+if tok x "$out" gpt-5.6-sol; then printf 'ok   - the light tier reaches -m\n'; pass=$((pass + 1))
+else printf 'FAIL - the light tier reaches -m\n'; fail=$((fail + 1)); fi
+present "the light tier still reports the catalog date" "$out" "evidence=2026-09-14T13:35:00Z"
+
+out=$(run --kind risk3 --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+present "risk3 accepts the light tier" "$out" "codex-judge gpt-5.6-sol/high"
+
+out=$(run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+present "plan passes the plan-review schema" "$out" "codex-plan-review-schema.json"
+present "plan is read-only" "$out" "read-only"
+present "plan takes the heavy selection" "$out" "codex-judge gpt-6-astra/high"
+if tok x "$out" review; then printf 'FAIL - plan never uses codex exec review\n'; fail=$((fail + 1))
+else printf 'ok   - plan never uses codex exec review\n'; pass=$((pass + 1)); fi
+
+run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
+check "task without --prompt is a usage error" "$rc" "2"
+run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
+check "plan without --prompt is a usage error" "$rc" "2"
+run --kind plan --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
+check "--tier with plan is a usage error" "$rc" "2"
+run --kind final --tier light --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run >/dev/null; rc=$?
+check "--tier with final is a usage error" "$rc" "2"
+run --kind task --tier medium --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
+check "an unknown tier is a usage error" "$rc" "2"
+
+out=$(seat ok-plan plan --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+present "a schema-shaped plan report is OK" "$out" "status=OK"
+check "a plan OK exits 0" "$rc" "0"
+out=$(seat ok plan --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "a task-shaped report is not a plan review" "$out" "status=FAILED"
+out=$(seat ok task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "a schema-shaped task report is OK" "$out" "status=OK"
+out=$(seat refuse-always task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "a refused light run is FAILED" "$out" "status=FAILED"
+check "the light tier never falls back" "$(cat "$TMP/calls")" "1"
 
 # The caller must defer to the runner's outcome rather than running its own
 # retry rule: a FAILED seat that redispatches turns one refused run into two.

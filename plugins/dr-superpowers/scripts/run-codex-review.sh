@@ -2,16 +2,17 @@
 # Runs one Codex review seat: selects the judge rung, bounds the run, and
 # classifies the outcome.
 #
-# Both Claude-hosted seats call this instead of composing a codex command
-# themselves. An earlier design left the selection and fallback rules in prose,
-# and the runtime never reached the paragraph describing them: the fallback was
-# unreachable code written in English. Anything a seat must decide lives here,
-# where a test can reach it.
+# Every Claude-hosted Codex review seat calls this instead of composing a codex
+# command itself. An earlier design left the selection and fallback rules in
+# prose, and the runtime never reached the paragraph describing them: the
+# fallback was unreachable code written in English. Anything a seat must decide
+# lives here, where a test can reach it.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LADDER="$HERE/../reference/ladder.md"
-SCHEMA="$HERE/../criteria/codex-review-schema.json"
+TASK_SCHEMA="$HERE/../criteria/codex-review-schema.json"
+PLAN_SCHEMA="$HERE/../criteria/codex-plan-review-schema.json"
 # Tests point this at a stub roster. Unset in production, where the real
 # detector runs and its auth probe is the usability guard.
 ROSTER="${CODEX_REVIEW_ROSTER:-$HERE/detect-executors.sh}"
@@ -21,10 +22,10 @@ die() { printf 'run-codex-review: %s\n' "$1" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PATH"
 
-kind=""; cwd=""; out=""; prompt=""; base=""; dry_run=false
+kind=""; cwd=""; out=""; prompt=""; base=""; tier=""; dry_run=false
 while [ $# -gt 0 ]; do
   case "$1" in
-    --kind|--cwd|--out|--prompt|--base) [ $# -ge 2 ] || die "$1 needs a value" ;;
+    --kind|--cwd|--out|--prompt|--base|--tier) [ $# -ge 2 ] || die "$1 needs a value" ;;
   esac
   case "$1" in
     --kind) kind="$2"; shift 2 ;;
@@ -32,28 +33,43 @@ while [ $# -gt 0 ]; do
     --out) out="$2"; shift 2 ;;
     --prompt) prompt="$2"; shift 2 ;;
     --base) base="$2"; shift 2 ;;
+    --tier) tier="$2"; shift 2 ;;
     --dry-run) dry_run=true; shift ;;
     *) die "unknown argument: $1" ;;
   esac
 done
 
+# task is the name scripts/review-route prints; risk3 is the same seat under
+# its sub-project 7 name, kept so earlier callers keep working.
 case "$kind" in
-  risk3) [ -n "$prompt" ] || die "--kind risk3 requires --prompt" ;;
+  task|risk3) [ -n "$prompt" ] || die "--kind $kind requires --prompt"; kind=task ;;
+  plan) [ -n "$prompt" ] || die "--kind plan requires --prompt" ;;
   final) [ -n "$base" ] || die "--kind final requires --base" ;;
-  *) die "--kind must be risk3 or final" ;;
+  *) die "--kind must be task, risk3, plan or final" ;;
+esac
+case "$tier" in
+  "") tier=heavy ;;
+  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task or risk3" ;;
+  *) die "--tier must be light or heavy" ;;
 esac
 [ -n "$cwd" ] || die "--cwd is required"
 [ -n "$out" ] || die "--out is required"
 [ -d "$cwd" ] || die "--cwd is not a directory: $cwd"
 [ -d "$(dirname "$out")" ] || die "--out directory not found: $(dirname "$out")"
 
+case "$kind" in
+  task) schema="$TASK_SCHEMA" ;;
+  plan) schema="$PLAN_SCHEMA" ;;
+  *) schema="" ;;
+esac
+
 # Resolve before anything runs. The seat runs inside a subshell that cd's to
 # --cwd, while the output is read back from here, so a relative path would be
 # written into the worktree and then reported missing.
 out="$(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
 cwd="$(cd "$cwd" && pwd)"
-[ "$kind" != risk3 ] || [ -r "$prompt" ] || die "--prompt is not readable: $prompt"
-[ "$kind" != risk3 ] || [ -r "$SCHEMA" ] || die "review schema not found: $SCHEMA"
+[ -z "$schema" ] || [ -r "$prompt" ] || die "--prompt is not readable: $prompt"
+[ -z "$schema" ] || [ -r "$schema" ] || die "review schema not found: $schema"
 [ -z "$prompt" ] || prompt="$(cd "$(dirname "$prompt")" && pwd)/$(basename "$prompt")"
 
 # The judge policy, first row preferred and last row the fallback.
@@ -100,7 +116,12 @@ else
     '[.pairs[]? | select(.model == $m and .effort == $e)] | length > 0')
 fi
 
-if [ "$listed" = true ]; then
+# The light tier is the last row by definition: it is the known-good rung, so
+# the catalog has nothing to veto, and it is already the fallback row, so the
+# refusal branch below never retries it against itself.
+if [ "$tier" = light ]; then
+  model="$back_model"; effort="$back_effort"
+elif [ "$listed" = true ]; then
   model="$pref_model"; effort="$pref_effort"
 else
   model="$back_model"; effort="$back_effort"
@@ -108,13 +129,13 @@ fi
 secs=$(secs_of "$model" "$effort")
 [ -n "$secs" ] || die "no timeout for $model/$effort in the codex-judge block"
 
-# The command each kind runs. risk3 uses plain `codex exec` with this plugin's
-# own schema, never `codex exec review`, which imposes its own report shape -
-# the three risk-3 judges must return comparable criteria.
+# The command each kind runs. task and plan use plain `codex exec` with this
+# plugin's own schema, never `codex exec review`, which imposes its own report
+# shape - a seat must return the criteria the Claude judges return.
 build_argv() { # build_argv <model> <effort>
-  if [ "$kind" = risk3 ]; then
+  if [ -n "$schema" ]; then
     printf '%s\n' codex exec -s read-only -m "$1" -c "model_reasoning_effort=$2" \
-      --output-schema "$SCHEMA" -o "$out" -C "$cwd"
+      --output-schema "$schema" -o "$out" -C "$cwd"
   else
     printf '%s\n' codex exec review --base "$base" -m "$1" -c "model_reasoning_effort=$2" \
       -o "$out"
@@ -129,15 +150,16 @@ if [ "$dry_run" = true ]; then
   exit 0
 fi
 
-# Valid output is defined per kind. risk3 must parse as the criteria the other
-# two judges return; final has no schema and only has to be non-empty.
+# Valid output is defined per kind. task and plan must parse as their schema's
+# keys; final has no schema and only has to be non-empty.
 valid_output() {
-  if [ "$kind" = risk3 ]; then
-    jq -e 'has("spec_verdict") and has("task_quality") and has("cannot_verify")' \
-      "$out" >/dev/null 2>&1
-  else
-    [ -s "$out" ]
-  fi
+  case "$kind" in
+    task) jq -e 'has("spec_verdict") and has("task_quality") and has("cannot_verify")' \
+      "$out" >/dev/null 2>&1 ;;
+    plan) jq -e 'has("executability") and has("coherence") and has("coverage") and has("assumptions") and has("findings")' \
+      "$out" >/dev/null 2>&1 ;;
+    *) [ -s "$out" ] ;;
+  esac
 }
 
 # A refusal is the one failure a different model repairs. An expired token, an
