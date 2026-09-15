@@ -73,8 +73,8 @@ k=$(( $(sed -n 's/^## A\([0-9][0-9]*\) .*/\1/p' "$TMP/before" | sort -n | tail -
 plan_apply_amendments "$plan" "$TMP/after" > /dev/null 2>&1 \
   || reject "Old text does not match exactly once in $target"
 
-bash "$HERE/plan-lint" "$plan" --amendments "$TMP/before" | grep '^ERROR' | sort > "$TMP/lint-before"
-bash "$HERE/plan-lint" "$plan" --amendments "$TMP/after" | grep '^ERROR' | sort > "$TMP/lint-after"
+bash "$HERE/plan-lint" "$plan" --amendments "$TMP/before" --no-probe | grep '^ERROR' | sort > "$TMP/lint-before"
+bash "$HERE/plan-lint" "$plan" --amendments "$TMP/after" --no-probe | grep '^ERROR' | sort > "$TMP/lint-after"
 new_errors=$(comm -13 "$TMP/lint-before" "$TMP/lint-after")
 [ -z "$new_errors" ] || { echo "rejected: the amendment introduces lint errors:"; printf '%s\n' "$new_errors"; exit 1; }
 

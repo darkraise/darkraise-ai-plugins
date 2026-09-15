@@ -26,6 +26,27 @@ cd "$TMP"
 mkdir -p docs
 printf '# Spec\n' > docs/spec.md
 printf '# Program\n' > docs/program.md
+# The lane probe reads this session's Codex gate file. A fixed session id and a
+# temporary directory keep the machine's real session state out of every case.
+export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=plan-lint-test
+lane_surface() { # lane_surface <true|false>
+  mkdir -p "$DR_CODEX_SESSION_DIR"
+  printf '{"session_id":"plan-lint-test","usable":true,"review":false,"lane":%s}\n' "$1" \
+    > "$DR_CODEX_SESSION_DIR/plan-lint-test.json"
+}
+lane_surface true
+# Stub rosters for the lane probe. Every case uses one, so no case depends on
+# whether Codex is installed on the machine running the suite.
+cat > usable.sh <<EOF
+printf 'called\n' >> "$TMP/probe-calls"
+echo '[{"id":"codex","usable":true,"reason":null}]'
+EOF
+cat > unusable.sh <<EOF
+printf 'called\n' >> "$TMP/probe-calls"
+echo '[{"id":"codex","usable":false,"reason":"present but not authenticated; run codex login"}]'
+EOF
+export PLAN_LINT_ROSTER="$TMP/unusable.sh"
+calls() { cat "$TMP/probe-calls" 2>/dev/null | grep -c called; }
 
 claude_plan() {
   cat <<'EOF'
@@ -278,6 +299,49 @@ lint c3.md
 check "promotion: exit 0" "$status" "0"
 has "promotion warns" "$out" "WARN Task 1: Implementer rank 4 is above routing score 3 (promotion)"
 
+# --- the lazy lane probe ---
+# p1 makes Task 1 lane-eligible: total 2, risk 0, no Executor, no Override.
+variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/'
+export PLAN_LINT_ROSTER="$TMP/usable.sh"
+rm -f probe-calls; lint p1.md
+has "usable codex: an eligible task without Executor warns" "$out" "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-5.5 / medium)"
+check "usable codex: the warning does not fail the lint" "$status" "0"
+lacks "usable codex: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
+check "usable codex: the probe runs once" "$(calls)" "1"
+rm -f probe-calls; lint p1.md --no-probe
+lacks "--no-probe: no lane warning" "$out" "lane-eligible"
+check "--no-probe: the roster never runs" "$(calls)" "0"
+rm -f probe-calls; lint clean.md
+check "no candidate: the roster never runs" "$(calls)" "0"
+lane_surface false
+rm -f probe-calls; lint p1.md
+lacks "lane surface off: no lane warning" "$out" "lane-eligible"
+check "lane surface off: the roster never runs" "$(calls)" "0"
+rm -rf "$DR_CODEX_SESSION_DIR"
+rm -f probe-calls; lint p1.md
+check "no session file: the roster never runs" "$(calls)" "0"
+lane_surface true
+export PLAN_LINT_ROSTER="$TMP/unusable.sh"
+rm -f probe-calls; lint p1.md
+lacks "unusable codex: no lane warning" "$out" "lane-eligible"
+check "unusable codex: the probe still ran once" "$(calls)" "1"
+export PLAN_LINT_ROSTER="$TMP/usable.sh"
+variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-5.5 \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
+rm -f probe-calls; lint p2.md
+lacks "an Executor line clears the candidate" "$out" "lane-eligible"
+lacks "the Executor fixture is otherwise clean" "$out" "ERROR Task 1"
+check "a plan whose only candidate has an Executor never probes" "$(calls)" "0"
+variant p3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-high/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Override:** owner kept the Sonnet-high tier/'
+rm -f probe-calls; lint p3.md
+lacks "an overridden task is not a candidate" "$out" "lane-eligible"
+variant p4.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/'
+rm -f probe-calls; lint p4.md
+lacks "an inline plan gets no lane warning" "$out" "lane-eligible"
+check "an inline plan never probes" "$(calls)" "0"
+lint p1.md --no-probe --amendments am-none.md
+check "flags parse in any order" "$status" "0"
+export PLAN_LINT_ROSTER="$TMP/unusable.sh"
+check "plan-amend never probes" "$(grep -c -- '--no-probe' "$HERE/../scripts/plan-amend")" "2"
 # --- amendments ---
 cat > am.md <<'EOF'
 ## A1 — Task 2

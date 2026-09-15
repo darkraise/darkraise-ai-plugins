@@ -4,27 +4,32 @@
 # Execution line, placeholders, and every task's assignment lines against
 # reference/ladder.md (Claude) or reference/codex-routing.json (Codex).
 #
-# Usage: plan-lint PLAN_FILE [--amendments FILE]
+# Usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]
 # Default amendments: <workspace>/amendments.md inside a git repository.
+# --no-probe skips the lane probe, for runs whose verdict must not depend on
+# whether Codex is usable on the machine.
 # Output: "ERROR|WARN <header|Task N>: <what>" lines, then a summary line.
 # Exit: 0 no errors; 1 errors; 2 usage or missing file.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/codex-session.sh"
 ROUTING="$HERE/../reference/codex-routing.json"
 
-usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE]" >&2; exit 2; }
-[ $# -eq 1 ] || [ $# -eq 3 ] || usage
-plan=$1
+usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]" >&2; exit 2; }
+[ $# -ge 1 ] || usage
+plan=$1; shift
+amend="" amend_given=0 probe=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --amendments) [ $# -ge 2 ] || usage; amend=$2 amend_given=1; shift 2 ;;
+    --no-probe) probe=0; shift ;;
+    *) usage ;;
+  esac
+done
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-amend=""
-if [ $# -eq 3 ]; then
-  [ "$2" = "--amendments" ] || usage
-  amend=$3
-else
-  amend=$(plan_amendments_file "$plan")
-fi
+[ "$amend_given" -eq 1 ] || amend=$(plan_amendments_file "$plan")
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -135,7 +140,7 @@ gate=$(ladder_block gate)
 min_score=$(awk '$1 == "min_score" { print $2 }' <<<"$gate")
 max_risk=$(awk '$1 == "max_risk" { print $2 }' <<<"$gate")
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
-r5_bad="" max_total=0
+r5_bad="" max_total=0 lane=""
 
 # A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
 # sections, each a unit with its own Files, Implementer and Evaluation lines;
@@ -219,6 +224,10 @@ for n in $nums; do
       rung=$(awk -v t="$t" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block codex-assignment)")
       { [ -n "$rung" ] && [[ "$executor" == *"codex $rung"* ]]; } || say ERROR "$where" "Executor does not name the codex-assignment rung for total $t (codex ${rung:-none})"
       [[ "$externals" == *codex* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name codex"
+    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] \
+         && [ "$t" -ge "$min_score" ] && [ "$d" -le "$max_risk" ]; then
+      rung=$(awk -v t="$t" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block codex-assignment)")
+      [ -z "$rung" ] || lane="$lane$where"$'\t'"$rung"$'\n'
     fi
   fi
   for v in "$a" "$b" "$c" "$d"; do
@@ -229,6 +238,22 @@ for n in $nums; do
   [ $((a + b + c + d)) -le "$max_total" ] || max_total=$((a + b + c + d))
   done
 done
+
+# The lane probe is lazy: the detector costs about two seconds, so it runs only
+# when some task could have taken the lane and did not, and only when this
+# session's Codex gate opened the lane surface. A plan without Executor lines is
+# correct on a machine where Codex is unusable, so every outcome other than a
+# usable codex row prints nothing. Inline plans are skipped: Executor lines are
+# inert under inline execution, so the warning would be noise.
+if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ] && codex_session_on lane; then
+  roster=$(timeout 30 bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}" 2>/dev/null) || roster=""
+  usable=$(jq -r '.[]? | select(.id == "codex") | .usable' <<<"$roster" 2>/dev/null | tr -d '\r')
+  if [ "$usable" = true ]; then
+    while IFS=$'\t' read -r w r; do
+      [ -z "$w" ] || say WARN "$w" "lane-eligible with no **Executor:** line (codex $r)"
+    done <<<"$lane"
+  fi
+fi
 
 # R5: inline eligibility, and the inline model follows the highest total —
 # Sonnet for the Sonnet band (<= 3), Opus once a task reaches the Opus-low band.
