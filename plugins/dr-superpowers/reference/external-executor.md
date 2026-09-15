@@ -14,11 +14,26 @@ plus the `codex-judge` block the review seats' runner reads.
 ## Planning
 
 Run this once per plan, after scoring every task and before writing any
-assignment line:
+assignment line. Run the session gate first:
+
+```bash
+bash "<plugin-root>/scripts/codex-gate"
+```
+
+Say its line aloud when it ends `source=probe`. Unless it prints `lane=true`, stop here:
+ask nothing, run no roster, and write the plan Claude-only, saying
+`codex off — <reason>` in one line, `<reason>` being the gate's `reason`
+(`untrusted` when it printed `usable=true`). Otherwise run the roster:
 
 ```bash
 bash "<plugin-root>/scripts/detect-executors.sh"
 ```
+
+Read `docs/superpowers/distilled/constraints.md` first, when the project has
+one. If a constraint there declares an executor's lane on and the roster reports
+that executor `usable`, tick it without asking and say so in one line; the
+question below then covers only the other executors. An absent file is not an
+error.
 
 Render the roster as a multi-select question: one tickable option per executor
 whose `usable` is `true`, and a prose line naming every other detected executor
@@ -92,7 +107,12 @@ checkout. Fingerprints detect drift, not who wrote it. Never remove a blocked or
 unreconciled worktree. Read [external-task-recovery.md](external-task-recovery.md)
 for ownership, artifacts, approved write sets, and recovery operations.
 
-1. **Guard the roster.** Run
+1. **Gate, then guard the roster.** Run `bash "<plugin-root>/scripts/codex-gate"`
+   first, saying its line aloud when it ends `source=probe`.
+   Unless it prints `lane=true`, run neither the roster nor the wrapper:
+   dispatch the task's `**Implementer:**` agent on the Claude lane, say the
+   substitution aloud, and record it with the line below, quoting the gate's
+   `reason` (`untrusted` when it printed `usable=true`). Otherwise run
    `bash "<plugin-root>/scripts/detect-executors.sh"` and read the entry
    for the named executor. **Never trust the plan's copy** - it records what was
    available when the plan was written.
@@ -142,9 +162,12 @@ for ownership, artifacts, approved write sets, and recovery operations.
    lived only in your context, a compaction would turn round 2 into a fresh
    dispatch wearing a resume's name.
 
-4. **Review as normal.** Dispatch the judge exactly as for a Claude task. Do not
-   tell it which lane produced the diff: a judge that knows the author scores
-   the author, and nothing in its inputs needs to change to keep it unaware.
+4. **Review with the routed seat.** Run `scripts/review-route PLAN_FILE --task <N>`
+   and review with the seat it prints. A task carrying an `**Executor:**` line
+   always routes to a Claude judge, so Codex never reviews its own work. Do not
+   tell the judge which lane produced the diff: a judge that knows the author
+   scores the author, and nothing in its inputs needs to change to keep it
+   unaware.
 
 The wrapper's report carries `## Discovered issues (not fixed)` and
 `## Assumptions made` exactly as a Claude implementer's report does, so the
@@ -160,6 +183,13 @@ wrapper's exit code says which case you are in:
 | 0 | `status=DONE`. Proceed to review, unless the report carries the empty-diff note below |
 | 1 | Codex ran and did not reach DONE. Read the `status=` field on the same line |
 | 2 | No status line was printed. Read the wrapper's own stderr before doing anything - see below |
+
+**Refresh the gate first.** After any run whose status is not `DONE`, run
+`bash "<plugin-root>/scripts/codex-gate" --refresh` before the next Codex use of
+any kind - a retry, a successor rung, a resume or a review seat - so a quota or
+login failure turns Codex off for the rest of the session. When the refreshed
+line no longer says `lane=true`, the response is `HANDBACK` whatever the tables
+below say; record it with the gate's `reason`.
 
 **This section covers an initial run.** A resume round that fails takes a
 different path, because two of the responses below are unavailable to it - see
@@ -310,76 +340,100 @@ Task <N>: fix round 2/5 (0 addressed, 2 open - codex quota exhausted, retried on
 A handback from a failed resume is still a handback: say it aloud, and let the
 ordinary Claude ladder govern from there.
 
-## Risk-3 Codex seat
+## Codex task review seats
 
-On a risk-3 task, one of the three independent review seats is Codex when it is
-usable. Risk-3 tasks are excluded from the executor lane by `max_risk 1` in the
-`gate` block of [ladder.md](ladder.md), so this seat never reviews Codex's own
-work - a property the final-review Codex round does not share.
+`scripts/review-route PLAN_FILE --task <N>` names a Codex seat for every task
+without an `**Executor:**` line: `codex:light` for totals 0 to 3, `codex:heavy`
+for 4 to 6, and `codex:heavy+judge-fable` at risk 2 or above. A task carrying
+an `**Executor:**` line routes to a Claude judge, so these seats never review
+Codex's own work - a property the final-review Codex round does not share.
+Batched tasks never carry one, and route on the batch's highest total and risk.
 
-The runner establishes usability from the roster itself and never trusts the
+The controller runs `scripts/codex-gate` before `review-route`, which names no
+Codex seat while the gate has not opened the review surface. The runner runs the
+gate again before its roster and reports `FAILED` with
+`run-codex-review: codex is off for this session (<reason>)` unless it says
+`usable=true`; a quota error during a run turns Codex off for the rest of the
+session. It then establishes usability from the roster itself and never trusts the
 plan's copy, applies the `codex-judge` row's bound with coreutils `timeout`, and
 reports `FAILED` with the roster's own `reason` when Codex is not usable. Run it
 as a background Bash call: the Bash tool's `timeout` caps at ten minutes, the
 rung's bound is longer, and a background call is not bound by it at all.
 
 ```bash
-bash "<plugin-root>/scripts/run-codex-review.sh" --kind risk3 \
+bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy> \
   --cwd <worktree-root> --out <workspace>/task-<N>-review-codex.json \
-  --prompt <prompt-file>
+  --prompt <workspace>/task-<N>-review-codex-prompt.md
 ```
 
-The runner owns the model, the effort, the bound and the outcome. It takes the
-first row of [ladder.md](ladder.md)'s `codex-judge` block that the local model
-catalog advertises, falls back to that block's last row whenever the catalog is
-absent, unreadable or silent, and prints one status line:
+`codex:light` passes `--tier light`, which runs the `codex-judge` block's last
+row and never falls back. `codex:heavy` and `codex:heavy+judge-fable` pass
+`--tier heavy`: the runner takes the block's first row when the local model
+catalog advertises it, takes the last row whenever the catalog is absent,
+unreadable or silent, and falls back once on a refusal. `--kind risk3` is the
+same seat under its earlier name and stays accepted. The runner prints one
+status line:
 
 ```
 codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<fetched_at>
 ```
 
-Read that line and nothing else. `OK` and `FALLBACK` are a seat that scored;
+Read that line and nothing else. `OK` and `FALLBACK` are a seat that reviewed;
 `FALLBACK` additionally means the preferred rung refused the run, so say the
 substitution aloud and record it in the task's ledger line with the reason the
 runner prints in its own `refused (...)` message — it reads that line from
 `<out>.stderr` or `<out>.stdout`, because an API-level refusal arrives on the
 JSON stream rather than on stderr.
 
-`TIMEOUT` or `FAILED` is a seat that produced no score. Fall back to a third
-Claude judge rather than averaging two scores as if three had voted. Never read
-an absent or malformed report as a clean review, and never count it as a third
-vote: the runner has already distinguished a report that is missing from one
-that is merely unfavourable.
+On a `--tier heavy` run, a status line naming the block's last row with
+`status=OK` is a substitution as well: the catalog did not advertise the
+preferred rung, so selection fell closed before the run. Say that aloud too,
+quoting the line's `evidence=` value, which is the catalog's own date or
+`unknown`. It is not `FALLBACK`, because nothing refused anything. On a
+`--tier light` run the last row is the rung that tier selects, and there is
+nothing to say.
 
-A status line naming the block's last row with `status=OK` is a substitution as
-well: the catalog did not advertise the preferred rung, so selection fell closed
-before the run. Say that aloud too, quoting the line's `evidence=` value, which
-is the catalog's own date or `unknown`. It is not `FALLBACK`, because nothing
-refused anything.
+`TIMEOUT` or `FAILED` is a seat that produced no review. Dispatch the route's
+`fallback` seat with the ordinary task-reviewer prompt and say so. Never read an
+absent or malformed report as a clean review: the runner has already
+distinguished a report that is missing from one that is merely unfavourable.
+
+**The prompt** is
+[task-reviewer-prompt.md](../skills/subagent-driven-development/references/task-reviewer-prompt.md)
+with its criteria block, with three changes. Send only the `prompt:` body,
+without the `Subagent ([JUDGE]):` and `description:` lines. Leave out the Second
+Pass section: that pass is Fable's. And **replace the Output Format section and
+the criteria block's output-format paragraph with the schema, rather than
+appending to them.** The shipped schema, `criteria/codex-review-schema.json`,
+carries the four criterion names, the 1 to 20 range, and the spec and quality
+verdicts, and the final message is JSON rather than a markdown
+`### Verification Scores` section. Send the criteria themselves - where to look,
+what scores high, what to ignore - and let the schema state the shape. Sent
+unedited, the prompt would order markdown while `--output-schema` forbids it.
 
 Use `codex exec`, not `codex exec review`: the latter imposes its own report
-shape, and this seat must return the criteria the other two judges return. The
-prompt is the task-reviewer prompt with its criteria block, with one change.
-**For this seat the criteria block's output-format paragraph is replaced by the
-schema, not appended to it.** The shipped schema,
-`criteria/codex-review-schema.json`, carries the four criterion names, the 1 to
-20 range, and the spec and quality verdicts, and the final message is JSON rather
-than a markdown `### Verification Scores` section. Send the criteria themselves -
-where to look, what scores high, what to ignore - and let the schema state the
-shape. Sent unedited, the prompt would order markdown while `--output-schema`
-forbids it.
+shape. The schema is a plugin file, outside every worktree, so it can never land
+in a task's commit.
 
-The schema is a plugin file, outside every worktree, so it can never land in a
-task's commit.
-
-If Codex is not usable, dispatch the third judge seat instead - `judge-fable`,
-or `judge-opus` when Fable is unavailable or declined - and say so. A Codex seat
-changes who scores, not how the scores are read.
+**At risk 2 or above** this review is the first of two steps: the controller
+then dispatches `judge-fable` with the Second Pass section naming this seat's
+`--out` path, per
+[subagent-driven-development](../skills/subagent-driven-development/SKILL.md)
+§3 Review the task. Fable's verdicts and scores are the task's.
 
 ## Final-review Codex round
 
-The final whole-branch review adds this round. The runner decides whether Codex
-is usable:
+The final whole-branch review adds this round. Run the session gate first:
+
+```bash
+bash "<plugin-root>/scripts/codex-gate"
+```
+
+Say its line aloud when it ends `source=probe`.
+Unless it prints `review=true`, skip the round: say `codex off — <reason>`,
+`<reason>` being the gate's `reason` (`untrusted` when it printed
+`usable=true`), and report the Claude review alone. Otherwise the runner decides
+whether Codex is usable:
 
 ```bash
 bash "<plugin-root>/scripts/run-codex-review.sh" --kind final \
@@ -415,11 +469,11 @@ more, and a background call is not bound by it at all. The bound is the
 `codex-judge` row's third field, applied by the runner with coreutils `timeout`.
 
 The runner establishes usability itself from the same `detect-executors.sh`
-roster the risk-3 seat uses, so this round needs no separate guard; a Codex that
+roster the task seats use, so this round needs no separate guard; a Codex that
 is not usable comes back as `status=FAILED` with the roster's own reason on
 stderr.
 
-Unlike the risk-3 seat, this round is **not** self-review-free. The branch
+Unlike the task seats, this round is **not** self-review-free. The branch
 contains whatever the executor lane produced, so Codex is reviewing some of its
 own commits. That is why every finding - whichever reviewer raised it - is then
 verified by a judge that wrote none of the code.
@@ -428,7 +482,8 @@ verified by a judge that wrote none of the code.
 
 | Situation | Response |
 |-----------|----------|
-| Task has an `**Executor:**` line and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
+| Task has an `**Executor:**` line and `scripts/codex-gate` does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
+| Task has an `**Executor:**` line, the gate prints `lane=true`, and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
 | The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`/`ultra`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |

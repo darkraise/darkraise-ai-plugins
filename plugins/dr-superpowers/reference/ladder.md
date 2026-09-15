@@ -268,9 +268,11 @@ Seconds. One constant cannot serve both a `medium` and an `xhigh` run.
 
 ### Codex judge rung
 
-The two Claude-hosted review seats — the risk-3 seat and the final-review
-round — take their model from this block, not from `codex-assignment`. The
-first row is preferred; the last row is the fallback.
+Every Claude-hosted Codex review seat — the task seats, plan-review round 1,
+and the final-review round — takes its model from this block, not from
+`codex-assignment`. The first row is preferred; the last row is the fallback.
+`--tier light` runs the last row directly, for tasks totalling 0 to 3; every
+other seat uses the first row with its fallback.
 
 ```codex-judge
 gpt-6-astra high 1800

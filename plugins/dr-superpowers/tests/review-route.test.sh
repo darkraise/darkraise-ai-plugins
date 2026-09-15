@@ -279,5 +279,21 @@ for f in "$P/skills/subagent-driven-development/SKILL.md" \
 done
 present "inline mode lists four kinds it does not run" "$P/skills/executing-plans/SKILL.md" 'The other four kinds belong to seats this mode does not run'
 
+# --- external-executor and ladder prose ------------------------------------------
+EXEC="$P/reference/external-executor.md"
+LAD="$P/reference/ladder.md"
+present "the lane reference has the task seats section" "$EXEC" '## Codex task review seats'
+absent "the lane reference drops the risk-3 seat section" "$EXEC" '## Risk-3 Codex seat'
+present "planning reads the distilled constraints" "$EXEC" 'Read `docs/superpowers/distilled/constraints.md` first'
+present "a declared lane is ticked without asking" "$EXEC" 'tick it without asking'
+present "an executor task routes to a Claude judge" "$EXEC" 'always routes to a Claude judge'
+absent "the final round no longer cites the risk-3 seat" "$EXEC" 'Unlike the risk-3 seat'
+present "the ladder names the light tier" "$LAD" '`--tier light` runs the last row directly'
+present "planning runs the gate before the roster" "$EXEC" 'Unless it prints `lane=true`, stop here:'
+present "dispatch runs the gate before guarding the roster" "$EXEC" '1. **Gate, then guard the roster.**'
+present "a failed run refreshes the gate" "$EXEC" 'bash "<plugin-root>/scripts/codex-gate" --refresh'
+present "the final Codex round needs the review surface" "$EXEC" 'Unless it prints `review=true`, skip the round'
+present "the task seats name the runner's gate" "$EXEC" 'codex is off for this session (<reason>)'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
