@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["executability", "coherence", "coverage", "assumptions", "findings"],
+  "properties": {
+    "executability": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Executability score, 1 clear failure to 20 clearly met." },
+    "coherence": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Coherence score, 1 clear failure to 20 clearly met." },
+    "coverage": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Coverage score, 1 clear failure to 20 clearly met." },
+    "assumptions": { "type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "description": "Assumptions score, 1 clear failure to 20 clearly met." },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "where", "summary"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["Critical", "Important", "Minor"] },
+          "where": { "type": "string", "description": "Task N, Task N part X, or header." },
+          "summary": { "type": "string", "description": "The issue, why it matters for execution, and the fix." }
+        }
+      }
+    }
+  }
+}

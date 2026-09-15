@@ -82,5 +82,27 @@ if [ -f "$PR" ]; then
   check "plan-review exposes the four contracted ids" "$got" "assumptions coherence coverage executability"
 fi
 
+# The Codex plan-review seat returns plan-review.md's criteria through a JSON
+# schema. Its integer fields must be exactly that file's ids, or round 1 scores
+# a different rubric from the judges that run rounds 2 and 3.
+PSCHEMA="$CRITERIA/codex-plan-review-schema.json"
+check "codex-plan-review-schema.json exists" "$([ -f "$PSCHEMA" ] && echo yes || echo no)" "yes"
+if [ -f "$PSCHEMA" ] && [ -f "$PR" ]; then
+  want=$(grep -o '{#[a-z0-9_]\{1,\}}' "$PR" | tr -d '{#}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+  got=$(jq -r '.properties | to_entries[] | select(.value.type=="integer") | .key' "$PSCHEMA" \
+    | tr -d '\r' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+  check "codex plan-review schema scores exactly the plan-review ids" "$got" "$want"
+  check "codex plan-review schema requires every property" \
+    "$(jq -r '((.properties|keys)-(.required))|join(",")' "$PSCHEMA" | tr -d '\r')" ""
+  check "codex plan-review schema is strict at the top" \
+    "$(jq -r '.additionalProperties == false' "$PSCHEMA" | tr -d '\r')" "true"
+  check "codex plan-review findings items are strict" \
+    "$(jq -r '.properties.findings.items | (.additionalProperties == false) and ((((.properties|keys)-(.required))|length) == 0)' "$PSCHEMA" | tr -d '\r')" "true"
+  check "codex plan-review findings carry severity, summary and where" \
+    "$(jq -r '.properties.findings.items.properties | keys | join(",")' "$PSCHEMA" | tr -d '\r')" "severity,summary,where"
+  check "codex plan-review scores range 1 to 20" \
+    "$(jq -r '[.properties[] | select(.type=="integer") | (.enum | length == 20 and min == 1 and max == 20)] | all' "$PSCHEMA" | tr -d '\r')" "true"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
