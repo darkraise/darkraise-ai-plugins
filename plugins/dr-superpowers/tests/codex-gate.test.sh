@@ -80,5 +80,40 @@ out=$(cd "$TMP/work" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_PROJECT_DIR="$TMP/projec
 check "project-local settings override the user setting" "$out" "codex-plugin off reason=plugin-not-enabled"
 rm -rf "$TMP/project"
 
+SESS="$TMP/sessions"
+# The trust cases edit a copy: the shipped policy must never change under a
+# test, even one that dies halfway. The copy starts untrusted whatever the
+# shipped file records, so a gate that passes later changes no case below.
+POLICY="$TMP/policy.json"
+jq '.trust = {"calibration":"pending","smoke":"pending"}' "$P/reference/codex-plugin.json" > "$POLICY"
+gate() { # gate <mode> [args...]; sets out and rc
+  local mode="$1"; shift
+  out=$(cd "$TMP/work" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_PROJECT_DIR= DR_CODEX_SESSION_DIR="$SESS" DR_CODEX_POLICY="$POLICY" \
+    CLAUDE_CODE_SESSION_ID="${SID-s1}" GATE_STUB_MODE="$mode" GATE_STUB_LOG="$TMP/log" \
+    DR_CODEX_GATE_TIMEOUT_MS="${GATE_MS:-20000}" bash "$P/scripts/codex-gate" "$@" 2>"$TMP/err"); rc=$?
+}
+field() { jq -r ".$1 | tostring" "$SESS/s1.json" 2>/dev/null | tr -d '\r'; }
+fresh() { rm -rf "$SESS" "$TMP/log"; }
+
+# --- the session readers -----------------------------------------------------
+. "$P/scripts/lib/codex-session.sh"
+export DR_CODEX_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID=s1
+on() { # on <name> <surface> <want: on|off>
+  if codex_session_on "$2"; then check "$1" on "$3"; else check "$1" off "$3"; fi
+}
+fresh; mkdir -p "$SESS"
+on "no file is off" review off
+printf '{"session_id":"s1","usable":true,"review":true,"lane":false}\n' > "$SESS/s1.json"
+on "an open review surface is on" review on
+on "a closed lane is off" lane off
+codex_session_mark_off quota
+check "mark_off closes both surfaces" "$(field usable)/$(field review)/$(field lane)/$(field reason)" "false/false/false/quota"
+on "a marked-off session is off" review off
+printf 'not json' > "$SESS/s1.json"
+on "a torn file is off" review off
+CLAUDE_CODE_SESSION_ID=""
+printf '{"session_id":"","usable":true,"review":true,"lane":true}\n' > "$SESS/.json"
+on "no session id is off whatever is on disk" review off
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
