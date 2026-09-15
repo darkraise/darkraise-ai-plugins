@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The fleet is nineteen agents in three classes. Seven execution implementers
+# The fleet is twenty agents in three classes. Seven execution implementers
 # pin one model/effort pairing each and are everything the assignment table and
 # the escalation ladder can reach. Nine reserve implementers - the xhigh and max
 # efforts, and every Fable tier - are never an output of scoring: they are
 # reachable only by a human override, or by the reserve chain after a split has
-# already been spent. Three role agents - two judges and one scout - are
+# already been spent. Four role agents - three judges and one scout - are
 # read-only by registry: their tools list omits Edit, Write, NotebookEdit, and
 # Agent, so "reviewers do not mutate the tree" and "reviewers do not spawn
 # subagents" are enforced rather than requested.
@@ -33,13 +33,13 @@ fm() {
 }
 
 RESERVE="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-opus-max impl-opus-xhigh impl-sonnet-max impl-sonnet-xhigh"
-EXPECTED="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-haiku impl-opus-high impl-opus-low impl-opus-max impl-opus-medium impl-opus-xhigh impl-sonnet-high impl-sonnet-low impl-sonnet-max impl-sonnet-medium impl-sonnet-xhigh judge-fable judge-opus scout-sonnet"
+EXPECTED="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-haiku impl-opus-high impl-opus-low impl-opus-max impl-opus-medium impl-opus-xhigh impl-sonnet-high impl-sonnet-low impl-sonnet-max impl-sonnet-medium impl-sonnet-xhigh judge-fable judge-opus judge-sonnet-high scout-sonnet"
 ROLE_TOOLS="Read, Grep, Glob, WebFetch"
 
 is_reserve() { case " $RESERVE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 actual=$(cd "$AGENTS" 2>/dev/null && ls *.md 2>/dev/null | sed 's/\.md$//' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-check "fleet contains exactly the 19 expected agents" "$actual" "$EXPECTED"
+check "fleet contains exactly the 20 expected agents" "$actual" "$EXPECTED"
 
 for f in "$AGENTS"/*.md; do
   [ -e "$f" ] || continue
