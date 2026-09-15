@@ -25,6 +25,18 @@ absent() { # absent <name> <file> <needle>
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
+# Routing reads this session's Codex gate file. A fixed session id and a
+# temporary directory keep the machine's real session state out of every case.
+export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=review-route-test
+review_surface() { # review_surface <true|false|absent>
+  rm -rf "$DR_CODEX_SESSION_DIR"
+  [ "$1" != absent ] || return 0
+  mkdir -p "$DR_CODEX_SESSION_DIR"
+  printf '{"session_id":"review-route-test","usable":true,"review":%s,"lane":false}\n' "$1" \
+    > "$DR_CODEX_SESSION_DIR/review-route-test.json"
+}
+review_surface true
+
 # Fixture lines carry a leading | so a plan that quotes this suite still lints:
 # plan-lint's part and Evaluation scans do not skip fenced blocks.
 sed 's/^|//' > "$TMP/plan.md" <<'EOF'
@@ -148,6 +160,48 @@ route --plan-round 2
 check "plan round 2 is Opus" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=round"
 route --plan-round 3
 check "plan round 3 is Opus" "$out" "review-seat plan-round=3 primary=dr-superpowers:judge-opus fallback=- reason=round"
+
+# --- the review surface off ------------------------------------------------------
+# While the session's gate has not opened the review surface, no route names a
+# Codex seat, and the Claude seat it names has nothing to fall back to.
+review_surface false
+route --task 1
+check "codex off: total 1 goes to Sonnet alone" "$out" "review-seat task=1 primary=dr-superpowers:judge-sonnet-high fallback=- reason=codex-off"
+check "codex off: a routed task still exits 0" "$rc" "0"
+route --task 2
+check "codex off: total 3 goes to Opus alone" "$out" "review-seat task=2 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
+route --task 3
+check "codex off: total 4 goes to Opus alone" "$out" "review-seat task=3 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
+route --task 10
+check "codex off: total 5 goes to Fable alone" "$out" "review-seat task=10 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+route --task 4
+check "codex off: risk 2 at total 4 goes to Fable, not its band" "$out" "review-seat task=4 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+route --task 7
+check "codex off: a split task routes on its riskiest part" "$out" "review-seat task=7 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+route --task 1 2
+check "codex off: a batch takes its highest total" "$out" "review-seat task=1,2 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
+route --task 5
+check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 primary=dr-superpowers:judge-opus fallback=- reason=executor"
+route --task 6
+check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dr-superpowers:judge-fable fallback=- reason=executor"
+route --plan-round 1
+check "codex off: plan round 1 goes to Fable alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+route --plan-round 2
+check "codex off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=round"
+review_surface absent
+route --task 3
+check "no session file is off" "$out" "review-seat task=3 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
+route --plan-round 1
+check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+review_surface true
+printf 'not json' > "$DR_CODEX_SESSION_DIR/review-route-test.json"
+route --task 1
+check "a torn session file is off" "$out" "review-seat task=1 primary=dr-superpowers:judge-sonnet-high fallback=- reason=codex-off"
+review_surface true
+CLAUDE_CODE_SESSION_ID="" route --task 1
+check "no session id is off, whatever is on disk" "$out" "review-seat task=1 primary=dr-superpowers:judge-sonnet-high fallback=- reason=codex-off"
+route --task 1
+check "an open review surface routes to Codex again" "$out" "review-seat task=1 primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 
 route --task 9
 check "an unparseable Evaluation exits 2" "$rc" "2"

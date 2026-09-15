@@ -4,9 +4,11 @@
 #
 # The routing table lives here rather than in prose for the reason
 # run-codex-review.sh gives: a rule a seat must follow is only reachable when a
-# test can reach it. This script never probes Codex. run-codex-review.sh checks
-# availability on every run, and its status line decides whether the fallback
-# is used.
+# test can reach it. This script never probes Codex: it reads the file
+# scripts/codex-gate keeps for this session, and while that file does not open
+# the review surface it names Claude seats only, with reason=codex-off. While
+# the surface is open, run-codex-review.sh still checks availability on every
+# run, and its status line decides whether the fallback is used.
 #
 # Usage: review-route PLAN_FILE --task ID [ID ...]
 #        review-route PLAN_FILE --plan-round R
@@ -18,6 +20,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/codex-session.sh"
 
 SONNET=dr-superpowers:judge-sonnet-high
 OPUS=dr-superpowers:judge-opus
@@ -44,8 +47,10 @@ fi
 case "$1" in
   --plan-round)
     [ $# -eq 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
-    if [ "$2" -eq 1 ]; then
+    if [ "$2" -eq 1 ] && codex_session_on review; then
       printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round\n' "$FABLE"
+    elif [ "$2" -eq 1 ]; then
+      printf 'review-seat plan-round=1 primary=%s fallback=- reason=codex-off\n' "$FABLE"
     else
       printf 'review-seat plan-round=%s primary=%s fallback=- reason=round\n' "$2" "$OPUS"
     fi
@@ -90,6 +95,11 @@ if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 2 ]; then
   primary=$FABLE fallback=- reason=executor
 elif [ "$executor" -eq 1 ]; then
   primary=$(band "$max_total") fallback=- reason=executor
+elif ! codex_session_on review; then
+  # Codex is off for this session, so the Codex rows name their Claude seat
+  # directly, and there is nothing left to fall back to. Risk stays with Fable.
+  if [ "$max_risk" -ge 2 ]; then primary=$FABLE; else primary=$(band "$max_total"); fi
+  fallback=- reason=codex-off
 elif [ "$max_risk" -ge 2 ]; then
   primary=codex:heavy+judge-fable fallback=$FABLE reason=risk
 elif [ "$max_total" -le 3 ]; then
