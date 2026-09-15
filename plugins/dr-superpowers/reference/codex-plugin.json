@@ -1,0 +1,5 @@
+{
+  "plugin": "codex@openai-codex",
+  "versions": ["1.0.3"],
+  "trust": { "calibration": "pending", "smoke": "pending" }
+}

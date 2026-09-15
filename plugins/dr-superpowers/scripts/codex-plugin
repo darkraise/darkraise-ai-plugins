@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Locate the official codex plugin for the running Claude Code profile, and say
+# whether this plugin may use it.
+#
+# Every Codex interaction of the session gate goes through that plugin, which
+# owns the codex binary; nothing here names the binary. A plugin that is not
+# enabled in this profile has none of its hooks running and may be pruned from
+# the shared plugin cache, so enablement is checked, not assumed.
+#
+# Usage: codex-plugin
+# Output: codex-plugin ok version=<v> root=<install path, to end of line>
+#         codex-plugin off reason=<plugin-not-enabled|plugin-not-installed|plugin-missing|plugin-version:<v>>
+# Exit: 0 ok; 1 off; 2 usage error or missing jq.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# Tests point this at a copy; the shipped file is the allowlist and trust record.
+POLICY="${DR_CODEX_POLICY:-$HERE/../reference/codex-plugin.json}"
+
+die() { printf 'codex-plugin: %s\n' "$1" >&2; exit 2; }
+off() { printf 'codex-plugin off reason=%s\n' "$1"; exit 1; }
+
+[ $# -eq 0 ] || die "usage: codex-plugin"
+command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
+[ -r "$POLICY" ] || die "policy file not found: $POLICY"
+
+id=$(jq -r '.plugin' "$POLICY" | tr -d '\r')
+config="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
+# User, then project, then local settings; the last file that defines the key
+# wins. Scripts run from the plugin root, which is not the project, so project
+# settings are read only when Claude Code names the project directory.
+enabled=""
+for f in "$config/settings.json" \
+         ${CLAUDE_PROJECT_DIR:+"$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json"}; do
+  [ -r "$f" ] || continue
+  v=$(jq -r --arg id "$id" \
+    '.enabledPlugins | if type == "object" and has($id) then .[$id] | tostring else empty end' \
+    "$f" 2>/dev/null | tr -d '\r')
+  [ -z "$v" ] || enabled=$v
+done
+[ "$enabled" = true ] || off plugin-not-enabled
+
+# Registry format 2 holds an array of installs per plugin; the user-scope
+# install is the one a profile-wide enablement refers to.
+entry=$(jq -c --arg id "$id" \
+  '.plugins[$id] | if type == "array" then ((map(select(.scope == "user")) + .) | .[0]) else . end // empty' \
+  "$config/plugins/installed_plugins.json" 2>/dev/null | tr -d '\r')
+[ -n "$entry" ] && [ "$entry" != null ] || off plugin-not-installed
+
+# installPath is a Windows path on Windows; forward slashes serve bash and node.
+root=$(jq -r '.installPath // empty' <<<"$entry" | tr -d '\r' | tr '\\' '/')
+version=$(jq -r '.version // empty' <<<"$entry" | tr -d '\r')
+[ -n "$root" ] && [ -f "$root/scripts/lib/app-server.mjs" ] || off plugin-missing
+[ "$(jq -r '.version // empty' "$root/.claude-plugin/plugin.json" 2>/dev/null | tr -d '\r')" = "$version" ] \
+  || off plugin-missing
+
+jq -e --arg v "$version" '.versions | index($v) != null' "$POLICY" >/dev/null 2>&1 \
+  || off "plugin-version:$version"
+
+printf 'codex-plugin ok version=%s root=%s\n' "$version" "$root"
