@@ -13,3 +13,9 @@ Run: 2026-09-16, not run to completion — `codex-gate usable=false reason=plugi
 | small-model | 5e96f14 | - | - | 17 / 17 / 16 / 17 | - | PENDING — codex unusable: plugin-not-enabled |
 
 Gate: PENDING — codex unusable: plugin-not-enabled. The review surface stays off: `trust.calibration` in `plugins/dr-superpowers/reference/codex-plugin.json` stays `pending`.
+
+## Smoke test
+
+Run: 2026-09-16, not run to completion — `codex-gate usable=false reason=plugin-not-enabled review=false lane=false resets_at=- source=probe`.
+
+Gate: PENDING — codex unusable: plugin-not-enabled. The lane surface stays off: `trust.smoke` in `plugins/dr-superpowers/reference/codex-plugin.json` stays `pending`.
