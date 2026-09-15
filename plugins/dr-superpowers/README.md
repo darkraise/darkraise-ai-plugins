@@ -49,13 +49,14 @@ read time per [legacy-names.md](reference/legacy-names.md).
 
 ## What you get
 
-**Nineteen agents in three classes.** Seven execution implementers - Sonnet 5
+**Twenty agents in three classes.** Seven execution implementers - Sonnet 5
 and Opus 5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything a score can reach. Nine reserve implementers - the `xhigh` and `max`
 efforts, and every Fable 5 tier - are reachable only by a human override, or by
 a task that has already been split once and still exhausted `impl-opus-high`.
-Three read-only role agents - `judge-fable`, its `judge-opus` fallback, and
-`scout-sonnet` - whose `tools:` frontmatter omits `Edit`, `Write`, and `Agent`,
+Four read-only role agents - the judges `judge-fable`, `judge-opus` and
+`judge-sonnet-high`, and `scout-sonnet` - whose `tools:` frontmatter omits
+`Edit`, `Write`, and `Agent`,
 so a reviewer that cannot modify the tree or spawn subagents is a fact about the
 registry rather than a request in a prompt.
 
@@ -85,9 +86,9 @@ every evaluation, and 2 to 4 criteria that each say where to look, what scores
 high, what scores low, and what to ignore. Task reviews score four criteria -
 spec, scope, verification, quality - 1 to 20 each, alongside the spec and
 quality verdicts and never replacing them, because the fix loop keys on those
-verdicts. Risk-3 tasks are scored three times
-and averaged, and a spread above 6 points sends the diff to the controller
-instead of to the mean.
+verdicts. Tasks at risk 2 or above are reviewed by Codex `gpt-6-astra` and then
+by `judge-fable`, which rules CONFIRMED or REJECTED on every Codex finding in the
+same pass.
 
 **Best-of-3 approach selection.** `selecting-approaches` gates an open approach
 decision to inline, one advisory pass, or three scouts ranked by a judge in a
@@ -173,20 +174,33 @@ refused. `tests/run-codex-task.test.sh` now asserts the ordering on both the
 composed and the spawned argv, but a stub cannot notice a flag the real CLI stops
 accepting; only a re-probe can.
 
-**Cross-family review.** On a risk-3 task one of the three judges is Codex, and
-the final whole-branch review gains a Codex round whose findings
-are deduped with the Claude reviewer's and then verified by `judge-fable` - or
-`judge-opus` when Fable is unavailable, the same fallback every judge seat uses. Risk-3
-tasks are excluded from the executor lane, so the risk-3 judge seat never
-reviews Codex's own work. The final whole-branch round is different: the branch
-contains whatever the executor lane produced, so that round is not
-self-review-free, which is why every finding goes through a third seat.
-Both review seats run through `scripts/run-codex-review.sh`, which judges at
-`gpt-6-astra` — the rung the native Codex policy already floors judges at —
-and falls back to `gpt-5.6-sol` whenever the local model catalog does not
-advertise Astra. Selection, the run bound and the four outcomes live in that
-script rather than in prose, so a refused model is a recorded substitution
-instead of a silently missing seat.
+**Cross-family review.** Codex is the default task reviewer: `gpt-5.6-sol` for
+tasks totalling 0 to 3, `gpt-6-astra` for 4 to 6, and Astra followed by
+`judge-fable` at risk 2 or above. A task the executor lane implemented is always
+reviewed by a Claude judge, so Codex never reviews its own work there; when a
+Codex seat produces nothing, `judge-sonnet-high`, `judge-opus` or `judge-fable`
+takes it by score band. Plan review takes Astra for round 1 and `judge-opus` for
+delta rounds 2 and 3. The final whole-branch review gains a Codex round whose
+findings are deduped with the Claude reviewer's and then verified by
+`judge-fable` - or `judge-opus` when Fable is unavailable. That round is not
+self-review-free, because the branch contains whatever the executor lane
+produced, which is why every finding goes through a third seat.
+`scripts/review-route` prints the review seat for a task or plan round, and
+every Codex seat runs through `scripts/run-codex-review.sh`, which checks
+availability on each run and falls back to `gpt-5.6-sol` whenever the local
+model catalog does not advertise Astra. Selection, the run bound and the four
+outcomes live in those scripts rather than in prose, so a refused model is a
+recorded substitution instead of a silently missing seat.
+
+**The Codex session gate.** Before any Codex use, `scripts/codex-gate` checks the official codex plugin
+once per session - enabled, installed at an allowed version, logged in, and
+within quota - through the plugin's own client, and caches the answer per
+session. When Codex is unusable, every Codex seat, the final-review Codex round,
+the executor lane and `plan-lint`'s lane probe are skipped for the session and
+Claude seats take over; a quota error mid-run turns Codex off the same way. A
+usable Codex is still used only on a surface whose shipping gate passed,
+recorded per surface in `reference/codex-plugin.json`: the calibration replay
+opens the review seats, and the executor-lane smoke test opens the lane.
 
 **Project state.** `docs/superpowers/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
@@ -411,7 +425,7 @@ validates raw scores and history before returning a native routing decision.
 prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
 stops and the Compact Instructions block, and `reference/final-review.md` holds
 the whole-branch review both execution skills end at.
-`scripts/run-codex-review.sh` runs one Codex review seat for both of them: it
+`scripts/run-codex-review.sh` runs every Codex review seat: it
 selects the judge rung from `codex-judge`, bounds the run, and classifies the
 outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
 
@@ -420,7 +434,9 @@ outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
 settles a disagreement between them.
 
 `criteria/` holds the verifier criteria, including `plan-review.md` for plan
-review and `codex-review-schema.json` for the risk-3 Codex seat; `criteria/TEMPLATE.md` documents the format.
+review, `codex-review-schema.json` for the Codex task seats, and
+`codex-plan-review-schema.json` for the Codex plan-review round;
+`criteria/TEMPLATE.md` documents the format.
 `tests/criteria.test.sh` validates every file in that directory.
 
 `scripts/` holds the external executor lane:

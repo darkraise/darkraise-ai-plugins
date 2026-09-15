@@ -332,6 +332,32 @@ reasoning effort, imposes no deadline, does not background, returns no job id to
 cancel with, and leaves a detached broker daemon its own session hook owns.
 Details: `docs/superpowers/specs/2026-09-14-dr-superpowers-judge-seats-design.md`.
 
+**Amendment 2026-09-15 (sub-project 8 spec).** The decomposition gains an eighth
+sub-project, "Review routing", after Codex judge seats. Per-task review moves to
+Codex by default — `gpt-5.6-sol / high` for totals 0-3, `gpt-6-astra / high` for
+4-6 — with Claude judges as named fallbacks (`judge-sonnet-high`, new;
+`judge-opus`; `judge-fable`) on a Codex seat that produced nothing. A task
+carrying an `**Executor:**` line is always reviewed by Claude, so Codex never
+reviews its own work. Risk >= 2 is reviewed by Astra and then by Fable, which
+rules on Astra's findings in the same pass; this replaces the three-seat risk-3
+mean, and the `risk3-spread` ruling kind is retired. Plan review takes Codex
+Astra for round 1 and `judge-opus` for delta rounds 2 and 3; rounds are not cut.
+A new `scripts/review-route` holds the routing table; `run-codex-review.sh`
+gains `--kind task|plan` and `--tier light|heavy`; `plan-lint` gains a lazy lane
+probe with `--no-probe`. Shipping is gated on a calibration replay of four
+recorded plan reviews and one real executor-lane smoke run.
+A session gate (`scripts/codex-gate`) reads the official codex plugin's install
+state and account rate limits through the plugin's own client, overturning the
+2026-09-14 ruling that the plugin is not the substrate; when Codex is unusable,
+every Codex seat, the lane and the lane probe are skipped for the session and
+Claude seats take over; a usable Codex is still used only on a surface whose
+shipping gate passed - calibration for the review seats, the smoke test for the
+lane. The shipping gates run only when Codex is usable and record `PENDING`
+otherwise.
+A ninth sub-project, "Codex through the plugin", moves `run-codex-review.sh`,
+`run-codex-task.sh` and the executor roster onto the plugin's client. Details:
+`docs/superpowers/specs/2026-09-15-dr-superpowers-review-routing-design.md` (§15).
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`
