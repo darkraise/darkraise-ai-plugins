@@ -80,6 +80,40 @@ out=$(cd "$TMP/work" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_PROJECT_DIR="$TMP/projec
 check "project-local settings override the user setting" "$out" "codex-plugin off reason=plugin-not-enabled"
 rm -rf "$TMP/project"
 
+# --- the gate ----------------------------------------------------------------
+# The stub client's behaviour is chosen per case by GATE_STUB_MODE; it records
+# the connect options so direct mode is asserted, and every close() call.
+cat > "$PLUG/scripts/lib/app-server.mjs" <<'STUB'
+import fs from "node:fs";
+const mode = process.env.GATE_STUB_MODE;
+const log = (line) => fs.appendFileSync(process.env.GATE_STUB_LOG, `${line}\n`);
+export class CodexAppServerClient {
+  static async connect(cwd, options) {
+    log(`connect disableBroker=${options?.disableBroker === true}`);
+    if (mode === "connect-throws") throw new Error("spawn failed");
+    if (mode === "hang") await new Promise(() => setInterval(() => {}, 1000));
+    return new CodexAppServerClient();
+  }
+  async request(method) {
+    log(`request ${method}`);
+    if (method === "account/read") {
+      if (mode === "logged-out") return { account: null, requiresOpenaiAuth: true };
+      return { account: { type: "chatgpt", email: "a@b.c" }, requiresOpenaiAuth: true };
+    }
+    if (method === "account/rateLimits/read") {
+      if (mode === "method-missing") throw new Error("unknown variant `account/rateLimits/read`");
+      if (mode === "rpc-error") throw new Error("internal error");
+      if (mode === "shapeless") return { rateLimits: {} };
+      if (mode === "quota") return { ordinaryUsageAllowed: false, rateLimits: { primary: { usedPercent: 100, resetsAt: 1789898607 } } };
+      if (mode === "full") return { ordinaryUsageAllowed: true, rateLimits: { primary: { usedPercent: 100, resetsAt: 1789898607 } } };
+      return { ordinaryUsageAllowed: true, rateLimits: { primary: { usedPercent: 12, resetsAt: 1789898607 } } };
+    }
+    throw new Error(`unexpected ${method}`);
+  }
+  async close() { log("close"); }
+}
+STUB
+
 SESS="$TMP/sessions"
 # The trust cases edit a copy: the shipped policy must never change under a
 # test, even one that dies halfway. The copy starts untrusted whatever the
@@ -94,6 +128,101 @@ gate() { # gate <mode> [args...]; sets out and rc
 }
 field() { jq -r ".$1 | tostring" "$SESS/s1.json" 2>/dev/null | tr -d '\r'; }
 fresh() { rm -rf "$SESS" "$TMP/log"; }
+
+check "codex-gate exists" "$([ -f "$P/scripts/codex-gate" ] && echo yes || echo no)" "yes"
+
+fresh; gate usable
+check "a usable but untrusted plugin opens no surface" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+check "the gate exits 0 when it answers" "$rc" "0"
+check "the probe connects in direct mode" "$(grep -c 'connect disableBroker=true' "$TMP/log")" "1"
+check "the probe reads the login, then the limits" \
+  "$(grep '^request' "$TMP/log" | tr '\n' ' ')" "request account/read request account/rateLimits/read "
+check "the probe closes its client" "$(grep -c '^close$' "$TMP/log")" "1"
+check "the session file records the session" "$(field session_id)" "s1"
+check "the session file records the plugin version" "$(field plugin_version)" "1.0.3"
+gate usable
+check "a second call answers from the cache" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=cache"
+check "a cached answer starts no client" "$(grep -c connect "$TMP/log")" "1"
+
+# Trust is read on every call, cache or probe: flipping it must not wait for a
+# new session.
+cp "$POLICY" "$TMP/policy.bak"
+jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+gate usable
+check "both gates passed opens both surfaces" "$out" \
+  "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache"
+jq '.trust = {"calibration":"pass","smoke":"pending"}' "$TMP/policy.bak" > "$POLICY"
+gate usable
+check "calibration alone opens only the review seats" "$out" \
+  "codex-gate usable=true reason=ok review=true lane=false resets_at=- source=cache"
+check "the rewritten file carries the review surface" "$(field review)/$(field lane)" "true/false"
+jq '.trust = {"calibration":"pending","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+gate usable
+check "the smoke test alone opens only the lane" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=true resets_at=- source=cache"
+jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+fresh; gate quota
+check "trust never opens a surface on an unusable Codex" "$out" \
+  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+cp "$TMP/policy.bak" "$POLICY"
+
+fresh; gate quota
+check "an exhausted quota is off with its reset time" "$out" \
+  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+fresh; gate full
+check "usage at 100 percent is quota even when ordinary usage is allowed" "$out" \
+  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+fresh; gate logged-out
+check "a logged-out plugin is off" "$out" \
+  "codex-gate usable=false reason=logged-out review=false lane=false resets_at=- source=probe"
+fresh; gate method-missing
+check "an app-server without the limits method is off" "$out" \
+  "codex-gate usable=false reason=method-missing review=false lane=false resets_at=- source=probe"
+fresh; gate rpc-error
+check "any other limits error is off" "$out" \
+  "codex-gate usable=false reason=plugin-api review=false lane=false resets_at=- source=probe"
+fresh; gate shapeless
+check "a limits reply without the signal is off" "$out" \
+  "codex-gate usable=false reason=plugin-api review=false lane=false resets_at=- source=probe"
+fresh; gate connect-throws
+check "a connect that throws is off" "$out" \
+  "codex-gate usable=false reason=plugin-api review=false lane=false resets_at=- source=probe"
+fresh; GATE_MS=1500 gate hang
+check "a hung connect times out" "$out" \
+  "codex-gate usable=false reason=timeout review=false lane=false resets_at=- source=probe"
+
+# The quota answer is cached only until its reset time.
+fresh; gate quota
+jq '.resets_at_epoch = 1577836800' "$SESS/s1.json" > "$TMP/s.json" && mv "$TMP/s.json" "$SESS/s1.json"
+gate usable
+check "a quota past its reset time is probed again" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+gate quota --refresh
+check "--refresh probes even with a cached answer" "$out" \
+  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+
+# Another session's file is never this session's answer.
+fresh; gate quota
+SID=s2 gate usable
+check "a different session probes for itself" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+
+# Without a session id nothing can be cached or read back, so nothing is written.
+fresh; SID= gate usable
+check "no session id still answers" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+check "no session id writes no file" "$(ls "$SESS" 2>/dev/null | wc -l | tr -d ' ')" "0"
+
+fresh; enable false; gate usable
+check "a disabled plugin never starts a client" "$out" \
+  "codex-gate usable=false reason=plugin-not-enabled review=false lane=false resets_at=- source=probe"
+check "a disabled plugin writes no client log" "$([ -f "$TMP/log" ] && echo yes || echo no)" "no"
+enable true
+
+gate usable --bogus
+check "an unknown flag is a usage error" "$rc" "2"
 
 # --- the session readers -----------------------------------------------------
 . "$P/scripts/lib/codex-session.sh"
