@@ -369,8 +369,9 @@ Appended to §6 of the program design, after the 2026-09-14 sub-project 7 amendm
 > plan reviews and one real executor-lane smoke run. A session gate (`scripts/codex-gate`) reads
 > the official codex plugin's install state and account rate limits through the plugin's own
 > client, overturning the 2026-09-14 ruling that the plugin is not the substrate; when Codex is
-> unusable or not yet trusted by both gates, every Codex seat, the lane and the lane probe are
-> skipped for the session and Claude seats take over. The shipping gates run only when Codex is
+> unusable, every Codex seat, the lane and the lane probe are skipped for the session and Claude
+> seats take over; a usable Codex is still used only on a surface whose shipping gate passed -
+> calibration for the review seats, the smoke test for the lane. The shipping gates run only when Codex is
 > usable and record `PENDING` otherwise. A ninth sub-project, "Codex through the plugin", moves
 > `run-codex-review.sh`, `run-codex-task.sh` and the executor roster onto the plugin's client.
 > Details: `docs/superpowers/specs/2026-09-15-dr-superpowers-review-routing-design.md` (§15).
@@ -380,17 +381,18 @@ Appended to §6 of the program design, after the 2026-09-14 sub-project 7 amendm
 Execution stopped at the calibration gate: all four replays returned `status=FAILED` on
 `You've hit your usage limit ... try again at Sep 20th, 2026 5:03 PM`. The owner then ruled that
 a Codex outage must degrade the process, not block it, and that Codex in Claude Code is reached
-only through the official codex plugin. A `judge-fable` design review (verdict REVISE) shaped
-the rulings below; the owner accepted every recommendation. This section overrides §1-§14
-wherever they disagree.
+only through the official codex plugin. Two `judge-fable` reviews shaped this section - one of
+the design (verdict REVISE, every recommendation accepted by the owner) and one of its first
+draft (APPROVE-WITH-CHANGES, folded in here). This section overrides §1-§14 wherever they
+disagree.
 
 ### 15.1 Owner rulings (binding)
 
 10. **Codex out of quota never fails a task.** The seat falls back to its Claude seat, and Codex
     is skipped for the rest of the session.
 11. **Availability is confirmed before Codex is first needed.** If Codex is unavailable for any
-    reason, the process ignores everything Codex-related: Codex review seats, the executor lane,
-    and `plan-lint`'s lane probe.
+    reason, the process ignores everything Codex-related: the Codex review seats, the final-review
+    Codex round, the executor lane, and `plan-lint`'s lane probe.
 12. **The codex plugin is the substrate.** This overturns the program design's 2026-09-14 ruling
     that "the official OpenAI `codex` plugin is deliberately not adopted as the substrate". What
     changed is the owner's requirement. Its objections - no caller schema or prompt, no effort,
@@ -403,16 +405,19 @@ wherever they disagree.
     that boundary. The existing runners (`run-codex-review.sh`, `run-codex-task.sh`,
     `detect-executors.sh`) still call the binary; moving them onto the plugin is sub-project 9
     (§15.8).
-14. **Codex is off by default until it is trusted.** Codex seats and the lane are used only when
-    the gate reports the plugin usable *and* both shipping gates of §11 have passed. Until then
-    the gate reports `available=false reason=untrusted`.
+14. **Codex is off by default until it is trusted, per surface.** The owner's decision was "off
+    until calibration passes"; each shipping gate of §11 vouches for one surface. Calibration
+    replays plan reviews, so it opens the **review** surface: the task seats, plan-review round 1
+    and the final-review Codex round. The smoke test runs the executor wrapper, so it opens the
+    **lane** surface: `**Executor:**` dispatch and `plan-lint`'s lane probe. A usable Codex on an
+    untrusted surface is off for that surface.
 15. **The gate runs lazily**, at the first Codex need in a session, and answers from a per-session
     cache afterwards. It is not a SessionStart hook: a hook would start a Codex app-server on
     every session, Codex-using or not.
 16. **The session key** is the Claude Code session id plus the quota reset time (§15.3).
 17. **The availability signal** is `ordinaryUsageAllowed === true` and
-    `rateLimits.primary.usedPercent < 100`. Credits and the per-model entries in
-    `rateLimitsByLimitId` are ignored.
+    `rateLimits.primary.usedPercent < 100`, a missing `primary` or `usedPercent` counting as 0.
+    Credits and the per-model entries in `rateLimitsByLimitId` are ignored.
 18. **The model catalog** stays a read of `models_cache.json` by `detect-executors.sh` for now;
     sub-project 9 settles it.
 
@@ -426,23 +431,34 @@ Prints one line; exit 0 when the plugin is usable, 1 when it is not, 2 on a usag
 missing `jq`:
 
 ```
-codex-plugin ok root=<install path> version=<v>
+codex-plugin ok version=<v> root=<install path, to the end of the line>
 codex-plugin off reason=<plugin-not-enabled|plugin-not-installed|plugin-missing|plugin-version:<v>>
 ```
+
+`root` comes last so an install path with spaces still parses.
 
 - **Config dir:** `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`. Verified 2026-09-15: this session's Bash
   environment carries `CLAUDE_CONFIG_DIR=C:/Users/quang/.claude-alt`.
 - **Enabled:** `enabledPlugins["codex@openai-codex"]` is `true`, taking the last value defined in
-  `<config>/settings.json`, then `<repo>/.claude/settings.json`, then
-  `<repo>/.claude/settings.local.json` - user, project, local precedence. Not `true` =>
-  `plugin-not-enabled`. Verified 2026-09-15: the `.claude-alt` profile registers the
-  `openai-codex` marketplace but does not enable the plugin; the owner enables it.
-- **Installed:** `<config>/plugins/installed_plugins.json` has a `plugins["codex@openai-codex"]`
-  entry, giving `installPath` and `version`; none => `plugin-not-installed`. The install path must
-  hold `.claude-plugin/plugin.json` with the same `version`, and `scripts/lib/app-server.mjs`;
+  `<config>/settings.json`, then `$CLAUDE_PROJECT_DIR/.claude/settings.json`, then
+  `$CLAUDE_PROJECT_DIR/.claude/settings.local.json` - user, project, local precedence. Project
+  files are read only when `CLAUDE_PROJECT_DIR` is set, because these scripts run from the plugin
+  root, which for an installed plugin is not the project. A key that no file defines is not
+  enabled => `plugin-not-enabled`. Verified 2026-09-15: the `.claude-alt` profile registers the
+  `openai-codex` marketplace but does not enable the plugin, and the cache directory both
+  profiles record carries an `.orphaned_at` marker; the owner enables the plugin in `.claude-alt`,
+  and a pruned cache surfaces as `plugin-missing`.
+- **Installed:** `<config>/plugins/installed_plugins.json` is registry format 2, where
+  `plugins["codex@openai-codex"]` is an array of installs. The gate takes the element with
+  `scope: "user"`, else the first; none => `plugin-not-installed`. Its `installPath` (backslashes
+  turned to forward slashes, which both bash and node accept) must hold
+  `.claude-plugin/plugin.json` with the element's `version`, and `scripts/lib/app-server.mjs`;
   else `plugin-missing`.
-- **Allowlist:** the version must appear in `reference/codex-plugin.json` `versions`; else
-  `plugin-version:<v>`. The file ships with `["1.0.3"]`.
+- **Allowlist:** the version must appear in the policy file's `versions`; else
+  `plugin-version:<v>`.
+- **Policy file:** `${DR_CODEX_POLICY:-<plugin>/reference/codex-plugin.json}`, shipped as
+  `{"plugin": "codex@openai-codex", "versions": ["1.0.3"], "trust": {"calibration": "pending",
+  "smoke": "pending"}}`. The override is a test seam, read by `codex-plugin` and `codex-gate`.
 
 ### 15.3 `scripts/codex-gate` - the session gate
 
@@ -450,104 +466,132 @@ codex-plugin off reason=<plugin-not-enabled|plugin-not-installed|plugin-missing|
 codex-gate [--refresh]
 ```
 
-One line on stdout, exit 0 whatever the answer; exit 2 on a usage error or a missing `node` or
-`jq`:
+One line on stdout, exit 0 whatever the answer; exit 2 on a usage error or a missing `jq` or
+`node`:
 
 ```
-codex-gate available=<true|false> usable=<true|false> reason=<r> resets_at=<iso|-> source=<probe|cache>
+codex-gate usable=<bool> reason=<r> review=<bool> lane=<bool> resets_at=<iso|-> source=<probe|cache>
 ```
 
-**Session id:** `$CLAUDE_CODE_SESSION_ID` (verified present in this session's Bash environment);
-else none. With no session id the gate probes on every call and consumers treat Codex as off.
+`reason` is `ok` when usable, else the probe's failure. `review=false` beside `usable=true` means
+the calibration gate has not passed; `lane=false` beside it, the smoke test.
 
-**Session file:** `${DR_CODEX_SESSION_FILE:-<primary checkout>/.superpowers/codex-session.json}`,
-where the primary checkout is the one `git rev-parse --git-common-dir` belongs to, so linked
-worktrees share it. Fields: `session_id`, `available`, `usable`, `trusted`, `reason`,
-`checked_at`, `resets_at` (ISO or null), `plugin_version`.
+**Session id:** `$CLAUDE_CODE_SESSION_ID`, verified present in this session's Bash environment.
+With no id the gate still probes and prints its line, but writes nothing, and every reader treats
+Codex as off.
 
-**Cache.** Without `--refresh`, when a session id exists and equals the file's: a file with
-`usable: true` is reused; a file with `usable: false` is reused while `resets_at` is null or in
-the future. Anything else probes.
+**Session file:** `${DR_CODEX_SESSION_DIR:-$HOME/.claude/dr-superpowers/codex-sessions}/<session
+id>.json`, beside the `sessions/` records `scripts/session-start.sh` keeps. One file per session
+id, so parallel sessions - a linked worktree beside the primary checkout - never overwrite each
+other, and nothing depends on the working directory. Fields: `session_id`, `usable`, `review`,
+`lane`, `reason`, `checked_at`, `resets_at` (UTC ISO with `Z`, or null), `resets_at_epoch`
+(seconds, or null), `plugin_version`. Every write goes to a temporary file renamed into place, and
+prunes files older than seven days.
+
+**Cache.** Without `--refresh`, when this session's file exists: `usable: true` is reused;
+`usable: false` is reused while `resets_at_epoch` is null or later than `date +%s`. Anything else
+probes. `review` and `lane` are recomputed from the policy file on every call, cache hit or probe,
+and written back, so a trust commit reaches the readers without a `--refresh`.
 
 **Probe**, fail-closed at every step, the first failure naming the reason:
 
 1. `scripts/codex-plugin` - its `off` reason.
-2. `node scripts/lib/codex-gate.mjs <root>` imports `<root>/scripts/lib/app-server.mjs`; no
-   `CodexAppServerClient.connect` function => `plugin-api`.
-3. `connect(<cwd>, { disableBroker: true })`, then `account/read`. Logged in when `account.type`
-   is `chatgpt` or `apiKey`, or `requiresOpenaiAuth` is `false` - the rule the plugin's own
-   `buildAppServerAuthStatus` applies. Else `logged-out`. A connect that throws => `plugin-api`.
-4. `account/rateLimits/read`. An error whose message contains `unknown variant` or
-   `unknown method` => `method-missing`; any other error, or a response without a boolean
+2. `node scripts/lib/codex-gate.mjs <root> <cwd> <timeout-ms>` imports
+   `<root>/scripts/lib/app-server.mjs` through `pathToFileURL`, since a Windows path is not a URL;
+   no `CodexAppServerClient.connect` function, or a failed import => `plugin-api`.
+3. `connect(<cwd>, { disableBroker: true })` - a throw => `plugin-api` - then
+   `account/read` with `{ refreshToken: false }`, the parameters the plugin itself sends. Logged in
+   when `account.type` is `chatgpt` or `apiKey`, or `requiresOpenaiAuth` is `false`, the rule of
+   the plugin's `buildAppServerAuthStatus`; else `logged-out`.
+4. `account/rateLimits/read` with `{}`. An error whose message contains `unknown variant` or
+   `unknown method` => `method-missing`; any other error, or a reply without a boolean
    `ordinaryUsageAllowed` => `plugin-api`. Ruling 17 false => `quota`, with
-   `resets_at = rateLimits.primary.resetsAt` (epoch seconds) as ISO, or null when absent.
-5. The whole probe runs under a 30-second deadline owned by the script
-   (`DR_CODEX_GATE_TIMEOUT_MS` overrides it): on expiry it calls `close()` on the client, which
-   ends the app-server process tree, and reports `timeout`. It never relies on coreutils
-   `timeout`, which on Windows kills only `node` and strands the app-server.
-6. The client is closed on every path.
+   `resets_at_epoch = rateLimits.primary.resetsAt` when it is a number.
+5. **Deadline.** The node script owns a 30-second deadline (`DR_CODEX_GATE_TIMEOUT_MS`
+   overrides it): on expiry it calls `close()` on any client it holds, which ends the app-server
+   process tree, and reports `timeout`. The bash gate adds an outer coreutils `timeout` of the
+   deadline plus 15 seconds, so the gate always returns even if node wedges; a node that produced
+   no answer reports `timeout`. The client is closed on every path.
 
-Verified 2026-09-15 with a probe script: step 4 returned `ordinaryUsageAllowed: false`,
-`primary.usedPercent: 100`, `resetsAt: 1789898607` (2026-09-20 17:03 +07), with no model call
-and no Codex process left running.
+   A connect that never answers leaves node holding no client to close. Verified 2026-09-15 on
+   this machine: deadlines of 150, 900 and 1600 ms, expiring mid-connect against the real plugin,
+   left no Codex process running three seconds later - the app-server exits when node's end of
+   its stdin closes. An app-server that ignored that EOF would be stranded; the stub test proves
+   only that the gate returns.
 
-**Trust.** `usable` is the probe's answer. `trusted` is `reference/codex-plugin.json`
-`trust.calibration == "pass"` and `trust.smoke == "pass"`, read on every call, cache or probe.
-`available = usable && trusted`. `reason` is the probe's failure, else `untrusted`, else `ok`.
+Verified 2026-09-15 with the prototype against the real plugin (`CLAUDE_CONFIG_DIR` pointed at the
+profile that enables it): `usable=false reason=quota resets_at=2026-09-20T10:03:27Z` in 2.8
+seconds, no model call, no Codex process left running; a second call answered from the cache.
 
-### 15.4 Readers of the session file - `scripts/lib/codex-session.sh`
+### 15.4 Readers - `scripts/lib/codex-session.sh`
 
-- **`codex_session_on`** succeeds only when the file exists, its `session_id` equals the current
-  session id, and `available` is `true`. Every other state is off: routing fails closed.
-- **`codex_session_refused`** succeeds only when the file's `session_id` equals the current one
-  and `usable` is `false`, printing the reason. A missing file refuses nothing, so callers that
-  predate the gate keep their behaviour.
-- **`codex_session_mark_off <reason>`** rewrites the file for the current session with `usable`
-  and `available` `false` and `resets_at` null. With no session id it does nothing.
+- **`codex_session_on <review|lane>`** succeeds only when there is a session id, this session's
+  file parses, and its field for that surface is `true`. Every other state - no id, no file, a torn
+  file - is off: routing fails closed.
+- **`codex_session_mark_off <reason>`** rewrites this session's file with `usable`, `review` and
+  `lane` false and no reset time, keeping `plugin_version`. With no session id it does nothing.
 
 ### 15.5 What reads it
 
-- **`review-route`** (overrides §3 when Codex is off). When `codex_session_on` fails, Executor
-  rows 1-2 are unchanged; risk >= 2 => `primary=dr-superpowers:judge-fable fallback=-`; every
-  band row => `primary=<band judge> fallback=-`; plan round 1 =>
-  `primary=dr-superpowers:judge-fable fallback=-`; rounds 2+ are unchanged. Every changed line
-  prints `reason=codex-off`. `review-route` still probes nothing: it reads a file.
-- **`run-codex-review.sh`**, every kind. When `codex_session_refused` succeeds, before the roster
-  runs, it prints the existing unusable line `codex-judge none/none status=FAILED exit=0
-  out=<out> evidence=unknown`, the reason on stderr, and exits 1. After a run whose error lines
-  (the existing `error_lines`) match `usage limit|rate_limit_reached`, it calls
-  `codex_session_mark_off quota` and prints the run's ordinary `FAILED` line. A quota error is
-  never a refusal, so it never takes the fallback row. This is the only change to `--kind risk3`
-  and `--kind final`, and it fires only when the session file says Codex is unusable or a run
-  hits the quota.
-- **`plan-lint`** (adds to §8's trigger). The lane probe runs only when `codex_session_on`
+- **`review-route`** (overrides §3 when the review surface is off). When
+  `codex_session_on review` fails: Executor rows 1-2 are unchanged; risk >= 2 =>
+  `primary=dr-superpowers:judge-fable fallback=-`; every band row =>
+  `primary=<band judge> fallback=-`; plan round 1 => `primary=dr-superpowers:judge-fable
+  fallback=-`; rounds 2+ are unchanged. Every changed line prints `reason=codex-off`.
+  `review-route` still probes nothing: it reads a file.
+- **`run-codex-review.sh`**, every kind including `risk3` and `final`, `--dry-run` included. Before
+  the roster runs it runs `bash "${CODEX_REVIEW_GATE:-$HERE/codex-gate}"`; when that line does not
+  say `usable=true`, or the gate exits non-zero, it prints the existing unusable line
+  `codex-judge none/none status=FAILED exit=0 out=<out> evidence=unknown`, writes
+  `run-codex-review: codex is off for this session (<reason>)` to stderr, and exits 1. The runner
+  checks `usable`, never `review`, so the shipping gates can calibrate an untrusted surface. After
+  any attempt, the fallback attempt included, whose error lines (the existing `error_lines`) match
+  `usage limit|rate_limit_reached`, it calls `codex_session_mark_off quota` and prints that
+  attempt's ordinary `FAILED` line. A quota error is never a refusal, so it never takes the
+  fallback row. These are the only changes to `--kind risk3` and `--kind final`.
+- **`plan-lint`** (adds to §8's trigger). The lane probe runs only when `codex_session_on lane`
   succeeds; otherwise no WARN lines.
-- **Skills.** `writing-plans` runs `scripts/codex-gate` before its roster question and before each
-  review round's `review-route`; `subagent-driven-development` before each `review-route` and
-  before dispatching an Executor task; `reference/external-executor.md` §Planning renders the
-  roster question and ticks the lane only when the gate says `available=true`. The session says
-  the gate line aloud when `source=probe`. After any executor run that is not `DONE`, the
-  controller runs `scripts/codex-gate --refresh` before the next Codex use. When the gate says
-  `available=false`, an `**Executor:**` task runs on its `**Implementer:**` agent, recorded with
-  the existing substitution ledger line quoting the gate's `reason`.
+- **Order: gate, then roster.** Every Codex use runs `scripts/codex-gate` first and reaches
+  `detect-executors.sh` or a runner only when the gate opened that surface.
+  - `writing-plans` runs the gate before its roster question (§Planning of
+    `reference/external-executor.md`) and before each review round's `review-route`.
+  - `subagent-driven-development` runs it before each `review-route`.
+  - `reference/external-executor.md` §Planning renders the roster question, and ticks a declared
+    lane, only when the gate says `lane=true`; §Dispatch step 1 runs the gate before guarding the
+    roster and, on `lane=false`, dispatches the `**Implementer:**` agent with the existing
+    substitution line quoting the gate's `reason`; after any executor run that is not `DONE`,
+    §When a run fails runs `scripts/codex-gate --refresh` before the next Codex use.
+  - `reference/external-executor.md` §Final-review Codex round runs the gate first and skips the
+    round, saying `codex off — <reason>`, when it says `review=false`. `reference/final-review.md`
+    reaches the round only through that section, so it stays unmodified.
+  - The session says the gate line aloud when `source=probe`; the line itself is not ledgered.
+- **Ledger.** §7's seat clause gains `, seat <judge> (codex off — <reason>)` for a task whose route
+  was Claude-only because the review surface was off, `<reason>` being the gate's (`untrusted`
+  when `usable=true`).
 
-§7's outcome table gains a row: **gate `available=false`** => no Codex seat runs; the route
-already names the Claude seat.
+§7's outcome table gains a row: **review surface off** => no Codex seat runs; the route already
+names the Claude seat.
 
 ### 15.6 The shipping gates become conditional
 
 §11 still defines both gates, with these changes:
 
-- **Each runs only when `scripts/codex-gate` reports `usable=true`.** Otherwise the notes file
-  records the gate as `PENDING — codex unusable: <reason>` and execution continues.
+- **Calibration calls `run-codex-review.sh --kind plan` directly**, not through `review-route`,
+  which names a Claude seat while the review surface is untrusted.
+- **Each gate runs only when `scripts/codex-gate` reports `usable=true`.** Otherwise the notes
+  file records it as `PENDING — codex unusable: <reason>` and execution continues.
 - **A gate that runs and passes sets its `trust` field** in `reference/codex-plugin.json` to
   `pass`, in the same commit as the notes. A gate that runs and fails still stops the plan as
   BLOCKED, as §11 says.
 - **The notes record the Codex version from the plugin:** `codex.detail` from
   `node <root>/scripts/codex-companion.mjs setup --json`, not `codex --version`.
 
-With the quota exhausted until 2026-09-20, 1.9.0 is expected to ship with both gates `PENDING`,
-so every Codex seat and the lane stay off until they pass.
+With the quota exhausted until 2026-09-20 and the plugin not enabled in this profile, 1.9.0 is
+expected to ship with both gates `PENDING`: every Codex surface stays off. A flip ships as a plugin
+release, because an installed copy reads its own `reference/codex-plugin.json`. Sub-project 9 owns
+it: it moves the runners onto the plugin, so its own calibration and smoke runs are the evidence
+that sets `trust`. A session after 2026-09-20 may also re-run §11's gates on the 1.9.x runners and
+release the flip, if the owner wants the binary-path runners trusted before sub-project 9.
 
 ### 15.7 Files and suites this adds
 
@@ -560,12 +604,14 @@ so every Codex seat and the lane stay off until they pass.
 | `scripts/review-route`, `scripts/run-codex-review.sh`, `scripts/plan-lint` | §15.5 |
 | `skills/writing-plans/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `reference/external-executor.md` | §15.5 |
 
-New suite `tests/codex-gate.test.sh` runs against a stub config dir (settings and
-`installed_plugins.json` fixtures) and a stub plugin root whose `scripts/lib/app-server.mjs`
-exports a scripted `CodexAppServerClient` (usable, quota, logged-out, method-missing, a hung
-connect). `tests/review-route.test.sh`, `tests/codex-review.test.sh` and
-`tests/plan-lint.test.sh` gain Codex-off cases driven by `DR_CODEX_SESSION_FILE` and
-`CLAUDE_CODE_SESSION_ID`. No test starts a real Codex.
+New suite `tests/codex-gate.test.sh` runs against a stub config dir (settings and a format-2
+`installed_plugins.json`) and a stub plugin root whose `scripts/lib/app-server.mjs` exports a
+scripted `CodexAppServerClient` (usable, quota, full, logged-out, method-missing, an RPC error, a
+reply without the signal, a throwing connect, a hung connect). `tests/review-route.test.sh`,
+`tests/codex-review.test.sh` and `tests/plan-lint.test.sh` gain surface-off cases, and every one
+of those suites sets `DR_CODEX_SESSION_DIR` to a temporary directory and `CLAUDE_CODE_SESSION_ID`
+to a fixed id, so the machine's real session state never leaks into a test. The runner suite
+points `CODEX_REVIEW_GATE` at a stub. No test starts a real Codex.
 
 ### 15.8 Sub-project 9 - Codex through the plugin
 
@@ -574,6 +620,6 @@ Out of scope here, recorded so the program amendment names it: a plugin-backed r
 plugin's `scripts/lib/codex.mjs` (`runAppServerTurn` with an output schema, model, effort,
 sandbox and exact-thread resume) in direct mode, with an in-script deadline that sends
 `turn/interrupt` and closes the client; the model-catalog decision (ruling 18); stub-plugin
-fixtures for those suites; and its own calibration and smoke evidence through the new path. It
-lifts this plan's constraints on `run-codex-task.sh`, `detect-executors.sh` and the `risk3` /
-`final` argv.
+fixtures for those suites; its own calibration and smoke evidence through the new path, which
+sets `trust`; and a reaper for an app-server that ignores stdin EOF. It lifts this plan's
+constraints on `run-codex-task.sh`, `detect-executors.sh` and the `risk3` / `final` argv.
