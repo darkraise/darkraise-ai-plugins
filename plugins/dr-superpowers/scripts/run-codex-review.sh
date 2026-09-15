@@ -16,6 +16,10 @@ PLAN_SCHEMA="$HERE/../criteria/codex-plan-review-schema.json"
 # Tests point this at a stub roster. Unset in production, where the real
 # detector runs and its auth probe is the usability guard.
 ROSTER="${CODEX_REVIEW_ROSTER:-$HERE/detect-executors.sh}"
+# Tests point this at a stub gate. Unset in production, where scripts/codex-gate
+# answers from this session's cache or probes the codex plugin.
+GATE="${CODEX_REVIEW_GATE:-$HERE/codex-gate}"
+. "$HERE/lib/codex-session.sh"
 
 die() { printf 'run-codex-review: %s\n' "$1" >&2; exit 2; }
 
@@ -85,6 +89,20 @@ pref_effort=$(printf '%s\n' "$judge" | sed -n 1p | awk '{print $2}')
 back_model=$(printf '%s\n' "$judge" | tail -1 | awk '{print $1}')
 back_effort=$(printf '%s\n' "$judge" | tail -1 | awk '{print $2}')
 secs_of() { printf '%s\n' "$judge" | awk -v m="$1" -v e="$2" '$1 == m && $2 == e {print $3; exit}'; }
+
+# The session gate runs before the roster, on every kind and on a dry run: a
+# Codex this session may not use is never selected or run. Only `usable` is
+# read, never the review surface, so a shipping gate can still exercise an
+# untrusted surface.
+gate_line=$(bash "$GATE" 2>/dev/null); gate_rc=$?
+gate_line=$(printf '%s\n' "$gate_line" | tail -1 | tr -d '\r')
+if [ "$gate_rc" -ne 0 ] || [[ "$gate_line" != *" usable=true "* ]]; then
+  gate_reason=$(sed -n 's/.* reason=\([^ ]*\).*/\1/p' <<<"$gate_line")
+  [ "$gate_rc" -eq 0 ] || gate_reason="codex-gate exited $gate_rc"
+  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=unknown\n' "$out"
+  printf 'run-codex-review: codex is off for this session (%s)\n' "${gate_reason:-no gate answer}" >&2
+  exit 1
+fi
 
 # Selection. The catalog is a negative filter: a pair it does not advertise is
 # never attempted, and every state that is not a positive match - no catalog, an
@@ -184,6 +202,15 @@ is_refusal() { # is_refusal <log-prefix>
   error_lines "$1" | grep -qiE "$REFUSAL"
 }
 
+# An exhausted quota is not a refusal either: every model on the account hits
+# the same limit. It turns Codex off for the rest of the session instead, so the
+# next seat goes straight to its Claude judge.
+QUOTA='usage limit|rate_limit_reached'
+
+is_quota() { # is_quota <log-prefix>
+  error_lines "$1" | grep -qiE "$QUOTA"
+}
+
 # The same line the match came from, not merely the first line of stderr - that
 # is the CLI banner, which would make every substitution read as "refused
 # (OpenAI Codex v0.154.0)".
@@ -220,6 +247,11 @@ if [ "$rc" -eq 0 ] && valid_output; then
   status "$model" "$effort" OK "$rc"; exit 0
 fi
 
+if is_quota "$out"; then
+  codex_session_mark_off quota
+  status "$model" "$effort" FAILED "$rc"; exit 1
+fi
+
 # The fallback is attempted at most once, and never when the row that just ran
 # is already the fallback row.
 if is_refusal "$out" \
@@ -234,6 +266,7 @@ if is_refusal "$out" \
   if [ "$rc" -eq 0 ] && valid_output; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
+  is_quota "$out.fallback" && codex_session_mark_off quota
   status "$back_model" "$back_effort" FAILED "$rc"; exit 1
 fi
 

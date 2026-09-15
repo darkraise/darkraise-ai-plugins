@@ -10,6 +10,10 @@ SCRIPT="$HERE/../scripts/run-codex-review.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
+# The runner marks this session's Codex gate file off on a quota error. A fixed
+# session id and a temporary directory keep the machine's real file out of it.
+export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=codex-review-test
+
 pass=0 fail=0
 check() { # check <name> <got> <want>
   if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
@@ -46,8 +50,16 @@ ASTRA='{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","pairs":[
 SOL_ONLY='{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","pairs":[{"model":"gpt-5.6-sol","effort":"high"}]}'
 EMPTY='{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","pairs":[]}'
 
+# A stub session gate. Every case sees a usable Codex unless it sets
+# GATE_STUB_LINE or GATE_STUB_EXIT.
+cat > "$TMP/gate-stub" <<STUB
+#!$BASH_BIN
+printf '%s\n' "\${GATE_STUB_LINE:-codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache}"
+exit "\${GATE_STUB_EXIT:-0}"
+STUB
+
 run() { # run <args...>
-  PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" \
+  PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" CODEX_REVIEW_GATE="$TMP/gate-stub" \
     "$BASH_BIN" "$SCRIPT" "$@" 2>"$TMP/err"
 }
 
@@ -142,6 +154,13 @@ case "\$CODEX_STUB_MODE" in
   ok) printf '{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}' > "\$outfile"; exit 0 ;;
   ok-final) printf 'a review\n' > "\$outfile"; exit 0 ;;
   ok-plan) printf '{"executability":17,"coherence":16,"coverage":17,"assumptions":16,"findings":[]}' > "\$outfile"; exit 0 ;;
+  # The observed form of an exhausted quota, 2026-09-15: a column-0 ERROR: line.
+  quota) echo "ERROR: You've hit your usage limit. Upgrade to Pro or try again at Sep 20th, 2026 5:03 PM." >&2; exit 1 ;;
+  refuse-then-quota)
+    if [ "\$model" = gpt-6-astra ]; then
+      echo 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The gpt-6-astra model is not supported when using Codex with a ChatGPT account."}}' >&2; exit 1
+    fi
+    echo "ERROR: You've hit your usage limit. Upgrade to Pro or try again at Sep 20th, 2026 5:03 PM." >&2; exit 1 ;;
   empty) : > "\$outfile"; exit 0 ;;
   noout) exit 0 ;;
   # The observed form: a real refusal from codex 0.154.0, captured on
@@ -287,6 +306,61 @@ present "a schema-shaped task report is OK" "$out" "status=OK"
 out=$(seat refuse-always task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a refused light run is FAILED" "$out" "status=FAILED"
 check "the light tier never falls back" "$(cat "$TMP/calls")" "1"
+
+# --- the session gate and the quota ------------------------------------------
+write_roster "$ASTRA"
+OFF='codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=cache'
+calls() { cat "$TMP/calls" 2>/dev/null || echo 0; }
+
+out=$(GATE_STUB_LINE="$OFF" seat ok task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+check "an unusable gate prints the unusable line" "$out" "codex-judge none/none status=FAILED exit=0 out=$TMP/o.json evidence=unknown"
+check "an unusable gate exits 1" "$rc" "1"
+check "an unusable gate runs no codex" "$(calls)" "0"
+present "the runner names the gate's reason" "$(cat "$TMP/err")" "run-codex-review: codex is off for this session (quota)"
+
+out=$(GATE_STUB_LINE="$OFF" seat ok-final final --out "$TMP/o.md" --base main --dry-run); rc=$?
+present "a dry run is gated too" "$out" "codex-judge none/none status=FAILED"
+check "a gated dry run exits 1" "$rc" "1"
+case "$out" in
+  *would-run*) printf 'FAIL - a gated dry run prints no command\n'; fail=$((fail + 1)) ;;
+  *) printf 'ok   - a gated dry run prints no command\n'; pass=$((pass + 1)) ;;
+esac
+out=$(GATE_STUB_LINE="$OFF" seat ok risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+present "risk3 is gated too" "$out" "codex-judge none/none status=FAILED"
+check "a gated risk3 runs no codex" "$(calls)" "0"
+
+out=$(GATE_STUB_EXIT=2 seat ok-final final --out "$TMP/o.md" --base main); rc=$?
+present "a gate that exits non-zero is refused, whatever it printed" "$out" "codex-judge none/none status=FAILED"
+check "a refused gate exits 1" "$rc" "1"
+check "a refused gate runs no codex" "$(calls)" "0"
+
+out=$(GATE_STUB_LINE='codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe' \
+  run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+present "an untrusted review surface still runs: the runner reads usable only" "$out" "codex-judge gpt-6-astra/high status=OK"
+
+SFILE="$DR_CODEX_SESSION_DIR/codex-review-test.json"
+open_session() {
+  mkdir -p "$DR_CODEX_SESSION_DIR"
+  printf '{"session_id":"codex-review-test","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$SFILE"
+}
+open_session
+out=$(seat quota task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+present "a quota error is FAILED on the model that ran" "$out" "codex-judge gpt-6-astra/high status=FAILED exit=1"
+check "a quota error exits 1" "$rc" "1"
+check "a quota error is never a refusal: no second seat" "$(calls)" "1"
+check "a quota error turns Codex off for the session" \
+  "$(jq -r '[.usable, .review, .lane, .reason] | map(tostring) | join("/")' "$SFILE" | tr -d '\r')" "false/false/false/quota"
+check "the marked-off file keeps the plugin version" "$(jq -r '.plugin_version' "$SFILE" | tr -d '\r')" "1.0.3"
+
+open_session
+out=$(seat refuse-then-quota final --out "$TMP/o.md" --base main); rc=$?
+present "a quota error on the fallback run is FAILED" "$out" "codex-judge gpt-5.6-sol/high status=FAILED exit=1"
+check "the quota fallback ran exactly one extra seat" "$(calls)" "2"
+check "a quota error on the fallback run turns Codex off" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "false"
+
+open_session
+seat prose-fail final --out "$TMP/o.md" --base main >/dev/null
+check "an ordinary failure leaves the session on" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "true"
 
 # The caller must defer to the runner's outcome rather than running its own
 # retry rule: a FAILED seat that redispatches turns one refused run into two.
