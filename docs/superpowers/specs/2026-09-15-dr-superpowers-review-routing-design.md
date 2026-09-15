@@ -113,12 +113,13 @@ line.
 catches them first; the band row exists so the table is total.
 
 **Plan-review routing:** round 1 `primary=codex:plan fallback=dr-superpowers:judge-fable`;
-round 2 or later `primary=dr-superpowers:judge-opus fallback=-`.
+round 2 or later `primary=dr-superpowers:judge-opus fallback=-`; both print `reason=round`.
 
 **Exit 2**, with a message on stderr and nothing on stdout: usage errors, a missing plan, an id
 with no task, an `**Evaluation:**` line that does not parse, or a `Host: codex` plan (native hosts
 route through `native-codex.md`). On exit 2 the controller reviews with `judge-fable` — today's
-seat — and says why.
+seat — and says why; a planner on a Codex-host plan dispatches its native judge instead, because a
+Codex host has no Claude judge.
 
 The Fable-unavailable rule applies after routing: wherever a line names `judge-fable` and Fable is
 unavailable or declined, the controller dispatches `judge-opus` and says so. `review-route` does
@@ -230,6 +231,8 @@ absence.
   the plan.
 - **Candidates:** on a Claude-host plan, each task or part with no `**Override:**` line, Rule S
   clean, `total >= min_score`, `risk <= max_risk`, and no `**Executor:**` line.
+- **Inline plans are skipped:** `**Executor:**` lines are inert under inline execution, so a
+  warning there would be noise.
 - **Lazy:** the scan runs first and collects candidates. Only when at least one exists, and
   `--no-probe` is absent, does it run the roster once — `bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}"`
   under `timeout 30` (measured 2.0s).
