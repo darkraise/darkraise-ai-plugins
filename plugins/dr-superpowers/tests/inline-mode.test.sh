@@ -72,11 +72,11 @@ check "the re-review prompt exists" \
 absent "drops the upstream subagent-availability note" "$INLINE" \
   "works much better with access to subagents"
 
-# The three ruling-seat kinds this mode can reach, and the five it cannot.
+# The three ruling-seat kinds this mode can reach, and the four it cannot.
 for k in blocked-plan plan-conflict final-residual; do
   present "claims the $k kind" "$INLINE" "\`$k\`"
 done
-# The skill names all eight kinds - three it runs and five it explains away -
+# The skill names all seven kinds - three it runs and four it explains away -
 # so "states the three and no others" is not greppable. Assert the three plus
 # the sentence that excludes the rest.
 present "names the kinds it does not run" "$INLINE" "no task reviewer"

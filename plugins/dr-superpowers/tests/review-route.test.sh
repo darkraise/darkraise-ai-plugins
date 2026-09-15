@@ -271,5 +271,13 @@ present "the second pass names the Codex file by path" "$TRP" '[CODEX_REVIEW_FIL
 present "the second pass comes after Fable's own review" "$TRP" 'Do this only after your Spec Compliance'
 present "a Codex finding never raises a score" "$TRP" 'review raises a score, and nothing else you wrote before reading it changes.'
 
+# --- risk3-spread is retired -----------------------------------------------------
+for f in "$P/skills/subagent-driven-development/SKILL.md" \
+         "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
+         "$P/skills/executing-plans/SKILL.md"; do
+  absent "no risk3-spread in ${f#"$P/"}" "$f" 'risk3-spread'
+done
+present "inline mode lists four kinds it does not run" "$P/skills/executing-plans/SKILL.md" 'The other four kinds belong to seats this mode does not run'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -299,10 +299,9 @@ is the only thing this mode dispatches before the final review.
 | `plan-conflict` | A final-review finding that conflicts with what the plan's text requires, or is labelled plan-mandated |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
-The other five kinds belong to seats this mode does not run: `preflight` (there
-is no pre-flight scan), `cannot-verify` and `risk3-spread` (no task reviewer),
-`breaker` (no five-round review loop), and `codex-empty-diff` (no external
-executor).
+The other four kinds belong to seats this mode does not run: `preflight` (there
+is no pre-flight scan), `cannot-verify` (no task reviewer), `breaker` (no
+five-round review loop), and `codex-empty-diff` (no external executor).
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` - `<task>` is the task
 number the items concern, or `plan` for a plan-level point, so a recurring

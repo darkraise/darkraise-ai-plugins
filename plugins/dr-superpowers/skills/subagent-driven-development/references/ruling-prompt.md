@@ -88,9 +88,6 @@ Subagent ([JUDGE]):
       text requires, or is labelled plan-mandated.
     - cannot-verify: a requirement the task reviewer could not verify from
       the diff. CONFIRMED-GAP means it is unmet.
-    - risk3-spread: three reviews of one risk-3 task disagree by more than 6
-      points on a criterion. Decide what the diff supports: CONFIRMED-GAP
-      for each finding that stands, PARK otherwise.
     - breaker: findings still open after the fifth fix round.
     - blocked-plan: an implementer reported BLOCKED because the plan is
       wrong.

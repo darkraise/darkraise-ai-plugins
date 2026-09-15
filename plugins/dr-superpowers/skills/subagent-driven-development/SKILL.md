@@ -334,7 +334,6 @@ that arises at one point into one dispatch:
 | `preflight` | Once, before Task 1 (Setup) |
 | `plan-conflict` | A review finding labelled plan-mandated, or one that conflicts with what the plan's text requires |
 | `cannot-verify` | Every "⚠️ Cannot verify from diff" item, before the task completes |
-| `risk3-spread` | A risk-3 criterion whose three scores spread by more than 6 points |
 | `breaker` | Every finding still open after round 5/5 |
 | `blocked-plan` | An implementer BLOCKED because the plan is wrong |
 | `codex-empty-diff` | A Codex fix round that returned DONE with an empty diff and an argument ([external-executor.md](../../reference/external-executor.md)) |
