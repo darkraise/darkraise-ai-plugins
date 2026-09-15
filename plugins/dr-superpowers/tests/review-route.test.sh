@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# review-route is the review routing table as code. Each fixture task below
+# pins one row, so a controller of any size reaches the same seat. The prose
+# checks appended later pin the skill text that tells a controller to call it.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+P="$HERE/.."
+ROUTE="$P/scripts/review-route"
+
+pass=0 fail=0
+check() { # check <name> <got> <want>
+  if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+present() { # present <name> <file> <needle>
+  if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       missing: [%s] in %s\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+absent() { # absent <name> <file> <needle>
+  if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'FAIL - %s\n       unexpected: [%s] in %s\n' "$1" "$3" "$2"; fail=$((fail + 1))
+  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
+}
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# Fixture lines carry a leading | so a plan that quotes this suite still lints:
+# plan-lint's part and Evaluation scans do not skip fenced blocks.
+sed 's/^|//' > "$TMP/plan.md" <<'EOF'
+|# Routing Fixture Plan
+|
+|**Goal:** Fixture.
+|
+|## Task index
+|
+|1. light low
+|2. light mid
+|3. heavy
+|4. risky
+|5. executor
+|6. executor risky
+|7. split
+|8. risk three
+|9. broken
+|10. band five
+|
+|### Task 1: light low
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 2: light mid
+|
+|**Implementer:** dr-superpowers:impl-sonnet-high
+|**Evaluation:** files 1 — spec 0 — coupling 1 — risk 1 = 3
+|
+|### Task 3: heavy
+|
+|**Implementer:** dr-superpowers:impl-opus-low
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
+|
+|### Task 4: risky
+|
+|**Implementer:** dr-superpowers:impl-opus-low
+|**Evaluation:** files 1 - spec 0 - coupling 1 - risk 2 = 4
+|
+|### Task 5: executor
+|
+|**Implementer:** dr-superpowers:impl-sonnet-high
+|**Executor:** codex gpt-5.5 / high
+|**Evaluation:** files 1 - spec 0 - coupling 1 - risk 1 = 3
+|
+|### Task 6: executor risky
+|
+|**Implementer:** dr-superpowers:impl-sonnet-high
+|**Executor:** codex gpt-5.5 / high
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3
+|
+|### Task 7: split
+|
+|#### Part A: small half
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|#### Part B: risky half
+|
+|**Implementer:** dr-superpowers:impl-opus-medium
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
+|
+|### Task 8: risk three
+|
+|**Implementer:** dr-superpowers:impl-opus-high
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
+|
+|### Task 9: broken
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** one plus one
+|
+|### Task 10: band five
+|
+|**Implementer:** dr-superpowers:impl-opus-medium
+|**Evaluation:** files 2 - spec 2 - coupling 1 - risk 0 = 5
+EOF
+
+route() { # route <args...>; sets out and rc
+  out=$(bash "$ROUTE" "$TMP/plan.md" "$@" 2>"$TMP/err"); rc=$?
+}
+
+check "script exists" "$([ -f "$ROUTE" ] && echo yes || echo no)" "yes"
+
+route --task 1
+check "total 1: light Codex, Sonnet fallback" "$out" "review-seat task=1 primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
+check "a routed task exits 0" "$rc" "0"
+route --task 2
+check "total 3 with em dashes: light Codex, Opus fallback" "$out" "review-seat task=2 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
+route --task 3
+check "total 4 at risk 1: heavy Codex, Opus fallback" "$out" "review-seat task=3 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+route --task 4
+check "risk 2: Astra then Fable" "$out" "review-seat task=4 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+route --task 5
+check "an Executor task is reviewed by its band judge, never Codex" "$out" "review-seat task=5 primary=dr-superpowers:judge-opus fallback=- reason=executor"
+route --task 6
+check "an Executor task at risk 2 goes to Fable alone" "$out" "review-seat task=6 primary=dr-superpowers:judge-fable fallback=- reason=executor"
+route --task 7A
+check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
+route --task 7B
+check "the risky part routes to Astra then Fable" "$out" "review-seat task=7B primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+route --task 7
+check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+route --task 8
+check "risk 3 routes like risk 2" "$out" "review-seat task=8 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+route --task 10
+check "total 5 at risk 0: heavy Codex, Fable fallback" "$out" "review-seat task=10 primary=codex:heavy fallback=dr-superpowers:judge-fable reason=band"
+
+route --task 1 2
+check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
+route --task 1 3
+check "a batch crossing into the heavy band" "$out" "review-seat task=1,3 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+route --task 1 5
+check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dr-superpowers:judge-opus fallback=- reason=executor"
+
+route --plan-round 1
+check "plan round 1 is Codex with a Fable fallback" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-fable reason=round"
+route --plan-round 2
+check "plan round 2 is Opus" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=round"
+route --plan-round 3
+check "plan round 3 is Opus" "$out" "review-seat plan-round=3 primary=dr-superpowers:judge-opus fallback=- reason=round"
+
+route --task 9
+check "an unparseable Evaluation exits 2" "$rc" "2"
+check "an unparseable Evaluation prints nothing on stdout" "$out" ""
+route --task 99
+check "an unknown task exits 2" "$rc" "2"
+route --task 7C
+check "an unknown part exits 2" "$rc" "2"
+route --task x
+check "a malformed id exits 2" "$rc" "2"
+route --task
+check "--task with no id exits 2" "$rc" "2"
+route --plan-round 0
+check "plan round 0 exits 2" "$rc" "2"
+route --bogus 1
+check "an unknown flag exits 2" "$rc" "2"
+out=$(bash "$ROUTE" "$TMP/nope.md" --task 1 2>/dev/null); rc=$?
+check "a missing plan exits 2" "$rc" "2"
+
+{ printf 'Host: codex\n'; cat "$TMP/plan.md"; } > "$TMP/codex.md"
+out=$(bash "$ROUTE" "$TMP/codex.md" --task 1 2>"$TMP/err"); rc=$?
+check "a Codex-host plan exits 2" "$rc" "2"
+present "a Codex-host plan names native-codex.md" "$TMP/err" "native-codex.md"
+
+sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
+out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)
+check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

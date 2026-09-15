@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Print the review seat for a task, a batch, or a plan-review round, and the
+# Claude seat that replaces it when a Codex seat produces nothing.
+#
+# The routing table lives here rather than in prose for the reason
+# run-codex-review.sh gives: a rule a seat must follow is only reachable when a
+# test can reach it. This script never probes Codex. run-codex-review.sh checks
+# availability on every run, and its status line decides whether the fallback
+# is used.
+#
+# Usage: review-route PLAN_FILE --task ID [ID ...]
+#        review-route PLAN_FILE --plan-round R
+# ID is a task number, or a task number and part letter for a split task (7B).
+# Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
+# Exit: 0 routed; 2 usage error, missing task, unparseable Evaluation, or a
+# Codex-host plan.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+SONNET=dr-superpowers:judge-sonnet-high
+OPUS=dr-superpowers:judge-opus
+FABLE=dr-superpowers:judge-fable
+SEP='( — | – | - | -- )'
+
+die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
+usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R"; }
+
+[ $# -ge 3 ] || usage
+plan=$1; shift
+[ -f "$plan" ] || die "no such plan file: $plan"
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+src="$TMP/plan.md"
+plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
+  || die "an amendment does not apply; run plan-lint"
+
+if plan_header "$src" | grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$'; then
+  die "a Host: codex plan routes reviews through reference/native-codex.md"
+fi
+
+case "$1" in
+  --plan-round)
+    [ $# -eq 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
+    if [ "$2" -eq 1 ]; then
+      printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round\n' "$FABLE"
+    else
+      printf 'review-seat plan-round=%s primary=%s fallback=- reason=round\n' "$2" "$OPUS"
+    fi
+    exit 0 ;;
+  --task) shift ;;
+  *) usage ;;
+esac
+
+max_total=-1 max_risk=-1 executor=0
+for id in "$@"; do
+  [[ "$id" =~ ^([0-9]+)([A-Z]?)$ ]] || die "not a task id: $id"
+  n=${BASH_REMATCH[1]} part=${BASH_REMATCH[2]}
+  text=$(plan_task_text "$src" "$n") || die "no Task $n in the plan"
+  if [ -n "$part" ]; then
+    text=$(awk -v p="$part" '/^#### Part [A-Z]:/ { on = (substr($3, 1, 1) == p) } on' <<<"$text")
+    [ -n "$text" ] || die "no part $part in Task $n"
+  fi
+  grep -qE '^\*\*Executor:\*\*' <<<"$text" && executor=1
+  evs=$(grep -E '^\*\*Evaluation:\*\*' <<<"$text" || true)
+  [ -n "$evs" ] || die "Task $id has no **Evaluation:** line"
+  # A task without a part letter carries every part's Evaluation line, so it
+  # routes on its heaviest part.
+  while IFS= read -r ev; do
+    [[ "$ev" =~ ^\*\*Evaluation:\*\*\ files\ [0-9]+$SEP"spec "[0-9]+$SEP"coupling "[0-9]+$SEP"risk "([0-9]+)\ =\ ([0-9]+) ]] \
+      || die "Task $id: the Evaluation line does not parse: $ev"
+    [ "${BASH_REMATCH[4]}" -le "$max_risk" ] || max_risk=${BASH_REMATCH[4]}
+    [ "${BASH_REMATCH[5]}" -le "$max_total" ] || max_total=${BASH_REMATCH[5]}
+  done <<<"$evs"
+done
+
+band() { # band <total> - the Claude judge for a score band
+  if [ "$1" -le 1 ]; then echo "$SONNET"
+  elif [ "$1" -le 4 ]; then echo "$OPUS"
+  else echo "$FABLE"
+  fi
+}
+
+# Executor first: a task Codex implemented is never reviewed by Codex, whatever
+# its risk. Totals 5 and 6 carry risk >= 2 under Rule S, so the risk row catches
+# them before the band rows; the band rows still cover an overridden task.
+if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 2 ]; then
+  primary=$FABLE fallback=- reason=executor
+elif [ "$executor" -eq 1 ]; then
+  primary=$(band "$max_total") fallback=- reason=executor
+elif [ "$max_risk" -ge 2 ]; then
+  primary=codex:heavy+judge-fable fallback=$FABLE reason=risk
+elif [ "$max_total" -le 3 ]; then
+  primary=codex:light fallback=$(band "$max_total") reason=band
+else
+  primary=codex:heavy fallback=$(band "$max_total") reason=band
+fi
+
+printf 'review-seat task=%s primary=%s fallback=%s reason=%s\n' \
+  "$(IFS=,; echo "$*")" "$primary" "$fallback" "$reason"
