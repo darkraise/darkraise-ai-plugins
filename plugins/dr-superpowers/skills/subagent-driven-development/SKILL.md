@@ -238,7 +238,7 @@ Every seat is named, so nothing silently inherits your session's model.
 |---|---|---|
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
 | External implementer | The task's `**Executor:**` line, via [external-executor.md](../../reference/external-executor.md) | Set by the wrapper |
-| Task reviewer | `dr-superpowers:judge-fable`; `dr-superpowers:judge-opus` when Fable is unavailable or your human partner declined it — say the substitution aloud | None |
+| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3 Review the task); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; `dr-superpowers:judge-opus` wherever it names `judge-fable` and Fable is unavailable or your human partner declined it — say every substitution aloud | None |
 | Ruling seat | `dr-superpowers:judge-fable`; `dr-superpowers:judge-opus` under the same rule | None |
 | Scoped re-review | general-purpose | Explicit, cheap-to-mid |
 | Final review | general-purpose | Explicit, most capable available |
@@ -276,7 +276,7 @@ Task <N>: BLOCKED — <agent> exhausted — <what a human must decide>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
-Task <N>: complete (commits a..b, review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q[, K=3]]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
+Task <N>: complete (commits a..b, review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
@@ -285,7 +285,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   tasks reviewed as a batch. Batches are contiguous task ranges so
   `Group <a>-<b>` names them; only a batch's review rounds log on its Group
   line.
-- The scores clause is present whenever a judge scored the task.
+- The scores clause is present whenever a review seat, Codex or judge, scored the task.
 - The checkpoint after the `—` comes from the report's
   `## Discovered issues (not fixed)` and `## Assumptions made` sections — the
   implementer's or the Codex wrapper's. `done` is a one-line summary of the
@@ -532,12 +532,16 @@ needed.
   before dispatching the implementer — never `HEAD~1`, which silently
   truncates multi-commit tasks. Never dispatch a task reviewer without a diff
   file.
-- **The seat:** `dr-superpowers:judge-fable`, or `judge-opus` under the
-  Fable-unavailable rule, with [task-reviewer-prompt.md](references/task-reviewer-prompt.md).
-  Expand `[PLUGIN_ROOT]` to this plugin's resolved directory before sending.
-  Put the invariant material first and the criteria block last, as the
-  template does: on the risk-3 path the three prompts then share a long
-  identical prefix.
+- **The seat:** run `scripts/codex-gate` (say its line aloud when it ends
+  `source=probe`), then `scripts/review-route PLAN_FILE --task <N>` (all of a
+  batch's task numbers for a batch), and review with the `primary` it prints.
+  A judge seat gets [task-reviewer-prompt.md](references/task-reviewer-prompt.md)
+  with `[PLUGIN_ROOT]` expanded to this plugin's resolved directory; a Codex
+  seat is run as below. On `reason=codex-off` the review surface is off for
+  this session: the `primary` is a judge, no Codex seat runs, and the seat
+  clause records `(codex off — <reason>)` with the gate line's `reason`
+  (`untrusted` when it printed `usable=true`). If `review-route` exits 2,
+  review with `dr-superpowers:judge-fable` and say why, quoting its message.
 - **Reviewer inputs:** the brief file (it ends with the plan's Global
   Constraints and Contracts — the reviewer's attention lens), the report
   file, and the review package. Never tell the reviewer which lane produced
@@ -562,21 +566,44 @@ the complete line for the final review to triage, never settled by you;
 judge that returns scores but drops the verdicts has produced an unusable
 review — re-dispatch it.
 
-**Risk 3.** When the task's `**Evaluation:**` line scored risk 3, dispatch three
-independent seats on the same inputs and average each criterion. If the three
-scores for any criterion spread by more than 6 points, send a `risk3-spread`
-item with the three reviews to the ruling seat rather than trusting the
-average: the criterion failed to discriminate on this
-diff. One of the three seats is Codex, run through
-`scripts/run-codex-review.sh`, which decides for itself whether Codex is usable
-and which judge rung to use — see
-[external-executor.md](../../reference/external-executor.md) §Risk-3 Codex
-seat. Never average two scores as if three had voted. Read the runner's status
-line and take its word: `OK` and `FALLBACK` are a seat that scored, and
-`TIMEOUT or FAILED` is a seat that did not — dispatch a third Claude judge for
-it and never re-dispatch the Codex seat. The runner has already applied its own
-one-shot fallback, so a second attempt here would turn one refused run into
-two. A seat that produced no report is never averaged in as if it had voted.
+**Codex seats.** Write the task-reviewer prompt for Codex as
+[external-executor.md](../../reference/external-executor.md) §Codex task review
+seats describes, to `<workspace>/task-<N>-review-codex-prompt.md`, and run it
+as a background Bash call with no timeout:
+
+```bash
+bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy> \
+  --cwd <worktree-root> --out <workspace>/task-<N>-review-codex.json \
+  --prompt <workspace>/task-<N>-review-codex-prompt.md
+```
+
+`codex:light` is `--tier light`; `codex:heavy` and `codex:heavy+judge-fable` are
+`--tier heavy`. Read the runner's status line and take its word: `OK` and
+`FALLBACK` are a seat that reviewed — on `FALLBACK`, or a `--tier heavy` line
+naming `gpt-5.6-sol/high` with `status=OK`, say the substitution aloud — and
+`TIMEOUT or FAILED` is a seat that did not: dispatch the route's `fallback`
+seat with the ordinary prompt, say so with the runner's reason, and
+never re-dispatch the Codex seat. The runner has already applied its own one-shot
+fallback, so a second attempt here would turn one refused run into two. A
+`FAILED` whose reason reads `codex is off for this session` is the same case:
+the runner's own gate refused, or a quota error turned Codex off for the rest of
+the session, so the next task's `review-route` names Claude seats. Read a
+Codex review from its JSON — `spec_verdict` (`compliant` or `issues`),
+`task_quality` (`approved` or `needs_fixes`), the four scores, `findings` and
+`cannot_verify` — and apply the bands, the ⚠️ route and the fix loop to it
+exactly as to a judge's report.
+
+**Risk 2 and above.** On `primary=codex:heavy+judge-fable`, run the Codex seat
+first, then dispatch `dr-superpowers:judge-fable` (`judge-opus` under the
+Fable-unavailable rule) with the task-reviewer prompt and its Second Pass
+section, `[CODEX_REVIEW_FILE]` set to the Codex seat's `--out` path. The task's
+verdicts and scores are Fable's. Fable's findings, plus every Codex finding it
+marks CONFIRMED, drive the fix loop; each CONFIRMED cannot-verify item goes to
+the ruling seat as a `cannot-verify` item. A reply whose `### Codex findings`
+section is not its last section formed its own review after reading Codex's:
+re-dispatch it. If the Codex seat produced nothing, dispatch Fable without the
+Second Pass section and say so. This replaces the three-seat average earlier
+versions used for risk 3.
 
 The task reviewer may report "⚠️ Cannot verify from diff" items — requirements
 that live in unchanged code or span tasks. These do not block the rest of the
@@ -693,7 +720,10 @@ message as your other bookkeeping:
 
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked; scores …) — …; remaining: <parked one-liners>; …` after a tripped breaker
-- append `, K=3` inside the scores clause on a risk-3 task
+- end the scores clause with `, seat <seat>`: `codex gpt-5.6-sol/high`,
+  `codex gpt-6-astra/high+judge-fable`, or the judge's short name, followed by
+  ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
+  ` (codex off — <reason>)` when `review-route` printed `reason=codex-off`
 
 Then mark the todo complete and move on. Never move to the next task while
 the review has open Critical/Important issues that are neither fixed nor

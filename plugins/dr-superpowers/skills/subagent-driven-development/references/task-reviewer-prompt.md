@@ -201,12 +201,39 @@ Subagent ([JUDGE]):
     Score against those criteria and nothing else. Where a criterion tells you
     to ignore something, ignoring it is part of scoring correctly. The scores
     ride alongside the verdicts above and never replace them.
+
+    ## Second Pass: The Codex Review
+
+    [Include this section only on a risk 2 or above task whose Codex seat
+    produced a review. Delete it otherwise.]
+
+    Do this only after your Spec Compliance, Strengths, Issues, Assessment and
+    Verification Scores sections are written in full. Then read the Codex
+    review of the same diff: [CODEX_REVIEW_FILE]
+
+    It is a JSON object; read its `findings` and `cannot_verify`. Append this
+    section to the end of your report:
+
+    ### Codex findings
+    - [CONFIRMED|REJECTED] <file:line> <the finding, one line> - <your evidence>
+    - [CONFIRMED|REJECTED] cannot-verify: <the item, one line> - <your evidence>
+
+    Write one line for every entry in `findings` and every entry in
+    `cannot_verify`. CONFIRMED means the diff supports it. A CONFIRMED finding
+    your Issues section missed is added there too, at your own severity and
+    marked `(from codex)`, and may lower a score you gave; nothing in the Codex
+    review raises a score, and nothing else you wrote before reading it changes.
 ```
 
 **Placeholders:**
-- `[JUDGE]` — `dr-superpowers:judge-fable`, or `dr-superpowers:judge-opus`
-  when Fable is unavailable or declined (say the substitution aloud); no
-  `model` argument
+- `[JUDGE]` — the judge `scripts/review-route` printed, as its `primary` or,
+  after a Codex seat produced nothing, its `fallback`;
+  `dr-superpowers:judge-opus` in place of `dr-superpowers:judge-fable` when
+  Fable is unavailable or declined (say the substitution aloud); no `model`
+  argument
+- `[CODEX_REVIEW_FILE]` — only with the Second Pass section: the Codex seat's
+  `--out` JSON path. Pass the path, never the findings pasted inline: Fable
+  cannot anchor on a review it has not opened yet
 - `[PLUGIN_ROOT]` — REQUIRED: the resolved dr-superpowers plugin directory.
   Expand it before sending; a judge handed the literal token cannot open the
   criteria file
