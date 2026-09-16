@@ -301,13 +301,13 @@ present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**
 absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
 present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
 present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'
-present "the Claude manifest is 1.9.0" "$P/.claude-plugin/plugin.json" '"version": "1.9.0"'
-present "the Codex manifest is 1.9.0" "$P/.codex-plugin/plugin.json" '"version": "1.9.0"'
+present "the Claude manifest is 1.10.0" "$P/.claude-plugin/plugin.json" '"version": "1.10.0"'
+present "the Codex manifest is 1.10.0" "$P/.codex-plugin/plugin.json" '"version": "1.10.0"'
 present "the program design records sub-project 8" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-15 (sub-project 8 spec).**'
 present "README names the session gate" "$RD" '`scripts/codex-gate` checks the official codex plugin'
 present "README records trust per surface" "$RD" 'recorded per surface in `reference/codex-plugin.json`'
 present "the program design records the session gate" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" 'A session gate (`scripts/codex-gate`) reads'
-present "the program design names sub-project 9" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" 'A ninth sub-project, "Codex through the plugin", moves'
+present "the program design names sub-project 9" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-16 (sub-project 9 spec).**'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

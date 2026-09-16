@@ -147,32 +147,26 @@ evidence, not native Codex capability declarations:
   `CLAUDE.md` into every prompt, because Codex natively reads only `AGENTS.md`,
   and passes the model's own conventional-commit subject to `git commit`
   unmodified.
-- `codex exec resume` does **not** inherit `-m` or `-c model_reasoning_effort`.
-  The wrapper re-sends every per-invocation flag, because a bare resume would
-  silently run a fix round at the user's config default instead of the recorded
-  tier.
-- `codex exec resume` accepts a **narrower flag set than `codex exec`**. It takes
-  `-m`, `-c`, `--json`, `--output-schema`, and `-o`, but rejects `-C` and `-s`
-  outright - `error: unexpected argument '-C' found`, exit 2, before any model
-  call. Those two therefore precede the subcommand, where the parent `codex exec`
-  takes them and honours them for the resumed thread. Re-confirmed against
-  0.153.4 on 2026-09-06, which is also where this was first caught: the earlier
-  argv put every flag after the subcommand, so each fix round on this lane died
-  at argument parsing and was reported as an ordinary `BLOCKED`.
+- Resume is a request field, not a subcommand. `scripts/lib/codex-client.mjs`
+  passes `resumeThreadId`, and the runner re-sends the model and the effort on
+  every resumed turn, because a resumed thread that fell back to the user's
+  config defaults would run a fix round at a tier the ledger does not record.
+
+Every Codex interaction — the session gate, both runners and the executor
+roster — goes through the official `codex@openai-codex` plugin.
+`scripts/codex-plugin` locates it for the active profile and enforces a version
+allowlist; `scripts/lib/codex-client.mjs` runs one turn through the plugin's own
+client and reaps the broker it causes to exist. This plugin never names the
+`codex` executable and never reads Codex-owned state.
 
 That probe is a dated observation, not a standing fact: the same two models were
 listed in the local catalog on 2026-09-14, and `gpt-6-astra` ran there on that
-date. Catalog listing is not entitlement, which is why the judge seats fall back
-at runtime rather than trusting either list.
+date. This plugin reads no model catalog at all: the judge seats attempt the preferred
+rung and fall back once on a refusal, which is the only evidence of entitlement
+that has ever been reliable.
 
-A different machine, account, or Codex version must verify advertised capabilities
-and supported CLI flags before using the tables. Do not make paid capability
-probes. The flag-position fact above is the one that has
-already changed once, and it fails silently - the wrapper turns a parse error
-into `status=BLOCKED`, which reads as a model that gave up rather than a CLI that
-refused. `tests/run-codex-task.test.sh` now asserts the ordering on both the
-composed and the spawned argv, but a stub cannot notice a flag the real CLI stops
-accepting; only a re-probe can.
+A different machine, account, or Codex version must verify the tables against
+its own account before relying on them. Do not make paid capability probes.
 
 **Cross-family review.** Codex is the default task reviewer: `gpt-5.6-sol` for
 tasks totalling 0 to 3, `gpt-6-astra` for 4 to 6, and Astra followed by
@@ -187,8 +181,8 @@ self-review-free, because the branch contains whatever the executor lane
 produced, which is why every finding goes through a third seat.
 `scripts/review-route` prints the review seat for a task or plan round, and
 every Codex seat runs through `scripts/run-codex-review.sh`, which checks
-availability on each run and falls back to `gpt-5.6-sol` whenever the local
-model catalog does not advertise Astra. Selection, the run bound and the four
+availability on each run and falls back once to `gpt-5.6-sol` when Astra
+refuses the run. Selection, the run bound and the four
 outcomes live in those scripts rather than in prose, so a refused model is a
 recorded substitution instead of a silently missing seat.
 

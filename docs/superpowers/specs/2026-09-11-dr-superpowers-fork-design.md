@@ -354,9 +354,17 @@ Claude seats take over; a usable Codex is still used only on a surface whose
 shipping gate passed - calibration for the review seats, the smoke test for the
 lane. The shipping gates run only when Codex is usable and record `PENDING`
 otherwise.
-A ninth sub-project, "Codex through the plugin", moves `run-codex-review.sh`,
-`run-codex-task.sh` and the executor roster onto the plugin's client. Details:
-`docs/superpowers/specs/2026-09-15-dr-superpowers-review-routing-design.md` (§15).
+**Amendment 2026-09-16 (sub-project 9 spec).** Sub-project 9, "Codex through the
+plugin", is the last of nine. `scripts/lib/codex-client.mjs` becomes the single
+seam to the official plugin; `run-codex-review.sh`, `run-codex-task.sh` and the
+executor roster move onto it. The `models_cache.json` read is dropped, settling
+ruling 18 by removing the catalog rather than relocating it, and the status
+line's `evidence=` becomes the constant `none`. Ruling 12 is narrowed to the
+gate: `runAppServerTurn` connects through a broker and its thread helpers are
+unexported, so runs use broker mode with a reaper this plugin owns. Shipping is
+gated on calibration and smoke replayed through the new path; both record
+`PENDING` while Codex is unusable. Details:
+`docs/superpowers/specs/2026-09-16-dr-superpowers-codex-through-plugin-design.md`.
 
 ## 7. Verification (every sub-project)
 
