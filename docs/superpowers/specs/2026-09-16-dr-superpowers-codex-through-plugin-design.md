@@ -95,10 +95,17 @@ change.
 and the only one that runs a turn. Its surface, invoked as
 `node codex-client.mjs <plugin-root>` with the request on stdin:
 
-| Export | Does |
+It is a command-line module, not a library: nothing imports it, so it exports
+nothing. The two operations below are reached by the request's `op` field.
+
+| Operation | Does |
 |---|---|
-| `runTurn(req)` | One Codex turn, with deadline, interrupt and reap; returns a plain result object |
-| `reap(cwd)` | Shut down a broker this process caused to exist |
+| `op: "turn"` | One Codex turn, with deadline, interrupt and reap; prints a result object |
+| `op: "auth"` | The plugin's login state, for the executor roster |
+
+Reaping is not a separate operation: every turn reaps the broker it caused to
+exist before it prints, and a broker that already existed is left alone, because
+it belongs to the user's own Codex session rather than to this run.
 
 `runTurn`'s request, marshalled as JSON on stdin:
 
@@ -226,7 +233,7 @@ this at smaller scale and is the pattern to follow.
 Every suite runs against the stub; no test starts a real Codex, and no test
 reads the machine's Claude config or session file. Suites touched:
 `codex-review`, `codex-gate`, `lanes`, and a new `codex-client` suite covering
-`locate()`'s fail-closed cases, the deadline and interrupt path, and the reaper.
+`runTurn`'s fail-closed cases, the deadline and interrupt path, and the reaper.
 
 Suites touching the runners keep exporting `DR_CODEX_SESSION_DIR` and
 `CLAUDE_CODE_SESSION_ID`, per the standing constraint.
