@@ -13,6 +13,8 @@
 # and then have nothing to run it - a deadlock no failure-mode row covers.
 set -uo pipefail
 
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
 # Every field this script emits is built with jq. Without it the script would
 # exit 127 with empty stdout, which the dispatching skill reads as "no executor
 # usable" - a silent downgrade of the whole lane.
@@ -30,42 +32,57 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
   local id="$1" capable="$2" lane="$3" incapable_reason="$4"
   local path present version authed reason usable auth_status=not_applicable
 
-  path=$(command -v "$id" 2>/dev/null || true)
-  if [ -n "$path" ]; then present=true; else present=false; fi
-
-  version=null
-  if [ "$present" = true ]; then
-    local v
-    v=$(timeout 20 "$id" --version 2>/dev/null | head -1 | tr -d '\r')
-    [ -n "$v" ] && version=$(jq -Rn --arg v "$v" '$v')
-  fi
-
-  authed=null
-  if [ "$id" = codex ] && [ "$present" = true ]; then
-    local auth_output auth_rc
-    auth_output=$(timeout 20 "$id" login status 2>&1)
-    auth_rc=$?
-    auth_output="${auth_output//$'\r'/}"
-    auth_status=probe_failed
-    if [ "$auth_rc" -eq 0 ] && [[ "$auth_output" == 'Logged in using '* ]]; then
-      authed=true; auth_status=authenticated
-    elif [ "$auth_rc" -eq 1 ] && [ "$auth_output" = 'Not logged in' ]; then
-      authed=false; auth_status=logged_out
+  # Codex is reached only through the official plugin: no `command -v codex`,
+  # no `codex --version`, no `codex login status`. Every other id keeps the
+  # PATH probe, because no plugin owns it.
+  if [ "$id" = codex ]; then
+    path=""
+    present=false
+    version=null
+    authed=null
+    auth_status=not_applicable
+    local plugin_line plugin_root auth_json
+    if plugin_line=$(bash "$HERE/codex-plugin" 2>/dev/null); then
+      present=true
+      plugin_root=${plugin_line#*root=}
+      path=$plugin_root
+      version=$(jq -Rn --arg v "${plugin_line#*version=}" '$v | sub(" root=.*"; "")')
+      auth_json=$(printf '{"op":"auth","cwd":"%s"}' "$PWD" \
+        | timeout 60 node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>/dev/null)
+      case "$(jq -r '.authed // "null"' <<<"${auth_json:-{\}}" 2>/dev/null)" in
+        true)  authed=true;  auth_status=authenticated ;;
+        false) authed=false; auth_status=logged_out ;;
+        *)     authed=null;  auth_status=probe_failed ;;
+      esac
     fi
+  else
+    path=$(command -v "$id" 2>/dev/null || true)
+    if [ -n "$path" ]; then present=true; else present=false; fi
+    version=null
+    if [ "$present" = true ]; then
+      local v
+      v=$(timeout 20 "$id" --version 2>/dev/null | head -1 | tr -d '\r')
+      [ -n "$v" ] && version=$(jq -Rn --arg v "$v" '$v')
+    fi
+    authed=null
   fi
 
   usable=false
   reason=null
   if [ "$present" != true ]; then
-    reason='"not on PATH"'
+    if [ "$id" = codex ]; then
+      reason='"the codex plugin is not enabled in this profile"'
+    else
+      reason='"not on PATH"'
+    fi
   elif [ "$capable" != true ]; then
     reason=$(jq -Rn --arg r "$incapable_reason" '$r')
   elif [ "$lane" != true ]; then
     reason=$(jq -Rn --arg r "no executor lane is implemented for $id in this plugin; only codex has a wrapper" '$r')
   elif [ "$authed" = false ]; then
-    reason='"present but not authenticated; run codex login"'
+    reason='"the codex plugin is installed but not logged in; run /codex:setup"'
   elif [ "$auth_status" = probe_failed ]; then
-    reason='"authentication status probe failed; check codex login status"'
+    reason='"the codex plugin auth probe failed; run /codex:setup"'
   elif [ "$version" = null ]; then
     reason='"version probe failed; check the CLI installation"'
   else
