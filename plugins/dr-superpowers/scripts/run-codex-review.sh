@@ -192,7 +192,7 @@ run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the resu
       schemaPath:(if $schema == "" then null else $schema end),
       sandbox:"read-only", resumeThreadId:null, persistThread:false,
       threadName:null, deadlineMs:$deadline}')
-  printf '%s' "$request" | node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
+  printf '%s' "$request" | timeout $(( $3 + 60 )) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
 }
 
 # --kind final ships no --prompt of its own: the round is defined by the branch.

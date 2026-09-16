@@ -79,6 +79,7 @@ fi
 # block: the controller would spend a rung and a second paid run to learn
 # nothing. The durable phase distinguishes preflight failures from failures after execution.
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
+command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PATH"
 
 # Resolved once: reset pathspecs are repo-relative while these files are written
 # caller-relative, and `git reset` on a non-matching path exits 0, so the miss
@@ -237,7 +238,7 @@ plugin_root=${plugin_line#*root=}
 
 dr_task_update '.phase = "running" | .processes = []' || die 'cannot persist running phase'
 
-result=$(build_request | node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$report.stderr")
+result=$(build_request | timeout $((timeout_s + 60)) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$report.stderr")
 # A node that died before printing leaves $result empty, and every jq below would
 # then fail and take the runner with it. One guard here covers all of them.
 [ -n "$result" ] || result='{}'
