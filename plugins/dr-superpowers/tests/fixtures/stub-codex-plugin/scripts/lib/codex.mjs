@@ -83,7 +83,7 @@ function bumpCalls() {
 
 async function turn(cwd, options, label) {
   const n = bumpCalls();
-  log(`${label} ${options.model || "-"}/${options.effort || "-"}`);
+  log(`${label} ${options.model || "-"}/${options.effort || "-"} sandbox=${options.sandbox ?? "-"} schema=${options.outputSchema ? "yes" : "no"} resume=${options.resumeThreadId ?? "-"} persist=${options.persistThread === true}`);
   let m = mode();
   if (n > 1 && process.env.STUB_SECOND_MODE) m = process.env.STUB_SECOND_MODE;
   if (process.env.STUB_REFUSE_ONCE === "1") {

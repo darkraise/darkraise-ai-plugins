@@ -55,6 +55,31 @@ check "task: routes to runAppServerTurn" \
   "$(grep -c '^runAppServerTurn' "$STUB_EVENT_LOG")" "1"
 unset STUB_EVENT_LOG
 
+# --- codex-client forwards sandbox, output schema, resume and persist to the plugin ---
+export STUB_EVENT_LOG="$TMP/forward.log"
+: > "$STUB_EVENT_LOG"
+# schemaPath is passed as jq's own --arg, not folded into the --argjson extra
+# blob req() uses elsewhere: a real absolute path here has to survive the same
+# MSYS-to-Windows argv translation run-codex-review.sh's own `--arg schema`
+# relies on, which only fires on a standalone argv token, never on a path
+# folded inside a larger JSON string.
+forward_req=$(jq -nc --arg cwd "$TMP" --arg schema "$P/criteria/codex-review-schema.json" \
+  --argjson extra '{"sandbox":"workspace-write","resumeThreadId":"prior-thread","persistThread":true}' \
+  '{op:"turn", kind:"task", cwd:$cwd, model:"gpt-5.6-sol", effort:"high",
+    prompt:"review this", schemaPath:$schema, sandbox:"read-only",
+    resumeThreadId:null, persistThread:false, threadName:null,
+    deadlineMs:5000} + $extra')
+run "$forward_req" >/dev/null
+check "forward: sandbox reaches the plugin" \
+  "$(grep -c 'sandbox=workspace-write' "$STUB_EVENT_LOG")" "1"
+check "forward: output schema reaches the plugin" \
+  "$(grep -c 'schema=yes' "$STUB_EVENT_LOG")" "1"
+check "forward: resumeThreadId reaches the plugin" \
+  "$(grep -c 'resume=prior-thread' "$STUB_EVENT_LOG")" "1"
+check "forward: persistThread reaches the plugin" \
+  "$(grep -c 'persist=true' "$STUB_EVENT_LOG")" "1"
+unset STUB_EVENT_LOG
+
 # --- a plugin that will not import fails closed ---
 out=$(printf '%s' "$(req '{}')" | node "$CLIENT" "$TMP/not-a-plugin" 2>/dev/null)
 check "missing plugin: ok is false" "$(jq -r '.ok' <<<"$out")" "false"
