@@ -78,5 +78,25 @@ check "missing cwd: reason" "$(jq -r '.reason' <<<"$out")" "bad-request"
 printf '%s' "$(req '{}')" | node "$CLIENT" "$STUB" >/dev/null 2>&1
 check "exit code is always 0" "$?" "0"
 
+# --- the deadline interrupts rather than merely abandoning ---
+export STUB_MODE=hang STUB_EVENT_LOG="$TMP/deadline.log"
+: > "$STUB_EVENT_LOG"
+out=$(run "$(req '{"deadlineMs":300}')")
+check "deadline: ok is false" "$(jq -r '.ok' <<<"$out")" "false"
+check "deadline: timedOut is true" "$(jq -r '.timedOut' <<<"$out")" "true"
+check "deadline: reason" "$(jq -r '.reason' <<<"$out")" "timeout"
+check "deadline: interrupted is true" "$(jq -r '.interrupted' <<<"$out")" "true"
+check "deadline: interrupt carried both ids" \
+  "$(grep -c '^interruptAppServerTurn stub-thread stub-turn' "$STUB_EVENT_LOG")" "1"
+unset STUB_EVENT_LOG
+export STUB_MODE=ok
+
+# --- a turn that finishes in time is never interrupted ---
+export STUB_EVENT_LOG="$TMP/no-interrupt.log"
+: > "$STUB_EVENT_LOG"
+run "$(req '{}')" >/dev/null
+check "fast turn: no interrupt" "$(grep -c '^interruptAppServerTurn' "$STUB_EVENT_LOG")" "0"
+unset STUB_EVENT_LOG
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

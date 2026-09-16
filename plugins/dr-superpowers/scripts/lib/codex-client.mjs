@@ -119,13 +119,47 @@ async function main() {
   // criteria prompt and output schema would be discarded. `--kind final` arrives
   // with its criteria and the branch diff already in `prompt`, composed by
   // run-codex-review.sh.
+  // The deadline is ours, not coreutils timeout: on Windows `timeout` kills
+  // only node and strands the app-server it spawned. Interrupting needs both
+  // ids, which is why they are captured from progress above.
+  const deadlineMs = Number(req.deadlineMs) > 0 ? Number(req.deadlineMs) : 600000;
+  let timedOut = false;
+  let interrupted = false;
+  let timer = null;
+
+  const expiry = new Promise((resolve) => {
+    timer = setTimeout(async () => {
+      timedOut = true;
+      try {
+        const outcome = await plugin.interruptAppServerTurn(req.cwd, {
+          threadId: seen.threadId,
+          turnId: seen.turnId
+        });
+        interrupted = outcome?.interrupted === true;
+      } catch {
+        // An interrupt that fails leaves the reaper as the remaining recourse.
+      }
+      resolve(null);
+    }, deadlineMs);
+  });
+
   let result;
   try {
-    result = await plugin.runAppServerTurn(req.cwd, options);
+    result = await Promise.race([plugin.runAppServerTurn(req.cwd, options), expiry]);
   } catch (error) {
+    clearTimeout(timer);
     await emit({
       reason: "plugin-api", threadId: seen.threadId, turnId: seen.turnId,
       stderr: String(error?.message ?? error)
+    });
+  }
+  clearTimeout(timer);
+
+  if (timedOut) {
+    await emit({
+      reason: "timeout", timedOut: true, interrupted,
+      threadId: seen.threadId, turnId: seen.turnId,
+      stderr: "the deadline expired"
     });
   }
 
