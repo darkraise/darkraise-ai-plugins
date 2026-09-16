@@ -3,6 +3,7 @@
 // drive every branch of codex-client.mjs without a real Codex, a real account
 // or a real broker.
 import fs from "node:fs";
+import path from "node:path";
 
 const mode = () => process.env.STUB_MODE || "ok";
 
@@ -121,6 +122,14 @@ async function turn(cwd, options, label) {
       status: 1, threadId: "stub-thread", turnId: "stub-turn", finalMessage: null,
       error: { message: "You've hit your usage limit." }, stderr: "ERROR: usage limit\n"
     };
+  }
+  // The task runner's suite pins scope validation, staging and commit, which
+  // need a turn that changes the worktree. Paths are relative to cwd.
+  if (process.env.STUB_WRITE_PATH) {
+    fs.writeFileSync(path.join(cwd, process.env.STUB_WRITE_PATH), `${process.env.STUB_WRITE_CONTENT ?? "produced"}\n`);
+  }
+  if (process.env.STUB_DELETE_PATH) {
+    fs.rmSync(path.join(cwd, process.env.STUB_DELETE_PATH), { force: true });
   }
   return {
     status: Number(process.env.STUB_TURN_STATUS || 0),
