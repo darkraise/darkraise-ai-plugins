@@ -10,7 +10,9 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LADDER="$HERE/../reference/ladder.md"
+# Tests point this at a fixture ladder whose seconds are small enough to reach
+# the timeout branch. Unset in production, where the shipped table is read.
+LADDER="${CODEX_REVIEW_LADDER:-$HERE/../reference/ladder.md}"
 TASK_SCHEMA="$HERE/../criteria/codex-review-schema.json"
 PLAN_SCHEMA="$HERE/../criteria/codex-plan-review-schema.json"
 # Tests point this at a stub roster. Unset in production, where the real
@@ -99,16 +101,11 @@ gate_line=$(printf '%s\n' "$gate_line" | tail -1 | tr -d '\r')
 if [ "$gate_rc" -ne 0 ] || [[ "$gate_line" != *" usable=true "* ]]; then
   gate_reason=$(sed -n 's/.* reason=\([^ ]*\).*/\1/p' <<<"$gate_line")
   [ "$gate_rc" -eq 0 ] || gate_reason="codex-gate exited $gate_rc"
-  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=unknown\n' "$out"
+  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
   printf 'run-codex-review: codex is off for this session (%s)\n' "${gate_reason:-no gate answer}" >&2
   exit 1
 fi
 
-# Selection. The catalog is a negative filter: a pair it does not advertise is
-# never attempted, and every state that is not a positive match - no catalog, an
-# unreadable one, one that lists nothing, one that lists other models - takes the
-# fallback row. That is the owner's fail-closed rule, and null is deliberately
-# not treated as [].
 # Invoked through bash, not executed directly: core.filemode is false on some
 # checkouts, so the detector can arrive at mode 100644 and a direct call would
 # fail every seat with "no codex row".
@@ -119,37 +116,34 @@ codex_row=$(printf '%s' "$roster" | jq -c '.[]? | select(.id=="codex")' 2>/dev/n
 usable=$(printf '%s' "$codex_row" | jq -r '.usable')
 if [ "$usable" != true ]; then
   reason=$(printf '%s' "$codex_row" | jq -r '.reason // "codex is not usable"')
-  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=unknown\n' "$out"
+  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
   printf 'run-codex-review: %s\n' "$reason" >&2
   exit 1
 fi
 
-advertised=$(printf '%s' "$codex_row" | jq -c '.advertised')
-if [ "$advertised" = null ]; then
-  evidence=unknown
-  listed=false
-else
-  evidence=$(printf '%s' "$advertised" | jq -r '.fetched_at // "unknown"')
-  listed=$(printf '%s' "$advertised" | jq --arg m "$pref_model" --arg e "$pref_effort" \
-    '[.pairs[]? | select(.model == $m and .effort == $e)] | length > 0')
-fi
+# No catalog: the plugin advertises no model list, and reading Codex's own
+# models_cache.json is the boundary this sub-project closes. The preferred rung
+# is attempted, and a refusal falls back, which is the guarantee that matters.
+evidence=none
 
-# The light tier is the last row by definition: it is the known-good rung, so
-# the catalog has nothing to veto, and it is already the fallback row, so the
-# refusal branch below never retries it against itself.
+# The light tier is the last row by definition: the known-good rung, and already
+# the fallback row, so the refusal branch never retries it against itself.
 if [ "$tier" = light ]; then
   model="$back_model"; effort="$back_effort"
-elif [ "$listed" = true ]; then
-  model="$pref_model"; effort="$pref_effort"
 else
-  model="$back_model"; effort="$back_effort"
+  model="$pref_model"; effort="$pref_effort"
 fi
 secs=$(secs_of "$model" "$effort")
 [ -n "$secs" ] || die "no timeout for $model/$effort in the codex-judge block"
 
 if [ "$dry_run" = true ]; then
   printf 'would-run:\n'
-  build_argv "$model" "$effort"
+  jq -nc --arg kind "$kind" --arg cwd "$cwd" --arg model "$model" \
+    --arg effort "$effort" --arg schema "${schema:-}" \
+    --argjson deadline "$(( secs * 1000 ))" \
+    '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
+      schemaPath:(if $schema == "" then null else $schema end),
+      sandbox:"read-only", deadlineMs:$deadline}'
   printf 'codex-judge %s/%s status=OK exit=0 out=%s evidence=%s\n' \
     "$model" "$effort" "$out" "$evidence"
   exit 0
