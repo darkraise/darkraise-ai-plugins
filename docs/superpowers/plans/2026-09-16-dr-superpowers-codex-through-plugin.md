@@ -4,7 +4,7 @@
 
 **Goal:** Move every Codex run — the review runner, the task runner and the executor roster — off the `codex` executable and onto the official plugin's client library, through one new module, and drop the `models_cache.json` read that violates the "never read Codex-owned state" boundary.
 
-**Architecture:** A new `scripts/lib/codex-client.mjs` receives an already-vetted plugin root on argv and a JSON request on stdin, runs exactly one Codex turn through the plugin's public `runAppServerTurn` (or `runAppServerReview` for `--kind final`), owns the deadline, the `turn/interrupt` and the broker reaper, and prints a JSON result. `run-codex-review.sh`, `run-codex-task.sh` and `detect-executors.sh` stay bash and keep every externally visible contract — argv, status line, exit codes, task record, resume semantics — replacing only the block that used to build and spawn a `codex exec` argv. `scripts/codex-plugin` remains the single locator and the single place the version allowlist is enforced.
+**Architecture:** A new `scripts/lib/codex-client.mjs` receives an already-vetted plugin root on argv and a JSON request on stdin, runs exactly one Codex turn through the plugin's public `runAppServerTurn` for every kind, owns the deadline, the `turn/interrupt` and the broker reaper, and prints a JSON result. `run-codex-review.sh`, `run-codex-task.sh` and `detect-executors.sh` stay bash and keep every externally visible contract — argv, status line, exit codes, task record, resume semantics — replacing only the block that used to build and spawn a `codex exec` argv. `scripts/codex-plugin` remains the single locator and the single place the version allowlist is enforced.
 
 **Tech Stack:** Bash, Node.js (ES modules), `jq`, the official `codex@openai-codex` plugin 1.0.3 client library (`scripts/lib/codex.mjs`, `scripts/lib/app-server.mjs`, `scripts/lib/broker-lifecycle.mjs`), Markdown, git.
 
@@ -13,6 +13,8 @@
 **Execution:** subagent — `claude --model sonnet --effort high` — Task 2 totals 5 (coupling 2, risk 2), above the inline band's ceiling of 4.
 
 **Program:** `docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md` — sub-project 9 of 9 — last
+
+**Plan review:** 2026-09-16 — dr-superpowers:judge-opus — executability 15 / coherence 14 / coverage 17 / assumptions 17 (round 3)
 
 ## Global Constraints
 
@@ -37,6 +39,7 @@ Paths are repository-relative unless a step says otherwise. `P` in test suites i
 |---|---|
 | `plugins/dr-superpowers/tests/fixtures/stub-codex-plugin/` | Task 1 |
 | `plugins/dr-superpowers/scripts/lib/codex-client.mjs` | Task 2, extended by Tasks 3, 4 and 5 |
+| `plugins/dr-superpowers/criteria/codex-final-review.md` | Task 6 |
 | `plugins/dr-superpowers/tests/codex-client.test.sh` | Task 2, extended by Tasks 3, 4 and 5 |
 | `docs/superpowers/notes/2026-09-16-codex-through-plugin-calibration.md` | Task 15 |
 
@@ -56,7 +59,6 @@ Request fields:
   "resumeThreadId": "<id>" | null,
   "persistThread": true | false,
   "threadName": "<name>" | null,
-  "base": "<git ref>" | null,
   "deadlineMs": <positive integer> }
 ```
 
@@ -76,11 +78,22 @@ Result fields:
 
 `reason` is one of `plugin-api`, `unavailable`, `logged-out`, `quota`, `refusal`, `timeout`, `bad-request`, or `null` when `ok` is true.
 
+`kind` is carried for diagnostics only. **Every kind runs one plain
+`runAppServerTurn`.** The client never calls `runAppServerReview`, which reads
+only `model`, `threadName`, `target` and `delivery` (`codex.mjs:908-961`) and
+would discard the seat's criteria prompt and output schema. `--kind final`
+therefore arrives with `criteria/codex-final-review.md` and the branch diff
+already composed into `prompt` by `run-codex-review.sh`, and with `schemaPath`
+null, because the final round has no schema and its report stays the markdown
+findings list `reference/final-review.md` section 3 deduplicates. There is no
+`base` field: the runner uses `--base` to build the diff and nothing downstream
+of that needs it.
+
 **`op: "auth"`** ignores every turn field and returns `{ ok, reason, authed: true|false|null, detail }`, used by Task 9.
 
 **Stub fixture contract** (Task 1; consumed by Tasks 2, 3, 4, 5, 6, 9, 10, 12, 13)
 
-`tests/fixtures/stub-codex-plugin/` mirrors the real plugin's layout: `.claude-plugin/plugin.json`, `scripts/lib/codex.mjs`, `scripts/lib/app-server.mjs`, `scripts/lib/broker-lifecycle.mjs`. Behaviour is scripted by environment variables read at import time:
+`tests/fixtures/stub-codex-plugin/` mirrors the real plugin's layout: `.claude-plugin/plugin.json`, `scripts/lib/codex.mjs`, `scripts/lib/app-server.mjs`, `scripts/lib/broker-lifecycle.mjs`. It exports **no** `runAppServerReview`, so no suite can certify a path the client does not take. Behaviour is scripted by environment variables read on every call:
 
 | Variable | Effect |
 |---|---|
@@ -89,7 +102,9 @@ Result fields:
 | `STUB_TURN_STATUS` | `0` or `1`, default `0` |
 | `STUB_EVENT_LOG` | file every stub call appends one line to, for assertions |
 | `STUB_EMPTY` | `1` makes a turn return an empty `finalMessage` |
-| `STUB_REFUSE_ONCE` | `1` refuses only the first call, so the fallback rung succeeds |
+| `STUB_REFUSE_ONCE` | `1` refuses only the first call, so the fallback rung succeeds; the count comes from `STUB_CALL_FILE` |
+| `STUB_CALL_FILE` | file holding the turn count. It is a file, not module state, because each seat is a fresh `node` process |
+| `STUB_SECOND_MODE` | the `STUB_MODE` value the second and later calls use, for refuse-then-quota |
 | `STUB_PRE_EXISTING` | `1` makes a broker session exist before the turn, which must not be reaped |
 | `STUB_NO_BROKER` | `1` makes no broker session exist after the turn |
 | `STUB_SHUTDOWN_FAILS` | `1` leaves the session in place after a shutdown, forcing teardown |
@@ -109,6 +124,10 @@ codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<pat
 - `scripts/codex-plugin` already prints `codex-plugin ok version=<v> root=<path>` and enforces the allowlist — `plugins/dr-superpowers/scripts/codex-plugin:61`, read 2026-09-16.
 - `node scripts/test-all.mjs` has one pre-existing failure on this machine, `tests/ui-discovery.test.mjs` "documented Win32 discovery finds centrally managed versions", from `bash: rg: command not found`. Verified 2026-09-16.
 - Codex quota is exhausted until 2026-09-20 17:03 (+07) and `codex@openai-codex` is not enabled in the `.claude-alt` profile this repository is developed in, so `scripts/codex-gate` reports `usable=false reason=plugin-not-enabled`. Verified 2026-09-16. Task 15 therefore records both shipping gates `PENDING`.
+- `runAppServerReview` is not used by this plan. It reads only `model`, `threadName`, `target`, `delivery` and `onProgress` and starts its own read-only thread (`~/.claude-alt/plugins/cache/openai-codex/codex/1.0.3/scripts/lib/codex.mjs:908-961`, read 2026-09-16), so a seat's criteria prompt and output schema are silently discarded and the answer comes back in Codex's report shape. The owner ruled on 2026-09-16 that `--kind final` routes through `runAppServerTurn` with the branch diff in the prompt.
+- That ruling also said "with this plugin's own schema". The final round has none, and the nearest candidates are the task and plan review schemas, whose axes are wrong for a whole-branch review. Inventing one would change what `plugins/dr-superpowers/reference/final-review.md:44-49` deduplicates, and that file is outside this plan's scope. `--kind final` therefore keeps `schemaPath` null and keeps returning markdown findings. This is the one narrowing of the ruling and it is raised with the owner.
+- `reference/ladder.md`'s `codex-judge` block bounds both rows at 1800 seconds — read 2026-09-16. No suite can reach the timeout branch against that, so Task 7 gives `LADDER` the same environment override `ROSTER` and `GATE` already have at `plugins/dr-superpowers/scripts/run-codex-review.sh:18,21`.
+- `plugins/dr-superpowers/tests/run-codex-task.test.sh` has no `$TMP/bin/codex` stub, and no `$TMP/bin` directory at all: its only PATH shim is the `nojq` one at lines 176-178, which writes `$TMP/nojq/dirname`. Every case it runs is a `--dry-run`. Verified 2026-09-16. Task 13 therefore rewrites argv assertions rather than deleting a stub, and Tasks 10 and 13 keep the plugin locator out of the dry-run path so that suite needs no plugin fixture.
 - `run-codex-task.sh` polls rather than wrapping in `timeout` because a wrapper process defeats `taskkill`'s native tree-walk — `plugins/dr-superpowers/scripts/run-codex-task.sh:282-287`, read 2026-09-16. Task 11 preserves that reasoning in the reaper.
 
 ## Task index
@@ -192,6 +211,9 @@ export function getCodexAvailability() {
 // forever.
 export async function getCodexAuthStatus() {
   log("getCodexAuthStatus");
+  if (mode() === "throw") {
+    throw new Error("stub: app-server exploded");
+  }
   if (mode() === "unavailable") {
     return { available: false, loggedIn: false, detail: "stub: codex not installed", source: "availability" };
   }
@@ -212,13 +234,51 @@ export async function interruptAppServerTurn(cwd, { threadId, turnId } = {}) {
 // STUB_REFUSE_ONCE makes only the first call refuse, so a suite can prove the
 // fallback rung succeeds; STUB_MODE=refusal refuses every call, which proves
 // the FAILED path instead.
+//
+// The count lives in a file, not in a module-level variable. run-codex-review.sh
+// spawns a fresh `node` process per seat, so a module counter is back at zero on
+// the fallback rung and the first call refuses again: the FALLBACK outcome would
+// be unreachable and the suite would certify a path nothing runs.
 let calls = 0;
 
+function bumpCalls() {
+  const file = process.env.STUB_CALL_FILE;
+  if (!file) {
+    calls += 1;
+    return calls;
+  }
+  let n = 0;
+  try {
+    n = Number(fs.readFileSync(file, "utf8").trim()) || 0;
+  } catch {
+    n = 0;
+  }
+  n += 1;
+  try {
+    fs.writeFileSync(file, String(n));
+  } catch {
+    // A suite that cannot write its own counter fails on its assertion instead.
+  }
+  return n;
+}
+
 async function turn(cwd, options, label) {
-  calls += 1;
-  log(`${label} ${options.model || "-"}/${options.effort || "-"} target=${options.target?.branch ?? "-"}`);
+  const n = bumpCalls();
+  log(`${label} ${options.model || "-"}/${options.effort || "-"}`);
   let m = mode();
-  if (process.env.STUB_REFUSE_ONCE === "1") m = calls === 1 ? "refusal" : "ok";
+  if (n > 1 && process.env.STUB_SECOND_MODE) m = process.env.STUB_SECOND_MODE;
+  if (process.env.STUB_REFUSE_ONCE === "1") {
+    m = n === 1 ? "refusal" : (process.env.STUB_SECOND_MODE || "ok");
+  }
+  // A turn against a logged-out account fails at the turn, not at an auth probe:
+  // getCodexAuthStatus is only reached by op:"auth". Without this branch the
+  // logged-out case would return status 0 and the suite would assert nothing.
+  if (m === "logged-out") {
+    return {
+      status: 1, threadId: "stub-thread", turnId: "stub-turn", finalMessage: null,
+      error: { message: "stream error: 401 unauthorized" }, stderr: "ERROR: 401 unauthorized\n"
+    };
+  }
   if (m === "unavailable") {
     throw new Error("Codex CLI is not installed or is missing required runtime support.");
   }
@@ -256,15 +316,11 @@ export async function runAppServerTurn(cwd, options = {}) {
   return turn(cwd, options, "runAppServerTurn");
 }
 
-// The real runAppServerReview returns `reviewText`, not `finalMessage`
-// (codex.mjs:950-960), and takes `options.target`, not a base string
-// (codex.mjs:935). The stub mirrors both so a suite cannot pass against a
-// shape the plugin never produces.
-export async function runAppServerReview(cwd, options = {}) {
-  const result = await turn(cwd, options, "runAppServerReview");
-  const { finalMessage, ...rest } = result;
-  return { ...rest, reviewText: finalMessage };
-}
+// There is deliberately no runAppServerReview here. The real one reads only
+// model, threadName, target and delivery (codex.mjs:908-961) and answers in
+// Codex's own report shape, so it cannot carry a seat's criteria prompt or
+// output schema. codex-client.mjs never calls it, and a stub that offered it
+// would let a suite certify a path production does not take.
 
 export function parseStructuredOutput(raw, fallback = {}) {
   try {
@@ -363,10 +419,11 @@ export function clearBrokerSession() {
 Run:
 
 ```bash
-node -e "import('./plugins/dr-superpowers/tests/fixtures/stub-codex-plugin/scripts/lib/codex.mjs').then(m => console.log(typeof m.runAppServerTurn, typeof m.getCodexAuthStatus))"
+node -e "import('./plugins/dr-superpowers/tests/fixtures/stub-codex-plugin/scripts/lib/codex.mjs').then(m => console.log(typeof m.runAppServerTurn, typeof m.getCodexAuthStatus, typeof m.runAppServerReview))"
 ```
 
-Expected: `function function`
+Expected: `function function undefined` — the third word proves the review entry
+point is absent, which is what stops a suite certifying it.
 
 - [ ] **Step 6: Commit**
 
@@ -426,7 +483,7 @@ req() { # req <extra-json>
   jq -nc --arg cwd "$TMP" --argjson extra "$1" \
     '{op:"turn", kind:"task", cwd:$cwd, model:"gpt-5.6-sol", effort:"high",
       prompt:"review this", schemaPath:null, sandbox:"read-only",
-      resumeThreadId:null, persistThread:false, threadName:null, base:null,
+      resumeThreadId:null, persistThread:false, threadName:null,
       deadlineMs:5000} + $extra'
 }
 
@@ -440,12 +497,12 @@ check "turn: threadId captured" "$(jq -r '.threadId' <<<"$out")" "stub-thread"
 check "turn: turnId captured" "$(jq -r '.turnId' <<<"$out")" "stub-turn"
 check "turn: reason is null" "$(jq -r '.reason' <<<"$out")" "null"
 
-# --- kind final routes to runAppServerReview ---
+# --- every kind runs one plain turn; nothing reaches a review entry point ---
 export STUB_EVENT_LOG="$TMP/events.log"
 : > "$STUB_EVENT_LOG"
-run "$(req '{"kind":"final","base":"main"}')" >/dev/null
-check "final: routes to runAppServerReview" \
-  "$(grep -c '^runAppServerReview' "$STUB_EVENT_LOG")" "1"
+run "$(req '{"kind":"final"}')" >/dev/null
+check "final: routes to runAppServerTurn" \
+  "$(grep -c '^runAppServerTurn' "$STUB_EVENT_LOG")" "1"
 : > "$STUB_EVENT_LOG"
 run "$(req '{}')" >/dev/null
 check "task: routes to runAppServerTurn" \
@@ -508,9 +565,14 @@ const EMPTY = {
   reaped: false, reason: null, stderr: ""
 };
 
+// Awaited at every call site, and it never resolves: the process ends inside the
+// write callback instead. A bare write followed by process.exit truncates a long
+// finalMessage, because a write to a pipe is asynchronous on Windows and every
+// result now travels this path. Returning normally is not an option either -
+// nothing after an emit may run.
 function emit(fields) {
-  process.stdout.write(`${JSON.stringify({ ...EMPTY, ...fields })}\n`);
-  process.exit(0);
+  process.stdout.write(`${JSON.stringify({ ...EMPTY, ...fields })}\n`, () => process.exit(0));
+  return new Promise(() => {});
 }
 
 async function readStdin() {
@@ -538,21 +600,21 @@ async function loadPlugin(root) {
 
 async function main() {
   const root = process.argv[2];
-  if (!root) emit({ reason: "bad-request", stderr: "a plugin root is required" });
+  if (!root) await emit({ reason: "bad-request", stderr: "a plugin root is required" });
 
   const req = parseRequest(await readStdin());
-  if (!req) emit({ reason: "bad-request", stderr: "the request is not a valid turn or auth object" });
+  if (!req) await emit({ reason: "bad-request", stderr: "the request is not a valid turn or auth object" });
 
   let plugin;
   try {
     plugin = await loadPlugin(root);
   } catch (error) {
-    emit({ reason: "plugin-api", stderr: String(error?.message ?? error) });
+    await emit({ reason: "plugin-api", stderr: String(error?.message ?? error) });
   }
 
   const availability = plugin.getCodexAvailability?.(req.cwd);
   if (availability && availability.available === false) {
-    emit({ reason: "unavailable", stderr: String(availability.detail ?? "codex is unavailable") });
+    await emit({ reason: "unavailable", stderr: String(availability.detail ?? "codex is unavailable") });
   }
 
   if (req.op === "auth") {
@@ -560,12 +622,12 @@ async function main() {
       // `loggedIn`, not `authenticated`: codex.mjs:831-864 is the shape.
       const status = await plugin.getCodexAuthStatus(req.cwd);
       const authed = status?.loggedIn === true;
-      emit({
+      await emit({
         ok: authed, authed, reason: authed ? null : "logged-out",
         stderr: String(status?.detail ?? "")
       });
     } catch (error) {
-      emit({ reason: "plugin-api", authed: null, stderr: String(error?.message ?? error) });
+      await emit({ reason: "plugin-api", authed: null, stderr: String(error?.message ?? error) });
     }
   }
 
@@ -584,7 +646,7 @@ async function main() {
     try {
       outputSchema = plugin.readOutputSchema(req.schemaPath);
     } catch (error) {
-      emit({ reason: "bad-request", stderr: `cannot read output schema: ${String(error?.message ?? error)}` });
+      await emit({ reason: "bad-request", stderr: `cannot read output schema: ${String(error?.message ?? error)}` });
     }
   }
 
@@ -599,38 +661,35 @@ async function main() {
     threadName: req.threadName ?? null,
     onProgress
   };
-  // runAppServerReview takes a structured target, not a base string
-  // (codex.mjs:935; the shape is codex-companion.mjs:262).
-  if (req.kind === "final") {
-    options.target = req.base ? { type: "baseBranch", branch: req.base } : null;
-  }
-
+  // Every kind runs one plain turn. runAppServerReview is never called: it reads
+  // only model, threadName, target and delivery (codex.mjs:908-961), starts its
+  // own read-only thread and answers in Codex's report shape, so a seat's
+  // criteria prompt and output schema would be discarded. `--kind final` arrives
+  // with its criteria and the branch diff already in `prompt`, composed by
+  // run-codex-review.sh.
   let result;
   try {
-    result = req.kind === "final"
-      ? await plugin.runAppServerReview(req.cwd, options)
-      : await plugin.runAppServerTurn(req.cwd, options);
+    result = await plugin.runAppServerTurn(req.cwd, options);
   } catch (error) {
-    emit({
+    await emit({
       reason: "plugin-api", threadId: seen.threadId, turnId: seen.turnId,
       stderr: String(error?.message ?? error)
     });
   }
 
   const turnStatus = typeof result?.status === "number" ? result.status : null;
-  emit({
+  await emit({
     ok: turnStatus === 0,
     turnStatus,
     threadId: result?.threadId ?? seen.threadId,
     turnId: result?.turnId ?? seen.turnId,
-    // runAppServerReview returns reviewText; runAppServerTurn returns
-    // finalMessage. One field reaches bash either way.
-    finalMessage: result?.finalMessage ?? result?.reviewText ?? null,
+    finalMessage: result?.finalMessage ?? null,
     reason: turnStatus === 0 ? null : "plugin-api",
     stderr: String(result?.stderr ?? "")
   });
 }
 
+// No await here: nothing follows, and emit ends the process itself.
 main().catch((error) => emit({ reason: "plugin-api", stderr: String(error?.message ?? error) }));
 ```
 
@@ -724,15 +783,10 @@ In `plugins/dr-superpowers/scripts/lib/codex-client.mjs`, replace the `let resul
 
   let result;
   try {
-    result = await Promise.race([
-      req.kind === "final"
-        ? plugin.runAppServerReview(req.cwd, options)
-        : plugin.runAppServerTurn(req.cwd, options),
-      expiry
-    ]);
+    result = await Promise.race([plugin.runAppServerTurn(req.cwd, options), expiry]);
   } catch (error) {
     clearTimeout(timer);
-    emit({
+    await emit({
       reason: "plugin-api", threadId: seen.threadId, turnId: seen.turnId,
       stderr: String(error?.message ?? error)
     });
@@ -740,7 +794,7 @@ In `plugins/dr-superpowers/scripts/lib/codex-client.mjs`, replace the `let resul
   clearTimeout(timer);
 
   if (timedOut) {
-    emit({
+    await emit({
       reason: "timeout", timedOut: true, interrupted,
       threadId: seen.threadId, turnId: seen.turnId,
       stderr: "the deadline expired"
@@ -748,17 +802,18 @@ In `plugins/dr-superpowers/scripts/lib/codex-client.mjs`, replace the `let resul
   }
 
   const turnStatus = typeof result?.status === "number" ? result.status : null;
-  emit({
+  await emit({
     ok: turnStatus === 0,
     turnStatus,
     threadId: result?.threadId ?? seen.threadId,
     turnId: result?.turnId ?? seen.turnId,
-    finalMessage: result?.finalMessage ?? result?.reviewText ?? null,
+    finalMessage: result?.finalMessage ?? null,
     reason: turnStatus === 0 ? null : "plugin-api",
     stderr: String(result?.stderr ?? "")
   });
 }
 
+// No await here: nothing follows, and emit ends the process itself.
 main().catch((error) => emit({ reason: "plugin-api", stderr: String(error?.message ?? error) }));
 ```
 
@@ -929,12 +984,22 @@ async function emit(fields) {
       reaped = false;
     }
   }
-  process.stdout.write(`${JSON.stringify({ ...EMPTY, ...fields, reaped })}\n`);
-  process.exit(0);
+  process.stdout.write(`${JSON.stringify({ ...EMPTY, ...fields, reaped })}\n`, () => process.exit(0));
+  return new Promise(() => {});
 }
 ```
 
-Every existing `emit(...)` call becomes `await emit(...)`, and `main().catch(...)` becomes `main().catch(async (error) => await emit({ reason: "plugin-api", stderr: String(error?.message ?? error) }))`.
+**No call site changes.** Task 2 already wrote `await emit(...)` everywhere and
+Task 3 added one more, so the helper can become `async` in place. Confirm that
+before moving on:
+
+```bash
+grep -c 'await emit(' plugins/dr-superpowers/scripts/lib/codex-client.mjs
+```
+
+Expected: `10` — nine sites from Task 2 plus the deadline emit from Task 3. The
+only other reference is `main().catch((error) => emit(...))`, which needs no
+`await` because nothing follows it.
 
 Set the context immediately after the request parses and the plugin loads, directly before the `op === "auth"` branch:
 
@@ -958,7 +1023,7 @@ Set the context immediately after the request parses and the plugin loads, direc
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `timeout 120 bash plugins/dr-superpowers/tests/codex-client.test.sh`
-Expected: PASS — `31 passed, 0 failed`
+Expected: PASS — `30 passed, 0 failed` (16 from Task 2, 6 from Task 3, 8 here).
 
 - [ ] **Step 5: Verify no broker leaks on the happy path**
 
@@ -1062,7 +1127,7 @@ Replace the final `emit` call in `main()` with:
     turnStatus,
     threadId: result?.threadId ?? seen.threadId,
     turnId: result?.turnId ?? seen.turnId,
-    finalMessage: result?.finalMessage ?? result?.reviewText ?? null,
+    finalMessage: result?.finalMessage ?? null,
     refusal, quota, reason,
     stderr: String(result?.stderr ?? "")
   });
@@ -1071,7 +1136,7 @@ Replace the final `emit` call in `main()` with:
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `timeout 120 bash plugins/dr-superpowers/tests/codex-client.test.sh`
-Expected: PASS — `40 passed, 0 failed`
+Expected: PASS — `38 passed, 0 failed` (30 after Task 4, plus 8 here).
 
 - [ ] **Step 5: Commit**
 
@@ -1088,7 +1153,8 @@ git commit -m "feat(superpowers): classify refusal and quota from result"
 ### Task 6: run-codex-review.sh: run the seat through the client
 
 **Files:**
-- Modify: `plugins/dr-superpowers/scripts/run-codex-review.sh:229-277`
+- Modify: `plugins/dr-superpowers/scripts/run-codex-review.sh:149-161,183-277` — `build_argv` at 153-161 with its comment, the refusal and quota helpers at 183-223, and the seat runner and outcome block at 228-277
+- Create: `plugins/dr-superpowers/criteria/codex-final-review.md`
 
 **Interfaces:**
 - Consumes: the `codex-client.mjs` interface in Contracts.
@@ -1129,15 +1195,33 @@ run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the resu
   request=$(jq -nc \
     --arg kind "$kind" --arg cwd "$cwd" --arg model "$1" --arg effort "$2" \
     --rawfile prompt "${prompt:-/dev/null}" --arg schema "${schema:-}" \
-    --arg base "${base:-}" --argjson deadline "$(( $3 * 1000 ))" \
+    --argjson deadline "$(( $3 * 1000 ))" \
     '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
       prompt:$prompt,
       schemaPath:(if $schema == "" then null else $schema end),
       sandbox:"read-only", resumeThreadId:null, persistThread:false,
-      threadName:null,
-      base:(if $base == "" then null else $base end),
-      deadlineMs:$deadline}')
+      threadName:null, deadlineMs:$deadline}')
   printf '%s' "$request" | node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
+}
+
+# --kind final ships no --prompt of its own: the round is defined by the branch.
+# Its criteria and its diff are composed here, because the plugin call that would
+# otherwise do this - runAppServerReview - reads only model, threadName, target
+# and delivery (codex.mjs:908-961) and answers in Codex's own report shape,
+# discarding the criteria a seat has to return.
+#
+# There is no $base in the request: it is consumed here and nowhere else.
+compose_final_prompt() { # compose_final_prompt; echoes the composed prompt path
+  local file="$out.prompt" diff="$out.diff"
+  git -C "$cwd" diff "$base...HEAD" > "$diff" 2>"$out.diff.err" || return 1
+  {
+    cat "$HERE/../criteria/codex-final-review.md"
+    printf '\n## The diff under review\n\n'
+    printf '%s\n' '```diff'
+    cat "$diff"
+    printf '%s\n' '```'
+  } > "$file" || return 1
+  printf '%s' "$file"
 }
 
 # The report is whatever the seat returned. Writing it here rather than in the
@@ -1147,11 +1231,50 @@ write_out() { # write_out <result-json>
 }
 ```
 
+- [ ] **Step 1b: Write the final round's criteria**
+
+`--kind final` now sends this plugin's own instructions, so they have to exist as
+a file. Create `plugins/dr-superpowers/criteria/codex-final-review.md`:
+
+```markdown
+# Final whole-branch review - criteria for the Codex seat
+
+You are one of two independent reviewers of a branch. A third seat deduplicates
+both lists afterwards, so report what you find and do not try to guess what the
+other reviewer said.
+
+The branch diff follows these criteria. Review that diff: the worktree is
+available, but the diff is the change under review.
+
+Report findings as markdown, most severe first, one per heading:
+
+- `### <severity>: <one-line claim>`, where severity is Critical, Important or
+  Minor.
+- Under it, three lines. `File:` a `path:line` inside the diff. `Why:` the
+  concrete failure - the input or state that reaches the defect and the wrong
+  result it produces. `Fix:` one sentence.
+
+A finding with no concrete failure is not a finding. Do not report style
+preferences, do not restate what the code does, and do not praise. If you find
+nothing, write `No findings.` and stop.
+```
+
 - [ ] **Step 2: Replace the outcome block**
 
 Replace everything from `rc=$(run_seat "$model" "$effort" "$secs" "$out")` to the end of the file with:
 
 ```bash
+# The final round composes its prompt from the branch; every other kind was
+# given one on argv. A failure here is a FAILED seat, not a usage error: the
+# caller reads the status line and would otherwise see nothing at all.
+if [ "$kind" = final ]; then
+  if ! prompt=$(compose_final_prompt); then
+    printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
+    printf 'run-codex-review: cannot diff %s...HEAD in %s\n' "$base" "$cwd" >&2
+    exit 1
+  fi
+fi
+
 result=$(run_seat "$model" "$effort" "$secs" "$out")
 write_out "$result"
 rc=0
@@ -1210,19 +1333,19 @@ Expected: FAIL, and **failing wholesale** rather than in a few cases: until Task
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugins/dr-superpowers/scripts/run-codex-review.sh
+git add plugins/dr-superpowers/scripts/run-codex-review.sh plugins/dr-superpowers/criteria/codex-final-review.md
 git commit -m "feat(superpowers): run review seats through the client"
 ```
 
-**Implementer:** dr-superpowers:impl-opus-low
-**Evaluation:** files 0 - spec 0 - coupling 2 - risk 2 = 4
+**Implementer:** dr-superpowers:impl-opus-medium
+**Evaluation:** files 1 - spec 0 - coupling 2 - risk 2 = 5
 
 ---
 
 ### Task 7: run-codex-review.sh: drop the catalog and dry-run argv
 
 **Files:**
-- Modify: `plugins/dr-superpowers/scripts/run-codex-review.sh:127-170`
+- Modify: `plugins/dr-superpowers/scripts/run-codex-review.sh:13,102,122,127-170`
 
 **Interfaces:**
 - Consumes: the status line in Contracts.
@@ -1230,7 +1353,12 @@ git commit -m "feat(superpowers): run review seats through the client"
 
 - [ ] **Step 1: Delete the catalog lookup**
 
-In `plugins/dr-superpowers/scripts/run-codex-review.sh`, delete the whole block that computes `advertised`, `evidence` and `listed` from the roster row, and replace it with:
+In `plugins/dr-superpowers/scripts/run-codex-review.sh`, delete two things. First,
+lines 107-111, the comment beginning `# Selection. The catalog is a negative
+filter:` — it states the rule this task removes. **Keep lines 112-114**, the
+`# Invoked through bash, not executed directly:` comment, which explains the
+roster call and stays true. Second, the whole block that computes `advertised`,
+`evidence` and `listed` from the roster row. Replace that second block with:
 
 ```bash
 # No catalog: the plugin advertises no model list, and reading Codex's own
@@ -1261,13 +1389,11 @@ Replace the `if [ "$dry_run" = true ]` block with:
 if [ "$dry_run" = true ]; then
   printf 'would-run:\n'
   jq -nc --arg kind "$kind" --arg cwd "$cwd" --arg model "$model" \
-    --arg effort "$effort" --arg schema "${schema:-}" --arg base "${base:-}" \
+    --arg effort "$effort" --arg schema "${schema:-}" \
     --argjson deadline "$(( secs * 1000 ))" \
     '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
       schemaPath:(if $schema == "" then null else $schema end),
-      sandbox:"read-only",
-      base:(if $base == "" then null else $base end),
-      deadlineMs:$deadline}'
+      sandbox:"read-only", deadlineMs:$deadline}'
   printf 'codex-judge %s/%s status=OK exit=0 out=%s evidence=%s\n' \
     "$model" "$effort" "$out" "$evidence"
   exit 0
@@ -1293,20 +1419,52 @@ grep -n 'evidence=' plugins/dr-superpowers/scripts/run-codex-review.sh
 Expected: only `evidence=none` literals and the two `evidence=%s` format strings
 that take `$evidence`, which is now always `none`.
 
-- [ ] **Step 4: Verify the dry run**
+- [ ] **Step 3c: Make the ladder path overridable**
 
-`--dry-run` returns before the locator runs, so this works on this machine even
-though the gate reports `plugin-not-enabled`:
+`LADDER` at line 13 is hard-coded, and both `codex-judge` rows bound a run at
+1800 seconds, so no suite can reach the timeout branch without waiting half an
+hour. Give it the test seam `ROSTER` (line 18) and `GATE` (line 21) already
+have. Replace line 13:
 
 ```bash
-bash plugins/dr-superpowers/scripts/run-codex-review.sh --kind task \
-  --cwd "$PWD" --out /tmp/dry.json --prompt /dev/null --dry-run 2>&1 | head -3
+LADDER="$HERE/../reference/ladder.md"
 ```
 
-Expected: `would-run:` then a single JSON object naming `"op":"turn"`, then a status line ending `evidence=none`.
+with:
 
-If it instead prints `status=FAILED`, the Step 1 insertion landed above the
-`--dry-run` block; move it below `valid_output()`.
+```bash
+# Tests point this at a fixture ladder whose seconds are small enough to reach
+# the timeout branch. Unset in production, where the shipped table is read.
+LADDER="${CODEX_REVIEW_LADDER:-$HERE/../reference/ladder.md}"
+```
+
+- [ ] **Step 4: Verify the dry run**
+
+The session gate (lines 97-105) and the roster (lines 114-124) both run **before**
+the `--dry-run` block, and on this machine the gate answers
+`usable=false reason=plugin-not-enabled`. Point both at stubs, as
+`tests/codex-review.test.sh` already does, or the command prints `status=FAILED`
+and exits 1 no matter where Step 1's replacement landed:
+
+```bash
+TMPD=$(mktemp -d)
+cat > "$TMPD/gate" <<'SH'
+#!/usr/bin/env bash
+echo "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache"
+SH
+cat > "$TMPD/roster" <<'SH'
+#!/usr/bin/env bash
+echo '[{"id":"codex","present":true,"path":"/stub","version":"1.0.3","authed":true,"auth_status":"authenticated","batch_capable":true,"usable":true,"reason":null}]'
+SH
+chmod +x "$TMPD/gate" "$TMPD/roster"
+CODEX_REVIEW_GATE="$TMPD/gate" CODEX_REVIEW_ROSTER="$TMPD/roster" \
+  bash plugins/dr-superpowers/scripts/run-codex-review.sh --kind task \
+  --cwd "$PWD" --out "$TMPD/dry.json" --prompt /dev/null --dry-run 2>&1 | head -3
+rm -rf "$TMPD"
+```
+
+Expected: `would-run:`, then a single JSON object naming `"op":"turn"`, then a
+status line ending `evidence=none`.
 
 - [ ] **Step 5: Commit**
 
@@ -1469,7 +1627,7 @@ git commit -m "feat(superpowers): probe codex through the plugin"
 ### Task 10: run-codex-task.sh: run the task through the client
 
 **Files:**
-- Modify: `plugins/dr-superpowers/scripts/run-codex-task.sh:27,114-145,178,265-337`
+- Modify: `plugins/dr-superpowers/scripts/run-codex-task.sh:27,114-146,178,211-231,265-337,353-359,399`
 
 **Interfaces:**
 - Consumes: the `codex-client.mjs` interface in Contracts.
@@ -1490,12 +1648,12 @@ brief="" report="" model="" effort="" cwd="" timeout_s="" thread="" dry=0 prompt
 Delete the `argv=(...)` construction block and the `command -v timeout` guard,
 and put in their place:
 
-```bash
-# The plugin root, resolved once. scripts/codex-plugin owns the locator and the
-# version allowlist; this script never names the codex executable.
-plugin_line=$(bash "$HERE/codex-plugin") || die "the codex plugin is not usable: $plugin_line"
-plugin_root=${plugin_line#*root=}
+The plugin locator does **not** go here. It moves into Step 5's launch block,
+below the `--dry-run` return, so a dry run needs no enabled plugin - the order
+`run-codex-review.sh` already uses, and what keeps every case in
+`tests/run-codex-task.test.sh` runnable without a plugin fixture.
 
+```bash
 # Every per-invocation field is rebuilt here, including on resume: the client
 # starts a fresh thread unless resumeThreadId is set, and a resumed thread must
 # carry the same model and effort the record pins.
@@ -1511,7 +1669,7 @@ build_request() { # build_request; echoes the request JSON
     '{op:"turn", kind:"task", cwd:$cwd, model:$model, effort:$effort,
       prompt:$prompt, schemaPath:$schema, sandbox:"workspace-write",
       resumeThreadId:(if $thread == "" then null else $thread end),
-      persistThread:true, threadName:null, base:null, deadlineMs:$deadline}'
+      persistThread:true, threadName:null, deadlineMs:$deadline}'
 }
 ```
 
@@ -1554,9 +1712,20 @@ the comment about `kill -TERM`) through `dr_task_update '.processes = []' || die
 # is a direct child that exits on its own, and the wrapper that used to sit
 # between us and node - the one that broke taskkill's native tree-walk - no
 # longer exists either.
+#
+# The plugin root is resolved here rather than beside build_request, so that
+# --dry-run returns above without needing an enabled plugin. scripts/codex-plugin
+# owns the locator and the version allowlist; this script never names the codex
+# executable.
+plugin_line=$(bash "$HERE/codex-plugin") || die "the codex plugin is not usable: $plugin_line"
+plugin_root=${plugin_line#*root=}
+
 dr_task_update '.phase = "running" | .processes = []' || die 'cannot persist running phase'
 
 result=$(build_request | node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$report.stderr")
+# A node that died before printing leaves $result empty, and every jq below would
+# then fail and take the runner with it. One guard here covers all of them.
+[ -n "$result" ] || result='{}'
 printf '%s\n' "$result" > "$jsonl"
 
 # The report the verdict is read from. The client returns the model's structured
@@ -1578,6 +1747,51 @@ rc=0
 survivor=no
 ```
 
+- [ ] **Step 5b: Delete the launch bookkeeping outside Step 5's range**
+
+Three fragments sit outside the range Step 5 replaced and still name a process
+that no longer exists. Task 11 Step 4's grep expects no output, so delete all
+three here:
+
+- **lines 211-212**, `codex_pid=""` and `codex_winpid=""`;
+- **lines 213-231**, the comment block beginning `# Two mechanisms for two
+  topologies.` through the closing `}` of `kill_codex_tree`;
+- **line 399**, the survivor note
+  `[ "$survivor" = yes ] && printf -- '- note: a codex process may still be running (pid %s); ...' "$codex_pid"`.
+
+Line 428, `[ "$survivor" = yes ] && notes="$notes note=codex-may-still-be-running"`,
+**stays**: Step 5 assigns `survivor=no` and never changes it, so the line is
+inert and the notes field keeps its shape. `cleanup()` at 232-248 also still
+references `codex_pid`; Task 11 Step 1 replaces that function whole, and the two
+tasks are committed in sequence, so run the Step 6 grep only after Task 11.
+
+- [ ] **Step 5c: Take the failure diagnostics from the client result**
+
+Lines 353-359 extract `codex_error` from `$jsonl` by matching `.type == "error"`
+or `.type == "turn.failed"`. `$jsonl` now holds one client result object, which
+carries no `.type`, so every failed run would report nothing while the client's
+own `reason` and `stderr` - the only thing separating a quota failure from a
+refusal from a crash - were discarded. Replace the whole `codex_error=$(jq -r
+'...' "$jsonl" ...)` assignment **and the comment above it** with:
+
+```bash
+# The client classifies the failure, so this is where the controller reads it.
+# `reason` separates quota from refusal from timeout from a plugin fault, and
+# `stderr` carries whatever text came back. Without this the task report says
+# only "exit 1", which reads as a model that gave up rather than one that was
+# never reached.
+codex_error=$(jq -r '
+  [ (if .reason then "reason=" + .reason else empty end),
+    (if .refusal == true then "refusal=true" else empty end),
+    (if .quota == true then "quota=true" else empty end),
+    (if .timedOut == true then "timedOut=true" else empty end),
+    (.stderr // "" | select(. != "")) ]
+  | join("\n")' <<<"$result" 2>/dev/null || true)
+```
+
+Lines 412-413, `if [ -n "$codex_error" ]` and the `## Codex error` fence, need no
+change: they already print whatever the variable holds.
+
 - [ ] **Step 6: Confirm nothing references the deleted machinery**
 
 Run:
@@ -1592,7 +1806,13 @@ Expected: no output from either.
 - [ ] **Step 7: Run the task-runner suite**
 
 Run: `timeout 300 bash plugins/dr-superpowers/tests/run-codex-task.test.sh`
-Expected: FAIL on the four dry-run checks pinning `timeout=900`, `exec`, `-C` and `--output-schema`, and on every case driven by the `$TMP/bin/codex` stub binary. Task 13 updates them. Record the failing count in the ledger.
+Expected: FAIL on every assertion that reads the argv the dry run no longer
+prints — the eight-fragment loop at lines 80-82, the `--dangerously-bypass`
+check at 84, both timeout checks at 88 and 95, the resume block at 101-106, the
+ordering block at 116-121, the non-resume block at 124-129, and the space
+round-trip at 194-202. This suite has **no** `$TMP/bin/codex` stub to break, and
+every other case still passes. Task 13 rewrites all of them. Record the failing
+count in the ledger.
 
 - [ ] **Step 8: Commit**
 
@@ -1621,19 +1841,32 @@ referred to it, and records the reap outcome.
 - [ ] **Step 1: Replace the cleanup trap**
 
 `cleanup()` at lines 232-248 signals the process group Task 10 stopped creating.
-Replace the whole function with:
+Two of its statements are **not** optional and must survive:
+
+- `dr_task_unlock` (line 245). `trap cleanup EXIT` at line 248 replaced
+  `trap 'dr_task_unlock' EXIT` at line 157, so `cleanup` is now the only thing
+  that releases the worktree lock. A body that returns without it leaves
+  `$DR_TASK_ROOT/run.lock` behind after **every** completed run, and every later
+  task in that worktree dies at `dr_task_lock` with "worktree run lock exists".
+- the `dr_task_block 'execution interrupted; ...'` guard (line 243). It is what
+  marks a record whose phase is still `running` when the shell exits.
+
+There is no temporary directory to clean up: the existing body removes none.
+Replace the whole function with exactly this:
 
 ```bash
 # The only child is node, which exits when the client does, and the client reaps
-# the broker it caused to exist. Nothing here has a process group to signal.
+# the broker it caused to exist. Nothing here has a process group to signal - but
+# the interrupted-run guard and the unlock both stay, because the EXIT trap is
+# still the only thing that releases the worktree lock.
 cleanup() {
-  [ -n "${TMPDIR_RUN:-}" ] && rm -rf "$TMPDIR_RUN"
+  if [ "$(jq -r .phase "$record" 2>/dev/null)" = running ]; then
+    dr_task_update '.processes = []' && dr_task_block 'execution interrupted; reconcile the recorded snapshot' || true
+  fi
+  dr_task_unlock
   return 0
 }
 ```
-
-Keep whatever temporary-directory variable the existing `cleanup` removed; if it
-removed none, the body is `return 0` alone.
 
 - [ ] **Step 2: Record the reap in the task record**
 
@@ -1641,26 +1874,28 @@ Directly after the `discovered_thread` block Task 10 added, add:
 
 ```bash
 # The client reaps the broker it caused to exist. Recording the outcome makes a
-# leak visible in the task record rather than only in a process list. The
-# default matters: a crashed node leaves $result empty, and a bare --argjson of
-# an empty string makes jq error and the runner die.
+# leak visible in the task record rather than only in a process list. Task 10
+# Step 5 already guarantees $result holds an object, so the jq below cannot be
+# handed an empty string; the `if` still defaults a missing key to false.
 dr_task_update '.reaped = $reaped' \
-  --argjson reaped "$(jq -r 'if .reaped == true then true else false end' <<<"${result:-{\}}" 2>/dev/null || echo false)" \
+  --argjson reaped "$(jq -r 'if .reaped == true then true else false end' <<<"$result" 2>/dev/null || echo false)" \
   || die 'cannot persist reap outcome'
 ```
 
 - [ ] **Step 3: Verify the record still validates**
 
-`scripts/lib/task-state.sh` validates the record's shape. Confirm it tolerates
-the new key before relying on it:
+`scripts/lib/task-state.sh:51` validates the record by asserting that required
+keys are **present** — a chain of `has("candidate") and has("pending") and …`.
+It never compares the full key set, so an added key cannot be rejected and
+`reaped` needs to be registered nowhere. Confirm that still holds:
 
 ```bash
-grep -n 'reaped\|required\|has(' plugins/dr-superpowers/scripts/lib/task-state.sh | head
+sed -n '45,55p' plugins/dr-superpowers/scripts/lib/task-state.sh
 timeout 300 bash plugins/dr-superpowers/tests/task-state.test.sh
 ```
 
-Expected: the suite reports `0 failed`. If the validator rejects unknown keys,
-add `reaped` to whatever list it checks, in the same commit.
+Expected: line 51 is a `has(...)` chain with no `keys` comparison, and the suite
+reports `0 failed`.
 
 - [ ] **Step 4: Verify no orphan is possible**
 
@@ -1670,7 +1905,9 @@ Run:
 grep -nE 'kill_codex_tree|codex_pid|codex_winpid|taskkill|launch-pending' plugins/dr-superpowers/scripts/run-codex-task.sh
 ```
 
-Expected: no output.
+Expected: no output. Task 10 Step 5b deleted lines 211-231 and 399; Step 1 above
+removed the last references, in `cleanup`. A hit here means one of those two
+edits was skipped.
 
 - [ ] **Step 5: Run the task-runner suite**
 
@@ -1725,6 +1962,30 @@ jq -nc --arg p "$STUB_PLUGIN" \
 export DR_CODEX_POLICY="$TMP/policy.json"
 jq -nc '{plugin:"codex@openai-codex", versions:["1.0.3"],
          trust:{calibration:"pending", smoke:"pending"}}' > "$DR_CODEX_POLICY"
+
+# A fixture ladder, because the shipped codex-judge rows bound a run at 1800
+# seconds and the timeout case would wait out half an hour against them. The
+# rows and their order are the shipped ones; only the seconds differ. Task 7
+# Step 3c adds the CODEX_REVIEW_LADDER override this reads.
+export CODEX_REVIEW_LADDER="$TMP/ladder.md"
+fence='```'
+{ printf '%scodex-judge\n' "$fence"
+  printf 'gpt-6-astra high 2\n'
+  printf 'gpt-5.6-sol high 2\n'
+  printf '%s\n' "$fence"; } > "$CODEX_REVIEW_LADDER"
+
+# --kind final composes its own prompt from `git diff <base>...HEAD` (Task 6), so
+# the work tree has to be a real repository with the base branch present. One
+# empty commit is enough: the diff may be empty, and the runner only needs the
+# compose to succeed.
+#
+# mkdir here, not only at line 29: this block sits near the top of the file, well
+# above the existing `mkdir -p "$TMP/bin" "$TMP/codexhome" "$TMP/work"`, and
+# `git -C` on a directory that does not exist yet fails outright.
+mkdir -p "$TMP/work"
+git -C "$TMP/work" init -q -b main
+git -C "$TMP/work" -c user.email=t@example.invalid -c user.name=t \
+  commit -q --allow-empty -m base
 ```
 
 The stub fixture carries version `1.0.3` in its `.claude-plugin/plugin.json` and
@@ -1733,80 +1994,244 @@ before calling a root usable.
 
 - [ ] **Step 2: Carry the stub environment into every run**
 
-The existing `run()` helper passes `PATH`, `CODEX_REVIEW_ROSTER` and
-`CODEX_REVIEW_GATE`. Add the plugin-facing variables so a per-case `STUB_MODE`
-reaches the client:
+Replace the `run()` helper at lines 61-64 with:
 
 ```bash
-run() { # run <args...>
-  PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" CODEX_REVIEW_GATE="$TMP/gate-stub" \
-    CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" CLAUDE_PROJECT_DIR= DR_CODEX_POLICY="$DR_CODEX_POLICY" \
-    STUB_MODE="${STUB_MODE:-ok}" STUB_TURN_STATUS="${STUB_TURN_STATUS:-0}" \
-    STUB_EMPTY="${STUB_EMPTY:-0}" STUB_REFUSE_ONCE="${STUB_REFUSE_ONCE:-0}" \
-    STUB_FINAL_MESSAGE="${STUB_FINAL_MESSAGE:-}" STUB_EVENT_LOG="${STUB_EVENT_LOG:-}" \
+run() { # run <args...>; STUB_* variables in the environment script the stub
+  printf '0' > "$TMP/calls"
+  : > "$TMP/events.log"
+  PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" \
+    CODEX_REVIEW_GATE="$TMP/gate-stub" CODEX_REVIEW_LADDER="$CODEX_REVIEW_LADDER" \
+    CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" CLAUDE_PROJECT_DIR= \
+    DR_CODEX_POLICY="$DR_CODEX_POLICY" \
+    STUB_CALL_FILE="$TMP/calls" STUB_EVENT_LOG="$TMP/events.log" \
     "$BASH_BIN" "$SCRIPT" "$@" 2>"$TMP/err"
 }
 ```
 
-- [ ] **Step 3: Delete the codex binary stub and its writer**
+**Do not add the `STUB_*` mode variables to that prefix.** Writing
+`STUB_FINAL_MESSAGE="${STUB_FINAL_MESSAGE:-}"` exports an empty string, and the
+stub reads `process.env.STUB_FINAL_MESSAGE ?? '{"ok":true}'` — `??` treats `""`
+as present, so every case would get an empty final message, `valid_output` would
+fail, and every `OK` case would report `FAILED`. It is also unnecessary: a bash
+assignment written in front of a shell-function call is visible to the commands
+that function runs, so a per-case `STUB_MODE=refusal run …` already reaches the
+client.
 
-Delete the `$TMP/bin/codex` heredoc, every `chmod +x "$TMP/bin/codex"`, and the
-helper that set `CODEX_STUB_MODE`. Nothing reaches a `codex` binary any more, so
-a stub binary left in place would only mask a regression.
+`STUB_CALL_FILE` and `STUB_EVENT_LOG` are reset here rather than per case, so
+every seat count and every call log covers exactly one runner invocation —
+including the two seats of a fallback, which is the count the assertions read.
+
+- [ ] **Step 3: Delete the codex binary stub and retarget the seat helper**
+
+Delete lines **143-191**: the comment block introducing the stub, the
+`cat > "$TMP/bin/codex" <<STUB … STUB` heredoc with its whole
+`case "$CODEX_STUB_MODE"` body, and the `chmod +x "$TMP/bin/codex"` beneath it.
+Keep line 142, the `# --- the outcome policy ---` banner: the section it labels
+survives this task.
+Nothing reaches a `codex` binary any more, so a stub binary left in place would
+only mask a regression.
+
+Then replace the `seat()` helper at lines 193-197, which currently reads:
+
+```bash
+seat() { # seat <mode> <kind> <extra-args...>
+  rm -f "$TMP/calls" "$TMP"/o.md* "$TMP"/o.json*
+  local mode="$1" k="$2"; shift 2
+  CODEX_STUB_MODE="$mode" run --kind "$k" --cwd "$TMP/work" "$@"
+}
+```
+
+with one that takes no mode, because the stub is scripted by `STUB_*` variables
+a per-case prefix supplies:
+
+```bash
+seat() { # seat <kind> <extra-args...>; STUB_* in the environment scripts the stub
+  rm -f "$TMP"/o.md* "$TMP"/o.json*
+  local k="$1"; shift
+  run --kind "$k" --cwd "$TMP/work" "$@"
+}
+```
+
+`$TMP/calls` is deliberately no longer removed here. `run()` re-initialises it to
+`0` on every invocation, which is what keeps the three "runs no codex" checks at
+lines 318, 330 and 335 reading `0` instead of an empty string.
 
 - [ ] **Step 4: Remap every outcome case**
 
-Each old `CODEX_STUB_MODE` value has one replacement. The call shape becomes
-`STUB_MODE=<mode> run --kind <k> --cwd "$TMP/work" --out "$TMP/o.md" --prompt "$TMP/p.md"`,
-capturing into `out` and reading the last line for the status.
+Every `seat <mode> <kind> …` call becomes `<prefix> seat <kind> …`, where the
+prefix is this table's second column. An empty prefix means the stub's defaults
+are already right and the call carries none.
 
-| Old `CODEX_STUB_MODE` | New environment | Expected status |
+| Old `CODEX_STUB_MODE` | New environment prefix | Expected outcome |
 |---|---|---|
-| `ok-final` | `STUB_MODE=ok` | `OK` |
-| `empty` | `STUB_MODE=ok STUB_EMPTY=1` | `FAILED` |
-| `noout` | `STUB_MODE=ok STUB_EMPTY=1` | `FAILED` |
-| `hang` | `STUB_MODE=hang`, with the rung's seconds lowered by the fixture | `TIMEOUT` |
-| `refuse-then-ok` | `STUB_REFUSE_ONCE=1` | `FALLBACK` |
-| `refuse-always` | `STUB_MODE=refusal` | `FAILED` |
-| `prose-fail` | `STUB_MODE=ok STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE` quoting a refusal phrase | `FAILED`, and no fallback ran |
-| `refuse-stdout` | `STUB_MODE=refusal` | `FAILED` |
-| `authfail` | `STUB_MODE=logged-out` | `FAILED` |
-| `cancel` | `STUB_MODE=throw` | `FAILED` |
-| `refuse-then-quota` | `STUB_REFUSE_ONCE=1 STUB_MODE=quota` | `FAILED`, session marked off |
+| `ok-final` | *(none)* | `OK` |
+| `ok` | `STUB_FINAL_MESSAGE='{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}'` | `OK` |
+| `ok-plan` | `STUB_FINAL_MESSAGE='{"executability":17,"coherence":16,"coverage":17,"assumptions":16,"findings":[]}'` | `OK` |
+| `empty` | `STUB_EMPTY=1` | `FAILED` |
+| `noout` | `STUB_EMPTY=1` | `FAILED` |
+| `hang` | `STUB_MODE=hang` | `TIMEOUT`, one seat |
+| `refuse-then-ok` | `STUB_REFUSE_ONCE=1` | `FALLBACK`, two seats |
+| `refuse-always` | `STUB_MODE=refusal` | `FAILED`, two seats |
+| `prose-fail` | `STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the diff mentions an unsupported model'` | `FAILED`, one seat |
+| `authfail` | `STUB_MODE=logged-out` | `FAILED`, one seat |
+| `cancel` | `STUB_MODE=throw` | `FAILED`, one seat |
+| `quota` | `STUB_MODE=quota` | `FAILED`, one seat, session marked off |
+| `refuse-then-quota` | `STUB_REFUSE_ONCE=1 STUB_SECOND_MODE=quota` | `FAILED` on the fallback row, session marked off |
+
+Three of these rows were unreachable in the previous draft, and each needs
+something outside the table:
+
+- **`hang`** works only against the Step 1 fixture ladder. The shipped rows bound
+  a run at 1800 seconds; the fixture bounds it at 2, which is what lets the
+  client's deadline fire inside the suite.
+- **`authfail`** needs the stub's `logged-out` **turn** branch, which Task 1 adds.
+  An `op:"turn"` request never reaches `getCodexAuthStatus`, so without that
+  branch the case returns status 0 and proves nothing.
+- **`refuse-then-quota`** needs `STUB_SECOND_MODE`. `STUB_REFUSE_ONCE=1` alone
+  forces call 2 to `ok`, so the session would never be marked off and the
+  assertion at line 359 would fail.
+
+**Delete the `refuse-stdout` case at lines 252-255** rather than remapping it. It
+existed to prove that a refusal arriving on stdout rather than on stderr still
+falls back. The client classifies from the turn result's own error field, so
+there is no stream to distinguish, and `STUB_MODE=refusal` already covers the
+outcome the case asserted.
+
+**Delete the fallback-row case at lines 246-250 as well** — `write_roster
+"$SOL_ONLY"` followed by `seat refuse-always final`, asserting `the fallback row
+is never retried against itself` with a seat count of 1. It worked only because
+the catalog fixture forced selection onto the last row. After Task 7 the heavy
+tier always selects `gpt-6-astra`, so the run falls back and the count reads 2,
+which is what this table's `refuse-always` row already expects. The property is
+not lost: the `--tier light` case at lines 306-308 asserts it, and `--tier` is a
+usage error with `--kind final` (line 294), so this case cannot be rescued by
+adding one.
 
 The `prose-fail` row is the case that proves the migration's point: the old
 runner grepped a transcript and would call that a refusal, while the client
 classifies from the result's own error field and does not.
 
+- [ ] **Step 4b: Restore the seat-count and refusal-log assertions**
+
+`$TMP/calls` used to be written by the deleted binary stub. It is written by the
+stub plugin now, through `STUB_CALL_FILE`, and `run()` resets it per invocation —
+so the seven `check … "$(cat "$TMP/calls")"` assertions at lines 221, 227, 231,
+235, 239, 244 and 308, and the `calls()` helper at line 313, keep working
+unchanged once Steps 2 and 3 land. Lines 250 and 255 are deliberately **not** in
+that list: Step 4 deletes the two cases that carry them.
+
+The two log assertions at lines 257-262 do not. They read `$TMP/o.md.stderr` and
+`$TMP/o.md.fallback.stderr` and require the first to be **non-empty**; `run_seat`
+redirects node's stderr to those paths and node writes nothing against the stub.
+The refusal text now travels in the result's `stderr` field and comes out in the
+runner's own `refused (...)` message. Replace lines 257-262 with:
+
+```bash
+# The refusal has to survive into the fallback run, because the ledger quotes it.
+# It travels in the result's own stderr field now and reaches the runner's
+# message rather than a log file.
+STUB_REFUSE_ONCE=1 seat final --out "$TMP/o.md" --base main >/dev/null
+check "the refusal is quoted before the fallback runs" \
+  "$(grep -c 'refused (.*); falling back to gpt-5.6-sol/high' "$TMP/err")" "1"
+check "both seats ran, preferred rung first" \
+  "$(awk '/^runAppServerTurn/{print $2}' "$TMP/events.log" | tr '\n' ',')" \
+  "gpt-6-astra/high,gpt-5.6-sol/high,"
+check "no seat ever reaches a review entry point" \
+  "$(grep -c 'runAppServerReview' "$TMP/events.log")" "0"
+```
+
 - [ ] **Step 5: Fix the selection and evidence assertions**
 
-The default heavy tier is the ladder's first row, `gpt-6-astra`, not
-`gpt-5.6-sol`; keep every existing selection assertion naming `gpt-6-astra`.
+`evidence=` appears in four expectations. Change all four to `evidence=none`:
+lines 73 and 276, which expect `evidence=2026-09-14T13:35:00Z`, and lines 106 and
+316, which expect `evidence=unknown`. After Task 7 every status line the runner
+prints carries the constant.
 
-Replace the check reading `evidence=2026-09-14T13:35:00Z` with:
+Then delete the catalog fixtures and the cases built on them:
+
+- **lines 37-51** — `write_roster()`'s `<advertised-json>` parameter and the
+  `ASTRA`, `SOL_ONLY` and `EMPTY` constants. `write_roster` becomes a
+  no-argument function emitting a row with no `advertised` key, and every
+  `write_roster "$ASTRA"`, `write_roster "$SOL_ONLY"`, `write_roster "$EMPTY"`
+  and `write_roster null` call becomes a bare `write_roster`.
+- **lines 88-106** — the three fail-closed selection blocks: `catalog without
+  astra falls back to sol`, `empty catalog falls back to sol`, `absent catalog
+  falls back to sol`, and `absent catalog reports unknown evidence`. Selection no
+  longer consults a catalog, so the preferred rung is always attempted and these
+  four outcomes cannot occur.
+- **line 125** — the `"advertised":null` field in the unusable-roster fixture.
+
+Keep every remaining selection assertion naming `gpt-6-astra`: the heavy tier is
+still the ladder's first row. The `--tier light` cases at lines 272-279 keep
+selecting `gpt-5.6-sol`, still the last row.
+
+- [ ] **Step 6: Replace the argv assertions with request-JSON assertions**
+
+`--dry-run` prints `would-run:` and then one JSON object on line 2. The `tok()`
+helper at line 76 tested one argv token per line and has nothing left to test.
+Delete `tok` and every check that used it — lines 77-78, 79-81, 85-86, 92-93,
+98-99, 104-105, 112-113, 116-117, 269-270, 274-275 and 285-286 — along with the
+six `present` checks that matched argv text, at lines 82, 114, 115, 267, 282 and
+283. Add one helper in `tok`'s place:
 
 ```bash
+req_of() { sed -n '2p' <<<"$1"; } # req_of <dry-run output>; echoes the request JSON
+```
+
+Then write the replacements:
+
+- **Lines 71-86**, after the existing `out=$(run --kind final … --dry-run)` at
+  line 70:
+
+```bash
+present "the heavy tier selects astra" "$out" "codex-judge gpt-6-astra/high"
+present "dry run reports OK" "$out" "status=OK"
 present "dry run reports no catalog evidence" "$out" "evidence=none"
+r=$(req_of "$out")
+check "final: prints a turn request" "$(jq -r '.op' <<<"$r")" "turn"
+check "final: carries the selected model" "$(jq -r '.model' <<<"$r")" "gpt-6-astra"
+check "final: carries the selected effort" "$(jq -r '.effort' <<<"$r")" "high"
+check "final: sends no base field" "$(jq -r 'has("base")' <<<"$r")" "false"
+check "final: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
+check "final: deadline in milliseconds" "$(jq -r '.deadlineMs > 0' <<<"$r")" "true"
 ```
 
-Then run `grep -n 'evidence=' plugins/dr-superpowers/tests/codex-review.test.sh`
-and change every remaining expected value, including the `evidence=unknown` on
-the gate-off branch, to `evidence=none`. Delete the cases exercising a catalog
-that did or did not advertise a pair, and the advertised-pair roster fixtures
-they used: a roster row no longer carries `advertised`.
+  `final` sends neither a schema nor a base. Its criteria and its diff are
+  composed into the prompt by the runner on a real run, and `--dry-run` returns
+  before that happens.
 
-- [ ] **Step 6: Replace the argv assertions**
-
-Every check asserting that `--dry-run` printed a `codex exec` argv line becomes
-an assertion on the request JSON, which is printed on the second line:
+- **Lines 111-117**, the risk3 block:
 
 ```bash
-out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.md" --prompt "$TMP/p.md" --dry-run)
-check "dry-run: prints a turn request" "$(sed -n '2p' <<<"$out" | jq -r '.op')" "turn"
-check "dry-run: carries the model" "$(sed -n '2p' <<<"$out" | jq -r '.model')" "gpt-6-astra"
-check "dry-run: read-only sandbox" "$(sed -n '2p' <<<"$out" | jq -r '.sandbox')" "read-only"
-check "dry-run: deadline in milliseconds" "$(sed -n '2p' <<<"$out" | jq -r '.deadlineMs > 0')" "true"
+out=$(run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+r=$(req_of "$out")
+check "risk3: carries a schema path" \
+  "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
+check "risk3: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
+check "risk3: the kind reaches the request" "$(jq -r '.kind' <<<"$r")" "risk3"
 ```
+
+- **Lines 266-270 and 281-286**, the task and plan blocks:
+
+```bash
+out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+r=$(req_of "$out")
+check "task: passes the task-review schema" \
+  "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
+present "task defaults to the heavy tier" "$out" "codex-judge gpt-6-astra/high"
+
+out=$(run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+r=$(req_of "$out")
+check "plan: passes the plan-review schema" \
+  "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-plan-review-schema.json')" "1"
+check "plan: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
+present "plan takes the heavy selection" "$out" "codex-judge gpt-6-astra/high"
+```
+
+Lines 272-279, the light-tier cases, keep their `present` assertions on the
+status line and lose only the `tok` check: the line already names the row that
+was selected.
 
 - [ ] **Step 7: Run the suite**
 
@@ -1841,74 +2266,249 @@ plan. These two suites are the ones that cover the roster and the task runner.
 - [ ] **Step 1: Give detect.test.sh a usable PATH**
 
 `plugins/dr-superpowers/tests/detect.test.sh:38` runs with `PATH="$TMP/bin"`,
-holding shims for `jq timeout head tr` and a stub `codex` binary. After Task 9
-the roster needs `node` and `bash`, so replace that helper with:
+which holds shims for `jq timeout head tr` and a stub `codex` binary. After Task
+9 the roster also needs `node` and `bash`. Add them as shims, **not** by
+appending the real `PATH`: the sealed `PATH` is exactly what makes the
+`cursor-agent`, `opencode` and `antigravity` "not present" assertions at lines
+96-107 deterministic, and appending this machine's `PATH` would let a real
+binary answer them. Extend the shim loop at lines 34-37:
 
 ```bash
-# node and bash are needed now: the codex row is probed through the plugin, not
-# through a codex binary on PATH. The real PATH is appended rather than
-# replaced, and the codex stub binary is gone, so a codex on this machine's PATH
-# can no longer reach the roster.
-run() { PATH="$TMP/bin:$PATH" CLAUDE_CONFIG_DIR="$TMP/config" CLAUDE_PROJECT_DIR= \
+for dep in jq timeout head tr node bash; do
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v "$dep")" > "$TMP/bin/$dep"
+  chmod +x "$TMP/bin/$dep"
+done
+```
+
+and replace the `run()` helper at line 38 with:
+
+```bash
+# The codex row is probed through the plugin now, not through a codex binary on
+# PATH, so PATH stays sealed to $TMP/bin and the locator is pointed at fixtures
+# instead. CLAUDE_PROJECT_DIR is cleared because scripts/codex-plugin also reads
+# a project's own .claude/settings*.json.
+run() { PATH="$TMP/bin" CLAUDE_CONFIG_DIR="$TMP/config" CLAUDE_PROJECT_DIR= \
         DR_CODEX_POLICY="$TMP/policy.json" STUB_MODE="${STUB_MODE:-ok}" \
         "$BASH_BIN" "$SCRIPT"; }
 ```
 
+`STUB_MODE="${STUB_MODE:-ok}"` is safe here, unlike `STUB_FINAL_MESSAGE` in Task
+12: `ok` is the stub's real default, so the fallback value and the absent value
+mean the same thing.
+
 - [ ] **Step 2: Add the stub-plugin fixture**
 
-Add the same fixture block Task 12 Step 1 adds, using this suite's own `TMP`
-variable, so `scripts/codex-plugin` resolves the Task 1 stub.
+`scripts/codex-plugin` reads a profile's settings, its installed-plugins file and
+the policy file. All three are fixtures here. Add this directly below Step 1's
+shim loop. It is **not** the block Task 12 Step 1 adds: that one also builds a git
+repository and a ladder fixture, and this suite never runs the review runner and
+has no `$TMP/work`.
+
+```bash
+# The locator reads a profile's settings and installed-plugins file; the version
+# allowlist reads the policy file. Step 1's run() clears CLAUDE_PROJECT_DIR,
+# because the locator also reads a project's own .claude/settings*.json.
+STUB_PLUGIN="$HERE/fixtures/stub-codex-plugin"
+mkdir -p "$TMP/config/plugins"
+printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
+jq -nc --arg p "$STUB_PLUGIN" \
+  '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
+  > "$TMP/config/plugins/installed_plugins.json"
+jq -nc '{plugin:"codex@openai-codex", versions:["1.0.3"],
+         trust:{calibration:"pending", smoke:"pending"}}' > "$TMP/policy.json"
+```
 
 - [ ] **Step 3: Delete the codex binary stubs and the catalog fixtures**
 
-Delete every `$TMP/bin/codex` writer and its `chmod +x` (lines 53-54, 65-66,
-73-74 and the heredoc at 137-144), the `CODEX_HOME="$TMP/codexhome"` export and
-the `$TMP/codexhome` tree, and all eighteen assertions reading `.advertised`,
-including the cases distinguishing `null` from `[]`. None of that behaviour
-exists after Tasks 8 and 9.
+In `plugins/dr-superpowers/tests/detect.test.sh`, delete by line:
+
+- **53-54** — the `$TMP/bin/codex` writer and its `chmod +x`. Lines 65-66 and
+  73-74 write that stub too, but each is paired with something else — an
+  `auth.json` write at 66, a `run` at 74 — and Step 3b replaces the whole of
+  52-61 and 63-77 regardless, so do not treat those two pairs as writer plus
+  `chmod` here.
+- **137-144** — the `cat > "$TMP/bin/codex" <<STUB … STUB` heredoc and its
+  `chmod +x`.
+- **133-192** — the whole `--- advertised model pairs ---` section, from its
+  banner comment through `check "absent cache leaves codex usable"`. That is the
+  `write_cache` helper at 146, its four calls at 148, 166, 171 and 182, the
+  `rm -f "$TMP/codexhome/models_cache.json"` at 188, the `has_field` helper at
+  161, the **twelve** assertions reading `.advertised` — lines 153, 154, 155,
+  157, 162, 163, 168, 173, 174, 184, 190 and 191 — and the three
+  catalog-behaviour checks at 175, 185 and 192 that do not name `.advertised`
+  but exist only to exercise that section.
+- **`CODEX_HOME`** wherever it is set: line 38, which Step 1's new `run()`
+  already drops, and line 118, the `nojq` invocation, which keeps its `PATH` and
+  loses only `CODEX_HOME="$TMP/codexhome"`.
+- **`$TMP/codexhome`** — remove it from the `mkdir -p` at line 21; lines 64, 66
+  and 71 (the `rm -f` and `printf` against `auth.json`) go with the cases Step 3b
+  replaces.
+
+The count is twelve, not eighteen: round 1's "18" added the `CODEX_HOME` lines to
+the `.advertised` assertions.
+
+- [ ] **Step 3b: Replace the cases the deleted stubs fed**
+
+Deleting the three stub writers leaves three blocks of assertions with nothing
+driving them. Replace each block; do not merely delete the writer above it.
+
+**Lines 43-50, `--- nothing installed ---`.** "codex not present" now means the
+plugin is not enabled, not that `PATH` is empty. Keep lines 45 and 46 as they
+are and replace 47-50 with:
+
+```bash
+# No plugin enabled in the fixture profile, so there is no codex lane at all.
+printf '{"enabledPlugins":{}}\n' > "$TMP/config/settings.json"
+out=$(run)
+check "no plugin: codex not present" "$(field codex present "$out")" "false"
+check "no plugin: codex not usable" "$(field codex usable "$out")" "false"
+check "no plugin: the reason names the plugin, not PATH" \
+  "$(field codex reason "$out" | grep -qi 'plugin' && echo yes || echo no)" "yes"
+```
+
+**Lines 52-61, `--- codex installed and authenticated ---`.** Replace the banner,
+both stub lines and all six checks with:
+
+```bash
+# --- codex enabled and logged in, both answered by the plugin ----------------
+printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
+out=$(run)
+check "codex present from the plugin" "$(field codex present "$out")" "true"
+check "codex version from the plugin" "$(field codex version "$out")" "1.0.3"
+check "codex authed from the plugin" "$(field codex authed "$out")" "true"
+check "codex batch capable" "$(field codex batch_capable "$out")" "true"
+check "codex usable" "$(field codex usable "$out")" "true"
+check "usable executor carries no reason" "$(field codex reason "$out")" "null"
+```
+
+**Lines 63-77, `--- codex installed but unauthenticated ---`.** Replace the
+banner, the two stub writers, the `auth.json` writes and all six checks with:
+
+```bash
+# --- enabled but logged out, and a probe that fails outright -----------------
+out=$(STUB_MODE=logged-out run)
+check "logged out is not usable" "$(field codex usable "$out")" "false"
+check "logged out says so" \
+  "$(field codex reason "$out" | grep -qi 'logged in' && echo yes || echo no)" "yes"
+check "logged out is explicit" "$(field codex auth_status "$out")" "logged_out"
+out=$(STUB_MODE=throw run 2>"$TMP/probe.err")
+check "a failed probe is distinct" "$(field codex auth_status "$out")" "probe_failed"
+check "a failed probe is unusable" "$(field codex usable "$out")" "false"
+check "the probe's own text is not exposed" \
+  "$(printf '%s%s' "$out" "$(cat "$TMP/probe.err")" | grep -c 'stub: app-server exploded')" "0"
+```
+
+`STUB_MODE=throw` reaches `getCodexAuthStatus`'s throw branch, which Task 1 adds,
+and the client turns that into `authed: null` — which Task 9 maps to
+`auth_status=probe_failed`.
 
 - [ ] **Step 4: Add roster cases for the plugin path**
 
+Presence, version and auth are already covered by Step 3b. What is left is the
+two facts that are new to the plugin path:
+
 ```bash
-# --- the codex row is plugin-backed, never PATH-backed ---
+# --- the roster row carries a plugin root and no catalog ---------------------
 row=$(run | jq -c '.[] | select(.id=="codex")')
-check "codex row: present from the plugin" "$(jq -r '.present' <<<"$row")" "true"
-check "codex row: version from the plugin" "$(jq -r '.version' <<<"$row")" "1.0.3"
-check "codex row: authed from the plugin" "$(jq -r '.authed' <<<"$row")" "true"
-check "codex row: usable" "$(jq -r '.usable' <<<"$row")" "true"
 check "codex row: no advertised field" "$(jq -r 'has("advertised")' <<<"$row")" "false"
+check "codex row: path is the plugin root, not a binary" \
+  "$(jq -r '.path' <<<"$row" | grep -c 'stub-codex-plugin')" "1"
 
-STUB_MODE=logged-out row=$(run | jq -c '.[] | select(.id=="codex")')
-check "logged out: not usable" "$(jq -r '.usable' <<<"$row")" "false"
-check "logged out: names the plugin, not codex login" \
+row=$(STUB_MODE=logged-out run | jq -c '.[] | select(.id=="codex")')
+check "logged out: names the plugin setup command, not codex login" \
   "$(jq -r '.reason' <<<"$row" | grep -c 'codex:setup')" "1"
-
-# A profile that does not enable the plugin has no codex lane at all.
-printf '{"enabledPlugins":{}}\n' > "$TMP/config/settings.json"
-row=$(run | jq -c '.[] | select(.id=="codex")')
-check "not enabled: not present" "$(jq -r '.present' <<<"$row")" "false"
-check "not enabled: says so" "$(jq -r '.reason' <<<"$row" | grep -c 'not enabled')" "1"
-printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
 ```
+
+Write the environment prefix inside the command substitution, as above.
+`STUB_MODE=logged-out row=$(run | …)` is **two assignments**, not a prefixed
+command: it would set `STUB_MODE` in the suite's own shell and leak it into every
+later case.
 
 - [ ] **Step 5: Update run-codex-task.test.sh**
 
-Add the same fixture block, clear `CLAUDE_PROJECT_DIR`, delete the
-`$TMP/bin/codex` stub, and replace the four dry-run assertions that pinned
-`timeout=900`, `exec`, `-C` and `--output-schema` with:
+Three facts about this suite, because the previous draft got all three wrong:
+
+- It has **no** `$TMP/bin/codex` stub. Its only `$TMP/bin` use is the `nojq`
+  shim at lines 176-178, which stays.
+- Its invocation helper is `dry()` at line 36, which already passes `--dry-run`.
+  There is no `run_task`.
+- It needs **no** stub-plugin fixture. Every case it runs is a dry run, and Task
+  10 keeps the plugin locator below the `--dry-run` return.
+
+What it does have is about twenty assertions on the `codex exec` argv the dry run
+used to print. Replace them by line.
+
+**Lines 79-85** — `cmd=$(dry …)`, the eight-fragment `for frag` loop and the
+`--dangerously-bypass` check:
 
 ```bash
-dry=$(run_task --dry-run)
-check "task dry-run: prints a turn request" "$(sed -n '2p' <<<"$dry" | jq -r '.op')" "turn"
-check "task dry-run: workspace-write sandbox" "$(sed -n '2p' <<<"$dry" | jq -r '.sandbox')" "workspace-write"
-check "task dry-run: persists the thread" "$(sed -n '2p' <<<"$dry" | jq -r '.persistThread')" "true"
-check "task dry-run: carries the report schema" \
-  "$(sed -n '2p' <<<"$dry" | jq -r '.schemaPath' | grep -c 'codex-report-schema.json')" "1"
-check "task dry-run: deadline in milliseconds" "$(sed -n '2p' <<<"$dry" | jq -r '.deadlineMs')" "900000"
+req=$(dry --model gpt-5.5 --effort medium | sed -n '2p')
+check "dry run: prints a turn request" "$(jq -r '.op' <<<"$req")" "turn"
+check "dry run: carries the model" "$(jq -r '.model' <<<"$req")" "gpt-5.5"
+check "dry run: carries the effort" "$(jq -r '.effort' <<<"$req")" "medium"
+check "dry run: workspace-write sandbox" "$(jq -r '.sandbox' <<<"$req")" "workspace-write"
+check "dry run: persists the thread" "$(jq -r '.persistThread' <<<"$req")" "true"
+check "dry run: carries the report schema" \
+  "$(jq -r '.schemaPath' <<<"$req" | grep -c 'codex-report-schema.json')" "1"
+check "dry run: names the worktree" "$(jq -r '.cwd' <<<"$req")" "$TMP/work"
+check "dry run: never bypasses the sandbox" \
+  "$(jq -r '.sandbox' <<<"$req" | grep -c 'bypass')" "0"
 ```
 
-Use whatever invocation helper the suite already defines in place of
-`run_task`, adding `--dry-run` to it.
+**Lines 87-96** — the two timeout checks **and the comment at 90-94**. That
+comment explains a SIGPIPE hazard specific to the old two-line `timeout=…` /
+`codex …` output and the `grep -q` that read it; the replacement prints one JSON
+line and reads it with `jq`, so delete the comment with the checks rather than
+leaving stale prose. `timeout=<s>` is no longer printed at all: the bound travels
+as `deadlineMs`.
+
+```bash
+check "deadline defaults from codex-timeout" "$(jq -r '.deadlineMs' <<<"$req")" "900000"
+check "explicit timeout wins" \
+  "$(dry --model gpt-5.5 --effort medium --timeout 42 | sed -n '2p' | jq -r '.deadlineMs')" "42000"
+```
+
+**Lines 98-121** — the resume block (four checks) and the flag-ordering block
+(four checks, plus `res_cmd` at 115). Ordering is no longer a correctness
+property: there is no argv, and the thread id is a request field. Delete the
+`before()` helper at lines 22-31 and its comment, and replace both blocks with:
+
+```bash
+# A resumed run must still re-send the model and the effort: the client starts a
+# fresh thread unless resumeThreadId is set, and a resumed thread has to carry
+# the tier the ledger recorded.
+res=$(dry --model gpt-5.5 --effort high --resume 01a0-thread | sed -n '2p')
+check "resume carries the thread id" "$(jq -r '.resumeThreadId' <<<"$res")" "01a0-thread"
+check "resume re-sends the model" "$(jq -r '.model' <<<"$res")" "gpt-5.5"
+check "resume re-sends the effort" "$(jq -r '.effort' <<<"$res")" "high"
+check "resume still asks for a persisted thread" "$(jq -r '.persistThread' <<<"$res")" "true"
+```
+
+**Lines 123-129** — the non-resume block:
+
+```bash
+plain=$(dry --model gpt-5.5 --effort medium | sed -n '2p')
+check "a non-resume run sends no thread id" "$(jq -r '.resumeThreadId' <<<"$plain")" "null"
+check "a non-resume run still names the worktree" "$(jq -r '.cwd' <<<"$plain")" "$TMP/work"
+check "a non-resume run still asks for workspace-write" "$(jq -r '.sandbox' <<<"$plain")" "workspace-write"
+```
+
+**Lines 191-202** — the space round-trip, which greps `'^codex '` and `eval`s the
+printed argv. JSON has no shell quoting to round-trip, but the path must still
+arrive whole:
+
+```bash
+mkdir -p "$TMP/dir with space"
+spaced=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null \
+  | sed -n '2p')
+check "dry run carries a space-containing path whole" \
+  "$(jq -r '.cwd' <<<"$spaced")" "$TMP/dir with space"
+```
+
+Lines 40-76 (the schema and validation checks), 131-189 (malformed input, the
+missing-jq guard, and "rejected input prints nothing on stdout") and 204-205 are
+untouched: none of them reads the argv.
 
 - [ ] **Step 6: Run both suites**
 
@@ -1936,16 +2536,20 @@ git commit -m "test(superpowers): cover the plugin-backed roster"
 ### Task 14: reference/external-executor.md: retire the catalog prose
 
 **Files:**
-- Modify: `plugins/dr-superpowers/reference/external-executor.md:369-373,388-394,414,459,465-469`
+- Modify: `plugins/dr-superpowers/reference/external-executor.md:369-394,413-415,450,459-463,465-469`
 
 **Interfaces:**
 - Consumes: the status line in Contracts.
 - Produces: prose that matches the shipped behaviour. Nothing later reads it.
 
-Five passages describe a model catalog, a `codex exec` argv or a coreutils
-`timeout` that no longer exist. Each has exact replacement text below; do not
-paraphrase, because `tests/lanes.test.sh` and `tests/ladder.test.sh` read some of
-these lines.
+Seven passages describe a model catalog, a `codex exec` argv, a refusal read from
+a log file, or a coreutils `timeout` — none of which exist after Tasks 6, 7 and
+8. Each has exact replacement text below; do not paraphrase, because
+`tests/lanes.test.sh` and `tests/ladder.test.sh` read some of these lines.
+
+**Work from the bottom of the file upwards, or match on the quoted text rather
+than the line number.** Every line number below is from the unmodified file, and
+Steps 2 and 4c each delete a paragraph, which shifts everything after it.
 
 - [ ] **Step 1: The tier paragraph (369-373)**
 
@@ -1976,34 +2580,71 @@ Delete the whole paragraph, from `On a `--tier heavy` run, a status line naming 
 through `nothing to say.` It described a selection that fell closed before the
 run, which cannot happen now: the preferred rung is always attempted.
 
-- [ ] **Step 3: The argv sentence (414)**
+- [ ] **Step 3: The argv paragraph (413-415)**
 
-Replace:
+Replace the whole paragraph, all three lines of it:
 
 ```text
 Use `codex exec`, not `codex exec review`: the latter imposes its own report
+shape. The schema is a plugin file, outside every worktree, so it can never land
+in a task's commit.
 ```
 
 with:
 
 ```text
-Task and plan kinds send this plugin's own output schema, never the review
+Task and plan kinds send this plugin's own output schema, never Codex's review
 report shape: a seat must return the criteria the Claude judges return. The
+schema is a plugin file, outside every worktree, so it can never land in a
+task's commit.
 ```
 
-Read the following line and adjust its opening so the sentence still reads; the
-point being preserved is that the review report shape is unsuitable for a seat.
+- [ ] **Step 4: The two status-line fences, the refusal-log sentence, and the second catalog paragraph**
 
-- [ ] **Step 4: The status-line description (459)**
+Four edits here, not one. Line 459 is prose, not a fence: the two fences carrying
+`evidence=<fetched_at>` are at 378 and 450.
 
-Replace the fenced example's trailing `evidence=<fetched_at>` with
-`evidence=none`, and add directly below the fence:
+**4a. Both fences (378 and 450).** Each reads:
+
+```text
+codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<fetched_at>
+```
+
+Change `evidence=<fetched_at>` to `evidence=none` in **both**, and add, directly
+below the first fence only:
 
 ```text
 `evidence=none` is constant. This plugin reads no model catalog, so there is no
 date to quote; the field is kept only because skills and suites read the line's
 shape.
 ```
+
+**4b. The refusal-log sentence (381-386).** Replace:
+
+```text
+Read that line and nothing else. `OK` and `FALLBACK` are a seat that reviewed;
+`FALLBACK` additionally means the preferred rung refused the run, so say the
+substitution aloud and record it in the task's ledger line with the reason the
+runner prints in its own `refused (...)` message — it reads that line from
+`<out>.stderr` or `<out>.stdout`, because an API-level refusal arrives on the
+JSON stream rather than on stderr.
+```
+
+with:
+
+```text
+Read that line and nothing else. `OK` and `FALLBACK` are a seat that reviewed;
+`FALLBACK` additionally means the preferred rung refused the run, so say the
+substitution aloud and record it in the task's ledger line with the reason the
+runner prints in its own `refused (...)` message. That reason comes from the
+client's own result rather than from a log file: a refusal is classified from
+the turn's error field, so which stream carried it no longer matters.
+```
+
+**4c. The second catalog paragraph (459-463).** Delete it in full, from `A status
+line naming the block's last row with` through `refused anything.` It is the same
+substitution Step 2 deletes at 388-394, repeated in the final-review section, and
+it ceases to exist for the same reason.
 
 - [ ] **Step 5: The deadline paragraph (465-469)**
 
@@ -2028,16 +2669,48 @@ runner passes to the client as a deadline; the client interrupts the turn and
 reaps the broker when it expires.
 ```
 
+- [ ] **Step 5b: Say how the final round is now composed**
+
+Directly below the paragraph Step 5 replaced, add:
+
+```text
+The runner composes that round's prompt itself: `criteria/codex-final-review.md`
+followed by `git diff <base>...HEAD`. It does not use the Codex plugin's own
+review call, which reads only the model, the thread name and a target branch and
+answers in Codex's report shape — a seat's criteria and its schema would both be
+discarded. `--kind final` still takes no `--prompt`, and the round still returns
+a markdown findings list, which is what [final-review.md](final-review.md) step 3
+deduplicates.
+```
+
+- [ ] **Step 5c: The task-seat deadline sentence (355-359)**
+
+One more passage names coreutils `timeout`, and it sits outside every range
+above. Replace:
+
+```text
+plan's copy, applies the `codex-judge` row's bound with coreutils `timeout`, and
+```
+
+with:
+
+```text
+plan's copy, passes the `codex-judge` row's bound to the client as a deadline, and
+```
+
 - [ ] **Step 6: Verify no catalog prose survives**
 
 Run:
 
 ```bash
-grep -niE 'catalog|advertis|fetched_at|models_cache|coreutils .timeout.' plugins/dr-superpowers/reference/external-executor.md
+grep -niE 'fetched_at|models_cache|did not advertise|coreutils' plugins/dr-superpowers/reference/external-executor.md
 ```
 
-Expected: no output. If a hit remains, rewrite that sentence to match the
-behaviour Tasks 6 and 7 shipped rather than deleting it blindly.
+Expected: no output.
+
+The pattern deliberately omits `catalog` and `advertis`. The replacement text
+Steps 1 and 4a add uses both words — to say that no catalog is read — so a grep
+matching them would send an implementer to rewrite what this task just wrote.
 
 - [ ] **Step 7: Run the prose suites**
 
@@ -2155,18 +2828,61 @@ Set `"version": "1.10.0"` in `plugins/dr-superpowers/.claude-plugin/plugin.json`
 
 - [ ] **Step 2: Update the README**
 
-Run `grep -nE 'codex exec|codex CLI|codex binary|on PATH|codex login' plugins/dr-superpowers/README.md`
-and rewrite each hit so it describes the plugin path. Where the hits form a
-contiguous description of how Codex is invoked, replace that block with:
+Five passages are stale, listed here with their line numbers in the unmodified
+file. Edit them from the bottom up, or match on the quoted text.
+
+**188-193.** In the sentence beginning `every Codex seat runs through`, replace
+`which checks availability on each run and falls back to `gpt-5.6-sol` whenever
+the local model catalog does not advertise Astra` with `which checks availability
+on each run and falls back once to `gpt-5.6-sol` when Astra refuses the run`.
+
+**168-175.** In the paragraph beginning `A different machine, account, or Codex
+version`, replace `must verify advertised capabilities and supported CLI flags
+before using the tables` with `must verify the tables against its own account
+before relying on them`, and delete the sentence from `The flag-position fact
+above is the one that has` through `only a re-probe can.` — it describes argv
+parsing this plugin no longer does.
+
+**163-166.** In the paragraph beginning `That probe is a dated observation`,
+replace the last sentence, `Catalog listing is not entitlement, which is why the
+judge seats fall back at runtime rather than trusting either list.`, with:
+
+```markdown
+This plugin reads no model catalog at all: the judge seats attempt the preferred
+rung and fall back once on a refusal, which is the only evidence of entitlement
+that has ever been reliable.
+```
+
+**150-161.** Delete both `codex exec resume` bullets — 150-153 and 154-161 — and
+put one bullet in their place:
+
+```markdown
+- Resume is a request field, not a subcommand. `scripts/lib/codex-client.mjs`
+  passes `resumeThreadId`, and the runner re-sends the model and the effort on
+  every resumed turn, because a resumed thread that fell back to the user's
+  config defaults would run a fix round at a tier the ledger does not record.
+```
+
+**After 161**, where the bullet list ends. Insert the paragraph describing the
+plugin path. Not after 142: that line ends the reasoning-efforts bullet and 143
+begins `- Codex **cannot commit**`, so a paragraph there lands mid-list.
 
 ```markdown
 Every Codex interaction — the session gate, both runners and the executor
-roster — goes through the official `codex@openai-codex` plugin. `scripts/codex-plugin`
-locates it for the active profile and enforces a version allowlist;
-`scripts/lib/codex-client.mjs` runs one turn through the plugin's own client and
-reaps the broker it causes to exist. This plugin never names the `codex`
-executable and never reads Codex-owned state.
+roster — goes through the official `codex@openai-codex` plugin.
+`scripts/codex-plugin` locates it for the active profile and enforces a version
+allowlist; `scripts/lib/codex-client.mjs` runs one turn through the plugin's own
+client and reaps the broker it causes to exist. This plugin never names the
+`codex` executable and never reads Codex-owned state.
 ```
+
+Then confirm nothing stale survives:
+
+```bash
+grep -nE 'codex exec|codex binary|codex login|models_cache|CODEX_HOME|advertis' plugins/dr-superpowers/README.md
+```
+
+Expected: no output.
 
 - [ ] **Step 3: Amend the program design**
 

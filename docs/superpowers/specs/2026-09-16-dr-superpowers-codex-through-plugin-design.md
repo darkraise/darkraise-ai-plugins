@@ -126,8 +126,20 @@ module writes no output file and chooses no exit code: the caller writes the
 report to its `--out` path and decides the process exit, because exit codes are
 part of the argv contract bash owns (§5).
 
-`kind: final` routes to `runAppServerReview`; every other kind routes to
-`runAppServerTurn` with `outputSchema` read from `schemaPath`.
+Every kind routes to `runAppServerTurn`, with `outputSchema` read from
+`schemaPath` when one is given.
+
+`runAppServerReview` is **not** used. It reads only `model`, `threadName`,
+`target` and `delivery` (`codex.mjs:908-961`), starts its own read-only thread
+and answers in Codex's report shape, so a seat's criteria prompt and output
+schema would be silently discarded — the same reason SP8 moved every other kind
+off `codex exec review`. `--kind final` therefore arrives with
+`criteria/codex-final-review.md` and `git diff <base>...HEAD` already composed
+into `prompt` by `run-codex-review.sh`, and with `schemaPath` null: the final
+round has no schema of its own, and its report stays the markdown findings list
+`reference/final-review.md` §3 deduplicates. There is no `base` request field;
+`--base` is consumed by the runner when it builds the diff. (Owner ruling,
+2026-09-16.)
 
 **Version allowlist.** `scripts/codex-plugin` is the single place the allowlist
 is enforced, which is what makes bounding the coupling meaningful: every caller
@@ -214,6 +226,11 @@ Named here so the plan treats them as deliberate:
 4. `--kind risk3` and `--kind final` keep their argv and exit codes, but their
    status line's `evidence=` value becomes `none`. SP8's constraint freezing
    these kinds byte-for-byte is lifted by this sub-project, as SP8 §15.8 said.
+5. `--kind final` composes its own prompt. The runner reads
+   `criteria/codex-final-review.md` and appends `git diff <base>...HEAD` instead
+   of handing the round to Codex's own review flow. Its argv and its `--out`
+   contract are unchanged: no `--prompt`, and a markdown findings list on the way
+   out.
 
 ## 9. Approaches considered
 
