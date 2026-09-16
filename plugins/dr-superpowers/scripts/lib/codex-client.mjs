@@ -18,6 +18,21 @@ const EMPTY = {
   reaped: false, reason: null, stderr: ""
 };
 
+// Classified from the result's own error, never from the transcript. The old
+// bash runners searched captured stderr, where a review that merely quoted a
+// refusal message read as a refusal: a 2026-09-14 --kind final run left 10,590
+// stderr lines carrying 20 false matches.
+const REFUSAL = /(unsupported|unknown|invalid|not (supported|available|found)).*(model|effort)|(model|effort).*(unsupported|unknown|invalid|not (supported|available|found))/i;
+const QUOTA = /usage limit|rate_limit_reached/i;
+
+function classify(result) {
+  const message = String(result?.error?.message ?? "");
+  if (!message) return { refusal: false, quota: false };
+  if (QUOTA.test(message)) return { refusal: false, quota: true };
+  if (REFUSAL.test(message)) return { refusal: true, quota: false };
+  return { refusal: false, quota: false };
+}
+
 // The shutdown RPC settles only on the broker's reply, an error or a close
 // (broker-lifecycle.mjs:43-57). A broker whose listener accepts but whose event
 // loop is wedged does none of those, and this runs before the result is
@@ -285,13 +300,20 @@ async function main() {
   }
 
   const turnStatus = typeof result?.status === "number" ? result.status : null;
+  const { refusal, quota } = classify(result);
+  let reason = null;
+  if (turnStatus !== 0) {
+    if (quota) reason = "quota";
+    else if (refusal) reason = "refusal";
+    else reason = "plugin-api";
+  }
   await emit({
     ok: turnStatus === 0,
     turnStatus,
     threadId: result?.threadId ?? seen.threadId,
     turnId: result?.turnId ?? seen.turnId,
     finalMessage: result?.finalMessage ?? null,
-    reason: turnStatus === 0 ? null : "plugin-api",
+    refusal, quota, reason,
     stderr: String(result?.stderr ?? "")
   });
 }

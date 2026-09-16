@@ -130,5 +130,27 @@ check "reap: a timeout still reaps" "$(jq -r '.reaped' <<<"$out")" "true"
 export STUB_MODE=ok
 unset STUB_EVENT_LOG
 
+# --- a refusal is classified from the result, not grepped from a transcript ---
+export STUB_MODE=refusal
+out=$(run "$(req '{}')")
+check "refusal: ok is false" "$(jq -r '.ok' <<<"$out")" "false"
+check "refusal: refusal is true" "$(jq -r '.refusal' <<<"$out")" "true"
+check "refusal: quota is false" "$(jq -r '.quota' <<<"$out")" "false"
+check "refusal: reason" "$(jq -r '.reason' <<<"$out")" "refusal"
+
+# --- an exhausted quota is its own outcome, never a refusal ---
+export STUB_MODE=quota
+out=$(run "$(req '{}')")
+check "quota: quota is true" "$(jq -r '.quota' <<<"$out")" "true"
+check "quota: refusal is false" "$(jq -r '.refusal' <<<"$out")" "false"
+check "quota: reason" "$(jq -r '.reason' <<<"$out")" "quota"
+export STUB_MODE=ok
+
+# --- prose that merely quotes a refusal is not a refusal ---
+export STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the reviewer wrote "unsupported model" in its report'
+out=$(run "$(req '{}')")
+check "quoted prose: not a refusal" "$(jq -r '.refusal' <<<"$out")" "false"
+unset STUB_TURN_STATUS STUB_FINAL_MESSAGE
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
