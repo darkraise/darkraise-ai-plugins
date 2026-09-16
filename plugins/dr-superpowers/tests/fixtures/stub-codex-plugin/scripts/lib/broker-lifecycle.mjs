@@ -16,11 +16,9 @@ function log(entry) {
 export const PID_FILE_ENV = "CODEX_COMPANION_APP_SERVER_PID_FILE";
 export const LOG_FILE_ENV = "CODEX_COMPANION_APP_SERVER_LOG_FILE";
 
-// The client asks twice: once before the turn, to learn whether a broker it
-// must not touch already exists, and once after a shutdown, to learn whether
-// the broker actually died. The stub models that sequence rather than a single
-// boolean, because the pre-existing case is the one that protects the user's
-// own /codex:* session.
+// The client asks once, before the turn, whether a broker it must not touch
+// already exists. Later loads return the post-turn session unless
+// STUB_NO_BROKER is set, so a suite can still script the session away.
 let loads = 0;
 
 export function loadBrokerSession() {
@@ -37,8 +35,9 @@ export function loadBrokerSession() {
 // The real sendBrokerShutdown resolves undefined (broker-lifecycle.mjs:43-57):
 // it reports nothing about whether the broker died. The stub returns undefined
 // too, so no caller can be written against a truthiness that does not exist.
-// STUB_SHUTDOWN_FAILS instead leaves the session in place, which is what the
-// caller must actually probe for.
+// STUB_SHUTDOWN_FAILS leaves the session visible to a later loadBrokerSession;
+// the client tears down after every shutdown regardless, because the real
+// broker never removes its session file.
 export async function sendBrokerShutdown(endpoint) {
   log(`sendBrokerShutdown ${endpoint}`);
   if (process.env.STUB_SHUTDOWN_FAILS !== "1") process.env.STUB_NO_BROKER = "1";

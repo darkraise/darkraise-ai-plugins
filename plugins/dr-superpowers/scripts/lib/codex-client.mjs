@@ -18,6 +18,12 @@ const EMPTY = {
   reaped: false, reason: null, stderr: ""
 };
 
+// The shutdown RPC settles only on the broker's reply, an error or a close
+// (broker-lifecycle.mjs:43-57). A broker whose listener accepts but whose event
+// loop is wedged does none of those, and this runs before the result is
+// printed, so it is bounded the way the deadline interrupt is.
+const SHUTDOWN_GRACE_MS = 5000;
+
 // Awaited at every call site, and it never resolves: the process ends inside the
 // write callback instead. A bare write followed by process.exit truncates a long
 // finalMessage, because a write to a pipe is asynchronous on Windows and every
@@ -85,31 +91,35 @@ async function reap(root, cwd) {
   }
   if (!session) return false;
 
-  // sendBrokerShutdown resolves undefined: it reports nothing about whether the
-  // broker died (broker-lifecycle.mjs:43-57). So ask afterwards rather than
-  // believing a return value that does not exist - treating undefined as
-  // failure would taskkill a healthy shutdown's PID, which may already be
-  // reused by then.
+  // The broker answers broker/shutdown before it exits and never removes
+  // broker.json (app-server-broker.mjs:102-114,160-164; clearBrokerSession is
+  // called only by ensureBrokerSession and the SessionEnd hook), so the session
+  // file says nothing about whether it died, and sendBrokerShutdown itself
+  // resolves undefined (broker-lifecycle.mjs:43-57). Teardown therefore always
+  // follows, exactly as the plugin's own SessionEnd hook does
+  // (session-lifecycle-hook.mjs:98-111): the kill lands on a broker still
+  // closing its app-server, or on a PID that exited milliseconds earlier, and
+  // teardown removes the pid file, log and session directory that a graceful
+  // exit leaves behind.
+  let grace = null;
   try {
-    await lifecycle.sendBrokerShutdown(session.endpoint);
+    await Promise.race([
+      lifecycle.sendBrokerShutdown(session.endpoint),
+      new Promise((settle) => {
+        grace = setTimeout(() => settle(null), SHUTDOWN_GRACE_MS);
+      })
+    ]);
   } catch {
     // An unreachable endpoint is already down, or never came up.
   }
-  let down = true;
+  clearTimeout(grace);
   try {
-    down = lifecycle.loadBrokerSession(cwd) === null;
+    // killProcess carries the Windows knowledge run-codex-task.sh proved:
+    // taskkill walks the native process tree, and a plain kill leaves the
+    // node children of the broker running.
+    lifecycle.teardownBrokerSession({ ...session, killProcess: killTree });
   } catch {
-    down = false;
-  }
-  if (!down) {
-    try {
-      // killProcess carries the Windows knowledge run-codex-task.sh proved:
-      // taskkill walks the native process tree, and a plain kill leaves the
-      // node children of the broker running.
-      lifecycle.teardownBrokerSession({ ...session, killProcess: killTree });
-    } catch {
-      // Nothing further is available; the caller reports reaped=false.
-    }
+    // The session file is still cleared below; a leaked temp dir is not fatal.
   }
   try {
     lifecycle.clearBrokerSession(cwd);
