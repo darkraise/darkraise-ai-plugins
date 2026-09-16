@@ -26,6 +26,12 @@ for f in "$CRITERIA"/*.md; do
   [ -e "$f" ] || continue
   base=$(basename "$f" .md)
 
+  # codex-final-review.md is the Codex seat's prompt for the final round, not a
+  # scored rubric: that round has no schema and returns a markdown findings list,
+  # so it carries no ground-truth note, no criteria section and no pinned ids.
+  # It is pinned on its own below the loop.
+  [ "$base" = codex-final-review ] && continue
+
   check "$base: has a ground truth note" \
     "$(grep -c '^## Ground Truth Note$' "$f")" "1"
   check "$base: has a criteria section" \
@@ -49,6 +55,20 @@ for f in "$CRITERIA"/*.md; do
   check "$base: content is ASCII only" \
     "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$f")" "0"
 done
+
+# The final round's prompt. run-codex-review.sh cats it into every --kind final
+# request, so its presence, its encoding and its two load-bearing instructions
+# are pinned even though it is not a rubric.
+FR="$CRITERIA/codex-final-review.md"
+check "codex-final-review.md exists" "$([ -f "$FR" ] && echo yes || echo no)" "yes"
+if [ -f "$FR" ]; then
+  check "codex-final-review: content is ASCII only" \
+    "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$FR")" "0"
+  check "codex-final-review: names the finding heading shape" \
+    "$(grep -c '`### <severity>: <one-line claim>`' "$FR")" "1"
+  check "codex-final-review: names the empty sentinel" \
+    "$(grep -c 'write `No findings.` and stop' "$FR")" "1"
+fi
 
 # task-review.md is named by subagent-driven-development, so its ids are a contract.
 TR="$CRITERIA/task-review.md"
