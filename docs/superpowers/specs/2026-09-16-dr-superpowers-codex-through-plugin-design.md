@@ -81,11 +81,22 @@ it depends on an internal error path that a patch release could remove silently.
 
 ## 4. `scripts/lib/codex-client.mjs` — the one seam
 
-The only file in dr-superpowers that imports from the Codex plugin. Its surface:
+**Amendment 2026-09-16 (written during planning).** The design first put a
+`locate()` in this module. It does not belong here: `scripts/codex-plugin`
+already resolves the plugin for the active profile, checks enablement, verifies
+the install and enforces the version allowlist, and it already hands the root to
+`codex-gate.mjs` as argv. `codex-client.mjs` takes `<plugin-root>` the same way.
+The allowlist therefore stays enforced in exactly one place, which is the
+property that matters, and `scripts/codex-gate` and `scripts/lib/codex-gate.mjs`
+are left completely untouched rather than refactored. This strictly reduces the
+change.
+
+`codex-client.mjs` is the only *new* file that imports from the Codex plugin,
+and the only one that runs a turn. Its surface, invoked as
+`node codex-client.mjs <plugin-root>` with the request on stdin:
 
 | Export | Does |
 |---|---|
-| `locate()` | Resolve the plugin for the active `CLAUDE_CONFIG_DIR`, check its version against `reference/codex-plugin.json`, fail closed on anything unknown |
 | `runTurn(req)` | One Codex turn, with deadline, interrupt and reap; returns a plain result object |
 | `reap(cwd)` | Shut down a broker this process caused to exist |
 
@@ -111,10 +122,11 @@ part of the argv contract bash owns (§5).
 `kind: final` routes to `runAppServerReview`; every other kind routes to
 `runAppServerTurn` with `outputSchema` read from `schemaPath`.
 
-**Version allowlist.** `locate()` is the single place the allowlist is enforced,
-which is what makes bounding the coupling to one public function meaningful.
-`reference/codex-plugin.json` keeps its current shape; adding a version is still
-an owner action.
+**Version allowlist.** `scripts/codex-plugin` is the single place the allowlist
+is enforced, which is what makes bounding the coupling meaningful: every caller
+of `codex-client.mjs` passes a root that the locator has already vetted.
+`reference/codex-plugin.json` keeps its current shape, and adding a version is
+still an owner action.
 
 ## 5. What each caller keeps
 
@@ -125,17 +137,17 @@ and the task record with its resume and attempts semantics. Bash keeps the
 policy; Node owns the plugin coupling. The block that built a `codex exec` argv
 and spawned it is what changes, and only that.
 
-`scripts/codex-gate` keeps its rate-limit probe and its 53 assertions untouched.
-It stops duplicating locate-and-version and imports that half from
-`codex-client.mjs`. This is the only change this sub-project makes to the
-session gate; the gate's behaviour, cache format and status line do not move.
+`scripts/codex-gate`, `scripts/lib/codex-gate.mjs` and `scripts/codex-plugin`
+are **not modified by any task**. The locator keeps enforcing the version
+allowlist for every caller, and the gate keeps its rate-limit probe, its cache
+format, its status line and its 53 assertions exactly as SP8 shipped them.
 
 `scripts/detect-executors.sh` stops reading
 `${CODEX_HOME:-$HOME/.codex}/models_cache.json`. That read is the standing
 violation of SP8 ruling 13 ("dr-superpowers never names the `codex` executable
 and never reads Codex-owned state"), and with the catalog dropped nothing needs
-it. Presence and auth come from `locate()` and the plugin's
-`getCodexAuthStatus`.
+it. Presence and auth come from `scripts/codex-plugin` and the plugin's
+`getCodexAuthStatus`, reached through `codex-client.mjs`.
 
 ## 6. The deadline, the interrupt and the reaper
 
