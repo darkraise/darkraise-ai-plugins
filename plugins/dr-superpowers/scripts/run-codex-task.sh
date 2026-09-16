@@ -24,7 +24,7 @@ block() {
   ' "$LADDER"
 }
 
-brief="" report="" model="" effort="" cwd="" timeout_s="" thread="" dry=0
+brief="" report="" model="" effort="" cwd="" timeout_s="" thread="" dry=0 prompt=""
 task_id='' write_set='' operation='' operation_value='' approval='' review_round=''
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -111,39 +111,30 @@ if [ -n "$review_round" ]; then
   [[ "$review_round" =~ ^[1-5]$ ]] && [ -n "$thread" ] || die '--review-round requires a resume and a round from 1 to 5'
 fi
 
-# Every per-invocation flag is rebuilt here, including on resume: a bare
-# `codex exec resume <id>` inherits the user's config defaults instead.
+# Every per-invocation field is rebuilt here, including on resume: the client
+# starts a fresh thread unless resumeThreadId is set, and a resumed thread must
+# carry the same model and effort the record pins.
 #
-# -C and -s must precede the subcommand. `codex exec resume` accepts neither -
-# 0.153.4 answers `error: unexpected argument '-C' found` and exits before any
-# model call - while `codex exec` takes both and honours them for the resumed
-# thread. Every other flag below is accepted in either position, so it stays
-# after, which keeps the two forms one argv apart.
-argv=(exec -C "$cwd" -s workspace-write)
-[ -n "$thread" ] && argv+=(resume "$thread")
-argv+=(
-  -m "$model"
-  -c "model_reasoning_effort=$effort"
-  --json
-  --output-schema "$SCHEMA"
-  -o "$report.last.json"
-)
+# --rawfile, not --arg "$(cat ...)": a task prompt is a brief plus CLAUDE.md
+# plus a contract, and passing it as an argument blows the 32,767-character
+# Windows CreateProcess limit.
+build_request() { # build_request; echoes the request JSON
+  jq -nc \
+    --arg cwd "$cwd" --arg model "$model" --arg effort "$effort" \
+    --rawfile prompt "${prompt:-/dev/null}" --arg thread "${thread:-}" \
+    --arg schema "$SCHEMA" --argjson deadline "$(( timeout_s * 1000 ))" \
+    '{op:"turn", kind:"task", cwd:$cwd, model:$model, effort:$effort,
+      prompt:$prompt, schemaPath:$schema, sandbox:"workspace-write",
+      resumeThreadId:(if $thread == "" then null else $thread end),
+      persistThread:true, threadName:null, deadlineMs:$deadline}'
+}
 
 if [ "$dry" -eq 1 ]; then
-  # Two separate lines, not one: execution no longer wraps codex in `timeout`
-  # (that would reinsert a process between the wrapper and node, breaking
-  # taskkill's native tree-walk - see kill_codex_tree below), so a dry run
-  # that printed "timeout $s codex ..." would show a command that never
-  # actually runs. %q, not %s, on the invocation: a path containing a space
-  # silently splits into several arguments under %s.
-  printf 'timeout=%s\n' "$timeout_s"
-  printf 'codex'
-  printf ' %q' "${argv[@]}"
-  printf '\n'
+  printf 'would-run:\n'
+  build_request
   exit 0
 fi
 
-command -v timeout >/dev/null 2>&1 || die 'GNU timeout is required but not on PATH'
 [ -n "$task_id" ] || die '--task-id is required'
 cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
 report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
@@ -175,7 +166,6 @@ dr_snapshot "$cwd" "$before_snapshot" || die 'cannot snapshot worktree'
 human_report="$report"
 attempt="$(jq '.attempts | length + 1' "$record")"
 report="$DR_TASK_DIR/attempt-$attempt.md"
-argv[${#argv[@]}-1]="$report.last.json"
 dr_task_update '.model = $model | .effort = $effort | .baseline = $snapshot[0] | .candidate = null |
   .attempts += [{number:$attempt,model:$model,effort:$effort,resume:$resume,prior_thread:.thread}] |
   .review_rounds = (if $review_round == "" then .review_rounds else ($review_round | tonumber) end) |
@@ -208,27 +198,6 @@ prefix=$(git -C "$cwd" rev-parse --show-prefix) || die "not a git repository: $c
 [ -z "$prefix" ] || die "cwd must be the repository root, but sits under $prefix"
 base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
-codex_pid=""
-codex_winpid=""
-# Two mechanisms for two topologies. kill -TERM -<pgid> reaches MSYS-aware
-# descendants sharing the set -m group, and taskkill //T walks native
-# ParentProcessId. Only the first is proven necessary: taskkill alone leaves an
-# MSYS grandchild alive. The group kill was also observed to reach native
-# grandchildren, by a mechanism nobody has explained - taskkill stays because
-# that observation is unexplained, not because it is known to be redundant.
-kill_codex_tree() {
-  [ -n "$codex_pid" ] || return 0
-  local current_start
-  current_start=$(awk '{print $22}' "/proc/$codex_pid/stat" 2>/dev/null || true)
-  if [ -n "$current_start" ] && [ -n "${codex_start:-}" ] && [ "$current_start" != "$codex_start" ]; then return 1; fi
-  if [ -n "$codex_winpid" ] && [ -n "$current_start" ] && [ "$current_start" = "${codex_start:-}" ]; then
-    taskkill //F //T //PID "$codex_winpid" >/dev/null 2>&1
-  fi
-  kill -TERM -"$codex_pid" 2>/dev/null || true
-  sleep 1
-  kill -0 -"$codex_pid" 2>/dev/null && kill -KILL -"$codex_pid" 2>/dev/null
-  return 0
-}
 cleanup() {
   if [ -z "$codex_pid" ] && jq -e '.phase == "running" and any(.processes[]; .identity == "launch-pending")' "$record" >/dev/null 2>&1; then
     dr_task_block 'launch interrupted before process identity was recorded; manual writer reconciliation required' || true
@@ -260,81 +229,49 @@ trap 'exit 143' TERM HUP
 rm -f "$last" "$jsonl" "$report"
 [ ! -f "$last" ] || die "could not clear stale verdict file: $last"
 
-# A non-interactive script has job control off, so a plain `cmd &` inherits
-# this script's own process group instead of getting a fresh one - confirmed
-# live: `kill -TERM -"$codex_pid"` then fails with "No such process" because
-# no group with that id exists. `set -m` around just this launch is what makes
-# the backgrounded job (and anything it execs) its own group, which is what
-# `kill_codex_tree` signals; `setsid` would do the same but isn't on this box.
-set -m
-dr_task_update '.phase = "running" | .processes = [{identity:"launch-pending"}]' || die 'cannot persist running phase'
-codex "${argv[@]}" < "$prompt" > "$jsonl" 2> "$report.stderr" &
-codex_pid=$!
-set +m
-# Captured once, right after launch, while codex_pid (node) is still alive:
-# this is node's own Windows process, which is what taskkill //T needs to
-# start its native tree-walk from.
-codex_winpid=$(cat "/proc/$codex_pid/winpid" 2>/dev/null || true)
-codex_start=$(awk '{print $22}' "/proc/$codex_pid/stat" 2>/dev/null || true)
-dr_task_update '.processes = [{pid:$pid,winpid:$winpid,start:$start,group:$pid}]' \
-  --arg pid "$codex_pid" --arg winpid "$codex_winpid" --arg start "$codex_start" || die 'cannot persist process identity'
+# The client owns the deadline, the interrupt and the broker reaper, so there is
+# no process group for this script to create, poll or signal. `set -m`,
+# kill_codex_tree, the polled wait and the grace window all went with it: node
+# is a direct child that exits on its own, and the wrapper that used to sit
+# between us and node - the one that broke taskkill's native tree-walk - no
+# longer exists either.
+#
+# The plugin root is resolved here rather than beside build_request, so that
+# --dry-run returns above without needing an enabled plugin. scripts/codex-plugin
+# owns the locator and the version allowlist; this script never names the codex
+# executable.
+plugin_line=$(bash "$HERE/codex-plugin") || die "the codex plugin is not usable: $plugin_line"
+plugin_root=${plugin_line#*root=}
 
-# Polled rather than wrapped in `timeout`: the kill has to happen while the
-# child is still live. `timeout` reaps its child before wait returns, leaving
-# nothing left to signal by the time a kill would fire - and it would also put
-# a wrapper process between us and node, which is exactly what breaks
-# taskkill's native tree-walk (see codex_winpid above).
+dr_task_update '.phase = "running" | .processes = []' || die 'cannot persist running phase'
+
+result=$(build_request | node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$report.stderr")
+# A node that died before printing leaves $result empty, and every jq below would
+# then fail and take the runner with it. One guard here covers all of them.
+[ -n "$result" ] || result='{}'
+printf '%s\n' "$result" > "$jsonl"
+
+# The report the verdict is read from. The client returns the model's structured
+# output as finalMessage; lines below parse $last for status, summary and
+# commit_subject, so writing it here is what keeps the runner able to commit.
+# -j, not -r, and no file at all for an empty message: -r would leave a one-byte
+# file whose parse yields status "", while a missing $last is what the verdict
+# block below has always read as BLOCKED.
+jq -j '.finalMessage // ""' <<<"$result" > "$last"
+[ -s "$last" ] || rm -f "$last"
+
+discovered_thread=$(jq -r '.threadId // empty' <<<"$result")
+if [ -n "$discovered_thread" ]; then
+  dr_task_update '.thread = $thread' --arg thread "$discovered_thread" \
+    || die 'cannot persist thread'
+fi
+
 timed_out=no
-waited=0
-thread_persisted=no
-while [ "$waited" -lt "$timeout_s" ] && kill -0 "$codex_pid" 2>/dev/null; do
-  if [ "$thread_persisted" = no ]; then
-    discovered_thread="$(jq -r '.thread_id // .threadId // .session_id // .sessionId // empty' "$jsonl" 2>/dev/null | head -1)"
-    if [ -n "$discovered_thread" ]; then
-      dr_task_update '.thread = $thread' --arg thread "$discovered_thread" || die 'cannot persist thread'
-      thread_persisted=yes
-    fi
-  fi
-  sleep 1
-  waited=$((waited + 1))
-done
-if kill -0 "$codex_pid" 2>/dev/null; then
-  timed_out=yes
-  kill_codex_tree
-fi
-
-# Bounded rather than a bare `wait`: a child that survived both signals would
-# block forever, and this wrapper must always return a status line to the
-# controller. Reintroducing `timeout` is not the answer - it would reinsert a
-# process between us and node, which is what made taskkill unable to walk the
-# native tree.
-grace=0
-while [ "$grace" -lt 30 ] && kill -0 "$codex_pid" 2>/dev/null; do
-  sleep 1
-  grace=$((grace + 1))
-done
-survivor=no
-if kill -0 "$codex_pid" 2>/dev/null; then
-  rc=124
-  # Both kills plus the grace window have already been spent, so this process
-  # outlived everything the wrapper can do about it. Saying so is what stops a
-  # retry from putting a second Codex into the same worktree.
-  survivor=yes
-else
-  wait "$codex_pid"; rc=$?
-  if kill -0 -"$codex_pid" 2>/dev/null; then
-    kill_codex_tree
-    if kill -0 -"$codex_pid" 2>/dev/null; then
-      dr_task_block 'child group survived parent exit'
-      die 'child group remains; ownership stays reserved'
-    fi
-  fi
-  codex_pid=""
-  codex_winpid=""
-fi
+[ "$(jq -r '.timedOut' <<<"$result")" = true ] && timed_out=yes
+rc=0
+[ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
 [ "$timed_out" = yes ] && rc=124
-[ "$survivor" = no ] || { dr_task_block 'child survived termination'; die 'child still running'; }
-dr_task_update '.processes = []' || die 'cannot persist child termination'
+survivor=no
 
 # Event field naming has varied across Codex releases, so match on any of the
 # shapes rather than pinning one that a later version may rename.
@@ -344,19 +281,18 @@ thread_id=$(jq -r 'select(type=="object")
 [ -n "$thread_id" ] || thread_id="${thread:-unknown}"
 dr_task_update '.thread = $thread' --arg thread "$thread_id" || die 'cannot persist task thread'
 
-# Codex reports API failures - quota, rate limit, 5xx, auth - as events on the
-# --json stream, which is stdout and lands in $jsonl. They never reach stderr,
-# which holds only the CLI's own chatter. Extracting the message here is what
-# lets the controller tell a transient failure from a capability one without
-# opening a JSONL file by hand. The first error event carries the fuller text;
-# the turn.failed that follows repeats it in short form.
+# The client classifies the failure, so this is where the controller reads it.
+# `reason` separates quota from refusal from timeout from a plugin fault, and
+# `stderr` carries whatever text came back. Without this the task report says
+# only "exit 1", which reads as a model that gave up rather than one that was
+# never reached.
 codex_error=$(jq -r '
-  select(type == "object")
-  | select(.type == "error" or .type == "turn.failed")
-  | [.message?, (.error? | objects | .message?)]
-  | map(select(. != null and . != ""))
-  | .[0] // empty
-' "$jsonl" 2>/dev/null | head -1)
+  [ (if .reason then "reason=" + .reason else empty end),
+    (if .refusal == true then "refusal=true" else empty end),
+    (if .quota == true then "quota=true" else empty end),
+    (if .timedOut == true then "timedOut=true" else empty end),
+    (.stderr // "" | select(. != "")) ]
+  | join("\n")' <<<"$result" 2>/dev/null || true)
 
 status=BLOCKED
 summary=""
@@ -396,7 +332,6 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
   [ "$timed_out" = yes ] && printf -- '- note: timed out after %ss and codex was killed; raise --timeout rather than taking the successor rung\n' "$timeout_s"
-  [ "$survivor" = yes ] && printf -- '- note: a codex process may still be running (pid %s); check before retrying in this worktree\n' "$codex_pid"
   printf '\n## Summary\n\n%s\n' "$summary"
   printf '\n## Discovered issues (not fixed)\n\n%s\n' "${discovered:-None}"
   printf '\n## Assumptions made\n\n%s\n' "${assumptions:-None}"
