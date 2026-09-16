@@ -26,35 +26,9 @@ command -v timeout >/dev/null 2>&1 || {
   exit 2
 }
 
-# The local Codex model catalog, as a negative filter. A pair absent from it is
-# never attempted; a pair present in it is attempted and the seat runner's
-# outcome policy carries the guarantee. Catalog listing is not entitlement:
-# gpt-5.6-luna and gpt-5.6-terra were listed on 2026-09-14 and were rejected
-# with HTTP 400 on this account on 2026-08-31.
-#
-# null and an empty pair list are different facts and must stay
-# distinguishable: null means no usable catalog was read, [] means one was read
-# and advertised nothing.
-advertised_pairs() {
-  local cache="${CODEX_HOME:-$HOME/.codex}/models_cache.json"
-  [ -r "$cache" ] || { printf 'null'; return; }
-  # Validate before extracting. A cache that is a valid object followed by
-  # trailing bytes - a half-written file during a concurrent codex run - makes
-  # jq print the object and *then* fail, so an unguarded `|| printf null`
-  # appends to real output and yields "{...}null". --argjson would reject that
-  # and emit() would produce nothing, dropping the codex row from the roster
-  # entirely: a silent loss of the whole lane.
-  jq -e . "$cache" >/dev/null 2>&1 || { printf 'null'; return; }
-  jq -c '{fetched_at: .fetched_at, client_version: .client_version,
-          pairs: [.models[]? | select(.visibility == "list") as $m
-                  | $m.supported_reasoning_levels[]?
-                  | {model: $m.slug, effort: .effort}]}' "$cache" 2>/dev/null \
-    || printf 'null'
-}
-
 emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
   local id="$1" capable="$2" lane="$3" incapable_reason="$4"
-  local path present version authed reason usable auth_status=not_applicable advertised=null
+  local path present version authed reason usable auth_status=not_applicable
 
   path=$(command -v "$id" 2>/dev/null || true)
   if [ -n "$path" ]; then present=true; else present=false; fi
@@ -78,10 +52,6 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
     elif [ "$auth_rc" -eq 1 ] && [ "$auth_output" = 'Not logged in' ]; then
       authed=false; auth_status=logged_out
     fi
-  fi
-
-  if [ "$id" = codex ] && [ "$present" = true ]; then
-    advertised=$(advertised_pairs)
   fi
 
   usable=false
@@ -111,11 +81,10 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
     --argjson batch_capable "$capable" \
     --argjson usable "$usable" \
     --argjson reason "$reason" \
-    --argjson advertised "$advertised" \
     --arg path "$path" \
     '{id:$id, present:$present, path:(if $path=="" then null else $path end),
       version:$version, authed:$authed, auth_status:$auth_status, batch_capable:$batch_capable,
-      usable:$usable, reason:$reason, advertised:$advertised}'
+      usable:$usable, reason:$reason}'
 }
 
 {
