@@ -18,7 +18,7 @@ check() { # check <name> <got> <want>
 
 # A synthetic PATH holding only the stubs we choose, so the result does not
 # depend on what happens to be installed on the machine running the suite.
-mkdir -p "$TMP/bin" "$TMP/codexhome"
+mkdir -p "$TMP/bin"
 BASH_BIN=$(command -v bash)
 # Every stub and shim below is interpreted via an absolute-path shebang, never
 # "#!/usr/bin/env bash": once PATH is restricted to $TMP/bin, env has nothing
@@ -31,11 +31,36 @@ make_stub() { printf '#!%s\necho "%s"\n' "$BASH_BIN" "$2" > "$TMP/bin/$1"; chmod
 # jq and codex land in /usr/bin, which would resolve the real binary and flip
 # every not-present assertion. Shim just the four commands the script needs, so
 # PATH can be exactly one directory this test controls.
-for dep in jq timeout head tr; do
+# dirname is external: both detect-executors.sh's HERE line and
+# scripts/codex-plugin:16 call it, and a sealed PATH without it resolves HERE
+# to the wrong directory and reports the plugin absent.
+for dep in jq timeout head tr node bash dirname; do
   printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v "$dep")" > "$TMP/bin/$dep"
   chmod +x "$TMP/bin/$dep"
 done
-run() { PATH="$TMP/bin" CODEX_HOME="$TMP/codexhome" "$BASH_BIN" "$SCRIPT"; }
+
+# The locator reads a profile's settings and installed-plugins file; the version
+# allowlist reads the policy file. run() below clears CLAUDE_PROJECT_DIR,
+# because the locator also reads a project's own .claude/settings*.json.
+# Required of every suite touching detect-executors.sh: a fixed session id and a
+# temporary directory keep the machine's real session file out of every case.
+export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=detect-test
+STUB_PLUGIN="$HERE/fixtures/stub-codex-plugin"
+mkdir -p "$TMP/config/plugins"
+printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
+jq -nc --arg p "$STUB_PLUGIN" \
+  '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
+  > "$TMP/config/plugins/installed_plugins.json"
+jq -nc '{plugin:"codex@openai-codex", versions:["1.0.3"],
+         trust:{calibration:"pending", smoke:"pending"}}' > "$TMP/policy.json"
+
+# The codex row is probed through the plugin now, not through a codex binary on
+# PATH, so PATH stays sealed to $TMP/bin and the locator is pointed at fixtures
+# instead. CLAUDE_PROJECT_DIR is cleared because scripts/codex-plugin also reads
+# a project's own .claude/settings*.json.
+run() { PATH="$TMP/bin" CLAUDE_CONFIG_DIR="$TMP/config" CLAUDE_PROJECT_DIR= \
+        DR_CODEX_POLICY="$TMP/policy.json" STUB_MODE="${STUB_MODE:-ok}" \
+        "$BASH_BIN" "$SCRIPT"; }
 field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | .[$f]' <<< "$3"; }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
@@ -44,37 +69,35 @@ check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 out=$(run)
 check "empty PATH: emits valid JSON" "$(jq -e 'type=="array"' >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
 check "empty PATH: reports all four executors" "$(jq 'length' <<<"$out")" "4"
-check "empty PATH: codex not present" "$(field codex present "$out")" "false"
-check "empty PATH: codex not usable" "$(field codex usable "$out")" "false"
-check "empty PATH: codex has a reason" \
-  "$(field codex reason "$out" | grep -qi 'path' && echo yes || echo no)" "yes"
-
-# --- codex installed and authenticated --------------------------------------
-printf '#!%s\nif [[ "$*" == "--version" ]]; then echo "codex-cli 0.151.0"; else echo "Logged in using ChatGPT"; fi\n' "$BASH_BIN" > "$TMP/bin/codex"
-chmod +x "$TMP/bin/codex"
+# No plugin enabled in the fixture profile, so there is no codex lane at all.
+printf '{"enabledPlugins":{}}\n' > "$TMP/config/settings.json"
 out=$(run)
-check "codex present" "$(field codex present "$out")" "true"
-check "codex version captured" "$(field codex version "$out")" "codex-cli 0.151.0"
-check "codex authed" "$(field codex authed "$out")" "true"
+check "no plugin: codex not present" "$(field codex present "$out")" "false"
+check "no plugin: codex not usable" "$(field codex usable "$out")" "false"
+check "no plugin: the reason names the plugin, not PATH" \
+  "$(field codex reason "$out" | grep -qi 'plugin' && echo yes || echo no)" "yes"
+
+# --- codex enabled and logged in, both answered by the plugin ----------------
+printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
+out=$(run)
+check "codex present from the plugin" "$(field codex present "$out")" "true"
+check "codex version from the plugin" "$(field codex version "$out")" "1.0.3"
+check "codex authed from the plugin" "$(field codex authed "$out")" "true"
 check "codex batch capable" "$(field codex batch_capable "$out")" "true"
 check "codex usable" "$(field codex usable "$out")" "true"
 check "usable executor carries no reason" "$(field codex reason "$out")" "null"
 
-# --- codex installed but unauthenticated ------------------------------------
-rm -f "$TMP/codexhome/auth.json"
-printf '#!%s\nif [[ "$*" == "--version" ]]; then echo "codex-cli 0.151.0"; else echo "Not logged in"; exit 1; fi\n' "$BASH_BIN" > "$TMP/bin/codex"
-printf '{"tokens":{}}' > "$TMP/codexhome/auth.json"
-out=$(run)
-check "unauthenticated codex is not usable" "$(field codex usable "$out")" "false"
-check "unauthenticated codex says so" \
-  "$(field codex reason "$out" | grep -qi 'auth' && echo yes || echo no)" "yes"
-printf '{"tokens":{}}' > "$TMP/codexhome/auth.json"
-check "logged out is explicit" "$(field codex auth_status "$out")" logged_out
-printf '#!%s\nif [[ "$*" == "--version" ]]; then echo "codex-cli 0.151.0"; else echo "secret-example-token"; exit 9; fi\n' "$BASH_BIN" > "$TMP/bin/codex"
-out=$(run 2>"$TMP/probe.err")
-check "failed probe is distinct" "$(field codex auth_status "$out")" probe_failed
-check "failed probe is unusable" "$(field codex usable "$out")" false
-check "probe output is not exposed" "$(printf '%s%s' "$out" "$(cat "$TMP/probe.err")" | grep -c secret-example-token)" 0
+# --- enabled but logged out, and a probe that fails outright -----------------
+out=$(STUB_MODE=logged-out run)
+check "logged out is not usable" "$(field codex usable "$out")" "false"
+check "logged out says so" \
+  "$(field codex reason "$out" | grep -qi 'logged in' && echo yes || echo no)" "yes"
+check "logged out is explicit" "$(field codex auth_status "$out")" "logged_out"
+out=$(STUB_MODE=throw run 2>"$TMP/probe.err")
+check "a failed probe is distinct" "$(field codex auth_status "$out")" "probe_failed"
+check "a failed probe is unusable" "$(field codex usable "$out")" "false"
+check "the probe's own text is not exposed" \
+  "$(printf '%s%s' "$out" "$(cat "$TMP/probe.err")" | grep -c 'stub: app-server exploded')" "0"
 
 # --- antigravity is present but never dispatchable --------------------------
 # Its only agent-shaped subcommand opens a GUI chat session: no output file, no
@@ -115,7 +138,7 @@ for dep in timeout head tr; do
   printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v "$dep")" > "$TMP/nojq/$dep"
   chmod +x "$TMP/nojq/$dep"
 done
-nojq_out=$(PATH="$TMP/nojq" CODEX_HOME="$TMP/codexhome" "$BASH_BIN" "$SCRIPT" 2>"$TMP/nojq.err")
+nojq_out=$(PATH="$TMP/nojq" "$BASH_BIN" "$SCRIPT" 2>"$TMP/nojq.err")
 nojq_rc=$?
 check "a missing jq exits 2" "$nojq_rc" "2"
 check "a missing jq prints nothing on stdout" "$(printf '%s' "$nojq_out" | wc -c | tr -d ' ')" "0"
@@ -130,66 +153,15 @@ out=$(run)
 check "reason is set exactly when usable is false" \
   "$(jq '[.[] | select((.usable == false) != (.reason != null))] | length' <<<"$out")" "0"
 
-# --- advertised model pairs --------------------------------------------------
-# The cache is a negative filter: a pair it does not list is never attempted.
-# It is not entitlement — gpt-5.6-luna and gpt-5.6-terra were listed on
-# 2026-09-14 and were rejected with HTTP 400 on this account on 2026-08-31.
-cat > "$TMP/bin/codex" <<STUB
-#!$BASH_BIN
-case "\$1" in
-  login) echo "Logged in using ChatGPT" ;;
-  *) echo "codex-cli 0.153.4" ;;
-esac
-STUB
-chmod +x "$TMP/bin/codex"
+# --- the roster row carries a plugin root and no catalog ---------------------
+row=$(run | jq -c '.[] | select(.id=="codex")')
+check "codex row: no advertised field" "$(jq -r 'has("advertised")' <<<"$row")" "false"
+check "codex row: path is the plugin root, not a binary" \
+  "$(jq -r '.path' <<<"$row" | grep -c 'stub-codex-plugin')" "1"
 
-write_cache() { printf '%s' "$1" > "$TMP/codexhome/models_cache.json"; }
-
-write_cache '{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","models":[
-  {"slug":"gpt-6-astra","visibility":"list","supported_reasoning_levels":[{"effort":"high"},{"effort":"xhigh"}]},
-  {"slug":"gpt-5.6-sol","visibility":"list","supported_reasoning_levels":[{"effort":"high"}]},
-  {"slug":"gpt-reserve","visibility":"hide","supported_reasoning_levels":[{"effort":"high"}]}]}'
-out=$(run)
-check "advertised: fetched_at" "$(field codex advertised "$out" | jq -r '.fetched_at')" "2026-09-14T13:35:00Z"
-check "advertised: client_version" "$(field codex advertised "$out" | jq -r '.client_version')" "0.153.4"
-check "advertised: astra/high is listed" \
-  "$(field codex advertised "$out" | jq '[.pairs[] | select(.model=="gpt-6-astra" and .effort=="high")] | length')" "1"
-check "advertised: hidden models are filtered out" \
-  "$(field codex advertised "$out" | jq '[.pairs[] | select(.model=="gpt-reserve")] | length')" "0"
-# jq -r prints "null" for a key that does not exist, so a value check alone
-# would pass against the unmodified script. Assert the key is present too.
-has_field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | has($f)' <<< "$3"; }
-check "advertised: the key exists on every row" "$(has_field cursor-agent advertised "$out")" "true"
-check "advertised: non-codex rows are null" "$(field cursor-agent advertised "$out")" "null"
-
-# A cache that lists nothing is not the same fact as no cache at all.
-write_cache '{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","models":[]}'
-out=$(run)
-check "advertised: empty catalog is an empty pair list" \
-  "$(field codex advertised "$out" | jq -c '.pairs')" "[]"
-
-write_cache 'not json at all'
-out=$(run)
-check "advertised: malformed cache is null" "$(field codex advertised "$out")" "null"
-check "malformed cache still emits the key" "$(has_field codex advertised "$out")" "true"
-check "malformed cache does not break the roster" \
-  "$(jq -e 'type=="array"' >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
-
-# A half-written cache during a concurrent codex run: valid JSON followed by
-# garbage. jq emits the object and then fails, so an unguarded extraction
-# yields "{...}null", which --argjson rejects - and the whole codex row
-# disappears from the roster, silently losing the lane.
-write_cache '{"fetched_at":"x","client_version":"y","models":[]} trailing garbage'
-out=$(run)
-check "advertised: trailing garbage is null" "$(field codex advertised "$out")" "null"
-check "trailing garbage keeps the codex row" \
-  "$(jq -r '[.[] | select(.id=="codex")] | length' <<<"$out")" "1"
-
-rm -f "$TMP/codexhome/models_cache.json"
-out=$(run)
-check "advertised: absent cache is null" "$(field codex advertised "$out")" "null"
-check "absent cache still emits the key" "$(has_field codex advertised "$out")" "true"
-check "absent cache leaves codex usable" "$(field codex usable "$out")" "true"
+row=$(STUB_MODE=logged-out run | jq -c '.[] | select(.id=="codex")')
+check "logged out: names the plugin setup command, not codex login" \
+  "$(jq -r '.reason' <<<"$row" | grep -c 'codex:setup')" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

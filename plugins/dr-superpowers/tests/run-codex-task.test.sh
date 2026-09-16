@@ -16,19 +16,9 @@ check() { # check <name> <got> <want>
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 
-# Flag ORDER is a correctness property here, not a style one: `codex exec`
-# accepts -C and -s while `codex exec resume` rejects both, so a substring test
-# that ignores position passes on an argv the real CLI refuses to parse.
-before() { # before <argv-line> <first> <second> -> yes when both are present, in order
-  awk -v a="$2" -v b="$3" '
-    { ai = 0; bi = 0
-      for (i = 1; i <= NF; i++) {
-        if (ai == 0 && $i == a) ai = i
-        if (bi == 0 && $i == b) bi = i
-      }
-      print (ai > 0 && bi > 0 && ai < bi) ? "yes" : "no" }
-  ' <<<"$1"
-}
+# A fixed session id and a temporary directory keep the machine's real session
+# file out of every case, whatever the wrapper touches.
+export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=run-task-test
 
 mkdir -p "$TMP/work"
 printf 'do the thing\n' > "$TMP/brief.md"
@@ -36,6 +26,14 @@ printf 'do the thing\n' > "$TMP/brief.md"
 dry() { bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
           --cwd "$TMP/work" --dry-run "$@" 2>"$TMP/err"; }
 rc_of() { dry "$@" >/dev/null; echo $?; }
+
+# The wrapper builds the request with `jq --arg cwd "$cwd"`. Where jq is a native
+# Windows build under an MSYS shell, the runtime rewrites a POSIX path argument
+# into its Windows form on the way into the process, so the literal the suite
+# passed in is not the literal that lands in the JSON. Running the expected value
+# through the same one-argument jq call applies the identical rewrite - an
+# identity everywhere else - so the assertion compares paths, not path spellings.
+as_arg() { jq -rn --arg p "$1" '$p'; }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 check "schema exists" "$([ -f "$HERE/../scripts/codex-report-schema.json" ] && echo yes || echo no)" "yes"
@@ -75,58 +73,37 @@ check "rejects a missing brief" \
       --model gpt-5.5 --effort medium --dry-run >/dev/null 2>&1; echo $?)" "2"
 check "accepts a valid rung" "$(rc_of --model gpt-5.5 --effort medium)" "0"
 
-# --- the composed command line ----------------------------------------------
-cmd=$(dry --model gpt-5.5 --effort medium)
-for frag in "exec" "-C" "-s workspace-write" "-m gpt-5.5" \
-            "model_reasoning_effort=medium" "--json" "--output-schema" "-o"; do
-  check "dry run includes [$frag]" "$(grep -qF -- "$frag" <<<"$cmd" && echo yes || echo no)" "yes"
-done
-check "dry run never bypasses the sandbox" \
-  "$(grep -qF -- "--dangerously-bypass" <<<"$cmd" && echo yes || echo no)" "no"
+# --- the composed turn request ----------------------------------------------
+req=$(dry --model gpt-5.5 --effort medium | sed -n '2p')
+check "dry run: prints a turn request" "$(jq -r '.op' <<<"$req")" "turn"
+check "dry run: carries the model" "$(jq -r '.model' <<<"$req")" "gpt-5.5"
+check "dry run: carries the effort" "$(jq -r '.effort' <<<"$req")" "medium"
+check "dry run: workspace-write sandbox" "$(jq -r '.sandbox' <<<"$req")" "workspace-write"
+check "dry run: persists the thread" "$(jq -r '.persistThread' <<<"$req")" "true"
+check "dry run: carries the report schema" \
+  "$(jq -r '.schemaPath' <<<"$req" | grep -c 'codex-report-schema.json')" "1"
+check "dry run: names the worktree" "$(jq -r '.cwd' <<<"$req")" "$(as_arg "$TMP/work")"
+check "dry run: never bypasses the sandbox" \
+  "$(jq -r '.sandbox' <<<"$req" | grep -c 'bypass')" "0"
 
 # --- timeouts come from the table unless overridden -------------------------
-check "timeout defaults from codex-timeout" \
-  "$(grep -qE '^timeout=900$' <<<"$cmd" && echo yes || echo no)" "yes"
-# Captured into a variable first, not `dry ... | grep -q`: `grep -q` exits as
-# soon as it matches the first ("timeout=...") line and closes its end of the
-# pipe, and the wrapper's still-pending second `printf` (the "codex ..." line)
-# can then hit SIGPIPE, making `dry` exit 141 under `pipefail` even though the
-# match itself succeeded - reproduced directly at roughly a 50% rate.
+check "deadline defaults from codex-timeout" "$(jq -r '.deadlineMs' <<<"$req")" "900000"
 check "explicit timeout wins" \
-  "$(out=$(dry --model gpt-5.5 --effort medium --timeout 42); grep -qE '^timeout=42$' <<<"$out" && echo yes || echo no)" "yes"
+  "$(dry --model gpt-5.5 --effort medium --timeout 42 | sed -n '2p' | jq -r '.deadlineMs')" "42000"
 
-# --- resume must re-send every per-invocation flag ---------------------------
-# A bare `codex exec resume <id>` falls back to the user's config defaults, so a
-# round-2 fix would silently run at a tier the ledger does not record.
-res=$(dry --model gpt-5.5 --effort high --resume 01a0-thread)
-check "resume names the subcommand" "$(grep -qF -- "resume" <<<"$res" && echo yes || echo no)" "yes"
-check "resume carries the thread id" "$(grep -qF -- "01a0-thread" <<<"$res" && echo yes || echo no)" "yes"
-check "resume re-sends the model" "$(grep -qF -- "-m gpt-5.5" <<<"$res" && echo yes || echo no)" "yes"
-check "resume re-sends the effort" \
-  "$(grep -qF -- "model_reasoning_effort=high" <<<"$res" && echo yes || echo no)" "yes"
+# A resumed run must still re-send the model and the effort: the client starts a
+# fresh thread unless resumeThreadId is set, and a resumed thread has to carry
+# the tier the ledger recorded.
+res=$(dry --model gpt-5.5 --effort high --resume 01a0-thread | sed -n '2p')
+check "resume carries the thread id" "$(jq -r '.resumeThreadId' <<<"$res")" "01a0-thread"
+check "resume re-sends the model" "$(jq -r '.model' <<<"$res")" "gpt-5.5"
+check "resume re-sends the effort" "$(jq -r '.effort' <<<"$res")" "high"
+check "resume still asks for a persisted thread" "$(jq -r '.persistThread' <<<"$res")" "true"
 
-# --- resume must place -C and -s before the subcommand -----------------------
-# Verified against codex-cli 0.153.4: `codex exec resume <id> -C <dir>` answers
-# `error: unexpected argument '-C' found` and exits before any model call, and
-# -s is refused the same way. The wrapper would then report status=BLOCKED,
-# which is indistinguishable from a real block, so every fix round on the
-# external lane would die at argument parsing. The parent `codex exec` takes
-# both flags and honours them for the resumed thread.
-res_cmd=$(tail -1 <<<"$res")
-check "resume places -C before the subcommand" "$(before "$res_cmd" -C resume)" "yes"
-check "resume places -s before the subcommand" "$(before "$res_cmd" -s resume)" "yes"
-check "resume keeps -m after the subcommand, where resume accepts it" \
-  "$(before "$res_cmd" resume -m)" "yes"
-check "resume keeps the thread id adjacent to the subcommand" \
-  "$(grep -qE -- 'resume 01a0-thread' <<<"$res_cmd" && echo yes || echo no)" "yes"
-
-plain_cmd=$(tail -1 <<<"$(dry --model gpt-5.5 --effort medium)")
-check "a non-resume run names no subcommand" \
-  "$(grep -qE -- '(^| )resume( |$)' <<<"$plain_cmd" && echo named || echo bare)" "bare"
-check "a non-resume run still passes -C" \
-  "$(grep -qF -- "-C $TMP/work" <<<"$plain_cmd" && echo yes || echo no)" "yes"
-check "a non-resume run still passes the sandbox" \
-  "$(grep -qF -- "-s workspace-write" <<<"$plain_cmd" && echo yes || echo no)" "yes"
+plain=$(dry --model gpt-5.5 --effort medium | sed -n '2p')
+check "a non-resume run sends no thread id" "$(jq -r '.resumeThreadId' <<<"$plain")" "null"
+check "a non-resume run still names the worktree" "$(jq -r '.cwd' <<<"$plain")" "$(as_arg "$TMP/work")"
+check "a non-resume run still asks for workspace-write" "$(jq -r '.sandbox' <<<"$plain")" "workspace-write"
 
 # --- malformed input fails fast, and the dry run tells the truth ------------
 check "a trailing flag with no value exits 2 rather than hanging" \
@@ -189,17 +166,13 @@ check "rejected input prints nothing on stdout" \
       | wc -c | tr -d ' \r\n')" "0"
 
 # The dry run's contract is that it shows what would actually run, so re-parse
-# what it printed and confirm a space-containing path survives as ONE argument.
+# what it printed and confirm a space-containing path arrives whole.
 mkdir -p "$TMP/dir with space"
-printed=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
-  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null | grep '^codex ')
-eval "set -- $printed"
-roundtrip=no
-while [ $# -gt 0 ]; do
-  if [ "$1" = "-C" ] && [ "${2:-}" = "$TMP/dir with space" ]; then roundtrip=yes; fi
-  shift
-done
-check "dry run round-trips a space-containing path as one argument" "$roundtrip" "yes"
+spaced=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
+  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null \
+  | sed -n '2p')
+check "dry run carries a space-containing path whole" \
+  "$(jq -r '.cwd' <<<"$spaced")" "$(as_arg "$TMP/dir with space")"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
