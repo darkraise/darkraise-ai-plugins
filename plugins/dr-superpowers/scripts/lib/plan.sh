@@ -72,10 +72,19 @@ ladder_block() {
     | awk -v tag="$1" 'stop { next } $0 == "```" tag { f = 1; next } f && /^```/ { stop = 1; next } f && NF { print }'
 }
 
-# ledger_blocked FILE — the task numbers with a "Task N: BLOCKED" line, sorted,
-# unique. BLOCKED is terminal: a resumed session must not start the task.
+# ledger_blocked FILE — the task numbers whose terminal ledger line is
+# "Task N: BLOCKED", sorted, unique. BLOCKED is terminal: a resumed session must
+# not start the task. The Recovery rule both execution skills define reads the
+# last "Task N:" line in file order, stepping over the kinds that are not
+# terminal, so a BLOCKED the owner resolved and the task re-ran is not blocked
+# any more — a flat grep would keep reporting it forever.
 ledger_blocked() {
-  tr -d '\r' < "$1" | sed -n 's/^Task \([0-9][0-9]*\): BLOCKED.*/\1/p' | sort -un
+  tr -d '\r' < "$1" | awk '
+    !/^Task [0-9]+:/ { next }
+    /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:)/ { next }
+    { n = $2; sub(/:$/, "", n); blocked[n] = ($0 ~ /^Task [0-9]+: BLOCKED/) }
+    END { for (n in blocked) if (blocked[n]) print n }
+  ' | sort -un
 }
 
 # plan_header_line FILE LABEL — the first line outside fences that begins
