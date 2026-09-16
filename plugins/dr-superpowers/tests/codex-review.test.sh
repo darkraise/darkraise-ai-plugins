@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The selection rule and the outcome policy are the two things a review seat
 # gets wrong silently: a wrong model still produces a review, and a failed run
-# still produces a file. Both are asserted here against a stub codex, so no
-# model call is made and every branch is reachable.
+# still produces a file. Both are asserted here against a stub Codex plugin, so
+# no model call is made and every branch is reachable.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,6 +13,43 @@ trap 'rm -rf "$TMP"' EXIT
 # The runner marks this session's Codex gate file off on a quota error. A fixed
 # session id and a temporary directory keep the machine's real file out of it.
 export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=codex-review-test
+
+# The runner resolves its plugin root through scripts/codex-plugin, which reads
+# the profile settings and the policy file. Both are fixtures here, and
+# CLAUDE_PROJECT_DIR is cleared because the locator also reads a project's own
+# .claude/settings*.json - without this a run under Claude Code reads this
+# repository's settings.
+STUB_PLUGIN="$HERE/fixtures/stub-codex-plugin"
+export STUB_MODE=ok
+export CLAUDE_PROJECT_DIR=
+export CLAUDE_CONFIG_DIR="$TMP/config"
+mkdir -p "$CLAUDE_CONFIG_DIR/plugins"
+printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$CLAUDE_CONFIG_DIR/settings.json"
+jq -nc --arg p "$STUB_PLUGIN" \
+  '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
+  > "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
+export DR_CODEX_POLICY="$TMP/policy.json"
+jq -nc '{plugin:"codex@openai-codex", versions:["1.0.3"],
+         trust:{calibration:"pending", smoke:"pending"}}' > "$DR_CODEX_POLICY"
+
+# A fixture ladder, because the shipped codex-judge rows bound a run at 1800
+# seconds and the timeout case would wait out half an hour against them. The
+# rows and their order are the shipped ones; only the seconds differ.
+export CODEX_REVIEW_LADDER="$TMP/ladder.md"
+fence='```'
+{ printf '%scodex-judge\n' "$fence"
+  printf 'gpt-6-astra high 2\n'
+  printf 'gpt-5.6-sol high 2\n'
+  printf '%s\n' "$fence"; } > "$CODEX_REVIEW_LADDER"
+
+# --kind final composes its own prompt from `git diff <base>...HEAD`, so the
+# work tree has to be a real repository with the base branch present. One empty
+# commit is enough: the diff may be empty, and the runner only needs the compose
+# to succeed.
+mkdir -p "$TMP/work"
+git -C "$TMP/work" init -q -b main
+git -C "$TMP/work" -c user.email=t@example.invalid -c user.name=t \
+  commit -q --allow-empty -m base
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -34,21 +71,17 @@ for dep in jq timeout head tr sed awk grep cat mktemp rm; do
 done
 
 # A stub roster, so selection is tested without probing the real machine.
-write_roster() { # write_roster <advertised-json>
+write_roster() { # write_roster
   cat > "$TMP/bin/detect-stub" <<STUB
 #!$BASH_BIN
 cat <<'JSON'
 [{"id":"codex","present":true,"path":"/stub/codex","version":"codex-cli 0.153.4",
   "authed":true,"auth_status":"authenticated","batch_capable":true,"usable":true,
-  "reason":null,"advertised":$1}]
+  "reason":null}]
 JSON
 STUB
   chmod +x "$TMP/bin/detect-stub"
 }
-
-ASTRA='{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","pairs":[{"model":"gpt-6-astra","effort":"high"}]}'
-SOL_ONLY='{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","pairs":[{"model":"gpt-5.6-sol","effort":"high"}]}'
-EMPTY='{"fetched_at":"2026-09-14T13:35:00Z","client_version":"0.153.4","pairs":[]}'
 
 # A stub session gate. Every case sees a usable Codex unless it sets
 # GATE_STUB_LINE or GATE_STUB_EXIT.
@@ -58,63 +91,45 @@ printf '%s\n' "\${GATE_STUB_LINE:-codex-gate usable=true reason=ok review=true l
 exit "\${GATE_STUB_EXIT:-0}"
 STUB
 
-run() { # run <args...>
-  PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" CODEX_REVIEW_GATE="$TMP/gate-stub" \
+run() { # run <args...>; STUB_* variables in the environment script the stub
+  printf '0' > "$TMP/calls"
+  : > "$TMP/events.log"
+  PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" \
+    CODEX_REVIEW_GATE="$TMP/gate-stub" CODEX_REVIEW_LADDER="$CODEX_REVIEW_LADDER" \
+    CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" CLAUDE_PROJECT_DIR= \
+    DR_CODEX_POLICY="$DR_CODEX_POLICY" \
+    STUB_CALL_FILE="$TMP/calls" STUB_EVENT_LOG="$TMP/events.log" \
     "$BASH_BIN" "$SCRIPT" "$@" 2>"$TMP/err"
 }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 
 # --- selection ---------------------------------------------------------------
-write_roster "$ASTRA"
+write_roster
 out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
-present "advertised astra selects astra" "$out" "codex-judge gpt-6-astra/high"
+req_of() { sed -n '2p' <<<"$1"; } # req_of <dry-run output>; echoes the request JSON
+present "the heavy tier selects astra" "$out" "codex-judge gpt-6-astra/high"
 present "dry run reports OK" "$out" "status=OK"
-present "dry run carries the cache date as evidence" "$out" "evidence=2026-09-14T13:35:00Z"
-# Line-exact: --dry-run prints one argv token per line, and a substring test
-# for "review" would also match the schema filename.
-tok() { printf '%s\n' "$2" | grep -qx -- "$3"; }
-if tok x "$out" review; then printf 'ok   - final kind uses codex exec review\n'; pass=$((pass + 1))
-else printf 'FAIL - final kind uses codex exec review\n'; fail=$((fail + 1)); fi
-if tok x "$out" '--base' && tok x "$out" main; then
-  printf 'ok   - final kind passes the base\n'; pass=$((pass + 1))
-else printf 'FAIL - final kind passes the base\n'; fail=$((fail + 1)); fi
-present "selected effort reaches the command" "$out" "model_reasoning_effort=high"
-# Both judge rows run at high, so the effort check cannot tell them apart. Only
-# a token check on -m proves the selected model is the one that runs.
-if tok x "$out" gpt-6-astra; then printf 'ok   - the selected model reaches -m\n'; pass=$((pass + 1))
-else printf 'FAIL - the selected model reaches -m\n'; fail=$((fail + 1)); fi
-
-# Fail closed: three distinct states, one outcome.
-write_roster "$SOL_ONLY"
-out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
-present "catalog without astra falls back to sol" "$out" "codex-judge gpt-5.6-sol/high"
-if tok x "$out" gpt-5.6-sol; then printf 'ok   - the sol row reaches -m\n'; pass=$((pass + 1))
-else printf 'FAIL - the sol row reaches -m\n'; fail=$((fail + 1)); fi
-
-write_roster "$EMPTY"
-out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
-present "empty catalog falls back to sol" "$out" "codex-judge gpt-5.6-sol/high"
-if tok x "$out" gpt-5.6-sol; then printf 'ok   - the empty-catalog sol row reaches -m\n'; pass=$((pass + 1))
-else printf 'FAIL - the empty-catalog sol row reaches -m\n'; fail=$((fail + 1)); fi
-
-write_roster null
-out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
-present "absent catalog falls back to sol" "$out" "codex-judge gpt-5.6-sol/high"
-if tok x "$out" gpt-5.6-sol; then printf 'ok   - the absent-catalog sol row reaches -m\n'; pass=$((pass + 1))
-else printf 'FAIL - the absent-catalog sol row reaches -m\n'; fail=$((fail + 1)); fi
-present "absent catalog reports unknown evidence" "$out" "evidence=unknown"
+present "dry run reports no catalog evidence" "$out" "evidence=none"
+r=$(req_of "$out")
+check "final: prints a turn request" "$(jq -r '.op' <<<"$r")" "turn"
+check "final: carries the selected model" "$(jq -r '.model' <<<"$r")" "gpt-6-astra"
+check "final: carries the selected effort" "$(jq -r '.effort' <<<"$r")" "high"
+check "final: sends no base field" "$(jq -r 'has("base")' <<<"$r")" "false"
+check "final: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
+check "final: deadline in milliseconds" "$(jq -r '.deadlineMs > 0' <<<"$r")" "true"
 
 # --- the two kinds differ ----------------------------------------------------
-write_roster "$ASTRA"
+write_roster
 printf 'prompt text\n' > "$TMP/p.txt"
 out=$(run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-if tok x "$out" '--output-schema'; then printf 'ok   - risk3 passes a schema flag\n'; pass=$((pass + 1))
-else printf 'FAIL - risk3 passes a schema flag\n'; fail=$((fail + 1)); fi
-present "risk3 is read-only" "$out" "read-only"
-present "risk3 passes the review schema" "$out" "codex-review-schema.json"
-if tok x "$out" review; then printf 'FAIL - risk3 never uses codex exec review\n'; fail=$((fail + 1))
-else printf 'ok   - risk3 never uses codex exec review\n'; pass=$((pass + 1)); fi
+r=$(req_of "$out")
+check "risk3: carries a schema path" \
+  "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
+check "risk3: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
+# risk3 is the sub-project 7 name for the task seat, normalised to task before
+# the request is built, so that is the kind the client sees.
+check "risk3: the kind reaches the request" "$(jq -r '.kind' <<<"$r")" "task"
 
 # The unusable branch has its own status line and must still be parseable.
 cat > "$TMP/bin/detect-stub" <<STUB
@@ -122,7 +137,7 @@ cat > "$TMP/bin/detect-stub" <<STUB
 cat <<'JSON'
 [{"id":"codex","present":true,"path":null,"version":null,"authed":false,
   "auth_status":"logged_out","batch_capable":true,"usable":false,
-  "reason":"present but not authenticated; run codex login","advertised":null}]
+  "reason":"present but not authenticated; run codex login"}]
 JSON
 STUB
 chmod +x "$TMP/bin/detect-stub"
@@ -140,150 +155,89 @@ run --kind bogus --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run >/dev
 check "an unknown kind is a usage error" "$rc" "2"
 
 # --- the outcome policy ------------------------------------------------------
-# A stub codex whose behaviour is chosen per case by CODEX_STUB_MODE. The
-# fallback cases need the stub to behave differently on its second invocation,
-# so it counts its own calls.
-cat > "$TMP/bin/codex" <<STUB
-#!$BASH_BIN
-n=\$(cat "$TMP/calls" 2>/dev/null || echo 0); n=\$((n + 1)); printf '%s' "\$n" > "$TMP/calls"
-model=""; prev=""
-for a in "\$@"; do [ "\$prev" = "-m" ] && model="\$a"; prev="\$a"; done
-outfile=""; prev=""
-for a in "\$@"; do [ "\$prev" = "-o" ] && outfile="\$a"; prev="\$a"; done
-case "\$CODEX_STUB_MODE" in
-  ok) printf '{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}' > "\$outfile"; exit 0 ;;
-  ok-final) printf 'a review\n' > "\$outfile"; exit 0 ;;
-  ok-plan) printf '{"executability":17,"coherence":16,"coverage":17,"assumptions":16,"findings":[]}' > "\$outfile"; exit 0 ;;
-  # The observed form of an exhausted quota, 2026-09-15: a column-0 ERROR: line.
-  quota) echo "ERROR: You've hit your usage limit. Upgrade to Pro or try again at Sep 20th, 2026 5:03 PM." >&2; exit 1 ;;
-  refuse-then-quota)
-    if [ "\$model" = gpt-6-astra ]; then
-      echo 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The gpt-6-astra model is not supported when using Codex with a ChatGPT account."}}' >&2; exit 1
-    fi
-    echo "ERROR: You've hit your usage limit. Upgrade to Pro or try again at Sep 20th, 2026 5:03 PM." >&2; exit 1 ;;
-  empty) : > "\$outfile"; exit 0 ;;
-  noout) exit 0 ;;
-  # The observed form: a real refusal from codex 0.154.0, captured on
-  # 2026-09-14, arrives on stderr as a column-0 ERROR: line.
-  refuse-then-ok)
-    if [ "\$model" = gpt-6-astra ]; then
-      echo 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The gpt-6-astra model is not supported when using Codex with a ChatGPT account."}}' >&2; exit 1
-    fi
-    printf 'a review\n' > "\$outfile"; exit 0 ;;
-  refuse-always) printf 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The %s model is not supported when using Codex with a ChatGPT account."}}\n' "\$model" >&2; exit 1 ;;
-  # A run that merely mentions a refusal in its prose - what every review of
-  # this plugin's own tests looks like - is not a refusal.
-  prose-fail) echo "the diff mentions an unsupported model" >&2; exit 1 ;;
-  # An API-level refusal arrives on the JSON event stream, which is stdout.
-  refuse-stdout)
-    if [ "\$model" = gpt-6-astra ]; then
-      echo '{"type":"error","message":"http 400: model not available"}'; exit 1
-    fi
-    printf 'a review\n' > "\$outfile"; exit 0 ;;
-  authfail) echo "stream error: 401 unauthorized" >&2; exit 1 ;;
-  cancel) exit 130 ;;
-  # 124 is what coreutils timeout returns after it kills the child; the stub
-  # returns it directly, so this asserts the classification, not the deadline.
-  hang) exit 124 ;;
-esac
-exit 1
-STUB
-chmod +x "$TMP/bin/codex"
-
-seat() { # seat <mode> <kind> <extra-args...>
-  rm -f "$TMP/calls" "$TMP"/o.md* "$TMP"/o.json*
-  local mode="$1" k="$2"; shift 2
-  CODEX_STUB_MODE="$mode" run --kind "$k" --cwd "$TMP/work" "$@"
+seat() { # seat <kind> <extra-args...>; STUB_* in the environment scripts the stub
+  rm -f "$TMP"/o.md* "$TMP"/o.json*
+  local k="$1"; shift
+  run --kind "$k" --cwd "$TMP/work" "$@"
 }
 
-write_roster "$ASTRA"
+write_roster
 
-out=$(seat ok-final final --out "$TMP/o.md" --base main); rc=$?
+out=$(seat final --out "$TMP/o.md" --base main); rc=$?
 present "a complete run with output is OK" "$out" "status=OK"
 check "OK exits 0" "$rc" "0"
 
-out=$(seat empty final --out "$TMP/o.md" --base main); rc=$?
-present "exit 0 with an empty report is FAILED" "$out" "status=FAILED"
+out=$(STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main); rc=$?
+present "an empty report is FAILED" "$out" "status=FAILED"
 check "FAILED exits 1" "$rc" "1"
 
-out=$(seat noout final --out "$TMP/o.md" --base main)
-present "exit 0 with no report at all is FAILED" "$out" "status=FAILED"
+out=$(STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main)
+present "no report at all is FAILED" "$out" "status=FAILED"
 
-out=$(seat ok risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_FINAL_MESSAGE='{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}'   seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a schema-shaped risk3 report is OK" "$out" "status=OK"
 
-out=$(seat ok-final risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "risk3 output that is not schema-shaped is FAILED" "$out" "status=FAILED"
 
-out=$(seat hang final --out "$TMP/o.md" --base main); rc=$?
-present "exit 124 is TIMEOUT, never a model change" "$out" "status=TIMEOUT"
+out=$(STUB_MODE=hang seat final --out "$TMP/o.md" --base main); rc=$?
+present "a run past its deadline is TIMEOUT, never a model change" "$out" "status=TIMEOUT"
 check "TIMEOUT exits 1" "$rc" "1"
 check "TIMEOUT does not run a second seat" "$(cat "$TMP/calls")" "1"
 
-out=$(seat refuse-then-ok final --out "$TMP/o.md" --base main); rc=$?
+out=$(STUB_REFUSE_ONCE=1 seat final --out "$TMP/o.md" --base main); rc=$?
 present "a refused model falls back once" "$out" "status=FALLBACK"
 present "the fallback line names the model that ran" "$out" "codex-judge gpt-5.6-sol/high"
 check "FALLBACK exits 0" "$rc" "0"
 check "the fallback runs exactly one extra seat" "$(cat "$TMP/calls")" "2"
 
-out=$(seat refuse-always final --out "$TMP/o.md" --base main)
+out=$(STUB_MODE=refusal seat final --out "$TMP/o.md" --base main)
 present "a fallback that also fails is FAILED" "$out" "status=FAILED"
 check "the fallback is attempted at most once" "$(cat "$TMP/calls")" "2"
 
-out=$(seat prose-fail final --out "$TMP/o.md" --base main)
+# A failed turn whose prose merely mentions a refusal is classified from the
+# result's own error field, so it is not a refusal and never falls back.
+out=$(STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the diff mentions an unsupported model'   seat final --out "$TMP/o.md" --base main)
 present "prose that mentions a refusal is not a refusal" "$out" "status=FAILED"
 check "a prose mention runs no second seat" "$(cat "$TMP/calls")" "1"
 
-out=$(seat authfail final --out "$TMP/o.md" --base main)
+out=$(STUB_MODE=logged-out seat final --out "$TMP/o.md" --base main)
 present "an auth failure is FAILED, not a model change" "$out" "status=FAILED"
 check "an auth failure runs no second seat" "$(cat "$TMP/calls")" "1"
 
-# A cancelled run is the owner's decision, not a capability signal.
-out=$(seat cancel final --out "$TMP/o.md" --base main)
-present "a cancelled run is FAILED, not a model change" "$out" "status=FAILED"
-check "a cancelled run runs no second seat" "$(cat "$TMP/calls")" "1"
+# A client-side throw is not a capability signal.
+out=$(STUB_MODE=throw seat final --out "$TMP/o.md" --base main)
+present "a thrown turn is FAILED, not a model change" "$out" "status=FAILED"
+check "a thrown turn runs no second seat" "$(cat "$TMP/calls")" "1"
 
-# Already on the fallback row: there is nothing to fall back to.
-write_roster "$SOL_ONLY"
-out=$(seat refuse-always final --out "$TMP/o.md" --base main)
-present "a refusal on the fallback row is FAILED" "$out" "status=FAILED"
-check "the fallback row is never retried against itself" "$(cat "$TMP/calls")" "1"
-
-write_roster "$ASTRA"
-out=$(seat refuse-stdout final --out "$TMP/o.md" --base main)
-present "a refusal on stdout also falls back" "$out" "status=FALLBACK"
-check "the stdout refusal runs exactly one extra seat" "$(cat "$TMP/calls")" "2"
-
-# The refusal must survive the fallback run, because the ledger quotes it.
-seat refuse-then-ok final --out "$TMP/o.md" --base main >/dev/null
-check "the refusal's own logs are kept" \
-  "$([ -s "$TMP/o.md.stderr" ] && echo yes || echo no)" "yes"
-check "the fallback writes its own logs" \
-  "$([ -f "$TMP/o.md.fallback.stderr" ] && echo yes || echo no)" "yes"
+# The refusal has to survive into the fallback run, because the ledger quotes it.
+# It travels in the result's own stderr field now and reaches the runner's
+# message rather than a log file.
+STUB_REFUSE_ONCE=1 seat final --out "$TMP/o.md" --base main >/dev/null
+check "the refusal is quoted before the fallback runs"   "$(grep -c 'refused (.*); falling back to gpt-5.6-sol/high' "$TMP/err")" "1"
+check "both seats ran, preferred rung first"   "$(awk '/^runAppServerTurn/{print $2}' "$TMP/events.log" | tr '
+' ',')"   "gpt-6-astra/high,gpt-5.6-sol/high,"
+check "no seat ever reaches a review entry point"   "$(grep -c 'runAppServerReview' "$TMP/events.log")" "0"
 
 # --- task and plan kinds, and the light tier ---------------------------------
-write_roster "$ASTRA"
+write_roster
 out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-present "task passes the task-review schema" "$out" "codex-review-schema.json"
+r=$(req_of "$out")
+check "task: passes the task-review schema"   "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
 present "task defaults to the heavy tier" "$out" "codex-judge gpt-6-astra/high"
-if tok x "$out" review; then printf 'FAIL - task never uses codex exec review\n'; fail=$((fail + 1))
-else printf 'ok   - task never uses codex exec review\n'; pass=$((pass + 1)); fi
 
 out=$(run --kind task --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 present "the light tier selects the last judge row" "$out" "codex-judge gpt-5.6-sol/high"
-if tok x "$out" gpt-5.6-sol; then printf 'ok   - the light tier reaches -m\n'; pass=$((pass + 1))
-else printf 'FAIL - the light tier reaches -m\n'; fail=$((fail + 1)); fi
-present "the light tier still reports the catalog date" "$out" "evidence=2026-09-14T13:35:00Z"
+present "the light tier reports no catalog evidence" "$out" "evidence=none"
 
 out=$(run --kind risk3 --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 present "risk3 accepts the light tier" "$out" "codex-judge gpt-5.6-sol/high"
 
 out=$(run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-present "plan passes the plan-review schema" "$out" "codex-plan-review-schema.json"
-present "plan is read-only" "$out" "read-only"
+r=$(req_of "$out")
+check "plan: passes the plan-review schema"   "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-plan-review-schema.json')" "1"
+check "plan: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
 present "plan takes the heavy selection" "$out" "codex-judge gpt-6-astra/high"
-if tok x "$out" review; then printf 'FAIL - plan never uses codex exec review\n'; fail=$((fail + 1))
-else printf 'ok   - plan never uses codex exec review\n'; pass=$((pass + 1)); fi
 
 run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
 check "task without --prompt is a usage error" "$rc" "2"
@@ -296,40 +250,40 @@ check "--tier with final is a usage error" "$rc" "2"
 run --kind task --tier medium --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
 check "an unknown tier is a usage error" "$rc" "2"
 
-out=$(seat ok-plan plan --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+out=$(STUB_FINAL_MESSAGE='{"executability":17,"coherence":16,"coverage":17,"assumptions":16,"findings":[]}'   seat plan --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
 present "a schema-shaped plan report is OK" "$out" "status=OK"
 check "a plan OK exits 0" "$rc" "0"
-out=$(seat ok plan --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_FINAL_MESSAGE='{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}'   seat plan --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a task-shaped report is not a plan review" "$out" "status=FAILED"
-out=$(seat ok task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_FINAL_MESSAGE='{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}'   seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a schema-shaped task report is OK" "$out" "status=OK"
-out=$(seat refuse-always task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_MODE=refusal seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a refused light run is FAILED" "$out" "status=FAILED"
 check "the light tier never falls back" "$(cat "$TMP/calls")" "1"
 
 # --- the session gate and the quota ------------------------------------------
-write_roster "$ASTRA"
+write_roster
 OFF='codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=cache'
 calls() { cat "$TMP/calls" 2>/dev/null || echo 0; }
 
-out=$(GATE_STUB_LINE="$OFF" seat ok task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
-check "an unusable gate prints the unusable line" "$out" "codex-judge none/none status=FAILED exit=0 out=$TMP/o.json evidence=unknown"
+out=$(GATE_STUB_LINE="$OFF" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+check "an unusable gate prints the unusable line" "$out" "codex-judge none/none status=FAILED exit=0 out=$TMP/o.json evidence=none"
 check "an unusable gate exits 1" "$rc" "1"
 check "an unusable gate runs no codex" "$(calls)" "0"
 present "the runner names the gate's reason" "$(cat "$TMP/err")" "run-codex-review: codex is off for this session (quota)"
 
-out=$(GATE_STUB_LINE="$OFF" seat ok-final final --out "$TMP/o.md" --base main --dry-run); rc=$?
+out=$(GATE_STUB_LINE="$OFF" seat final --out "$TMP/o.md" --base main --dry-run); rc=$?
 present "a dry run is gated too" "$out" "codex-judge none/none status=FAILED"
 check "a gated dry run exits 1" "$rc" "1"
 case "$out" in
   *would-run*) printf 'FAIL - a gated dry run prints no command\n'; fail=$((fail + 1)) ;;
   *) printf 'ok   - a gated dry run prints no command\n'; pass=$((pass + 1)) ;;
 esac
-out=$(GATE_STUB_LINE="$OFF" seat ok risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+out=$(GATE_STUB_LINE="$OFF" seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
 present "risk3 is gated too" "$out" "codex-judge none/none status=FAILED"
 check "a gated risk3 runs no codex" "$(calls)" "0"
 
-out=$(GATE_STUB_EXIT=2 seat ok-final final --out "$TMP/o.md" --base main); rc=$?
+out=$(GATE_STUB_EXIT=2 seat final --out "$TMP/o.md" --base main); rc=$?
 present "a gate that exits non-zero is refused, whatever it printed" "$out" "codex-judge none/none status=FAILED"
 check "a refused gate exits 1" "$rc" "1"
 check "a refused gate runs no codex" "$(calls)" "0"
@@ -344,7 +298,7 @@ open_session() {
   printf '{"session_id":"codex-review-test","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$SFILE"
 }
 open_session
-out=$(seat quota task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+out=$(STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
 present "a quota error is FAILED on the model that ran" "$out" "codex-judge gpt-6-astra/high status=FAILED exit=1"
 check "a quota error exits 1" "$rc" "1"
 check "a quota error is never a refusal: no second seat" "$(calls)" "1"
@@ -353,13 +307,13 @@ check "a quota error turns Codex off for the session" \
 check "the marked-off file keeps the plugin version" "$(jq -r '.plugin_version' "$SFILE" | tr -d '\r')" "1.0.3"
 
 open_session
-out=$(seat refuse-then-quota final --out "$TMP/o.md" --base main); rc=$?
+out=$(STUB_REFUSE_ONCE=1 STUB_SECOND_MODE=quota seat final --out "$TMP/o.md" --base main); rc=$?
 present "a quota error on the fallback run is FAILED" "$out" "codex-judge gpt-5.6-sol/high status=FAILED exit=1"
 check "the quota fallback ran exactly one extra seat" "$(calls)" "2"
 check "a quota error on the fallback run turns Codex off" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "false"
 
 open_session
-seat prose-fail final --out "$TMP/o.md" --base main >/dev/null
+STUB_TURN_STATUS=1 STUB_FINAL_MESSAGE='the diff mentions an unsupported model'   seat final --out "$TMP/o.md" --base main >/dev/null
 check "an ordinary failure leaves the session on" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "true"
 
 # The caller must defer to the runner's outcome rather than running its own
