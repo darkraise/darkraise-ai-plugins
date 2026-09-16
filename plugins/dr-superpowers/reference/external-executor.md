@@ -355,7 +355,7 @@ gate again before its roster and reports `FAILED` with
 `run-codex-review: codex is off for this session (<reason>)` unless it says
 `usable=true`; a quota error during a run turns Codex off for the rest of the
 session. It then establishes usability from the roster itself and never trusts the
-plan's copy, applies the `codex-judge` row's bound with coreutils `timeout`, and
+plan's copy, passes the `codex-judge` row's bound to the client as a deadline, and
 reports `FAILED` with the roster's own `reason` when Codex is not usable. Run it
 as a background Bash call: the Bash tool's `timeout` caps at ten minutes, the
 rung's bound is longer, and a background call is not bound by it at all.
@@ -368,30 +368,27 @@ bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy
 
 `codex:light` passes `--tier light`, which runs the `codex-judge` block's last
 row and never falls back. `codex:heavy` and `codex:heavy+judge-fable` pass
-`--tier heavy`: the runner takes the block's first row when the local model
-catalog advertises it, takes the last row whenever the catalog is absent,
-unreadable or silent, and falls back once on a refusal. `--kind risk3` is the
+`--tier heavy`: the runner takes the block's first row, and falls back once to
+the last row on a refusal. There is no catalog to consult first - the codex
+plugin advertises no model list, and reading Codex's own cache would cross the
+boundary the session gate exists to hold. `--kind risk3` is the
 same seat under its earlier name and stays accepted. The runner prints one
 status line:
 
 ```
-codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<fetched_at>
+codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=none
 ```
+
+`evidence=none` is constant. This plugin reads no model catalog, so there is no
+date to quote; the field is kept only because skills and suites read the line's
+shape.
 
 Read that line and nothing else. `OK` and `FALLBACK` are a seat that reviewed;
 `FALLBACK` additionally means the preferred rung refused the run, so say the
 substitution aloud and record it in the task's ledger line with the reason the
-runner prints in its own `refused (...)` message — it reads that line from
-`<out>.stderr` or `<out>.stdout`, because an API-level refusal arrives on the
-JSON stream rather than on stderr.
-
-On a `--tier heavy` run, a status line naming the block's last row with
-`status=OK` is a substitution as well: the catalog did not advertise the
-preferred rung, so selection fell closed before the run. Say that aloud too,
-quoting the line's `evidence=` value, which is the catalog's own date or
-`unknown`. It is not `FALLBACK`, because nothing refused anything. On a
-`--tier light` run the last row is the rung that tier selects, and there is
-nothing to say.
+runner prints in its own `refused (...)` message. That reason comes from the
+client's own result rather than from a log file: a refusal is classified from
+the turn's error field, so which stream carried it no longer matters.
 
 `TIMEOUT` or `FAILED` is a seat that produced no review. Dispatch the route's
 `fallback` seat with the ordinary task-reviewer prompt and say so. Never read an
@@ -411,9 +408,10 @@ verdicts, and the final message is JSON rather than a markdown
 what scores high, what to ignore - and let the schema state the shape. Sent
 unedited, the prompt would order markdown while `--output-schema` forbids it.
 
-Use `codex exec`, not `codex exec review`: the latter imposes its own report
-shape. The schema is a plugin file, outside every worktree, so it can never land
-in a task's commit.
+Task and plan kinds send this plugin's own output schema, never Codex's review
+report shape: a seat must return the criteria the Claude judges return. The
+schema is a plugin file, outside every worktree, so it can never land in a
+task's commit.
 
 **At risk 2 or above** this review is the first of two steps: the controller
 then dispatches `judge-fable` with the Second Pass section naming this seat's
@@ -447,7 +445,7 @@ name is what this round has always passed. The runner owns the model, the
 effort, the bound and the outcome, and prints one status line:
 
 ```
-codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<fetched_at>
+codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=none
 ```
 
 `OK` and `FALLBACK` are a round that produced findings; on `FALLBACK` say the
@@ -456,17 +454,20 @@ than the preferred one. `TIMEOUT` and `FAILED` mean this round produced
 nothing: skip it, say so, and report the Claude review alone, exactly as a
 missing Codex has always been reported.
 
-A status line naming the block's last row with `status=OK` is a substitution as
-well: the catalog did not advertise the preferred rung, so selection fell closed
-before the run. Say that aloud too, quoting the line's `evidence=` value, which
-is the catalog's own date or `unknown`. It is not `FALLBACK`, because nothing
-refused anything.
+The final-review kind runs read-only by nature and takes no sandbox flag. Run
+the runner as a background Bash call: the Bash tool's own `timeout` caps at ten
+minutes while a whole-branch round needs more, and a background call is not
+bound by it at all. The bound is the `codex-judge` row's third field, which the
+runner passes to the client as a deadline; the client interrupts the turn and
+reaps the broker when it expires.
 
-`codex exec review` is purpose-built for this and takes no sandbox flag, because
-review is read-only by nature. Run the runner as a background Bash call: the
-Bash tool's own `timeout` caps at ten minutes while a whole-branch round needs
-more, and a background call is not bound by it at all. The bound is the
-`codex-judge` row's third field, applied by the runner with coreutils `timeout`.
+The runner composes that round's prompt itself: `criteria/codex-final-review.md`
+followed by `git diff <base>...HEAD`. It does not use the Codex plugin's own
+review call, which reads only the model, the thread name and a target branch and
+answers in Codex's report shape — a seat's criteria and its schema would both be
+discarded. `--kind final` still takes no `--prompt`, and the round still returns
+a markdown findings list, which is what [final-review.md](final-review.md) step 3
+deduplicates.
 
 The runner establishes usability itself from the same `detect-executors.sh`
 roster the task seats use, so this round needs no separate guard; a Codex that
