@@ -198,16 +198,11 @@ prefix=$(git -C "$cwd" rev-parse --show-prefix) || die "not a git repository: $c
 [ -z "$prefix" ] || die "cwd must be the repository root, but sits under $prefix"
 base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
+# The only child is node, which exits when the client does, and the client reaps
+# the broker it caused to exist. Nothing here has a process group to signal - but
+# the interrupted-run guard and the unlock both stay, because the EXIT trap is
+# still the only thing that releases the worktree lock.
 cleanup() {
-  if [ -z "$codex_pid" ] && jq -e '.phase == "running" and any(.processes[]; .identity == "launch-pending")' "$record" >/dev/null 2>&1; then
-    dr_task_block 'launch interrupted before process identity was recorded; manual writer reconciliation required' || true
-    return 0
-  fi
-  [ -n "$codex_pid" ] && kill_codex_tree
-  if [ -n "$codex_pid" ] && kill -0 -"$codex_pid" 2>/dev/null; then
-    dr_task_block 'owned process group may still be running' || true
-    return 0
-  fi
   if [ "$(jq -r .phase "$record" 2>/dev/null)" = running ]; then
     dr_task_update '.processes = []' && dr_task_block 'execution interrupted; reconcile the recorded snapshot' || true
   fi
@@ -230,11 +225,8 @@ rm -f "$last" "$jsonl" "$report"
 [ ! -f "$last" ] || die "could not clear stale verdict file: $last"
 
 # The client owns the deadline, the interrupt and the broker reaper, so there is
-# no process group for this script to create, poll or signal. `set -m`,
-# kill_codex_tree, the polled wait and the grace window all went with it: node
-# is a direct child that exits on its own, and the wrapper that used to sit
-# between us and node - the one that broke taskkill's native tree-walk - no
-# longer exists either.
+# no process group for this script to create, poll or signal: node is a direct
+# child that exits on its own.
 #
 # The plugin root is resolved here rather than beside build_request, so that
 # --dry-run returns above without needing an enabled plugin. scripts/codex-plugin
@@ -265,6 +257,14 @@ if [ -n "$discovered_thread" ]; then
   dr_task_update '.thread = $thread' --arg thread "$discovered_thread" \
     || die 'cannot persist thread'
 fi
+
+# The client reaps the broker it caused to exist. Recording the outcome makes a
+# leak visible in the task record rather than only in a process list. Task 10
+# Step 5 already guarantees $result holds an object, so the jq below cannot be
+# handed an empty string; the `if` still defaults a missing key to false.
+dr_task_update '.reaped = $reaped' \
+  --argjson reaped "$(jq -r 'if .reaped == true then true else false end' <<<"$result" 2>/dev/null || echo false)" \
+  || die 'cannot persist reap outcome'
 
 timed_out=no
 [ "$(jq -r '.timedOut' <<<"$result")" = true ] && timed_out=yes
