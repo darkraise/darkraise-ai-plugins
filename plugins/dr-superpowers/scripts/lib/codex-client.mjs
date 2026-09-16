@@ -127,18 +127,32 @@ async function main() {
   let interrupted = false;
   let timer = null;
 
+  // The interrupt itself is bounded. The real interruptAppServerTurn connects
+  // to the broker and awaits an initialize RPC, the turn/interrupt RPC and a
+  // close, none with a timeout of its own (codex.mjs:866-906,
+  // app-server.mjs:281-319), and the broker that most needs interrupting is
+  // the one least likely to answer. An unanswered RPC here would leave the race
+  // unsettled and this process hanging with no result for bash to read.
+  const INTERRUPT_GRACE_MS = 5000;
   const expiry = new Promise((resolve) => {
     timer = setTimeout(async () => {
       timedOut = true;
+      let grace = null;
       try {
-        const outcome = await plugin.interruptAppServerTurn(req.cwd, {
-          threadId: seen.threadId,
-          turnId: seen.turnId
-        });
+        const outcome = await Promise.race([
+          plugin.interruptAppServerTurn(req.cwd, {
+            threadId: seen.threadId,
+            turnId: seen.turnId
+          }),
+          new Promise((settle) => {
+            grace = setTimeout(() => settle(null), INTERRUPT_GRACE_MS);
+          })
+        ]);
         interrupted = outcome?.interrupted === true;
       } catch {
         // An interrupt that fails leaves the reaper as the remaining recourse.
       }
+      clearTimeout(grace);
       resolve(null);
     }, deadlineMs);
   });
