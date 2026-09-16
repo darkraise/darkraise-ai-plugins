@@ -366,6 +366,18 @@ gated on calibration and smoke replayed through the new path; both record
 `PENDING` while Codex is unusable. Details:
 `docs/superpowers/specs/2026-09-16-dr-superpowers-codex-through-plugin-design.md`.
 
+**Amendment 2026-09-17 (sub-project 10 spec).** Sub-project 10, "Execution and
+review cost", is the last of ten. Measurement over 93 sessions found the weekly
+limit spent on execution mode and reviewer tier rather than seat count. An
+inline plan now delegates its heavy tasks (total >= 5 or risk 3) through a
+shared `reference/delegated-task.md`, and whole-plan subagent mode needs a heavy
+majority. Fable is kept for risk-3 task reviews, the two-list final-review
+dedupe, round 1 of an intricate plan with Codex unavailable, and critical
+rulings; Codex Sol and Astra review Claude-implemented tasks when available.
+Plan review re-rounds only on a Critical finding or a score of 8 or below, capped
+by the highest task total. A subagent-mode controller hands off at 350k. Details:
+`docs/superpowers/specs/2026-09-17-dr-superpowers-execution-cost-design.md`.
+
 ## 7. Verification (every sub-project)
 
 - `node scripts/validate-repository.mjs`
