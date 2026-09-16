@@ -98,5 +98,37 @@ run "$(req '{}')" >/dev/null
 check "fast turn: no interrupt" "$(grep -c '^interruptAppServerTurn' "$STUB_EVENT_LOG")" "0"
 unset STUB_EVENT_LOG
 
+# --- every run reaps the broker it caused to exist ---
+export STUB_EVENT_LOG="$TMP/reap.log"
+: > "$STUB_EVENT_LOG"
+out=$(run "$(req '{}')")
+check "reap: reaped is true" "$(jq -r '.reaped' <<<"$out")" "true"
+check "reap: shutdown sent" "$(grep -c '^sendBrokerShutdown stub-endpoint' "$STUB_EVENT_LOG")" "1"
+check "reap: session cleared" "$(grep -c '^clearBrokerSession' "$STUB_EVENT_LOG")" "1"
+
+# --- a shutdown that does not land escalates to teardown ---
+: > "$STUB_EVENT_LOG"
+export STUB_SHUTDOWN_FAILS=1
+out=$(run "$(req '{}')")
+check "reap: teardown when the session survives shutdown"   "$(grep -c '^teardownBrokerSession 4242' "$STUB_EVENT_LOG")" "1"
+check "reap: still reports reaped" "$(jq -r '.reaped' <<<"$out")" "true"
+unset STUB_SHUTDOWN_FAILS
+
+# --- a broker that already existed belongs to someone else and survives ---
+: > "$STUB_EVENT_LOG"
+export STUB_PRE_EXISTING=1
+out=$(run "$(req '{}')")
+check "reap: a pre-existing broker is not reaped" "$(jq -r '.reaped' <<<"$out")" "false"
+check "reap: no shutdown sent to someone else's broker"   "$(grep -c '^sendBrokerShutdown' "$STUB_EVENT_LOG")" "0"
+unset STUB_PRE_EXISTING
+
+# --- a timed-out run still reaps ---
+: > "$STUB_EVENT_LOG"
+export STUB_MODE=hang
+out=$(run "$(req '{"deadlineMs":300}')")
+check "reap: a timeout still reaps" "$(jq -r '.reaped' <<<"$out")" "true"
+export STUB_MODE=ok
+unset STUB_EVENT_LOG
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
