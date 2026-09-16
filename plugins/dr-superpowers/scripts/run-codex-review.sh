@@ -147,19 +147,6 @@ fi
 secs=$(secs_of "$model" "$effort")
 [ -n "$secs" ] || die "no timeout for $model/$effort in the codex-judge block"
 
-# The command each kind runs. task and plan use plain `codex exec` with this
-# plugin's own schema, never `codex exec review`, which imposes its own report
-# shape - a seat must return the criteria the Claude judges return.
-build_argv() { # build_argv <model> <effort>
-  if [ -n "$schema" ]; then
-    printf '%s\n' codex exec -s read-only -m "$1" -c "model_reasoning_effort=$2" \
-      --output-schema "$schema" -o "$out" -C "$cwd"
-  else
-    printf '%s\n' codex exec review --base "$base" -m "$1" -c "model_reasoning_effort=$2" \
-      -o "$out"
-  fi
-}
-
 if [ "$dry_run" = true ]; then
   printf 'would-run:\n'
   build_argv "$model" "$effort"
@@ -180,58 +167,66 @@ valid_output() {
   esac
 }
 
-# A refusal is the one failure a different model repairs. An expired token, an
-# exhausted quota, a bad working directory and a cancelled run are not refusals:
-# the fallback would fail identically and would cost a second full round.
+# The plugin root, resolved once. scripts/codex-plugin owns the locator and the
+# version allowlist; this script never names the codex executable.
 #
-# Only error-shaped lines are searched, and only at column 0. Codex writes its
-# whole session transcript - every file the model read, and the review text
-# itself - to stderr, and the report to stdout: a 2026-09-14 `--kind final` run
-# on this repository left 10,590 stderr lines carrying 20 matches for an
-# unanchored search, because this plugin's own tests and prose quote refusal
-# messages. Matching those would declare a refusal on a clean run and buy a
-# second full round. Both streams are still read: an API-level refusal arrives
-# as a JSON event, which can reach either.
-REFUSAL='(unsupported|unknown|invalid|not (supported|available|found)).*(model|effort)|(model|effort).*(unsupported|unknown|invalid|not (supported|available|found))'
+# A locator refusal is a FAILED seat, not a usage error: spec section 7 maps
+# locate and version failures to the status line, and exiting 2 here would make
+# a caller that reads the line see nothing at all.
+if ! plugin_line=$(bash "$HERE/codex-plugin"); then
+  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
+  printf 'run-codex-review: %s\n' "$plugin_line" >&2
+  exit 1
+fi
+plugin_root=${plugin_line#*root=}
 
-error_lines() { # error_lines <log-prefix>
-  grep -hE '^ERROR:|^\{"type": ?"error"' "$1.stdout" "$1.stderr" 2>/dev/null
+# One seat run, through the plugin's client. The client owns the deadline, the
+# interrupt and the broker reaper; this script owns the argv contract, the
+# status line and the exit code.
+#
+# --rawfile, not --arg "$(cat ...)": a reviewer prompt carries a whole branch
+# diff and passing it as an argument blows the 32,767-character Windows
+# CreateProcess limit.
+run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the result JSON
+  local request
+  request=$(jq -nc \
+    --arg kind "$kind" --arg cwd "$cwd" --arg model "$1" --arg effort "$2" \
+    --rawfile prompt "${prompt:-/dev/null}" --arg schema "${schema:-}" \
+    --argjson deadline "$(( $3 * 1000 ))" \
+    '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
+      prompt:$prompt,
+      schemaPath:(if $schema == "" then null else $schema end),
+      sandbox:"read-only", resumeThreadId:null, persistThread:false,
+      threadName:null, deadlineMs:$deadline}')
+  printf '%s' "$request" | node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
 }
 
-# grep -c, not -q: -q exits at the first match, and under pipefail the SIGPIPE it
-# sends error_lines would read as "no match".
-is_refusal() { # is_refusal <log-prefix>
-  local n; n=$(error_lines "$1" | grep -ciE "$REFUSAL") || true
-  [ "${n:-0}" -gt 0 ]
+# --kind final ships no --prompt of its own: the round is defined by the branch.
+# Its criteria and its diff are composed here, because the plugin call that would
+# otherwise do this - runAppServerReview - reads only model, threadName, target
+# and delivery (codex.mjs:908-961) and answers in Codex's own report shape,
+# discarding the criteria a seat has to return.
+#
+# There is no $base in the request: it is consumed here and nowhere else.
+compose_final_prompt() { # compose_final_prompt; echoes the composed prompt path
+  local file="$out.prompt" diff="$out.diff"
+  git -C "$cwd" diff "$base...HEAD" > "$diff" 2>"$out.diff.err" || return 1
+  {
+    cat "$HERE/../criteria/codex-final-review.md"
+    printf '\n## The diff under review\n\n'
+    printf '%s\n' '```diff'
+    cat "$diff"
+    printf '%s\n' '```'
+  } > "$file" || return 1
+  printf '%s' "$file"
 }
 
-# An exhausted quota is not a refusal either: every model on the account hits
-# the same limit. It turns Codex off for the rest of the session instead, so the
-# next seat goes straight to its Claude judge.
-QUOTA='usage limit|rate_limit_reached'
-
-is_quota() { # is_quota <log-prefix>
-  local n; n=$(error_lines "$1" | grep -ciE "$QUOTA") || true
-  [ "${n:-0}" -gt 0 ]
-}
-
-# The same line the match came from, not merely the first line of stderr - that
-# is the CLI banner, which would make every substitution read as "refused
-# (OpenAI Codex v0.154.0)".
-refusal_line() { # refusal_line <log-prefix>
-  error_lines "$1" | grep -m1 . | tr -d '\r'
-}
-
-# Each attempt writes its own pair of logs. Sharing one would let the fallback's
-# (usually empty) output overwrite the refusal that explains why the fallback
-# ran at all, which is the line the ledger substitution quotes.
-run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the exit code
-  local argv=() line
-  while IFS= read -r line; do argv+=("$line"); done < <(build_argv "$1" "$2")
-  rm -f "$out"
-  ( cd "$cwd" && timeout "$3" "${argv[@]}" >"$4.stdout" 2>"$4.stderr" \
-      < "${prompt:-/dev/null}" )
-  printf '%s' "$?"
+# The report is whatever the seat returned. Writing it here rather than in the
+# client keeps the --out contract with bash, which owns it.
+write_out() { # write_out <result-json>
+  # -j, not -r: -r appends a newline, so an empty finalMessage would leave a
+  # one-byte file that valid_output's -s test would call a review.
+  jq -j '.finalMessage // ""' <<<"$1" > "$out"
 }
 
 status() { # status <model> <effort> <state> <exit>
@@ -239,10 +234,23 @@ status() { # status <model> <effort> <state> <exit>
     "$1" "$2" "$3" "$4" "$out" "$evidence"
 }
 
-rc=$(run_seat "$model" "$effort" "$secs" "$out")
+# The final round composes its prompt from the branch; every other kind was
+# given one on argv. A failure here is a FAILED seat, not a usage error: the
+# caller reads the status line and would otherwise see nothing at all.
+if [ "$kind" = final ]; then
+  if ! prompt=$(compose_final_prompt); then
+    printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
+    printf 'run-codex-review: cannot diff %s...HEAD in %s\n' "$base" "$cwd" >&2
+    exit 1
+  fi
+fi
 
-# Deadline expiry is tracked apart from every other non-zero exit: a hang and a
-# refusal both exit non-zero, and only one of them is worth a second run.
+result=$(run_seat "$model" "$effort" "$secs" "$out")
+write_out "$result"
+rc=0
+[ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
+[ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
+
 if [ "$rc" -eq 124 ]; then
   status "$model" "$effort" TIMEOUT "$rc"; exit 1
 fi
@@ -251,26 +259,31 @@ if [ "$rc" -eq 0 ] && valid_output; then
   status "$model" "$effort" OK "$rc"; exit 0
 fi
 
-if is_quota "$out"; then
+if [ "$(jq -r '.quota' <<<"$result")" = true ]; then
   codex_session_mark_off quota
   status "$model" "$effort" FAILED "$rc"; exit 1
 fi
 
 # The fallback is attempted at most once, and never when the row that just ran
 # is already the fallback row.
-if is_refusal "$out" \
+if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
    && { [ "$model" != "$back_model" ] || [ "$effort" != "$back_effort" ]; }; then
   printf 'run-codex-review: %s/%s refused (%s); falling back to %s/%s\n' \
-    "$model" "$effort" "$(refusal_line "$out")" "$back_model" "$back_effort" >&2
+    "$model" "$effort" "$(jq -r '.stderr' <<<"$result" | head -1)" \
+    "$back_model" "$back_effort" >&2
   back_secs=$(secs_of "$back_model" "$back_effort")
-  rc=$(run_seat "$back_model" "$back_effort" "$back_secs" "$out.fallback")
+  result=$(run_seat "$back_model" "$back_effort" "$back_secs" "$out.fallback")
+  write_out "$result"
+  rc=0
+  [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
+  [ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
   if [ "$rc" -eq 124 ]; then
     status "$back_model" "$back_effort" TIMEOUT "$rc"; exit 1
   fi
   if [ "$rc" -eq 0 ] && valid_output; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
-  is_quota "$out.fallback" && codex_session_mark_off quota
+  [ "$(jq -r '.quota' <<<"$result")" = true ] && codex_session_mark_off quota
   status "$back_model" "$back_effort" FAILED "$rc"; exit 1
 fi
 
