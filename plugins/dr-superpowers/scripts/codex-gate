@@ -39,6 +39,10 @@ if [ "$refresh" -eq 0 ] && [ -n "$file" ] && [ -r "$file" ]; then
                    (.resets_at_epoch // "" | tostring), (.plugin_version // "")] | join("\u001f")' \
     "$file" 2>/dev/null | tr -d '\r')
   IFS=$'\x1f' read -r c_usable c_reason c_resets c_epoch c_version <<<"$cached"
+  # A hand-edited non-numeric epoch would make the -gt below write "integer
+  # expression expected" to stderr; 0 is never in the future, so it reads as
+  # stale exactly as the error did.
+  case "$c_epoch" in *[!0-9]*) c_epoch=0 ;; esac
   if [ "$c_usable" = true ] \
      || { [ "$c_usable" = false ] && { [ -z "$c_epoch" ] || [ "$c_epoch" -gt "$(date -u +%s)" ]; }; }; then
     usable=$c_usable reason=$c_reason resets=$c_resets epoch=$c_epoch version=$c_version source=cache

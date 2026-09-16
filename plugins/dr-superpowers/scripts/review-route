@@ -40,7 +40,10 @@ src="$TMP/plan.md"
 plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
   || die "an amendment does not apply; run plan-lint"
 
-if plan_header "$src" | grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$'; then
+# Captured, not piped: grep -q exits at its first match, and under pipefail the
+# writer's SIGPIPE would decide the if, not the match.
+header=$(plan_header "$src")
+if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 

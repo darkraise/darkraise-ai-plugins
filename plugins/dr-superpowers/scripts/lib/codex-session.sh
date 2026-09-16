@@ -40,7 +40,11 @@ codex_session_write() {
 # session: no reset time, so the gate's cache keeps the answer.
 codex_session_mark_off() {
   local f prior; f=$(codex_session_file) || return 0
-  prior=$(cat "$f" 2>/dev/null) || prior='{}'
+  # Parsed, not cat: an empty or torn file would make the jq below produce
+  # nothing, and the empty file that writes reads back as a cache miss, so the
+  # next gate call re-probes and can turn Codex on again.
+  prior=$(jq -c . "$f" 2>/dev/null) || prior=''
+  [ -n "$prior" ] || prior='{}'
   codex_session_write "$(jq -c --arg sid "$(codex_session_id)" --arg r "$1" \
     --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{session_id: $sid, usable: false, review: false, lane: false, reason: $r, checked_at: $at,

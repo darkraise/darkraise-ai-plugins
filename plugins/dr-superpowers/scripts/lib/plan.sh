@@ -69,7 +69,7 @@ plan_primary_root() {
 # blank lines dropped.
 ladder_block() {
   tr -d '\r' < "$_PLAN_LIB_DIR/../../reference/ladder.md" \
-    | awk -v tag="$1" '$0 == "```" tag { f = 1; next } f && /^```/ { exit } f && NF { print }'
+    | awk -v tag="$1" 'stop { next } $0 == "```" tag { f = 1; next } f && /^```/ { stop = 1; next } f && NF { print }'
 }
 
 # ledger_blocked FILE — the task numbers with a "Task N: BLOCKED" line, sorted,
@@ -80,18 +80,23 @@ ledger_blocked() {
 
 # plan_header_line FILE LABEL — the first line outside fences that begins
 # "**LABEL:**", or nothing.
+# awk stops at a flag rather than exit: exiting leaves tr writing into a closed
+# pipe, and under pipefail that SIGPIPE becomes the caller's exit status on any
+# plan larger than the pipe buffer.
 plan_header_line() {
   tr -d '\r' < "$1" | awk -v p="**$2:**" "$_PLAN_AWK"'
+    stop { next }
     in_fence($0) { next }
-    index($0, p) == 1 { print; exit }
+    index($0, p) == 1 { print; stop = 1 }
   '
 }
 
 # plan_header FILE — every line before the first task heading.
 plan_header() {
   tr -d '\r' < "$1" | awk "$_PLAN_AWK"'
+    stop { next }
     { f = in_fence($0) }
-    !f && is_task($0) >= 0 { exit }
+    !f && is_task($0) >= 0 { stop = 1; next }
     { print }
   '
 }

@@ -717,8 +717,8 @@ When the review comes back clean — or every open finding is parked with a
 ruling at the cap — append the completion line to the ledger in the same
 message as your other bookkeeping:
 
-- `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
-- `Task <N>: complete (commits <base7>..<head7>, <K> parked; scores …) — …; remaining: <parked one-liners>; …` after a tripped breaker
+- `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
+- `Task <N>: complete (commits <base7>..<head7>, <K> parked; scores …, seat <seat>) — …; remaining: <parked one-liners>; …` after a tripped breaker
 - end the scores clause with `, seat <seat>`: `codex gpt-5.6-sol/high`,
   `codex gpt-6-astra/high+judge-fable`, or the judge's short name, followed by
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by

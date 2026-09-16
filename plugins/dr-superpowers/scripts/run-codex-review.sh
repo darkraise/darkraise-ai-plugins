@@ -198,8 +198,11 @@ error_lines() { # error_lines <log-prefix>
   grep -hE '^ERROR:|^\{"type": ?"error"' "$1.stdout" "$1.stderr" 2>/dev/null
 }
 
+# grep -c, not -q: -q exits at the first match, and under pipefail the SIGPIPE it
+# sends error_lines would read as "no match".
 is_refusal() { # is_refusal <log-prefix>
-  error_lines "$1" | grep -qiE "$REFUSAL"
+  local n; n=$(error_lines "$1" | grep -ciE "$REFUSAL") || true
+  [ "${n:-0}" -gt 0 ]
 }
 
 # An exhausted quota is not a refusal either: every model on the account hits
@@ -208,7 +211,8 @@ is_refusal() { # is_refusal <log-prefix>
 QUOTA='usage limit|rate_limit_reached'
 
 is_quota() { # is_quota <log-prefix>
-  error_lines "$1" | grep -qiE "$QUOTA"
+  local n; n=$(error_lines "$1" | grep -ciE "$QUOTA") || true
+  [ "${n:-0}" -gt 0 ]
 }
 
 # The same line the match came from, not merely the first line of stderr - that
