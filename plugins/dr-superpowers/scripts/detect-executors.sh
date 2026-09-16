@@ -32,9 +32,10 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
   local id="$1" capable="$2" lane="$3" incapable_reason="$4"
   local path present version authed reason usable auth_status=not_applicable
 
-  # Codex is reached only through the official plugin: no `command -v codex`,
-  # no `codex --version`, no `codex login status`. Every other id keeps the
-  # PATH probe, because no plugin owns it.
+  # Codex is reached only through the official plugin, which owns the binary:
+  # presence, version and login state come from the locator and the client,
+  # never from a PATH probe. Every other id keeps the PATH probe, because no
+  # plugin owns it.
   if [ "$id" = codex ]; then
     path=""
     present=false
@@ -49,7 +50,7 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
       version=$(jq -Rn --arg v "${plugin_line#*version=}" '$v | sub(" root=.*"; "")')
       auth_json=$(printf '{"op":"auth","cwd":"%s"}' "$PWD" \
         | timeout 60 node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>/dev/null)
-      case "$(jq -r '.authed // "null"' <<<"${auth_json:-{\}}" 2>/dev/null)" in
+      case "$(jq -r '.authed | tojson' <<<"${auth_json:-{\}}" 2>/dev/null)" in
         true)  authed=true;  auth_status=authenticated ;;
         false) authed=false; auth_status=logged_out ;;
         *)     authed=null;  auth_status=probe_failed ;;
