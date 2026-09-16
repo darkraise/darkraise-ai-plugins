@@ -2,3 +2,4 @@
 # platforms, so shell scripts and manifests stay consistent for the Ubuntu CI
 # runner and every contributor regardless of core.autocrlf.
 * text=auto eol=lf
+docs/superpowers/plans/completed.md merge=union
