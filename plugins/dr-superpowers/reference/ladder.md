@@ -287,10 +287,10 @@ Judges are excluded from the implementer ladder anyway: nothing escalates into
 a review seat.
 
 `gpt-6-astra` is the rung `reference/codex-routing.json` already floors native
-judges at, so both hosts now judge at the same tier. Selection is not automatic:
-`scripts/run-codex-review.sh` takes the first row the local model catalog
-advertises and otherwise falls back to the last row, because a catalog listing
-is not an entitlement.
+judges at, so both hosts now judge at the same tier. This plugin reads no model
+catalog: `scripts/run-codex-review.sh` attempts the first row and falls back
+once to the last row on a refusal, which is the only evidence of entitlement
+that has ever been reliable.
 
 1800 seconds is a provisional operational budget, not a derived figure. The only
 measurement is a `gpt-5.6-sol/high` whole-branch round at roughly four minutes on
