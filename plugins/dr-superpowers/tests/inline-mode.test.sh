@@ -79,7 +79,23 @@ done
 # The skill names all seven kinds - three it runs and four it explains away -
 # so "states the three and no others" is not greppable. Assert the three plus
 # the sentence that excludes the rest.
-present "names the kinds it does not run" "$INLINE" "no task reviewer"
+present "names the one kind it never runs" "$INLINE" 'Only `codex-empty-diff` belongs to a seat this mode never runs'
+for k in preflight cannot-verify breaker; do
+  present "claims the $k kind for delegated work" "$INLINE" "\`$k\`"
+done
+present "reads the Dispatch line" "$INLINE" '`**Dispatch:** delegated'
+present "links the delegated loop" "$INLINE" "../../reference/delegated-task.md"
+present "passes the plan to context-size" "$INLINE" 'context-size --plan PLAN_FILE'
+present "subagent mode passes the plan to context-size" "$SDD" 'context-size --plan PLAN_FILE'
+present "a delegated task hands off at the next ledger write" "$INLINE" 'In a delegated task, act at the next ledger write'
+present "a delegating plan gets a preflight" "$INLINE" 'send one `preflight` item'
+present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
+present "inline confirms a Header amendment" "$INLINE" 'A Header amendment from `judge-opus` is confirmed by `judge-fable`'
+absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-flight scan.'
+absent "inline no longer names judge-fable as the ruling seat" "$INLINE" '`dr-superpowers:judge-fable` (`dr-superpowers:judge-opus` when Fable is'
+present "inline translates a delegated task's agent" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
+absent "inline drops the all-inert legacy sentence" "$INLINE" 'no task is dispatched, so their names need no translation'
+present "a return to inline starts at a task that is not delegated" "$INLINE" 'The return takes effect at the first remaining task that is not delegated'
 
 # The fix cap, and the escalation clause both skills key on.
 present "states the fix cap" "$INLINE" "fix round R/3"

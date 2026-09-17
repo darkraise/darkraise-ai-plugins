@@ -375,7 +375,7 @@ for f in "$P/skills/subagent-driven-development/SKILL.md" \
          "$P/skills/executing-plans/SKILL.md"; do
   absent "no risk3-spread in ${f#"$P/"}" "$f" 'risk3-spread'
 done
-present "inline mode lists four kinds it does not run" "$P/skills/executing-plans/SKILL.md" 'The other four kinds belong to seats this mode does not run'
+present "inline mode names the one kind it never runs" "$P/skills/executing-plans/SKILL.md" 'Only `codex-empty-diff` belongs to a seat this mode never runs'
 
 # --- external-executor and ladder prose ------------------------------------------
 EXEC="$P/reference/external-executor.md"

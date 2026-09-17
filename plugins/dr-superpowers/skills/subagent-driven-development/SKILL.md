@@ -18,8 +18,11 @@ back. Before anything else:
    ledger line decides: `complete` is done; `fix round R/5` resumes at round
    R+1 with a fresh dispatch; an assigned line with commits after its base
    goes to review.
-3. Run `scripts/context-size`. On exit 5, invoke dr-superpowers:handoff.
-4. Re-read this skill in full before the next dispatch.
+3. Run `scripts/context-size --plan PLAN_FILE`. On exit 5, invoke
+   dr-superpowers:handoff.
+4. Re-read this skill in full before the next dispatch, and
+   [delegated-task.md](../../reference/delegated-task.md) when a task is
+   mid-loop (an agent-named assigned line or `fix round R/5`).
 
 ## Select the host first
 

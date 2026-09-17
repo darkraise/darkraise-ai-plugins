@@ -16,8 +16,11 @@ back. Before anything else:
    the directory it prints.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides; see the Recovery table under The Ledger.
-3. Run `scripts/context-size`. On exit 5, invoke dr-superpowers:handoff.
-4. Re-read this skill in full before the next task.
+3. Run `scripts/context-size --plan PLAN_FILE`. On exit 5, invoke
+   dr-superpowers:handoff.
+4. Re-read this skill in full before the next task. If a task's last ledger
+   line is an agent-named assigned line or `fix round R/5`, also re-read
+   [delegated-task.md](../../reference/delegated-task.md) before continuing.
 
 ## Select the host first
 
@@ -25,7 +28,7 @@ On Codex, the ruling seat is a native judge at Astra high or above
 ([native-codex.md](../../reference/native-codex.md)), and there is no budget
 line: hand off after every 3 completed tasks, or after any task that needed 3
 or more fix rounds. Everything else here is host-neutral - inline mode
-dispatches nothing but the ruling seat and the final review.
+dispatches nothing but the ruling seat, delegated tasks and the final review.
 
 ## Overview
 
@@ -34,19 +37,28 @@ the gate.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Why this mode.** The plan's `**Execution:**` line chose it because every task
-scores 4 or less with none at risk 3: each is a small change whose text carries
-the code, and a subagent per task would cost more in context rebuild than the
-task itself. The line's model follows the highest score: Sonnet when every
-task is 3 or less, Opus when any task scores 4. Subagent availability has
-nothing to do with it - the line decides, and only your human partner
-overrides it.
+**Why this mode.** The plan's `**Execution:**` line chose it because at most
+half the tasks are heavy (total 5 or more, or risk 3). The rest are small
+changes whose text carries the code, and a subagent per task would cost more in
+context rebuild than the task itself. The line's model follows the highest
+score among the tasks you implement: Sonnet when every one is 3 or less, Opus
+when one scores 4; its effort is at least high when the plan delegates.
+Subagent availability has nothing to do with it - the line decides, and only
+your human partner overrides it.
 
-**Why no per-task review.** The eligibility bar is the gate, applied before
-execution starts. A task too large, too vague or too risky for this mode never
-reaches it: the plan would have said `subagent`. What catches the rest is the
-plan's own verification steps, your self-review of each diff, and one broad
-review of the whole branch at the end.
+**Delegated tasks.** A heavy task is not yours to implement. Its brief's second
+line is `**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md`
+ends with `**Dispatch:** delegated — Task <a>, Task <b>`. Run
+[delegated-task.md](../../reference/delegated-task.md) for it: an implementer
+subagent, the review seat `scripts/review-route` prints, fix rounds up to 5 and
+a reviewed complete line. Read that file the first time a delegated task comes
+up, not before. Delegated tasks are never batched.
+
+**Why no per-task review of your own tasks.** The eligibility bar is the gate,
+applied when the plan was written. A task too large or too risky to implement
+here is delegated and reviewed; what catches the rest is the plan's own
+verification steps, your self-review of each diff, and one broad review of the
+whole branch at the end.
 
 **Continuous execution.** Do not pause between tasks to check in. "Should I
 continue?" prompts and progress summaries waste your human partner's time -
@@ -140,12 +152,16 @@ passed it.
 skills and agents under older plugin prefixes. Translate each with
 [legacy-names.md](../../reference/legacy-names.md) at read time, never edit the
 plan, and log one `Ruling: translated <old> -> <new> — legacy plugin name —
-none` per distinct name. `**Implementer:**` and `**Executor:**` lines are inert
-in this mode: no task is dispatched, so their names need no translation.
+none` per distinct name. `**Executor:**` lines are inert in this mode: nothing
+goes to an external executor. `**Implementer:**` lines are inert for the tasks
+you implement; translate a delegated task's `**Implementer:**` agent before dispatching it.
 
-There is no pre-flight scan. It is one whole-plan judge dispatch, and a plan
-eligible for this mode is low-coupling by construction. A plan defect that
-surfaces while you work goes to the seat as a `blocked-plan` item.
+**Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated`
+line, send one `preflight` item to the ruling seat before Task 1 and carry out
+its verdicts. A plan with no delegated task has no pre-flight scan: it is one
+whole-plan judge dispatch, and a plan of small tasks is low-coupling by
+construction. A plan defect that surfaces while you work goes to the seat as a
+`blocked-plan` item.
 
 ## The Ledger
 
@@ -178,7 +194,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   The branch's review is the `Final review:` line.
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
-- The fix cap is 3, not subagent mode's 5. You are fixing your own work, so a
+- The fix cap is 3 for a task you implement, not subagent mode's 5; a delegated task keeps 5. You are fixing your own work, so a
   fourth round is not a better round - it is the trigger in Switching to
   subagent mode. A fix-round line is written after the round, with its
   outcome, exactly as subagent mode writes its own: `passing` when the
@@ -196,6 +212,11 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   the parked findings, `discovered` the problems you found and did not fix, and
   `assumptions` what you assumed where the plan was silent.
 - Write each line in the same message as your other bookkeeping, never later.
+- A delegated task writes subagent mode's per-task lines instead:
+  the agent-named assigned line, `fix round R/5`, `HANDBACK`, `parked`,
+  dispatch `Ruling:` lines, `BLOCKED — <agent> exhausted`, and the complete line
+  with `review clean` or `K parked` and its scores clause
+  (dr-superpowers:subagent-driven-development §The Ledger).
 
 **Recovery.** For task N, take the last line in file order among its
 `Task <N>:` lines, stepping over `minor (deferred)`, `parked`,
@@ -210,6 +231,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
 | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
 | `fix round 3/3 (…; still failing)` | Go to Switching to subagent mode |
 | `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
+| An agent-named `implementer <agent> (assigned …)` line, or `fix round R/5` | A delegated task: apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 
 **Plan state.** First, whatever the per-task lines say: if the ledger holds a
@@ -230,10 +252,12 @@ budget before every task at no extra request:
 
 - `ok` or `unknown`: carry on.
 - `handoff`: finish the task in flight, write its ledger line, then invoke
-  dr-superpowers:handoff. Never hand off mid-task.
+  dr-superpowers:handoff. Never hand off in the middle of a task you
+  implement. In a delegated task, act at the next ledger write, as subagent
+  mode does: let the dispatched agent return, write its line, then hand off.
 
-Run `scripts/context-size` after each `Task <N>: complete` line and act on its
-exit 5 the same way.
+Run `scripts/context-size --plan PLAN_FILE` after each `Task <N>: complete`
+line and act on its exit 5 the same way.
 
 The last task completing is a soft stop: the final review runs in this session
 unless the budget line says `handoff`. A switch to subagent mode is always a
@@ -247,7 +271,10 @@ For each task, in order:
    root, and read the file it prints. It carries the task text with every
    amendment applied, the header's Global Constraints and Contracts, and the
    budget line. You never read task text any other way: reading the plan file
-   directly skips the amendments.
+   directly skips the amendments. If the brief's second line is
+   `**Dispatch:** delegated`, run
+   [delegated-task.md](../../reference/delegated-task.md) for this task instead
+   of steps 2 to 7, then go to step 8.
 2. **Open the task.** Take the base commit (`git rev-parse --short HEAD`) and
    append `Task <N>: implementer inline (assigned; base <sha7>)`.
 3. **Implement exactly what the task names.** Follow its steps in order. Where
@@ -267,7 +294,7 @@ For each task, in order:
 6. **Commit** as the task's commit step specifies.
 7. **Close the task.** Append the complete line with its checkpoint, in the
    same message as your other bookkeeping, and mark the todo complete.
-8. **Check the budget.** Run `scripts/context-size`.
+8. **Check the budget.** Run `scripts/context-size --plan PLAN_FILE`.
 
 **When a verification will not pass.** Fix, re-run, then append
 `Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`
@@ -289,29 +316,33 @@ branch against the spec, not against what you meant.
 Judgment about the plan, the spec or a finding belongs to the ruling seat, not
 to you, whatever model you run on. It reads the whole plan, the spec,
 `amendments.md` and the ledger; you read the header and one brief at a time. It
-is the only thing this mode dispatches before the final review.
+and delegated tasks are all this mode dispatches before the final review.
 
-**When.** Three points arise in this mode:
+**When.** These points arise in this mode:
 
 | Kind | Decision point |
 |---|---|
+| `preflight` | Once, before Task 1, when the plan delegates any task (Setup) |
 | `blocked-plan` | The plan is wrong and no path forward is a mechanical choice |
-| `plan-conflict` | A final-review finding that conflicts with what the plan's text requires, or is labelled plan-mandated |
+| `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
+| `cannot-verify` | A delegated task's "⚠️ Cannot verify from diff" item |
+| `breaker` | A delegated task's findings still open after round 5/5 |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
-The other four kinds belong to seats this mode does not run: `preflight` (there
-is no pre-flight scan), `cannot-verify` (no task reviewer), `breaker` (no
-five-round review loop), and `codex-empty-diff` (no external executor).
+Only `codex-empty-diff` belongs to a seat this mode never runs (no external
+executor), and `preflight` arises only for a plan with a delegated task.
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` - `<task>` is the task
 number the items concern, or `plan` for a plan-level point, so a recurring
 point never overwrites an earlier file - listing each item: an id, its kind,
-its task, and the paths it needs, with the findings copied verbatim. Dispatch
-`dr-superpowers:judge-fable` (`dr-superpowers:judge-opus` when Fable is
-unavailable or your human partner declined it - say the substitution aloud)
-with
+its task, and the paths it needs, with the findings copied verbatim. Run
+`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` and dispatch the
+`primary` it prints (`dr-superpowers:judge-opus` in place of
+`dr-superpowers:judge-fable` when Fable is unavailable or your human partner
+declined it - say the substitution aloud) with
 [ruling-prompt.md](../subagent-driven-development/references/ruling-prompt.md),
-expanding its placeholders.
+expanding its placeholders. On any exit 2, dispatch
+`dr-superpowers:judge-opus` and say why, quoting its message.
 
 **Carry out each verdict**, and copy its `Ruling:` line into the ledger
 verbatim:
@@ -327,7 +358,10 @@ verbatim:
   root. On `amended: A<k> …`, write the amendment ledger line; your next
   `task-brief` carries the amendment. On `rejected: …`, make one fresh seat
   dispatch carrying the entry and the rejection output; a second rejection is
-  BLOCKED.
+  BLOCKED. A Header amendment from `judge-opus` is confirmed by `judge-fable`
+  before `plan-amend` runs, exactly as
+  dr-superpowers:subagent-driven-development §The Ruling Seat describes,
+  including its ledger line when Fable is unavailable.
 - **BLOCKED** - log `Task <N>: BLOCKED — ruling seat — <decision>`, name it in
   your final message, and stop.
 
@@ -372,7 +406,9 @@ task boundary where every earlier task is complete.
 
 Your human partner may also move a plan the other way, from subagent mode to
 this one. Only their explicit instruction does that, and only at the same kind
-of boundary.
+of boundary. The return takes effect at the first remaining task that is not delegated:
+only its `implementer inline (assigned` line records the return, so delegated
+tasks before it still run under subagent mode.
 
 ## Final Review
 
