@@ -119,5 +119,52 @@ done
 present "final review runs gates first" "$FINAL" 'dr-superpowers:running-gates'
 present "a red gate stops the review" "$FINAL" 'A red gate stops'
 
+# --- the Dispatch line: mixed mode's delegation, computed by task-brief ---
+DTMP=$(mktemp -d)
+sed 's/^|//' > "$DTMP/plan.md" <<'EOF'
+|# Mixed
+|
+|**Execution:** inline — `claude --model opus --effort high` — x
+|
+|### Task 1: light
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 2: heavy
+|
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
+|
+|### Task 3: split
+|
+|#### Part A: small
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|#### Part B: risky
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
+EOF
+brief() { bash "$P/scripts/task-brief" "$@" >/dev/null 2>&1; }
+brief "$DTMP/plan.md" 1 "$DTMP/b1.md"
+check "a light task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/b1.md")" "0"
+brief "$DTMP/plan.md" 2 "$DTMP/b2.md"
+check "a heavy task's second line is the Dispatch line" "$(sed -n 2p "$DTMP/b2.md")" "**Dispatch:** delegated — total 5, risk 2"
+brief "$DTMP/plan.md" 3 "$DTMP/b3.md"
+check "a split task carries its highest total and risk" "$(sed -n 2p "$DTMP/b3.md")" "**Dispatch:** delegated — total 4, risk 3"
+brief --header "$DTMP/plan.md" "$DTMP/h.md"
+check "the header lists the delegated tasks" "$(tail -n 1 "$DTMP/h.md")" "**Dispatch:** delegated — Task 2, Task 3"
+sed 's/^\*\*Evaluation:\*\* files 1 - spec 1 - coupling 1 - risk 2 = 5$/**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4/; s/risk 3 = 4$/risk 0 = 1/' "$DTMP/plan.md" > "$DTMP/light.md"
+brief --header "$DTMP/light.md" "$DTMP/hl.md"
+check "a plan with no heavy task has no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/hl.md")" "0"
+sed 's/inline — `claude --model opus --effort high`/subagent — `claude --model sonnet --effort high`/' "$DTMP/plan.md" > "$DTMP/sub.md"
+brief "$DTMP/sub.md" 2 "$DTMP/s2.md"
+check "a subagent plan has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/s2.md")" "0"
+grep -v '^\*\*Execution:\*\*' "$DTMP/plan.md" > "$DTMP/old.md"
+brief "$DTMP/old.md" 2 "$DTMP/o2.md"
+check "a plan with no Execution line has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/o2.md")" "0"
+{ printf 'Host: codex\n\n'; cat "$DTMP/plan.md"; } > "$DTMP/cdx.md"
+brief "$DTMP/cdx.md" 2 "$DTMP/c2.md"
+check "a Codex-host plan has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/c2.md")" "0"
+rm -rf "$DTMP"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
