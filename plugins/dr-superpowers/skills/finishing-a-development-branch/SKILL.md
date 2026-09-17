@@ -283,8 +283,8 @@ provides a workspace-exit tool, use it.
 **Runs after Options 1, 2 and 3.** A discard ends at Step 6: the work is
 gone, so nothing follows from it.
 
-If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`,
-from the plugin root (the path the session's entry point names; two levels above this skill's directory), with the
+If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`
+(see using-superpowers §Session Budget), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
 the next program sub-project with its launch command and first prompt, or

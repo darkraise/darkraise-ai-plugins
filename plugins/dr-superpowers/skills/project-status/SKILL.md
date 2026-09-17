@@ -14,9 +14,8 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
 
 ## Steps
 
-1. **Orient in one call.** Run `scripts/repo-audit`, from the plugin root (the
-   path the session's entry point names; two levels above this skill's
-   directory). It gives branch and HEAD, worktrees, dirty files, plans with
+1. **Orient in one call.** Run `scripts/repo-audit`
+   (see using-superpowers §Session Budget). It gives branch and HEAD, worktrees, dirty files, plans with
    ledgers, the handoff file, and recent commits.
 2. **Route out if execution is live.** If a ledger has incomplete tasks and no
    task's last line is `BLOCKED`, name the plan and the task reached and route

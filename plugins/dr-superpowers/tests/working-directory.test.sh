@@ -98,5 +98,16 @@ check "same repository: review-package exits 0" "$status" "0"
 run "$X" next-step docs/plan.md
 check "same repository: next-step exits 0" "$status" "0"
 
+# --- the prose names one contract ---
+P="$HERE/.."
+check "no skill, reference or script says 'from the plugin root'" \
+  "$(grep -rlF 'from the plugin root' "$P/skills" "$P/reference" "$P/scripts" 2>/dev/null)" ""
+check "no skill or reference re-explains where the plugin root is" \
+  "$(grep -rlF "the path the session's entry point names" "$P/skills" "$P/reference" 2>/dev/null)" ""
+check "the compaction snapshot names the contract" \
+  "$(grep -cF 'plugin-root path, with the working directory inside the project;' "$P/scripts/lib/snapshot.sh")" "1"
+check "nine skill and reference files cite the contract" \
+  "$(grep -rlF '(see using-superpowers §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "9"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

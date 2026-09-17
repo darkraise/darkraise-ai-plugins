@@ -13,8 +13,7 @@ session from memory or from a summary.
 
 ## Steps
 
-1. **Orient in one call.** Run `scripts/repo-audit`, from the plugin root (the path the session's entry point names; two
-   levels above this skill's directory). Read
+1. **Orient in one call.** Run `scripts/repo-audit` (see using-superpowers §Session Budget). Read
    `<primary checkout>/.superpowers/handoff/latest.md`; the audit prints its path.
 2. **Verify the worktree** named in latest.md's `## State` against
    `git worktree list --porcelain`. Normalise both paths before comparing:

@@ -52,8 +52,8 @@ these steps directly.
   the reserve table of [ladder.md](ladder.md) — any `xhigh` or
   `max` agent, or any Fable tier — is a human ruling: dispatch it as written
   and note `reserve tier`. See [escalation.md](../skills/subagent-driven-development/references/escalation.md).
-- **Task brief:** run `scripts/task-brief PLAN_FILE N`, from the plugin root
-  (the path the session's entry point names) — it extracts the task's full text
+- **Task brief:** run `scripts/task-brief PLAN_FILE N`
+  (see using-superpowers §Session Budget) — it extracts the task's full text
   to a uniquely named file and prints `wrote <path>: <N> lines`, then the
   budget line (see the caller's Session Budget section). Read the path out of the first line; do
   not pipe the output into a prompt as if it were a filename. Compose the
@@ -142,8 +142,8 @@ required. Implementer self-review never replaces the task review; both are
 needed.
 
 - Hand the reviewer its diff as a file: run
-  `scripts/review-package PLAN_FILE BASE HEAD`, from the plugin root
-  (the path the session's entry point names), and pass the reviewer the
+  `scripts/review-package PLAN_FILE BASE HEAD`
+  (see using-superpowers §Session Budget), and pass the reviewer the
   file path it prints (or, without bash: `git log --oneline`, `git diff --stat`,
   and `git diff -U10` for the range, redirected to one uniquely named
   file). The output never enters your own context. Use the BASE you recorded

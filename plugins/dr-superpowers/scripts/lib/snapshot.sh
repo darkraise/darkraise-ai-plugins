@@ -89,9 +89,9 @@ snapshot_build() {
   s1='## Compaction snapshot
 
 This session was just compacted. Trust this snapshot, the ledger and `git log`
-over the summary above. If anything is unclear, run `scripts/repo-audit` from the
-dr-superpowers plugin root; if the next budget line says `handoff`, run the
-dr-superpowers handoff skill.'
+over the summary above. If anything is unclear, run `scripts/repo-audit` by its
+dr-superpowers plugin-root path, with the working directory inside the project;
+if the next budget line says `handoff`, run the dr-superpowers handoff skill.'
   s2=$(snapshot_latest "$cwd")
   s3=$(snapshot_ledgers "$cwd")
   if [ -n "$tp" ] && command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; then

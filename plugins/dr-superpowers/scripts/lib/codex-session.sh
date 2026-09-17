@@ -1,9 +1,9 @@
 # Codex session state: one file per Claude Code session, written by
 # scripts/codex-gate and marked off by a runner that hits the quota.
 #
-# The file is keyed by session id rather than kept in the project: skills run
-# these scripts from the plugin root, which for an installed plugin is not the
-# project, and a quota is account-wide anyway. Readers fail closed - any state
+# The file is keyed by session id rather than kept in the project: a quota is
+# account-wide, so the answer belongs to the session, not to any one project
+# the session works in. Readers fail closed - any state
 # that is not a positive answer for this session is off.
 #
 # Source this file; it defines functions only.

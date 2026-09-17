@@ -28,8 +28,8 @@ id=$(jq -r '.plugin' "$POLICY" | tr -d '\r')
 config="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
 # User, then project, then local settings; the last file that defines the key
-# wins. Scripts run from the plugin root, which is not the project, so project
-# settings are read only when Claude Code names the project directory.
+# wins. Project settings are read only when Claude Code names the project
+# directory, never guessed from the working directory.
 enabled=""
 for f in "$config/settings.json" \
          ${CLAUDE_PROJECT_DIR:+"$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json"}; do

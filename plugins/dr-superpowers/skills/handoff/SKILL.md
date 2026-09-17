@@ -63,8 +63,7 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    ```
 
    In a design phase, `State` names the draft instead of a plan and ledger.
-4. **Run `scripts/next-step`**, from the plugin root (the path the session's entry point
-   names; two levels above this skill's directory):
+4. **Run `scripts/next-step`** (see using-superpowers §Session Budget):
    - Execution: `scripts/next-step PLAN_FILE`.
    - Design phase: `scripts/next-step --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
      for example `--next "Write the implementation plan with dr-superpowers:writing-plans."`

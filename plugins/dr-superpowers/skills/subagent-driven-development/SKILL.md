@@ -11,8 +11,8 @@ If this session was compacted — a compaction snapshot or summary sits above �
 your memory of the run is gone, and only the start of this file may have come
 back. Before anything else:
 
-1. Run `scripts/sdd-workspace PLAN_FILE`, from the plugin root (the path the session's entry point names; two
-   levels above this skill's directory), and read `progress.md` and `handoff.md` in
+1. Run `scripts/sdd-workspace PLAN_FILE` (see using-superpowers §Session Budget),
+   and read `progress.md` and `handoff.md` in
    the directory it prints.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides: `complete` is done; `fix round R/5` resumes at round
@@ -71,8 +71,8 @@ path forward is a guess. For those, stop and ask.
 
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished — one of those four stops, a context-budget handoff, or
-your human partner asking you to stop — run `scripts/next-step PLAN_FILE`,
-from the plugin root (the path the session's entry point names; two levels above this skill's directory), as your last
+your human partner asking you to stop — run `scripts/next-step PLAN_FILE`
+(see using-superpowers §Session Budget) as your last
 action. The last thing in your final message is the block it prints,
 verbatim. It also rewrites the `## Next session` section of the primary
 checkout's `.superpowers/handoff/latest.md`; if it exits 4, say the handoff
@@ -171,8 +171,7 @@ sequences — the single most expensive failure observed. Track progress in
 a ledger file, not only in todos.
 
 - Each plan owns a workspace: at skill start, run
-  `scripts/sdd-workspace PLAN_FILE`, from the plugin root (the path the session's entry point names; two
-  levels above this skill's directory) — it prints the plan's git-ignored
+  `scripts/sdd-workspace PLAN_FILE` (see using-superpowers §Session Budget) — it prints the plan's git-ignored
   directory (`<repo-root>/.superpowers/sdd/<plan-basename>/`), home to
   every artifact for THIS plan: ledger, briefs, reports, review packages.
   Another plan's directory is never yours to read or write.
@@ -199,7 +198,7 @@ a ledger file, not only in todos.
   that happens, recover from `git log`.
 
 Read the plan's header, never the whole plan: run
-`scripts/task-brief --header PLAN_FILE`, from the plugin root, and read the
+`scripts/task-brief --header PLAN_FILE` (see using-superpowers §Session Budget), and read the
 file it prints (`<workspace>/plan-header.md`). Note the Execution line, the
 Global Constraints and the Contracts, and create a todo per Task index entry.
 A plan written before 1.4.0 may have no Task index: then run
