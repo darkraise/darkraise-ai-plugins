@@ -43,8 +43,7 @@ present "hand-written research is never deleted" "$SKILL" 'docs/reverse-engineer
 present "non-markdown under notes is never eligible" "$SKILL" 'never eligible'
 
 # The judge gate.
-present "dispatches judge-fable" "$SKILL" 'dr-superpowers:judge-fable'
-present "names judge-opus as the substitute" "$SKILL" 'dr-superpowers:judge-opus'
+present "dispatches judge-opus" "$SKILL" 'Dispatch dr-superpowers:judge-opus with'
 for v in CARRIED MISSING DISTORTED; do
   present "verdict $v" "$SKILL" "$v"
 done

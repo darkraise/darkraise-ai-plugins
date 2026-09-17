@@ -96,7 +96,7 @@ each the same decision statement and the same constraints, and name its
 candidate's angle so the three do not converge. Each returns one committed
 approach, not a survey.
 
-**Rank.** Dispatch one `dr-superpowers:judge-fable` to run the ring
+**Rank.** Dispatch one `dr-superpowers:judge-opus` to run the ring
 pass: three comparisons, **A vs B, B vs C, C vs A**, scoring both candidates
 against every criterion in
 [`../../criteria/approach-selection.md`](../../criteria/approach-selection.md)
@@ -107,9 +107,6 @@ candidate sits in slot A exactly once and slot B exactly once, so a judge's
 preference for whichever candidate it read first cancels out exactly. Do not
 reorder the ring, and do not drop a comparison to save a pass - two comparisons
 leave one candidate unbalanced and the bias comes back.
-
-**If Fable is unavailable or your human partner has declined it, dispatch
-`judge-opus` instead and say so.** Never substitute silently.
 
 **Select.** Aggregate the three comparisons into a win count per candidate. The
 highest wins. Report the winner, the ranking, and the **grafts** - the ideas

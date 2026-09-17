@@ -101,15 +101,14 @@ first, and the judge is given its SHA. A judge that reads uncommitted files can
 be invalidated by any later edit — a merge, a split, or a fix made for another
 file's verdict — and would then be attesting to text that no longer exists.
 
-**The judge reads the working tree, not the commit.** `agents/judge-fable.md`
+**The judge reads the working tree, not the commit.** `agents/judge-opus.md`
 grants `Read, Grep, Glob, WebFetch` and **no Bash**, so it cannot run
 `git show <sha>:<path>`. Committing first therefore binds the verdict only under
 three conditions you must hold: the working tree is clean at that SHA when you
 dispatch, nothing is edited until the verdict returns, and the verdict names the
 SHA it was given. A verdict returned against an edited tree is void; re-judge.
 
-Dispatch dr-superpowers:judge-fable (dr-superpowers:judge-opus when Fable is
-unavailable or your human partner declined it — say the substitution aloud) with
+Dispatch dr-superpowers:judge-opus with
 [distil-judge.md](references/distil-judge.md). It must work in one order:
 enumerate every fact in each source as a numbered list first, then map each
 numbered fact to the entry that carries it, and only then return a verdict. A

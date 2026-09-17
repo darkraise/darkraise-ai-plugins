@@ -8,7 +8,8 @@ on is §3 of the program design
 
 | Item | Value | Source |
 |------|-------|--------|
-| Handoff budget | 475,000 tokens; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-11 |
+| Handoff budget | 475,000 tokens for every session not controlling a subagent-mode plan; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-11 |
+| Controller budget | 350,000 tokens for a session running a subagent-mode plan, by its Execution line or a ledger that left inline mode; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-17: a controller adds about 9.7k per task against inline's 19.1k |
 | `autoCompactWindow` | 650,000, in `~/.claude/settings.json` | Set 2026-09-11 |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
 | Hook output cap | 10,000 characters; longer output becomes a file reference | Claude Code hooks reference |
@@ -17,7 +18,7 @@ on is §3 of the program design
 
 The budget has to sit below the point where compaction fires by more than one
 task's growth — a controller adds about 140k across a long fix loop. At a
-650,000 window compaction lands near 605-625k, so 475k leaves that margin.
+650,000 window compaction lands near 605-625k, so 475k leaves that margin and 350k leaves more.
 
 ## The budget line
 
@@ -33,8 +34,10 @@ newer transcript exists in the same directory: two sessions may share it) or
 apply the count rule on Codex and the phase stops everywhere.
 
 `scripts/task-brief` and `scripts/review-package` print it as their last line,
-so checking before every task and every review costs no extra request.
-`scripts/context-size` prints it on demand (exit 0 ok, 5 handoff, 3 unknown);
+measured against their plan's budget, so checking before every task and every
+review costs no extra request. `scripts/context-size --plan PLAN_FILE` prints it
+on demand (exit 0 ok, 5 handoff, 3 unknown); without `--plan` the budget is
+475k;
 `scripts/repo-audit` includes it.
 
 ## Checkpoints
@@ -42,7 +45,7 @@ so checking before every task and every review costs no extra request.
 - **subagent-driven-development:** every `task-brief` and `review-package`. On
   `handoff`, act at the next ledger write.
 - **executing-plans:** the budget line on every `task-brief`, and
-  `context-size` after each `Task N: complete` line.
+  `context-size --plan PLAN_FILE` after each `Task N: complete` line.
 - **brainstorming:** `context-size` once, after the spec is committed.
 - **Anywhere:** `context-size` when in doubt.
 
