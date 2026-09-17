@@ -1,6 +1,6 @@
 ---
 name: judge-sonnet-high
-description: "Read-only task reviewer running Sonnet 5 at high effort. Dispatched by dr-superpowers as the task reviewer for totals 0 and 1 when Codex is not the reviewer."
+description: "Read-only task reviewer running Sonnet 5 at high effort. Dispatched by dr-superpowers as the task reviewer for totals 0 to 3 when Codex is not the reviewer."
 model: sonnet
 effort: high
 tools: Read, Grep, Glob, WebFetch

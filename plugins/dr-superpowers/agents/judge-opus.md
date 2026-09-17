@@ -1,6 +1,6 @@
 ---
 name: judge-opus
-description: "Read-only verifier, ruling seat and approach ranker running Opus 5 at high effort. Dispatched by dr-superpowers as the task reviewer for totals 2 to 4 when Codex is not the reviewer, for plan-review rounds 2 and 3, and in place of judge-fable when Fable is unavailable or declined."
+description: "Read-only verifier, ruling seat and approach ranker running Opus 5 at high effort. Dispatched by dr-superpowers as the task reviewer for totals 4 to 6 when Codex is not the reviewer, for plan-review rounds after the first and round 1 of a plain plan when Codex is unavailable, for routine rulings, approach ranking and distillation checks, and in place of judge-fable when Fable is unavailable or declined."
 model: opus
 effort: high
 tools: Read, Grep, Glob, WebFetch

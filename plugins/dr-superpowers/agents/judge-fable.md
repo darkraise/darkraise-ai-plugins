@@ -1,6 +1,6 @@
 ---
 name: judge-fable
-description: "Read-only verifier, ruling seat and approach ranker running Fable 5 at high effort. Dispatched by dr-superpowers to score a task or plan review against criteria, rule on execution judgment items, or rank candidate approaches pairwise."
+description: "Read-only verifier and ruling seat running Fable 5 at high effort. Dispatched by dr-superpowers for critical seats only: risk-3 task reviews, the final review's two-list dedupe, plan-review round 1 of an intricate plan when Codex is unavailable, and rulings on final-review residuals, risk-3 tasks, an intricate plan's preflight and Header amendments."
 model: fable
 effort: high
 tools: Read, Grep, Glob, WebFetch

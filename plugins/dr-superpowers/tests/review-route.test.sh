@@ -357,6 +357,18 @@ present "the second pass names the Codex file by path" "$TRP" '[CODEX_REVIEW_FIL
 present "the second pass comes after Fable's own review" "$TRP" 'Do this only after your Spec Compliance'
 present "a Codex finding never raises a score" "$TRP" 'review raises a score, and nothing else you wrote before reading it changes.'
 
+# --- ruling seat prose -----------------------------------------------------------
+RULP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
+present "SDD routes the ruling seat" "$SDD" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
+absent "SDD no longer pins the ruling seat to Fable" "$SDD" '`dr-superpowers:judge-fable` (`judge-opus` under the Fable-unavailable rule,'
+present "SDD confirms an Opus header amendment on Fable" "$SDD" '**A Header amendment from `judge-opus` is confirmed first.**'
+present "SDD never hands the confirmation to Opus" "$SDD" 'never hand it'
+present "the ruling prompt has the confirmation note" "$RULP" '[CONFIRM_NOTE]'
+present "the ruling prompt routes its judge" "$RULP" 'the `primary` that `scripts/review-route PLAN_FILE --ruling <kind>'
+present "judge-fable serves critical seats only" "$P/agents/judge-fable.md" 'critical seats only'
+present "judge-sonnet-high reviews totals 0 to 3" "$P/agents/judge-sonnet-high.md" 'totals 0 to 3'
+present "judge-opus reviews totals 4 to 6" "$P/agents/judge-opus.md" 'totals 4 to 6'
+
 # --- risk3-spread is retired -----------------------------------------------------
 for f in "$P/skills/subagent-driven-development/SKILL.md" \
          "$P/skills/subagent-driven-development/references/ruling-prompt.md" \

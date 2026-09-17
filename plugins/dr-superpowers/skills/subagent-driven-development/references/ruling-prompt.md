@@ -24,6 +24,8 @@ Subagent ([JUDGE]):
 
     [PROVISIONAL_NOTE]
 
+    [CONFIRM_NOTE]
+
     Where the plan and the spec disagree, the spec wins. Where neither
     answers, decide, and say what it costs if you are wrong.
 
@@ -102,15 +104,20 @@ Subagent ([JUDGE]):
 ```
 
 **Placeholders:**
-- `[JUDGE]` — `dr-superpowers:judge-fable`, or `dr-superpowers:judge-opus` when
-  Fable is unavailable or declined (say the substitution aloud); no `model`
-  argument. On Codex, a native judge at Astra high or above.
+- `[JUDGE]` — the `primary` that `scripts/review-route PLAN_FILE --ruling <kind>
+  [<task> ...]` prints, or `dr-superpowers:judge-fable` for a Header
+  amendment's confirmation; `dr-superpowers:judge-opus` in place of
+  `judge-fable` when Fable is unavailable or declined (say the substitution
+  aloud); no `model` argument. On Codex, a native judge at Astra high or above.
 - `[N]`, `[POINT]` — the item count and the decision point, for the description.
 - `[SPEC_FILE]`, `[PLAN_FILE]` — REQUIRED: absolute paths.
 - `[AMENDMENTS_FILE]`, `[LEDGER_FILE]` — REQUIRED: `<workspace>/amendments.md`
   and `<workspace>/progress.md`.
 - `[PROVISIONAL_NOTE]` — when the plan's Spec path is unreachable, "The spec is
   unreachable. Mark every Ruling (provisional)."; otherwise delete the line.
+- `[CONFIRM_NOTE]` — only for a Header amendment's confirmation: "Another seat
+  returned the verdict at the end of the items file for item <id>. Return your
+  own verdict block for that item."; otherwise delete the line.
 - `[ITEMS_FILE]` — REQUIRED: `<workspace>/rulings-<point>-<task>.md`, where
   `<task>` is the task number the items concern, or `plan` for a plan-level
   point. One entry per item: its id, kind, task (or `plan`), and the paths it
