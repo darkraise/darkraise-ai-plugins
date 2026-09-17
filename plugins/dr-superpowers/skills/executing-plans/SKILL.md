@@ -257,8 +257,9 @@ budget before every task at no extra request:
   implement. In a delegated task, act at the next ledger write, as subagent
   mode does: let the dispatched agent return, write its line, then hand off.
 
-Run `scripts/context-size --plan PLAN_FILE` after each `Task <N>: complete`
-line and act on its exit 5 the same way.
+Run `scripts/context-size --plan PLAN_FILE` after the last task's
+`Task <N>: complete` line and act on its exit 5 the same way; after every
+earlier task, the next brief's budget line is that check.
 
 The last task completing is a soft stop: the final review runs in this session
 unless the budget line says `handoff`. A switch to subagent mode is always a
@@ -295,7 +296,9 @@ For each task, in order:
 6. **Commit** as the task's commit step specifies.
 7. **Close the task.** Append the complete line with its checkpoint, in the
    same message as your other bookkeeping, and mark the todo complete.
-8. **Check the budget.** Run `scripts/context-size --plan PLAN_FILE`.
+8. **Check the budget after the last task.** Run
+   `scripts/context-size --plan PLAN_FILE`. After any other task, go to the
+   next task's step 1: its brief prints the same budget line.
 
 **When a verification will not pass.** Fix, re-run, then append
 `Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`

@@ -45,7 +45,7 @@ on demand (exit 0 ok, 5 handoff, 3 unknown); without `--plan` the budget is
 - **subagent-driven-development:** every `task-brief` and `review-package`. On
   `handoff`, act at the next ledger write.
 - **executing-plans:** the budget line on every `task-brief`, and
-  `context-size --plan PLAN_FILE` after each `Task N: complete` line.
+  `context-size --plan PLAN_FILE` after the last `Task N: complete` line.
 - **brainstorming:** `context-size` once, after the spec is committed.
 - **Anywhere:** `context-size` when in doubt.
 

@@ -404,7 +404,7 @@ present "the Codex manifest is 1.11.0" "$P/.codex-plugin/plugin.json" '"version"
 present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
 present "approach ranking runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'Dispatch one `dr-superpowers:judge-opus` to run the ring'
 present "the budget reference names the controller budget" "$P/reference/session-budget.md" '| Controller budget | 350,000 tokens'
-present "the budget checkpoints pass the plan" "$P/reference/session-budget.md" '`context-size --plan PLAN_FILE` after each `Task N: complete` line'
+present "the budget checkpoints pass the plan" "$P/reference/session-budget.md" '`context-size --plan PLAN_FILE` after the last `Task N: complete` line'
 present "the program design records sub-project 8" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-15 (sub-project 8 spec).**'
 present "README names the session gate" "$RD" '`scripts/codex-gate` checks the official codex plugin'
 present "README records trust per surface" "$RD" 'recorded per surface in `reference/codex-plugin.json`'
