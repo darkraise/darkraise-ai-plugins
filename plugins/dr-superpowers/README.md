@@ -181,7 +181,7 @@ reviewed by a Claude judge, so Codex never reviews its own work there; when a
 Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
 `judge-opus` 4 to 6, with `judge-fable` only at risk 3. Plan review takes Astra for round 1 (`judge-fable` for an intricate plan when
 Codex is off, `judge-opus` otherwise) and `judge-opus` for delta rounds,
-capped by the plan's highest task total. The final whole-branch review gains a Codex round. When both
+capped by the plan's highest task total. The final whole-branch review runs on `judge-fable` for an intricate plan and `judge-opus` otherwise, its one fix subagent on the highest tier among the tasks the findings touch, and gains a Codex round. When both
 reviewers return findings, `judge-fable` - or `judge-opus` when Fable is
 unavailable - dedupes and verifies them. With one list there is no third seat:
 the fixer triages each finding against the code and the scoped re-review rules

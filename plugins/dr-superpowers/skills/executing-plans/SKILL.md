@@ -422,7 +422,9 @@ tasks before it still run under subagent mode.
 
 Every task is complete, so the branch gets one broad review: follow
 [final-review.md](../../reference/final-review.md), the procedure both
-execution skills share. In this mode it runs in this session, unless the last
+execution skills share; its reviewer is the seat
+`scripts/review-route PLAN_FILE --final` prints, and its fix wave is your own
+pass. In this mode it runs in this session, unless the last
 budget line said `handoff` - then invoke dr-superpowers:handoff, and
 dr-superpowers:resume-execution brings the next session here. List any
 `(unseated)` rulings for the reviewer alongside the ledger's parked and

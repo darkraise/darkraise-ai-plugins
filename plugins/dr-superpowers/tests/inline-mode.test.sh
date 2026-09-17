@@ -130,6 +130,18 @@ absent "inline mode does not spell out the package call" "$INLINE" \
 present "the shared reference spells out the package call" "$FINAL" \
   "review-package PLAN_FILE MERGE_BASE HEAD"
 present "the shared reference names both modes" "$FINAL" "Inline mode"
+present "final review routes the Claude seat" "$FINAL" '`scripts/review-route PLAN_FILE --final` and dispatch'
+absent "final review drops the most capable model" "$FINAL" 'most capable'
+present "final review routes the fix subagent" "$FINAL" '`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]`'
+present "final review ledgers the fix subagent" "$FINAL" '`Final fix: implementer <agent> (assigned; base <sha7>)`'
+absent "subagent mode drops the most capable final seat" "$SDD" 'most capable available'
+absent "subagent mode drops the most capable final reviewer" "$SDD" 'final reviewer on the most capable model'
+present "subagent ledger has the Final fix line" "$SDD" 'Final fix: implementer <agent> (assigned; base <sha7>)'
+present "subagent mode recovers a lost fix wave" "$SDD" 'A `Final fix:` line and no `Final review:` line'
+present "inline mode names the final seat" "$INLINE" '`scripts/review-route PLAN_FILE --final` prints'
+present "judge-fable takes an intricate final review" "$P/agents/judge-fable.md" 'the final whole-branch review of an intricate plan'
+present "judge-opus takes a plain final review" "$P/agents/judge-opus.md" 'the final whole-branch review of a plain plan'
+present "README names the final seats" "$P/README.md" 'The final whole-branch review runs on `judge-fable` for an intricate plan'
 
 # A standing project constraint outranks a spec, so both execution skills read
 # it at Setup. Without this, a plan can be executed against a constraint and

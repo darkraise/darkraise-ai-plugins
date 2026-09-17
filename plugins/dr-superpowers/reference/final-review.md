@@ -29,11 +29,17 @@ re-deriving the branch diff with git commands.
    build, or whose suites fail, spends both reviewer seats on findings the gate
    already made. When the
    project has no manifest, say so in one line and go to step 1.
-1. **Claude review.** Dispatch a general-purpose agent on the most capable
-   available model, using dr-superpowers:requesting-code-review's
+1. **Claude review.** Run `scripts/review-route PLAN_FILE --final` and dispatch
+   the `primary` it prints: `dr-superpowers:judge-fable` for an intricate plan
+   (a task at risk 3 or totalling 6), `dr-superpowers:judge-opus` otherwise.
+   When Fable is unavailable or your human partner declined it, dispatch the
+   `fallback` instead and say so aloud. Use dr-superpowers:requesting-code-review's
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
    with `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
-   spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`.
+   spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`. The judge
+   agents are read-only; the package file means the template's git fallback
+   never applies. A Codex-host plan takes its final-review seat from
+   [native-codex.md](native-codex.md) instead.
 2. **Codex round.** Run the round in
    [external-executor.md](external-executor.md) §Final-review Codex round. Its
    runner reports one of four outcomes: `OK` and `FALLBACK` produce findings
@@ -71,6 +77,16 @@ If confirmed findings remain, fix them in ONE wave with the complete list — in
 subagent mode one fix subagent, in inline mode one pass of your own. Never one
 fixer per finding: per-finding fixers each rebuild context and re-run suites, and
 a real session's final-review fix wave cost more than all its tasks combined.
+
+**The fix subagent** (subagent mode). Run
+`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]` with every
+repository-relative path the findings name. It prints the highest implementer
+tier among the tasks whose `**Files:**` blocks name those paths, as the ledger
+last recorded each (an escalation counts, and an `inline` implementer counts as
+the Execution line's rung), raised to `impl-sonnet-high` and capped at
+`impl-opus-high`; no matched task gives `reason=floor`. Append
+`Final fix: implementer <agent> (assigned; base <sha7>)` to the ledger, then
+dispatch the printed `primary` as `subagent_type`, with no `model` argument.
 
 Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the

@@ -239,7 +239,8 @@ Every seat is named, so nothing silently inherits your session's model.
 | Seat | Agent | Model argument |
 |---|---|---|
 | Ruling seat | The seat `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` prints (The Ruling Seat); `dr-superpowers:judge-opus` in place of `judge-fable` when Fable is unavailable or your human partner declined it, said aloud | None |
-| Final review | general-purpose | Explicit, most capable available |
+| Final review | The seat `scripts/review-route PLAN_FILE --final` prints ([final-review.md](../../reference/final-review.md) step 1); its `fallback` when Fable is unavailable or your human partner declined it, said aloud | None |
+| Final fix wave | The implementer `scripts/review-route PLAN_FILE --final-fix <file> ...` prints ([final-review.md](../../reference/final-review.md) §Fixing what it finds) | None |
 
 The implementer, external implementer, task reviewer and scoped re-review seats,
 and the rule that fleet agents take no `model` argument, are in
@@ -248,8 +249,7 @@ and the rule that fleet agents take no `model` argument, are in
 **General-purpose seats always take an explicit model.** An omitted model
 inherits your session's model — often the most capable and most expensive —
 which silently defeats the choice. Scoped re-reviews of small fix diffs take a
-cheap-to-mid tier; a subtle concurrency fix takes more. The final whole-branch
-review takes the most capable available model.
+cheap-to-mid tier; a subtle concurrency fix takes more.
 
 ## The Ledger
 
@@ -270,6 +270,7 @@ Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: complete (commits a..b, review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
+Final fix: implementer <agent> (assigned; base <sha7>)
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
 
@@ -309,7 +310,10 @@ without `base`: take the previous task's complete-line head, or the branch's
 merge base for Task 1. An old `(scored at dispatch)` line reads as assigned.
 
 **Plan state.** Every task complete and no `Final review:` line: go to Final
-Review. A `Final review: clean` line: the review is done — go to
+Review. A `Final fix:` line and no `Final review:` line: the fix wave was
+dispatched; after compaction the agent id is gone, so re-dispatch that agent
+fresh, then continue Final Review at the scoped re-review. A
+`Final review: clean` line: the review is done — go to
 dr-superpowers:finishing-a-development-branch.
 
 ## The Ruling Seat
@@ -535,7 +539,7 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 [After the last task's complete line: dr-superpowers:handoff prints the resume guide]
 
 [Fresh session: dr-superpowers:resume-execution → Final Review]
-[final-review.md: package the branch; general-purpose final reviewer on the most capable model; Codex round in the background]
+[final-review.md: package the branch; review-route --final prints judge-opus for this plain plan; Codex round in the background]
 [judge-fable dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
