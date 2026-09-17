@@ -83,6 +83,10 @@ Subagent (general-purpose):
     - **[finding one-liner]** — ADDRESSED | NOT ADDRESSED, with file:line
       evidence. "Attempted" is not addressed: the specific defect must no
       longer exist.
+    - For a finding the fix report lists under `REJECTED:` (a final review
+      with one findings list): **[finding one-liner]** — REJECTION UPHELD |
+      REJECTION DISPUTED, with file:line evidence. Uphold only when the
+      evidence shows the finding is wrong, not merely unfixed.
 
     ### New Breakage in the Fix Diff
 
@@ -97,7 +101,7 @@ Subagent (general-purpose):
     ### Verdict
 
     **Fix round:** [All findings addressed, no new Critical/Important
-    breakage | Findings remain open] — list the open ones.
+    breakage | Findings remain open] — list the open ones. An upheld rejection is closed; a disputed one is open.
 
     ### Progress
 

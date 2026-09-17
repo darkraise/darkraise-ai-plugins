@@ -476,8 +476,10 @@ stderr.
 
 Unlike the task seats, this round is **not** self-review-free. The branch
 contains whatever the executor lane produced, so Codex is reviewing some of its
-own commits. That is why every finding - whichever reviewer raised it - is then
-verified by a judge that wrote none of the code.
+own commits. That is why a finding is never acted on unchecked: with two lists a
+judge that wrote none of the code verifies every finding, and with one list the
+fixer triages each against the code and a Claude re-review that wrote none of it
+rules on every rejection ([final-review.md](final-review.md)).
 
 ## Failure rows
 

@@ -41,21 +41,31 @@ re-deriving the branch diff with git commands.
    run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say
    which, and go to step 3 with the Claude review alone. An absent or empty
    report is never a clean round.
-3. **Dedupe and verify** in one dispatch of `dr-superpowers:judge-fable`
-   (`dr-superpowers:judge-opus` when Fable is unavailable or your human partner
-   declined it — say the substitution aloud) given both reviewers' lists. It
-   merges findings that name the same defect in the same place (not merely the
-   same file), tags each `claude`, `codex`, or `both`, and returns `CONFIRMED` or
-   `REJECTED` with evidence for each. The verifier is a third seat, so neither
-   reviewer grades its own work.
-4. **Report** confirmed findings ranked most severe first, then the rejected ones
-   with the reason each was rejected. A finding both reviewers raised and the
-   judge confirmed is the strongest signal available in this loop; say so.
+3. **Dedupe and verify, only with two lists.** When the Claude review and the
+   Codex round each produced at least one finding, dispatch
+   `dr-superpowers:judge-fable` once (`dr-superpowers:judge-opus` when Fable is
+   unavailable or your human partner declined it — say the substitution aloud)
+   given both lists. It merges findings that name the same defect in the same
+   place (not merely the same file), tags each `claude`, `codex`, or `both`, and
+   returns `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a
+   third seat, so neither reviewer grades its own work.
+
+   **With one list** — Codex off, `TIMEOUT`, `FAILED`, or either reviewer
+   returning no findings — there is no step-3 seat. Every finding in the list
+   enters the fix wave unverified, and the fixer triages it (Fixing what it
+   finds).
+4. **Report.** With two lists: confirmed findings ranked most severe first, then
+   the rejected ones with the reason each was rejected; a finding both reviewers
+   raised and the judge confirmed is the strongest signal available in this
+   loop, so say so. With one list: the findings ranked most severe first, then,
+   after the fix wave, which were fixed and which the fixer rejected, with the
+   re-review's verdict on each rejection.
 
 ## Fixing what it finds
 
 A confirmed finding gates the handoff whichever reviewer raised it; a rejected
-one never does.
+one never does. With one list, every finding gates the handoff until the fixer
+fixes it or rejects it with evidence the re-review upholds.
 
 If confirmed findings remain, fix them in ONE wave with the complete list — in
 subagent mode one fix subagent, in inline mode one pass of your own. Never one
@@ -63,14 +73,20 @@ fixer per finding: per-finding fixers each rebuild context and re-run suites, an
 a real session's final-review fix wave cost more than all its tasks combined.
 
 Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
-finding, the covering tests, the command and its output. In subagent mode the
+finding, the covering tests, the command and its output. With one list the
+fixer first checks each finding against the code under
+dr-superpowers:receiving-code-review, fixes the real ones, and records each one
+it rejects under `REJECTED: <finding>` with its evidence. In subagent mode the
 fix subagent writes it as its report file; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
 its `[REPORT_FILE]` being that file).
-Send any residual findings to the ruling seat as `final-residual` items and carry
-out its verdicts.
+Send any residual findings — `NOT ADDRESSED`, and `REJECTION DISPUTED` in the
+one-list case — to the ruling seat as `final-residual` items and carry out its
+verdicts. The scoped re-review is a Claude seat that wrote none of the code, so
+a list from Codex alone, which may cover Codex's own executor-lane commits,
+still gets an independent reader.
 
 There is no second fix wave. Residual load-bearing findings surface to your human
 partner when dr-superpowers:finishing-a-development-branch presents the options.

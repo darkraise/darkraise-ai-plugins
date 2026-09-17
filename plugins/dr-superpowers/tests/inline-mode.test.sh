@@ -135,6 +135,18 @@ done
 present "final review runs gates first" "$FINAL" 'dr-superpowers:running-gates'
 present "a red gate stops the review" "$FINAL" 'A red gate stops'
 
+# The dedupe seat runs only over two lists; one list goes to the fixer's triage
+# and the re-review rules on every rejection.
+RRP="$P/skills/subagent-driven-development/references/re-review-prompt.md"
+present "final review dedupes only two lists" "$FINAL" '**Dedupe and verify, only with two lists.**'
+present "final review names the one-list case" "$FINAL" '**With one list**'
+present "the fixer records rejections" "$FINAL" 'under `REJECTED: <finding>`'
+present "disputed rejections go to the ruling seat" "$FINAL" '`REJECTION DISPUTED` in the'
+present "the re-review rules on rejections" "$RRP" 'REJECTION UPHELD |'
+present "an upheld rejection closes" "$RRP" 'An upheld rejection is closed; a disputed one is open.'
+present "the Codex round rationale covers one list" "$P/reference/external-executor.md" 'with one list the'
+absent "README drops the always-third-seat claim" "$P/README.md" 'which is why every finding goes through a third seat'
+
 # --- the delegated loop: one copy, shared by both execution skills ---
 DT="$P/reference/delegated-task.md"
 check "exists: reference/delegated-task.md" "$([ -f "$DT" ] && echo yes || echo no)" "yes"
