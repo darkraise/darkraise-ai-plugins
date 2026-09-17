@@ -171,7 +171,7 @@ plan_delegated() {
 # Git reports the top level in one form (C:/… under Git Bash) whichever way the
 # path was spelled, so comparing <top level>/<prefix><name> is stable where pwd
 # output is not: /tmp and /c/Users/…/Temp name the same directory.
-_plan_canon() {
+plan_repo_canon() {
   local dir top prefix
   dir=$(dirname "$1")
   top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || return 1
@@ -183,7 +183,7 @@ _plan_canon() {
 # names PLAN; nothing otherwise. A stale ledger under the same slug is ignored.
 plan_ledger() {
   local want top file named got
-  want=$(_plan_canon "$1") || return 0
+  want=$(plan_repo_canon "$1") || return 0
   top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || return 0
   file="$top/.superpowers/sdd/$(basename "$1" .md)/progress.md"
   [ -f "$file" ] || return 0
@@ -193,7 +193,7 @@ plan_ledger() {
     named=$(cygpath -u "$named" 2>/dev/null || printf '%s' "$named")
   fi
   case $named in /*) ;; *) named="$top/$named" ;; esac
-  got=$(_plan_canon "$named") || return 0
+  got=$(plan_repo_canon "$named") || return 0
   [ "$got" != "$want" ] || printf '%s\n' "$file"
   return 0
 }

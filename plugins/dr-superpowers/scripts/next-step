@@ -49,9 +49,8 @@ repo_err=$(plan_require_same_repo "$plan" 2>&1) || fail 2 "${repo_err#next-step:
 root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
 primary=$(plan_primary_root "$root")
 
-root_posix=$(cd "$root" && pwd)
-plan_abs="$(cd "$(dirname "$plan")" && pwd)/$(basename "$plan")"
-rel=${plan_abs#"$root_posix"/}
+plan_canon=$(plan_repo_canon "$plan") || fail 2 "not inside a git repository"
+rel=${plan_canon#"$root"/}
 slug=$(basename "$plan" .md)
 
 status_line="" next_line="" prompt="" launch=1 dir="$primary" launch_cmd="" escalated_at=""
@@ -74,9 +73,8 @@ else
   skill=subagent-driven-development
   if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$execution"; then skill=executing-plans; fi
 
-  ledger_shown="$root/.superpowers/sdd/$slug/progress.md"
-  ledger_file="$root_posix/.superpowers/sdd/$slug/progress.md"
-  ledger_note="no ledger at \`$ledger_shown\`"
+  ledger_file="$root/.superpowers/sdd/$slug/progress.md"
+  ledger_note="no ledger at \`$ledger_file\`"
   ledger_text=""
   done_tasks=""
   blocked_tasks=""
@@ -89,11 +87,10 @@ else
     if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
       ledger_plan_path=$(cygpath -u "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
     fi
-    case $ledger_plan_path in /*) ;; *) ledger_plan_path="$root_posix/$ledger_plan_path" ;; esac
-    ledger_plan_abs=$(cd "$(dirname "$ledger_plan_path")" 2>/dev/null && pwd)/$(basename "$ledger_plan_path")
-    if [ "$ledger_plan_abs" = "$plan_abs" ]; then
+    case $ledger_plan_path in /*) ;; *) ledger_plan_path="$root/$ledger_plan_path" ;; esac
+    if [ "$(plan_repo_canon "$ledger_plan_path" 2>/dev/null)" = "$plan_canon" ]; then
       has_ledger=1
-      ledger_note="ledger \`$ledger_shown\`"
+      ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
       blocked_tasks=$(ledger_blocked "$ledger_file")
       # A ledger outranks the Execution line on which mode the run is in: a
@@ -101,7 +98,7 @@ else
       # holds until a later inline assignment shows the plan came back.
       escalated_at=$(ledger_left_inline "$ledger_file")
     else
-      ledger_note="the ledger at \`$ledger_shown\` belongs to another plan and is ignored"
+      ledger_note="the ledger at \`$ledger_file\` belongs to another plan and is ignored"
     fi
   fi
 
@@ -182,7 +179,7 @@ else
       prompt="$prompt First enter the existing worktree \`$root\`."
     fi
     if [ "$has_ledger" -eq 1 ]; then
-      prompt="$prompt Progress ledger: \`$ledger_shown\` — trust its \`Task N: complete\` lines."
+      prompt="$prompt Progress ledger: \`$ledger_file\` — trust its \`Task N: complete\` lines."
     fi
   fi
 fi

@@ -408,5 +408,22 @@ lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
 lacks "blocked: no launch command" "$out" "Launch in"
 has "blocked: latest.md carries the block" "$(cat "$REPO/.superpowers/handoff/latest.md")" "Task 2 is BLOCKED"
 
+# --- the same directory under a second POSIX spelling ---
+# Under Git Bash /tmp and /c/Users/…/Temp can name one directory, so stripping
+# pwd output off the plan path degrades the status line to an absolute path
+# wherever the two spellings differ. Git resolves the relative path instead.
+ALIAS_PLAN_REL="docs/plans/2026-01-01-alias.md"
+case $ROOT in
+  [A-Za-z]:/*)
+    ALT="/$(printf '%s' "${ROOT%%:*}" | tr '[:upper:]' '[:lower:]')${ROOT#?:}"
+    if [ -d "$ALT" ] && [ "$ALT" != "$(cd "$REPO" && pwd)" ]; then
+      write_plan "$REPO/$ALIAS_PLAN_REL" "$EXEC_SUB" ""
+      run "$ALT" "$ALIAS_PLAN_REL"
+      check "mount alias: exits 0" "$status" "0"
+      has "mount alias: the plan path stays relative" "$out" "Plan \`$ALIAS_PLAN_REL\`"
+    fi
+    ;;
+esac
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
