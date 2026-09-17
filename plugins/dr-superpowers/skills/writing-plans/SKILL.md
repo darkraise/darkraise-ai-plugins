@@ -250,7 +250,7 @@ choice is the interesting part. A hand edit that breaks a checked rule — a
 reserve tier, a kept `spec = 3`, a table mismatch — carries an
 `**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
 reports it as a warning. Never write an Override line yourself. Under
-dr-superpowers:executing-plans the lines are inert.
+dr-superpowers:executing-plans the lines are read only for the delegated tasks.
 [assigning-implementers.md](references/assigning-implementers.md) explains why
 each of these rules exists.
 
@@ -292,7 +292,9 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
    run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),
    then `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
    seat it prints, using
-   [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). Every seat
+   [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). The gate
+   keeps an off answer for the session, so add `--refresh` when Codex may have
+   come back since then, such as after a login. Every seat
    scores executability, coherence, coverage and assumptions (1-20) against
    [plan-review.md](../../criteria/plan-review.md) and lists findings. If
    `review-route` exits 2 naming `native-codex.md`, the plan is a Codex-host

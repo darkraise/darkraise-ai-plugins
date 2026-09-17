@@ -15,9 +15,9 @@ Four findings from real transcripts drove the fork; the numbers are in
 `docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`.
 
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
-  400–700k context. The plugin hands off at a 475k budget printed by its own
-  scripts, keeps the execution controller on Sonnet, and reads the plan one
-  task at a time instead of whole.
+  400–700k context. The plugin hands off at a budget printed by its own
+  scripts (475k, or 350k for a subagent-mode controller), keeps the execution
+  controller on Sonnet, and reads the plan one task at a time instead of whole.
 - **Small models executing literally.** Upstream advises picking a model per
   task but has no field for the choice, and the Agent tool cannot pass
   reasoning effort. Here every task records an implementer from a model ×
@@ -129,9 +129,9 @@ wrapper costs more to orchestrate than it saves.
 an override on a second line, which is what makes a machine without Codex, a cold
 session, and an executor whose auth has lapsed all degrade by reading a line that
 is already there rather than re-deriving the assignment at dispatch. Under
-`dr-superpowers:executing-plans`, which dispatches only the ruling seat and the
-final review, both lines are simply inert instead - no task is dispatched, so
-nothing falls back.
+`dr-superpowers:executing-plans` both lines are read only for the tasks an
+inline plan delegates; for the tasks the session implements itself they are
+inert, so nothing falls back.
 
 The following observations were made against the external CLI lane on Windows
 with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy

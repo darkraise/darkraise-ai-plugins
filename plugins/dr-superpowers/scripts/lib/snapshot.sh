@@ -4,7 +4,8 @@
 # scripts/session-start.sh on the compact source; defines functions only.
 #
 # Capped because hook output over 10,000 characters is replaced by a file
-# reference, and the injected entry point already takes about 3,400.
+# reference, and the injected entry point already takes about 4,800;
+# session-start.sh subtracts its measured length, so this is only the ceiling.
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plan.sh"
 

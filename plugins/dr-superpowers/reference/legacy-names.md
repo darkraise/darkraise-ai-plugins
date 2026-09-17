@@ -70,6 +70,7 @@ Each suffix resolves to `dr-superpowers:` followed by the same suffix.
 | `impl-fable-max` |
 | `judge-fable` |
 | `judge-opus` |
+| `judge-sonnet-high` |
 | `scout-sonnet` |
 
 Translation changes only the prefix. The tier a plan recorded — including a

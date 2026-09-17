@@ -151,7 +151,9 @@ needed.
   truncates multi-commit tasks. Never dispatch a task reviewer without a diff
   file.
 - **The seat:** run `scripts/codex-gate` (say its line aloud when it ends
-  `source=probe`), then `scripts/review-route PLAN_FILE --task <N>` (all of a
+  `source=probe`; add `--refresh` when Codex may have come back since an
+  earlier off answer, such as after a login, because an off answer is kept for
+  the session), then `scripts/review-route PLAN_FILE --task <N>` (all of a
   batch's task numbers for a batch), and review with the `primary` it prints.
   A judge seat gets [task-reviewer-prompt.md](../skills/subagent-driven-development/references/task-reviewer-prompt.md)
   with `[PLUGIN_ROOT]` expanded to this plugin's resolved directory; a Codex
