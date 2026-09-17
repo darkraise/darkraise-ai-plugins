@@ -47,6 +47,10 @@ session from memory or from a summary.
    - Start or resume at Task N: invoke the skill the plan's `**Execution:**`
      line names — dr-superpowers:subagent-driven-development for `subagent`,
      dr-superpowers:executing-plans for `inline`. Its ledger recovery takes over.
+     A ledger with a `Task <N>: escalated inline -> subagent` line and no later
+     `implementer inline (assigned` line has left inline mode: invoke
+     dr-superpowers:subagent-driven-development whatever the Execution line
+     says.
    - Run the final whole-branch review: invoke the skill the plan's
      `**Execution:**` line names, as the previous bullet does. With every task
      complete, each goes straight to its Final Review section, and both follow
