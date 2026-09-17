@@ -7,6 +7,7 @@
 # degrade the verdict to unknown, never produce a wrong number.
 
 CTX_DEFAULT_BUDGET=475000
+CTX_CONTROLLER_BUDGET=350000
 
 ctx_jq() { "${DR_SUPERPOWERS_JQ:-jq}" "$@"; }
 ctx_have_jq() { command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; }
@@ -93,9 +94,10 @@ ctx_measure() {
 
 # Print the budget line; return 0 ok, 5 handoff, 3 unknown.
 ctx_line() {
-  local budget=${DR_SUPERPOWERS_BUDGET:-$CTX_DEFAULT_BUDGET} tokens bk tk pct
-  case $budget in ''|*[!0-9]*) budget=$CTX_DEFAULT_BUDGET ;; esac
-  [ "$budget" -gt 0 ] || budget=$CTX_DEFAULT_BUDGET
+  local fallback=${CTX_BUDGET:-$CTX_DEFAULT_BUDGET} budget tokens bk tk pct
+  budget=${DR_SUPERPOWERS_BUDGET:-$fallback}
+  case $budget in ''|*[!0-9]*) budget=$fallback ;; esac
+  [ "$budget" -gt 0 ] || budget=$fallback
   bk=$(( (budget + 500) / 1000 ))
   if ! ctx_have_jq; then echo "budget: unknown of ${bk}k — unknown — no jq"; return 3; fi
   if ! ctx_find_transcript; then echo "budget: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
@@ -109,4 +111,23 @@ ctx_line() {
     return 5
   fi
   echo "budget: ${tk}k of ${bk}k (${pct}%) — ok — source: $CTX_SOURCE"
+}
+
+# ctx_plan_budget PLAN — the default budget for a session running PLAN: the
+# controller budget when the plan runs in subagent mode, by its Execution line
+# or by a ledger that left inline mode. Needs lib/plan.sh sourced.
+ctx_plan_budget() {
+  local plan=$1 ledger
+  if [ ! -f "$plan" ] \
+     || grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then
+    echo "$CTX_DEFAULT_BUDGET"; return 0
+  fi
+  if grep -qE '^\*\*Execution:\*\*[ \t]*`?subagent' <<<"$(plan_header_line "$plan" Execution)"; then
+    echo "$CTX_CONTROLLER_BUDGET"; return 0
+  fi
+  ledger=$(plan_ledger "$plan")
+  if [ -n "$ledger" ] && [ -n "$(ledger_left_inline "$ledger")" ]; then
+    echo "$CTX_CONTROLLER_BUDGET"; return 0
+  fi
+  echo "$CTX_DEFAULT_BUDGET"
 }

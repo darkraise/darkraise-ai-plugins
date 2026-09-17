@@ -59,6 +59,15 @@ out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
 check "task-brief: budget line says handoff" "$(tail -n 1 <<<"$out")" \
   "budget: 500k of 475k (105%) — handoff — source: record"
 
+# --- a subagent-mode plan: the controller's 350k budget ---
+printf '# Plan\n\n**Execution:** subagent — `claude --model sonnet --effort high` — x\n\n### Task 1: Only thing\n\nBody.\n' > docs/sub.md
+out=$(bash "$P/scripts/task-brief" docs/sub.md 1 2>/dev/null)
+check "task-brief: a subagent plan's budget is 350k" "$(tail -n 1 <<<"$out")" \
+  "budget: 500k of 350k (142%) — handoff — source: record"
+out=$(bash "$P/scripts/review-package" docs/sub.md "$BASE" HEAD 2>/dev/null)
+check "review-package: a subagent plan's budget is 350k" "$(tail -n 1 <<<"$out")" \
+  "budget: 500k of 350k (142%) — handoff — source: record"
+
 # --- a missing task still fails the way it did ---
 bash "$P/scripts/task-brief" docs/plan.md 9 >/dev/null 2>&1; status=$?
 check "task-brief: missing task still exits 3" "$status" "3"

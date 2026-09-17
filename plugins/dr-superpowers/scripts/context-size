@@ -2,12 +2,25 @@
 # Print the running session's context size against the handoff budget as one
 # budget line (see reference/session-budget.md).
 #
-# Usage: context-size
+# Usage: context-size [--plan PLAN_FILE]
+#   --plan  the plan this session runs; a subagent-mode plan's controller hands
+#           off at the lower controller budget.
 # Exit: 0 ok; 5 handoff due; 3 unknown; 2 usage.
 set -uo pipefail
 
-[ $# -eq 0 ] || { echo "usage: context-size" >&2; exit 2; }
-. "$(cd "$(dirname "$0")" && pwd)/lib/context.sh"
+usage() { echo "usage: context-size [--plan PLAN_FILE]" >&2; exit 2; }
+plan=""
+case $# in
+  0) ;;
+  2) [ "$1" = --plan ] || usage; plan=$2 ;;
+  *) usage ;;
+esac
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/context.sh"
+if [ -n "$plan" ]; then
+  . "$HERE/lib/plan.sh"
+  CTX_BUDGET=$(ctx_plan_budget "$plan")
+fi
 
 ctx_line
 status=$?

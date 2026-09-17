@@ -92,6 +92,33 @@ asst 285000 > "$T"
 DR_SUPERPOWERS_BUDGET=300000 run
 check "override: line" "$out" "budget: 285k of 300k (95%) — ok — source: record"
 
+# --- the plan's execution mode picks the default budget ---
+mkdir -p "$REPO/docs" "$REPO/.superpowers/sdd/inl"
+printf '# P\n\n**Execution:** subagent — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n' > "$REPO/docs/sub.md"
+printf '# P\n\n**Execution:** inline — `claude --model opus --effort low` — x\n\n### Task 1: One\n' > "$REPO/docs/inl.md"
+printf 'Host: codex\n\n**Execution:** subagent — codex gpt-5.6-sol / high — x\n\n### Task 1: One\n' > "$REPO/docs/cdx.md"
+run --plan docs/sub.md
+check "subagent plan: 350k" "$out" "budget: 285k of 350k (81%) — ok — source: record"
+run --plan docs/inl.md
+check "inline plan: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
+run --plan docs/cdx.md
+check "Codex-host plan: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
+run --plan docs/nope.md
+check "missing plan: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
+printf '# SDD ledger — plan: docs/inl.md\nTask 1: implementer inline (assigned; base a)\nTask 1: escalated inline -> subagent — still failing\n' > "$REPO/.superpowers/sdd/inl/progress.md"
+run --plan docs/inl.md
+check "inline plan that left inline mode: 350k" "$out" "budget: 285k of 350k (81%) — ok — source: record"
+printf 'Task 1: implementer inline (assigned; base b)\n' >> "$REPO/.superpowers/sdd/inl/progress.md"
+run --plan docs/inl.md
+check "inline plan back in inline mode: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
+printf '# SDD ledger — plan: docs/other.md\nTask 1: escalated inline -> subagent — x\n' > "$REPO/.superpowers/sdd/inl/progress.md"
+run --plan docs/inl.md
+check "another plan's ledger is ignored: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
+DR_SUPERPOWERS_BUDGET=300000 run --plan docs/sub.md
+check "override beats the plan: 300k" "$out" "budget: 285k of 300k (95%) — ok — source: record"
+run --plan
+check "--plan without a file: exit 2" "$status" "2"
+
 # --- CRLF transcript ---
 asst 285000 | sed 's/$/\r/' > "$T"
 run
