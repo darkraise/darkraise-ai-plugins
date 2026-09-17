@@ -32,7 +32,11 @@ check "well-formed: emits valid JSON" \
 check "well-formed: event name is SessionStart" \
   "$(jq -r '.hookSpecificOutput.hookEventName // "MISSING"' <<<"$out" 2>/dev/null)" "SessionStart"
 check "well-formed: names the plugin root" \
-  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'Plugin root (run every')" "1"
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c '^Plugin root: ')" "1"
+check "well-formed: the plugin root line states the working-directory contract" \
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c ' — call scripts by this path, with the working directory inside the project$')" "1"
+check "using-superpowers states the working-directory contract" \
+  "$(grep -cF "with the working directory inside the project's worktree" "$HERE/../skills/using-superpowers/SKILL.md")" "1"
 check "well-formed: additionalContext is non-empty" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 check "well-formed: context names the entry-point skill" \
