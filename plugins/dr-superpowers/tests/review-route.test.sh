@@ -305,7 +305,16 @@ present "writing-plans routes each round" "$WP" 'scripts/review-route PLAN_FILE 
 present "writing-plans snapshots the plan before each round" "$WP" '<workspace>/plan-round-<r>.md'
 present "writing-plans runs the Codex plan kind" "$WP" '--kind plan'
 present "writing-plans writes the delta" "$WP" '<workspace>/plan-delta-<r>.diff'
-present "writing-plans keeps the round cap" "$WP" 'replaces a fresh full review; rounds are not cut.'
+present "writing-plans caps rounds by score" "$WP" 'below the `cap=` that `review-route` printed'
+present "writing-plans re-rounds only on Critical or a low score" "$WP" 'Run the next round only when a round returned'
+present "writing-plans gives a Critical at the cap one more round" "$WP" 'earns exactly one more'
+present "writing-plans states the heavy-majority rule" "$WP" '`subagent` when more than half the tasks are heavy'
+present "writing-plans raises a delegating inline effort" "$WP" 'raised to `high` when any task is'
+present "writing-plans falls back to Opus on exit 2" "$WP" 'On any other exit 2, review with `dr-superpowers:judge-opus`'
+present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dr-superpowers:judge-fable` for an intricate plan,'
+present "using-superpowers states the mixed-mode rule" "$P/skills/using-superpowers/SKILL.md" 'an inline plan delegates those'
+present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
+present "README caps plan review" "$P/README.md" 'capped by the plan'"'"'s highest task total'
 absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'
 present "the prompt file has a Codex round-1 section" "$PRP" '## Round 1 on Codex'
 present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-schema.json'
@@ -316,7 +325,7 @@ present "the delta template may read beyond the delta" "$PRP" 'The delta is wher
 
 # --- the session gate in writing-plans -------------------------------------------
 present "writing-plans runs the gate before each round" "$WP" 'run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),'
-present "writing-plans sends a codex-off round 1 to Fable" "$WP" '**`primary=dr-superpowers:judge-fable` with `reason=codex-off`**'
+present "writing-plans routes a codex-off round 1 by intricacy" "$WP" '**`reason=codex-off`** (round 1 while the gate has not opened the review'
 present "writing-plans offers the lane only on lane=true" "$WP" 'offers Codex only when'
 
 # --- task review prose -----------------------------------------------------------

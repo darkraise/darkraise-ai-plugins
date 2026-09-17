@@ -100,11 +100,14 @@ guesses into a confident pick.
 **Two execution modes, chosen by the plan.** The `**Execution:**` line decides
 whether a plan runs under subagent-driven-development, a dispatch and a scored
 review per task, or under executing-plans, where one session implements every
-task itself. Inline mode is available only when every task scores 4 or less
-with none at risk 3 - `plan-lint` refuses the line otherwise, and requires
-`--model opus` once any task scores 4 - and it trades
-per-task review for one whole-branch review at the end, which both modes now
-share. A task that will not converge after three fix rounds escalates to
+task itself. Inline mode is the default unless more than half the tasks are
+heavy (total 5 or more, or risk 3). An inline plan delegates its heavy tasks
+to an implementer subagent with the full per-task review loop, shared with
+subagent mode in `reference/delegated-task.md`, and implements the rest
+itself, trading their per-task review for one whole-branch review at the end,
+which both modes share. `plan-lint` requires `--model opus` once a task it
+implements scores 4, and `--effort high` once it delegates. A task that will
+not converge after three fix rounds escalates to
 subagent mode at the next task boundary, recorded in the ledger both modes
 write.
 
@@ -173,8 +176,9 @@ tasks totalling 0 to 3, `gpt-6-astra` for 4 to 6, and Astra followed by
 `judge-fable` at risk 3. A task the executor lane implemented is always
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
 Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
-`judge-opus` 4 to 6, with `judge-fable` only at risk 3. Plan review takes Astra for round 1 and `judge-opus` for
-delta rounds 2 and 3. The final whole-branch review gains a Codex round whose
+`judge-opus` 4 to 6, with `judge-fable` only at risk 3. Plan review takes Astra for round 1 (`judge-fable` for an intricate plan when
+Codex is off, `judge-opus` otherwise) and `judge-opus` for delta rounds,
+capped by the plan's highest task total. The final whole-branch review gains a Codex round whose
 findings are deduped with the Claude reviewer's and then verified by
 `judge-fable` - or `judge-opus` when Fable is unavailable. That round is not
 self-review-free, because the branch contains whatever the executor lane

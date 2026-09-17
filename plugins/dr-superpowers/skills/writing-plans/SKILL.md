@@ -117,16 +117,23 @@ names the native pair: `**Execution:** <inline|subagent> — codex <model> / <ef
 
 **Choosing the Execution line.** The plan decides its execution mode:
 
-- `inline` when every task's total is 4 or less and no task is at risk 3 —
-  the default then. The model follows the highest total: `sonnet` when every
-  task is 3 or less, `opus` when any task scores 4 (the Opus-low band).
-  `<e>` is the effort of the highest-scoring task's assigned tier
-  (`impl-haiku` counts as `low`): `claude --model <sonnet|opus> --effort <e>`.
-- Otherwise `subagent`: `claude --model sonnet --effort high`. The controller
-  owns no judgment calls — the ruling seat does — so it needs no stronger
-  model.
-- Your human partner may override the line; `plan-lint` checks its grammar and
-  the inline rule.
+A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
+An inline plan delegates its heavy tasks: each runs through
+[delegated-task.md](../../reference/delegated-task.md) with an implementer
+subagent and the full per-task review.
+
+- `subagent` when more than half the tasks are heavy:
+  `claude --model sonnet --effort high`. The controller owns no judgment calls
+  — the ruling seat does — so it needs no stronger model.
+- Otherwise `inline`, the default. The model follows the highest total among
+  the tasks that are not heavy: `sonnet` when every one is 3 or less, `opus`
+  when one scores 4 (the Opus-low band). `<e>` is that task's assigned tier's
+  effort (`impl-haiku` counts as `low`), raised to `high` when any task is
+  heavy: `claude --model <sonnet|opus> --effort <e>`. When every task is heavy
+  and your human partner overrides the line to inline, it is
+  `claude --model opus --effort high`.
+- Your human partner may override the line; `plan-lint` checks its grammar,
+  warns when it disputes the majority rule, and lists the delegated tasks.
 
 ## Task Structure
 
@@ -290,7 +297,7 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
    [plan-review.md](../../criteria/plan-review.md) and lists findings. If
    `review-route` exits 2 naming `native-codex.md`, the plan is a Codex-host
    plan: dispatch the native judge the prompt's `[JUDGE]` placeholder
-   describes. On any other exit 2, review with `dr-superpowers:judge-fable`
+   describes. On any other exit 2, review with `dr-superpowers:judge-opus`
    and say why, quoting its message.
    - **`primary=codex:plan`** (round 1). Write the prompt its Round 1 on Codex
      section describes to `<workspace>/plan-review-prompt.md`, then run, as a
@@ -306,28 +313,36 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
      scores and `findings` from the JSON. On `FALLBACK`, or a line naming
      `gpt-5.6-sol/high` with `status=OK`, say the substitution aloud with the
      runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
-     no review: dispatch the printed `fallback`, `dr-superpowers:judge-fable`
-     (`dr-superpowers:judge-opus` when Fable is unavailable or declined), with
+     no review: dispatch the printed `fallback` (`dr-superpowers:judge-fable`
+     for an intricate plan, `dr-superpowers:judge-opus` otherwise, and
+     `judge-opus` when Fable is unavailable or declined), with
      the full-plan template, save its reply to
      `<workspace>/plan-review-round-1.md`, and say why. Never run the Codex seat
      twice in one round.
-   - **`primary=dr-superpowers:judge-fable` with `reason=codex-off`** (round 1
-     while the gate has not opened the review surface). No Codex seat runs.
-     Dispatch it (`dr-superpowers:judge-opus` when Fable is unavailable or
+   - **`reason=codex-off`** (round 1 while the gate has not opened the review
+     surface). No Codex seat runs. The `primary` is
+     `dr-superpowers:judge-fable` for an intricate plan (a task at risk 3 or
+     totalling 6) and `dr-superpowers:judge-opus` otherwise. Dispatch it
+     (`dr-superpowers:judge-opus` when Fable is unavailable or
      declined) with the full-plan template, save its reply to
      `<workspace>/plan-review-round-1.md`, and say `codex off — <reason>`,
      quoting the gate line's `reason` (`untrusted` when it printed
      `usable=true`).
-   - **`primary=dr-superpowers:judge-opus`** (rounds 2 and 3). Write
+   - **`primary=dr-superpowers:judge-opus`** (every later round). Write
      `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
      dispatch the seat with the Rounds 2 and 3 template, passing that file and
      the previous round's findings file, and save its reply to
      `<workspace>/plan-review-round-<r>.md`.
-3. **Fix and repeat.** Any score of 8 or below, or any Critical or Important
-   finding: fix the plan, re-lint, and run the next round. A delta round
-   replaces a fresh full review; rounds are not cut. At most 3 review rounds;
-   after the third, show the remaining findings to your human partner. A
-   borderline score (9-13) gets a one-line decision in the plan's Assumptions.
+3. **Fix and repeat.** Fix every Critical and Important finding and re-lint;
+   Minor findings are advisory. Run the next round only when a round returned
+   a Critical finding or any score of 8 or below, and only while the round is
+   below the `cap=` that `review-route` printed: 1 when the plan's highest
+   task total is 3 or less, 2 for 4 or 5, 3 for 6. A delta round replaces a
+   fresh full review. At the cap, a Critical finding earns exactly one more
+   delta round (`reason=cap-critical`), scoped to its fix, which earns no
+   other. Any Critical finding still open after it, and any score of 8 or
+   below at the cap, go to your human partner. A borderline score (9-13) gets
+   a one-line decision in the plan's Assumptions.
 4. **Record.** Only now, add the header line
    `**Plan review:** <YYYY-MM-DD> — <seat> — executability e / coherence c / coverage v / assumptions a (round r)`
    below the `**Program:**` line (below `**Execution:**` when there is no
