@@ -19,6 +19,7 @@
 #
 # Usage: sdd-workspace PLAN_FILE
 set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 
 if [ $# -ne 1 ]; then
   echo "usage: sdd-workspace PLAN_FILE" >&2
@@ -27,6 +28,7 @@ fi
 
 plan=$1
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+plan_require_same_repo "$plan"
 
 slug=$(basename "$plan" .md)
 [ -n "$slug" ] && [ "$slug" != "." ] && [ "$slug" != ".." ] \

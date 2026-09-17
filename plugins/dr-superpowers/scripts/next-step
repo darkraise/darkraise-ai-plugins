@@ -44,6 +44,7 @@ esac
 [ $# -eq 1 ] || usage
 plan=$1
 [ -f "$plan" ] || fail 2 "no such file: $plan — run it from the repository root, or check the plan path"
+repo_err=$(plan_require_same_repo "$plan" 2>&1) || fail 2 "${repo_err#next-step: }"
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
 primary=$(plan_primary_root "$root")

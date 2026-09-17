@@ -9,6 +9,7 @@
 # (named per range, so a re-review after fixes gets a distinct fresh file).
 # Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 
 if [ $# -lt 3 ] || [ $# -gt 4 ]; then
   echo "usage: review-package PLAN_FILE BASE HEAD [OUTFILE]" >&2
@@ -19,6 +20,7 @@ plan=$1
 base=$2
 head=$3
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+plan_require_same_repo "$plan"
 
 git rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
 git rev-parse --verify --quiet "$head" >/dev/null || { echo "bad HEAD: $head" >&2; exit 2; }

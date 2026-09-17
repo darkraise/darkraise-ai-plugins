@@ -265,3 +265,23 @@ plan_amendments_file() {
     && printf '%s\n' "$root/.superpowers/sdd/$slug/amendments.md"
   return 0
 }
+
+# plan_require_same_repo FILE — return when FILE's directory and the working
+# directory share a top level; otherwise name both on stderr and exit 2.
+# Scripts find the repository from the working directory, but
+# plan_amendments_file and plan_ledger resolve from the plan's directory, so a
+# plan in another checkout would split one plan's state across two. A linked
+# worktree and its primary checkout have different top levels, so a worktree
+# session given the primary checkout's plan path is refused as well.
+plan_require_same_repo() {
+  local me cwd_top plan_top
+  me=$(basename "$0")
+  cwd_top=$(git rev-parse --show-toplevel 2>/dev/null) \
+    || { printf '%s: not inside a git repository\n' "$me" >&2; exit 2; }
+  plan_top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) \
+    || plan_top="no git repository"
+  [ "$plan_top" != "$cwd_top" ] || return 0
+  printf "%s: %s is in %s, but the working directory is in %s; run from inside the plan's worktree\n" \
+    "$me" "$1" "$plan_top" "$cwd_top" >&2
+  exit 2
+}
