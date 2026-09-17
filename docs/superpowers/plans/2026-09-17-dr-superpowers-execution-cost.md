@@ -14,6 +14,8 @@
 
 **Program:** `docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md` — sub-project 10 of 10 — last
 
+**Plan review:** 2026-09-17 — dr-superpowers:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 17 (round 2)
+
 ## Global Constraints
 
 - Every path below is relative to the repository root `D:/Repositories/Personal/darkraise-ai-plugins`; `P` means `plugins/dr-superpowers`.
@@ -41,6 +43,7 @@
   - `--task ID [ID ...]` prints `review-seat task=<ids> primary=<seat> fallback=<seat|-> reason=<band|risk|executor|codex-off>`; band is total 0-3 `judge-sonnet-high`, 4 and above `judge-opus`; Fable only at risk 3.
   - `--plan-round R` prints `review-seat plan-round=R primary=<seat> fallback=<seat|-> reason=<round|codex-off|cap-critical> cap=<n>`; cap 1 for a highest total of 3 or less, 2 for 4-5, 3 for 6 or more; an intricate plan (any task at risk 3 or total 6) takes `judge-fable` in round 1's Claude slot, otherwise `judge-opus`; round `cap+1` is `judge-opus` with `reason=cap-critical`; a later round, or an unparseable Evaluation line, exits 2.
   - `--ruling KIND [ID ...]` prints `review-seat ruling=<kind> tasks=<ids|plan> primary=<seat> fallback=- reason=<merge-gate|risk|intricate|routine>`; KIND is one of `preflight plan-conflict cannot-verify breaker blocked-plan codex-empty-diff final-residual`; an ID is a task number with an optional part letter and routes on its task's highest risk.
+  - `plan_shape` (a function inside `review-route`, Task 7; called by Task 8) takes no arguments, reads the plan in `$src`, sets the globals `cap` (as for `--plan-round`) and `intricate` (1 when any task is at risk 3 or total 6, else 0), and dies with exit 2 on an unparseable Evaluation line.
   - A `Host: codex` plan exits 2 for every form.
 - **C6 `P/reference/delegated-task.md`** (Task 9): headings `## Contract`, `## Seats`, `## 1. Dispatch the implementer`, `## 2. Handle the report`, `## 3. Review the task`, `## 4. The fix loop`, `## 5. Complete the task`, `## Recovery`.
 - **C7 `[CONFIRM_NOTE]`** placeholder in `P/skills/subagent-driven-development/references/ruling-prompt.md` (Task 12).
@@ -51,7 +54,8 @@
 - `review-route --plan-round` reads no task today: `P/scripts/review-route:51-60` (read 2026-09-17).
 - `context-size` rejects any argument: `P/scripts/context-size:9` (read 2026-09-17).
 - `next-step`'s escalation test is an inline grep: `P/scripts/next-step:101-107` (read 2026-09-17).
-- `plan-lint`'s clean Claude fixture is a subagent plan with no heavy task, so the new mismatch warning raises its summary to 2 warnings: `P/tests/plan-lint.test.sh:66,165` (read 2026-09-17).
+- `plan-lint`'s clean Claude fixture is a subagent plan with no heavy task, so the new mismatch warning raises its summary to 2 warnings: `P/tests/plan-lint.test.sh:61,165` (read 2026-09-17).
+- `judge-opus` has the same tool grant as `judge-fable` (`Read, Grep, Glob, WebFetch`), so distilling-docs' no-Bash claim holds when it cites `agents/judge-opus.md`: `P/agents/judge-opus.md:6`, `P/agents/judge-fable.md:6` (read 2026-09-17).
 - `review-route.test.sh`'s fixture Task 9 has an unparseable Evaluation line: `P/tests/review-route.test.sh:109-112` (read 2026-09-17).
 - `validate-repository.mjs` checks links only under `skills/`, so `reference/delegated-task.md`'s links need their own test: `scripts/validate-repository.mjs:56-78` (read 2026-09-17).
 - `P/tests/codex-review.test.sh:321-326` pins Codex-seat prose in the subagent skill that moves to `delegated-task.md` (read 2026-09-17).
@@ -292,7 +296,7 @@ has "mixed ledger: resumes the delegated task" "$out" "Resume at Task 2 (Second)
 - [ ] **Step 2: Run the suite**
 
 Run: `timeout 300 bash plugins/dr-superpowers/tests/next-step.test.sh`
-Expected: the three `mixed ledger` cases pass already (the old grep also ignores agent-named lines) and the suite exits 0. This pins the behaviour before the refactor; if any case fails, stop and report it — the refactor must not be the thing that makes it pass.
+Expected: the three `mixed ledger` cases pass already (the old grep also ignores agent-named lines) and the suite exits 0. This pins the behaviour before the refactor; if any case fails, stop and report it — the refactor must not be the thing that makes it pass. The existing `escalated:` cases are the ones that fail against a wrong `ledger_left_inline`.
 
 - [ ] **Step 3: Replace the inline grep with the helper**
 
@@ -699,6 +703,10 @@ variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --mod
 lint v9d.md
 has "risk 3 is delegated" "$out" "NOTE header: delegated: Task 2"
 has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution that delegates needs --effort high or above (effort low)"
+variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dr-superpowers:impl-opus-low$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-opus-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+lint v9j.md
+has "a split task is heavy when one part is" "$out" "NOTE header: delegated: Task 2"
+check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
 variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-opus-medium/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
 lint v9h.md
 has "a heavy majority on inline warns" "$out" "WARN header: Execution line is inline but 2 of 2 tasks are heavy"
@@ -714,7 +722,7 @@ lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
 - [ ] **Step 2: Run the suite to verify it fails**
 
 Run: `timeout 300 bash plugins/dr-superpowers/tests/plan-lint.test.sh`
-Expected: FAIL on the summary, the subagent warning, both `effort high` cases, both `NOTE` cases, `a heavy minority inline at effort high: exit 0` and `a heavy majority on inline warns`; exit 1.
+Expected: FAIL on the summary, the subagent warning, both `effort high` cases, the three `NOTE` cases (including `a split task is heavy when one part is`), `a heavy minority inline at effort high: exit 0`, `a split task with a heavy part inline at effort high: exit 0` and `a heavy majority on inline warns`; exit 1.
 
 - [ ] **Step 3: Implement rule 5**
 
@@ -909,7 +917,7 @@ check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat t
 - [ ] **Step 2: Run the suite to verify it fails**
 
 Run: `timeout 300 bash plugins/dr-superpowers/tests/review-route.test.sh`
-Expected: FAIL on the changed rows (task 2, 4, 5, 6, 7, 7B, 10, 11 and the batches, on and off); exit 1.
+Expected: FAIL on the changed rows (task 2, 4, 5, 6, 7, 7B, 10 and the batches, on and off; task 11 already routes to Fable and passes); exit 1.
 
 - [ ] **Step 3: Implement the new rows**
 
@@ -972,7 +980,7 @@ Expected: `0 failed`, exit 0.
 
 ```bash
 git add plugins/dr-superpowers/scripts/review-route plugins/dr-superpowers/tests/review-route.test.sh
-git commit -m "feat(superpowers): keep Fable task reviews for risk 3"
+git commit -m "feat(superpowers): Fable reviews risk 3 tasks"
 ```
 
 ### Task 7: review-route plan rounds carry a cap
@@ -1366,7 +1374,7 @@ Expected: each exits 1, failing on the missing `delegated-task.md`.
 
 - [ ] **Step 3: Write and run the extraction script**
 
-Write this file with the Write tool to a path outside the repository (the session scratchpad), named `extract-delegated.mjs`, then run `timeout 60 node <that path>` from the repository root. It prints `moved` and changes exactly the two files.
+Write this file with the Write tool to a path outside the repository — the scratchpad directory your session's system prompt names, or else the directory `mktemp -d` prints — named `extract-delegated.mjs`, then run `timeout 60 node <that path>` from the repository root. It prints `moved` and changes exactly the two files.
 
 ```js
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -1502,6 +1510,7 @@ git commit -m "refactor(superpowers): share the per-task loop"
 - Modify: `plugins/dr-superpowers/reference/delegated-task.md`
 - Modify: `plugins/dr-superpowers/reference/external-executor.md`
 - Modify: `plugins/dr-superpowers/README.md`
+- Modify: `plugins/dr-superpowers/skills/subagent-driven-development/references/task-reviewer-prompt.md`
 - Test: `plugins/dr-superpowers/tests/review-route.test.sh`
 
 **Interfaces:**
@@ -1522,10 +1531,11 @@ present "the delegated loop falls back to Opus on exit 2" "$DT" 'review with `dr
 present "the task seats reserve Fable for risk 3" "$P/reference/external-executor.md" 'and `codex:heavy+judge-fable` at risk 3.'
 present "the second pass points at the delegated loop" "$P/reference/external-executor.md" 'per [delegated-task.md](delegated-task.md) §3 Review the task.'
 absent "README drops risk 2 Fable reviews" "$P/README.md" 'at risk 2 or above'
+present "the second pass runs at risk 3 only" "$P/skills/subagent-driven-development/references/task-reviewer-prompt.md" '[Include this section only on a risk 3 task whose Codex seat'
 ```
 
 Run: `timeout 300 bash plugins/dr-superpowers/tests/review-route.test.sh`
-Expected: FAIL on those six; exit 1.
+Expected: FAIL on those seven; exit 1.
 
 - [ ] **Step 2: Edit `reference/delegated-task.md`**
 
@@ -1605,6 +1615,10 @@ Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
 `judge-opus` 4 to 6, with `judge-fable` only at risk 3.
 ```
 
+- [ ] **Step 4b: Edit `task-reviewer-prompt.md`**
+
+In `plugins/dr-superpowers/skills/subagent-driven-development/references/task-reviewer-prompt.md`, replace `    [Include this section only on a risk 2 or above task whose Codex seat` with `    [Include this section only on a risk 3 task whose Codex seat`.
+
 - [ ] **Step 5: Run the suites to verify they pass**
 
 Run: `timeout 300 bash plugins/dr-superpowers/tests/review-route.test.sh && timeout 300 bash plugins/dr-superpowers/tests/inline-mode.test.sh && timeout 300 bash plugins/dr-superpowers/tests/codex-review.test.sh`
@@ -1613,7 +1627,7 @@ Expected: all end `0 failed`, exit 0.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugins/dr-superpowers/reference/delegated-task.md plugins/dr-superpowers/reference/external-executor.md plugins/dr-superpowers/README.md plugins/dr-superpowers/tests/review-route.test.sh
+git add plugins/dr-superpowers/reference/delegated-task.md plugins/dr-superpowers/reference/external-executor.md plugins/dr-superpowers/README.md plugins/dr-superpowers/skills/subagent-driven-development/references/task-reviewer-prompt.md plugins/dr-superpowers/tests/review-route.test.sh
 git commit -m "docs(superpowers): route task reviews by risk 3"
 ```
 
@@ -1850,7 +1864,7 @@ Expected: both suites end `0 failed`; the validator prints its valid line.
 
 ```bash
 git add plugins/dr-superpowers/skills/writing-plans plugins/dr-superpowers/skills/using-superpowers/SKILL.md plugins/dr-superpowers/README.md plugins/dr-superpowers/tests/review-route.test.sh
-git commit -m "docs(superpowers): plan for mixed mode and capped reviews"
+git commit -m "docs(superpowers): plan mixed mode, capped reviews"
 ```
 
 ### Task 12: Ruling seat prose
@@ -2069,6 +2083,10 @@ present "a delegating plan gets a preflight" "$INLINE" 'send one `preflight` ite
 present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
 present "inline confirms a Header amendment" "$INLINE" 'A Header amendment from `judge-opus` is confirmed by `judge-fable`'
 absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-flight scan.'
+absent "inline no longer names judge-fable as the ruling seat" "$INLINE" '`dr-superpowers:judge-fable` (`dr-superpowers:judge-opus` when Fable is'
+present "inline translates a delegated task's agent" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
+absent "inline drops the all-inert legacy sentence" "$INLINE" 'no task is dispatched, so their names need no translation'
+present "a return to inline starts at a task that is not delegated" "$INLINE" 'The return takes effect at the first remaining task that is not delegated'
 ```
 
 In `plugins/dr-superpowers/tests/review-route.test.sh`, replace `present "inline mode lists four kinds it does not run" "$P/skills/executing-plans/SKILL.md" 'The other four kinds belong to seats this mode does not run'` with `present "inline mode names the one kind it never runs" "$P/skills/executing-plans/SKILL.md" 'Only `codex-empty-diff` belongs to a seat this mode never runs'`.
@@ -2159,6 +2177,39 @@ its verdicts. A plan with no delegated task has no pre-flight scan: it is one
 whole-plan judge dispatch, and a plan of small tasks is low-coupling by
 construction. A plan defect that surfaces while you work goes to the seat as a
 `blocked-plan` item.
+```
+
+Replace:
+
+```text
+none` per distinct name. `**Implementer:**` and `**Executor:**` lines are inert
+in this mode: no task is dispatched, so their names need no translation.
+```
+
+with:
+
+```text
+none` per distinct name. `**Executor:**` lines are inert in this mode: nothing
+goes to an external executor. `**Implementer:**` lines are inert for the tasks
+you implement; translate a delegated task's `**Implementer:**` agent before dispatching it.
+```
+
+Replace:
+
+```text
+Your human partner may also move a plan the other way, from subagent mode to
+this one. Only their explicit instruction does that, and only at the same kind
+of boundary.
+```
+
+with:
+
+```text
+Your human partner may also move a plan the other way, from subagent mode to
+this one. Only their explicit instruction does that, and only at the same kind
+of boundary. The return takes effect at the first remaining task that is not delegated:
+only its `implementer inline (assigned` line records the return, so delegated
+tasks before it still run under subagent mode.
 ```
 
 - [ ] **Step 3: Edit `skills/executing-plans/SKILL.md` — ledger and budget**
@@ -2570,7 +2621,7 @@ Expected: both end `0 failed`, exit 0.
 
 ```bash
 git add plugins/dr-superpowers/reference/final-review.md plugins/dr-superpowers/skills/subagent-driven-development/references/re-review-prompt.md plugins/dr-superpowers/reference/external-executor.md plugins/dr-superpowers/README.md plugins/dr-superpowers/tests/inline-mode.test.sh
-git commit -m "docs(superpowers): skip the dedupe seat for one list"
+git commit -m "docs(superpowers): one list skips dedupe seat"
 ```
 
 ### Task 15: Remaining Fable seats, budget reference and version
@@ -2627,7 +2678,12 @@ Expected: both exit 1 on the changed pins (the program-design pin already passes
 
 - [ ] **Step 2: Edit the two skills**
 
-In `plugins/dr-superpowers/skills/selecting-approaches/SKILL.md`, replace `**Rank.** Dispatch one `dr-superpowers:judge-fable` to run the ring` with `**Rank.** Dispatch one `dr-superpowers:judge-opus` to run the ring`.
+In `plugins/dr-superpowers/skills/selecting-approaches/SKILL.md`, replace `**Rank.** Dispatch one `dr-superpowers:judge-fable` to run the ring` with `**Rank.** Dispatch one `dr-superpowers:judge-opus` to run the ring`, and delete these two lines together with the blank line that follows them:
+
+```text
+**If Fable is unavailable or your human partner has declined it, dispatch
+`judge-opus` instead and say so.** Never substitute silently.
+```
 
 In `plugins/dr-superpowers/skills/distilling-docs/SKILL.md`, replace `**The judge reads the working tree, not the commit.** `agents/judge-fable.md`` with `**The judge reads the working tree, not the commit.** `agents/judge-opus.md``, and replace:
 
@@ -2644,7 +2700,7 @@ Dispatch dr-superpowers:judge-opus with
 [distil-judge.md](references/distil-judge.md). It must work in one order:
 ```
 
-Run: `grep -rn "judge-fable" plugins/dr-superpowers/skills/selecting-approaches plugins/dr-superpowers/skills/distilling-docs`
+Run: `grep -rn "judge-fable\|Fable" plugins/dr-superpowers/skills/selecting-approaches plugins/dr-superpowers/skills/distilling-docs`
 Expected: no output.
 
 - [ ] **Step 3: Edit `reference/session-budget.md`**
