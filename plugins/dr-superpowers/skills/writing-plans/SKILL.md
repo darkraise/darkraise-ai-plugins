@@ -118,22 +118,29 @@ names the native pair: `**Execution:** <inline|subagent> — codex <model> / <ef
 **Choosing the Execution line.** The plan decides its execution mode:
 
 A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
-An inline plan delegates its heavy tasks: each runs through
+A task is **four-band** when it is not heavy and its highest total is exactly 4.
+An inline plan delegates its heavy tasks, and its four-band tasks while they
+are a third of the plan or fewer (`3 x four-band <= N`): each runs through
 [delegated-task.md](../../reference/delegated-task.md) with an implementer
-subagent and the full per-task review.
+subagent and the full per-task review. Past that third, one Opus session costs
+less than a seat per task, and no four-band task is delegated. The tasks not
+delegated are the **self-implemented** tasks.
 
 - `subagent` when more than half the tasks are heavy:
   `claude --model sonnet --effort high`. The controller owns no judgment calls
-  — the ruling seat does — so it needs no stronger model.
-- Otherwise `inline`, the default. The model follows the highest total among
-  the tasks that are not heavy: `sonnet` when every one is 3 or less, `opus`
-  when one scores 4 (the Opus-low band). `<e>` is that task's assigned tier's
-  effort (`impl-haiku` counts as `low`), raised to `high` when any task is
-  heavy: `claude --model <sonnet|opus> --effort <e>`. When every task is heavy
+  — the ruling seat does — so it needs no stronger model. Four-band tasks never
+  count toward this majority.
+- Otherwise `inline`, the default. The model is `opus` when a self-implemented
+  task totals 4 (so only when four-band tasks exceed a third of the plan), and
+  `sonnet` otherwise. `<e>` is the assignment-table effort of the highest
+  self-implemented total (`impl-haiku` counts as `low`),
+  raised to `high` when any task is delegated:
+  `claude --model <sonnet|opus> --effort <e>`. When every task is heavy
   and your human partner overrides the line to inline, use
-  `claude --model opus --effort high` (`plan-lint` checks only the effort).
+  `claude --model opus --effort high`.
 - Your human partner may override the line; `plan-lint` checks its grammar,
-  warns when it disputes the majority rule, and lists the delegated tasks.
+  warns when it disputes the majority rule, and lists the delegated tasks with
+  their reasons.
 
 ## Task Structure
 

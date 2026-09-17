@@ -101,9 +101,12 @@ guesses into a confident pick.
 whether a plan runs under subagent-driven-development, a dispatch and a scored
 review per task, or under executing-plans, where one session implements every
 task itself. Inline mode is the default unless more than half the tasks are
-heavy (total 5 or more, or risk 3). An inline plan delegates its heavy tasks
-to an implementer subagent with the full per-task review loop, shared with
-subagent mode in `reference/delegated-task.md`, and implements the rest
+heavy (total 5 or more, or risk 3). An inline plan delegates its heavy tasks,
+which are too large or risky to implement in the session, and its total-4 tasks
+while they are a third of the plan or fewer, which then get an independent
+review without putting the whole session on Opus. Each delegated task runs
+through an implementer subagent with the full per-task review loop, shared with
+subagent mode in `reference/delegated-task.md`; the session implements the rest
 itself, trading their per-task review for one whole-branch review at the end,
 which both modes share. `plan-lint` requires `--model opus` once a task it
 implements scores 4, and `--effort high` once it delegates. A task that will

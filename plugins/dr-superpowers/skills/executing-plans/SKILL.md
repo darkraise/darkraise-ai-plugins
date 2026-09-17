@@ -46,9 +46,12 @@ when one scores 4; its effort is at least high when the plan delegates.
 Subagent availability has nothing to do with it - the line decides, and only
 your human partner overrides it.
 
-**Delegated tasks.** A heavy task is not yours to implement. Its brief's second
-line is `**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md`
-ends with `**Dispatch:** delegated — Task <a>, Task <b>`. Run
+**Delegated tasks.** A delegated task is not yours to implement: every heavy
+task, and each total-4 task while those are a third of the plan or fewer, so it
+gets an independent review without putting the whole session on Opus. Its
+brief's second line is `**Dispatch:** delegated — total <t>, risk <r>`, and
+`plan-header.md` ends with
+`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4)`. Run
 [delegated-task.md](../../reference/delegated-task.md) for it: an implementer
 subagent, the review seat `scripts/review-route` prints, fix rounds up to 5 and
 a reviewed complete line. Read that file the first time a delegated task comes
@@ -158,8 +161,9 @@ implement; a delegated task's is read by
 you implement; translate a delegated task's `**Implementer:**` agent before dispatching it.
 
 **Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated`
-line, send one `preflight` item to the ruling seat before Task 1 and carry out
-its verdicts. A plan with no delegated task has no pre-flight scan: it is one
+line naming at least one `(heavy)` task, send one `preflight` item to the
+ruling seat before Task 1 and carry out its verdicts. A plan with no heavy task
+has no pre-flight scan, even when it delegates total-4 tasks: it is one
 whole-plan judge dispatch, and a plan of small tasks is low-coupling by
 construction. A plan defect that surfaces while you work goes to the seat as a
 `blocked-plan` item.
@@ -326,7 +330,7 @@ and delegated tasks are all this mode dispatches before the final review.
 
 | Kind | Decision point |
 |---|---|
-| `preflight` | Once, before Task 1, when the plan delegates any task (Setup) |
+| `preflight` | Once, before Task 1, when the plan has a heavy task (Setup) |
 | `blocked-plan` | The plan is wrong and no path forward is a mechanical choice |
 | `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
 | `cannot-verify` | A delegated task's "⚠️ Cannot verify from diff" item |
@@ -334,7 +338,7 @@ and delegated tasks are all this mode dispatches before the final review.
 | `final-residual` | Findings still open after the final review's one fix wave |
 
 Only `codex-empty-diff` belongs to a seat this mode never runs (no external
-executor), and `preflight` arises only for a plan with a delegated task.
+executor), and `preflight` arises only for a plan with a heavy task.
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` - `<task>` is the task
 number the items concern, or `plan` for a plan-level point, so a recurring

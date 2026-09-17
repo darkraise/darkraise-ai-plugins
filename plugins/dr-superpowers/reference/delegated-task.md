@@ -3,7 +3,10 @@
 One task's dispatch, review, fix loop and complete line.
 dr-superpowers:subagent-driven-development runs it for every task, and
 dr-superpowers:executing-plans runs it for each task whose brief carries
-`**Dispatch:** delegated`.
+`**Dispatch:** delegated`: a heavy task, too large or risky to implement in the
+session, or a total-4 task in a plan where those are a third of the tasks or
+fewer, delegated so it gets an independent review without putting the whole
+session on Opus.
 
 ## Contract
 
