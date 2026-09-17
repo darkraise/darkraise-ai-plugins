@@ -98,13 +98,7 @@ else
       # A ledger outranks the Execution line on which mode the run is in: a
       # switch is recorded there and the plan is never edited. The escalation
       # holds until a later inline assignment shows the plan came back.
-      esc=$(grep -nE '^Task [0-9]+: escalated inline -> subagent[ \t]*(—|-|$)' <<<"$ledger_text" | tail -n 1 | cut -d: -f1 || true)
-      if [ -n "$esc" ]; then
-        back=$(grep -nE '^Task [0-9]+: implementer inline \(assigned' <<<"$ledger_text" | tail -n 1 | cut -d: -f1 || true)
-        if [ -z "$back" ] || [ "$back" -lt "$esc" ]; then
-          escalated_at=$(sed -n "${esc}p" <<<"$ledger_text" | sed -E 's/^Task ([0-9]+):.*/\1/')
-        fi
-      fi
+      escalated_at=$(ledger_left_inline "$ledger_file")
     else
       ledger_note="the ledger at \`$ledger_shown\` belongs to another plan and is ignored"
     fi

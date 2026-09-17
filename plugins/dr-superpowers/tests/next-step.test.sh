@@ -279,6 +279,21 @@ run "$REPO" docs/plans/2026-01-01-inline.md
 has "returned to inline: launches the inline pair" "$out" "claude --model sonnet --effort low"
 lacks "returned to inline: drops the escalation sentence" "$out" "This plan escalated to subagent mode"
 
+# --- a mixed ledger: a delegated task mid-loop in an inline plan ---
+# Mixed mode writes subagent grammar for a delegated task. An agent-named
+# assignment is not a switch, and the plan stays in inline mode.
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-inline.md"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+  echo "Task 2: implementer dr-superpowers:impl-opus-medium (assigned; base bbbbbbb)"
+  echo "Task 2: fix round 2/5 (1 addressed, 1 open — x; commits bbbbbbb..ccccccc; progress 9 -> 12; resumed)"
+} > "$INL_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-inline.md
+has "mixed ledger: keeps the inline pair" "$out" "claude --model sonnet --effort low"
+lacks "mixed ledger: no mode switch" "$out" "This plan escalated to subagent mode"
+has "mixed ledger: resumes the delegated task" "$out" "Resume at Task 2 (Second)."
+
 # --- a ledger that merely quotes the escalation marker must not escalate ---
 # The marker is its own ledger line, not a substring match anywhere in the
 # ledger; a deferred-minor sentence describing the grammar is not an
