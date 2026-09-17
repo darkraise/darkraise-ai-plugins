@@ -162,6 +162,49 @@ check "plan_heavy: total 5 or risk 3 on any part" "$(plan_heavy "$TMP/scores.md"
 sed 's/$/\r/' "$TMP/scores.md" > "$TMP/scores-crlf.md"
 check "plan_scores: CRLF" "$(plan_scores "$TMP/scores-crlf.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
 
+# --- plan_delegated: heavy tasks, and total-4 tasks while a third or fewer ---
+deleg_plan() { # deleg_plan <file> <total/risk ...> — one task per argument
+  local f=$1 i=0 tr; shift
+  printf '# Delegation\n' > "$f"
+  for tr in "$@"; do
+    i=$((i + 1))
+    printf '\n### Task %s: t\n\n**Evaluation:** files 0 - spec 0 - coupling %s - risk %s = %s\n' \
+      "$i" "$((${tr%/*} - ${tr#*/}))" "${tr#*/}" "${tr%/*}" >> "$f"
+  done
+}
+deleg() { plan_delegated "$1" | tr '\t\n' ' |'; }
+deleg_plan "$TMP/d1.md" 1/0 4/2 1/0 1/0 1/0 1/0
+check "plan_delegated: one total-4 task in six" "$(deleg "$TMP/d1.md")" "2 total 4|"
+deleg_plan "$TMP/d2.md" 4/2 1/0 4/2 1/0 1/0 1/0
+check "plan_delegated: two total-4 tasks in six" "$(deleg "$TMP/d2.md")" "1 total 4|3 total 4|"
+deleg_plan "$TMP/d3.md" 4/2 4/2 4/2 1/0 1/0 1/0
+check "plan_delegated: three total-4 tasks in six are none" "$(deleg "$TMP/d3.md")" ""
+deleg_plan "$TMP/d4.md" 5/2 4/2 1/0 4/3 1/0 1/0
+check "plan_delegated: heavy and total-4 tasks together" "$(deleg "$TMP/d4.md")" "1 heavy|2 total 4|4 heavy|"
+deleg_plan "$TMP/d5.md" 5/2 4/2 4/2 1/0
+check "plan_delegated: heavy tasks stay when total-4 tasks pass a third" "$(deleg "$TMP/d5.md")" "1 heavy|"
+sed 's/^|//' > "$TMP/d6.md" <<'EOF'
+|# Split
+|
+|### Task 1: light
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 2: split
+|
+|#### Part A: small
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|#### Part B: larger
+|
+|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
+|
+|### Task 3: unscored
+EOF
+check "plan_delegated: a split task with a total-4 part" "$(deleg "$TMP/d6.md")" "2 total 4|"
+check "plan_delegated: the scores fixture" "$(deleg "$TMP/scores.md")" "2 heavy|3 heavy|"
+
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
 git init -q "$REPO"

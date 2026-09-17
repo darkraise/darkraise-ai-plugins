@@ -150,6 +150,24 @@ plan_heavy() {
   plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
 }
 
+# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>heavy"
+# or "N<TAB>total 4" line each, ascending. Heavy tasks always. Tasks whose
+# highest total is exactly 4 only while they are a third of the plan or fewer:
+# past that, one Opus session costs less than a seat for each of them.
+plan_delegated() {
+  local tasks
+  tasks=$(plan_tasks "$1" | grep -c . || true)
+  plan_scores "$1" | awk -F'\t' -v n="$tasks" '
+    $2 == "-" || $2 == "?" { next }
+    $2 + 0 >= 5 || $3 + 0 == 3 { row[++k] = $1 "\theavy"; next }
+    $2 + 0 == 4 { row[++k] = $1 "\ttotal 4"; four++ }
+    END {
+      for (i = 1; i <= k; i++)
+        if (row[i] !~ /\ttotal 4$/ || 3 * four <= n + 0) print row[i]
+    }
+  '
+}
+
 # Git reports the top level in one form (C:/… under Git Bash) whichever way the
 # path was spelled, so comparing <top level>/<prefix><name> is stable where pwd
 # output is not: /tmp and /c/Users/…/Temp name the same directory.
