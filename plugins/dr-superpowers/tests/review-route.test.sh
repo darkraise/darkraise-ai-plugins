@@ -197,6 +197,34 @@ check "cap 3: round 5 exits 2" "$rc" "2"
 rround "$TMP/plan.md" 1
 check "an unparseable Evaluation line fails a plan round" "$rc" "2"
 
+# --- the ruling seat -------------------------------------------------------------
+# Fable rules only where a wrong verdict is expensive: the merge gate, a risk-3
+# task, and an intricate plan's preflight.
+rule() { out=$(bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; }
+rule "$TMP/light.md" --ruling final-residual
+check "final-residual is the merge gate on Fable" "$out" "review-seat ruling=final-residual tasks=plan primary=dr-superpowers:judge-fable fallback=- reason=merge-gate"
+rule "$TMP/round.md" --ruling plan-conflict 8
+check "an item on a risk-3 task goes to Fable" "$out" "review-seat ruling=plan-conflict tasks=8 primary=dr-superpowers:judge-fable fallback=- reason=risk"
+rule "$TMP/round.md" --ruling breaker 3 8
+check "a batch routes on its heaviest item" "$out" "review-seat ruling=breaker tasks=3,8 primary=dr-superpowers:judge-fable fallback=- reason=risk"
+rule "$TMP/round.md" --ruling cannot-verify 4
+check "a routine item goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=4 primary=dr-superpowers:judge-opus fallback=- reason=routine"
+rule "$TMP/round.md" --ruling preflight
+check "preflight on an intricate plan goes to Fable" "$out" "review-seat ruling=preflight tasks=plan primary=dr-superpowers:judge-fable fallback=- reason=intricate"
+rule "$TMP/light.md" --ruling preflight
+check "preflight on a plain plan goes to Opus" "$out" "review-seat ruling=preflight tasks=plan primary=dr-superpowers:judge-opus fallback=- reason=routine"
+rule "$TMP/round.md" --ruling blocked-plan 7B
+check "a part id routes on its task" "$out" "review-seat ruling=blocked-plan tasks=7B primary=dr-superpowers:judge-opus fallback=- reason=routine"
+rule "$TMP/round.md" --ruling guess 1
+check "an unknown kind exits 2" "$rc" "2"
+rule "$TMP/round.md" --ruling breaker 99
+check "an unknown task exits 2" "$rc" "2"
+rule "$TMP/round.md" --ruling breaker x
+check "a malformed ruling id exits 2" "$rc" "2"
+{ printf 'Host: codex\n'; cat "$TMP/light.md"; } > "$TMP/cdx-light.md"
+rule "$TMP/cdx-light.md" --ruling breaker 1
+check "a Codex-host plan exits 2 for a ruling" "$rc" "2"
+
 # --- the review surface off ------------------------------------------------------
 # While the session's gate has not opened the review surface, no route names a
 # Codex seat, and the Claude seat it names has nothing to fall back to.

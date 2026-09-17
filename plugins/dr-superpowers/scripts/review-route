@@ -83,6 +83,31 @@ case "$1" in
       printf 'review-seat plan-round=%s primary=%s fallback=- reason=cap-critical cap=%s\n' "$r" "$OPUS" "$cap"
     fi
     exit 0 ;;
+  --ruling)
+    shift
+    [ $# -ge 1 ] || usage
+    kind=$1; shift
+    case $kind in
+      preflight|plan-conflict|cannot-verify|breaker|blocked-plan|codex-empty-diff|final-residual) ;;
+      *) die "not a ruling kind: $kind" ;;
+    esac
+    plan_shape
+    scores=$(plan_scores "$src")
+    ids="" risky=0
+    for id in "$@"; do
+      [[ "$id" =~ ^([0-9]+)([A-Z]?)$ ]] || die "not a task id: $id"
+      row=$(awk -F'\t' -v n="${BASH_REMATCH[1]}" '$1 == n' <<<"$scores")
+      [ -n "$row" ] || die "no Task ${BASH_REMATCH[1]} in the plan"
+      [ "$(cut -f3 <<<"$row")" != 3 ] || risky=1
+      ids="${ids:+$ids,}$id"
+    done
+    if [ "$kind" = final-residual ]; then primary=$FABLE reason=merge-gate
+    elif [ "$risky" -eq 1 ]; then primary=$FABLE reason=risk
+    elif [ "$kind" = preflight ] && [ "$intricate" -eq 1 ]; then primary=$FABLE reason=intricate
+    else primary=$OPUS reason=routine
+    fi
+    printf 'review-seat ruling=%s tasks=%s primary=%s fallback=- reason=%s\n' "$kind" "${ids:-plan}" "$primary" "$reason"
+    exit 0 ;;
   --task) shift ;;
   *) usage ;;
 esac
