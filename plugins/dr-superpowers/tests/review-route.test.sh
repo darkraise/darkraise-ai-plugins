@@ -393,6 +393,28 @@ present "a failed run refreshes the gate" "$EXEC" 'bash "<plugin-root>/scripts/c
 present "the final Codex round needs the review surface" "$EXEC" 'Unless it prints `review=true`, skip the round'
 present "the task seats name the runner's gate" "$EXEC" 'codex is off for this session (<reason>)'
 
+# --- the final whole-branch review ---
+shape_plan "$TMP/final-plain.md" '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1' \
+  '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5'
+rule "$TMP/final-plain.md" --final
+check "final: a plain plan takes judge-opus" "$out" "review-seat final primary=dr-superpowers:judge-opus fallback=- reason=plain"
+shape_plan "$TMP/final-risk.md" '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1' \
+  '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4'
+rule "$TMP/final-risk.md" --final
+check "final: risk 3 is intricate" "$out" \
+  "review-seat final primary=dr-superpowers:judge-fable fallback=dr-superpowers:judge-opus reason=intricate"
+shape_plan "$TMP/final-six.md" '**Evaluation:** files 1 - spec 1 - coupling 2 - risk 2 = 6'
+rule "$TMP/final-six.md" --final
+check "final: total 6 is intricate" "$out" \
+  "review-seat final primary=dr-superpowers:judge-fable fallback=dr-superpowers:judge-opus reason=intricate"
+review_surface false
+rule "$TMP/final-plain.md" --final
+check "final: the seat does not read the Codex gate" "$out" "review-seat final primary=dr-superpowers:judge-opus fallback=- reason=plain"
+rule "$TMP/final-plain.md" --final extra
+check "final: an extra argument exits 2" "$rc" "2"
+rule "$TMP/final-plain.md" --task
+check "final: --task with no id still exits 2" "$rc" "2"
+
 # --- README, version and program amendment -------------------------------------
 RD="$P/README.md"
 present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**'

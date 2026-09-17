@@ -13,6 +13,7 @@
 # Usage: review-route PLAN_FILE --task ID [ID ...]
 #        review-route PLAN_FILE --plan-round R
 #        review-route PLAN_FILE --ruling KIND [ID ...]
+#        review-route PLAN_FILE --final
 # ID is a task number, or a task number and part letter for a split task (7B).
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
 #         (a plan round appends cap=<n>)
@@ -30,9 +31,9 @@ FABLE=dr-superpowers:judge-fable
 SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
-usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND [ID ...]"; }
+usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND [ID ...] | --final"; }
 
-[ $# -ge 3 ] || usage
+[ $# -ge 2 ] || usage
 plan=$1; shift
 [ -f "$plan" ] || die "no such plan file: $plan"
 
@@ -108,7 +109,16 @@ case "$1" in
     fi
     printf 'review-seat ruling=%s tasks=%s primary=%s fallback=- reason=%s\n' "$kind" "${ids:-plan}" "$primary" "$reason"
     exit 0 ;;
-  --task) shift ;;
+  --final)
+    [ $# -eq 1 ] || usage
+    plan_shape
+    if [ "$intricate" -eq 1 ]; then
+      printf 'review-seat final primary=%s fallback=%s reason=intricate\n' "$FABLE" "$OPUS"
+    else
+      printf 'review-seat final primary=%s fallback=- reason=plain\n' "$OPUS"
+    fi
+    exit 0 ;;
+  --task) shift; [ $# -ge 1 ] || usage ;;
   *) usage ;;
 esac
 
