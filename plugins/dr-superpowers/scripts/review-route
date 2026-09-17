@@ -85,25 +85,25 @@ for id in "$@"; do
 done
 
 band() { # band <total> - the Claude judge for a score band
-  if [ "$1" -le 1 ]; then echo "$SONNET"
-  elif [ "$1" -le 4 ]; then echo "$OPUS"
-  else echo "$FABLE"
+  if [ "$1" -le 3 ]; then echo "$SONNET"
+  else echo "$OPUS"
   fi
 }
 
 # Executor first: a task Codex implemented is never reviewed by Codex, whatever
-# its risk. Totals 5 and 6 carry risk >= 2 under Rule S, so the risk row catches
-# them before the band rows; the band rows still cover an overridden task.
-if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 2 ]; then
+# its risk. Fable is kept for risk 3 (security, data loss, migration,
+# concurrency); every other task takes its band. The lane gate admits risk <= 1,
+# so the executor risk-3 row is a guard.
+if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 3 ]; then
   primary=$FABLE fallback=- reason=executor
 elif [ "$executor" -eq 1 ]; then
   primary=$(band "$max_total") fallback=- reason=executor
 elif ! codex_session_on review; then
   # Codex is off for this session, so the Codex rows name their Claude seat
-  # directly, and there is nothing left to fall back to. Risk stays with Fable.
-  if [ "$max_risk" -ge 2 ]; then primary=$FABLE; else primary=$(band "$max_total"); fi
+  # directly, and there is nothing left to fall back to. Risk 3 stays with Fable.
+  if [ "$max_risk" -ge 3 ]; then primary=$FABLE; else primary=$(band "$max_total"); fi
   fallback=- reason=codex-off
-elif [ "$max_risk" -ge 2 ]; then
+elif [ "$max_risk" -ge 3 ]; then
   primary=codex:heavy+judge-fable fallback=$FABLE reason=risk
 elif [ "$max_total" -le 3 ]; then
   primary=codex:light fallback=$(band "$max_total") reason=band

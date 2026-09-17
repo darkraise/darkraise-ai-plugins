@@ -56,6 +56,7 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |8. risk three
 |9. broken
 |10. band five
+|11. executor risk three
 |
 |### Task 1: light low
 |
@@ -115,6 +116,12 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |
 |**Implementer:** dr-superpowers:impl-opus-medium
 |**Evaluation:** files 2 - spec 2 - coupling 1 - risk 0 = 5
+|
+|### Task 11: executor risk three
+|
+|**Implementer:** dr-superpowers:impl-opus-low
+|**Executor:** codex gpt-5.5 / high
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
 EOF
 
 route() { # route <args...>; sets out and rc
@@ -127,32 +134,34 @@ route --task 1
 check "total 1: light Codex, Sonnet fallback" "$out" "review-seat task=1 primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 check "a routed task exits 0" "$rc" "0"
 route --task 2
-check "total 3 with em dashes: light Codex, Opus fallback" "$out" "review-seat task=2 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
+check "total 3 with em dashes: light Codex, Sonnet fallback" "$out" "review-seat task=2 primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 route --task 3
 check "total 4 at risk 1: heavy Codex, Opus fallback" "$out" "review-seat task=3 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 route --task 4
-check "risk 2: Astra then Fable" "$out" "review-seat task=4 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+check "risk 2 takes its band: heavy Codex, Opus fallback" "$out" "review-seat task=4 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 route --task 5
-check "an Executor task is reviewed by its band judge, never Codex" "$out" "review-seat task=5 primary=dr-superpowers:judge-opus fallback=- reason=executor"
+check "an Executor task is reviewed by its band judge, never Codex" "$out" "review-seat task=5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 route --task 6
-check "an Executor task at risk 2 goes to Fable alone" "$out" "review-seat task=6 primary=dr-superpowers:judge-fable fallback=- reason=executor"
+check "an Executor task at risk 2 takes its band" "$out" "review-seat task=6 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
+route --task 11
+check "an Executor task at risk 3 goes to Fable alone" "$out" "review-seat task=11 primary=dr-superpowers:judge-fable fallback=- reason=executor"
 route --task 7A
 check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 route --task 7B
-check "the risky part routes to Astra then Fable" "$out" "review-seat task=7B primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+check "the risk-2 part takes heavy Codex" "$out" "review-seat task=7B primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 route --task 7
-check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 route --task 8
-check "risk 3 routes like risk 2" "$out" "review-seat task=8 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+check "risk 3 goes to Astra then Fable" "$out" "review-seat task=8 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
 route --task 10
-check "total 5 at risk 0: heavy Codex, Fable fallback" "$out" "review-seat task=10 primary=codex:heavy fallback=dr-superpowers:judge-fable reason=band"
+check "total 5 at risk 0: heavy Codex, Opus fallback" "$out" "review-seat task=10 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 
 route --task 1 2
-check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
+check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 route --task 1 3
 check "a batch crossing into the heavy band" "$out" "review-seat task=1,3 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 route --task 1 5
-check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dr-superpowers:judge-opus fallback=- reason=executor"
+check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 
 route --plan-round 1
 check "plan round 1 is Codex with a Fable fallback" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-fable reason=round"
@@ -169,21 +178,23 @@ route --task 1
 check "codex off: total 1 goes to Sonnet alone" "$out" "review-seat task=1 primary=dr-superpowers:judge-sonnet-high fallback=- reason=codex-off"
 check "codex off: a routed task still exits 0" "$rc" "0"
 route --task 2
-check "codex off: total 3 goes to Opus alone" "$out" "review-seat task=2 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
+check "codex off: total 3 goes to Sonnet alone" "$out" "review-seat task=2 primary=dr-superpowers:judge-sonnet-high fallback=- reason=codex-off"
 route --task 3
 check "codex off: total 4 goes to Opus alone" "$out" "review-seat task=3 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
 route --task 10
-check "codex off: total 5 goes to Fable alone" "$out" "review-seat task=10 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+check "codex off: total 5 goes to Opus alone" "$out" "review-seat task=10 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
 route --task 4
-check "codex off: risk 2 at total 4 goes to Fable, not its band" "$out" "review-seat task=4 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+check "codex off: risk 2 at total 4 takes its band" "$out" "review-seat task=4 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
+route --task 8
+check "codex off: risk 3 goes to Fable alone" "$out" "review-seat task=8 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
 route --task 7
-check "codex off: a split task routes on its riskiest part" "$out" "review-seat task=7 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+check "codex off: a split task routes on its heaviest part" "$out" "review-seat task=7 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
 route --task 1 2
-check "codex off: a batch takes its highest total" "$out" "review-seat task=1,2 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
+check "codex off: a batch takes its highest total" "$out" "review-seat task=1,2 primary=dr-superpowers:judge-sonnet-high fallback=- reason=codex-off"
 route --task 5
-check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 primary=dr-superpowers:judge-opus fallback=- reason=executor"
+check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 route --task 6
-check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dr-superpowers:judge-fable fallback=- reason=executor"
+check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 route --plan-round 1
 check "codex off: plan round 1 goes to Fable alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
 route --plan-round 2
@@ -228,7 +239,7 @@ present "a Codex-host plan names native-codex.md" "$TMP/err" "native-codex.md"
 
 sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)
-check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 
 # --- plan review prose ---------------------------------------------------------
 WP="$P/skills/writing-plans/SKILL.md"
