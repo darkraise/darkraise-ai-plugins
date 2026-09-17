@@ -12,8 +12,10 @@
 #
 # Usage: review-route PLAN_FILE --task ID [ID ...]
 #        review-route PLAN_FILE --plan-round R
+#        review-route PLAN_FILE --ruling KIND [ID ...]
 # ID is a task number, or a task number and part letter for a split task (7B).
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
+#         (a plan round appends cap=<n>)
 # Exit: 0 routed; 2 usage error, missing task, unparseable Evaluation, or a
 # Codex-host plan.
 set -uo pipefail
@@ -28,7 +30,7 @@ FABLE=dr-superpowers:judge-fable
 SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
-usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R"; }
+usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND [ID ...]"; }
 
 [ $# -ge 3 ] || usage
 plan=$1; shift
@@ -47,15 +49,38 @@ if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 
+# plan_shape — sets cap (plan-review rounds from the highest task total: 1 for
+# <= 3, 2 for 4-5, 3 for 6) and intricate (1 when a task is at risk 3 or
+# totals 6). A plan with no Evaluation line gets cap 1.
+plan_shape() {
+  local n t r max=-1
+  cap=1 intricate=0
+  while IFS=$'\t' read -r n t r; do
+    [ -n "$n" ] || continue
+    [ "$t" != "?" ] || die "Task $n: the Evaluation line does not parse"
+    [ "$t" != "-" ] || continue
+    [ "$t" -le "$max" ] || max=$t
+    if [ "$r" -ge 3 ] || [ "$t" -ge 6 ]; then intricate=1; fi
+  done < <(plan_scores "$src")
+  if [ "$max" -ge 6 ]; then cap=3; elif [ "$max" -ge 4 ]; then cap=2; fi
+}
+
 case "$1" in
   --plan-round)
     [ $# -eq 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
-    if [ "$2" -eq 1 ] && codex_session_on review; then
-      printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round\n' "$FABLE"
-    elif [ "$2" -eq 1 ]; then
-      printf 'review-seat plan-round=1 primary=%s fallback=- reason=codex-off\n' "$FABLE"
+    plan_shape
+    r=$2 claude=$OPUS
+    [ "$intricate" -eq 0 ] || claude=$FABLE
+    if [ "$r" -gt $((cap + 1)) ]; then
+      die "plan round $r is past the cap ($cap) and its one cap-critical round"
+    elif [ "$r" -eq 1 ] && codex_session_on review; then
+      printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round cap=%s\n' "$claude" "$cap"
+    elif [ "$r" -eq 1 ]; then
+      printf 'review-seat plan-round=1 primary=%s fallback=- reason=codex-off cap=%s\n' "$claude" "$cap"
+    elif [ "$r" -le "$cap" ]; then
+      printf 'review-seat plan-round=%s primary=%s fallback=- reason=round cap=%s\n' "$r" "$OPUS" "$cap"
     else
-      printf 'review-seat plan-round=%s primary=%s fallback=- reason=round\n' "$2" "$OPUS"
+      printf 'review-seat plan-round=%s primary=%s fallback=- reason=cap-critical cap=%s\n' "$r" "$OPUS" "$cap"
     fi
     exit 0 ;;
   --task) shift ;;

@@ -127,6 +127,19 @@ EOF
 route() { # route <args...>; sets out and rc
   out=$(bash "$ROUTE" "$TMP/plan.md" "$@" 2>"$TMP/err"); rc=$?
 }
+rround() { # rround <plan> <round>; sets out and rc
+  out=$(bash "$ROUTE" "$1" --plan-round "$2" 2>"$TMP/err"); rc=$?
+}
+shape_plan() { # shape_plan <file> <evaluation line>... - one task per line
+  local f=$1 i=0 ev; shift
+  { printf '# Shape\n\n'
+    for ev in "$@"; do i=$((i + 1)); printf '### Task %s: t\n\n%s\n\n' "$i" "$ev"; done
+  } > "$f"
+}
+# Plan rounds parse every task, so they run on the fixture without Task 9.
+awk '/^### Task 9:/ { skip = 1 } /^### Task 10:/ { skip = 0 } !skip' "$TMP/plan.md" | grep -v '^9\. broken$' > "$TMP/round.md"
+shape_plan "$TMP/light.md" '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3' '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1'
+shape_plan "$TMP/mid.md" '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5' '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1'
 
 check "script exists" "$([ -f "$ROUTE" ] && echo yes || echo no)" "yes"
 
@@ -163,12 +176,26 @@ check "a batch crossing into the heavy band" "$out" "review-seat task=1,3 primar
 route --task 1 5
 check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 
-route --plan-round 1
-check "plan round 1 is Codex with a Fable fallback" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-fable reason=round"
-route --plan-round 2
-check "plan round 2 is Opus" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=round"
-route --plan-round 3
-check "plan round 3 is Opus" "$out" "review-seat plan-round=3 primary=dr-superpowers:judge-opus fallback=- reason=round"
+rround "$TMP/round.md" 1
+check "an intricate plan's round 1 is Codex with a Fable fallback, cap 3" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-fable reason=round cap=3"
+rround "$TMP/light.md" 1
+check "a plain plan's round 1 falls back to Opus, cap 1" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-opus reason=round cap=1"
+rround "$TMP/light.md" 2
+check "cap 1: round 2 is the cap-critical round" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=cap-critical cap=1"
+rround "$TMP/light.md" 3
+check "cap 1: round 3 exits 2" "$rc" "2"
+rround "$TMP/mid.md" 2
+check "highest total 5: round 2 is within cap 2" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=round cap=2"
+rround "$TMP/mid.md" 3
+check "cap 2: round 3 is cap-critical" "$out" "review-seat plan-round=3 primary=dr-superpowers:judge-opus fallback=- reason=cap-critical cap=2"
+rround "$TMP/round.md" 3
+check "cap 3: round 3 is a round" "$out" "review-seat plan-round=3 primary=dr-superpowers:judge-opus fallback=- reason=round cap=3"
+rround "$TMP/round.md" 4
+check "cap 3: round 4 is cap-critical" "$out" "review-seat plan-round=4 primary=dr-superpowers:judge-opus fallback=- reason=cap-critical cap=3"
+rround "$TMP/round.md" 5
+check "cap 3: round 5 exits 2" "$rc" "2"
+rround "$TMP/plan.md" 1
+check "an unparseable Evaluation line fails a plan round" "$rc" "2"
 
 # --- the review surface off ------------------------------------------------------
 # While the session's gate has not opened the review surface, no route names a
@@ -195,15 +222,17 @@ route --task 5
 check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 route --task 6
 check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
-route --plan-round 1
-check "codex off: plan round 1 goes to Fable alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
-route --plan-round 2
-check "codex off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=round"
+rround "$TMP/round.md" 1
+check "codex off: an intricate plan's round 1 goes to Fable alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off cap=3"
+rround "$TMP/light.md" 1
+check "codex off: a plain plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-opus fallback=- reason=codex-off cap=1"
+rround "$TMP/round.md" 2
+check "codex off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dr-superpowers:judge-opus fallback=- reason=round cap=3"
 review_surface absent
 route --task 3
 check "no session file is off" "$out" "review-seat task=3 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
-route --plan-round 1
-check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+rround "$TMP/round.md" 1
+check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off cap=3"
 review_surface true
 printf 'not json' > "$DR_CODEX_SESSION_DIR/review-route-test.json"
 route --task 1
