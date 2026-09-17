@@ -119,6 +119,25 @@ done
 present "final review runs gates first" "$FINAL" 'dr-superpowers:running-gates'
 present "a red gate stops the review" "$FINAL" 'A red gate stops'
 
+# --- the delegated loop: one copy, shared by both execution skills ---
+DT="$P/reference/delegated-task.md"
+check "exists: reference/delegated-task.md" "$([ -f "$DT" ] && echo yes || echo no)" "yes"
+for h in '## Contract' '## Seats' '## 1. Dispatch the implementer' '## 2. Handle the report' \
+         '## 3. Review the task' '## 4. The fix loop' '## 5. Complete the task' '## Recovery'; do
+  check "delegated loop heading: $h" "$(grep -cxF -- "$h" "$DT")" "1"
+done
+for h in '### 1. Dispatch the implementer' '### 2. Handle the report' '### 3. Review the task' \
+         '### 4. The fix loop' '### 5. Complete the task'; do
+  check "subagent mode no longer holds: $h" "$(grep -cxF -- "$h" "$SDD")" "0"
+done
+present "subagent mode links the delegated loop" "$SDD" "../../reference/delegated-task.md"
+present "subagent mode defers per-task recovery" "$SDD" 'Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery'
+# validate-repository.mjs checks links only under skills/, so this suite pins
+# the reference file's links.
+for link in $(grep -oE '\]\([^)#]+\.md' "$DT" | sed 's/^](//' | sort -u); do
+  check "delegated loop link resolves: $link" "$([ -f "$P/reference/$link" ] && echo yes || echo no)" "yes"
+done
+
 # --- the Dispatch line: mixed mode's delegation, computed by task-brief ---
 DTMP=$(mktemp -d)
 sed 's/^|//' > "$DTMP/plan.md" <<'EOF'

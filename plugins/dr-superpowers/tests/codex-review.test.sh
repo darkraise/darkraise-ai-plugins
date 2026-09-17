@@ -318,7 +318,7 @@ check "an ordinary failure leaves the session on" "$(jq -r '.usable | tostring' 
 
 # The caller must defer to the runner's outcome rather than running its own
 # retry rule: a FAILED seat that redispatches turns one refused run into two.
-SDD="$HERE/../skills/subagent-driven-development/SKILL.md"
+SDD="$HERE/../reference/delegated-task.md"
 sdd=$(cat "$SDD")
 present "the risk-3 caller names the runner" "$sdd" "run-codex-review.sh"
 present "the risk-3 caller defers on FAILED" "$sdd" "TIMEOUT or FAILED"

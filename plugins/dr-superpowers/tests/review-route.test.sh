@@ -321,19 +321,22 @@ present "writing-plans offers the lane only on lane=true" "$WP" 'offers Codex on
 
 # --- task review prose -----------------------------------------------------------
 SDD="$P/skills/subagent-driven-development/SKILL.md"
+DT="$P/reference/delegated-task.md"
 TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
-present "the Seats table routes the task reviewer" "$SDD" '| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints'
-present "SDD runs the light tier for codex:light" "$SDD" '`codex:light` is `--tier light`'
-present "SDD has the risk 2 section" "$SDD" '**Risk 2 and above.**'
+present "the Seats table routes the task reviewer" "$DT" '| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints'
+present "the delegated loop runs the light tier for codex:light" "$DT" '`codex:light` is `--tier light`'
+present "the delegated loop has the risk section" "$DT" '**Risk 2 and above.**'
 absent "SDD no longer averages three seats" "$SDD" 'average each criterion'
+absent "the delegated loop does not average three seats" "$DT" 'average each criterion'
 absent "SDD no longer writes K=3" "$SDD" 'K=3'
-present "SDD writes the seat clause" "$SDD" ', seat <seat>'
-present "SDD keeps the runner name" "$SDD" 'run-codex-review.sh'
-present "SDD keeps the FAILED deferral" "$SDD" 'TIMEOUT or FAILED'
-present "SDD keeps the no-redispatch rule" "$SDD" 'never re-dispatch the Codex seat'
-present "SDD runs the gate before routing" "$SDD" '- **The seat:** run `scripts/codex-gate` (say its line aloud when it ends'
-present "SDD names a codex-off route" "$SDD" 'On `reason=codex-off` the review surface is off for'
-present "SDD records a codex-off seat" "$SDD" '` (codex off — <reason>)` when `review-route` printed `reason=codex-off`'
+absent "the delegated loop does not write K=3" "$DT" 'K=3'
+present "the delegated loop writes the seat clause" "$DT" ', seat <seat>'
+present "the delegated loop keeps the runner name" "$DT" 'run-codex-review.sh'
+present "the delegated loop keeps the FAILED deferral" "$DT" 'TIMEOUT or FAILED'
+present "the delegated loop keeps the no-redispatch rule" "$DT" 'never re-dispatch the Codex seat'
+present "the delegated loop runs the gate before routing" "$DT" '- **The seat:** run `scripts/codex-gate` (say its line aloud when it ends'
+present "the delegated loop names a codex-off route" "$DT" 'On `reason=codex-off` the review surface is off for'
+present "the delegated loop records a codex-off seat" "$DT" '` (codex off — <reason>)` when `review-route` printed `reason=codex-off`'
 present "the reviewer prompt has the second pass" "$TRP" '## Second Pass: The Codex Review'
 present "the second pass names the Codex file by path" "$TRP" '[CODEX_REVIEW_FILE]'
 present "the second pass comes after Fable's own review" "$TRP" 'Do this only after your Spec Compliance'
