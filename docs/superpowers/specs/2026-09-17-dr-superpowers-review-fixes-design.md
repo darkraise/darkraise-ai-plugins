@@ -79,7 +79,9 @@ resolves against that working directory.
   `subagent-driven-development/SKILL.md:14,75,174,202`, `handoff/SKILL.md:66`,
   `resume-execution/SKILL.md:16`, `writing-plans/SKILL.md:283`,
   `reference/delegated-task.md:55,145`, `project-status/SKILL.md:17`,
-  `brainstorming/SKILL.md:237`, `finishing-a-development-branch/SKILL.md:287`.
+  `brainstorming/SKILL.md:237`, `finishing-a-development-branch/SKILL.md:287`,
+  and the compaction snapshot's first section (`scripts/lib/snapshot.sh:92-93`,
+  "run `scripts/repo-audit` from the dr-superpowers plugin root").
 - On Codex the plugin root stays "the directory two levels above any skill
   file"; only the working-directory half is new there.
 - The comment in `lib/codex-session.sh:4-6` is corrected to match.
