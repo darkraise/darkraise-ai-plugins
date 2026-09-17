@@ -301,7 +301,7 @@ Then:
 | `BLOCKED` | Terminal; never re-dispatch. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `review round R/5` on a `Group` line, R < 5 | Resume the batch's loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
 | `review round 5/5` on a `Group` line | Go to the breaker |
-| `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the successor rung of the task's `**Implementer:**` agent ([escalation.md](references/escalation.md)) fresh at round 1 of 5, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
+| `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the first rung on the escalation table ranked strictly above both the task's `**Implementer:**` agent and the inline session's rung, the successor of whichever ranks higher ([escalation.md](references/escalation.md) §Escalating out of inline mode) fresh at round 1 of 5, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
 | `implementer <agent> (assigned …)` or `fix round R/5` | Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 

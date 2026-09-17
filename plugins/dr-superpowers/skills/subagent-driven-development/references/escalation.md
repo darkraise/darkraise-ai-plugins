@@ -27,6 +27,24 @@ rounds resume the same Codex session and it leaves the lane by `HANDBACK`
 instead of by climbing a rung - see
 [external-executor.md](../../../reference/external-executor.md).
 
+## Escalating out of inline mode
+
+A task whose last ledger line is `escalated inline -> subagent` failed in an
+inline session that may already run above the task's assigned tier, so the
+successor of the `**Implementer:**` agent alone can land at or below the tier
+that just failed. Rank both with [ladder.md](../../../reference/ladder.md)
+§Why this terminates:
+
+- the task's `**Implementer:**` agent, and
+- the inline session's rung: the Execution line's `--model` and `--effort` as
+  `impl-<model>-<effort>` (`haiku` as `impl-haiku`).
+
+Start the walk from whichever ranks higher and dispatch its successor on the
+escalation table, the first rung ranked strictly above both. For example,
+`impl-sonnet-low` assigned in an `impl-sonnet-high` session dispatches
+`impl-opus-high`, not `impl-opus-low`. When that start is `impl-opus-high`, its
+successor is `SPLIT`, handled as §The top rung is SPLIT describes.
+
 ## Recording an escalation
 
 Append one clause to the fix-round line the round already writes:

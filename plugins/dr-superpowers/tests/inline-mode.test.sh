@@ -110,6 +110,12 @@ present "a return to inline starts at a task that is not delegated" "$INLINE" 'T
 present "states the fix cap" "$INLINE" "fix round R/3"
 present "inline writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
 present "subagent mode reads the escalation line" "$SDD" "escalated inline -> subagent"
+ESC="$P/skills/subagent-driven-development/references/escalation.md"
+present "the inline recovery row ranks above both" "$SDD" "ranked strictly above both the task's \`**Implementer:**\` agent and the inline session's rung"
+present "escalation names the inline exit" "$ESC" '## Escalating out of inline mode'
+present "escalation walks from the higher rung" "$ESC" 'dispatch its successor on the'
+present "escalation gives the worked example" "$ESC" '`impl-opus-high`, not `impl-opus-low`'
+present "escalation names the session rung" "$ESC" '`impl-<model>-<effort>` (`haiku` as `impl-haiku`)'
 present "inline fix rounds record their outcome" "$INLINE" "passing | still failing"
 absent "inline no longer marks the switch on a fix-round line" "$INLINE" "escalated inline -> subagent)"
 
