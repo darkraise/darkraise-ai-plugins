@@ -14,6 +14,7 @@
 #        review-route PLAN_FILE --plan-round R
 #        review-route PLAN_FILE --ruling KIND [ID ...]
 #        review-route PLAN_FILE --final
+#        review-route PLAN_FILE --final-fix FILE [FILE ...]
 # ID is a task number, or a task number and part letter for a split task (7B).
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
 #         (a plan round appends cap=<n>)
@@ -31,7 +32,7 @@ FABLE=dr-superpowers:judge-fable
 SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
-usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND [ID ...] | --final"; }
+usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND [ID ...] | --final | --final-fix FILE [FILE ...]"; }
 
 [ $# -ge 2 ] || usage
 plan=$1; shift
@@ -64,6 +65,100 @@ plan_shape() {
     if [ "$r" -ge 3 ] || [ "$t" -ge 6 ]; then intricate=1; fi
   done < <(plan_scores "$src")
   if [ "$max" -ge 6 ]; then cap=3; elif [ "$max" -ge 4 ]; then cap=2; fi
+}
+
+# agent_rank AGENT — reference/ladder.md §Why this terminates: model_rank * 10 +
+# effort_rank. Nothing for a name that is not an implementer.
+agent_rank() {
+  local m e
+  if [ "$1" = impl-haiku ]; then echo 0; return; fi
+  [[ "$1" =~ ^impl-(sonnet|opus|fable)-(low|medium|high|xhigh|max)$ ]] || return 0
+  case ${BASH_REMATCH[1]} in sonnet) m=1 ;; opus) m=2 ;; *) m=3 ;; esac
+  case ${BASH_REMATCH[2]} in low) e=0 ;; medium) e=1 ;; high) e=2 ;; xhigh) e=3 ;; *) e=4 ;; esac
+  echo $((m * 10 + e))
+}
+
+# task_files N — the paths every **Files:** block of task N names, backticks and
+# a :line-range or :line-list suffix (b.txt:10-20, plan-lint:143,239) removed.
+task_files() {
+  plan_task_text "$src" "$1" | awk "$_PLAN_AWK"'
+    in_fence($0) { on = 0; next }
+    /^\*\*Files:\*\*/ { on = 1; next }
+    on && /^- (Create|Modify|Test):/ {
+      p = $0; sub(/^- (Create|Modify|Test):[ \t]*/, "", p); gsub(/`/, "", p)
+      sub(/[ \t].*$/, "", p); sub(/:[0-9][0-9,-]*$/, "", p)
+      print p; next
+    }
+    { on = 0 }
+  '
+}
+
+# task_agents N — the implementer task N last ran on: the ledger's last assigned
+# agent, escalation target or HANDBACK target, or else every **Implementer:**
+# line of the task (one per part). Plugin prefixes are dropped. The inline
+# marker "escalated inline -> subagent" names no agent, so only impl- targets
+# count.
+task_agents() {
+  local agent=""
+  [ -z "$ledger" ] || agent=$(tr -d '\r' < "$ledger" | awk -v p="Task $1: " '
+    index($0, p) != 1 { next }
+    match($0, /: implementer [^ ]+ \(assigned/) {
+      s = substr($0, RSTART, RLENGTH); sub(/^: implementer /, "", s); sub(/ \(assigned$/, "", s); a = s
+    }
+    match($0, /(escalated [^ ]+ -> |HANDBACK to )[^ ;)]+/) {
+      s = substr($0, RSTART, RLENGTH); sub(/^.* /, "", s); sub(/^.*:/, "", s)
+      if (s ~ /^impl-/) a = s
+    }
+    END { sub(/^.*:/, "", a); if (a != "") print a }
+  ')
+  if [ -n "$agent" ]; then printf '%s\n' "$agent"; return; fi
+  plan_task_text "$src" "$1" | sed -nE 's/^\*\*Implementer:\*\*[ \t]*`?([^` \t]+)`?.*/\1/p' | sed 's/^.*://'
+}
+
+# final_fix FILE... — the fix wave takes the highest tier among the tasks whose
+# Files blocks name the findings' paths, between impl-sonnet-high and
+# impl-opus-high: the wave has no second wave and no escalation, so its tier
+# follows the work it touches.
+final_fix() {
+  local execution m e rung="" n _title agents agent rank best=-1 tasks="" files file hit
+  local models=(haiku sonnet opus fable) efforts=(low medium high xhigh max)
+  ledger=$(plan_ledger "$plan")
+  execution=$(plan_header_line "$src" Execution)
+  if [[ "$execution" =~ claude\ --model\ ([a-z0-9.-]+)\ --effort\ ([a-z]+) ]]; then
+    m=${BASH_REMATCH[1]} e=${BASH_REMATCH[2]}
+    case $m in
+      *haiku*) rung=impl-haiku ;;
+      *sonnet*) rung=impl-sonnet-$e ;;
+      *opus*) rung=impl-opus-$e ;;
+      *fable*) rung=impl-fable-$e ;;
+    esac
+  fi
+  while IFS=$'\t' read -r n _title; do
+    [ -n "$n" ] || continue
+    files=$(task_files "$n")
+    hit=0
+    for file in "$@"; do
+      file=${file#./}
+      [[ "$file" =~ ^(.+):[0-9][0-9,-]*$ ]] && file=${BASH_REMATCH[1]}
+      if grep -qxF -- "$file" <<<"$files"; then hit=1; break; fi
+    done
+    [ "$hit" -eq 1 ] || continue
+    tasks="${tasks:+$tasks,}$n"
+    agents=$(task_agents "$n")
+    while IFS= read -r agent; do
+      [ "$agent" != inline ] || agent=$rung
+      rank=$(agent_rank "$agent")
+      [ -z "$rank" ] || [ "$rank" -le "$best" ] || best=$rank
+    done <<<"$agents"
+  done < <(plan_tasks "$src")
+  if [ -z "$tasks" ]; then
+    printf 'review-seat final-fix primary=dr-superpowers:impl-sonnet-high fallback=- reason=floor\n'
+    return
+  fi
+  [ "$best" -ge 12 ] || best=12
+  [ "$best" -le 22 ] || best=22
+  printf 'review-seat final-fix primary=dr-superpowers:impl-%s-%s fallback=- reason=tasks:%s\n' \
+    "${models[best / 10]}" "${efforts[best % 10]}" "$tasks"
 }
 
 case "$1" in
@@ -117,6 +212,11 @@ case "$1" in
     else
       printf 'review-seat final primary=%s fallback=- reason=plain\n' "$OPUS"
     fi
+    exit 0 ;;
+  --final-fix)
+    shift
+    [ $# -ge 1 ] || usage
+    final_fix "$@"
     exit 0 ;;
   --task) shift; [ $# -ge 1 ] || usage ;;
   *) usage ;;

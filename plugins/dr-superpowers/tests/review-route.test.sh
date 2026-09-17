@@ -415,6 +415,142 @@ check "final: an extra argument exits 2" "$rc" "2"
 rule "$TMP/final-plain.md" --task
 check "final: --task with no id still exits 2" "$rc" "2"
 
+# --- the final fix wave's implementer ---
+FF="$TMP/ff"
+git init -q "$FF"
+mkdir -p "$FF/docs" "$FF/.superpowers/sdd/plan"
+sed 's/^|//' > "$FF/docs/plan.md" <<'EOF'
+|# Fix Wave Fixture
+|
+|**Execution:** inline — `claude --model opus --effort low` — x
+|
+|### Task 1: below the floor
+|
+|**Files:**
+|- Create: `a.txt`
+|- Test: `tests/a.test.sh`
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 1 - spec 0 - coupling 0 - risk 0 = 1
+|
+|### Task 2: line range
+|
+|**Files:**
+|- Modify: `b.txt:10-20`
+|
+|**Implementer:** dr-superpowers:impl-opus-medium
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
+|
+|### Task 3: escalated
+|
+|**Files:**
+|- Modify: `c.txt`
+|
+|**Implementer:** dr-superpowers:impl-sonnet-medium
+|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+|
+|### Task 4: reserve
+|
+|**Files:**
+|- Modify: `d.txt`
+|
+|**Implementer:** dr-superpowers:impl-fable-high
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
+|**Override:** owner assigned Fable
+|
+|### Task 5: inline
+|
+|**Files:**
+|- Modify: `e.txt`
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 6: split
+|
+|#### Part A: small half
+|
+|**Files:**
+|- Modify: `f.txt`
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|#### Part B: larger half
+|
+|**Files:**
+|- Modify: `g.txt`
+|
+|**Implementer:** dr-superpowers:impl-opus-low
+|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
+|
+|### Task 7: line list
+|
+|**Files:**
+|- Modify: `h.txt:3-4,9`
+|
+|**Implementer:** dr-superpowers:impl-sonnet-high
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 0 = 3
+EOF
+sed 's/^|//' > "$FF/.superpowers/sdd/plan/progress.md" <<'EOF'
+|# SDD ledger — plan: docs/plan.md
+|Task 1: implementer impl-sonnet-low (assigned; base aaaaaaa)
+|Task 3: implementer dr-superpowers:impl-sonnet-medium (assigned; base bbbbbbb)
+|Task 3: fix round 4/5 (1 addressed, 1 open — x; commits bbbbbbb..ccccccc; escalated impl-sonnet-medium -> impl-opus-medium)
+|Task 5: implementer inline (assigned; base ddddddd)
+|Task 5: escalated inline -> subagent — three fix rounds
+EOF
+fix() { out=$(bash "$ROUTE" "$FF/docs/plan.md" --final-fix "$@" 2>"$TMP/err"); rc=$?; }
+FIXSEAT="review-seat final-fix primary=dr-superpowers"
+fix zzz.txt
+check "final-fix: no matched task is the floor" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=floor"
+fix a.txt
+check "final-fix: a low tier is raised to the floor" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:1"
+fix tests/a.test.sh
+check "final-fix: a Test entry matches" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:1"
+fix b.txt
+check "final-fix: a :line-range suffix in the plan is ignored" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:2"
+fix b.txt:12
+check "final-fix: a finding's own line suffix is ignored" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:2"
+fix h.txt
+check "final-fix: a :line-list suffix in the plan is ignored" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
+fix h.txt:3,9
+check "final-fix: a finding's own line list is ignored" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
+fix a.txt b.txt
+check "final-fix: the highest of two matched tasks" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:1,2"
+fix c.txt
+check "final-fix: the ledger's escalated agent counts" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:3"
+fix d.txt
+check "final-fix: a reserve tier is capped at impl-opus-high" "$out" "$FIXSEAT:impl-opus-high fallback=- reason=tasks:4"
+fix e.txt
+check "final-fix: an inline implementer is the Execution line's rung" "$out" "$FIXSEAT:impl-opus-low fallback=- reason=tasks:5"
+fix g.txt
+check "final-fix: a split task's parts count as the task" "$out" "$FIXSEAT:impl-opus-low fallback=- reason=tasks:6"
+fix zzz.txt c.txt
+check "final-fix: an unmatched file beside a matched one" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:3"
+sed 's/^|//' > "$FF/.superpowers/sdd/plan/amendments.md" <<'EOF'
+|## A1 — Task 1
+|
+|### Old
+|
+|````
+|- Create: `a.txt`
+|````
+|
+|### New
+|
+|````
+|- Create: `a2.txt`
+|````
+EOF
+fix a2.txt
+check "final-fix: an amended Files block is read" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:1"
+fix a.txt
+check "final-fix: a file amended away no longer matches" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=floor"
+rm -f "$FF/.superpowers/sdd/plan/amendments.md"
+fix
+check "final-fix: no file exits 2" "$rc" "2"
+
 # --- README, version and program amendment -------------------------------------
 RD="$P/README.md"
 present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**'
