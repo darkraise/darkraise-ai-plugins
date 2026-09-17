@@ -152,8 +152,9 @@ passed it.
 skills and agents under older plugin prefixes. Translate each with
 [legacy-names.md](../../reference/legacy-names.md) at read time, never edit the
 plan, and log one `Ruling: translated <old> -> <new> — legacy plugin name —
-none` per distinct name. `**Executor:**` lines are inert in this mode: nothing
-goes to an external executor. `**Implementer:**` lines are inert for the tasks
+none` per distinct name. `**Executor:**` lines are inert for the tasks you
+implement; a delegated task's is read by
+[delegated-task.md](../../reference/delegated-task.md) §1. `**Implementer:**` lines are inert for the tasks
 you implement; translate a delegated task's `**Implementer:**` agent before dispatching it.
 
 **Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated`

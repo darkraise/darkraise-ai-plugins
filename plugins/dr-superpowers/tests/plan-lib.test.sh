@@ -172,6 +172,9 @@ check "plan_ledger: no ledger prints nothing" "$(plan_ledger "$REPO/docs/demo.md
 printf '# SDD ledger — plan: docs/demo.md\n' > "$L"
 check "plan_ledger: a relative identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
   "$(git -C "$REPO" rev-parse --show-toplevel)/.superpowers/sdd/demo/progress.md"
+printf '# SDD ledger — plan: %s/docs/demo.md\n' "$(git -C "$REPO" rev-parse --show-toplevel)" > "$L"
+check "plan_ledger: an absolute identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.superpowers/sdd/demo/progress.md"
 printf '# SDD ledger — plan: docs/other.md\n' > "$L"
 check "plan_ledger: another plan's ledger is ignored" "$(plan_ledger "$REPO/docs/demo.md")" ""
 printf '# SDD ledger — plan: docs/demo.md\nTask 1: implementer inline (assigned; base a)\nTask 2: escalated inline -> subagent — still failing\n' > "$L"

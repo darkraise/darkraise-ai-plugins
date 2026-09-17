@@ -130,8 +130,8 @@ subagent and the full per-task review.
   when one scores 4 (the Opus-low band). `<e>` is that task's assigned tier's
   effort (`impl-haiku` counts as `low`), raised to `high` when any task is
   heavy: `claude --model <sonnet|opus> --effort <e>`. When every task is heavy
-  and your human partner overrides the line to inline, it is
-  `claude --model opus --effort high`.
+  and your human partner overrides the line to inline, use
+  `claude --model opus --effort high` (`plan-lint` checks only the effort).
 - Your human partner may override the line; `plan-lint` checks its grammar,
   warns when it disputes the majority rule, and lists the delegated tasks.
 
@@ -330,7 +330,7 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
      `usable=true`).
    - **`primary=dr-superpowers:judge-opus`** (every later round). Write
      `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
-     dispatch the seat with the Rounds 2 and 3 template, passing that file and
+     dispatch the seat with the Later rounds template, passing that file and
      the previous round's findings file, and save its reply to
      `<workspace>/plan-review-round-<r>.md`.
 3. **Fix and repeat.** Fix every Critical and Important finding and re-lint;

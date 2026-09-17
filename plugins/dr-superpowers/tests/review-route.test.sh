@@ -318,7 +318,7 @@ present "README caps plan review" "$P/README.md" 'capped by the plan'"'"'s highe
 absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'
 present "the prompt file has a Codex round-1 section" "$PRP" '## Round 1 on Codex'
 present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-schema.json'
-present "the prompt file has a delta template" "$PRP" '## Rounds 2 and 3'
+present "the prompt file has a delta template" "$PRP" '## Later rounds'
 present "the delta template takes the delta file" "$PRP" '[DELTA_FILE]'
 present "the delta template verdicts prior findings" "$PRP" '[ADDRESSED|NOT ADDRESSED]'
 present "the delta template may read beyond the delta" "$PRP" 'The delta is where to look first, not the limit of'

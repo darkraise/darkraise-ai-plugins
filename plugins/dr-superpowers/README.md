@@ -375,7 +375,8 @@ differences:
 9. **Small-model planning.** A strong model plans once; small models execute.
    Every task brief carries the header's Global Constraints and Contracts, the
    controller reads only the header and one brief at a time, and judgment
-   calls go to a read-only ruling seat (`judge-fable`). Its plan corrections
+   calls go to a read-only ruling seat (`judge-opus` for routine items,
+   `judge-fable` for critical ones, as `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
 10. **Two modes, chosen by the plan.** Upstream picks `executing-plans` when

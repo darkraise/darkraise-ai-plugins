@@ -391,7 +391,7 @@ budget line ([session-budget.md](../../reference/session-budget.md)), so you
 check the session budget before every task and every review at no extra
 request:
 
-    budget: 312k of 475k (65%) — ok — source: record
+    budget: 312k of 350k (89%) — ok — source: record
 
 - `ok` or `unknown`: carry on.
 - `handoff`: finish the step in flight — let the dispatched agent return and
@@ -507,7 +507,7 @@ Task 1: Hook installation script  (**Implementer:** dr-superpowers:impl-sonnet-l
 
 Implementer: DONE — 5/5 passing; report file written; assumptions: user-level install (brief silent)
 
-[date +%s; review-package PLAN_FILE a1b2c3d HEAD; dispatch judge-fable with the printed path]
+[date +%s; review-package PLAN_FILE a1b2c3d HEAD; review-route --task 1 prints judge-sonnet-high; dispatch it with the printed path]
 Judge: Spec ✅. Task quality: Approved.
   Verification Scores: spec 17 / scope 18 / verification 16 / quality 16
 
@@ -518,7 +518,7 @@ Task 2: Recovery modes  (**Implementer:** dr-superpowers:impl-sonnet-medium)
 [BASE=d4e5f6a; dispatch impl-sonnet-medium]
 Implementer: DONE — 8/8 passing
 
-[date +%s → t0; review-package; dispatch judge-fable]
+[date +%s → t0; review-package; review-route --task 2; dispatch judge-sonnet-high]
 Judge: Spec ❌ — missing progress reporting. Important: magic number (100).
   Verification Scores: spec 7 / scope 17 / verification 15 / quality 12
 

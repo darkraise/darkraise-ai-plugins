@@ -101,7 +101,7 @@ above to `scripts/run-codex-review.sh --kind plan` with three changes:
 Expand `[PLUGIN_ROOT]`, `[PLAN_FILE]`, `[SPEC_FILE]` and `[LINT_FILE]` exactly as
 for a judge.
 
-## Rounds 2 and 3
+## Later rounds
 
 When `scripts/review-route` prints `primary=dr-superpowers:judge-opus`, dispatch
 this template instead of the one above:
