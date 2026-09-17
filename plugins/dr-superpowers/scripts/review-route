@@ -157,8 +157,8 @@ final_fix() {
   fi
   [ "$best" -ge 12 ] || best=12
   [ "$best" -le 22 ] || best=22
-  printf 'review-seat final-fix primary=dr-superpowers:impl-%s-%s fallback=- reason=tasks:%s\n' \
-    "${models[best / 10]}" "${efforts[best % 10]}" "$tasks"
+  printf 'review-seat final-fix primary=dr-superpowers:%s fallback=- reason=tasks:%s\n' \
+    "impl-${models[best / 10]}-${efforts[best % 10]}" "$tasks"
 }
 
 case "$1" in
