@@ -28,7 +28,7 @@ git rev-parse --verify --quiet "$head" >/dev/null || { echo "bad HEAD: $head" >&
 if [ $# -eq 4 ]; then
   out=$4
 else
-  dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
+  dir=$(bash "$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
   out="$dir/review-$(git rev-parse --short "$base")..$(git rev-parse --short "$head").diff"
 fi
 
@@ -51,4 +51,4 @@ echo "wrote ${out}: ${commits} commit(s), $(wc -c < "$out" | tr -d ' ') bytes"
 # The budget line rides on a call the controller already makes before every
 # review, so checking the session budget costs no extra request. It must never
 # fail the package.
-"$(cd "$(dirname "$0")" && pwd)/context-size" --plan "$plan" 2>/dev/null || true
+bash "$(cd "$(dirname "$0")" && pwd)/context-size" --plan "$plan" 2>/dev/null || true

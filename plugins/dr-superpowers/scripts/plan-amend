@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 plan=$1 block=$2
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 [ -f "$block" ] || { echo "no such block file: $block" >&2; exit 2; }
-dir=$(cd "$(dirname "$plan")" && "$HERE/sdd-workspace" "$(basename "$plan")") \
+dir=$(cd "$(dirname "$plan")" && bash "$HERE/sdd-workspace" "$(basename "$plan")") \
   || { echo "plan-amend needs the plan inside a git repository" >&2; exit 2; }
 amend="$dir/amendments.md"
 reject() { echo "rejected: $1"; exit 1; }

@@ -33,7 +33,7 @@ if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
 if [ -n "$given" ]; then
   out=$given
 else
-  dir=$("$HERE/sdd-workspace" "$plan")
+  dir=$(bash "$HERE/sdd-workspace" "$plan")
   if [ "$header" -eq 1 ]; then out="$dir/plan-header.md"; else out="$dir/task-${n}-brief.md"; fi
 fi
 
@@ -84,4 +84,4 @@ echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
 # The budget line rides on a call the controller already makes before every
 # task, so checking the session budget costs no extra request. It must never
 # fail the brief.
-"$HERE/context-size" --plan "$plan" 2>/dev/null || true
+bash "$HERE/context-size" --plan "$plan" 2>/dev/null || true

@@ -109,5 +109,11 @@ check "the compaction snapshot names the contract" \
 check "nine skill and reference files cite the contract" \
   "$(grep -rlF '(see using-superpowers §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "9"
 
+# A script that execs a sibling depends on the executable bit, which a Windows
+# checkout cannot carry: core.filemode is false there, so a new script lands as
+# mode 100644 and only Linux rejects it, with exit 126.
+check "no script execs a sibling instead of running it with bash" \
+  "$(grep -rnE '(^|\$\(|&& |\|\| |; )"\$(HERE/|\(cd )' "$P/scripts" 2>/dev/null)" ""
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
