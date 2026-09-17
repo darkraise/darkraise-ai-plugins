@@ -206,7 +206,7 @@ lint v8.md
 has "Execution grammar" "$out" "ERROR header: Execution line does not match"
 variant v9.md 's/^\*\*Execution:\*\* .*/**Execution:** inline -- claude --model sonnet --effort medium -- all small/'
 lint v9.md
-has "inline at total 4 needs opus" "$out" "ERROR header: inline execution with a task at total 4 needs --model opus (highest total 4)"
+has "inline at total 4 needs opus" "$out" "ERROR header: inline execution with a self-implemented task at total 4 needs --model opus"
 lacks "inline at total 4 passes R5" "$out" "inline execution needs every task"
 lacks "double-hyphen separators and bare command parse" "$out" "Execution line does not match"
 variant v9b.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — Task 2 scores 4/'
@@ -214,9 +214,9 @@ lint v9b.md
 lacks "inline at total 4 on opus is clean" "$out" "ERROR header: inline"
 variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
 lint v9c.md
-has "inline that delegates needs effort high" "$out" "ERROR header: inline execution that delegates needs --effort high or above (effort low)"
+has "inline that delegates needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 lacks "a heavy minority no longer breaks inline" "$out" "inline execution needs every task"
-has "inline names the delegated task" "$out" "NOTE header: delegated: Task 2"
+has "inline names the delegated task" "$out" "NOTE header: delegated: Task 2 (heavy)"
 variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
 lint v9c2.md
 check "a heavy minority inline at effort high: exit 0" "$status" "0"
@@ -224,11 +224,11 @@ lacks "the model follows the tasks the session implements" "$out" "needs --model
 lacks "a heavy minority on inline does not warn" "$out" "Execution line is inline but"
 variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
 lint v9d.md
-has "risk 3 is delegated" "$out" "NOTE header: delegated: Task 2"
-has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution that delegates needs --effort high or above (effort low)"
+has "risk 3 is delegated" "$out" "NOTE header: delegated: Task 2 (heavy)"
+has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dr-superpowers:impl-opus-low$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-opus-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
-has "a split task is heavy when one part is" "$out" "NOTE header: delegated: Task 2"
+has "a split task is heavy when one part is" "$out" "NOTE header: delegated: Task 2 (heavy)"
 check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
 variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-opus-medium/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
 lint v9h.md
@@ -240,6 +240,95 @@ codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/ri
 lint codex-inline.md
 has "a Codex-host inline plan keeps the old eligibility error" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 1"
 lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
+
+# --- R5 delegation: heavy tasks, and total-4 tasks while a third or fewer ---
+ev() { # ev <total> — "<agent> <evaluation>" for a lint-clean task at that total
+  case $1 in
+    0) echo 'impl-haiku files 0 - spec 0 - coupling 0 - risk 0 = 0' ;;
+    1) echo 'impl-sonnet-low files 0 - spec 0 - coupling 1 - risk 0 = 1' ;;
+    2) echo 'impl-sonnet-medium files 0 - spec 1 - coupling 1 - risk 0 = 2' ;;
+    3) echo 'impl-sonnet-high files 1 - spec 1 - coupling 1 - risk 0 = 3' ;;
+    4) echo 'impl-opus-low files 0 - spec 1 - coupling 1 - risk 2 = 4' ;;
+    5) echo 'impl-opus-medium files 1 - spec 1 - coupling 1 - risk 2 = 5' ;;
+  esac
+}
+tplan() { # tplan <file> <mode> <model> <effort> <total ...> — one clean task per total
+  local f=$1 mode=$2 model=$3 effort=$4 i=0 t e; shift 4
+  {
+    printf '# Mode Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/spec.md`\n\n'
+    printf '**Execution:** %s — `claude --model %s --effort %s` — x\n\n' "$mode" "$model" "$effort"
+    printf '**Plan review:** 2026-09-17 — dr-superpowers:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)\n\n'
+    printf '## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n'
+    for t in "$@"; do i=$((i + 1)); printf '%s. Step %s\n' "$i" "$i"; done
+    i=0
+    for t in "$@"; do
+      i=$((i + 1)); e=$(ev "$t")
+      printf '\n### Task %s: Step %s\n\n**Files:**\n- Modify: `f%s.txt`\n\n**Implementer:** dr-superpowers:%s\n**Evaluation:** %s\n' \
+        "$i" "$i" "$i" "${e%% *}" "${e#* }"
+    done
+  } > "$f"
+}
+tplan r1.md inline sonnet high 1 4 1 1 1 1
+lint r1.md
+check "one total-4 task in six on sonnet high: exit 0" "$status" "0"
+has "one total-4 task in six is delegated" "$out" "NOTE header: delegated: Task 2 (total 4)"
+lacks "a delegated total-4 task needs no Opus session" "$out" "needs --model opus"
+tplan r2.md inline sonnet high 4 1 4 1 1 1
+lint r2.md
+check "two total-4 tasks in six on sonnet high: exit 0" "$status" "0"
+has "two total-4 tasks in six are delegated" "$out" "NOTE header: delegated: Task 1 (total 4), Task 3 (total 4)"
+tplan r3.md inline sonnet high 4 4 4 1 1 1
+lint r3.md
+lacks "three total-4 tasks in six are not delegated" "$out" "NOTE header"
+has "a self-implemented total 4 needs Opus" "$out" "ERROR header: inline execution with a self-implemented task at total 4 needs --model opus"
+tplan r4.md inline opus low 4 4 4 1 1 1
+lint r4.md
+check "three total-4 tasks in six on opus low: exit 0" "$status" "0"
+tplan r5.md inline sonnet high 5 4 1 1 1 1
+lint r5.md
+check "a heavy and a total-4 task on sonnet high: exit 0" "$status" "0"
+has "heavy and total-4 reasons together" "$out" "NOTE header: delegated: Task 1 (heavy), Task 2 (total 4)"
+tplan r6.md inline sonnet medium 1 4 1 1 1 1
+lint r6.md
+has "delegating a total-4 task raises the effort to high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
+tplan r7.md inline sonnet max 1 4 1 1 1 1
+lint r7.md
+check "an effort above the required one: exit 0" "$status" "0"
+tplan r8.md inline sonnet medium 3 1 1 1 1 1
+lint r8.md
+has "a self-implemented total 3 needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
+tplan r9.md inline sonnet low 2 1 1 1 1 1
+lint r9.md
+has "a self-implemented total 2 needs effort medium" "$out" "ERROR header: inline execution needs --effort medium or above (effort low)"
+tplan r10.md inline sonnet low 0 0 0 0 0 0
+lint r10.md
+check "impl-haiku counts as low: exit 0" "$status" "0"
+tplan r11.md inline haiku low 1 1
+lint r11.md
+has "inline on haiku is a model error" "$out" "ERROR header: inline execution needs --model sonnet or opus (model haiku)"
+tplan r12.md inline fable high 1 1
+lint r12.md
+has "inline on fable is a model error" "$out" "ERROR header: inline execution needs --model sonnet or opus (model fable)"
+tplan r13.md inline claude-opus-5 low 4 4 4 1 1 1
+lint r13.md
+lacks "a claude-opus model id counts as opus" "$out" "needs --model"
+tplan r14.md inline claude-haiku-4-5 low 1 1
+lint r14.md
+has "a model id naming neither family is a model error" "$out" "ERROR header: inline execution needs --model sonnet or opus (model claude-haiku-4-5)"
+tplan r15.md subagent opus high 5 5 5 5 1 1
+lint r15.md
+has "a subagent line at opus warns" "$out" "WARN header: subagent Execution line should be claude --model sonnet --effort high"
+lacks "a heavy majority on subagent is not disputed" "$out" "Execution line is subagent but"
+tplan r16.md subagent sonnet high 5 5 5 5 1 1
+lint r16.md
+lacks "a subagent line at sonnet high does not warn" "$out" "subagent Execution line should be"
+tplan r17.md inline opus low 1 1 1 1 1 1
+lint r17.md
+check "opus where sonnet would do: exit 0" "$status" "0"
+tplan r18.md subagent sonnet high 1 4 4 1 1 1
+lint r18.md
+has "total-4 tasks never count toward subagent mode" "$out" "WARN header: Execution line is subagent but only 0 of 6 tasks are heavy"
+
 variant v9e.md 's/^### Task 1: First thing$/### Task 1: -v flag/; s/^1\. First thing$/1. -v flag/'
 lint v9e.md
 lacks "leading punctuation in a title survives the index check" "$out" "Task index does not match"
