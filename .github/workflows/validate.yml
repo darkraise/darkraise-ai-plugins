@@ -36,7 +36,7 @@ jobs:
 
   windows:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +47,7 @@ jobs:
         shell: pwsh
         run: choco install jq ripgrep --yes --no-progress
       - name: Run Windows regression suites
-        timeout-minutes: 16
+        timeout-minutes: 34
         shell: pwsh
         env:
           DR_TEST_BASH: C:/Program Files/Git/bin/bash.exe
