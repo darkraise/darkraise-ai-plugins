@@ -159,7 +159,7 @@ needed.
   this session: the `primary` is a judge, no Codex seat runs, and the seat
   clause records `(codex off — <reason>)` with the gate line's `reason`
   (`untrusted` when it printed `usable=true`). If `review-route` exits 2,
-  review with `dr-superpowers:judge-fable` and say why, quoting its message.
+  review with `dr-superpowers:judge-opus` and say why, quoting its message.
 - **Reviewer inputs:** the brief file (it ends with the plan's Global
   Constraints and Contracts — the reviewer's attention lens), the report
   file, and the review package. Never tell the reviewer which lane produced
@@ -211,7 +211,7 @@ Codex review from its JSON — `spec_verdict` (`compliant` or `issues`),
 `cannot_verify` — and apply the bands, the ⚠️ route and the fix loop to it
 exactly as to a judge's report.
 
-**Risk 2 and above.** On `primary=codex:heavy+judge-fable`, run the Codex seat
+**Risk 3.** On `primary=codex:heavy+judge-fable`, run the Codex seat
 first, then dispatch `dr-superpowers:judge-fable` (`judge-opus` under the
 Fable-unavailable rule) with the task-reviewer prompt and its Second Pass
 section, `[CODEX_REVIEW_FILE]` set to the Codex seat's `--out` path. The task's

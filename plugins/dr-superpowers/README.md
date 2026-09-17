@@ -86,8 +86,8 @@ every evaluation, and 2 to 4 criteria that each say where to look, what scores
 high, what scores low, and what to ignore. Task reviews score four criteria -
 spec, scope, verification, quality - 1 to 20 each, alongside the spec and
 quality verdicts and never replacing them, because the fix loop keys on those
-verdicts. Tasks at risk 2 or above are reviewed by Codex `gpt-6-astra` and then
-by `judge-fable`, which rules CONFIRMED or REJECTED on every Codex finding in the
+verdicts. Tasks at risk 3 are reviewed by Codex `gpt-6-astra` and then by
+`judge-fable`, which rules CONFIRMED or REJECTED on every Codex finding in the
 same pass.
 
 **Best-of-3 approach selection.** `selecting-approaches` gates an open approach
@@ -170,10 +170,10 @@ its own account before relying on them. Do not make paid capability probes.
 
 **Cross-family review.** Codex is the default task reviewer: `gpt-5.6-sol` for
 tasks totalling 0 to 3, `gpt-6-astra` for 4 to 6, and Astra followed by
-`judge-fable` at risk 2 or above. A task the executor lane implemented is always
+`judge-fable` at risk 3. A task the executor lane implemented is always
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
-Codex seat produces nothing, `judge-sonnet-high`, `judge-opus` or `judge-fable`
-takes it by score band. Plan review takes Astra for round 1 and `judge-opus` for
+Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
+`judge-opus` 4 to 6, with `judge-fable` only at risk 3. Plan review takes Astra for round 1 and `judge-opus` for
 delta rounds 2 and 3. The final whole-branch review gains a Codex round whose
 findings are deduped with the Claude reviewer's and then verified by
 `judge-fable` - or `judge-opus` when Fable is unavailable. That round is not

@@ -343,8 +343,9 @@ ordinary Claude ladder govern from there.
 ## Codex task review seats
 
 `scripts/review-route PLAN_FILE --task <N>` names a Codex seat for every task
-without an `**Executor:**` line: `codex:light` for totals 0 to 3, `codex:heavy`
-for 4 to 6, and `codex:heavy+judge-fable` at risk 2 or above. A task carrying
+without an `**Executor:**` line: `codex:light` for totals 0 to 3 and
+`codex:heavy` for 4 to 6 at any risk up to 2,
+and `codex:heavy+judge-fable` at risk 3. A task carrying
 an `**Executor:**` line routes to a Claude judge, so these seats never review
 Codex's own work - a property the final-review Codex round does not share.
 Batched tasks never carry one, and route on the batch's highest total and risk.
@@ -413,11 +414,10 @@ report shape: a seat must return the criteria the Claude judges return. The
 schema is a plugin file, outside every worktree, so it can never land in a
 task's commit.
 
-**At risk 2 or above** this review is the first of two steps: the controller
-then dispatches `judge-fable` with the Second Pass section naming this seat's
-`--out` path, per
-[subagent-driven-development](../skills/subagent-driven-development/SKILL.md)
-§3 Review the task. Fable's verdicts and scores are the task's.
+**At risk 3** this review is the first of two steps: the controller then
+dispatches `judge-fable` with the Second Pass section naming this seat's
+`--out` path, per [delegated-task.md](delegated-task.md) §3 Review the task.
+Fable's verdicts and scores are the task's.
 
 ## Final-review Codex round
 
