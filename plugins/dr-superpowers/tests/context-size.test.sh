@@ -27,7 +27,7 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
-unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ
+unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -137,6 +137,14 @@ asst 100000 > "$PROJ/other.jsonl"
 run
 check "guessed: line" "$out" "budget: 100k of 475k (21%) — ok — source: guessed"
 has "guessed: warns on stderr" "$(cat "$TMP/stderr")" "a guess"
+
+# --- CLAUDE_CONFIG_DIR moves the transcripts; session records stay under HOME ---
+ALT="$TMP/alt"
+mkdir -p "$ALT/projects"
+mv "$PROJ" "$ALT/projects/$KEY"
+out=$(cd "$REPO" && CLAUDE_CONFIG_DIR="$ALT" bash "$SCRIPT" 2>"$TMP/stderr")
+check "CLAUDE_CONFIG_DIR: guessed line" "$out" "budget: 100k of 475k (21%) — ok — source: guessed"
+mv "$ALT/projects/$KEY" "$PROJ"
 
 # --- nothing to read ---
 HOME="$TMP/empty" run

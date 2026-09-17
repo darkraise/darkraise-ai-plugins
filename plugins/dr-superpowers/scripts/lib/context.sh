@@ -51,7 +51,7 @@ ctx_find_transcript() {
     [ -f "$tp" ] || continue
     CTX_TRANSCRIPT=$tp CTX_SOURCE=record
     sid=$(ctx_jq -r '.session_id // empty' <"$rec" 2>/dev/null | tr -d '\r')
-    newest=$(ls -t "$HOME/.claude/projects/$key"/*.jsonl 2>/dev/null | head -n 1)
+    newest=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$key"/*.jsonl 2>/dev/null | head -n 1)
     if [ -n "$newest" ] && [ -n "$sid" ] && [ "$(basename "$newest" .jsonl)" != "$sid" ]; then
       CTX_SOURCE='record?'
     fi
@@ -59,7 +59,7 @@ ctx_find_transcript() {
   done <<<"$cands"
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    newest=$(ls -t "$HOME/.claude/projects/$(ctx_key "$c")"/*.jsonl 2>/dev/null | head -n 1)
+    newest=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(ctx_key "$c")"/*.jsonl 2>/dev/null | head -n 1)
     if [ -n "$newest" ]; then CTX_TRANSCRIPT=$newest CTX_SOURCE=guessed; return 0; fi
   done <<<"$cands"
   return 1
