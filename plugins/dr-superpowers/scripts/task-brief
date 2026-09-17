@@ -44,32 +44,34 @@ if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>
   exit 4
 fi
 
-# Mixed mode: an inline plan delegates its heavy tasks. The line is computed
-# here so an executing session never re-scores a task.
+# Mixed mode: an inline plan delegates the tasks plan_delegated names. The
+# lines are computed here so an executing session never re-scores a task.
 dispatch=0
 if ! grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")" \
    && grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$(plan_header_line "$src" Execution)"; then
   dispatch=1
 fi
+delegated=""
+[ "$dispatch" -eq 0 ] || delegated=$(plan_delegated "$src")
 
 if [ "$header" -eq 1 ]; then
   plan_header "$src" > "$out"
-  if [ "$dispatch" -eq 1 ]; then
-    heavy=$(plan_heavy "$src" | awk '{ printf "%sTask %s", (NR > 1 ? ", " : ""), $1 }')
-    [ -z "$heavy" ] || printf '**Dispatch:** delegated — %s\n' "$heavy" >> "$out"
+  if [ -n "$delegated" ]; then
+    printf '**Dispatch:** delegated — %s\n' \
+      "$(awk -F'\t' '{ printf "%sTask %s (%s)", (NR > 1 ? ", " : ""), $1, $2 }' <<<"$delegated")" >> "$out"
   fi
 else
   if ! plan_task_text "$src" "$n" > "$out"; then
     echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
     exit 3
   fi
-  if [ "$dispatch" -eq 1 ]; then
+  # Captured, not piped: grep -q exits at its first match, and under pipefail the
+  # writer's SIGPIPE would decide the if.
+  if [ -n "$delegated" ] && grep -qxF "$n" <<<"$(cut -f1 <<<"$delegated")"; then
     row=$(plan_scores "$src" | awk -F'\t' -v n="$n" '$1 == n')
     t=$(cut -f2 <<<"$row") r=$(cut -f3 <<<"$row")
-    if [[ "$t" =~ ^[0-9]+$ ]] && { [ "$t" -ge 5 ] || [ "$r" -eq 3 ]; }; then
-      awk -v d="**Dispatch:** delegated — total $t, risk $r" 'NR == 1 { print; print d; next } { print }' "$out" > "$out.tmp"
-      mv "$out.tmp" "$out"
-    fi
+    awk -v d="**Dispatch:** delegated — total $t, risk $r" 'NR == 1 { print; print d; next } { print }' "$out" > "$out.tmp"
+    mv "$out.tmp" "$out"
   fi
   excerpt=$(plan_header "$src" | awk "$_PLAN_AWK"'in_fence($0) { if (on) print; next } /^## / { on = ($0 == "## Global Constraints" || $0 == "## Contracts") } on { print }')
   if [ -n "$excerpt" ]; then
