@@ -121,6 +121,77 @@ plan_task_text() {
   '
 }
 
+# plan_scores FILE — one "N<TAB>total<TAB>risk" line per task: the highest total
+# and the highest risk among the task's Claude-host **Evaluation:** lines outside
+# fences (a split task has one per part). "N<TAB>-<TAB>-" when the task has no
+# Evaluation line, "N<TAB>?<TAB>?" when one does not parse.
+plan_scores() {
+  local sep='( — | – | - | -- )' n _title evs ev tot risk bad
+  while IFS=$'\t' read -r n _title; do
+    [ -n "$n" ] || continue
+    evs=$(plan_task_text "$1" "$n" | awk "$_PLAN_AWK"'in_fence($0) { next } /^\*\*Evaluation:\*\*/ { print }')
+    if [ -z "$evs" ]; then printf '%s\t-\t-\n' "$n"; continue; fi
+    tot=-1 risk=-1 bad=0
+    while IFS= read -r ev; do
+      if [[ "$ev" =~ ^\*\*Evaluation:\*\*\ files\ [0-9]+$sep"spec "[0-9]+$sep"coupling "[0-9]+$sep"risk "([0-9]+)\ =\ ([0-9]+) ]]; then
+        [ "${BASH_REMATCH[4]}" -le "$risk" ] || risk=${BASH_REMATCH[4]}
+        [ "${BASH_REMATCH[5]}" -le "$tot" ] || tot=${BASH_REMATCH[5]}
+      else
+        bad=1
+      fi
+    done <<<"$evs"
+    if [ "$bad" -eq 1 ]; then printf '%s\t?\t?\n' "$n"; else printf '%s\t%s\t%s\n' "$n" "$tot" "$risk"; fi
+  done < <(plan_tasks "$1")
+}
+
+# plan_heavy FILE — the task numbers mixed mode delegates: a highest total of 5
+# or more, or a highest risk of 3. One per line, ascending.
+plan_heavy() {
+  plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
+}
+
+# Git reports the top level in one form (C:/… under Git Bash) whichever way the
+# path was spelled, so comparing <top level>/<prefix><name> is stable where pwd
+# output is not: /tmp and /c/Users/…/Temp name the same directory.
+_plan_canon() {
+  local dir top prefix
+  dir=$(dirname "$1")
+  top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || return 1
+  prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || return 1
+  printf '%s/%s%s\n' "$top" "$prefix" "$(basename "$1")"
+}
+
+# plan_ledger PLAN — the plan's ledger file when it exists and its identity line
+# names PLAN; nothing otherwise. A stale ledger under the same slug is ignored.
+plan_ledger() {
+  local want top file named got
+  want=$(_plan_canon "$1") || return 0
+  top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || return 0
+  file="$top/.superpowers/sdd/$(basename "$1" .md)/progress.md"
+  [ -f "$file" ] || return 0
+  named=$(ledger_plan "$file")
+  [ -n "$named" ] || return 0
+  if command -v cygpath >/dev/null 2>&1; then
+    named=$(cygpath -u "$named" 2>/dev/null || printf '%s' "$named")
+  fi
+  case $named in /*) ;; *) named="$top/$named" ;; esac
+  got=$(_plan_canon "$named") || return 0
+  [ "$got" != "$want" ] || printf '%s\n' "$file"
+  return 0
+}
+
+# ledger_left_inline LEDGER — the task number where the plan left inline mode:
+# the last "escalated inline -> subagent" line with no later inline assignment.
+# Nothing when the plan is in inline mode. The marker is a whole ledger line,
+# never a substring of another line.
+ledger_left_inline() {
+  tr -d '\r' < "$1" | awk '
+    /^Task [0-9]+: escalated inline -> subagent[ \t]*(—|-|$)/ { n = $2; sub(/:$/, "", n); esc = n; next }
+    /^Task [0-9]+: implementer inline \(assigned/ { esc = "" }
+    END { if (esc != "") print esc }
+  '
+}
+
 # plan_apply_amendments PLAN AMEND — the plan with every amendments.md entry
 # applied in file order; the plan unchanged when AMEND is missing or empty.
 # Exit 1, naming the entry on stderr, when an entry does not apply: its Old

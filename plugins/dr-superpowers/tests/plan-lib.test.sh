@@ -122,5 +122,66 @@ got=$(plan_amendments_file "$REPO/plan.md")
 check "amendments_file: the plan's workspace file" "${got##*/.superpowers/}" "sdd/plan/amendments.md"
 check "amendments_file: outside a repository" "$(plan_amendments_file "$TMP/h.md")" ""
 
+# --- plan_scores and plan_heavy ---
+sed 's/^|//' > "$TMP/scores.md" <<'EOF'
+|# Scores
+|
+|### Task 1: light
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|```text
+|**Evaluation:** files 3 - spec 3 - coupling 3 - risk 3 = 12
+|```
+|
+|### Task 2: total five
+|
+|**Evaluation:** files 1 — spec 1 — coupling 1 — risk 2 = 5
+|
+|### Task 3: split
+|
+|#### Part A: small
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|#### Part B: risky
+|
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
+|
+|### Task 4: no score
+|
+|Body.
+|
+|### Task 5: broken
+|
+|**Evaluation:** one plus one
+EOF
+check "plan_scores: highest total and risk per task, fences skipped" \
+  "$(plan_scores "$TMP/scores.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
+check "plan_heavy: total 5 or risk 3 on any part" "$(plan_heavy "$TMP/scores.md" | tr '\n' ' ')" "2 3 "
+sed 's/$/\r/' "$TMP/scores.md" > "$TMP/scores-crlf.md"
+check "plan_scores: CRLF" "$(plan_scores "$TMP/scores-crlf.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
+
+# --- plan_ledger and ledger_left_inline ---
+REPO="$TMP/repo"
+git init -q "$REPO"
+mkdir -p "$REPO/docs" "$REPO/.superpowers/sdd/demo"
+printf '# Demo\n' > "$REPO/docs/demo.md"
+L="$REPO/.superpowers/sdd/demo/progress.md"
+check "plan_ledger: no ledger prints nothing" "$(plan_ledger "$REPO/docs/demo.md")" ""
+printf '# SDD ledger — plan: docs/demo.md\n' > "$L"
+check "plan_ledger: a relative identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.superpowers/sdd/demo/progress.md"
+printf '# SDD ledger — plan: docs/other.md\n' > "$L"
+check "plan_ledger: another plan's ledger is ignored" "$(plan_ledger "$REPO/docs/demo.md")" ""
+printf '# SDD ledger — plan: docs/demo.md\nTask 1: implementer inline (assigned; base a)\nTask 2: escalated inline -> subagent — still failing\n' > "$L"
+check "ledger_left_inline: the escalated task" "$(ledger_left_inline "$L")" "2"
+printf 'Task 3: implementer inline (assigned; base b)\n' >> "$L"
+check "ledger_left_inline: a later inline assignment returns" "$(ledger_left_inline "$L")" ""
+printf 'Task 3: minor (deferred): the grammar says Task 4: escalated inline -> subagent — x\n' >> "$L"
+check "ledger_left_inline: a quoted marker is not a switch" "$(ledger_left_inline "$L")" ""
+printf 'Task 5: escalated inline -> subagent\n' | sed 's/$/\r/' >> "$L"
+check "ledger_left_inline: a bare CRLF marker counts" "$(ledger_left_inline "$L")" "5"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
