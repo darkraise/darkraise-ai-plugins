@@ -76,7 +76,9 @@ fi
 # commit mid-session reaches the readers without a --refresh.
 trust() { jq -r --arg g "$1" '.trust[$g] == "pass"' "$POLICY" 2>/dev/null | tr -d '\r'; }
 review=false lane=false
-if [ "$usable" = true ]; then
+# Without a session id there is no session file, and every reader of the file
+# answers off, so the gate's line says off too rather than disagree with them.
+if [ "$usable" = true ] && [ -n "$file" ]; then
   [ "$(trust calibration)" = true ] && review=true
   [ "$(trust smoke)" = true ] && lane=true
 fi

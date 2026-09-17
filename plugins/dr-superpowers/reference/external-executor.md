@@ -429,8 +429,10 @@ bash "<plugin-root>/scripts/codex-gate"
 
 Say its line aloud when it ends `source=probe`.
 Unless it prints `review=true`, skip the round: say `codex off — <reason>`,
-`<reason>` being the gate's `reason` (`untrusted` when it printed
-`usable=true`), and report the Claude review alone. Otherwise the runner decides
+`<reason>` being the gate's `reason` (when it printed `usable=true`:
+`untrusted`, or `no session id` when `CLAUDE_CODE_SESSION_ID` is unset — the
+gate stores its answer per session, so without that id it opens no surface),
+and report the Claude review alone. Otherwise the runner decides
 whether Codex is usable:
 
 ```bash

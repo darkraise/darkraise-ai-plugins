@@ -214,6 +214,14 @@ fresh; SID= gate usable
 check "no session id still answers" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
 check "no session id writes no file" "$(ls "$SESS" 2>/dev/null | wc -l | tr -d ' ')" "0"
+# The readers (review-route, plan-lint) answer off without a session file, so
+# the gate's own line must agree even when every surface is trusted.
+cp "$POLICY" "$TMP/policy.bak"
+jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+fresh; SID= gate usable
+check "no session id opens no surface, even trusted" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+cp "$TMP/policy.bak" "$POLICY"
 
 fresh; enable false; gate usable
 check "a disabled plugin never starts a client" "$out" \
