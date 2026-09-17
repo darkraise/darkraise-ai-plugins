@@ -36,9 +36,13 @@ re-deriving the branch diff with git commands.
    `fallback` instead and say so aloud. Use dr-superpowers:requesting-code-review's
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
    with `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
-   spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`. The judge
-   agents are read-only; the package file means the template's git fallback
-   never applies. A Codex-host plan takes its final-review seat from
+   spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`. Dispatch the
+   `primary` (or `fallback`) as `subagent_type`; the template's own
+   "Subagent (general-purpose)" line is not the seat here. The judge
+   agents are read-only and carry no shell: the package file means the
+   template's git fallback never applies, and neither do its Read-Only
+   Review section's `git show`/`git diff`/`git worktree` instructions. A
+   Codex-host plan takes its final-review seat from
    [native-codex.md](native-codex.md) instead.
 2. **Codex round.** Run the round in
    [external-executor.md](external-executor.md) §Final-review Codex round. Its

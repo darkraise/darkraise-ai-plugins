@@ -273,10 +273,14 @@ Carry out the choice, then remove the worktree.
 **Otherwise:** The host environment owns this workspace — leave it in
 place. If this work came from a plan, first delete its workspace: running
 `scripts/sdd-workspace PLAN_FILE` from the main repo root (where Step 6
-already is) resolves against the wrong checkout, so run it from
-`$WORKTREE_PATH` instead — `(cd "$WORKTREE_PATH" && scripts/sdd-workspace
-PLAN_FILE)` — and `rm -rf` the path it prints. Then, if your platform
-provides a workspace-exit tool, use it.
+already is) resolves against the wrong checkout, so `cd "$WORKTREE_PATH"`
+and re-resolve `PLAN_FILE` against that checkout's own copy of the plan
+file — not the absolute path into the main repo root the session may still
+be holding, which `scripts/sdd-workspace` now refuses from inside the
+worktree (`plan_require_same_repo` treats a linked worktree and its primary
+checkout as different repositories). Then run `scripts/sdd-workspace
+PLAN_FILE` and `rm -rf` the path it prints. Then, if your platform provides
+a workspace-exit tool, use it.
 
 ## Step 7: Report the Next Step
 
