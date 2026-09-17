@@ -8,7 +8,7 @@
 # Default amendments: <workspace>/amendments.md inside a git repository.
 # --no-probe skips the lane probe, for runs whose verdict must not depend on
 # whether Codex is usable on the machine.
-# Output: "ERROR|WARN <header|Task N>: <what>" lines, then a summary line.
+# Output: "ERROR|WARN|NOTE <header|Task N>: <what>" lines, then a summary line.
 # Exit: 0 no errors; 1 errors; 2 usage or missing file.
 set -uo pipefail
 
@@ -102,7 +102,7 @@ index_lines=$(awk '$0 == "## Task index" { on = 1; next } on && /^## / { exit } 
 
 # --- Execution line (R6) ---
 execution=$(plan_header_line "$src" Execution)
-mode="" exec_model=""
+mode="" exec_model="" exec_effort=""
 if [ -n "$execution" ]; then
   if [ "$codex" -eq 1 ]; then
     if [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?$SEP.+ ]]; then
@@ -114,7 +114,7 @@ if [ -n "$execution" ]; then
       say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — codex <model> / <effort> — <reason>'"
     fi
   elif [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?claude\ --model\ (haiku|sonnet|opus|fable|claude-[a-z0-9.-]+)\ --effort\ (low|medium|high|xhigh|max)\`?$SEP.+ ]]; then
-    mode=${BASH_REMATCH[1]} exec_model=${BASH_REMATCH[3]}
+    mode=${BASH_REMATCH[1]} exec_model=${BASH_REMATCH[3]} exec_effort=${BASH_REMATCH[4]}
   else
     say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — claude --model <m> --effort <e> — <reason>'"
   fi
@@ -140,7 +140,7 @@ gate=$(ladder_block gate)
 min_score=$(awk '$1 == "min_score" { print $2 }' <<<"$gate")
 max_risk=$(awk '$1 == "max_risk" { print $2 }' <<<"$gate")
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
-r5_bad="" max_total=0 lane=""
+r5_bad="" max_total=0 lane="" units=""
 
 # A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
 # sections, each a unit with its own Files, Implementer and Evaluation lines;
@@ -236,6 +236,7 @@ for n in $nums; do
   [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] || say "$sev" "$where" "Rule S: files+spec+coupling must be below 4 and spec below 3"
   { [ $((a + b + c + d)) -le 4 ] && [ "$d" -lt 3 ]; } || r5_bad="$r5_bad $n"
   [ $((a + b + c + d)) -le "$max_total" ] || max_total=$((a + b + c + d))
+  units="$units$n $((a + b + c + d)) $d"$'\n'
   done
 done
 
@@ -255,13 +256,35 @@ if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ] && codex_sessio
   fi
 fi
 
-# R5: inline eligibility, and the inline model follows the highest total —
-# Sonnet for the Sonnet band (<= 3), Opus once a task reaches the Opus-low band.
-if [ "$mode" = inline ]; then
-  if [ -n "$r5_bad" ]; then
+# R5: execution mode. A Codex-host plan keeps the all-or-nothing inline rule.
+# On Claude a heavy task (total >= 5 or risk 3, on any part) is delegated under
+# inline mode, whole-plan subagent mode needs a heavy majority, the inline model
+# follows the tasks the session implements itself, and a session that delegates
+# runs the review loop, so its effort is at least high.
+if [ "$codex" -eq 1 ]; then
+  if [ "$mode" = inline ] && [ -n "$r5_bad" ]; then
     say ERROR header "inline execution needs every task at total <= 4 and risk < 3; fails on Task${r5_bad}"
-  elif [ "$codex" -eq 0 ] && [ "$max_total" -eq 4 ] && [ "$exec_model" != opus ]; then
-    say ERROR header "inline execution with a task at total 4 needs --model opus (highest total $max_total)"
+  fi
+elif [ -n "$mode" ]; then
+  heavy=$(awk 'NF == 3 && ($2 >= 5 || $3 == 3) { print $1 }' <<<"$units" | sort -un | tr '\n' ' ')
+  heavy_count=$(wc -w <<<"$heavy" | tr -d ' ')
+  task_count=$(grep -c . <<<"$nums" || true)
+  light_max=$(awk -v h=" $heavy" 'NF == 3 && index(h, " " $1 " ") == 0 && $2 > m { m = $2 } END { print m + 0 }' <<<"$units")
+  if [ "$mode" = inline ] && [ $((2 * heavy_count)) -gt "$task_count" ]; then
+    say WARN header "Execution line is inline but $heavy_count of $task_count tasks are heavy"
+  elif [ "$mode" = subagent ] && [ $((2 * heavy_count)) -le "$task_count" ]; then
+    say WARN header "Execution line is subagent but only $heavy_count of $task_count tasks are heavy"
+  fi
+  if [ "$mode" = inline ]; then
+    if [ "$heavy_count" -gt 0 ]; then
+      say NOTE header "delegated: $(awk '{ for (i = 1; i <= NF; i++) printf "%sTask %s", (i > 1 ? ", " : ""), $i }' <<<"$heavy")"
+      case $exec_effort in low|medium)
+        say ERROR header "inline execution that delegates needs --effort high or above (effort $exec_effort)" ;;
+      esac
+    fi
+    if [ "$light_max" -eq 4 ] && [ "$exec_model" != opus ]; then
+      say ERROR header "inline execution with a task at total 4 needs --model opus (highest total $light_max)"
+    fi
   fi
 fi
 

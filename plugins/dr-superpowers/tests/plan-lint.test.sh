@@ -162,7 +162,9 @@ variant() { # variant <name> <sed expression> — the Claude plan with one edit
 claude_plan > clean.md
 lint clean.md
 check "clean Claude plan: exit 0" "$status" "0"
-has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 1 warnings"
+has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 2 warnings"
+has "a light plan on subagent warns" "$out" "WARN header: Execution line is subagent but only 0 of 2 tasks are heavy"
+lacks "a plan with no heavy task gets no delegation note" "$out" "NOTE header"
 has "fenced TODO is a warning" "$out" "WARN Task 1: placeholder: # a fenced TODO is only a warning"
 lacks "inline-code TODO is not a finding" "$out" "Mark the"
 codex_plan > codex.md
@@ -212,10 +214,32 @@ lint v9b.md
 lacks "inline at total 4 on opus is clean" "$out" "ERROR header: inline"
 variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
 lint v9c.md
-has "inline breaks R5 at total 5" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 2"
+has "inline that delegates needs effort high" "$out" "ERROR header: inline execution that delegates needs --effort high or above (effort low)"
+lacks "a heavy minority no longer breaks inline" "$out" "inline execution needs every task"
+has "inline names the delegated task" "$out" "NOTE header: delegated: Task 2"
+variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
+lint v9c2.md
+check "a heavy minority inline at effort high: exit 0" "$status" "0"
+lacks "the model follows the tasks the session implements" "$out" "needs --model opus"
+lacks "a heavy minority on inline does not warn" "$out" "Execution line is inline but"
 variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
 lint v9d.md
-has "inline breaks R5 at risk 3" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 2"
+has "risk 3 is delegated" "$out" "NOTE header: delegated: Task 2"
+has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution that delegates needs --effort high or above (effort low)"
+variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dr-superpowers:impl-opus-low$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-opus-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+lint v9j.md
+has "a split task is heavy when one part is" "$out" "NOTE header: delegated: Task 2"
+check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
+variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-opus-medium/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
+lint v9h.md
+has "a heavy majority on inline warns" "$out" "WARN header: Execution line is inline but 2 of 2 tasks are heavy"
+variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-opus-medium/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-opus-low$/impl-opus-medium/'
+lint v9i.md
+lacks "a heavy majority on subagent does not warn" "$out" "Execution line is subagent but"
+codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
+lint codex-inline.md
+has "a Codex-host inline plan keeps the old eligibility error" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 1"
+lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
 variant v9e.md 's/^### Task 1: First thing$/### Task 1: -v flag/; s/^1\. First thing$/1. -v flag/'
 lint v9e.md
 lacks "leading punctuation in a title survives the index check" "$out" "Task index does not match"
