@@ -90,8 +90,17 @@ Implementation complete. You're on a detached HEAD (externally managed workspace
 Which option?
 ```
 
+Directly above the menu, write one line saying what follows the plan, read
+from its `**Program:**` line: `After integration: sub-project <k+1> (<title>)
+of <spec>` when it names `next: <title>`, `After integration: the program is
+complete` when it is the last sub-project, and `After integration: no
+follow-on work recorded` when there is no Program line or no plan. Step 7
+turns this into the launch block once the choice is made.
+
 Present the menu exactly as written — concise, with every option coming
-from the list above. Discarding the work happens only in response to your
+from the list above. The menu is the last thing in your message: rulings,
+findings and the summary go above it, never after, and never replace it with
+a request in prose such as "tell me 'merge it'". Discarding the work happens only in response to your
 human partner explicitly asking for it (see "If your human partner asks to
 discard the work" below). Wait for their answer; the integration decision
 is theirs.
@@ -222,6 +231,19 @@ line — not the plan file's own date. Commit an Option 1 index line as
 `docs(plans): complete <slug>`, which fits the 50-character subject limit where
 a full basename would not.
 
+**Carry open findings with it.** The ledger is the only record of what the
+run left open, and Step 6 deletes it. In the same commit as the index line,
+write `docs/superpowers/notes/<slug>-followups.md` listing, one bullet each
+with its task number:
+
+- every `minor (deferred)` line and every `parked` line;
+- every complete line's `discovered:` field that is not `none`;
+- every final-review finding you left for your human partner, such as a
+  behaviour choice or pre-existing drift.
+
+Write nothing when all three are empty. The file travels with the same
+outcomes as the index line: Options 1 and 2 only.
+
 ## Step 6: Cleanup Workspace
 
 **Runs for Option 1 and confirmed discards.** Options 2 and 3 always
@@ -315,6 +337,8 @@ plan file, end with: "No plan file — no follow-on work recorded."
 |--------|---------|
 | "Tests passed earlier this session" | Run the suite on the tree you are about to integrate. A green run only proves the tree it ran on. |
 | "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait. |
+| "I'll ask for the merge in prose" | A request buried in a long report goes unseen. The three-option menu, verbatim, is the last thing in the message. |
+| "The open findings are in my report" | The report scrolls away and Step 6 deletes the ledger. Commit them in the followups note. |
 | "They seem done with this feature — I'll offer to discard it" | The menu is complete as written. Discard happens only when your human partner asks for it in so many words. |
 | "'Yeah, get rid of it' counts as confirmation" | Only the typed word `discard` authorizes deletion. |
 | "The PR is up, so the worktree is clutter now" | PR feedback gets fixed in that worktree. It stays until the work lands. |

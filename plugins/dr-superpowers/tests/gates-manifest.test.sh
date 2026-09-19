@@ -117,6 +117,10 @@ present "finishing writes the completed index" "$FIN" 'docs/superpowers/plans/co
 present "index write is bound to the outcome" "$FIN" 'not to Step 6'
 present "option 2 records via PR" "$FIN" 'via PR'
 present "a discard records nothing" "$FIN" 'write nothing'
+present "the menu previews what follows the plan" "$FIN" 'After integration:'
+present "the menu ends the message" "$FIN" 'The menu is the last thing in your message'
+present "open findings outlive the workspace" "$FIN" 'docs/superpowers/notes/<slug>-followups.md'
+present "a prose merge request is a red flag" "$FIN" '"I'"'"'ll ask for the merge in prose"'
 
 # All sixteen implementer agents preload verification-before-completion. A
 # gates pointer there would tell every task implementer to run a branch-level
