@@ -52,7 +52,7 @@ read time per [legacy-names.md](reference/legacy-names.md).
 **Twenty agents in three classes.** Seven execution implementers - Sonnet 5
 and Opus 5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything a score can reach. Nine reserve implementers - the `xhigh` and `max`
-efforts, and every Fable 5 tier - are reachable only by a human override, or by
+efforts, and every Fable 5.1 tier - are reachable only by a human override, or by
 a task that has already been split once and still exhausted `impl-opus-high`.
 Four read-only role agents - the judges `judge-fable`, `judge-opus` and
 `judge-sonnet-high`, and `scout-sonnet` - whose `tools:` frontmatter omits
