@@ -10,11 +10,16 @@
 #
 # Usage: next-step [--complete] PLAN_FILE
 #        next-step --draft DRAFT_FILE --next ACTION
+#        next-step --adhoc --phase design|build --next ACTION
 #   --complete  the plan is finished and its branch integrated; the ledger may
 #               already be deleted. Replaces latest.md wholesale.
 #   --draft     a design phase (brainstorming, a spec, a plan being written) is
 #               handing off; DRAFT_FILE is the authority and ACTION names the
 #               next step and its skill.
+#   --adhoc     unplanned work (a chat-approved change or a punch list, with no
+#               plan or draft file) is handing off; the notes in latest.md are
+#               the authority. --phase design launches the planning model,
+#               --phase build the execution model.
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written.
 set -euo pipefail
@@ -28,10 +33,10 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--complete] PLAN_FILE | next-step --draft DRAFT_FILE --next ACTION"; }
+usage() { fail 2 "usage: next-step [--complete] PLAN_FILE | next-step --draft DRAFT_FILE --next ACTION | next-step --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 
-complete=0 draft=0 next_action=""
+complete=0 draft=0 adhoc=0 phase="" next_action=""
 case "${1:-}" in
   --complete) complete=1; shift ;;
   --draft)
@@ -40,22 +45,49 @@ case "${1:-}" in
     next_action=$3
     set -- "$1"
     ;;
+  --adhoc)
+    adhoc=1; shift
+    { [ $# -eq 4 ] && [ "$1" = "--phase" ] && [ "$3" = "--next" ] && [ -n "$4" ]; } || usage
+    case $2 in design|build) phase=$2 ;; *) usage ;; esac
+    next_action=$4
+    ;;
 esac
-[ $# -eq 1 ] || usage
-plan=$1
-[ -f "$plan" ] || fail 2 "no such file: $plan — run it from the repository root, or check the plan path"
-repo_err=$(plan_require_same_repo "$plan" 2>&1) || fail 2 "${repo_err#next-step: }"
 
-root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
-primary=$(plan_primary_root "$root")
+status_line="" next_line="" prompt="" launch=1 launch_cmd="" escalated_at=""
 
-plan_canon=$(plan_repo_canon "$plan") || fail 2 "not inside a git repository"
-rel=${plan_canon#"$root"/}
-slug=$(basename "$plan" .md)
+if [ "$adhoc" -eq 1 ]; then
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
+  primary=$(plan_primary_root "$root")
+  dir=$primary
+else
+  [ $# -eq 1 ] || usage
+  plan=$1
+  [ -f "$plan" ] || fail 2 "no such file: $plan — run it from the repository root, or check the plan path"
+  repo_err=$(plan_require_same_repo "$plan" 2>&1) || fail 2 "${repo_err#next-step: }"
 
-status_line="" next_line="" prompt="" launch=1 dir="$primary" launch_cmd="" escalated_at=""
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
+  primary=$(plan_primary_root "$root")
+  dir=$primary
 
-if [ "$draft" -eq 1 ]; then
+  plan_canon=$(plan_repo_canon "$plan") || fail 2 "not inside a git repository"
+  rel=${plan_canon#"$root"/}
+  slug=$(basename "$plan" .md)
+fi
+
+if [ "$adhoc" -eq 1 ]; then
+  case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
+  status_line="Unplanned work: the notes in \`.superpowers/handoff/latest.md\` are the authority."
+  next_line=$next_action
+  if [ "$phase" = design ]; then
+    launch_cmd="claude --model opus --effort high"
+  else
+    launch_cmd="claude --model sonnet --effort high"
+  fi
+  prompt="Continue the unplanned work recorded in \`.superpowers/handoff/latest.md\`: $next_action"
+  if [ "$root" != "$primary" ]; then
+    prompt="$prompt First enter the existing worktree \`$root\`."
+  fi
+elif [ "$draft" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
   status_line="Design in progress: \`$rel\` is the authority."
   next_line=$next_action

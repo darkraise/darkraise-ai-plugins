@@ -39,6 +39,9 @@ A fresh session reloads only its baseline plus these files. The numbers are in
      `scripts/sdd-workspace PLAN_FILE` prints.
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
      file. It is the authority.
+   - Unplanned work (a change designed in chat, or a punch list, with no plan
+     or draft file): the notes in `latest.md` are the authority, so step 3's
+     `State` must carry every item.
 2. **Commit the plan and the spec** if either has uncommitted changes, in a
    `docs(<scope>): …` commit of their own. Never commit `.superpowers/`.
 3. **Write the notes sections of `latest.md`** at
@@ -63,10 +66,17 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    ```
 
    In a design phase, `State` names the draft instead of a plan and ledger.
+   For unplanned work, `State` lists each item with its state: implemented
+   and uncommitted, committed, awaiting feedback (with the link), or
+   unscoped.
 4. **Run `scripts/next-step`** (see using-superpowers §Session Budget):
    - Execution: `scripts/next-step PLAN_FILE`.
    - Design phase: `scripts/next-step --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
      for example `--next "Write the implementation plan with dr-superpowers:writing-plans."`
+   - Unplanned work: `scripts/next-step --adhoc --phase <design|build> --next "<the next action, naming its skill>"`.
+     The phase is `design` when the next action, or any item the next
+     session may pick up, is unscoped or awaits a design decision or
+     feedback; otherwise `build`.
    It prints the `## Next session` block and writes it into `latest.md`. If it
    exits 4, say `latest.md` could not be written.
 5. **End the session.** Your final message is one line on why you stopped,
@@ -104,4 +114,5 @@ task state lives in the ledger and git.
 | "One more dispatch, then I'll hand off" | The verdict is acted on at the next ledger write. Record the step you are in; start nothing new. |
 | "The next session can read my summary" | It has none of your context. Only files cross the boundary. |
 | "I'll write the resume prompt myself" | `next-step` computes it from the plan and ledger. Hand-written guides go stale. |
+| "There is no plan, so I'll write the block myself" | Use `next-step --adhoc`. A hand-written launch command guesses the model. |
 | "Compaction will take care of it" | Compaction drops reports, findings and rulings. Hand off before it fires. |

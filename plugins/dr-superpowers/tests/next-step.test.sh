@@ -203,6 +203,30 @@ check "draft without --next: exits 2" "$status" "2"
 run "$REPO" --draft docs/specs/missing.md --next "x"
 check "draft of a missing file: exits 2" "$status" "2"
 
+# --- adhoc mode: unplanned work hands off, latest.md is the authority ---
+printf '# Handoff\n\n## State\nItem C unscoped.\n\n## Next session\nOld block.\n' > "$HANDOFF"
+run "$REPO" --adhoc --phase design --next "Scope item C with dr-superpowers:brainstorming"
+check "adhoc design: exits 0" "$status" "0"
+has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`.superpowers/handoff/latest.md\` are the authority."
+has "adhoc: next action gains a full stop" "$out" "**Next:** Scope item C with dr-superpowers:brainstorming."
+has "adhoc design: opus launch command" "$out" "claude --model opus --effort high"
+has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`.superpowers/handoff/latest.md\`: Scope item C with dr-superpowers:brainstorming."
+hand=$(cat "$HANDOFF")
+has "adhoc: handoff keeps the notes" "$hand" "Item C unscoped."
+lacks "adhoc: handoff drops the stale block" "$hand" "Old block."
+run "$REPO" --adhoc --phase build --next "Commit items A and B"
+check "adhoc build: exits 0" "$status" "0"
+has "adhoc build: sonnet launch command" "$out" "claude --model sonnet --effort high"
+lacks "adhoc build: no opus launch command" "$out" "claude --model opus"
+run "$REPO" --adhoc --next "x"
+check "adhoc without --phase: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase plan --next "x"
+check "adhoc with an unknown phase: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase design
+check "adhoc without --next: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase design --next "x" docs/plans/2026-01-01-demo.md
+check "adhoc with a plan argument: exits 2" "$status" "2"
+
 # --- usage errors ---
 run "$REPO"
 check "no args: exits 2" "$status" "2"
