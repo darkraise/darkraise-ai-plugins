@@ -16,7 +16,8 @@ Four findings from real transcripts drove the fork; the numbers are in
 
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
-  scripts (475k, or 350k for a subagent-mode controller), keeps the execution
+  scripts (the compaction point minus one task's growth, 465k at a 650000
+  window), keeps the execution
   controller on Sonnet, and reads the plan one task at a time instead of whole.
 - **Small models executing literally.** Upstream advises picking a model per
   task but has no field for the choice, and the Agent tool cannot pass
@@ -266,17 +267,18 @@ context, and compaction drops the reports, findings and rulings a controller
 needs. dr-superpowers hands off instead.
 
 - **The budget line.** `scripts/task-brief` and `scripts/review-package` end
-  with `budget: 312k of 475k (65%) — ok — source: record`, so the controller
+  with `budget: 312k of 465k (67%) — ok — source: record`, so the controller
   checks before every task and every review at no extra request;
   `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
   skill writes `latest.md` and the plan's `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
-- **Stops.** A saved plan, a finished task list under
-  subagent-driven-development, and a switch from inline to subagent mode are
-  hard stops; executing-plans' finished task list is a soft stop, continuing
-  in-session unless the budget says otherwise. So the final whole-branch review
-  runs in a fresh session under subagent mode and in the same session under
-  inline mode; see [session-budget.md](reference/session-budget.md) for the
+- **Stops.** A saved plan and a switch from inline to subagent mode are hard
+  stops; a finished task list is a soft stop in both modes, so the final
+  whole-branch review runs in the same session unless the budget says
+  otherwise. A `handoff` verdict waits for the task in flight to complete. The
+  budget is the compaction point minus one task's worst growth, derived from
+  `autoCompactWindow` and the model's window; see
+  [session-budget.md](reference/session-budget.md) for the numbers and the
   full Stops table.
 - **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
   snapshot of branch, worktrees, dirty files, plans in flight and handoff
@@ -284,7 +286,7 @@ needs. dr-superpowers hands off instead.
   execution skill.
 - **Compaction.** The SessionStart hook appends a snapshot of what summaries
   drop. Compaction fires at about 93-96% of `autoCompactWindow`, so set the
-  window well above the budget — 650000 for the default 475k — and paste the
+  window to suit you — the budget follows it, 465k at 650000 — and paste the
   Compact Instructions block from
   [session-budget.md](reference/session-budget.md) into your project's
   CLAUDE.md.

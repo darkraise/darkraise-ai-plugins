@@ -4,28 +4,34 @@ The numbers and rules behind dr-superpowers' handoffs. The cost model they rest
 on is §3 of the program design
 (`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`).
 
+The goal is a finished plan. The budget only keeps a session clear of
+auto-compaction: a session stops for a `handoff` verdict or a hard stop below,
+never earlier.
+
 ## Numbers
 
 | Item | Value | Source |
 |------|-------|--------|
-| Handoff budget | 475,000 tokens for every session not controlling a subagent-mode plan; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-11 |
-| Controller budget | 350,000 tokens for a session running a subagent-mode plan, by its Execution line or a ledger that left inline mode; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-17: a controller adds about 9.7k per task against inline's 19.1k |
+| Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-19 |
+| Model window | 1,000,000 for Fable 5.1, Opus 5 and Sonnet 5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24 |
 | `autoCompactWindow` | 650,000, in `~/.claude/settings.json` | Set 2026-09-11 |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
 | Hook output cap | 10,000 characters; longer output becomes a file reference | Claude Code hooks reference |
 | Skill bodies after compaction | First 5,000 tokens per skill, 25,000 in total, oldest dropped | Claude Code context-window docs |
 | Codex | Hand off every 3 tasks, or after a task that needed 3+ fix rounds | Program design R7 |
 
-The budget has to sit below the point where compaction fires by more than one
-task's growth — a controller adds about 140k across a long fix loop. At a
-650,000 window compaction lands near 605-625k, so 475k leaves that margin and 350k leaves more.
+The budget sits below the point where compaction fires by one task's worst
+growth — a controller adds about 140k across a long fix loop — so a task that
+starts under budget always finishes before compaction. `scripts/lib/context.sh`
+reads `autoCompactWindow` from `settings.json` and the model from the
+transcript, so the budget follows either when they change.
 
 ## The budget line
 
 ```
-budget: 312k of 475k (65%) — ok — source: record
-budget: 480k of 475k (101%) — handoff — source: record
-budget: unknown of 475k — unknown — no transcript found
+budget: 312k of 465k (67%) — ok — source: record
+budget: 470k of 465k (101%) — handoff — source: record
+budget: unknown of 465k — unknown — no transcript found
 ```
 
 `source` is `record` (the SessionStart hook's session record), `record?` (a
@@ -34,29 +40,30 @@ newer transcript exists in the same directory: two sessions may share it) or
 apply the count rule on Codex and the phase stops everywhere.
 
 `scripts/task-brief` and `scripts/review-package` print it as their last line,
-measured against their plan's budget, so checking before every task and every
-review costs no extra request. `scripts/context-size --plan PLAN_FILE` prints it
-on demand (exit 0 ok, 5 handoff, 3 unknown); without `--plan` the budget is
-475k;
-`scripts/repo-audit` includes it.
+so checking before every task and every review costs no extra request.
+`scripts/context-size` prints it on demand (exit 0 ok, 5 handoff, 3 unknown);
+`scripts/repo-audit` includes it. Only the verdict matters: a high percentage
+under `ok` is not a reason to stop.
 
 ## Checkpoints
 
-- **subagent-driven-development:** every `task-brief` and `review-package`. On
-  `handoff`, act at the next ledger write.
+- **subagent-driven-development:** every `task-brief` and `review-package`, and
+  `context-size` after the last `Task N: complete` line.
 - **executing-plans:** the budget line on every `task-brief`, and
-  `context-size --plan PLAN_FILE` after the last `Task N: complete` line.
+  `context-size` after the last `Task N: complete` line.
+- **Acting on `handoff`:** finish the task in flight through its
+  `Task N: complete` line, then hand off. Start no new task.
 - **brainstorming:** `context-size` once, after the spec is committed.
 - **Anywhere:** `context-size` when in doubt.
 
 ## Stops
 
-- **Hard:** the plan is saved; every plan task is complete under
-  subagent-driven-development (the final review runs in a fresh session); a
-  plan switches from inline to subagent mode. writing-plans runs
+- **Hard:** the plan is saved; a plan switches from inline to subagent mode.
+  Both launch the execution model the Execution line names. writing-plans runs
   dr-superpowers:handoff once the plan is reviewed.
-- **Soft:** the final review is clean; executing-plans' last task is complete.
-  Finishing follows in the same session unless the budget line says `handoff`.
+- **Soft:** the last task is complete, in either mode; the final review is
+  clean. The final review and finishing follow in the same session unless the
+  budget line says `handoff`.
 - **Budget:** a `handoff` verdict at any checkpoint.
 - **Codex:** the count rule above.
 

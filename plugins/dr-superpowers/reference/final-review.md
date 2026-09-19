@@ -6,11 +6,9 @@ of the work being done.
 
 ## Who runs it, and when
 
-- **Subagent mode** (dr-superpowers:subagent-driven-development): a fresh
-  session. The last task's complete line is a hard stop, so that session handed
-  off and dr-superpowers:resume-execution brought this one here.
-- **Inline mode** (dr-superpowers:executing-plans): this session, unless the last
-  budget line said `handoff`.
+- **Either execution mode:** the session that completed the last task, unless
+  its last budget line said `handoff`; then dr-superpowers:resume-execution
+  brought the next session here.
 - **Either mode:** point the reviewer at the ledger's deferred-minor and parked
   lines, the complete lines' `discovered:` fields, every borderline (9-13) score,
   and every `(unseated)` ruling, so it can triage what must be fixed before

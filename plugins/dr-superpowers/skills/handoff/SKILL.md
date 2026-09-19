@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when a budget line says handoff, at a hard phase stop (plan saved, every plan task complete under subagent-driven-development, or a switch from inline to subagent mode), after 3 Codex tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
+description: Use when a budget line says handoff, at a hard phase stop (plan saved, or a switch from inline to subagent mode), on Codex after 3 tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
 ---
 
 # Handoff
@@ -16,15 +16,13 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 ## When
 
 - A budget line — printed by `scripts/task-brief`, `scripts/review-package`
-  and `scripts/context-size` — said `handoff`. Act at the next ledger write,
-  never mid-dispatch: finish the step you are in, write the ledger line that
-  records it, then hand off.
-- A hard stop: the plan is saved; every plan task is complete under
-  dr-superpowers:subagent-driven-development (the final whole-branch review
-  runs in a fresh session); or a plan has just switched from inline to subagent
-  mode. Under dr-superpowers:executing-plans the last task is a soft stop
-  instead: the final review runs in the same session unless the budget line
-  says `handoff`.
+  and `scripts/context-size` — said `handoff`. Finish the task in flight
+  through its `Task N: complete` line, then hand off; start no new task. The
+  budget leaves room for one task to finish.
+- A hard stop: the plan is saved, or a plan has just switched from inline to
+  subagent mode. The last task completing is a soft stop in both execution
+  modes: the final review runs in the same session unless the budget line says
+  `handoff`.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds.
 - Your human partner says they are stepping away for more than an hour, or
@@ -111,7 +109,8 @@ task state lives in the ledger and git.
 
 | Thought | Reality |
 |---------|---------|
-| "One more dispatch, then I'll hand off" | The verdict is acted on at the next ledger write. Record the step you are in; start nothing new. |
+| "One more task, then I'll hand off" | Finish the task in flight; start no new one. |
+| "The line says 89% — I'll hand off now to be safe" | `ok` means continue. Only a `handoff` verdict or a hard stop ends the session; the budget already holds a task's margin. |
 | "The next session can read my summary" | It has none of your context. Only files cross the boundary. |
 | "I'll write the resume prompt myself" | `next-step` computes it from the plan and ledger. Hand-written guides go stale. |
 | "There is no plan, so I'll write the block myself" | Use `next-step --adhoc`. A hand-written launch command guesses the model. |

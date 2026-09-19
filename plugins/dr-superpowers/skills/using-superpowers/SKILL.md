@@ -53,9 +53,8 @@ Prefer an indexed code tool (for example darkmem `code_search`) over Explore sub
 ## Session Budget
 
 - Call every `scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working directory inside the project's worktree; a relative `PLAN_FILE` resolves against it. The plugin root is printed under this entry point (on Codex: the directory two levels above any skill file).
-- `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `handoff` means: finish the step in flight, then use dr-superpowers:handoff. See [session-budget.md](../../reference/session-budget.md).
+- The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok` means continue at any percentage; `handoff` means: finish the task in flight, then use dr-superpowers:handoff. See [session-budget.md](../../reference/session-budget.md).
 - Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger continues through dr-superpowers:resume-execution.
-- After more than an hour idle, start fresh from `.superpowers/handoff/latest.md`: the prompt cache is cold.
 - After compaction, trust the compaction snapshot, the ledger and `git log` over the summary.
 
 ## Platform and Precedence

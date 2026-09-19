@@ -16,8 +16,8 @@ session on Opus.
 - **The loop writes** only lines of the shared ledger grammar
   ([subagent-driven-development](../skills/subagent-driven-development/SKILL.md)
   §The Ledger).
-- **The loop returns** on the task's `complete` line, on a `BLOCKED` line, or on
-  a budget `handoff` acted on at the next ledger write, which §Recovery resumes.
+- **The loop returns** on the task's `complete` line or on a `BLOCKED` line. A
+  budget `handoff` waits for the `complete` line.
 
 ## Seats
 

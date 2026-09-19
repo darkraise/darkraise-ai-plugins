@@ -16,8 +16,8 @@ back. Before anything else:
    the directory it prints.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides; see the Recovery table under The Ledger.
-3. Run `scripts/context-size --plan PLAN_FILE`. On exit 5, invoke
-   dr-superpowers:handoff.
+3. Run `scripts/context-size`. On exit 5, finish the task in flight, then
+   invoke dr-superpowers:handoff.
 4. Re-read this skill in full before the next task. If a task's last ledger
    line is an agent-named assigned line or `fix round R/5`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
@@ -253,15 +253,15 @@ dr-superpowers:finishing-a-development-branch.
 ([session-budget.md](../../reference/session-budget.md)), so you check the
 budget before every task at no extra request:
 
-    budget: 312k of 475k (65%) — ok — source: record
+    budget: 312k of 465k (67%) — ok — source: record
 
-- `ok` or `unknown`: carry on.
-- `handoff`: finish the task in flight, write its ledger line, then invoke
-  dr-superpowers:handoff. Never hand off in the middle of a task you
-  implement. In a delegated task, act at the next ledger write, as subagent
-  mode does: let the dispatched agent return, write its line, then hand off.
+- `ok` or `unknown`: carry on, however high the percentage. Only the verdict
+  stops you.
+- `handoff`: finish the task in flight through its `Task N: complete` line,
+  then invoke dr-superpowers:handoff. Never hand off in the middle of a task,
+  delegated ones included. The budget holds one task's worst growth.
 
-Run `scripts/context-size --plan PLAN_FILE` after the last task's
+Run `scripts/context-size` after the last task's
 `Task <N>: complete` line and act on its exit 5 the same way; after every
 earlier task, the next brief's budget line is that check.
 
@@ -301,7 +301,7 @@ For each task, in order:
 7. **Close the task.** Append the complete line with its checkpoint, in the
    same message as your other bookkeeping, and mark the todo complete.
 8. **Check the budget after the last task.** Run
-   `scripts/context-size --plan PLAN_FILE`. After any other task, go to the
+   `scripts/context-size`. After any other task, go to the
    next task's step 1: its brief prints the same budget line.
 
 **When a verification will not pass.** Fix, re-run, then append
@@ -468,5 +468,6 @@ Use dr-superpowers:finishing-a-development-branch.
 | "I'll mention the ruling in my final message instead of the ledger" | Your message dies with the session; the ledger survives compaction. |
 | "I'll batch the commits at the end" | The ledger names commit ranges per task. A task without its own commits cannot be recovered or reviewed. |
 | "The adjacent bug is a two-line fix" | It is a deferred minor. The final review triages it with the rest. |
+| "The budget is at 89%, I'll hand off before the next task" | `ok` means continue. Only a `handoff` verdict stops the loop, and even then the task in flight finishes first. |
 | "I should check in before the next task" | Continuous execution. The stops are the four; "are you still happy?" is not one. |
 | "Nothing dispatches here, so there is no ledger to keep" | The ledger is what survives compaction, in this mode exactly as in the other. |

@@ -85,9 +85,9 @@ for k in preflight cannot-verify breaker; do
 done
 present "reads the Dispatch line" "$INLINE" '`**Dispatch:** delegated'
 present "links the delegated loop" "$INLINE" "../../reference/delegated-task.md"
-present "passes the plan to context-size" "$INLINE" 'context-size --plan PLAN_FILE'
-present "subagent mode passes the plan to context-size" "$SDD" 'context-size --plan PLAN_FILE'
-present "a delegated task hands off at the next ledger write" "$INLINE" 'In a delegated task, act at the next ledger write'
+present "a handoff waits for the task in flight" "$INLINE" 'Never hand off in the middle of a task,'
+present "subagent mode finishes the task before a handoff" "$SDD" 'finish the task in flight — its reviews, fix rounds and'
+present "subagent mode's last task is a soft stop" "$SDD" 'continue to Final Review in this session'
 present "a delegating plan gets a preflight" "$INLINE" 'send one `preflight` item'
 present "the preflight keys on a heavy task" "$INLINE" 'naming at least one `(heavy)` task'
 absent "the kinds table no longer keys the preflight on any delegation" "$INLINE" 'when the plan delegates any task'
@@ -135,7 +135,7 @@ absent "inline mode does not spell out the package call" "$INLINE" \
   "review-package PLAN_FILE MERGE_BASE HEAD"
 present "the shared reference spells out the package call" "$FINAL" \
   "review-package PLAN_FILE MERGE_BASE HEAD"
-present "the shared reference names both modes" "$FINAL" "Inline mode"
+present "the shared reference covers both modes" "$FINAL" "Either execution mode"
 present "final review routes the Claude seat" "$FINAL" '`scripts/review-route PLAN_FILE --final` and dispatch'
 absent "final review drops the most capable model" "$FINAL" 'most capable'
 present "final review routes the fix subagent" "$FINAL" '`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]`'

@@ -18,8 +18,8 @@ back. Before anything else:
    ledger line decides: `complete` is done; `fix round R/5` resumes at round
    R+1 with a fresh dispatch; an assigned line with commits after its base
    goes to review.
-3. Run `scripts/context-size --plan PLAN_FILE`. On exit 5, invoke
-   dr-superpowers:handoff.
+3. Run `scripts/context-size`. On exit 5, finish the task in flight, then
+   invoke dr-superpowers:handoff.
 4. Re-read this skill in full before the next dispatch, and
    [delegated-task.md](../../reference/delegated-task.md) when a task is
    mid-loop (an agent-named assigned line or `fix round R/5`).
@@ -394,15 +394,18 @@ budget line ([session-budget.md](../../reference/session-budget.md)), so you
 check the session budget before every task and every review at no extra
 request:
 
-    budget: 312k of 350k (89%) — ok — source: record
+    budget: 312k of 465k (67%) — ok — source: record
 
-- `ok` or `unknown`: carry on.
-- `handoff`: finish the step in flight — let the dispatched agent return and
-  write its ledger line — then invoke dr-superpowers:handoff. Dispatch nothing
-  new first.
-- After the last task's `Task N: complete` line, hand off whatever the budget
-  says: the final whole-branch review runs in a fresh session, which
-  dr-superpowers:resume-execution brings to Final Review.
+- `ok` or `unknown`: carry on, however high the percentage. Only the verdict
+  stops you.
+- `handoff`: finish the task in flight — its reviews, fix rounds and
+  `Task N: complete` line — then invoke dr-superpowers:handoff. Start no new
+  task. The budget holds one task's worst growth, so the task lands before
+  compaction.
+- After the last task's `Task N: complete` line, run `scripts/context-size`.
+  On `ok` or `unknown`, continue to Final Review in this session; on exit 5,
+  invoke dr-superpowers:handoff, and dr-superpowers:resume-execution brings
+  the next session to Final Review.
 - On Codex there is no budget line: hand off after every 3 completed tasks, or
   after any task that needed 3 or more fix rounds.
 
@@ -440,8 +443,9 @@ the complete line. Its contract names what the loop needs from you.
 
 ## Final Review
 
-This runs in a fresh session: after the last task's complete line you handed
-off, and dr-superpowers:resume-execution brought the next session here.
+This runs in the session that completed the last task, unless the budget
+line said `handoff` there; then dr-superpowers:resume-execution brought the
+next session here.
 
 Follow [final-review.md](../../reference/final-review.md), the procedure both
 execution skills share. Point the reviewer at the ledger's deferred-minor and
@@ -486,6 +490,7 @@ Use dr-superpowers:finishing-a-development-branch.
 | "I can see the plan is wrong, I'll rule on it myself" | You read the header and one brief; the seat reads the plan and the spec. Send it a plan-conflict item. |
 | "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. Every round ends with a scoped re-review. |
 | "Reviews slow the loop down" | The loop without reviews is just unverified churn. Reviews are the loop's brakes and steering. |
+| "The budget is at 89%, I'll hand off before the next task" | `ok` means continue. Only a `handoff` verdict stops the loop, and even then the task in flight finishes first. |
 | "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Controllers without one have re-dispatched entire completed task sequences. |
 | "The implementer spawned its own reviewer — free extra assurance" | It's a duplicate seat reviewing the same diff; the task review is the gate. A worker-spawned reviewer is a defect to flag, not rigor. |
 | "I'll pass a model to be safe" | On a fleet agent it overrides the pinned model while effort stays — a tier the ledger never records. |
@@ -536,9 +541,7 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 
 ...
 
-[After the last task's complete line: dr-superpowers:handoff prints the resume guide]
-
-[Fresh session: dr-superpowers:resume-execution → Final Review]
+[After the last task's complete line: context-size says ok — continue to Final Review]
 [final-review.md: package the branch; review-route --final prints judge-opus for this plain plan; Codex round in the background]
 [judge-fable dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
