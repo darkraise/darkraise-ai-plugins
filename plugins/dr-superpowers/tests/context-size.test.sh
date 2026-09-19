@@ -2,7 +2,8 @@
 # context-size must measure the main session's context from its transcript —
 # ignoring subagent, synthetic and interrupted entries, restarting at the last
 # compaction — find the transcript by session record or, failing that, by
-# guess, and print one budget line with a verdict exit code.
+# guess, and print one budget line with a verdict exit code. The budget sits a
+# task's growth below the compaction point of the session's model and settings.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +37,11 @@ KEY=$(printf '%s' "$(native "$(cd "$REPO" && pwd)")" | tr -c 'A-Za-z0-9' '-')
 PROJ="$HOME/.claude/projects/$KEY"
 SESS="$HOME/.claude/dr-superpowers/sessions"
 mkdir -p "$PROJ" "$SESS"
+settings() { printf '{
+  "autoCompactWindow": %s
+}
+' "$1" > "$HOME/.claude/settings.json"; }
+settings 650000
 
 asst() { # asst <tokens> [isSidechain] [model]
   printf '{"type":"assistant","isSidechain":%s,"message":{"model":"%s","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
@@ -57,85 +63,75 @@ T="$PROJ/s-1.jsonl"
 record s-1 "$T"
 run
 check "record: exit 0" "$status" "0"
-check "record: line" "$out" "budget: 285k of 475k (60%) — ok — source: record"
+check "record: line" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 
 # --- over budget ---
 asst 500000 > "$T"
 run
 check "over: exit 5" "$status" "5"
-check "over: line" "$out" "budget: 500k of 475k (105%) — handoff — source: record"
+check "over: line" "$out" "budget: 500k of 465k (107%) — handoff — source: record"
 
 # --- boundary with no assistant after it: postTokens ---
 { asst 460000; boundary 12000; userline; } > "$T"
 run
-check "boundary only: line" "$out" "budget: 12k of 475k (2%) — ok — source: record"
+check "boundary only: line" "$out" "budget: 12k of 465k (2%) — ok — source: record"
 
 # --- boundary then an assistant ---
 { asst 460000; boundary 12000; userline; asst 30000; } > "$T"
 run
-check "after boundary: line" "$out" "budget: 30k of 475k (6%) — ok — source: record"
+check "after boundary: line" "$out" "budget: 30k of 465k (6%) — ok — source: record"
 
 # --- usable entry outside the 400-line tail window ---
 { asst 50000; for i in $(seq 1 450); do userline; done; } > "$T"
 run
-check "whole-file fallback: line" "$out" "budget: 50k of 475k (10%) — ok — source: record"
+check "whole-file fallback: line" "$out" "budget: 50k of 465k (10%) — ok — source: record"
 
 # --- no usage entry ---
 userline > "$T"
 run
 check "no usage: exit 3" "$status" "3"
 posix() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
-check "no usage: line" "$out" "budget: unknown of 475k — unknown — no usage entry in $(posix "$T")"
+check "no usage: line" "$out" "budget: unknown of 465k — unknown — no usage entry in $(posix "$T")"
 
 # --- budget override ---
 asst 285000 > "$T"
 DR_SUPERPOWERS_BUDGET=300000 run
 check "override: line" "$out" "budget: 285k of 300k (95%) — ok — source: record"
 
-# --- the plan's execution mode picks the default budget ---
-mkdir -p "$REPO/docs" "$REPO/.superpowers/sdd/inl"
-printf '# P\n\n**Execution:** subagent — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n' > "$REPO/docs/sub.md"
-printf '# P\n\n**Execution:** inline — `claude --model opus --effort low` — x\n\n### Task 1: One\n' > "$REPO/docs/inl.md"
-printf 'Host: codex\n\n**Execution:** subagent — codex gpt-5.6-sol / high — x\n\n### Task 1: One\n' > "$REPO/docs/cdx.md"
-run --plan docs/sub.md
-check "subagent plan: 350k" "$out" "budget: 285k of 350k (81%) — ok — source: record"
-run --plan docs/inl.md
-check "inline plan: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
-run --plan docs/cdx.md
-check "Codex-host plan: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
-run --plan docs/nope.md
-check "missing plan: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
-printf '# SDD ledger — plan: docs/inl.md\nTask 1: implementer inline (assigned; base a)\nTask 1: escalated inline -> subagent — still failing\n' > "$REPO/.superpowers/sdd/inl/progress.md"
-run --plan docs/inl.md
-check "inline plan that left inline mode: 350k" "$out" "budget: 285k of 350k (81%) — ok — source: record"
-printf 'Task 1: implementer inline (assigned; base b)\n' >> "$REPO/.superpowers/sdd/inl/progress.md"
-run --plan docs/inl.md
-check "inline plan back in inline mode: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
-printf '# SDD ledger — plan: docs/other.md\nTask 1: escalated inline -> subagent — x\n' > "$REPO/.superpowers/sdd/inl/progress.md"
-run --plan docs/inl.md
-check "another plan's ledger is ignored: 475k" "$out" "budget: 285k of 475k (60%) — ok — source: record"
-DR_SUPERPOWERS_BUDGET=300000 run --plan docs/sub.md
-check "override beats the plan: 300k" "$out" "budget: 285k of 300k (95%) — ok — source: record"
-run --plan
-check "--plan without a file: exit 2" "$status" "2"
+# --- the budget follows the model's window and autoCompactWindow ---
+asst 30000 false claude-haiku-4-5-20251001 > "$T"
+run
+check "haiku: 200k window caps the compaction point" "$out" "budget: 30k of 46k (65%) — ok — source: record"
+asst 285000 false claude-sonnet-5 > "$T"
+settings 2000000
+run
+check "window beats a larger autoCompactWindow" "$out" "budget: 285k of 790k (36%) — ok — source: record"
+rm -f "$HOME/.claude/settings.json"
+run
+check "no settings: the model's window" "$out" "budget: 285k of 790k (36%) — ok — source: record"
+settings 650000
+DR_SUPERPOWERS_BUDGET=junk run
+check "invalid override is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"
+run --plan docs/p.md
+check "arguments: exit 2" "$status" "2"
 
 # --- CRLF transcript ---
 asst 285000 | sed 's/$/\r/' > "$T"
 run
-check "crlf: line" "$out" "budget: 285k of 475k (60%) — ok — source: record"
+check "crlf: line" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 
 # --- record whose session is not the newest in its project directory ---
 asst 285000 > "$T"
 touch -d '5 minutes ago' "$T"
 asst 1000 > "$PROJ/other.jsonl"
 run
-check "record?: line" "$out" "budget: 285k of 475k (60%) — ok — source: record?"
+check "record?: line" "$out" "budget: 285k of 465k (61%) — ok — source: record?"
 
 # --- no record: newest transcript, flagged as a guess ---
 rm -f "$SESS/$KEY.json"
 asst 100000 > "$PROJ/other.jsonl"
 run
-check "guessed: line" "$out" "budget: 100k of 475k (21%) — ok — source: guessed"
+check "guessed: line" "$out" "budget: 100k of 465k (21%) — ok — source: guessed"
 has "guessed: warns on stderr" "$(cat "$TMP/stderr")" "a guess"
 
 # --- CLAUDE_CONFIG_DIR moves the transcripts; session records stay under HOME ---
@@ -143,18 +139,18 @@ ALT="$TMP/alt"
 mkdir -p "$ALT/projects"
 mv "$PROJ" "$ALT/projects/$KEY"
 out=$(cd "$REPO" && CLAUDE_CONFIG_DIR="$ALT" bash "$SCRIPT" 2>"$TMP/stderr")
-check "CLAUDE_CONFIG_DIR: guessed line" "$out" "budget: 100k of 475k (21%) — ok — source: guessed"
+check "CLAUDE_CONFIG_DIR: guessed line, no settings there" "$out" "budget: 100k of 790k (12%) — ok — source: guessed"
 mv "$ALT/projects/$KEY" "$PROJ"
 
 # --- nothing to read ---
 HOME="$TMP/empty" run
 check "no transcript: exit 3" "$status" "3"
-check "no transcript: line" "$out" "budget: unknown of 475k — unknown — no transcript found"
+check "no transcript: line, no settings" "$out" "budget: unknown of 790k — unknown — no transcript found"
 
 # --- no jq ---
 DR_SUPERPOWERS_JQ=no-such-jq run
 check "no jq: exit 3" "$status" "3"
-check "no jq: line" "$out" "budget: unknown of 475k — unknown — no jq"
+check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
 
 # --- usage ---
 run extra

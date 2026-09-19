@@ -6,8 +6,10 @@
 # writes a system entry with subtype compact_boundary. A schema change must
 # degrade the verdict to unknown, never produce a wrong number.
 
-CTX_DEFAULT_BUDGET=475000
-CTX_CONTROLLER_BUDGET=350000
+# Auto-compaction fires at about 93% of the effective window; the budget sits
+# one worst-case task's growth below that, so a task in flight always lands.
+CTX_COMPACT_PCT=93
+CTX_TASK_MARGIN=140000
 
 ctx_jq() { "${DR_SUPERPOWERS_JQ:-jq}" "$@"; }
 ctx_have_jq() { command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; }
@@ -92,15 +94,61 @@ ctx_measure() {
   printf '%s\n' "$out"
 }
 
+# ctx_model FILE — the model of the last main-chain assistant entry, or nothing.
+ctx_model_reduce() {
+  tr -d '\r' | ctx_jq -R -r -n '
+    [inputs | select(length > 0) | (try fromjson catch null) | objects
+     | select((.isSidechain // false) == false and .type == "assistant")
+     | .message.model // empty | select(. != "<synthetic>")] | last // empty' 2>/dev/null
+}
+ctx_model() {
+  local out
+  out=$(tail -n 400 "$1" | ctx_model_reduce)
+  [ -n "$out" ] || out=$(ctx_model_reduce < "$1")
+  printf '%s' "$out"
+}
+
+ctx_model_window() {
+  case $1 in
+    *haiku*) echo 200000 ;;
+    *) echo 1000000 ;;
+  esac
+}
+
+# autoCompactWindow from the user settings, or nothing. Read without jq so the
+# budget stays printable when jq is missing.
+ctx_auto_compact_window() {
+  local f="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+  [ -f "$f" ] || return 0
+  tr -d '\r' <"$f" | grep -oE '"autoCompactWindow"[[:space:]]*:[[:space:]]*[0-9]+' \
+    | head -n 1 | grep -oE '[0-9]+$' || true
+}
+
+# ctx_budget MODEL — the handoff budget for a session on MODEL (may be empty).
+ctx_budget() {
+  local window acw point
+  window=$(ctx_model_window "$1")
+  acw=$(ctx_auto_compact_window)
+  point=$window
+  if [ -n "$acw" ] && [ "$acw" -gt 0 ] && [ "$acw" -lt "$window" ]; then point=$acw; fi
+  echo $(( point * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
+}
+
 # Print the budget line; return 0 ok, 5 handoff, 3 unknown.
 ctx_line() {
-  local fallback=${CTX_BUDGET:-$CTX_DEFAULT_BUDGET} budget tokens bk tk pct
-  budget=${DR_SUPERPOWERS_BUDGET:-$fallback}
-  case $budget in ''|*[!0-9]*) budget=$fallback ;; esac
-  [ "$budget" -gt 0 ] || budget=$fallback
+  local budget="" model="" tokens bk tk pct found=0
+  if ctx_have_jq && ctx_find_transcript; then
+    found=1
+    model=$(ctx_model "$CTX_TRANSCRIPT")
+  fi
+  case ${DR_SUPERPOWERS_BUDGET:-} in
+    ''|*[!0-9]*) ;;
+    *) [ "$DR_SUPERPOWERS_BUDGET" -gt 0 ] && budget=$DR_SUPERPOWERS_BUDGET ;;
+  esac
+  [ -n "$budget" ] || budget=$(ctx_budget "$model")
   bk=$(( (budget + 500) / 1000 ))
   if ! ctx_have_jq; then echo "budget: unknown of ${bk}k — unknown — no jq"; return 3; fi
-  if ! ctx_find_transcript; then echo "budget: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
+  if [ "$found" -eq 0 ]; then echo "budget: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
   if ! tokens=$(ctx_measure "$CTX_TRANSCRIPT"); then
     echo "budget: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
   fi
@@ -111,23 +159,4 @@ ctx_line() {
     return 5
   fi
   echo "budget: ${tk}k of ${bk}k (${pct}%) — ok — source: $CTX_SOURCE"
-}
-
-# ctx_plan_budget PLAN — the default budget for a session running PLAN: the
-# controller budget when the plan runs in subagent mode, by its Execution line
-# or by a ledger that left inline mode. Needs lib/plan.sh sourced.
-ctx_plan_budget() {
-  local plan=$1 ledger
-  if [ ! -f "$plan" ] \
-     || grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then
-    echo "$CTX_DEFAULT_BUDGET"; return 0
-  fi
-  if grep -qE '^\*\*Execution:\*\*[ \t]*`?subagent' <<<"$(plan_header_line "$plan" Execution)"; then
-    echo "$CTX_CONTROLLER_BUDGET"; return 0
-  fi
-  ledger=$(plan_ledger "$plan")
-  if [ -n "$ledger" ] && [ -n "$(ledger_left_inline "$ledger")" ]; then
-    echo "$CTX_CONTROLLER_BUDGET"; return 0
-  fi
-  echo "$CTX_DEFAULT_BUDGET"
 }

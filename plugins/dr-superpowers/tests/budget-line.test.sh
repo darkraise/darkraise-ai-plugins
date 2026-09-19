@@ -20,7 +20,9 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
-mkdir -p "$HOME"
+mkdir -p "$HOME/.claude"
+printf '{"autoCompactWindow": 650000}
+' > "$HOME/.claude/settings.json"
 export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ
@@ -40,7 +42,7 @@ out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null); status=$?
 check "task-brief: exit 0 with no transcript" "$status" "0"
 check "task-brief: first line unchanged" "$(sed -n 1p <<<"$out" | cut -c1-6)" "wrote "
 check "task-brief: last line is the budget line" "$(tail -n 1 <<<"$out")" \
-  "budget: unknown of 475k — unknown — no transcript found"
+  "budget: unknown of 465k — unknown — no transcript found"
 
 # --- over budget: handoff, exit unchanged ---
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
@@ -54,19 +56,10 @@ out=$(bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null); s
 check "review-package: exit 0 over budget" "$status" "0"
 check "review-package: first line unchanged" "$(sed -n 1p <<<"$out" | cut -c1-6)" "wrote "
 check "review-package: budget line says handoff" "$(tail -n 1 <<<"$out")" \
-  "budget: 500k of 475k (105%) — handoff — source: record"
+  "budget: 500k of 465k (107%) — handoff — source: record"
 out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
 check "task-brief: budget line says handoff" "$(tail -n 1 <<<"$out")" \
-  "budget: 500k of 475k (105%) — handoff — source: record"
-
-# --- a subagent-mode plan: the controller's 350k budget ---
-printf '# Plan\n\n**Execution:** subagent — `claude --model sonnet --effort high` — x\n\n### Task 1: Only thing\n\nBody.\n' > docs/sub.md
-out=$(bash "$P/scripts/task-brief" docs/sub.md 1 2>/dev/null)
-check "task-brief: a subagent plan's budget is 350k" "$(tail -n 1 <<<"$out")" \
-  "budget: 500k of 350k (142%) — handoff — source: record"
-out=$(bash "$P/scripts/review-package" docs/sub.md "$BASE" HEAD 2>/dev/null)
-check "review-package: a subagent plan's budget is 350k" "$(tail -n 1 <<<"$out")" \
-  "budget: 500k of 350k (142%) — handoff — source: record"
+  "budget: 500k of 465k (107%) — handoff — source: record"
 
 # --- a missing task still fails the way it did ---
 bash "$P/scripts/task-brief" docs/plan.md 9 >/dev/null 2>&1; status=$?
