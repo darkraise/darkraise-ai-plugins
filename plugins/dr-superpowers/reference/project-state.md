@@ -12,6 +12,7 @@ docs/superpowers/
   specs/                 authored, permanent, never deleted by a skill
   plans/                 authored, permanent, never deleted by a skill
     completed.md         append-only index of merged plans
+  registers/             one file per incoming list of source items
   gates.md               what proves a change works here, in order
   distilled/
     constraints.md       owner rulings, do-nots, fixed policy
@@ -28,6 +29,7 @@ it does without it.
 
 - `docs/superpowers/gates.md`
 - `docs/superpowers/plans/completed.md`
+- `docs/superpowers/registers/*.md`
 - `docs/superpowers/distilled/constraints.md`
 - `docs/superpowers/distilled/gotchas.md`
 - `docs/superpowers/distilled/reference.md`
@@ -39,6 +41,7 @@ it does without it.
 |---|---|---|
 | `gates.md` | a human, or dr-superpowers:running-gates' bootstrap on approval | dr-superpowers:running-gates |
 | `plans/completed.md` | dr-superpowers:finishing-a-development-branch | dr-superpowers:project-status |
+| `registers/*.md` | dr-superpowers:brainstorming, dr-superpowers:writing-plans, both execution skills, dr-superpowers:finishing-a-development-branch — all through `scripts/register` | `scripts/next-step`, `scripts/plan-lint`, `scripts/repo-audit`, dr-superpowers:project-status, dr-superpowers:brainstorming |
 | `distilled/*.md` | dr-superpowers:distilling-docs, or a human recording an approved spec's owner decision | dr-superpowers:project-status, dr-superpowers:brainstorming, dr-superpowers:resume-execution, both execution skills; `constraints.md` also dr-superpowers:writing-plans |
 
 ## Precedence

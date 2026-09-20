@@ -35,8 +35,9 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
      A plan whose tasks are all complete but which is not yet indexed as merged
      is also in flight — a review or an integration is still ahead of it.
    - **Complete** — listed in `docs/superpowers/plans/completed.md`. That index
-     is the only completion signal. A ledger showing every task complete is not
-     one: the work may be unmerged.
+     answers whether the branch landed, not whether the work is finished: an
+     item register answers that. A ledger showing every task complete is not a
+     completion signal either — the work may be unmerged.
    - **Not started** — neither, and only when `completed.md` exists. "No ledger"
      never means "never ran": dr-superpowers:finishing-a-development-branch
      deletes the workspace on integration.
@@ -55,12 +56,17 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
    derive it from.
 6. **Read the open constraints.** When `docs/superpowers/distilled/constraints.md`
    exists, take the entries whose scope covers the current work.
-7. **Report** the shape below, then stop. There is no memory-store step: every
+7. **Read the item registers.** Every `docs/superpowers/registers/*.md` the
+   audit lists. Unresolved rows — `open`, `planned`, `doing`, `verify` — are
+   open work whatever the plans say, and a register whose `**Covers:**` is `-`
+   is a list that arrived before anything was designed, which is open work too.
+   Never report work complete while a covering register has an unresolved row.
+8. **Report** the shape below, then stop. There is no memory-store step: every
    line comes from the audit or the tree.
 
 ## Output
 
-Five sections, in this order, nothing else:
+Six sections, in this order, nothing else:
 
 - **Repos** — the audit's branch, HEAD and worktree lines.
 - **In flight** — one bullet per plan with an active ledger, tasks complete of
@@ -68,6 +74,9 @@ Five sections, in this order, nothing else:
 - **Not started** — one bullet per un-started plan and unplanned spec, with paths.
 - **Owner-only items** — decisions and prohibitions waiting on your human
   partner, including every task whose last ledger line is `BLOCKED`.
+- **Open items** — per register, its unresolved rows as `#<id> <item> —
+  <state>`. Rows at `verify` sit under a sub-heading reading awaiting your check:
+  they are built, and only your human partner closes them.
 - **Next step** — exactly one, naming the skill or command that starts it.
 
 Unfinished work always appears. Finished work appears only when touched within

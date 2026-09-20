@@ -68,10 +68,10 @@ check "status rules run 0 to 7 in order" "$rules" "0 1 2 3 4 5 6 7 "
 present "status rule 0 reads the last line per task" "$SKILL" "A task's **last** ledger line is"
 present "status routes to resume-execution" "$SKILL" 'dr-superpowers:resume-execution'
 
-# The five output sections, in order.
-sections=$(grep -oE '^- \*\*(Repos|In flight|Not started|Owner-only items|Next step)\*\*' "$SKILL" \
+# The six output sections, in order.
+sections=$(grep -oE '^- \*\*(Repos|In flight|Not started|Owner-only items|Open items|Next step)\*\*' "$SKILL" \
   | sed 's/^- \*\*//; s/\*\*$//' | tr '\n' '|')
-check "status output sections in order" "$sections" "Repos|In flight|Not started|Owner-only items|Next step|"
+check "status output sections in order" "$sections" "Repos|In flight|Not started|Owner-only items|Open items|Next step|"
 
 present "status links project-state" "$SKILL" 'project-state.md'
 
@@ -97,6 +97,25 @@ present "the Codex lane is declared on" "$CONSTRAINTS" "### The Codex executor l
 present "the lane entry cites the review-routing spec" "$CONSTRAINTS" "Source: docs/superpowers/specs/2026-09-15-dr-superpowers-review-routing-design.md@"
 present "the lane entry records who set it" "$CONSTRAINTS" "Set by: owner"
 present "the lane entry waits for the session gate" "$CONSTRAINTS" 'When `scripts/codex-gate` reports `lane=true`'
+
+# --- item registers ---
+# Every needle below sits on one source line in the skill: these assert with
+# grep -F, and a phrase the file wraps can never match.
+SKILL="$P/skills/project-status/SKILL.md"
+present "status: names the registers directory" "$SKILL" "docs/superpowers/registers/"
+present "status: completed.md is no longer the only completion signal" "$SKILL" \
+  "not whether the work is finished"
+present "status: a register can veto done" "$SKILL" \
+  "Never report work complete while a covering register has an unresolved row"
+present "status: the report has an open-items section" "$SKILL" "**Open items**"
+present "status: verify rows are the owner's" "$SKILL" "awaiting your check"
+present "status: six sections now" "$SKILL" "Six sections, in this order"
+present "state: registers are listed" "$STATE" "docs/superpowers/registers/"
+if grep -qF "is the only completion signal" "$SKILL"; then
+  printf 'FAIL - status: the old single-source rule is gone\n'; fail=$((fail + 1))
+else
+  printf 'ok   - status: the old single-source rule is gone\n'; pass=$((pass + 1))
+fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
