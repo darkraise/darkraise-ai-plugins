@@ -211,11 +211,36 @@ ctx_budget() {
   echo $(( point * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
 }
 
+# Filled in by the observation log; a no-op until then.
+ctx_log_observation() { :; }
+
 # Print the budget line; return 0 ok, 5 handoff, 3 unknown.
 ctx_line() {
-  local budget="" model="" tokens bk tk pct found=0
-  if ctx_have_jq && ctx_find_transcript; then
+  local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
+  if ctx_have_jq; then
+    if ctx_find_transcript; then claude=$CTX_TRANSCRIPT; fi
+    if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
+  fi
+  # The live session is the one still being appended to. Session records are
+  # never deleted, so a record source does not by itself prove a live Claude
+  # session and modification time is the right tiebreak.
+  if [ -n "$rollout" ] && { [ -z "$claude" ] || [ "$rollout" -nt "$claude" ]; }; then
+    CTX_TRANSCRIPT=$rollout CTX_SOURCE=rollout
+    if ! tokens=$(ctx_measure_rollout "$rollout"); then
+      echo "budget: unknown — unknown — no usage entry in $rollout"
+      return 3
+    fi
+    ctx_log_observation "$tokens"
+    tk=$(( (tokens + 500) / 1000 ))
+    # No denominator: no Codex budget has been set yet, and the verdict stays
+    # unknown so reference/session-budget.md's count rule keeps the session.
+    # DR_SUPERPOWERS_BUDGET stays a Claude override for the same reason.
+    echo "budget: ${tk}k measured — unknown — source: rollout"
+    return 3
+  fi
+  if [ -n "$claude" ]; then
     found=1
+    CTX_TRANSCRIPT=$claude
     model=$(ctx_model "$CTX_TRANSCRIPT")
   fi
   case ${DR_SUPERPOWERS_BUDGET:-} in

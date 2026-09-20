@@ -251,5 +251,53 @@ check "discovery: finds the 40th-newest match" "$(cat "$TMP/found40")" "$R5"
 rm -rf "$CODEX_HOME"
 unset CODEX_HOME
 
+# --- host choice: the live session is the one still being appended to ---
+export CODEX_HOME="$TMP/codex2"
+mkdir -p "$CODEX_HOME"
+mkroll() { # mkroll <name> <tokens> — an interactive rollout for $REPO
+  mkdir -p "$CODEX_HOME/sessions/2026/09/15"
+  local f="$CODEX_HOME/sessions/2026/09/15/rollout-$1.jsonl"
+  { meta "$REPO_NATIVE"; usage_line "$2" 999999; } > "$f"
+  printf '%s' "$f"
+}
+
+RB=$(mkroll live 187000)
+run
+check "rollout: exit 3" "$status" "3"
+has "rollout: measured line" "$out" "budget: 187k measured — unknown — source: rollout"
+
+DR_SUPERPOWERS_BUDGET=100000 run
+has "rollout: DR_SUPERPOWERS_BUDGET does not make a verdict" "$out" "measured — unknown"
+
+{ meta "$REPO_NATIVE"; printf 'not json\n'; } > "$RB"
+run
+check "rollout: unmeasurable exits 3" "$status" "3"
+has "rollout: unmeasurable line carries no denominator" "$out" "budget: unknown — unknown — no usage entry in"
+
+# A Claude transcript written after the rollout wins, and its verdict returns.
+RB=$(mkroll live 187000)
+{ userline; asst 120000; } > "$T"
+record s-1 "$(native "$T")"
+touch "$T"
+run
+check "newest wins: the Claude transcript takes it back" "$status" "0"
+has "newest wins: Claude source" "$out" "source: record"
+touch "$RB"
+run
+check "newest wins: the rollout takes it again" "$status" "3"
+has "newest wins: rollout source" "$out" "source: rollout"
+
+# The regression this whole filter exists for: a Claude controller running
+# Codex executor tasks in its own worktree must keep its verdict.
+rm -f "$RB"
+mkdir -p "$CODEX_HOME/sessions/2026/09/16"
+{ meta "$REPO_NATIVE" codex_exec exec; usage_line 187000 999999; } \
+  > "$CODEX_HOME/sessions/2026/09/16/rollout-executor.jsonl"
+run
+check "executor lane: the Claude session keeps its verdict" "$status" "0"
+has "executor lane: still the Claude source" "$out" "source: record"
+rm -rf "$CODEX_HOME"
+unset CODEX_HOME
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
