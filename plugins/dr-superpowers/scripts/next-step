@@ -38,6 +38,7 @@ fail() { # fail EXIT MESSAGE
 
 usage() { fail 2 "usage: next-step [--host claude|codex] [--complete] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/register.sh"
 
 # --host is pulled out wherever it sits so the remaining arguments keep their
 # strict positional contract.
@@ -177,7 +178,47 @@ else
     n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
     next_title=$(sed -nE 's/.*( — | – | - | -- )next:[ \t]*(.*[^ \t])[ \t]*$/\2/p' <<<"$program")
     launch=0
-    if [ -z "$program" ]; then
+
+    # An item register outranks the Program line. `next:` is copied from the
+    # program's decomposition when the plan is written, so a split decided in a
+    # child spec never reaches it, and `last` alone cannot end a programme.
+    reg_specs=()
+    plan_spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$(plan_header_line "$plan" Spec)")
+    [ -z "$plan_spec" ] || reg_specs+=("$plan_spec")
+    [ -z "$spec" ] || [ "$spec" = "$plan_spec" ] || reg_specs+=("$spec")
+    open_rows="" reg_list=""
+    if [ ${#reg_specs[@]} -gt 0 ]; then
+      while IFS= read -r reg_file; do
+        [ -n "$reg_file" ] || continue
+        rows=$(register_open "$reg_file")
+        [ -n "$rows" ] || continue
+        # Several registers may cover one spec; every one that has open rows is
+        # named, so the count is never attributed to the wrong file.
+        reg_list="${reg_list:+$reg_list, }\`${reg_file#"$root"/}\`"
+        open_rows="${open_rows}${rows}
+"
+      done < <(register_for_spec "$root" "${reg_specs[@]}")
+    fi
+    open_rows=$(grep . <<<"$open_rows" || true)
+
+    if [ -n "$open_rows" ]; then
+      open_n=$(grep -c . <<<"$open_rows")
+      row_list=$(awk -F'\t' '
+        NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $1, $2 }
+        END { if (NR > 3) printf " +%d more", NR - 3 }
+      ' <<<"$open_rows")
+      assigned=$(head -n 1 <<<"$open_rows" | cut -f3)
+      if [ -n "$assigned" ] && [ "$assigned" != "-" ]; then
+        action="\`$assigned\`: write its spec in a fresh session."
+      else
+        action="Rule on the open rows with dr-superpowers:brainstorming."
+      fi
+      status_line="Plan \`$rel\` is complete."
+      next_line="Register rows still open ($open_n) in $reg_list: $row_list. $action"
+      launch_cmd=$(launch_for design)
+      prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
+      launch=1
+    elif [ -z "$program" ]; then
       status_line="Plan \`$rel\` is complete."
       next_line="Nothing — the plan records no follow-on work."
     elif grep -qE '( — | – | - | -- )last[ \t]*$' <<<"$program" || { [ -n "$k" ] && [ "$k" -ge "$n" ]; }; then

@@ -511,5 +511,68 @@ case $ROOT in
     ;;
 esac
 
+# --- item registers outrank the Program line ---
+# The frozen `next:` is copied when the plan is written, so a sub-project split
+# decided later never reaches it. A register with an open row must stop the
+# "every sub-project is done" answer.
+RREPO="$TMP/registers"
+git init -q -b main "$RREPO"
+mkdir -p "$RREPO/docs/superpowers/plans" "$RREPO/docs/superpowers/specs" "$RREPO/docs/superpowers/registers"
+printf '.superpowers/\n' > "$RREPO/.gitignore"
+: > "$RREPO/docs/superpowers/specs/prog-design.md"
+cat > "$RREPO/docs/superpowers/plans/c1.md" <<'PLAN'
+# C1
+
+**Goal:** One
+**Spec:** docs/superpowers/specs/prog-design.md
+**Execution:** inline — `claude --model sonnet --effort high` — small
+**Program:** `docs/superpowers/specs/prog-design.md` — sub-project 3 of 4 — last
+
+### Task 1: One
+PLAN
+git -C "$RREPO" add -A && git -C "$RREPO" commit -qm init
+
+cat > "$RREPO/docs/superpowers/registers/prog.md" <<'REG'
+# Programme — item register
+
+**Source:** owner list 2026-09-18
+**Covers:** docs/superpowers/specs/prog-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Status bar | - | - | done | - |
+| 4 | Settings tabs | C2 Settings | Radius follows the axis | planned | - |
+| 6 | Editor preview | C2 Settings | - | planned | - |
+| 16 | Stale note | C2 Settings | - | planned | - |
+| 17 | Unused UI font | C2 Settings | - | planned | - |
+REG
+
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: a register with open rows refuses 'Nothing'" "$OUT" "Register rows still open (4) in \`docs/superpowers/registers/prog.md\`"
+has "next-step: names the first rows" "$OUT" "#4 Settings tabs"
+has "next-step: caps the list at three" "$OUT" "+1 more"
+has "next-step: routes to the assignment" "$OUT" "\`C2 Settings\`: write its spec in a fresh session."
+lacks "next-step: must not claim the program is done" "$OUT" "Nothing — every sub-project"
+
+# An unassigned row routes to brainstorming instead.
+bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 4 open --assigned -
+bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 6 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 16 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 17 done
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: an unassigned row routes to brainstorming" "$OUT" "Rule on the open rows with dr-superpowers:brainstorming."
+has "next-step: one row still reports" "$OUT" "Register rows still open (1) in"
+
+# Every row resolved: the Program line answers again, exactly as before.
+bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 4 done
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: a fully resolved register restores the old answer" "$OUT" "Nothing — every sub-project"
+
+# No register at all: unchanged behaviour, which is what keeps every existing
+# plan in this repository working.
+rm "$RREPO/docs/superpowers/registers/prog.md"
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: no register means no change" "$OUT" "Nothing — every sub-project"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
