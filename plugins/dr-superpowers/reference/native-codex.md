@@ -88,10 +88,12 @@ and the final-review seat are all native judges at rank 8 (Astra high) or above,
 dispatched as Dispatch and review below describes. An exit 2 is never a reason
 to fall back to a Claude agent name.
 
-Sessions end on the count rule rather than a budget line, because there is no
-transcript for `scripts/context-size` to measure: hand off after every 3
-completed tasks, or after any task that needed 3 or more fix rounds. The budget
-line reads `unknown` here, which is that rule's cue, not a fault.
+Sessions end on the count rule rather than on a budget verdict: hand off after
+every 3 completed tasks, or after any task that needed 3 or more fix rounds. The
+budget line does measure this session —
+`budget: 187k measured — unknown — source: rollout`, read from the Codex
+rollout — but its verdict stays `unknown` because no Codex budget has been set
+yet, so the count rule, not the number, decides when to hand off.
 `scripts/next-step` takes `--host codex` on its `--draft` and `--adhoc` paths so
 the resume block names the Codex client; for a plan it reads `Host: codex` from
 the header itself.

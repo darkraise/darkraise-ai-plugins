@@ -406,8 +406,9 @@ request:
   On `ok` or `unknown`, continue to Final Review in this session; on exit 5,
   invoke dr-superpowers:handoff, and dr-superpowers:resume-execution brings
   the next session to Final Review.
-- On Codex there is no budget line: hand off after every 3 completed tasks, or
-  after any task that needed 3 or more fix rounds.
+- On Codex the budget line carries a measured number but no verdict: hand off
+  after every 3 completed tasks, or after any task that needed 3 or more fix
+  rounds.
 
 ## The Task Loop
 

@@ -24,7 +24,8 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   modes: the final review runs in the same session unless the budget line says
   `handoff`.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
-  more fix rounds.
+  more fix rounds. The budget line there reports a measured number with an
+  `unknown` verdict, and the measured number does not override it.
 - Your human partner says they are stepping away for more than an hour, or
   asks you to stop.
 

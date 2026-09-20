@@ -25,9 +25,10 @@ back. Before anything else:
 ## Select the host first
 
 On Codex, the ruling seat is a native judge at Astra high or above
-([native-codex.md](../../reference/native-codex.md)), and there is no budget
-line: hand off after every 3 completed tasks, or after any task that needed 3
-or more fix rounds. Everything else here is host-neutral - inline mode
+([native-codex.md](../../reference/native-codex.md)), and the budget line
+carries a measured number but no verdict: hand off after every 3 completed
+tasks, or after any task that needed 3 or more fix rounds. Everything else
+here is host-neutral - inline mode
 dispatches nothing but the ruling seat, delegated tasks and the final review.
 
 ## Overview

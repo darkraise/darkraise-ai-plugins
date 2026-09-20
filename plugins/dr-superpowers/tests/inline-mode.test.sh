@@ -205,6 +205,22 @@ present "the delegated loop names the Codex escalation source" "$DT"   'come fro
 present "inline mode routes a Codex host's exit 2" "$INLINE"   'Codex host, where `review-route` exits 2 on every'
 present "native Codex claims the exit 2" "$NC"   '`scripts/review-route` exits 2 on every `Host: codex` plan by design'
 present "native Codex states plans carry no delegated task" "$NC"   'A Codex plan therefore carries no delegated task'
+# The budget line exists on Codex now, and carries no verdict. Four documents
+# said it did not exist at all.
+SB="$P/reference/session-budget.md"
+present "the budget reference names the rollout source" "$SB" 'source: rollout'
+present "the budget reference states the Codex line carries no verdict" "$SB" \
+  'measured — unknown'
+present "the budget reference names the observations mode" "$SB" '--observations'
+present "native Codex names the measured line" "$NC" 'measured — unknown — source: rollout'
+absent "subagent mode no longer denies the Codex budget line" "$SDD" \
+  'On Codex there is no budget line'
+absent "inline mode no longer denies the Codex budget line" "$INLINE" \
+  'and there is no budget'
+present "inline mode names the measured Codex line" "$INLINE" \
+  'carries a measured number but no verdict'
+present "the handoff skill keeps the count rule authoritative" "$P/skills/handoff/SKILL.md" \
+  'the measured number does not override it'
 # validate-repository.mjs checks links only under skills/, so this suite pins
 # the reference file's links.
 for link in $(grep -oE '\]\([^)#]+\.md' "$DT" | sed 's/^](//' | sort -u); do

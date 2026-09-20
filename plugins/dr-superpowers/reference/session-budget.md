@@ -18,7 +18,7 @@ never earlier.
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
 | Hook output cap | 10,000 characters; longer output becomes a file reference | Claude Code hooks reference |
 | Skill bodies after compaction | First 5,000 tokens per skill, 25,000 in total, oldest dropped | Claude Code context-window docs |
-| Codex | Hand off every 3 tasks, or after a task that needed 3+ fix rounds | Program design R7 |
+| Codex | Hand off every 3 tasks, or after a task that needed 3+ fix rounds | Program design R7; the measured line does not override it |
 
 The budget sits below the point where compaction fires by one task's worst
 growth — a controller adds about 140k across a long fix loop — so a task that
@@ -33,6 +33,30 @@ budget: 312k of 465k (67%) — ok — source: record
 budget: 470k of 465k (101%) — handoff — source: record
 budget: unknown of 465k — unknown — no transcript found
 ```
+
+On a Codex host the line reports a measured number and no verdict:
+
+```
+budget: 187k measured — unknown — source: rollout
+budget: unknown — unknown — no usage entry in <path>
+```
+
+`source: rollout` is the session's own Codex rollout, found under
+`${CODEX_HOME:-~/.codex}/sessions` by its recorded working directory. Only an
+interactive rollout counts: an executor-lane run started by a Claude controller
+records that controller's directory, so selecting it would replace a live Claude
+session's verdict. Where a Claude transcript and a rollout both match, the more
+recently written one is the live session.
+
+The verdict stays `unknown` because no Codex budget has been set yet, so the
+count rule below still decides when a Codex session hands off.
+`DR_SUPERPOWERS_BUDGET` does not apply to a rollout measurement.
+
+Each Codex measurement appends a row to
+`<primary checkout>/.superpowers/sdd/budget-log.tsv`, and
+`scripts/context-size --observations` prints it back as the growth between
+consecutive task briefs — the data a later phase needs to set the budget. A
+negative delta is a compaction, reported as `compacted` rather than a number.
 
 `source` is `record` (the SessionStart hook's session record), `record?` (a
 newer transcript exists in the same directory: two sessions may share it) or
