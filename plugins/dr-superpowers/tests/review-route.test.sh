@@ -318,6 +318,12 @@ present "README caps plan review" "$P/README.md" 'capped by the plan'"'"'s highe
 absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'
 present "the prompt file has a Codex round-1 section" "$PRP" '## Round 1 on Codex'
 present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-schema.json'
+# A Claude judge reads files with a Read tool; Codex has none, and its only
+# file access is a command. Sent the template's no-commands line unchanged, the
+# seat's own approval layer refuses the read and it returns a well-formed
+# review of nothing - scoring every criterion 10, the schema's "uncertain".
+present "the Codex round-1 prompt permits read-only commands" "$PRP" 'You are running read-only'
+present "the Codex round-1 prompt still forbids edits and subagents" "$PRP" 'Do not modify any file, and do not dispatch subagents'
 present "the prompt file has a delta template" "$PRP" '## Later rounds'
 present "the delta template takes the delta file" "$PRP" '[DELTA_FILE]'
 present "the delta template verdicts prior findings" "$PRP" '[ADDRESSED|NOT ADDRESSED]'
@@ -557,8 +563,8 @@ present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**
 absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
 present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
 present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'
-present "the Claude manifest is 1.15.0" "$P/.claude-plugin/plugin.json" '"version": "1.15.0"'
-present "the Codex manifest is 1.15.0" "$P/.codex-plugin/plugin.json" '"version": "1.15.0"'
+present "the Claude manifest is 1.15.1" "$P/.claude-plugin/plugin.json" '"version": "1.15.1"'
+present "the Codex manifest is 1.15.1" "$P/.codex-plugin/plugin.json" '"version": "1.15.1"'
 present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
 present "approach ranking runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'Dispatch one `dr-superpowers:judge-opus` to run the ring'
 present "the budget reference derives the budget" "$P/reference/session-budget.md" 'min(`autoCompactWindow`, model window) × 93% − 140,000'

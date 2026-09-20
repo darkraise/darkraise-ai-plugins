@@ -83,7 +83,7 @@ scores. Bands: 1-8 fails, 9-13 borderline, 14-20 passes.
 ## Round 1 on Codex
 
 When `scripts/review-route` prints `primary=codex:plan`, send the template
-above to `scripts/run-codex-review.sh --kind plan` with three changes:
+above to `scripts/run-codex-review.sh --kind plan` with four changes:
 
 1. Send only the `prompt:` body, unindented: drop the `Subagent ([JUDGE]):` and
    `description:` lines, which mean nothing outside a subagent dispatch.
@@ -91,7 +91,24 @@ above to `scripts/run-codex-review.sh --kind plan` with three changes:
    but not including, `## Criteria`. The runner passes
    `criteria/codex-plan-review-schema.json`, and a prompt that orders markdown
    while `--output-schema` forbids it gets neither.
-3. End the prompt with this paragraph:
+3. Replace the line
+
+       You cannot run commands, modify files, or dispatch subagents.
+
+   with
+
+       You are running read-only. Read the files named above with your own
+       tools. Do not modify any file, and do not dispatch subagents.
+
+   A Claude judge reads a file with a Read tool, so forbidding commands costs
+   it nothing. Codex has no such tool: running a command is its only file
+   access, and the runner already confines it with `sandbox: "read-only"`.
+   Sent unchanged, the line makes the seat's own approval layer refuse the
+   read, and it returns a well-formed review of nothing - every criterion
+   scored 10, the schema's "genuinely uncertain" - with a finding saying it
+   could not open the files. Observed on two of three seats that ran on
+   2026-09-20.
+4. End the prompt with this paragraph:
 
        Return your review as the JSON object the output schema defines: the
        four scores as integers 1-20, and one `findings` entry per problem, with
