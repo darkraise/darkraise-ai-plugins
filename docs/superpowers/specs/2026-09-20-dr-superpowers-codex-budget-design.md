@@ -270,6 +270,7 @@ empty or absent log.
 | `reference/session-budget.md` | Document the rollout source, the `measured` line, the log and why Codex has no verdict yet |
 | `reference/native-codex.md` | Its §Execution modes and session ends says the budget line reads `unknown`; it must now say the line carries a measured number while the count rule still governs |
 | `skills/subagent-driven-development/SKILL.md` | Line 409, "On Codex there is no budget line", becomes false: there is one, and it carries no verdict |
+| `skills/executing-plans/SKILL.md` | Its Select the host first section (lines 27-30) also says "there is no budget line"; same correction |
 | `skills/handoff/SKILL.md` | Its count-rule bullet (line 26) stays in force, and should say the measured number does not override it |
 
 No skill's decision rules change. `repo-audit` needs no change: it prints
