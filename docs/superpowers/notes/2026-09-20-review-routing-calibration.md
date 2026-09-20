@@ -175,3 +175,90 @@ assertions passing.
 
 Every other case in that suite uses a one-file fixture repository, which is
 why a size ceiling survived a full 17-task sub-project unnoticed.
+
+## Calibration re-run — `project-state` at xhigh, 2026-09-21
+
+Owner direction: score divergence between two reviewers is signal to aggregate
+and discuss, not grounds to reject one of them; and raise astra's thinking
+effort before re-running.
+
+`reference/ladder.md`'s `codex-judge` block moved from `gpt-6-astra high 1800`
+to `gpt-6-astra xhigh 3600`. The effort and the bound had to move together:
+`project-state` had already exceeded 1800 seconds twice at `high`, and more
+thinking takes more wall clock, so raising effort alone would only have bought
+another `TIMEOUT`. The fallback row is `gpt-5.6-sol xhigh 2400`, not 3600,
+because that pair also appears in `codex-timeout` where it bounds task
+execution, and `tests/lanes.test.sh` requires the two blocks to agree on any
+shared pair.
+
+Scope: `project-state` alone. It is the only plan carrying this calibration's
+planted defects and the only one never reviewed, so it is where the evidence
+is.
+
+| Plan | Version | Status line | Astra e / c / v / a | Recorded | Max delta |
+|---|---|---|---|---|---|
+| project-state | d6c288c | `gpt-6-astra/xhigh status=OK exit=0` | 13 / 14 / 16 / 17 | 17 / 16 / 17 / 16 | 4 |
+
+Per-axis: executability −4, coherence −2, coverage −1, assumptions **+1**.
+Findings: 2 Critical, 19 Important.
+
+**The bound was the blocker, and that is now settled.** The run that failed
+twice at 1800 seconds completed inside 3600 at a *higher* effort, which is
+slower. 1800 was simply too small for the largest plan in the set.
+
+### Known defects (Step 5) — performed for the first time
+
+This check has never run before: it reads `project-state-review.json`, and
+that row was `NO-RUN` on 2026-09-20.
+
+- **Vacuous needles — FOUND.** "Several structural tests accept keyword stubs
+  instead of checking their stated guarantees … Task 5's 'squash' assertion
+  accepts an instruction to squash and omits the three judge/tree conditions.
+  … add negative controls." It names the mechanism and an instance, and
+  prescribes the right remedy. A second, independent finding on Task 4 reports
+  the same class: "The validator accepts a no-gates stub containing the three
+  asserted phrases because it never requires `seen_gate`."
+- **Cross-task helper — FOUND on substance, not on instance.** "Contracts
+  omits … the shared test-helper interfaces consumed by later tasks. Isolated
+  implementers cannot verify these claimed contracts." That is the defect's
+  mechanism and its consequence, but it does not name `absent`, Task 3, Task 11
+  or `tests/gates-manifest.test.sh`. A separate finding reports the same
+  consumer-precedes-producer hazard for documents, so the class was actively
+  hunted. Graded honestly: substance yes, instance no.
+
+### One Critical verified against shipped code
+
+> Task 2 — The skill instructs running `repo-audit` from the plugin root. The
+> script derives the audited repository from its working directory, so an
+> installed plugin can audit the plugin checkout or fail outside a repository.
+
+Confirmed. `scripts/repo-audit:15` is `root=$(git rev-parse --show-toplevel)`,
+which reads the *working directory*, while `project-status/SKILL.md:17` and
+`resume-execution/SKILL.md:16` both say "Run `scripts/repo-audit`" as a bare
+relative command. The hazard is mitigated today only by a cross-cutting rule in
+a different skill — `using-superpowers` §Session Budget, "call every
+`scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working
+directory inside the project's worktree" — which is exactly the remedy astra
+prescribes. An implementer reading only that task would not know.
+
+Whether that deserves *Critical* is arguable. That it is a real structural
+hazard, in a plan Claude judges scored 17 on executability, is not.
+
+### What this does and does not show
+
+Under the ±2 rule this row is still a `MISS` at a max delta of 4, though it is
+the tightest row recorded — the 2026-09-20 rows were 6, 5 and 9.
+
+**That comparison is not controlled and must not be read as one.**
+`project-state` was never scored at `high`, so nothing here isolates the effect
+of effort from the effect of reviewing a different document. The prediction
+going in was that higher effort would push scores *down* by finding more
+defects; this row neither confirms nor refutes it.
+
+What the row does establish, on its own terms: the seat finishes the largest
+plan, finds the planted defects, and returns specific findings, at least one of
+which is verifiable against shipped code.
+
+Gate: **not applied.** `trust.calibration` stays `pending`. Re-baselining means
+deciding what the reference is, and that is the owner's decision, not a
+session's — the three options above stand, now with this row as evidence.

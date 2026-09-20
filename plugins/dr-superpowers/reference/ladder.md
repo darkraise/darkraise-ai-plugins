@@ -275,9 +275,24 @@ and the final-review round — takes its model from this block, not from
 other seat uses the first row with its fallback.
 
 ```codex-judge
-gpt-6-astra high 1800
-gpt-5.6-sol high 1800
+gpt-6-astra xhigh 3600
+gpt-5.6-sol xhigh 2400
 ```
+
+The effort and the bound move together. At `high` with 1800 seconds the
+largest plan in the 2026-09-20 calibration exceeded the bound on both
+attempts and was never reviewed, so the one plan carrying that run's planted
+defects produced no evidence. Raising the effort without raising the bound
+would only buy more `TIMEOUT` rows, because more thinking takes more wall
+clock on exactly the plans that already ran out of it.
+
+The two rows carry different bounds on purpose. `gpt-6-astra/xhigh` appears
+only here, so its 3600 is free to be set for review work. `gpt-5.6-sol/xhigh`
+also appears in `codex-timeout`, where 2400 bounds *task execution*, and
+`tests/lanes.test.sh` requires the two blocks to agree on any pair they share
+— a constant in two places drifts otherwise. Widening the judge row would mean
+widening execution too, which is a different decision about how long a wedged
+task may hang, so the shared pair keeps the execution constant.
 
 It is a separate block for two mechanical reasons. `scripts/run-codex-task.sh`
 validates `--model` against `codex-assignment`, so a judge model there would
