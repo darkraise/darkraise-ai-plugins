@@ -4,7 +4,7 @@ dr_state_error() { printf 'task-state: %s\n' "$1" >&2; return 2; }
 dr_canonical() { (cd -- "$1" && pwd -P); }
 
 dr_snapshot() {
-  local root output="$2" index files path hash mode kind temp
+  local root output="$2" index files path hash mode kind temp indexfile filesfile
   root="$(dr_canonical "$1")" || return 2
   temp="$(mktemp "${output}.XXXXXX")" || return 2
   index="$(git -C "$root" ls-files --stage -z | base64 | tr -d '\r\n')" || { rm -f "$temp"; return 2; }
@@ -26,9 +26,20 @@ dr_snapshot() {
   head="$(git -C "$root" rev-parse HEAD)" || { rm -f "$temp"; return 2; }
   gitdir="$(git -C "$root" rev-parse --absolute-git-dir)" || { rm -f "$temp"; return 2; }
   gitdir="$(dr_canonical "$gitdir")" || { rm -f "$temp"; return 2; }
-  jq -n --arg root "$root" --arg gitdir "$gitdir" --arg head "$head" --arg index "$index" \
-    --argjson files "$files" '{root:$root,gitdir:$gitdir,head:$head,index:$index,files:$files}' > "$temp" &&
-    mv -f -- "$temp" "$output" || { rm -f "$temp"; return 2; }
+  # The index and the manifest both scale with the repository, and a command
+  # line is bounded - 32767 bytes on Windows. Passing them as arguments made
+  # the snapshot fail outright past a few hundred files, so both reach jq as
+  # files. --rawfile takes the index verbatim and --slurpfile parses the
+  # manifest, which keeps the output byte-identical to the argument form.
+  indexfile="$(mktemp "${output}.idx.XXXXXX")" || { rm -f "$temp"; return 2; }
+  filesfile="$(mktemp "${output}.fls.XXXXXX")" || { rm -f "$temp" "$indexfile"; return 2; }
+  printf '%s' "$index" > "$indexfile" || { rm -f "$temp" "$indexfile" "$filesfile"; return 2; }
+  printf '%s' "$files" > "$filesfile" || { rm -f "$temp" "$indexfile" "$filesfile"; return 2; }
+  jq -n --arg root "$root" --arg gitdir "$gitdir" --arg head "$head" \
+    --rawfile index "$indexfile" --slurpfile files "$filesfile" \
+    '{root:$root,gitdir:$gitdir,head:$head,index:$index,files:$files[0]}' > "$temp" &&
+    mv -f -- "$temp" "$output" || { rm -f "$temp" "$indexfile" "$filesfile"; return 2; }
+  rm -f "$indexfile" "$filesfile"
 }
 
 dr_task_assert_snapshot() {

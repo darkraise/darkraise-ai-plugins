@@ -54,5 +54,26 @@ dr_task_unlock
 printf '{broken' > "$DR_TASK_DIR/state.json"
 (dr_task_open "$fixture/work" task-1 "$fixture/scope.json") >/dev/null 2>&1
 check 'malformed state cannot become a fresh task' "$?" 2
+# --- a worktree large enough to exceed the OS argument limit ----------------
+# dr_snapshot passed the base64 index and the whole file manifest to jq as
+# command-line arguments. Windows caps a command line at 32767 bytes, so on any
+# repository of a few hundred files jq never started and every delegated task
+# died at "cannot snapshot worktree" before its executor ran. Every other case
+# in this suite uses a one-file fixture, which is why the ceiling went unseen.
+git -C "$fixture/primary" worktree add -q --detach "$fixture/big" HEAD
+i=0
+while [ "$i" -lt 700 ]; do
+  printf 'content %s\n' "$i" > "$fixture/big/file-with-a-longish-name-$i.txt"
+  i=$((i + 1))
+done
+git -C "$fixture/big" add -A
+git -C "$fixture/big" commit -qm 'test: many files'
+dr_snapshot "$fixture/big" "$fixture/big.json"
+check 'a large worktree can be snapshotted' "$?" 0
+check 'the large snapshot lists every file' \
+  "$(jq -r '.files | length' "$fixture/big.json" 2>/dev/null)" 701
+dr_task_assert_snapshot "$fixture/big.json" >/dev/null 2>&1
+check 'a large snapshot round-trips against its own worktree' "$?" 0
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
