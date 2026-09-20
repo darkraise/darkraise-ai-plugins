@@ -130,5 +130,31 @@ check "check: a missing file is usage" "$RC" "2"
 run bash "$REG"
 check "check: no verb is usage" "$RC" "2"
 
+# --- register open ---
+# The exit status is the gate: 1 means "something is still open", so a caller
+# can branch on it without parsing the report.
+run bash "$REG" open "$ROOT/clean.md"
+check "open: rows open exits 1" "$RC" "1"
+check "open: names the row" "$(grep -c '#1 First' <<<"$OUT")" "1"
+check "open: a resolved row is not listed" "$(grep -c '#2' <<<"$OUT")" "0"
+
+reg "$ROOT/settled.md" '| 1 | A | - | - | done | - |' '| 2 | B | - | - | n/a | answered inline |'
+run bash "$REG" open "$ROOT/settled.md"
+check "open: nothing open exits 0" "$RC" "0"
+
+run bash "$REG" open --root "$ROOT" --spec docs/superpowers/specs/a-design.md
+check "open: by spec finds the covering register" "$RC" "1"
+check "open: by spec names the item" "$(grep -c ' A' <<<"$OUT")" "1"
+
+# c-design.md is named by no register: the reg() helper's Covers line lists
+# a-design.md and b-design.md, so either of those would match one.
+run bash "$REG" open --root "$ROOT" --spec docs/superpowers/specs/c-design.md
+check "open: a spec no register covers exits 0" "$RC" "0"
+
+run bash "$REG" open --root "$ROOT" --spec docs/superpowers/specs/a-design.md "$ROOT/clean.md"
+check "open: --spec with a file is usage" "$RC" "2"
+run bash "$REG" open
+check "open: neither --spec nor a file is usage" "$RC" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

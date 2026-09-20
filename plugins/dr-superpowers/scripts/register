@@ -92,10 +92,42 @@ cmd_check() {
   [ "$errors" -eq 0 ]
 }
 
+cmd_open() {
+  local root="" spec="" file="" found=0 f rel id item assigned acceptance state note
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --root) [ $# -ge 2 ] || usage; root=$2; shift 2 ;;
+      --spec) [ $# -ge 2 ] || usage; spec=$2; shift 2 ;;
+      -*) usage ;;
+      *) [ -z "$file" ] || usage; file=$1; shift ;;
+    esac
+  done
+  if [ -n "$spec" ]; then
+    [ -z "$file" ] || usage
+    [ -n "$root" ] || root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  else
+    [ -n "$file" ] || usage
+    need_file "$file"
+  fi
+
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    rel=$f
+    [ -z "$root" ] || rel=${f#"$root"/}
+    while IFS=$'\t' read -r id item assigned acceptance state note; do
+      found=1
+      printf '%s: #%s %s — %s, assigned %s\n' "$rel" "$id" "$item" "$state" "${assigned:--}"
+    done < <(register_open "$f")
+  done < <(if [ -n "$spec" ]; then register_for_spec "$root" "$spec"; else printf '%s\n' "$file"; fi)
+
+  [ "$found" -eq 0 ]
+}
+
 [ $# -ge 1 ] || usage
 verb=$1
 shift
 case $verb in
   check) cmd_check "$@" ;;
+  open) cmd_open "$@" ;;
   *) usage ;;
 esac
