@@ -84,5 +84,51 @@ check "register_for_spec: matches one" \
 check "register_for_spec: no spec argument prints nothing" "$(register_for_spec "$ROOT")" ""
 check "register_files: no directory prints nothing" "$(register_files "$TMP/absent")" ""
 
+# --- register check ---
+REG="$HERE/../scripts/register"
+run() { # run <args...> -> sets OUT and RC
+  OUT=$("$@" 2>&1); RC=$?
+}
+
+reg "$ROOT/clean.md" \
+  '| 1 | First | - | - | open | - |' \
+  '| 2 | Second | - | - | deferred | not this batch |'
+run bash "$REG" check "$ROOT/clean.md"
+check "check: a clean register" "$RC" "0"
+check "check: clean summary" "$(tail -n 1 <<<"$OUT")" "register: 0 errors"
+
+reg "$ROOT/dup.md" '| 1 | A | - | - | open | - |' '| 1 | B | - | - | open | - |'
+run bash "$REG" check "$ROOT/dup.md"
+check "check: duplicate identifier fails" "$RC" "1"
+check "check: names the duplicate" "$(grep -c 'duplicate identifier: 1' <<<"$OUT")" "1"
+
+reg "$ROOT/state.md" '| 1 | A | - | - | finished | - |'
+run bash "$REG" check "$ROOT/state.md"
+check "check: unknown state fails" "$RC" "1"
+check "check: names the state" "$(grep -c 'unknown state: finished' <<<"$OUT")" "1"
+
+reg "$ROOT/note.md" '| 1 | A | - | - | deferred | - |'
+run bash "$REG" check "$ROOT/note.md"
+check "check: a ruling without its reason fails" "$RC" "1"
+check "check: names the missing note" "$(grep -c 'state deferred needs a note' <<<"$OUT")" "1"
+
+reg "$ROOT/short2.md" '| 1 | A | open |'
+run bash "$REG" check "$ROOT/short2.md"
+check "check: a short row fails" "$RC" "1"
+
+printf '# No header — item register\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | A | - | - | open | - |\n' > "$ROOT/bare.md"
+run bash "$REG" check "$ROOT/bare.md"
+check "check: missing Source and Covers fails" "$RC" "1"
+check "check: names Source" "$(grep -c 'missing \*\*Source:\*\* line' <<<"$OUT")" "1"
+
+printf '# Ghost — item register\n\n**Source:** s\n**Covers:** docs/superpowers/specs/absent-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | A | - | - | open | - |\n' > "$ROOT/ghost.md"
+run bash "$REG" check "$ROOT/ghost.md"
+check "check: a Covers path that does not exist fails" "$RC" "1"
+
+run bash "$REG" check "$ROOT/absent-file.md"
+check "check: a missing file is usage" "$RC" "2"
+run bash "$REG"
+check "check: no verb is usage" "$RC" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
