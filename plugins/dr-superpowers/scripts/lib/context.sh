@@ -211,8 +211,34 @@ ctx_budget() {
   echo $(( point * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
 }
 
-# Filled in by the observation log; a no-op until then.
-ctx_log_observation() { :; }
+# The primary checkout's root: a worktree's .superpowers lives with the
+# checkout that owns the repository, so every session logs to one file.
+ctx_primary_root() {
+  local common
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || return 1
+}
+
+# ctx_log_observation TOKENS — append one row, and never fail the caller: the
+# budget line is printed whether or not the observation is recorded.
+#
+# The log lives inside .superpowers/sdd/ because that directory self-ignores
+# (scripts/sdd-workspace writes * into its .gitignore). Only this repository's
+# root .gitignore lists .superpowers/, and an untracked-but-not-ignored file
+# would enter scripts/lib/task-state.sh's review snapshot, invalidating a Codex
+# review, and would block initial execution's clean-worktree check.
+ctx_log_observation() {
+  local primary base sid
+  primary=$(ctx_primary_root) || return 0
+  base="$primary/.superpowers/sdd"
+  mkdir -p "$base" 2>/dev/null || return 0
+  [ -f "$base/.gitignore" ] || printf '*\n' > "$base/.gitignore" 2>/dev/null || return 0
+  sid=$(head -n 1 "$CTX_ROLLOUT" 2>/dev/null | tr -d '\r' \
+    | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
+  printf '%s\t%s\t%s\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DR_SUPERPOWERS_BUDGET_CALLER:-direct}" "$sid" \
+    >> "$base/budget-log.tsv" 2>/dev/null || return 0
+}
 
 # Print the budget line; return 0 ok, 5 handoff, 3 unknown.
 ctx_line() {

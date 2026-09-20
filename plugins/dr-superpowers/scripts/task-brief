@@ -84,4 +84,5 @@ echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
 # The budget line rides on a call the controller already makes before every
 # task, so checking the session budget costs no extra request. It must never
 # fail the brief.
-bash "$HERE/context-size" 2>/dev/null || true
+# --header mode has no task number; --observations ignores the header rows.
+DR_SUPERPOWERS_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" 2>/dev/null || true

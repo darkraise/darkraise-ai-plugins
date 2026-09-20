@@ -299,5 +299,46 @@ has "executor lane: still the Claude source" "$out" "source: record"
 rm -rf "$CODEX_HOME"
 unset CODEX_HOME
 
+# --- the observation log ---
+# It lives inside .superpowers/sdd/, which self-ignores: an untracked file
+# elsewhere in the checkout enters task-state.sh's review snapshot.
+export CODEX_HOME="$TMP/codex3"
+mkdir -p "$CODEX_HOME"
+LOG="$REPO/.superpowers/sdd/budget-log.tsv"
+rm -rf "$REPO/.superpowers/sdd"
+mkroll2() { mkdir -p "$CODEX_HOME/sessions/2026/09/15"; { meta "$REPO_NATIVE"; usage_line "$1" 999999; } > "$CODEX_HOME/sessions/2026/09/15/rollout-log.jsonl"; }
+
+mkroll2 150000
+run
+check "log: one row after a rollout measurement" "$(wc -l < "$LOG" | tr -d ' ')" "1"
+check "log: the row has four fields" "$(awk -F'\t' 'NR==1 {print NF}' "$LOG")" "4"
+check "log: tokens land in field 2" "$(awk -F'\t' 'NR==1 {print $2}' "$LOG")" "150000"
+check "log: an unset caller writes direct" "$(awk -F'\t' 'NR==1 {print $3}' "$LOG")" "direct"
+check "log: the session id lands in field 4" "$(awk -F'\t' 'NR==1 {print $4}' "$LOG")" "01a0a58e-8e6c-72b0-92a3-b1586a8ca0ec"
+check "log: the directory self-ignores" "$(cat "$REPO/.superpowers/sdd/.gitignore")" "*"
+check "log: the checkout stays clean" "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)" ""
+
+DR_SUPERPOWERS_BUDGET_CALLER=task-brief:3 run
+check "log: the caller tag lands in field 3" "$(awk -F'\t' 'END {print $3}' "$LOG")" "task-brief:3"
+
+# The tag the shipped script writes, not one the test sets by hand:
+# ctx_observations filters on exactly this shape. Task 7 is deliberately a
+# different number from the hand-set row above, so the assertion cannot pass
+# on the row that is already there. The plan file needs no commit: task-brief
+# resolves it with git rev-parse, which works on an untracked file, and this
+# suite exports no git identity.
+PLANF="$REPO/docs/plans/2026-01-01-demo.md"
+mkdir -p "$REPO/docs/plans"
+printf '# Demo\n\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n### Task 7: Seventh\n\nBody.\n' > "$PLANF"
+( cd "$REPO" && bash "$HERE/../scripts/task-brief" docs/plans/2026-01-01-demo.md 7 ) >/dev/null 2>&1
+check "log: task-brief writes its own task number" "$(awk -F'\t' 'END {print $3}' "$LOG")" "task-brief:7"
+( cd "$REPO" && bash "$HERE/../scripts/task-brief" --header docs/plans/2026-01-01-demo.md ) >/dev/null 2>&1
+check "log: --header mode writes the header tag" "$(awk -F'\t' 'END {print $3}' "$LOG")" "task-brief:header"
+
+rm -rf "$CODEX_HOME"; unset CODEX_HOME
+rm -f "$LOG"
+run
+check "log: a Claude measurement writes no row" "$([ -f "$LOG" ] && echo yes || echo no)" "no"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
