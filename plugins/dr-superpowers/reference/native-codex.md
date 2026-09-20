@@ -71,6 +71,31 @@ the active history, stop for an explicit handoff decision. A fresh unstarted v2
 task can have empty local history while retaining the prior task record.
 A Claude `Executor: codex` line never starts recursive CLI offload in a Codex host.
 
+## Execution modes and session ends
+
+Both execution skills run on this host, and the plan's `**Execution:**` line
+names the mode and the native pair. `scripts/plan-lint` holds a Codex-host plan
+to the all-or-nothing inline rule: an inline plan needs every task at total 4 or
+less and risk below 3. A Codex plan therefore carries no delegated task, and
+`scripts/task-brief` writes it no `**Dispatch:**` line: the mixed inline
+delegation Claude plans use has no Codex form, so
+dr-superpowers:executing-plans dispatches nothing here but its ruling seat and
+the final review.
+
+`scripts/review-route` exits 2 on every `Host: codex` plan by design: seats come
+from this file, not from the Claude roster. The task reviewer, the ruling seat
+and the final-review seat are all native judges at rank 8 (Astra high) or above,
+dispatched as Dispatch and review below describes. An exit 2 is never a reason
+to fall back to a Claude agent name.
+
+Sessions end on the count rule rather than a budget line, because there is no
+transcript for `scripts/context-size` to measure: hand off after every 3
+completed tasks, or after any task that needed 3 or more fix rounds. The budget
+line reads `unknown` here, which is that rule's cue, not a fault.
+`scripts/next-step` takes `--host codex` on its `--draft` and `--adhoc` paths so
+the resume block names the Codex client; for a plan it reads `Host: codex` from
+the header itself.
+
 ## Selector contract
 
 Intersect currently advertised model/effort pairs with applicable user policy at

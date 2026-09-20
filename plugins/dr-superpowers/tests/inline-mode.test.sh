@@ -187,6 +187,18 @@ for h in '### 1. Dispatch the implementer' '### 2. Handle the report' '### 3. Re
 done
 present "subagent mode links the delegated loop" "$SDD" "../../reference/delegated-task.md"
 present "subagent mode defers per-task recovery" "$SDD" 'Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery'
+
+# A Codex host reaches both documents by the same paths a Claude host does, and
+# `review-route` exits 2 on every `Host: codex` plan. Each place that reads an
+# exit 2 must name the native judge there, not a Claude agent that host has no
+# way to dispatch.
+NC="$P/reference/native-codex.md"
+check "exists: reference/native-codex.md" "$([ -f "$NC" ] && echo yes || echo no)" "yes"
+present "the delegated loop routes a Codex host's exit 2" "$DT"   'the seat is a native judge at Astra high or above'
+present "the delegated loop names the Codex escalation source" "$DT"   'come from the `codex-v2` selector'
+present "inline mode routes a Codex host's exit 2" "$INLINE"   'Codex host, where `review-route` exits 2 on every'
+present "native Codex claims the exit 2" "$NC"   '`scripts/review-route` exits 2 on every `Host: codex` plan by design'
+present "native Codex states plans carry no delegated task" "$NC"   'A Codex plan therefore carries no delegated task'
 # validate-repository.mjs checks links only under skills/, so this suite pins
 # the reference file's links.
 for link in $(grep -oE '\]\([^)#]+\.md' "$DT" | sed 's/^](//' | sort -u); do

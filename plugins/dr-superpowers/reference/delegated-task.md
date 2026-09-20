@@ -25,7 +25,7 @@ session on Opus.
 |---|---|---|
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
 | External implementer | The task's `**Executor:**` line, via [external-executor.md](external-executor.md) | Set by the wrapper |
-| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; `dr-superpowers:judge-opus` wherever it names `judge-fable` and Fable is unavailable or your human partner declined it — say every substitution aloud | None |
+| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; `dr-superpowers:judge-opus` wherever it names `judge-fable` and Fable is unavailable or your human partner declined it — say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | general-purpose | Explicit, cheap-to-mid |
 
 **Fleet agents take no `model` argument.** The Agent tool's `model` argument
@@ -165,6 +165,9 @@ needed.
   clause records `(codex off — <reason>)` with the gate line's `reason`
   (`untrusted` when it printed `usable=true`). If `review-route` exits 2,
   review with `dr-superpowers:judge-opus` and say why, quoting its message.
+  Codex hosts are the exception: `review-route` exits 2 on every `Host: codex`
+  plan, and the seat is a native judge at Astra high or above
+  ([native-codex.md](native-codex.md)).
 - **Reviewer inputs:** the brief file (it ends with the plan's Global
   Constraints and Contracts — the reviewer's attention lens), the report
   file, and the review package. Never tell the reviewer which lane produced
@@ -297,6 +300,10 @@ is split once; a part that exhausts `impl-opus-high` again enters the reserve
 at `impl-opus-xhigh`, said aloud; `impl-fable-max` exhausted is
 `Task <N>: BLOCKED`. Both splits and reserve entries are `Ruling:` lines. The
 details are in [escalation.md](../skills/subagent-driven-development/references/escalation.md).
+On a Codex host the rungs are not these: escalation, the single split and the
+reserve chain all come from the `codex-v2` selector
+([native-codex.md](native-codex.md) §Selector contract), which the caller runs
+through `scripts/select-native-tier.sh`. The five-round cap is the same.
 
 **Every round, either way:** the implementer fixes, re-runs the tests
 covering the amended code, appends its fix report to the same report file,

@@ -77,6 +77,10 @@ A fresh session reloads only its baseline plus these files. The numbers are in
      feedback; otherwise `build`.
    It prints the `## Next session` block and writes it into `latest.md`. If it
    exits 4, say `latest.md` could not be written.
+
+   On Codex, add `--host codex` to the design-phase and unplanned-work calls,
+   so the block names the Codex client rather than Claude. A plan states its
+   own host in its header, so the execution call needs no flag.
 5. **End the session.** Your final message is one line on why you stopped,
    then the block, verbatim, as the last thing. The block is the resume guide:
    the launch command, the directory to launch it in, and the first prompt.

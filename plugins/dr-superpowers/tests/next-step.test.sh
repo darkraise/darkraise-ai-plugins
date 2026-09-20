@@ -143,7 +143,11 @@ has "inline: prompt names executing-plans" "$out" "with dr-superpowers:executing
 has "inline: command without backticks" "$out" "claude --model sonnet --effort medium"
 write_plan "$PLAN" '**Execution:** subagent — codex gpt-5.6-sol / high — Codex host' ""
 run "$REPO" "$PLAN_REL"
-has "codex: no claude command, points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
+has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-5.6-sol -c model_reasoning_effort=high"
+lacks "codex pair: no claude command" "$out" "claude --model"
+write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
+run "$REPO" "$PLAN_REL"
+has "an Execution line naming no pair: points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
 
 # --- CRLF plan ---
 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
@@ -431,6 +435,64 @@ has "blocked: next carries the decision" "$out" "Your human partner decides: whe
 lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
 lacks "blocked: no launch command" "$out" "Launch in"
 has "blocked: latest.md carries the block" "$(cat "$REPO/.superpowers/handoff/latest.md")" "Task 2 is BLOCKED"
+
+# --- Codex host: the launch command names the Codex client, not Claude ---
+# The session knows its host (native-codex.md identifies it from callable tool
+# schemas, never from an executable), so the adhoc and draft paths take it as a
+# flag. A plan carries `Host: codex` in its header instead.
+CODEX_DESIGN='codex -m gpt-6-astra -c model_reasoning_effort=high'
+CODEX_BUILD='codex -m gpt-5.6-sol -c model_reasoning_effort=high'
+
+run "$REPO" --adhoc --phase design --host codex --next "Scope item C with dr-superpowers:brainstorming"
+check "adhoc design on codex: exits 0" "$status" "0"
+has "adhoc design on codex: astra launch command" "$out" "$CODEX_DESIGN"
+lacks "adhoc design on codex: no claude launch command" "$out" "claude --model"
+run "$REPO" --adhoc --phase build --host codex --next "Commit items A and B"
+check "adhoc build on codex: exits 0" "$status" "0"
+has "adhoc build on codex: sol launch command" "$out" "$CODEX_BUILD"
+run "$REPO" --draft docs/specs/draft.md --host codex --next "Write the implementation plan with dr-superpowers:writing-plans"
+check "draft on codex: exits 0" "$status" "0"
+has "draft on codex: astra launch command" "$out" "$CODEX_DESIGN"
+run "$REPO" --adhoc --phase build --host claude --next "Commit items A and B"
+has "an explicit --host claude: keeps the claude launch command" "$out" "claude --model sonnet --effort high"
+run "$REPO" --adhoc --phase build --host gemini --next "x"
+check "an unknown --host: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase build --host --next "x"
+check "--host without a value: exits 2" "$status" "2"
+
+# A Codex plan's launch command comes from its own Execution line, exactly as a
+# Claude plan's does. The header, not the flag, tells the plan path its host.
+CODEX_PLAN_REL="docs/plans/2026-01-01-codex.md"
+CODEX_PLAN="$REPO/$CODEX_PLAN_REL"
+CODEX_LEDGER_DIR="$REPO/.superpowers/sdd/2026-01-01-codex"
+EXEC_CODEX='**Host:** codex
+
+**Routing policy:** codex-v2
+
+**Execution:** inline — `codex gpt-5.6-terra / high` — every task totals 4 or less'
+write_plan "$CODEX_PLAN" "$EXEC_CODEX" "$PROG_NEXT"
+run "$REPO" "$CODEX_PLAN_REL"
+check "codex plan: exits 0" "$status" "0"
+has "codex plan: launch command from the Execution line" "$out" "codex -m gpt-5.6-terra -c model_reasoning_effort=high"
+lacks "codex plan: no fallback to reading the Execution line" "$out" "Launch: see the"
+
+run "$REPO" --complete "$CODEX_PLAN_REL"
+check "codex plan complete: exits 0" "$status" "0"
+has "codex plan complete: the next sub-project launches the design tier" "$out" "$CODEX_DESIGN"
+lacks "codex plan complete: no claude launch command" "$out" "claude --model"
+
+mkdir -p "$CODEX_LEDGER_DIR"
+{ printf '# SDD ledger — plan: %s
+' "$CODEX_PLAN_REL"
+  printf 'Task 1: complete (commits a..b, review clean)
+'
+  printf 'Task 2: escalated inline -> subagent — fix round 3/3
+'; } > "$CODEX_LEDGER_DIR/progress.md"
+run "$REPO" "$CODEX_PLAN_REL"
+check "codex plan escalated: exits 0" "$status" "0"
+has "codex plan escalated: launches the build tier" "$out" "$CODEX_BUILD"
+lacks "codex plan escalated: no claude launch command" "$out" "claude --model"
+
 
 # --- the same directory under a second POSIX spelling ---
 # Under Git Bash /tmp and /c/Users/…/Temp can name one directory, so stripping

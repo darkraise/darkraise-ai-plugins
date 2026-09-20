@@ -8,9 +8,9 @@
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
-# Usage: next-step [--complete] PLAN_FILE
-#        next-step --draft DRAFT_FILE --next ACTION
-#        next-step --adhoc --phase design|build --next ACTION
+# Usage: next-step [--host claude|codex] [--complete] PLAN_FILE
+#        next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION
+#        next-step [--host claude|codex] --adhoc --phase design|build --next ACTION
 #   --complete  the plan is finished and its branch integrated; the ledger may
 #               already be deleted. Replaces latest.md wholesale.
 #   --draft     a design phase (brainstorming, a spec, a plan being written) is
@@ -20,6 +20,9 @@
 #               plan or draft file) is handing off; the notes in latest.md are
 #               the authority. --phase design launches the planning model,
 #               --phase build the execution model.
+#   --host      which client the next session launches; default claude. A plan
+#               states its own host in its header, so the flag serves the paths
+#               that have no plan to read.
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written.
 set -euo pipefail
@@ -33,8 +36,38 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--complete] PLAN_FILE | next-step --draft DRAFT_FILE --next ACTION | next-step --adhoc --phase design|build --next ACTION"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--complete] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
+
+# --host is pulled out wherever it sits so the remaining arguments keep their
+# strict positional contract.
+host=claude
+hostless=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --host)
+      [ $# -ge 2 ] || usage
+      case $2 in claude|codex) host=$2 ;; *) usage ;; esac
+      shift 2
+      ;;
+    *) hostless+=("$1"); shift ;;
+  esac
+done
+set -- ${hostless[@]+"${hostless[@]}"}
+
+# The design tier writes specs and plans; the build tier executes them. Claude's
+# pairs are its ladder's top execution rung and the subagent Execution default.
+# The Codex pairs are the tiers this plugin's own policy already names: Astra
+# high is where reference/codex-routing.json floors judges, and Sol high tops
+# the execution policy in reference/ladder.md.
+launch_for() { # launch_for design|build
+  case $host:$1 in
+    codex:design)  printf 'codex -m gpt-6-astra -c model_reasoning_effort=high' ;;
+    codex:*)       printf 'codex -m gpt-5.6-sol -c model_reasoning_effort=high' ;;
+    *:design)      printf 'claude --model opus --effort high' ;;
+    *)             printf 'claude --model sonnet --effort high' ;;
+  esac
+}
 
 complete=0 draft=0 adhoc=0 phase="" next_action=""
 case "${1:-}" in
@@ -78,11 +111,7 @@ if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
   status_line="Unplanned work: the notes in \`.superpowers/handoff/latest.md\` are the authority."
   next_line=$next_action
-  if [ "$phase" = design ]; then
-    launch_cmd="claude --model opus --effort high"
-  else
-    launch_cmd="claude --model sonnet --effort high"
-  fi
+  launch_cmd=$(launch_for "$phase")
   prompt="Continue the unplanned work recorded in \`.superpowers/handoff/latest.md\`: $next_action"
   if [ "$root" != "$primary" ]; then
     prompt="$prompt First enter the existing worktree \`$root\`."
@@ -91,7 +120,7 @@ elif [ "$draft" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
   status_line="Design in progress: \`$rel\` is the authority."
   next_line=$next_action
-  launch_cmd="claude --model opus --effort high"
+  launch_cmd=$(launch_for design)
   prompt="Continue from \`$rel\` (the authority): $next_action Read \`.superpowers/handoff/latest.md\` first."
 else
   tasks=$(plan_tasks "$plan")
@@ -101,7 +130,15 @@ else
   execution=$(plan_header_line "$plan" Execution)
   program=$(plan_header_line "$plan" Program)
 
+  # A Codex plan states its host in the header and its native pair on the
+  # Execution line; the flag is for the paths with no plan to read.
+  if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then host=codex; fi
+
   launch_cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$execution" | head -n 1 || true)
+  if [ -z "$launch_cmd" ]; then
+    pair=$(grep -oE 'codex [a-z0-9.-]+ / [a-z]+' <<<"$execution" | head -n 1 || true)
+    [ -z "$pair" ] || launch_cmd="codex -m $(awk '{ print $2 }' <<<"$pair") -c model_reasoning_effort=$(awk '{ print $4 }' <<<"$pair")"
+  fi
   skill=subagent-driven-development
   if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$execution"; then skill=executing-plans; fi
 
@@ -150,7 +187,7 @@ else
       k1=$((k + 1))
       status_line="Plan \`$rel\` is complete; sub-project $k of $n is done."
       next_line="Sub-project $k1 ($next_title): write its spec in a fresh session."
-      launch_cmd="claude --model opus --effort high"
+      launch_cmd=$(launch_for design)
       prompt="Start sub-project $k1 ($next_title) of the program in \`$spec\`: use dr-superpowers:brainstorming to write its spec."
       launch=1
     else
@@ -194,7 +231,7 @@ else
     fi
 
     if [ -n "$escalated_at" ] && [ "$launch" -eq 1 ]; then
-      launch_cmd="claude --model sonnet --effort high"
+      launch_cmd=$(launch_for build)
       next_line="$next_line This plan escalated to subagent mode at Task $escalated_at."
     fi
 
