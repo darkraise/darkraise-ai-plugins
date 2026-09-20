@@ -340,5 +340,36 @@ rm -f "$LOG"
 run
 check "log: a Claude measurement writes no row" "$([ -f "$LOG" ] && echo yes || echo no)" "no"
 
+# --- reading the observations back ---
+# The growth between two briefs is one task's cost. A negative delta is a
+# compaction, which is the event phase two calibrates against, never data.
+mkdir -p "$REPO/.superpowers/sdd"
+LOG="$REPO/.superpowers/sdd/budget-log.tsv"
+{ printf '2026-09-20T10:00:00Z\t40000\ttask-brief:1\tsess-a\n'
+  printf '2026-09-20T10:05:00Z\t78000\ttask-brief:2\tsess-a\n'
+  printf '2026-09-20T10:06:00Z\t79000\treview-package\tsess-a\n'
+  printf '2026-09-20T10:07:00Z\t80000\ttask-brief:header\tsess-a\n'
+  printf '2026-09-20T10:10:00Z\t31000\ttask-brief:3\tsess-a\n'
+  printf '2026-09-20T11:00:00Z\t50000\ttask-brief:9\tsess-b\n'
+} > "$LOG"
+run --observations
+check "observations: exits 0" "$status" "0"
+has "observations: a positive delta" "$out" "sess-a  Task 1 -> Task 2  +38k"
+has "observations: a compaction is not a number" "$out" "sess-a  Task 2 -> Task 3  compacted"
+has "observations: the session span" "$out" "sess-a  span  40k -> 31k"
+lacks_obs() { if grep -qF -- "$1" <<<"$out"; then printf 'FAIL - observations: %s\n' "$2"; fail=$((fail + 1)); else printf 'ok   - observations: %s\n' "$2"; pass=$((pass + 1)); fi; }
+lacks_obs "+1k" "a review-package row is never a pairing point"
+lacks_obs "Task 3 -> Task 9" "does not pair across session ids"
+: > "$LOG"
+run --observations
+check "observations: an empty log exits 0" "$status" "0"
+check "observations: an empty log prints nothing" "$out" ""
+rm -f "$LOG"
+run --observations
+check "observations: an absent log exits 0" "$status" "0"
+check "observations: an absent log prints nothing" "$out" ""
+run --observations extra
+check "observations: a stray argument exits 2" "$status" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

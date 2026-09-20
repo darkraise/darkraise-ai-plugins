@@ -288,3 +288,29 @@ ctx_line() {
   fi
   echo "budget: ${tk}k of ${bk}k (${pct}%) — ok — source: $CTX_SOURCE"
 }
+
+# Pair consecutive task-brief rows within one session: task-brief runs once per
+# task, so the growth between two briefs is one task's cost. A negative delta
+# means a compaction fell between them; it is reported, never averaged into the
+# data, because compaction is what the budget will be calibrated against.
+ctx_observations() {
+  local primary log
+  primary=$(ctx_primary_root) || return 0
+  log="$primary/.superpowers/sdd/budget-log.tsv"
+  [ -f "$log" ] || return 0
+  tr -d '\r' < "$log" | awk -F'\t' '
+    $3 ~ /^task-brief:[0-9]+$/ {
+      n = substr($3, 12)
+      if ($4 == sid) {
+        d = $2 - prev
+        if (d < 0) printf "%s  Task %s -> Task %s  compacted\n", $4, pn, n
+        else printf "%s  Task %s -> Task %s  +%dk\n", $4, pn, n, int((d + 500) / 1000)
+      } else {
+        if (sid != "") printf "%s  span  %dk -> %dk\n", sid, int((first + 500) / 1000), int((prev + 500) / 1000)
+        sid = $4; first = $2
+      }
+      prev = $2; pn = n
+    }
+    END { if (sid != "") printf "%s  span  %dk -> %dk\n", sid, int((first + 500) / 1000), int((prev + 500) / 1000) }
+  '
+}

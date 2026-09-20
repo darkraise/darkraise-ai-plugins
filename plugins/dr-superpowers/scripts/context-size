@@ -2,13 +2,22 @@
 # Print the running session's context size against the handoff budget as one
 # budget line (see reference/session-budget.md).
 #
-# Usage: context-size
+# Usage: context-size [--observations]
 # Exit: 0 ok; 5 handoff due; 3 unknown; 2 usage.
+#   --observations  print the per-task growth recorded on Codex hosts
+#                   (reference/session-budget.md) and exit 0.
 set -uo pipefail
 
-[ $# -eq 0 ] || { echo "usage: context-size" >&2; exit 2; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/context.sh"
+
+if [ "${1:-}" = --observations ]; then
+  shift
+  [ $# -eq 0 ] || { echo "usage: context-size [--observations]" >&2; exit 2; }
+  ctx_observations
+  exit 0
+fi
+[ $# -eq 0 ] || { echo "usage: context-size [--observations]" >&2; exit 2; }
 
 ctx_line
 status=$?
