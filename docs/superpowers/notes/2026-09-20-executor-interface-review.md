@@ -54,7 +54,7 @@ against the code before being accepted.
 | 19 | `session_dir` had no base path; array output form undefined | — | §4 and §4.2 |
 | 20 | Five registry fields are read by nothing in this sub-project | Confirmed | §4.3 lists them and forbids adding readers |
 | 21 | `handoff/SKILL.md` records no executor state, so there was nothing to generalise | Confirmed | Row withdrawn from §11 |
-| 22 | The `(total 4)` / `(executor)` overlap was undefined | — | §9.1 gives `executor` precedence and shows `heavy` cannot collide |
+| 22 | The `(total 4)` / `(executor)` overlap was undefined | — | §9.1 gives `executor` precedence over `total 4`. Its added claim that `heavy` cannot collide was **false** and is corrected in round 2 |
 | 23 | `tests/plan-lib.test.sh` and `tests/run-codex-task.test.sh` were absent from §12 | Confirmed | Added |
 
 ## Rejected or deliberately deferred

@@ -61,7 +61,7 @@ already executor-neutral and are not touched.
 |---|---|---|
 | D1 | A registry of per-executor data files, each executor keeping its own gate and locator script | Auth models genuinely differ. What must be shared is the *state*, not the probe |
 | D2 | Inline mode offloads cheap tasks downward, mirroring its upward delegation | A lane whose band is exactly what inline mode keeps for itself can never fire. Owner's choice over restricting the lane to subagent plans |
-| D3 | `executor-empty-diff` replaces `codex-empty-diff`, old name still accepted | The `--kind risk3` precedent. A hard rename breaks in-flight plans for no gain |
+| D3 | `executor-empty-diff` is added; `codex-empty-diff` stays accepted **and keeps printing its own spelling** | A hard rename breaks in-flight plans for no gain, and `review-route:205` echoes the kind it was given, so canonicalising on output would change an observable D5 does not permit |
 | D4 | A fixture executor id, used only by the suites, reached through a directory override | It proves the abstraction supports a second executor with no second CLI installed |
 | D5 | Codex's observable behaviour is unchanged except where §9 and §10 say otherwise | This is a refactor. Every deviation is named; anything unnamed must stay identical in effect |
 | D6 | The ledger keeps the field name `thread` | `task-state.sh` stores `thread`, the wrapper prints `thread=`. Renaming to `session` would make a third name for one value and create a compatibility cost that is entirely self-inflicted |

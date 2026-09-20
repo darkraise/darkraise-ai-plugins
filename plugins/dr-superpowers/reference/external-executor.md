@@ -198,12 +198,17 @@ When the resume itself fails.
 A run failure is exit 1 with `status=BLOCKED`, or exit 0 with an empty diff.
 
 An empty diff is the report's `- note: DONE with an empty diff; nothing was
-committed` line, not `base==head` alone. Identical shas with no such note mean
-the wrapper skipped the commit because `commit_subject` came back empty. Check
-the working tree before acting: if it is dirty, Codex did real work that was
-never staged - stage it, commit it under a conventional subject, and review as
-normal. If it is clean, nothing was produced and this is the empty-diff
-capability failure below; take the successor rung.
+committed` line, not `base==head` alone. Identical shas with that note mean
+nothing was produced: this is the empty-diff capability failure below, so take
+the successor rung.
+
+Identical shas *without* the note cannot happen alongside a status line. A
+`DONE` turn that changed files but returned an unusable `commit_subject` does
+not leave work sitting in the tree for you to stage: `dr_task_stage` blocks it
+with `invalid commit subject` and the wrapper exits 2 before printing anything.
+That is a post-execution exit 2, so read the durable record and follow
+[external-task-recovery.md](external-task-recovery.md); never stage the tree by
+hand, which would bypass the scoped staging the write set exists to enforce.
 
 | Failure | Response |
 |---------|----------|
@@ -224,12 +229,15 @@ underneath.
 `status` alone cannot tell you which failure you have, because it is forced to
 `BLOCKED` on any non-zero exit. Two other fields separate the cases:
 
-- **`exit=`** on the status line, and `- exit:` in the report, is Codex's own
-  exit code. `exit=2` is an argument-parse failure that took milliseconds and no
-  model call, and it means this wrapper and this CLI disagree - fix that rather
-  than retrying or changing rung. `exit=1` with a `## Codex error` section is an
-  ordinary failed run. `exit=0` with `status=BLOCKED` is the odd one: Codex
-  finished cleanly and wrote no verdict, which is a capability failure.
+- **`exit=`** on the status line, and `- exit:` in the report, is the wrapper's
+  normalized code for the turn, not Codex's own: `run-codex-task.sh` sets 0 when
+  the client reports `ok`, 1 when it does not, and 124 on a deadline. It is
+  never 2, because a wrapper that exits 2 dies before printing a status line at
+  all - which is why the exit table above reads exit 2 as "no status line was
+  printed" and sends you to stderr. Do not read this field as a CLI exit code.
+  `exit=1` with a `## Codex error` section is an ordinary failed run. `exit=0`
+  with `status=BLOCKED` is the odd one: Codex finished cleanly and wrote no
+  verdict, which is a capability failure.
 - **`note=timed-out`**, with `exit=124`, means the wrapper's poll loop hit the
   rung's `codex-timeout` and killed Codex. You do not have to infer this from
   wall time - which you could not do anyway, since the wrapper runs as a
@@ -316,7 +324,7 @@ bounded by their own rule below and by the five-round cap.
 |----------------|----------|
 | Transient - the report's `## Codex error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread |
 | `note=timed-out` with `exit=124` | Retry the same resume once with `--timeout` raised |
-| `exit=2` | The wrapper refused before launching, so nothing ran and the thread is untouched. A validation error in what you passed; fix it and re-issue the same resume. This does not count as a failed round |
+| `exit=2` | **Read the durable record's `phase` first: exit 2 does not prove nothing ran.** The wrapper also exits 2 after the turn, on thread-persistence, reap-persistence, scope-validation, staging, commit or report-copy failure. On a preflight phase, nothing ran and the thread is untouched: fix what you passed and re-issue the same resume, which does not count as a failed round. On any later phase, follow [external-task-recovery.md](external-task-recovery.md) before re-issuing anything |
 | `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 4 |
 | A second failure of any kind in the same round | `HANDBACK` |
 
@@ -492,7 +500,7 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
 | The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`/`ultra`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
-| Wrapper exits 2 on an initial run with any other message | It refused before launching Codex: a validation error, not a run failure. Ruling: `HANDBACK` to the `**Implementer:**` agent; never retry it unchanged |
+| Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
 | A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as a `codex-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
