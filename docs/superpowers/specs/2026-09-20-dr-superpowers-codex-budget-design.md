@@ -35,6 +35,12 @@ Owner rulings, 2026-09-20:
    session is stopped by a number nobody has validated (§6).
 4. **The margin is measured, not scaled.** Phase two sets the budget from
    observed per-task growth on Codex. This phase collects that data (§7).
+5. **Only interactive rollouts are candidates.** An executor-lane run started by
+   a Claude controller writes a rollout in the controller's own working
+   directory; selecting it would strip that Claude session of its verdict. The
+   search filters by recorded origin (§4.2, §4.3).
+6. **The log lives under `.superpowers/sdd/`**, which self-ignores, so it can
+   never enter a review snapshot (§7).
 
 ## 3. Evidence
 
@@ -75,6 +81,13 @@ figure and phase two must not treat it as one.
 **Sessions are identifiable.** Every rollout's first line is a `session_meta`
 entry carrying `session_id`, `cwd` and `cli_version`.
 
+**Interactive and non-interactive runs are distinguishable.** That same entry
+carries `originator` and `source`. Across the 25 newest rollouts on this machine
+the observed pairs are `codex_exec`/`exec` for non-interactive runs and `cli` or
+`vscode` for interactive ones. Several `exec` rollouts are timestamped seconds
+apart — the signature of a batch of executor-lane tasks — and one records this
+repository as its `cwd`.
+
 **An unbounded scan is too slow.** A `grep -r` across the sessions tree on this
 machine did not finish within 120 seconds. §4.2 bounds the search.
 
@@ -96,15 +109,22 @@ is no per-directory key to look up. The search is by recorded working directory.
 Candidate directories are the ones `ctx_candidates` already produces: the
 working directory, the repository root, and the primary checkout's root.
 
-Walk rollout files newest-first by modification time. For each, read only its
-first line, extract `.payload.cwd`, and compare it against each candidate in
-native form through the existing `ctx_native` helper — `cwd` is recorded in
-native Windows form (`D:\\Repositories\\...`) while the candidates are POSIX
-paths under Git Bash. Stop at the first match.
+Walk day directories newest-first, and files newest-first by modification time
+within them; the tree's `<YYYY>/<MM>/<DD>` layout makes that ordering cheap and
+avoids stat-ing the whole history. For each file read only its first line, and
+require both of:
 
-At most 40 files are examined. A session being written to is among the very
-newest, and §3 shows an unbounded walk is not affordable. Examining none is not
-an error: it yields no rollout, which §6 reports as `unknown`.
+- **Interactive origin.** `.payload.originator` is not `codex_exec` and
+  `.payload.source` is not `exec`. §4.3 explains why this is load-bearing.
+- **A matching directory.** `.payload.cwd` equals one of the candidates,
+  compared in native form through the existing `ctx_native` helper — `cwd` is
+  recorded in native Windows form (`D:\\Repositories\\...`) while the candidates
+  are POSIX paths under Git Bash.
+
+Stop at the first file satisfying both. At most 40 files are examined: a session
+being written to is among the very newest, and §3 shows an unbounded walk is
+not affordable. Examining none is not an error — it yields no rollout, which
+§6 reports as `unknown`.
 
 ### 4.3 Choosing between hosts
 
@@ -115,7 +135,25 @@ neither does, the line is `unknown` exactly as today.
 
 Modification time decides because the live session is the one still being
 appended to. A stale transcript from a previous session in the same directory
-loses to an active rollout, and the reverse.
+loses to an active rollout, and the reverse. Session records are never deleted,
+so a `record` source does not by itself prove a live Claude session; modification
+time is the right tiebreak between two stale candidates.
+
+**Why §4.2's origin filter is load-bearing.** Modification time alone is not
+enough, because this plugin itself produces the case where both hosts are live in
+one directory: a Claude controller runs `Executor:` tasks through
+`scripts/run-codex-task.sh --cwd <worktree>`, and those runs write rollouts whose
+`cwd` is the controller's own worktree (§3). Without the filter, the
+controller's next `review-package` line would flip to `source: rollout`, exit 3
+and `unknown` in a Claude session that had a verdict moments earlier —
+contradicting §1's promise that Claude-host verdicts are untouched. With the
+filter, an executor rollout is never a candidate.
+
+A native Codex subagent's rollout is expected to carry the same non-interactive
+origin, which would keep §12's exclusion of subagent measurement true as well.
+That is inference, not observation. If a native subagent proves to write an
+interactive-origin rollout in the controller's directory, newest-wins selects the
+wrong one and phase two must revisit this rule.
 
 ## 5. The measurement
 
@@ -157,22 +195,44 @@ There is no denominator and no percentage, because no budget has been set. A
 line that printed a percentage against a guessed window would be the one thing
 §2.3 exists to prevent.
 
+A rollout that is selected but cannot be measured prints
+`budget: unknown — unknown — no usage entry in <path>` and returns 3. It
+carries no denominator either, unlike the Claude failure line, which keeps the
+Claude-derived one it prints today.
+
+`DR_SUPERPOWERS_BUDGET` is ignored on a rollout measurement in this phase.
+Honouring it would produce `ok` and `handoff` verdicts on Codex, which §2.3
+forbids; it keeps its meaning on a Claude transcript.
+
 ## 7. Collecting the growth data
 
 When a rollout measurement succeeds, `context-size` appends one tab-separated
-row to `<primary checkout>/.superpowers/budget-log.tsv`:
+row to `<primary checkout>/.superpowers/sdd/budget-log.tsv`:
 
 ```
 <ISO-8601 UTC timestamp>	<tokens>	<caller>	<session id>
 ```
 
-The directory is already git-ignored. The file is append-only and is never read
-by the budget line itself.
+**The log must never be visible to git.** Only this repository's root
+`.gitignore` lists `.superpowers/`; the plugin cannot assume any project has that
+line, which is why `scripts/sdd-workspace` writes its own `*` `.gitignore` into
+`.superpowers/sdd/`. An un-ignored file there would be real damage rather than
+untidiness: `scripts/lib/task-state.sh` hashes untracked-but-not-ignored files
+into the review snapshot, so a `context-size` call between `dr_snapshot` and
+`dr_task_assert_snapshot` would invalidate a Codex review, and the same file
+would block initial execution on the clean-worktree check and appear under
+`repo-audit`'s dirty files. The log therefore lives inside `.superpowers/sdd/`,
+and `context-size` creates that directory and writes `*` into its `.gitignore`
+when absent, exactly as `sdd-workspace` does.
+
+The file is append-only and is never read by the budget line itself.
 
 `<caller>` comes from `DR_SUPERPOWERS_BUDGET_CALLER`, which `scripts/task-brief`
 and `scripts/review-package` set when they invoke `context-size`. Unset means
-`direct`. `task-brief` sets `task-brief:<TASK_NUMBER>`, taking the number from
-its own second argument; `review-package` sets `review-package`.
+`direct`. `review-package` sets `review-package`. `task-brief` sets
+`task-brief:<TASK_NUMBER>` in its ordinary mode and `task-brief:header` in
+`--header` mode, which has no task number and still calls `context-size`;
+`--observations` ignores the header rows.
 
 `task-brief` takes one task number per call, so **the difference between
 consecutive `task-brief:<N>` rows within one session id is one task's growth** —
@@ -181,8 +241,24 @@ inferred from row order alone: a re-run brief, a resumed plan or a skipped task
 is visible in the pair rather than silently averaged into it.
 
 `scripts/context-size --observations` reads the log back and prints, per session
-id, each consecutive `task-brief` delta and the session's own span. It takes no
-other arguments, writes nothing, and exits 0 with an empty log.
+id, each consecutive `task-brief:<N>` delta and the session's own span, one row
+per pair:
+
+```
+<session id>  Task 3 -> Task 4  +38k
+<session id>  Task 4 -> Task 5  compacted
+```
+
+**A negative delta is a compaction marker, never data.** Compaction is the event
+phase two calibrates against, so a pair whose second reading is lower than its
+first prints `compacted` and contributes no number. Phase two takes its margin
+from the positive deltas alone. (Labelled inference: a row written after a
+`compacted` record but before the next `token_count` carries the pre-compaction
+peak, which makes the following pair the negative one rather than that pair
+itself.)
+
+`--observations` takes no other arguments, writes nothing, and exits 0 with an
+empty or absent log.
 
 ## 8. Interface changes
 
@@ -193,6 +269,8 @@ other arguments, writes nothing, and exits 0 with an empty log.
 | `scripts/task-brief`, `scripts/review-package` | Set `DR_SUPERPOWERS_BUDGET_CALLER` when calling `context-size` (`task-brief` includes its task number); output unchanged |
 | `reference/session-budget.md` | Document the rollout source, the `measured` line, the log and why Codex has no verdict yet |
 | `reference/native-codex.md` | Its §Execution modes and session ends says the budget line reads `unknown`; it must now say the line carries a measured number while the count rule still governs |
+| `skills/subagent-driven-development/SKILL.md` | Line 409, "On Codex there is no budget line", becomes false: there is one, and it carries no verdict |
+| `skills/handoff/SKILL.md` | Its count-rule bullet (line 26) stays in force, and should say the measured number does not override it |
 
 No skill's decision rules change. `repo-audit` needs no change: it prints
 whatever `context-size` prints.
@@ -226,22 +304,42 @@ with `CODEX_HOME` and `HOME` pointed into a temporary directory:
 4. A rollout whose `session_meta.cwd` matches no candidate is not selected.
 5. A `cwd` in native Windows form matches a POSIX candidate for the same
    directory.
-6. With both a Claude transcript and a Codex rollout present, the one with the
-   later modification time wins, asserted in both directions.
-7. A rollout measurement prints `budget: <N>k measured — unknown — source: rollout`
+6. With both a Claude transcript and a Codex rollout present, and both of
+   interactive origin, the one with the later modification time wins, asserted
+   in both directions.
+7. A rollout whose `originator` is `codex_exec` (or whose `source` is `exec`)
+   is never selected, even when it is the newest file and its `cwd` matches. With
+   a Claude transcript also present, the Claude verdict survives unchanged —
+   this is the executor-lane case of §4.3.
+8. A rollout measurement prints `budget: <N>k measured — unknown — source: rollout`
    and `ctx_line` returns 3.
-8. The search stops after 40 files and reports no rollout rather than hanging.
-9. A malformed or truncated rollout yields `unknown`, not a number.
-10. A successful rollout measurement appends one well-formed row to
-    `budget-log.tsv`; a Claude measurement appends none.
-11. `DR_SUPERPOWERS_BUDGET_CALLER` lands in the row; unset writes `direct`;
+9. The search bound holds at its boundary: a matching rollout that is the 40th
+   newest is found, and one that is the 41st newest is not.
+10. A malformed or truncated rollout yields
+   `budget: unknown — unknown — no usage entry in <path>` and exit 3, not a
+   number and not a Claude-derived denominator.
+11. `DR_SUPERPOWERS_BUDGET` set to a number does not produce a verdict on a
+   rollout measurement, and still applies on a Claude transcript.
+12. A successful rollout measurement appends one well-formed row to
+    `budget-log.tsv`; a Claude measurement appends none. The log's directory is
+    created with a `*` `.gitignore` when absent, and `git status --porcelain
+    --untracked-files=all` in the checkout is empty afterwards.
+13. `DR_SUPERPOWERS_BUDGET_CALLER` lands in the row; unset writes `direct`;
     `task-brief` writes its own task number into the tag.
-12. `--observations` prints the per-task deltas for consecutive `task-brief:<N>`
-    rows within a session id, names both task numbers in each pair, ignores
-    other callers' rows, does not pair rows across session ids, and exits 0 on
-    an empty or absent log.
-13. Every existing Claude assertion in `tests/context-size.test.sh` and
-    `tests/budget-line.test.sh` still passes unchanged.
+14. `--observations` prints the per-task deltas for consecutive `task-brief:<N>`
+    rows within a session id in the §7 format, names both task numbers in each
+    pair, prints `compacted` for a negative delta and no number, ignores
+    `task-brief:header` and other callers' rows, does not pair rows across
+    session ids, and exits 0 on an empty or absent log.
+15. Every existing Claude assertion in `tests/context-size.test.sh` and
+    `tests/budget-line.test.sh` still passes unchanged. Both suites `unset
+    CODEX_HOME` alongside the `HOME` they already redirect, so a developer's real
+    rollout tree can never enter the walk during a test run.
+
+Fixtures are built from a real `session_meta` line with its instruction text
+redacted, and the implementation pins the session id to its jq path the way
+§4.2 pins `.payload.cwd`, so a field-name change fails a test rather than
+silently logging empty ids.
 
 ## 11. Verification
 
