@@ -91,12 +91,16 @@ Which option?
 ```
 
 Directly above the menu, write one line saying what follows the plan. Run
-`scripts/register open --spec <the plan's Spec path>` first. While it exits 1,
+`scripts/register open --spec <the plan's Spec path>` first, and again with the
+spec its `**Program:**` line names when that differs, because a programme's
+register covers the programme design rather than each child's. Ignore every row
+whose `assigned` value is this plan's repository-relative path: Step 5b resolves
+those, so they are not open after integration. While any other row remains,
 the line is `After integration: <n> register rows are still open — #<id>
 <item>`, whatever the Program line says.
 
-Only when every covering register is fully resolved does the Program line
-answer, read as before: `After integration: sub-project <k+1> (<title>) of
+Only when every covering register is fully resolved once those rows land does
+the Program line answer, read as before: `After integration: sub-project <k+1> (<title>) of
 <spec>` when it names `next: <title>`, `After integration: the program is
 complete` when it is the last sub-project, and `After integration: no
 follow-on work recorded` when there is no Program line or no plan. Step 7 turns

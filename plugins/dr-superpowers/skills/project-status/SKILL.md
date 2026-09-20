@@ -74,8 +74,8 @@ Six sections, in this order, nothing else:
 - **Not started** — one bullet per un-started plan and unplanned spec, with paths.
 - **Owner-only items** — decisions and prohibitions waiting on your human
   partner, including every task whose last ledger line is `BLOCKED`.
-- **Open items** — per register, its unresolved rows as `#<id> <item> —
-  <state>`. Rows at `verify` sit under a sub-heading reading awaiting your check:
+- **Open items** — omit when no register holds an unresolved row. Otherwise per
+  register, its unresolved rows as `#<id> <item> — <state>`. Rows at `verify` sit under a sub-heading reading awaiting your check:
   they are built, and only your human partner closes them.
 - **Next step** — exactly one, naming the skill or command that starts it.
 
@@ -97,8 +97,9 @@ wins, and the report names which one matched.
 | 3 | Final review clean, branch unmerged (`git merge-base --is-ancestor <branch> <base>` exits non-zero) | dr-superpowers:finishing-a-development-branch |
 | 4 | `completed.md` exists and a spec has no plan | dr-superpowers:writing-plans |
 | 5 | `completed.md` exists and a plan is absent from it with no ledger | dr-superpowers:using-git-worktrees, then the plan's execution skill |
-| 6 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
-| 7 | None of the above | say the project is between programmes, offer dr-superpowers:brainstorming |
+| 6 | A register holds an unresolved row and no rule above matched | The first row's `Assigned` sub-project via dr-superpowers:brainstorming, else dr-superpowers:brainstorming to rule on the open rows; when every unresolved row is at `verify`, no skill — they are awaiting your check |
+| 7 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
+| 8 | None of the above | say the project is between programmes, offer dr-superpowers:brainstorming |
 
 `BLOCKED` outranks everything: `scripts/next-step` already treats it as terminal
 and hands the decision to your human partner. Rule 0 reads each task's **last**
@@ -107,7 +108,7 @@ and later ruled and completed no longer matches.
 
 Rules 4 and 5 require `completed.md` to exist. Without it nothing can be shown to
 have finished, and firing rule 5 would recommend re-executing merged work — fall
-to rule 7 and say the index is absent. When several plans match one rule, take
+to rule 8 and say the index is absent. When several plans match one rule, take
 the newest filename date and say so. When a rule matches in more than one
 worktree, report each and recommend the one whose branch has the newest commit.
 

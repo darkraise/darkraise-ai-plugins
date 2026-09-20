@@ -203,5 +203,15 @@ run bash "$REG" add "$ROOT/empty.md" "The first item"
 check "add: the first row of an empty table" "$(register_rows "$ROOT/empty.md" | cut -f1)" "1"
 check "add: trailing prose survives" "$(tail -n 1 "$ROOT/empty.md")" "Trailing prose."
 
+# --- the repository's own registers ---
+# They are load-bearing for three scripts and two skills, so one that stopped
+# parsing would otherwise go unnoticed.
+REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
+while IFS= read -r own; do
+  [ -n "$own" ] || continue
+  run bash "$REG" check "$own"
+  check "own register parses: $(basename "$own")" "$RC" "0"
+done < <(register_files "$REPO_ROOT")
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

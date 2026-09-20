@@ -488,6 +488,6 @@ the plan, so the link cannot go stale.
 
 No surface may claim a body of work complete while a row is unresolved:
 `next-step` reports the open rows instead of "every sub-project is done",
-`plan-lint` rejects a `last` Program line that a register contradicts, and
-`project-status` lists the open rows. When no register covers a spec, every
+`plan-lint` rejects a `last` Program line that a register contradicts,
+`repo-audit` counts the open rows, and `project-status` lists them. When no register covers a spec, every
 surface behaves exactly as it did before.

@@ -63,8 +63,8 @@ present "status gates rules 4 and 5 on the index" "$SKILL" 'Rules 4 and 5 requir
 
 # The recommendation table must stay ordered: two sessions on one repo reach
 # the same step only if the rules are read in a fixed order.
-rules=$(grep -oE '^\| [0-7] \|' "$SKILL" | grep -oE '[0-7]' | tr '\n' ' ')
-check "status rules run 0 to 7 in order" "$rules" "0 1 2 3 4 5 6 7 "
+rules=$(grep -oE '^\| [0-8] \|' "$SKILL" | grep -oE '[0-8]' | tr '\n' ' ')
+check "status rules run 0 to 8 in order" "$rules" "0 1 2 3 4 5 6 7 8 "
 present "status rule 0 reads the last line per task" "$SKILL" "A task's **last** ledger line is"
 present "status routes to resume-execution" "$SKILL" 'dr-superpowers:resume-execution'
 
@@ -150,6 +150,24 @@ done
 present "README: the register is documented" "$P/README.md" "docs/superpowers/registers/"
 present "README: the states are documented" "$P/README.md" \
   "open, planned, doing, verify, done, deferred, n/a"
+
+# --- final review fixes ---
+present "status: an unresolved register row outranks 'between programmes'" "$SKILL" \
+  "A register holds an unresolved row and no rule above matched"
+present "status: Open items is omitted when empty" "$SKILL" \
+  "omit when no register holds an unresolved row"
+present "finishing: the Program spec is checked too" "$FIN" "when that differs"
+for skill_file in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md"; do
+  present "execution: a resolved row is never set back to doing ($(basename "$(dirname "$skill_file")"))" \
+    "$skill_file" 'skipping any row already at `verify`'
+done
+
+present "finishing: rows assigned to this plan are not counted as open" "$FIN" \
+  "Ignore every row"
+present "brainstorming: a register with no Covers line is still read" "$BRAIN" \
+  'register whose `**Covers:**` is `-`'
+present "brainstorming: the Covers line is filled once the spec exists" "$BRAIN" \
+  "set the register's \`**Covers:**\` line"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

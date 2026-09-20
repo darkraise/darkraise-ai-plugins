@@ -172,9 +172,12 @@ is the whole process.
   constraint outranks the spec you are about to write, and a rejected approach
   is the one a fresh design most reliably re-proposes. Neither is an error when
   absent.
-- Run `scripts/register open --spec <any spec this work touches>` and read every
-  register covering the area. A row deferred months ago is a decision this
-  design inherits; a findings file nobody reopens is how it was lost before.
+- Run `scripts/register open --spec <any spec this work touches>`, then list
+  `docs/superpowers/registers/` and run `scripts/register open <file>` on every
+  register whose `**Covers:**` is `-`: a list captured before anything was
+  designed is named by no spec, so no `--spec` query reaches it. A row deferred
+  months ago is a decision this design inherits; a findings file nobody reopens
+  is how it was lost before.
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
@@ -189,9 +192,14 @@ write them down before designing anything. Create
 `docs/superpowers/registers/YYYY-MM-DD-<slug>.md` with a `**Source:**` line
 naming where the items came from, a `**Covers:**` line holding `-` until a spec
 exists, and the table header
-`| # | Item | Assigned | Acceptance | State | Note |`. Add each item with
+`| # | Item | Assigned | Acceptance | State | Note |` with its `|---|---|---|---|---|---|`
+separator row. Add each item with
 `scripts/register add <file> "<the requester's words>"` — their words, not your
 paraphrase — and confirm the file with `scripts/register check <file>`.
+
+Once the spec is written, set the register's `**Covers:**` line to that spec's
+repository-relative path, comma-separated when several apply. Nothing else
+fills it in, and until it is filled no plan-side surface can see the register.
 
 The register is the authority on whether the work is finished. A list that
 lives only in the conversation is a list that gets shorter every session.
