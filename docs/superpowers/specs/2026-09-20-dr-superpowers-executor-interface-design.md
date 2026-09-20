@@ -151,8 +151,13 @@ more than the spawns cost.
 
 **Validity, and how a bad entry behaves.** An entry is valid when it parses as
 JSON, carries `id`, `locator`, `probe.command`, `probe.op`, `wrapper`,
-`session_dir`, `surfaces` and `blocks.gate`, its `id` matches its filename
-stem, and no earlier entry claimed that id. An invalid entry is **skipped by
+`session_dir`, `surfaces` and `blocks.gate`, and its `id` matches its filename
+stem. **There is no separate duplicate-id rule.** An earlier draft carried one;
+it is unreachable, because the stem check already makes two entries claiming
+one id impossible inside a single directory, and `DR_EXECUTORS_DIR` replaces
+the shipped directory rather than adding to it, so two directories are never
+read at once. A rule that cannot fire cannot be tested, and an untestable
+validity clause is worse than none. An invalid entry is **skipped by
 `list`, with one diagnostic line per bad entry on stderr**, and `get` on its id
 exits 1. `list` never fails as a whole: one malformed file must not remove
 every executor, which is the silent-downgrade failure `detect-executors.sh` was
@@ -603,7 +608,7 @@ with one id.
 
 | Suite | Covers |
 |---|---|
-| `tests/executors.test.sh` (new) | `list/get/path`, dotted keys, `DR_EXECUTORS_DIR`, unknown id, array output, and each §4.2 validity failure: malformed JSON, a missing required field, an id/filename mismatch, a duplicate id — each skipped with a stderr line while `list` still exits 0 and still names the valid entries |
+| `tests/executors.test.sh` (new) | `list/get/path`, dotted keys, `DR_EXECUTORS_DIR`, unknown id, array output, and each §4.2 validity failure: malformed JSON, a missing required field, an id/filename mismatch — each skipped with a stderr line while `list` still exits 0 and still names the valid entries |
 | `tests/executor-session.test.sh` (new) | Per-id files, surfaces from the registry, the full `mark_off` record including preserved `plugin_version`, one executor's mark-off leaving another's file alone, no session id, pruning |
 | `tests/plan-lib.test.sh` | `plan_executors` fence-awareness and part matching; the `executor` row kind; `heavy` winning over `executor` on a split task whose Part A carries the line and whose Part B is risk 3; `executor` winning over `total 4`; and the six-task three-total-4 fixture proving an offloaded total-4 still counts toward the threshold |
 | `tests/plan-lint.test.sh` | Existing Codex fixtures byte-identical for §6.1 and §6.2; a `stub` Executor line accepted against its own blocks; an unknown id rejected; **new** inline-mode fixtures carrying Executor lines to cover §9.2 |

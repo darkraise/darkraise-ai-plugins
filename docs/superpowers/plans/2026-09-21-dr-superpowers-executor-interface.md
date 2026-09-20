@@ -27,7 +27,7 @@
 
 **`scripts/executors`** — the only reader of the registry.
 - `executors list` — one id per line for every valid entry, sorted; exit 0 even when the directory is empty or every entry is invalid.
-- `executors get <id> <dotted.key>` — one field on stdout; an array prints one element per line; exit 0, or 1 when the id or key is absent.
+- `executors get <id> <dotted.key>` — one field on stdout; an array prints one element per line; exit 0, or 1 when the id or key is absent or its value is empty.
 - `executors path <id> <dotted.key>` — the field resolved absolute against the plugin root; same dotted-key syntax and same exits as `get`.
 - Registry directory: `${DR_EXECUTORS_DIR:-<plugin-root>/reference/executors}`. The variable replaces the directory; it does not add to it.
 - Exit 2 on a usage error or a missing `jq`.
@@ -72,7 +72,10 @@
 - `run-codex-task.sh` never assigns `survivor=yes` — `grep -c` returned 0, 2026-09-20 — so `note=codex-may-still-be-running` is unreachable.
 - `tests/run-codex-task.test.sh` asserts nothing on `note=` or the survivor path, so Task 12 must leave it untouched — grep 2026-09-20.
 - The Codex review surface is off for this session (`codex-gate` printed `usable=true reason=ok review=false lane=false`), so plan review round 1 routes to a Claude seat and no task carries an `**Executor:**` line.
-- unverified — Task 2 verifies that a stub locator and probe satisfy the Contracts grammar well enough for `detect-executors.sh` to produce a usable row for a fixture id.
+- The suite counts Tasks 4, 5 and 11 expect are today's: `bash tests/codex-gate.test.sh` reported `54 passed`, `codex-review` `88`, `review-route` `181`, `executor-recovery` `45` and `detect` `42`, all on 2026-09-21. Task 11 expects `50` and Task 5 expects `59` because each adds assertions to one of these.
+- `tests/fixtures/executors/opencode.json` declares no `session_dir_env`, so `executor_session_on opencode lane` resolves against the real `$HOME`. Every suite that reaches it isolates `DR_CODEX_SESSION_DIR` and `DR_STUB_SESSION_DIR` but cannot isolate opencode's, so that read must stay a read of an absent file: no task writes an opencode session file, and none may. Task 2 adds `"session_dir_env": "DR_OPENCODE_SESSION_DIR"` to the fixture entry so a later sub-project can isolate it without editing a suite.
+- A `VAR=value` prefix on a shell-function call reaches the function's child processes and does not persist afterwards: `bash -c 'f() { env | grep -c "^FOO=bar"; }; FOO=bar f; echo "${FOO:-unset}"'` printed `1` then `unset` on this box's bash 5.2.37, 2026-09-21. `tests/detect.test.sh:95,100,179` already depends on this, so Task 5's `STUB_LOCATOR=off regrun` follows a pattern the suite proves on every run.
+- unverified — Task 5 verifies that a stub locator and probe satisfy the Contracts grammar well enough for `detect-executors.sh` to produce a usable row for a fixture id. Task 2 proves only that the stub obeys the §4.1 grammar in isolation; the roster row is not observable until Task 5 makes the detector registry-driven.
 
 ## Task index
 
@@ -90,7 +93,7 @@
 12. Remove the unreachable survivor path
 13. The executor-neutral reference
 14. Repoint every reference link
-15. The delegated-set definitions
+15. The delegated-set and executor-line prose
 16. The ruling kind and the ledger grammar
 17. Generalise the recovery guide
 18. Version bump and release
@@ -383,6 +386,8 @@ git commit -m "feat(superpowers): add the executor registry helper"
 - Create: `plugins/dr-superpowers/tests/fixtures/executors/opencode.json`
 - Create: `plugins/dr-superpowers/tests/fixtures/executors/bin/stub-plugin`
 - Create: `plugins/dr-superpowers/tests/fixtures/executors/bin/stub-probe.mjs`
+- Create: `plugins/dr-superpowers/tests/fixtures/executors/bin/stub-gate`
+- Create: `plugins/dr-superpowers/tests/fixtures/executors/bin/stub-wrapper`
 - Test: `plugins/dr-superpowers/tests/executors.test.sh` (append one block)
 
 **Interfaces:**
@@ -479,10 +484,19 @@ only purpose is to prove a registered id suppresses its PATH-probe row:
   "probe": { "command": "tests/fixtures/executors/bin/stub-probe.mjs", "op": "auth" },
   "wrapper": "tests/fixtures/executors/bin/stub-wrapper",
   "session_dir": "opencode-sessions",
+  "session_dir_env": "DR_OPENCODE_SESSION_DIR",
   "surfaces": ["lane"],
   "blocks": { "gate": "stub-gate", "assignment": "stub-assignment" }
 }
 ```
+
+`session_dir_env` makes isolation *possible*; Task 6's suite is what achieves
+it, by exporting `DR_OPENCODE_SESSION_DIR` alongside `DR_STUB_SESSION_DIR`.
+The entry borrows the stub's gate and assignment blocks, so Task 6's
+per-executor warning produces a candidate row for `opencode` too, and
+`executor_session_on opencode lane` then reads a file. Without both the field
+and the export that read falls back to `$HOME/.claude/dr-superpowers/`, which
+is the one place this suite could otherwise touch live state.
 
 - [ ] **Step 4: Write the stub locator**
 
@@ -888,7 +902,7 @@ cd plugins/dr-superpowers
 timeout 300 bash tests/codex-gate.test.sh     | tail -1   # 54 passed, 0 failed
 timeout 300 bash tests/codex-review.test.sh   | tail -1   # 88 passed, 0 failed
 timeout 300 bash tests/review-route.test.sh   | tail -1   # 181 passed, 0 failed
-timeout 300 bash tests/executor-session.test.sh | tail -1 # 20 passed, 0 failed
+timeout 300 bash tests/executor-session.test.sh | tail -1 # 19 passed, 0 failed
 ```
 
 Expected: every line reports `0 failed`, and `codex-gate.test.sh` reports the
@@ -1141,7 +1155,8 @@ for dep in jq timeout head tr node bash dirname cygpath sort grep; do
 - [ ] **Step 6: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/detect.test.sh | tail -1`
-Expected: `59 passed, 0 failed`, with every pre-existing assertion still passing.
+Expected: `59 passed, 0 failed` — the suite's 42 as of 2026-09-21 plus this
+task's 17, with every pre-existing assertion still passing.
 
 - [ ] **Step 7: Confirm the live Codex row is unchanged**
 
@@ -1160,8 +1175,9 @@ git commit -m "refactor(superpowers): drive the roster from the registry"
 ### Task 6: plan-lint executor validation and the lane warning
 
 **Files:**
-- Modify: `plugins/dr-superpowers/scripts/plan-lint:191-193` (block resolution), `:271-283` (the Executor branch and the lane candidate), `:294-300` (the warning comment and its `if`)
-- Modify: `plugins/dr-superpowers/scripts/lib/plan.sh:70-72` (a `DR_LADDER` override for the fixture)
+- Modify: `plugins/dr-superpowers/scripts/plan-lint:191-193` (block resolution), `:271-283` (the Executor branch and the lane candidate), `:294-308` (the whole warning block)
+- Modify: `plugins/dr-superpowers/scripts/lib/plan.sh:70-71` (a `DR_LADDER` override for the fixture)
+- Create: `plugins/dr-superpowers/tests/fixtures/stub-ladder.md`
 - Test: `plugins/dr-superpowers/tests/plan-lint.test.sh` (append one block)
 
 **Interfaces:**
@@ -1178,6 +1194,12 @@ keys on session state and the roster, never on the header tick — `p1.md` at
 `tests/plan-lint.test.sh:416-420` carries no header tick and still expects the
 warning.
 
+Both paths become per-executor, which is what the spec's §6.1 and §6.2 ask
+for. With Codex alone registered the output is byte-identical, so the
+generalisation is only visible under the fixture registry — which is why Step 1
+adds a case where the stub is the executor that warns and Codex is the one that
+does not.
+
 - [ ] **Step 1: Write the failing test**
 
 Append to `plugins/dr-superpowers/tests/plan-lint.test.sh`, immediately before
@@ -1188,9 +1210,10 @@ its final summary line:
 # DR_LADDER points at a fixture ladder that is the shipped one plus the stub's
 # blocks: ladder_block reads one file, and the shipped ladder must not carry
 # test fixtures.
+# This suite defines no $P; the plugin root is "$HERE/.." here.
 export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
 export DR_LADDER="$TMP/stub-ladder.md"
-cat "$P/reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DR_LADDER"
+cat "$HERE/../reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DR_LADDER"
 
 # A stub Executor line validates against the stub's own blocks. The fixture
 # ladder supplies them, so the shipped ladder is untouched.
@@ -1207,14 +1230,53 @@ has "an unregistered Executor id is an error" "$out" "ERROR Task 1: Executor nam
 variant s3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
 lint s3.md
 has "the header must name the line's executor" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name stub"
+
+# --- the lane-eligible warning is per executor ------------------------------
+# The generalisation is invisible while codex is the only entry, so prove it
+# where it can be seen: the stub's lane surface is on and its roster row is
+# usable, codex's row is not, and the warning names the stub's own rung from
+# the stub-assignment block.
+# opencode.json borrows the stub's gate block, so it becomes a lane candidate
+# too and its session file is read. Export its directory as well, or that read
+# falls back to the real $HOME.
+export DR_STUB_SESSION_DIR="$TMP/stub-sessions"
+export DR_OPENCODE_SESSION_DIR="$TMP/opencode-sessions"
+mkdir -p "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
+printf '{"session_id":"plan-lint-test","usable":true,"lane":true}\n' \
+  > "$DR_STUB_SESSION_DIR/plan-lint-test.json"
+cat > stub-roster.sh <<EOF
+printf 'called\n' >> "$TMP/probe-calls"
+echo '[{"id":"codex","usable":false,"reason":"off"},{"id":"stub","usable":true,"reason":null}]'
+EOF
+export PLAN_LINT_ROSTER="$TMP/stub-roster.sh"
+rm -f probe-calls; lint p1.md
+has "a second executor warns with its own rung" "$out" \
+  "WARN Task 1: lane-eligible with no **Executor:** line (stub stub-model / medium)"
+lacks "an executor whose roster row is unusable does not warn" "$out" \
+  "lane-eligible with no **Executor:** line (codex"
+check "the per-executor warning still probes once" "$(calls)" "1"
+
+# With no lane surface for either id, nothing warns and nothing probes.
+rm -rf "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
+lane_surface false
+rm -f probe-calls; lint p1.md
+lacks "no executor has a lane surface: no warning" "$out" "lane-eligible"
+check "no executor has a lane surface: the roster never runs" "$(calls)" "0"
+lane_surface true
+unset PLAN_LINT_ROSTER DR_STUB_SESSION_DIR DR_OPENCODE_SESSION_DIR
 ```
+
+`p1.md` is the lane fixture already written above at `tests/plan-lint.test.sh:417`;
+`lane_surface`, `calls` and `lint` are the suite's own helpers.
 
 Add the fixture ladder blocks the stub validates against. The suite
 concatenates this onto a copy of the shipped ladder, so it holds only the
 stub's own blocks. Create
-`plugins/dr-superpowers/tests/fixtures/stub-ladder.md`:
+`plugins/dr-superpowers/tests/fixtures/stub-ladder.md` with exactly this
+content — the outer fence below is four backticks because the file's own
+content contains three-backtick fences:
 
-```markdown
+````markdown
 # Fixture ladder blocks for the stub executor
 
 ```stub-gate
@@ -1229,13 +1291,15 @@ require_external_enabled true
 3 stub-model high
 4 stub-model high
 ```
-```
+````
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd plugins/dr-superpowers && timeout 300 bash tests/plan-lint.test.sh 2>&1 | grep '^FAIL' | head -3`
-Expected: the three new assertions fail — a `stub` line is rejected because the
-current code compares it against `codex-assignment`.
+Run: `cd plugins/dr-superpowers && timeout 300 bash tests/plan-lint.test.sh 2>&1 | grep '^FAIL' | head -6`
+Expected: the three Executor-line assertions fail — a `stub` line is rejected
+because the current code compares it against `codex-assignment` — and
+"a second executor warns with its own rung" fails too, because the warning
+reads only Codex's session file and only the roster's `codex` row.
 
 - [ ] **Step 3: Let the ladder path be overridden**
 
@@ -1243,7 +1307,9 @@ current code compares it against `codex-assignment`.
 unreachable and the stub assertions above cannot pass. Give it the override
 `run-codex-review.sh` already sets the precedent for with
 `CODEX_REVIEW_LADDER`. In `plugins/dr-superpowers/scripts/lib/plan.sh`, replace
-lines 70-72:
+lines 70-71 only. **Line 72 is the `awk` that does the work and must survive**;
+a literal 70-72 edit would delete it and `ladder_block` would return nothing
+for every caller:
 
 ```bash
 ladder_block() {
@@ -1272,8 +1338,8 @@ min_score=$(awk '$1 == "min_score" { print $2 }' <<<"$gate")
 max_risk=$(awk '$1 == "max_risk" { print $2 }' <<<"$gate")
 ```
 
-with a helper that reads an executor's own blocks, defaulting to Codex's so
-every existing call keeps its values:
+with helpers that read an executor's own blocks, plus one row per registered
+executor for the lane warning below:
 
 ```bash
 # An executor's gate and assignment blocks are named by its registry entry.
@@ -1289,9 +1355,19 @@ executor_rung() { # executor_rung <id> <total>
   [ -n "$block" ] || return 1
   awk -v t="$2" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block "$block")"
 }
-min_score=$(executor_gate codex min_score)
-max_risk=$(executor_gate codex max_risk)
+# `<id>\t<min_score>\t<max_risk>` per registered executor, read once: the loop
+# below tests every task against every executor's gate, and each `executors`
+# call is a subprocess.
+lane_gates=""
+while read -r eid; do
+  [ -n "$eid" ] || continue
+  lane_gates="$lane_gates$eid"$'\t'"$(executor_gate "$eid" min_score)"$'\t'"$(executor_gate "$eid" max_risk)"$'\n'
+done < <(bash "$HERE/executors" list 2>/dev/null)
 ```
+
+`min_score` and `max_risk` are gone: every remaining reader wants one
+executor's values, and Step 5 takes them from `executor_gate` or from
+`lane_gates`.
 
 - [ ] **Step 5: Validate the Executor line against its own id**
 
@@ -1312,38 +1388,65 @@ Replace the Executor branch at lines 271-283 — from `executor=$(line Executor)
         { [ -n "$rung" ] && [[ "$executor" == *"$eid $rung"* ]]; } || say ERROR "$where" "Executor does not name the $eid-assignment rung for total $t ($eid ${rung:-none})"
         [[ "$externals" == *"$eid"* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name $eid"
       fi
-    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] \
-         && [ "$t" -ge "$min_score" ] && [ "$d" -le "$max_risk" ]; then
-      rung=$(executor_rung codex "$t")
-      [ -z "$rung" ] || lane="$lane$where"$'\t'"$rung"$'\n'
+    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ]; then
+      # One candidate row per executor whose own gate admits the task. The
+      # header tick is deliberately not read: p1.md carries none and still
+      # expects the warning.
+      while IFS=$'\t' read -r lid lmin lmax; do
+        [ -n "$lid" ] || continue
+        { [ "$t" -ge "${lmin:-0}" ] && [ "$d" -le "${lmax:-3}" ]; } || continue
+        rung=$(executor_rung "$lid" "$t")
+        [ -z "$rung" ] || lane="$lane$where"$'\t'"$lid"$'\t'"$rung"$'\n'
+      done <<<"$lane_gates"
     fi
 ```
 
 The four ERROR messages keep their wording with the id substituted, so a Codex
 plan's output is byte-identical. The `codex-assignment` string that was
 hardcoded becomes `$eid-assignment` in the third message, which for Codex reads
-exactly as before.
+exactly as before. The candidate row gains a middle field, the executor id, and
+Step 6 reads it.
 
-- [ ] **Step 6: Generalise the warning without changing its predicate**
+- [ ] **Step 6: Warn per executor**
 
-Replace lines 294-300 — the comment block and the `if` line only. **Lines 301-303 stay**: they are the `roster=` read, the `usable=` extraction and the inner `if`, and the replacement below does not restore them.
+Replace lines 294-308 — the whole block, comment through its closing `fi`.
+Line 309 is blank and line 310 begins the R5 comment; both stay.
 
 ```bash
 # The lane probe is lazy: the detector costs about two seconds, so it runs only
-# when some task could have taken the lane and did not, and only when this
-# session's gate opened that executor's lane surface. A plan without Executor
-# lines is correct on a machine where no executor is usable, so every outcome
-# other than a usable roster row prints nothing. Inline plans are skipped: an
-# inline plan may now carry Executor lines, so this warning would be
-# meaningful there, but turning it on changes a pinned fixture for an advisory
-# message. That is a deliberate deferral, recorded in the register, not an
-# oversight.
-if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ] && executor_session_on codex lane; then
+# when some task could have taken the lane and did not, and only for an
+# executor whose lane surface this session's gate opened. A plan without
+# Executor lines is correct on a machine where no executor is usable, so every
+# outcome other than a usable roster row prints nothing. Inline plans are
+# skipped: an inline plan may now carry Executor lines, so this warning would
+# be meaningful there, but turning it on changes a pinned fixture for an
+# advisory message. That is a deliberate deferral, recorded in the register,
+# not an oversight.
+if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ]; then
+  # The session test is free and the roster costs seconds, so no executor
+  # survives to the probe unless its own lane surface is on.
+  on_ids=""
+  for eid in $(cut -f 2 <<<"$lane" | sort -u); do
+    executor_session_on "$eid" lane && on_ids="$on_ids $eid "
+  done
+  if [ -n "$on_ids" ]; then
+    roster=$(timeout 30 bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}" 2>/dev/null) || roster=""
+    usable_ids=$(jq -r '.[]? | select(.usable == true) | .id' <<<"$roster" 2>/dev/null | tr -d '\r')
+    while IFS=$'\t' read -r w eid r; do
+      [ -n "$w" ] || continue
+      [[ "$on_ids" == *" $eid "* ]] || continue
+      grep -qxF "$eid" <<<"$usable_ids" || continue
+      say WARN "$w" "lane-eligible with no **Executor:** line ($eid $r)"
+    done <<<"$lane"
+  fi
+fi
 ```
 
-The predicate is unchanged: session lane surface, plus a usable roster row,
-plus a lazy probe, plus non-inline mode. It never reads the header tick, which
-is why `p1.md` keeps warning.
+The predicate per executor is what it was for Codex: that executor's lane
+surface, plus its own `usable` roster row, plus a lazy probe, plus non-inline
+mode. It never reads the header tick, which is why `p1.md` keeps warning. With
+Codex the only registered entry, the message is byte-identical to today's,
+which is what the existing `p1` assertions check.
 
 - [ ] **Step 7: Run the test to verify it passes**
 
@@ -1567,12 +1670,21 @@ git commit -m "feat(superpowers): delegate offloaded tasks in inline plans"
 
 `task-brief` already renders whatever kind `plan_delegated` prints, so the
 header needs no change at all. What this task proves is that it does, and it
-fixes the one place the brief's second line would otherwise mislead.
+fixes the one place the brief's second line would otherwise mislead. It is a
+**pin-only** task: its assertions pass the moment Task 7 lands, and its value
+is that a later change to `task-brief` cannot silently drop the rendering.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugins/dr-superpowers/tests/inline-mode.test.sh`, before its
-summary:
+Insert into `plugins/dr-superpowers/tests/inline-mode.test.sh` **immediately
+before line 299, `rm -rf "$DTMP"`** — not before the summary. Line 299 deletes
+`$DTMP`, so a block appended after it writes into a directory that no longer
+exists.
+
+`task-brief` writes its output to a file and prints only `wrote <path>: N
+lines`, so every assertion reads the file, never the command's stdout. The
+suite's own `brief()` helper at line 257 does exactly that, and `--header` is
+recognised only as the **first** argument (`scripts/task-brief:22`).
 
 ```bash
 # --- the executor marker in the Dispatch line -------------------------------
@@ -1600,27 +1712,30 @@ sed 's/^|//' > "$DTMP/offload.md" <<'EOF'
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 
-hdr=$(timeout 60 bash "$P/scripts/task-brief" "$DTMP/offload.md" --header 2>/dev/null)
+brief --header "$DTMP/offload.md" "$DTMP/oh.md"
 check "the header marks an offloaded task" \
-  "$(grep -c 'Task 1 (executor)' <<<"$hdr")" "1"
+  "$(grep -c 'Task 1 (executor)' "$DTMP/oh.md")" "1"
 check "the header does not mark a plain task" \
-  "$(grep -c 'Task 2' <<<"$hdr")" "0"
+  "$(grep -c 'Task 2' "$DTMP/oh.md")" "0"
 
-brief=$(timeout 60 bash "$P/scripts/task-brief" "$DTMP/offload.md" 1 2>/dev/null)
+brief "$DTMP/offload.md" 1 "$DTMP/ob1.md"
 check "an offloaded brief is marked delegated" \
-  "$(sed -n 2p <<<"$brief")" "**Dispatch:** delegated — total 2, risk 0"
-brief2=$(timeout 60 bash "$P/scripts/task-brief" "$DTMP/offload.md" 2 2>/dev/null)
+  "$(sed -n 2p "$DTMP/ob1.md")" "**Dispatch:** delegated — total 2, risk 0"
+brief "$DTMP/offload.md" 2 "$DTMP/ob2.md"
 check "a self-implemented brief carries no Dispatch line" \
-  "$(grep -c '^\*\*Dispatch:\*\*' <<<"$brief2")" "0"
+  "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/ob2.md")" "0"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run the test and record that it passes**
 
-Run: `cd plugins/dr-superpowers && timeout 300 bash tests/inline-mode.test.sh 2>&1 | grep '^FAIL' | head -3`
-Expected: FAIL on "the header marks an offloaded task" only if Task 7 is not
-yet in place. With Task 7 committed, all four pass already — run Step 2 anyway
-and record which, because that is the evidence this task is a proof rather
-than a change.
+**This task is pin-only: there is no red step, by construction.** Task 7 is
+what makes `plan_delegated` emit the `executor` kind, and Task 7 commits green,
+so a pin written afterwards cannot fail. Writing it before Task 7 would mean
+committing a red suite. The deliverable is the pin plus the comment in Step 3.
+
+Run: `cd plugins/dr-superpowers && timeout 300 bash tests/inline-mode.test.sh 2>&1 | grep -c '^FAIL'`
+Expected: `0`. Record the four new assertion names from the suite's output; if
+any of them fails, Task 7 is wrong and this task stops until it is fixed.
 
 - [ ] **Step 3: State the rendering rule in the script**
 
@@ -1682,7 +1797,10 @@ Append to `plugins/dr-superpowers/tests/plan-lint.test.sh`, before its summary:
 # Two consequences, both intended: an offloaded task leaves self_max, so a
 # total-4 offload no longer forces opus; and any delegation raises the
 # required effort to high.
-inline_plan() { # inline_plan <file> <execution line> <extra sed>
+# The Execution line is substituted with the suite's own `sed 's/^|//'` idiom
+# rather than perl: it is the only text-editing tool this suite uses, and the
+# line contains no character the shell or sed would reinterpret here.
+inline_plan() { # inline_plan <file> <execution line>
   sed 's/^|//' > "$TMP/$1" <<'EOF'
 |# Inline Offload Fixture
 |
@@ -1722,8 +1840,10 @@ inline_plan() { # inline_plan <file> <execution line> <extra sed>
 |**Implementer:** dr-superpowers:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
-  perl -0pi -e "s/EXECUTION_LINE/\Q$2\E/" "$TMP/$1"
-  perl -0pi -e 's/\\//g' "$TMP/$1"
+  # awk does a literal, one-shot replacement: no regex metacharacter in $2 is
+  # reinterpreted, and no escape survives into the file.
+  awk -v line="$2" '$0 == "EXECUTION_LINE" { print line; next } { print }' \
+    "$TMP/$1" > "$TMP/$1.tmp" && mv "$TMP/$1.tmp" "$TMP/$1"
 }
 
 inline_plan i1.md '**Execution:** inline — `claude --model sonnet --effort high` — fixture'
@@ -1736,17 +1856,23 @@ lint i2.md
 has "an offloading inline plan needs high effort" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run the test and record that it passes**
 
-Run: `cd plugins/dr-superpowers && timeout 300 bash tests/plan-lint.test.sh 2>&1 | grep '^FAIL' | head -3`
-Expected: without Task 7 the offloaded task is a plain four-band task, so
-`i1.md` reports `needs --model opus` and the NOTE line is absent. With Task 7
-committed the three assertions pass; run this step and record which, because
-that record is what proves Task 7's effect reaches `plan-lint`.
+**Pin-only, like Task 8, and for the same reason:** Task 7 already made these
+verdicts true and committed green, so there is no red step to run. Without
+Task 7 the offloaded task would be a plain four-band task, `i1.md` would report
+`needs --model opus` and the NOTE line would be absent — that is the
+counterfactual these fixtures pin, not a state this plan ever passes through.
+
+Run: `cd plugins/dr-superpowers && timeout 300 bash tests/plan-lint.test.sh 2>&1 | grep -c '^FAIL'`
+Expected: `0`. If any of the three new assertions fails, Task 7's effect does
+not reach `plan-lint` and this task stops until it does.
 
 - [ ] **Step 3: No implementation**
 
-This task adds no production code. Its deliverable is the pin.
+This task adds no production code. Its deliverable is the pin: three fixtures
+covering both consequences the spec's §9.2 names, which no existing fixture
+exercises because every Executor fixture sits on the subagent-mode base plan.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -1769,7 +1895,7 @@ git commit -m "test(superpowers): pin inline offload lint verdicts"
 - Test: `plugins/dr-superpowers/tests/review-route.test.sh` (append one block)
 
 **Interfaces:**
-- Consumes: nothing.
+- Consumes: the fixture registry `tests/fixtures/executors/` (Contracts), for the stub-routing case only.
 - Produces: the `executor-empty-diff` ruling kind and the legacy-spelling rule (Contracts). Task 14 updates the prose that names the kind.
 
 
@@ -1803,6 +1929,22 @@ check "a risk-3 task still routes the neutral kind to Fable" \
 
 bash "$ROUTE" "$TMP/plan.md" --ruling nonsense-kind 1 >/dev/null 2>&1
 check "an unknown ruling kind is still rejected" "$?" "2"
+
+# --- a task on a second executor still gets a Claude review seat ------------
+# The spec's §12 asks for this row. Routing decides who *reviews* a task, and
+# that has never depended on which executor produced the diff, so a stub
+# Executor line must route exactly as the codex line it replaces does.
+# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-5.5 /
+# high` (lines 84 and 90), so this rewrites both; only Task 5 is asserted on.
+# Swapping the executor and nothing else is the sharpest possible test.
+sed 's|\*\*Executor:\*\* codex gpt-5.5 / high|**Executor:** stub stub-model / high|' \
+  "$TMP/plan.md" > "$TMP/stub-plan.md"
+codex_seat=$(bash "$ROUTE" "$TMP/plan.md" --task 5 2>/dev/null)
+stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
+  bash "$ROUTE" "$TMP/stub-plan.md" --task 5 2>/dev/null)
+check "a stub Executor task routes exactly as a codex one does" "$stub_seat" "$codex_seat"
+check "the stub task's seat is a Claude judge" \
+  "$(grep -c 'primary=dr-superpowers:judge-' <<<"$stub_seat")" "1"
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1876,30 +2018,35 @@ summary:
 
 ```bash
 # --- consecutive offloads in one worktree -----------------------------------
-# The offload path runs several tasks into the same worktree. Without a
-# release between them the second fails preflight on the first task's owner
-# record, which is the failure the loop's new release step prevents.
+# tests/executor-recovery.test.sh:112-117 already proves that --release lets a
+# released worktree take a new task, so that case is not repeated. What is new
+# is the refusal the release prevents, and the instruction that makes the
+# release part of the loop rather than a recovery step somebody remembers.
 git -C "$fixture/primary" worktree add -qb consecutive "$fixture/consecutive"
 
 STUB_WRITE_PATH=one.txt run --cwd "$fixture/consecutive" --task-id offload-one
 check 'first offloaded task succeeds' "$?" 0
 
-STUB_WRITE_PATH=two.txt run --cwd "$fixture/consecutive" --task-id offload-two
-check 'a second task without a release is refused' "$([ $? -eq 0 ] && echo allowed || echo refused)" refused
+STUB_WRITE_PATH=two.txt run --cwd "$fixture/consecutive" --task-id offload-two; rc=$?
+check 'a second task without a release is refused' \
+  "$([ "$rc" -eq 0 ] && echo allowed || echo refused)" refused
 
-bash "$SCRIPT" --cwd "$fixture/consecutive" --task-id offload-one --release >/dev/null 2>&1
-check 'the first task releases ownership' "$?" 0
-
-STUB_WRITE_PATH=two.txt run --cwd "$fixture/consecutive" --task-id offload-two
-check 'a released worktree accepts the next offload' "$?" 0
+# The deliverable is the instruction, so assert it directly.
+LOOP="$HERE/../reference/delegated-task.md"
+check 'the loop tells the controller to release the worktree' \
+  "$(grep -c 'Release the worktree when the task is complete' "$LOOP")" 1
+check 'the release resolves the wrapper through the registry' \
+  "$(grep -cF 'executors" path <id> wrapper' "$LOOP")" 1
+check 'a HANDBACK reconciles instead of releasing' \
+  "$(grep -c 'reconcile rather than release' "$LOOP")" 1
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd plugins/dr-superpowers && timeout 300 bash tests/executor-recovery.test.sh 2>&1 | grep '^FAIL' | head -3`
-Expected: the four assertions describe behaviour the wrapper already has, so
-they pass. What fails today is the process: nothing tells a controller to run
-the release. Record the pass and continue — Step 3 is the deliverable.
+Run: `cd plugins/dr-superpowers && timeout 300 bash tests/executor-recovery.test.sh 2>&1 | grep '^FAIL' | head -5`
+Expected: the three prose assertions fail — `delegated-task.md` says nothing
+about releasing a worktree. The two wrapper assertions pass, because the
+wrapper already behaves this way; what is missing is the instruction to use it.
 
 - [ ] **Step 3: Require the release in the loop**
 
@@ -1912,10 +2059,11 @@ recorded:
 reviewed complete line no longer owns its worktree:
 
 ```bash
-bash "<plugin-root>/scripts/run-<executor>-task.sh" \
+bash "$(bash "<plugin-root>/scripts/executors" path <id> wrapper)" \
   --cwd <worktree-root> --task-id <stable-task-id> --release
 ```
 
+`<id>` is the first token of the task's `**Executor:**` line.
 `scripts/lib/task-state.sh` keeps an `owner.json` per worktree and refuses a
 different task id in it, so an unreleased worktree fails the next offload's
 preflight. An inline plan offloads several tasks into one worktree in
@@ -1932,7 +2080,8 @@ recovery procedure reads.
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/executor-recovery.test.sh | tail -1`
-Expected: `49 passed, 0 failed`.
+Expected: `50 passed, 0 failed` — the suite's 45 as of 2026-09-21 plus this
+task's five.
 
 - [ ] **Step 5: Commit**
 
@@ -2080,18 +2229,45 @@ summary:
 # --- the executor lane reference -------------------------------------------
 LANE="$P/reference/executor-lane.md"
 check "the neutral reference exists" "$([ -f "$LANE" ] && echo yes || echo no)" "yes"
+# The old path is spelled in two pieces on purpose. Task 14 rewrites every
+# literal `external-executor` in this repository with sed; written whole, this
+# assertion would be rewritten to test the new file, which exists, and would
+# then fail. The two pieces concatenate at runtime and match no sed pattern.
+OLDREF="external-""executor.md"
 check "the Codex-only reference is gone" \
-  "$([ -f "$P/reference/external-executor.md" ] && echo present || echo gone)" "gone"
-present "the reference resolves the gate through the registry" "$LANE" 'executors get <id> gate'
+  "$([ -f "$P/reference/$OLDREF" ] && echo present || echo gone)" "gone"
+present "the reference resolves the gate through the registry" "$LANE" 'executors path <id> gate'
+present "the reference names the blocks through the registry" "$LANE" 'executors get <id> blocks.assignment'
 present "the reference resolves the wrapper through the registry" "$LANE" 'executors path <id> wrapper'
 present "the reference keeps a per-executor section" "$LANE" '## Per-executor: codex'
 present "the reference names the neutral ruling kind" "$LANE" 'executor-empty-diff'
 present "the reference keeps the background-call rule" "$LANE" 'background Bash call'
-present "the reference keeps the two-failure budget" "$LANE" 'two'
-present "the reference documents the wedged-client case" "$LANE" 'reaped'
+present "the reference keeps the two-failure budget" "$LANE" 'At most two executor runs may *fail* per task before Claude takes over'
+present "the reference documents the wedged-client case" "$LANE" "Read the durable task record's \`phase\` and \`reaped\` as **evidence, not proof**"
+present "the reference resumes an executor task, not a Codex one" "$LANE" '## Resuming an executor task'
 absent "the reference no longer claims a wrapper poll loop" "$LANE" "wrapper's own poll loop"
 absent "the reference no longer names the unreachable survivor note" "$LANE" 'codex-may-still-be-running'
 ```
+
+Step 4's substitution table rewrites `bash "<plugin-root>/scripts/codex-gate"`
+at **every** occurrence, and `tests/review-route.test.sh:398` pins that exact
+string. Task 14's rename touches only the filename, so this pin would stay red
+for good. Replace it here, in the same task that invalidates it — the third
+legitimate assertion change in the plan, alongside Tasks 15 and 16. Replace
+line 398:
+
+```bash
+present "a failed run refreshes the gate" "$EXEC" 'bash "<plugin-root>/scripts/codex-gate" --refresh'
+```
+
+with:
+
+```bash
+present "a failed run refreshes the gate" "$EXEC" 'bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh'
+```
+
+`$EXEC` is `reference/external-executor.md` at line 387 and Task 14's `sed`
+repoints it with everything else, so only the needle moves here.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -2131,6 +2307,15 @@ such in the opening paragraph added below.
 | `## Codex error` (as the report heading) | `## Executor error` |
 | `Read `## Codex error` in the report` | `Read `## Executor error` in the report` |
 | `A native Codex host never uses this lane` | `A native Codex host never uses these lanes` |
+| `## Resuming a Codex task` (the heading at line 269) | `## Resuming an executor task` |
+| `At most two Codex runs may *fail* per task` | `At most two executor runs may *fail* per task` |
+
+`## Codex task review seats` and `## Final-review Codex round` keep their
+names: review seats are Codex's alone, which the per-executor section in Step 6
+states, and `reference/delegated-task.md:196` links the first of them by that
+anchor. The resume heading is the one that must move, because
+`delegated-task.md:277-279` sends every executor's fix rounds to it and Task 16
+repoints that sentence.
 
 Leave every rule, threshold and table row exactly as it is: the two-failure
 budget, the round-4 handback, the five-round cap, the retry-once rules, the
@@ -2161,18 +2346,25 @@ client's own deadline, taken from the rung's timeout block, with an outer
 status line, which is the guarantee that makes waiting safe.
 ```
 
-Replace the same claim at lines 241-242:
+Replace the same claim at lines 241-244. **The claim ends mid-line**: line 242
+continues ` You do not have to infer this from`, and lines 243-244 finish that
+second sentence, which is still true and must survive. Replace the whole
+bullet, lines 241-244:
 
 ```markdown
 - **`note=timed-out`**, with `exit=124`, means the wrapper's poll loop hit the
-  rung's `codex-timeout` and killed Codex.
+  rung's `codex-timeout` and killed Codex. You do not have to infer this from
+  wall time - which you could not do anyway, since the wrapper runs as a
+  background call and you are not watching the clock.
 ```
 
 with:
 
 ```markdown
 - **`note=timed-out`**, with `exit=124`, means the client reported that its own
-  deadline expired and it interrupted the turn.
+  deadline expired and it interrupted the turn. You do not have to infer this
+  from wall time - which you could not do anyway, since the wrapper runs as a
+  background call and you are not watching the clock.
 ```
 
 And delete the unreachable survivor paragraph at lines 246-249 entirely:
@@ -2230,20 +2422,33 @@ teardown failed. Where the evidence is inconclusive — `reaped: false` with no
 recorded pre-existing broker, or a client that never answered — reconcile
 process ownership before retrying, resuming or handing back. A retry into an
 unreconciled worktree puts two runs in one tree, which is the hazard the old
-`note=codex-may-still-be-running` row gestured at without ever being able to
-fire.
+survivor note gestured at without ever being able to fire.
+
+**Do not name the removed note here.** Step 1 asserts it is absent from this
+file with `grep -qF`, so writing the literal string in this section — even to
+explain that it is gone — fails this task's own assertion.
 ```
 
 - [ ] **Step 7: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/review-route.test.sh | tail -1`
 
-Expected: the ten new assertions pass, **and the suite still fails** on the
-path pins that name the old filename — eight in this suite and three in
-`tests/inline-mode.test.sh`. That is expected and is Task 14's work: the rename
-lands here, the referrers move there. Record the failing count and do not edit
-an assertion in this task. The two suites return to `0 failed` at the end of
-Task 14.
+Expected: the thirteen new assertions pass, **and the suite still fails** on
+the path pins that name the old filename — **eleven** in this suite
+(`:346`, `:347`, and the nine `present` calls on `$EXEC` at `:389`, `:391`,
+`:392`, `:393`, `:396`, `:397`, `:398`, `:399`, `:400`) and **two** in
+`tests/inline-mode.test.sh` (`:72` and `:180`).
+
+Three neighbours deliberately do **not** fail, and seeing them pass is part of
+the check: `review-route.test.sh:390` and `:394` are `absent` calls, which
+succeed against a file that no longer exists, and `inline-mode.test.sh:70`
+greps `reference/final-review.md`, which still carries the old spelling until
+Task 14 rewrites it.
+
+That is expected and is Task 14's work: the rename lands here, the referrers
+move there. Record the failing count and change no assertion in this task
+beyond the line-398 pin Step 1 already replaced. The two suites return to
+`0 failed` at the end of Task 14.
 
 - [ ] **Step 8: Commit**
 
@@ -2296,6 +2501,14 @@ grep -rl 'external-executor' . --exclude-dir=.git \
   | xargs sed -i 's/external-executor\.md/executor-lane.md/g; s/external-executor/executor-lane/g'
 ```
 
+This rewrites test assertions along with prose, which is correct — they pin
+the path and the path moved. **One assertion must not be rewritten**: Task 13's
+"the Codex-only reference is gone" check, which asserts the *old* file no
+longer exists. Task 13 spells that path as `OLDREF="external-""executor.md"`
+precisely so this `sed` cannot match it. If a later edit joins those two
+pieces, this step silently turns that assertion into a test of the new file and
+it starts failing.
+
 - [ ] **Step 3: Verify nothing references the old name**
 
 Run: `cd plugins/dr-superpowers && grep -rn 'external-executor' . --exclude-dir=.git`
@@ -2309,9 +2522,12 @@ timeout 300 bash tests/inline-mode.test.sh  | tail -1
 timeout 300 bash tests/review-route.test.sh | tail -1
 ```
 
-Expected: `0 failed` for both. The path assertions inside those suites were
-rewritten by Step 2 along with everything else, which is correct: they pin the
-path, and the path moved.
+Expected: `0 failed` for both — the eleven `review-route` failures and the two
+`inline-mode` failures Task 13 Step 7 recorded all clear here. The path
+assertions inside those suites were rewritten by Step 2 along with everything
+else, which is correct: they pin the path, and the path moved. The one pin
+Step 2's `sed` cannot repair, `review-route.test.sh:398`, was already replaced
+in Task 13 Step 1: its needle is a command string, not a path.
 
 - [ ] **Step 5: Commit**
 
@@ -2322,14 +2538,15 @@ git commit -m "docs(superpowers): repoint the lane reference links"
 
 ---
 
-### Task 15: The delegated-set definitions
+### Task 15: The delegated-set and executor-line prose
 
 **Files:**
-- Modify: `plugins/dr-superpowers/skills/executing-plans/SKILL.md` (lines 50-55, 164)
-- Modify: `plugins/dr-superpowers/skills/writing-plans/SKILL.md` (line 265)
-- Modify: `plugins/dr-superpowers/reference/delegated-task.md` (lines 5-9)
-- Modify: `plugins/dr-superpowers/README.md` (the sentence naming the delegation reasons)
-- Test: `plugins/dr-superpowers/tests/inline-mode.test.sh` (move three pins)
+- Modify: `plugins/dr-superpowers/skills/executing-plans/SKILL.md:50-55` and `:164-166`
+- Modify: `plugins/dr-superpowers/skills/writing-plans/SKILL.md:120-127`, `:133-135`, `:232-235`, `:265`
+- Modify: `plugins/dr-superpowers/skills/using-superpowers/SKILL.md:49`
+- Modify: `plugins/dr-superpowers/reference/delegated-task.md:5-9`
+- Modify: `plugins/dr-superpowers/README.md:105-109`
+- Test: `plugins/dr-superpowers/tests/inline-mode.test.sh` (replace the pin at line 101, append ten)
 
 **Interfaces:**
 - Consumes: the `executor` row kind (Contracts).
@@ -2338,27 +2555,59 @@ git commit -m "docs(superpowers): repoint the lane reference links"
 **Implementer:** dr-superpowers:impl-opus-low
 **Evaluation:** files 2 - spec 0 - coupling 1 - risk 1 = 4
 
-These four sentences are the definition of the delegated set, and
-`tests/inline-mode.test.sh:101,105-106` pin three of them verbatim. This is the
-one task in the plan where changing an existing assertion is correct rather
-than a defect signal, because the sentence it quotes is what changed.
+This is the whole `writing-plans` row of the spec's §11 together with §9.3's
+prose: the five sentences that define the delegated set, the four-band
+definition and the Execution-line model rule the new threshold touches, the
+roster flow that now runs per ticked executor, the one-Executor-line rule, and
+both copies of the "inert" claim.
+
+`tests/inline-mode.test.sh:101` pins the `plan-header.md` example verbatim and
+is the one assertion this task replaces — the sentence it quotes is what
+changed, which is why this is a legitimate assertion change rather than a
+defect signal. **The pins at 102-106 do not move**: every edit below appends
+the third reason to a sentence rather than rewriting it, so each pinned
+substring survives untouched and the new pins are additions. If an edit would
+break one of those five, the edit is wrong, not the pin.
 
 - [ ] **Step 1: Write the failing test**
 
 In `plugins/dr-superpowers/tests/inline-mode.test.sh`, replace the pin at line
-101 and the two at 105-106 with:
+101:
 
 ```bash
-present "inline mode names all three delegation reasons" "$INLINE" 'Task <c> (executor)'
-present "README names all three reasons for delegation" "$P/README.md" 'every task carrying an'
-present "the delegated loop names all three reasons" "$P/reference/delegated-task.md" 'every task carrying an'
-absent "inline mode no longer calls executor lines inert" "$INLINE" 'lines are inert for the tasks you'
+present "inline mode names both delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4)`'
+```
+
+with:
+
+```bash
+present "inline mode names all three delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4), Task <c> (executor)`'
+```
+
+Then append, before the suite's summary line:
+
+```bash
+# --- the third delegation reason, in every place that defines the set -------
+# One sentence fragment, repeated verbatim in five files, so a later edit to
+# any one of them is caught here rather than in a plan that misroutes a task.
+EXEC_REASON='and every task carrying an `**Executor:**` line'
+present "inline mode delegates every Executor line" "$INLINE" "$EXEC_REASON"
+present "writing-plans delegates every Executor line" "$P/skills/writing-plans/SKILL.md" "$EXEC_REASON"
+present "using-superpowers delegates every Executor line" "$P/skills/using-superpowers/SKILL.md" "$EXEC_REASON"
+present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
+present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" "$EXEC_REASON"
+present "the four-band population still counts an offloaded task" "$P/skills/writing-plans/SKILL.md" 'A total-4 task counts toward that third whether or not it is offloaded'
+present "writing-plans gates the roster per executor" "$P/skills/writing-plans/SKILL.md" 'for every executor whose gate prints `lane=true`'
+present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/SKILL.md" 'A task carries at most one `**Executor:**` line'
+absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
+absent "writing-plans no longer reads executor lines only when delegated" "$P/skills/writing-plans/SKILL.md" 'the lines are read only for the delegated tasks'
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/inline-mode.test.sh 2>&1 | grep -c '^FAIL'`
-Expected: `4`.
+Expected: `11` — the replaced pin, eight `present` assertions whose text does
+not exist yet, and two `absent` assertions whose text still does.
 
 - [ ] **Step 3: Extend the definition in executing-plans**
 
@@ -2379,15 +2628,19 @@ with:
 
 ```markdown
 **Delegated tasks.** A delegated task is not yours to implement: every heavy
-task, each total-4 task while those are a third of the plan or fewer, and
-every task carrying an `**Executor:**` line, so it gets an independent review
-without putting the whole session on Opus. An offloaded task is delegated for
-the same reason the others are — the session does not implement it — and it
-runs on its executor's wrapper rather than an implementer subagent. Its
-brief's second line is `**Dispatch:** delegated — total <t>, risk <r>`, and
-`plan-header.md` ends with
+task, each total-4 task while those are a third of the plan or fewer,
+and every task carrying an `**Executor:**` line, so it gets an independent
+review without putting the whole session on Opus. An offloaded task is
+delegated for the same reason the others are — the session does not implement
+it — and it runs on its executor's wrapper rather than an implementer
+subagent. Its brief's second line is
+`**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` ends with
 `**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4), Task <c> (executor)`.
 ```
+
+Both replacement lines matter to the pins: `and every task carrying an
+`**Executor:**` line` and the `plan-header.md` example must each sit on one
+line, because `present` greps for them as fixed strings.
 
 - [ ] **Step 4: Replace the inert rule, both copies**
 
@@ -2411,35 +2664,185 @@ executor's wrapper in place of an implementer subagent.
 ```
 
 `skills/writing-plans/SKILL.md` carries the second copy of the same rule, but
-**not in those words** — the string "inert" appears nowhere in that file.
-Line 265 reads:
+**not in those words** — the string "inert" appears nowhere in that file. The
+sentence **begins mid-line**: line 264 ends `Never write an Override line
+yourself. Under`, and line 265 is:
 
 ```markdown
-Under dr-superpowers:executing-plans the lines are read only for the delegated tasks.
+dr-superpowers:executing-plans the lines are read only for the delegated tasks.
 ```
 
-Replace that one sentence with:
+Replace from the word `Under` at the end of line 264 through the end of line
+265 with:
 
 ```markdown
-Under dr-superpowers:executing-plans the lines are read for the delegated
-tasks, which now include every task carrying an `**Executor:**` line.
+Under
+dr-superpowers:executing-plans the lines are read for the delegated tasks,
+which include every task carrying an `**Executor:**` line.
 ```
 
 It sits in a paragraph about `**Implementer:**` lines and Override lines, so
-replace the sentence alone and leave the paragraph around it intact.
+replace the sentence alone and leave the paragraph around it intact. Line 266
+(`[assigning-implementers.md]…`) stays.
 
-- [ ] **Step 5: Extend the other two definitions**
+- [ ] **Step 5: Extend the four-band definition and the model rule**
 
-In `reference/delegated-task.md` lines 5-9 and in the `README.md` sentence
-naming the delegation reasons, add the same third reason, using the exact
-phrase "every task carrying an" so the pins in Step 1 match.
+In `skills/writing-plans/SKILL.md`, replace lines 120-127:
 
-- [ ] **Step 6: Run the test to verify it passes**
+```markdown
+A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
+A task is **four-band** when it is not heavy and its highest total is exactly 4.
+An inline plan delegates its heavy tasks, and its four-band tasks while they
+are a third of the plan or fewer (`3 x four-band <= N`): each runs through
+[delegated-task.md](../../reference/delegated-task.md) with an implementer
+subagent and the full per-task review. Past that third, one Opus session costs
+less than a seat per task, and no four-band task is delegated. The tasks not
+delegated are the **self-implemented** tasks.
+```
+
+with:
+
+```markdown
+A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
+A task is **four-band** when it is not heavy and its highest total is exactly 4.
+An inline plan delegates its heavy tasks, its four-band tasks while they
+are a third of the plan or fewer (`3 x four-band <= N`),
+and every task carrying an `**Executor:**` line: each runs through
+[delegated-task.md](../../reference/delegated-task.md) with an implementer
+subagent — or, for an Executor line, that executor's wrapper — and the full
+per-task review. Past that third, one Opus session costs less than a seat per
+task, and no four-band task is delegated.
+A total-4 task counts toward that third whether or not it is offloaded:
+dropping it from the count could flip the threshold and newly delegate
+four-band tasks nobody marked. The tasks not delegated are the
+**self-implemented** tasks.
+```
+
+Then replace the first three lines of the bullet below it, lines 133-135:
+
+```markdown
+- Otherwise `inline`, the default. The model is `opus` when a self-implemented
+  task totals 4 (so only when four-band tasks exceed a third of the plan), and
+  `sonnet` otherwise. `<e>` is the assignment-table effort of the highest
+```
+
+with:
+
+```markdown
+- Otherwise `inline`, the default. The model is `opus` when a self-implemented
+  task totals 4 — so only when four-band tasks exceed a third of the plan and
+  at least one of them carries no `**Executor:**` line — and `sonnet`
+  otherwise. `<e>` is the assignment-table effort of the highest
+```
+
+The rest of that bullet, from `self-implemented total` onward, is unchanged:
+"raised to `high` when any task is delegated" already covers an executor row,
+because `plan_delegated` emits one.
+
+- [ ] **Step 6: Gate the roster per executor and state the one-line rule**
+
+In `skills/writing-plans/SKILL.md`, replace item 4 of the assignment
+procedure. **Task 14 already repointed its link**, so it now reads:
+
+```markdown
+4. **Offer an external executor** once per plan and apply the lane gate — see
+   [executor-lane.md](../../reference/executor-lane.md) §Planning,
+   which runs `scripts/codex-gate` before the roster and offers Codex only when
+   the gate prints `lane=true`. If no executor is usable, ask nothing.
+```
+
+Replace it with:
+
+```markdown
+4. **Offer an external executor** and apply the lane gate — see
+   [executor-lane.md](../../reference/executor-lane.md) §Planning. Every id
+   `scripts/executors list` prints has its own gate; run each, resolved with
+   `bash "$(bash scripts/executors path <id> gate)"`, before the roster, and
+   make the offer once per plan
+   for every executor whose gate prints `lane=true`. If none is usable, ask
+   nothing.
+```
+
+Then add this paragraph immediately after item 6 of that procedure, before the
+paragraph beginning "A human may edit any `**Implementer:**` line by hand":
+
+```markdown
+**A task carries at most one `**Executor:**` line, and you choose it.** When
+two ticked executors' gates both admit a task, nothing mechanical picks
+between them: write one line, and `plan-lint` validates only what is written.
+No precedence rule is introduced here — with one registered executor there is
+no choice to make, and a rule invented now would be untested against a real
+second executor.
+```
+
+- [ ] **Step 7: Extend the other three definitions**
+
+In `skills/using-superpowers/SKILL.md`, the Process Depth paragraph at line 49
+is one long line. Replace this fragment of it:
+
+```markdown
+an inline plan delegates those, and total-4 tasks while they are a third of the plan or fewer)
+```
+
+with:
+
+```markdown
+an inline plan delegates those, total-4 tasks while they are a third of the plan or fewer, and every task carrying an `**Executor:**` line)
+```
+
+In `reference/delegated-task.md`, replace lines 5-9:
+
+```markdown
+dr-superpowers:executing-plans runs it for each task whose brief carries
+`**Dispatch:** delegated`: a heavy task, too large or risky to implement in the
+session, or a total-4 task in a plan where those are a third of the tasks or
+fewer, delegated so it gets an independent review without putting the whole
+session on Opus.
+```
+
+with:
+
+```markdown
+dr-superpowers:executing-plans runs it for each task whose brief carries
+`**Dispatch:** delegated`: a heavy task, too large or risky to implement in the
+session, or a total-4 task in a plan where those are a third of the tasks or
+fewer, delegated so it gets an independent review without putting the whole
+session on Opus,
+and every task carrying an `**Executor:**` line, which runs on that executor's
+wrapper instead of an implementer subagent.
+```
+
+In `README.md`, replace lines 105-109:
+
+```markdown
+heavy (total 5 or more, or risk 3). An inline plan delegates its heavy tasks,
+which are too large or risky to implement in the session, and its total-4 tasks
+while they are a third of the plan or fewer, which then get an independent
+review without putting the whole session on Opus. Each delegated task runs
+through an implementer subagent with the full per-task review loop, shared with
+```
+
+with:
+
+```markdown
+heavy (total 5 or more, or risk 3). An inline plan delegates its heavy tasks,
+which are too large or risky to implement in the session, its total-4 tasks
+while they are a third of the plan or fewer, which then get an independent
+review without putting the whole session on Opus,
+and every task carrying an `**Executor:**` line, which runs on that executor
+rather than in the session. Each delegated task runs
+through an implementer subagent — or, for an Executor line, that executor's
+wrapper — with the full per-task review loop, shared with
+```
+
+- [ ] **Step 8: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/inline-mode.test.sh | tail -1`
-Expected: `0 failed`.
+Expected: `0 failed`. The five pins at lines 102-106 must still be among the
+passing assertions; if any of them now fails, an edit above rewrote a sentence
+it was supposed to extend.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add -A plugins/dr-superpowers
@@ -2454,15 +2857,22 @@ git commit -m "docs(superpowers): delegate offloaded tasks in the prose"
 - Modify: `plugins/dr-superpowers/skills/subagent-driven-development/SKILL.md` (the ruling table, the ledger grammar)
 - Modify: `plugins/dr-superpowers/skills/subagent-driven-development/references/ruling-prompt.md:96`
 - Modify: `plugins/dr-superpowers/skills/executing-plans/SKILL.md:346-347` and its kinds table
-- Modify: `plugins/dr-superpowers/skills/subagent-driven-development/references/escalation.md` (the Codex-session sentence)
+- Modify: `plugins/dr-superpowers/skills/subagent-driven-development/references/escalation.md:25-28` (the Codex-session sentence)
+- Modify: `plugins/dr-superpowers/reference/delegated-task.md:277-279` (the Codex-session sentence)
 - Test: `plugins/dr-superpowers/tests/inline-mode.test.sh`, `plugins/dr-superpowers/tests/review-route.test.sh`
 
 **Interfaces:**
-- Consumes: the `executor-empty-diff` ruling kind (Contracts).
+- Consumes: the `executor-empty-diff` ruling kind (Contracts), and the
+  `## Resuming an executor task` heading Task 13 renamed.
 - Produces: nothing.
 
 **Implementer:** dr-superpowers:impl-opus-low
 **Evaluation:** files 2 - spec 0 - coupling 1 - risk 1 = 4
+
+Every remaining Codex-literal string in the controller prose lands here. The
+spec's §11 names two of them, `escalation.md` and `delegated-task.md`, and both
+say the same wrong thing: that an external task resumes a *Codex* session. The
+session belongs to whichever executor the task's `**Executor:**` line names.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2502,9 +2912,15 @@ summary:
 
 ```bash
 RP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
+ESC="$P/skills/subagent-driven-development/references/escalation.md"
+LOOP="$P/reference/delegated-task.md"
 present "the ruling prompt explains the neutral kind" "$RP" 'executor-empty-diff'
 absent "the ruling prompt no longer names the Codex-only kind" "$RP" 'codex-empty-diff'
 present "the ledger grammar is executor-neutral" "$SDD" 'executor <id> <model>/<effort>, thread'
+present "escalation resumes the executor's own session" "$ESC" "Its fix rounds resume that executor's own session"
+absent "escalation no longer names a Codex session" "$ESC" 'rounds resume the same Codex session'
+present "the loop resumes the executor's own session" "$LOOP" "A task on an external executor resumes that executor's own session instead"
+absent "the loop no longer names a Codex session" "$LOOP" 'resumes its Codex'
 ```
 
 `$SDD` is already defined in that suite's plan-review prose block.
@@ -2512,23 +2928,57 @@ present "the ledger grammar is executor-neutral" "$SDD" 'executor <id> <model>/<
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/review-route.test.sh 2>&1 | grep -c '^FAIL'`
-Expected: a non-zero count.
+Expected: a non-zero count — at minimum the four Codex-session assertions and
+the three ruling-kind ones, none of whose text exists yet.
 
 - [ ] **Step 3: Rename the kind in the prompt**
 
-In `skills/subagent-driven-development/references/ruling-prompt.md:96`, replace
-`codex-empty-diff` with `executor-empty-diff`, and rewrite its explanation so
-it names the executor generically: an executor's fix round returned DONE with
-an empty diff, arguing the findings are already addressed or wrong, and the
-seat rules on that argument.
+In `skills/subagent-driven-development/references/ruling-prompt.md`, replace
+lines 96-97:
+
+```markdown
+    - codex-empty-diff: a Codex fix round changed nothing and argues that the
+      findings are already addressed or wrong. PARK accepts the argument.
+```
+
+with:
+
+```markdown
+    - executor-empty-diff: an external executor's fix round changed nothing
+      and argues that the findings are already addressed or wrong. PARK
+      accepts the argument.
+```
 
 - [ ] **Step 4: Rename it in the seats table and fix the ledger grammar**
 
-In `skills/subagent-driven-development/SKILL.md`, change `codex-empty-diff` to
-`executor-empty-diff` in the ruling table, and change the ledger grammar from
-`executor codex <m>/<e>, thread <id>` to
-`executor <id> <model>/<effort>, thread <id>`. The field name `thread` does not
-change: `lib/task-state.sh` stores `thread` and the wrapper prints `thread=`.
+In `skills/subagent-driven-development/SKILL.md`, replace line 340:
+
+```markdown
+| `codex-empty-diff` | A Codex fix round that returned DONE with an empty diff and an argument ([external-executor.md](../../reference/external-executor.md)) |
+```
+
+with — noting Task 14 already repointed the link, so the line reads
+`executor-lane.md` by now:
+
+```markdown
+| `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../reference/executor-lane.md)) |
+```
+
+Then replace the ledger clause at line 265. The line is one long grammar
+string; change only the bracketed executor clause:
+
+```markdown
+[; executor codex <m>/<e>, thread <id>]
+```
+
+to:
+
+```markdown
+[; executor <id> <model>/<effort>, thread <id>]
+```
+
+The field name `thread` does not change: `lib/task-state.sh` stores `thread`
+and the wrapper prints `thread=`.
 
 - [ ] **Step 5: Make the kind reachable in inline mode**
 
@@ -2551,11 +3001,50 @@ description the subagent skill gives it.
 
 - [ ] **Step 6: Generalise the escalation sentence**
 
-In `skills/subagent-driven-development/references/escalation.md`, replace the
-statement that an external task resumes a Codex session with one naming the
-executor's own session, resolved from the task's `**Executor:**` line.
+In `skills/subagent-driven-development/references/escalation.md`, replace lines
+25-28. Task 14 already repointed the link, so the fragment now reads:
 
-- [ ] **Step 7: Run the suites**
+```markdown
+None of the three applies to a task running on an external executor. Its fix
+rounds resume the same Codex session and it leaves the lane by `HANDBACK`
+instead of by climbing a rung - see
+[executor-lane.md](../../../reference/executor-lane.md).
+```
+
+with:
+
+```markdown
+None of the three applies to a task running on an external executor. Its fix
+rounds resume that executor's own session - the one its `**Executor:**` line
+names - and it leaves the lane by `HANDBACK` instead of by climbing a rung -
+see [executor-lane.md](../../../reference/executor-lane.md).
+```
+
+- [ ] **Step 7: Generalise the same sentence in the delegated loop**
+
+In `reference/delegated-task.md`, replace lines 277-279. Task 13 renamed the
+heading this sentence points at and Task 14 repointed the link, so the fragment
+now reads:
+
+```markdown
+That is not an escalation. A task on an external executor resumes its Codex
+session instead — see [executor-lane.md](executor-lane.md)
+§Resuming a Codex task.
+```
+
+with:
+
+```markdown
+That is not an escalation. A task on an external executor resumes that
+executor's own session instead — see [executor-lane.md](executor-lane.md)
+§Resuming an executor task.
+```
+
+The `**Codex seats.**` paragraph at line 195 and its `§Codex task review
+seats` anchor stay exactly as they are: review seats are Codex's alone, which
+`executor-lane.md`'s per-executor section states.
+
+- [ ] **Step 8: Run the suites**
 
 ```bash
 cd plugins/dr-superpowers
@@ -2565,7 +3054,7 @@ timeout 300 bash tests/review-route.test.sh | tail -1
 
 Expected: `0 failed` for both.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add -A plugins/dr-superpowers
