@@ -25,7 +25,7 @@ printf '{"autoCompactWindow": 650000}
 ' > "$HOME/.claude/settings.json"
 export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ
+unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CODEX_HOME
 
 REPO="$TMP/repo"
 git init -q "$REPO"

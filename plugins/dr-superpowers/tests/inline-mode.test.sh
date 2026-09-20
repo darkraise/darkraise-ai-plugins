@@ -11,6 +11,12 @@ P="$HERE/.."
 INLINE="$P/skills/executing-plans/SKILL.md"
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 FINAL="$P/reference/final-review.md"
+# task-brief prints the budget line, which measures a Codex rollout and appends
+# an observation row. This suite runs against the real HOME, so send the rollout
+# search somewhere that does not exist: on a Codex host the live rollout is the
+# newest file, and every brief below would otherwise append a junk row to the
+# developer's own budget log.
+export CODEX_HOME="$HERE/no-such-codex-home"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>

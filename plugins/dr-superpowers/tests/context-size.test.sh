@@ -28,7 +28,7 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
-unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR
+unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -200,6 +200,56 @@ check "rollout: a file with no usage returns 1" "$?" "1"
 { meta 'C:\x'; usage_line 88000 99000; } > "$ROLL"
 i=0; while [ "$i" -lt 500 ]; do compacted_line >> "$ROLL"; i=$((i + 1)); done
 check "rollout: falls back past a 400-line tail" "$(ctx_measure_rollout "$ROLL")" "88000"
+
+# --- Codex rollout discovery ---
+# Only an interactive rollout is a candidate: an executor-lane run started by a
+# Claude controller records the controller's own cwd, and selecting it would
+# strip that Claude session of its verdict.
+export CODEX_HOME="$TMP/codex"
+roll() { # roll <day> <name> <cwd> [originator] [source]
+  mkdir -p "$CODEX_HOME/sessions/2026/09/$1"
+  local f="$CODEX_HOME/sessions/2026/09/$1/rollout-$2.jsonl"
+  { meta "$3" "${4:-}" "${5:-cli}"; usage_line 123456 999999; } > "$f"
+  printf '%s' "$f"
+}
+REPO_NATIVE=$(native "$(cd "$REPO" && pwd)")
+
+R1=$(roll 15 a "$REPO_NATIVE")
+( cd "$REPO" && ctx_find_rollout && printf '%s' "$CTX_ROLLOUT" ) > "$TMP/found"
+check "discovery: finds a matching interactive rollout" "$(cat "$TMP/found")" "$R1"
+
+# The executor-lane rollout is NEWER (day 16) and names the same directory, so
+# it wins on modification time and only the origin filter can reject it. This
+# is the case that protects a live Claude controller's verdict.
+roll 16 b "$REPO_NATIVE" codex_exec exec >/dev/null
+( cd "$REPO" && ctx_find_rollout && printf '%s' "$CTX_ROLLOUT" ) > "$TMP/found2"
+check "discovery: prefers the interactive rollout over a newer executor one" "$(cat "$TMP/found2")" "$R1"
+
+rm -rf "$CODEX_HOME"
+roll 15 c "$REPO_NATIVE" codex_exec exec >/dev/null
+( cd "$REPO" && ctx_find_rollout ) >/dev/null 2>&1
+check "discovery: an executor-lane rollout alone is no match" "$?" "1"
+
+rm -rf "$CODEX_HOME"
+roll 15 d 'C:\somewhere\else' >/dev/null
+( cd "$REPO" && ctx_find_rollout ) >/dev/null 2>&1
+check "discovery: skips a rollout for another directory" "$?" "1"
+
+rm -rf "$CODEX_HOME"
+i=0
+while [ "$i" -lt 40 ]; do roll 16 "filler-$i" 'C:\somewhere\else' >/dev/null; i=$((i + 1)); done
+roll 15 target "$REPO_NATIVE" >/dev/null
+( cd "$REPO" && ctx_find_rollout ) >/dev/null 2>&1
+check "discovery: stops at the 40-file bound" "$?" "1"
+
+rm -rf "$CODEX_HOME"
+i=0
+while [ "$i" -lt 39 ]; do roll 16 "filler-$i" 'C:\somewhere\else' >/dev/null; i=$((i + 1)); done
+R5=$(roll 15 target "$REPO_NATIVE")
+( cd "$REPO" && ctx_find_rollout && printf '%s' "$CTX_ROLLOUT" ) > "$TMP/found40"
+check "discovery: finds the 40th-newest match" "$(cat "$TMP/found40")" "$R5"
+rm -rf "$CODEX_HOME"
+unset CODEX_HOME
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

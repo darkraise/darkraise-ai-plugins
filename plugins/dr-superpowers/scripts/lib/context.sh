@@ -143,6 +143,55 @@ ctx_measure_rollout() {
   printf '%s\n' "$out"
 }
 
+# A session being written to is among the very newest files, and the sessions
+# tree holds years of history: an unbounded walk did not finish in 120 seconds
+# on the machine this was measured on.
+CTX_ROLLOUT_SCAN=40
+
+# ctx_rollout_files DIR — rollout paths newest-first. Day directories are
+# walked newest-first, then files by modification time inside each, so the
+# <YYYY>/<MM>/<DD> layout does the coarse ordering without stat-ing the tree.
+ctx_rollout_files() {
+  local day
+  find "$1" -mindepth 3 -maxdepth 3 -type d 2>/dev/null | sort -r | while IFS= read -r day; do
+    ls -t "$day"/rollout-*.jsonl 2>/dev/null
+  done
+}
+
+# Sets CTX_ROLLOUT to this session's rollout; returns 1 when none matches.
+# Only interactive rollouts count. This plugin makes a Claude controller run
+# Codex tasks in its own worktree through run-codex-task.sh, and those runs
+# write rollouts carrying the controller's cwd; selecting one would replace a
+# live Claude session's verdict with an unknown.
+ctx_find_rollout() {
+  CTX_ROLLOUT=""
+  local sessions cands f cwd n=0
+  ctx_have_jq || return 1
+  sessions="${CODEX_HOME:-$HOME/.codex}/sessions"
+  [ -d "$sessions" ] || return 1
+  # ctx_native emits its own newline under Git Bash and none without cygpath,
+  # so the printf keeps one candidate per line on both. A blank line never
+  # matches a non-empty cwd under grep -qxF.
+  cands=$(ctx_candidates | while IFS= read -r c; do
+    [ -n "$c" ] && ctx_native "$c" && printf '\n'
+  done)
+  # One jq per file, with the origin filter inside it: task-brief prints the
+  # budget line before every task, so this walk is on the hot path and a
+  # process spawn per field would be three times the cost on Windows.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    n=$((n + 1))
+    [ "$n" -le "$CTX_ROLLOUT_SCAN" ] || return 1
+    cwd=$(head -n 1 "$f" 2>/dev/null | tr -d '\r' | ctx_jq -r '
+      .payload
+      | select((.originator // "") != "codex_exec" and (.source // "") != "exec")
+      | .cwd // empty' 2>/dev/null)
+    [ -n "$cwd" ] || continue
+    if grep -qxF -- "$cwd" <<<"$cands"; then CTX_ROLLOUT=$f; return 0; fi
+  done < <(ctx_rollout_files "$sessions")
+  return 1
+}
+
 # autoCompactWindow from the user settings, or nothing. Read without jq so the
 # budget stays printable when jq is missing.
 ctx_auto_compact_window() {
