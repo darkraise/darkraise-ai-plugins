@@ -262,3 +262,88 @@ which is verifiable against shipped code.
 Gate: **not applied.** `trust.calibration` stays `pending`. Re-baselining means
 deciding what the reference is, and that is the owner's decision, not a
 session's — the three options above stand, now with this row as evidence.
+
+## Aggregate across all four plans
+
+Three rows from 2026-09-20 at `high`, one from 2026-09-21 at `xhigh`. Per-axis
+delta is astra minus recorded.
+
+| Plan | Effort | executability | coherence | coverage | assumptions |
+|---|---|---|---|---|---|
+| project-state | xhigh | −4 | −2 | −1 | **+1** |
+| judge-seats | high | −4 | −4 | −6 | −4 |
+| inline-mode | high | −3 | −5 | **+2** | **+1** |
+| small-model | high | −9 | −4 | −1 | −8 |
+
+| Axis | astra mean (range) | Claude mean (range) | mean delta |
+|---|---|---|---|
+| executability | 12.00 (8–14) | 17.00 (**17–17**) | −5.00 |
+| coherence | 13.50 (13–14) | 17.25 (16–18) | −3.75 |
+| coverage | 14.25 (10–16) | 15.75 (14–17) | −1.50 |
+| assumptions | 13.75 (9–17) | 16.25 (16–17) | −2.50 |
+
+### What the aggregate shows
+
+**The axis with the largest disagreement is the axis where the Claude baseline
+has no variance at all.** Executability is recorded as 17 on all four plans —
+four different documents, four different sub-projects, identical score. Astra
+spreads the same four plans across 8 to 14. A measurement that returns the same
+value for every input is not discriminating between inputs, so on this axis the
+±2 rule was requiring agreement with a constant.
+
+That is the empirical form of the owner's argument, and it is the strongest
+single reason not to treat divergence as failure.
+
+**Astra is not uniformly harsh.** It scored *higher* than the recorded value on
+three of sixteen axis readings — coverage on `inline-mode` (+2), assumptions on
+`inline-mode` (+1) and on `project-state` (+1). A reviewer that were simply
+miscalibrated downward could not do that.
+
+**The disagreement is structured.** Coherence is the tightest band (−2 to −5 on
+every plan) and coverage the widest (−6 to +2). The two reviewers disagree
+most about whether a plan can be executed literally and agree most about what
+it covers — which is a difference in standard, not in competence.
+
+**`small-model` is the outlier and should not be averaged away.** Its −9 and −8
+carry the aggregate on two axes. Those scores were reproducible across the
+prompt fix (8/13/15/12 before, 8/13/15/9 after), so they are a real reading of
+that plan, not noise — but one plan drives the mean, and a re-baseline should
+look at the rows, not the average.
+
+**Finding volume was never the problem.** Across the four plans astra returned
+roughly 80 findings naming specific tasks and mechanisms, including two
+verified against shipped code: the `repo-audit` working-directory hazard
+(2026-09-21) and the risk-3 validation weakening on `judge-seats`
+(2026-09-20).
+
+## The amended criterion, applied to this evidence
+
+Spec §11 was amended on 2026-09-21: the gate turns on defect detection, and the
+score deltas are recorded and aggregated but decide nothing.
+
+| # | Criterion | Verdict | Evidence |
+|---|---|---|---|
+| 1 | The `d6c288c` replay reports both planted defects | **met** | Vacuous needles: named with an instance (Task 5's `squash` assertion) plus a second instance on Task 4. Cross-task helper: named on substance — shared test-helper interfaces consumed by later tasks, unverifiable by an isolated implementer — but not on instance. The amended rule counts substance |
+| 2 | Every plan attempted returns `status=OK` | **met** | judge-seats, inline-mode, small-model at `high` on 2026-09-20; project-state at `xhigh` on 2026-09-21, after its `TIMEOUT` was treated as the bound defect it was |
+| 3 | No fabricated finding; at least one Critical spot-checked | **met** | The `repo-audit` working-directory Critical verified against `scripts/repo-audit:15`, `project-status/SKILL.md:17` and `resume-execution/SKILL.md:16`. A second Critical from 2026-09-20 on `judge-seats` was verified in that run |
+
+**Would pass.** All three criteria are met on the evidence in this file.
+
+**Not applied.** `trust.calibration` stays `pending`, and flipping it is left to
+the owner as a deliberate act rather than a consequence of a session amending a
+document. Opening the review surface changes `review-route`'s output across the
+plugin — Codex seats start being named for plan and task reviews — and that is
+outward-facing enough to deserve an explicit yes. Three caveats belong with
+that decision:
+
+- Three of the four rows were produced at `high` under the pre-fix prompt; only
+  `project-state` reflects the current `xhigh` seat and the corrected prompt.
+- Criterion 3's spot-check covered one Critical per run, not every finding.
+- The cross-task helper was found on substance only. Under the pre-amendment
+  wording that was ambiguous; the amendment settles it, but a reader should
+  know the grading was a judgement and not a string match.
+
+To apply it: set `trust.calibration` to `pass` in
+`plugins/dr-superpowers/reference/codex-plugin.json`, change the
+`codex-gate.test.sh` trust assertion from `pending,pass` to `pass,pass`, and
+commit both with this note.

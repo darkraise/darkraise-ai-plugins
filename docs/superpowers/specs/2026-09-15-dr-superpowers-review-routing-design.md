@@ -294,18 +294,53 @@ recorded `**Plan review:**` lines:
 | `2026-09-12-dr-superpowers-inline-mode.md` | as committed | 17 / 18 / 14 / 16 |
 | `2026-09-12-dr-superpowers-small-model-planning.md` | as committed | 17 / 17 / 16 / 17 |
 
-Passes only if every axis lands within +/-2 of the recorded score **and** the `d6c288c` replay
-reports both defects its round 3 caught: the test helper `absent` defined in Task 3 and called
-only in Task 11, and the vacuous assertion needles (`"CLAUDE.md"`, `"optional"`, `'seven'`,
-`'exit 0'`) that `e3506c4` replaced.
+**Amended 2026-09-21 (owner decision). The gate turns on defect detection; the score deltas are
+recorded and aggregated, and decide nothing.**
+
+Passes when all three hold:
+
+1. The `d6c288c` replay reports both defects its round 3 caught: the test helper `absent` defined
+   in Task 3 and called only in Task 11, and the vacuous assertion needles (`"CLAUDE.md"`,
+   `"optional"`, `'seven'`, `'exit 0'`) that `e3506c4` replaced. A finding counts when it names
+   the defect's substance — the mechanism and its consequence — whether or not it names the
+   instance; a general remark about test quality that names neither does not. Record which of the
+   two a finding supplied.
+2. Every plan attempted returns `status=OK`. A `TIMEOUT` is a bound defect, not a seat defect:
+   raise the `codex-judge` row's seconds and re-run that plan before judging it.
+3. No finding is fabricated. Spot-check at least one Critical against the real files and record
+   the verdict.
+
+The four axis scores are still collected, and they go into the notes as a per-axis delta table
+against the recorded values, aggregated across every plan replayed. **A delta is evidence to
+discuss, never a failure.** Two reviewers disagreeing is the reason to run a second one; a gate
+that rejects the second for disagreeing with the first destroys what it was built to buy.
+
+The original rule required every axis within +/-2 of the recorded score. It was dropped because
+the 2026-09-20 and 2026-09-21 runs measured it and it does not hold up: the recorded
+executability is **17 on all four plans**, so on the axis with the largest disagreement the rule
+required agreement with a constant, while astra spread the same four plans across 8 to 14. The
+recorded values also came from Claude judges reviewing their own plugin's plans, and this
+session watched two successive `judge-opus` rounds pass over defects that made tasks fail their
+own assertions — so they are a reference point, not ground truth. Evidence in
+`docs/superpowers/notes/2026-09-20-review-routing-calibration.md` §Aggregate.
+
+A delta remains worth reading: a whole-axis gap that is wide and one-directional says the two
+seats hold different standards on that axis, which is a finding about the criteria, not about
+either seat.
 
 Correction to the draft: only project-state's pre-fix version exists in git (`ffd604f`,
 `d6c288c`, `e3506c4`). The other three plans were committed once, after their last review round's
 fixes, so their replays score a slightly better plan than the one their recorded scores came
-from. Any miss — on any plan — stops the plan at that task as BLOCKED with the numbers, and your
-human partner rules; the version caveat is part of that report, not an automatic pass. Four
-Codex runs, no Claude quota. Results go to
-`docs/superpowers/notes/2026-09-15-review-routing-calibration.md`.
+from. That caveat bears on reading the deltas, which no longer gate, so it is context in the
+notes rather than an argument for or against a pass.
+
+A failure of criterion 1 or 3 — a planted defect the replay does not report, or a finding that
+does not survive its spot-check — stops the plan at that task as BLOCKED with the evidence, and
+your human partner rules. Criterion 2 is not a stop: a `TIMEOUT` says the bound is wrong, so
+raise the `codex-judge` seconds and re-run that plan. Up to four Codex runs, no Claude quota.
+Results go to `docs/superpowers/notes/2026-09-15-review-routing-calibration.md`; the
+2026-09-20 and 2026-09-21 runs are recorded in
+`docs/superpowers/notes/2026-09-20-review-routing-calibration.md`, which supersedes it.
 
 **Smoke test.** One real run of `scripts/run-codex-task.sh` in a disposable linked worktree, on a
 one-file brief, at `gpt-5.5 / medium`. Passes on `status=DONE exit=0` with a one-commit range;
