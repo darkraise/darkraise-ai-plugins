@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# lib/register.sh is the one register parser every script shares, so all of
+# them agree on what a row is: fences by the CommonMark rule, escaped pipes
+# inside cells, CRLF tolerated.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../scripts/lib/register.sh"
+
+pass=0 fail=0
+check() { # check <name> <got> <want>
+  if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+reg() { # reg <file> <rows...>
+  local f=$1; shift
+  {
+    printf '# Sample — item register\n\n'
+    printf '**Source:** owner list 2026-09-20\n'
+    printf '**Covers:** docs/superpowers/specs/a-design.md, docs/superpowers/specs/b-design.md\n\n'
+    printf '| # | Item | Assigned | Acceptance | State | Note |\n'
+    printf '|---|---|---|---|---|---|\n'
+    printf '%s\n' "$@"
+  } > "$f"
+}
+
+reg "$TMP/r.md" \
+  '| 1 | Tabs in Settings | C2 Settings | Radius follows the axis | planned | - |' \
+  '| 2 | Zoom indicator | - | - | done | - |' \
+  '| 3 | Stale note | - | - | deferred | out of this batch |'
+
+check "register_field: Source" "$(register_field "$TMP/r.md" Source)" "owner list 2026-09-20"
+check "register_rows: identifiers" "$(register_rows "$TMP/r.md" | cut -f1 | tr '\n' ' ')" "1 2 3 "
+check "register_rows: states" "$(register_rows "$TMP/r.md" | cut -f5 | tr '\n' '|')" "planned|done|deferred|"
+check "register_open: unresolved only" "$(register_open "$TMP/r.md" | cut -f1 | tr '\n' ' ')" "1 "
+check "register_covers: two paths" "$(register_covers "$TMP/r.md" | tr '\n' ' ')" \
+  "docs/superpowers/specs/a-design.md docs/superpowers/specs/b-design.md "
+
+# The header and separator rows are not items.
+check "register_rows: header excluded" "$(register_rows "$TMP/r.md" | grep -c . )" "3"
+
+# A cell may hold an escaped pipe; splitting must not see it.
+reg "$TMP/pipe.md" '| 1 | Show a \| b | - | - | open | - |'
+check "register_rows: escaped pipe stays in the cell" "$(register_rows "$TMP/pipe.md" | cut -f2)" 'Show a | b'
+
+# Fenced table rows are documentation, not items.
+{
+  printf '# F — item register\n\n**Source:** s\n**Covers:** -\n\n'
+  printf '| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n'
+  printf '| 1 | Real | - | - | open | - |\n\n'
+  printf '````\n| 9 | Example | - | - | open | - |\n````\n'
+} > "$TMP/fenced.md"
+check "register_rows: fenced rows ignored" "$(register_rows "$TMP/fenced.md" | cut -f1 | tr '\n' ' ')" "1 "
+check "register_covers: a dash covers nothing" "$(register_covers "$TMP/fenced.md")" ""
+
+sed 's/$/\r/' "$TMP/r.md" > "$TMP/crlf.md"
+check "register_rows: CRLF" "$(register_rows "$TMP/crlf.md" | cut -f1 | tr '\n' ' ')" "1 2 3 "
+
+# register_scan reports the line number and the field count, which is how
+# check tells a short row from a well-formed one.
+reg "$TMP/short.md" '| 1 | Missing cells | open |'
+check "register_scan: field count of a short row" "$(register_scan "$TMP/short.md" | cut -f2)" "5"
+check "register_rows: a short row is not a row" "$(register_rows "$TMP/short.md")" ""
+
+# --- discovery ---
+# A real git repository, because `register check` resolves the root with
+# git rev-parse and would otherwise fall back to the working directory and
+# look for these specs in the checkout running the suite.
+ROOT="$TMP/repo"
+git init -q -b main "$ROOT"
+mkdir -p "$ROOT/docs/superpowers/registers" "$ROOT/docs/superpowers/specs"
+: > "$ROOT/docs/superpowers/specs/a-design.md"
+: > "$ROOT/docs/superpowers/specs/b-design.md"
+reg "$ROOT/docs/superpowers/registers/one.md" '| 1 | A | - | - | open | - |'
+printf '# Two — item register\n\n**Source:** s\n**Covers:** docs/superpowers/specs/z-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | B | - | - | open | - |\n' \
+  > "$ROOT/docs/superpowers/registers/two.md"
+check "register_files: both" "$(register_files "$ROOT" | wc -l | tr -d ' ')" "2"
+check "register_for_spec: matches one" \
+  "$(register_for_spec "$ROOT" docs/superpowers/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
+check "register_for_spec: no spec argument prints nothing" "$(register_for_spec "$ROOT")" ""
+check "register_files: no directory prints nothing" "$(register_files "$TMP/absent")" ""
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]
