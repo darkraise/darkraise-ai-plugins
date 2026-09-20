@@ -1,6 +1,18 @@
 # dr-opencode: a free-model OpenCode executor lane
 
-**Status:** approved design, not yet planned
+**Status:** SUPERSEDED as a standalone design, 2026-09-20. Two review seats found
+its founding premise unsound: dr-superpowers has no executor lane that happens
+to run Codex, it has Codex, named in the scripts, the lint rules, the session
+library, the ruling kinds and the skill prose. The work was decomposed into two
+sub-projects. This file is retained as the source material for the second, and
+must not be planned from as it stands.
+
+- **Sub-project A** — extract a lane-agnostic executor interface, with Codex as
+  its first instance and no change to Codex's behaviour. Spec pending.
+- **Sub-project B** — `dr-opencode` as the second instance: this document,
+  revised against the review findings, once A has landed.
+
+**Review findings:** docs/superpowers/notes/2026-09-20-dr-opencode-spec-review.md
 **Register:** docs/superpowers/registers/2026-09-20-opencode-executor.md
 **Owner decisions:** 2026-09-20 brainstorming session
 
