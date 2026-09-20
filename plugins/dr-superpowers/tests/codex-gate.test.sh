@@ -40,8 +40,8 @@ locate() { # locate; sets out and rc
 check "codex-plugin exists" "$([ -f "$P/scripts/codex-plugin" ] && echo yes || echo no)" "yes"
 check "the policy file allows 1.0.3" \
   "$(jq -r '.versions | index("1.0.3") != null' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "true"
-check "the policy file ships untrusted" \
-  "$(jq -r '[.trust.calibration, .trust.smoke] | join(",")' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "pending,pending"
+check "the policy file records the gates that passed" \
+  "$(jq -r '[.trust.calibration, .trust.smoke] | join(",")' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "pending,pass"
 
 install_plugin 1.0.3 1.0.3
 printf 'export class CodexAppServerClient {}\n' > "$PLUG/scripts/lib/app-server.mjs"

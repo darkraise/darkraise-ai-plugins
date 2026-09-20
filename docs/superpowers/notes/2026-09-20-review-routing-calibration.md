@@ -127,3 +127,51 @@ take on its own:
 A fourth question is separate from the gate: whether 1800 seconds is the right
 bound for `codex-judge`, given the largest plan in the set could not finish
 inside it twice.
+
+## Smoke test
+
+Run: 2026-09-21, Codex codex-cli 0.154.0; advanced runtime available, `gpt-5.5 / medium`, disposable linked worktree.
+
+Recorded here rather than in `2026-09-15-review-routing-calibration.md`, which
+Task 15 of the review-routing plan names: this file already supersedes that
+one's PENDING rows, so the live record belongs in one place.
+
+- Status line: `codex gpt-5.5/medium status=DONE exit=0 commits=7221a67..468f31b thread=01a0c046-cf0a-7883-9a4b-375d4b0f2e90`
+- Wrapper exit: 0
+- Commit: `468f31b test(superpowers): add codex smoke file`
+- File content correct: yes — `codex lane smoke test`, 22 bytes including the newline
+- Write set honoured: yes — `1 file changed, 1 insertion(+)`, `smoke.txt` only
+- Worktree clean afterwards: yes
+
+Gate: PASS — `trust.smoke` becomes `pass` and the executor lane opens.
+
+### One defect found and fixed before the gate could run
+
+The first attempt died before Codex was contacted:
+
+```
+scripts/lib/task-state.sh: line 29: jq: Argument list too long
+run-codex-task: cannot snapshot worktree
+wrapper-exit=2
+```
+
+`dr_snapshot` passed the base64 index and the whole file manifest to `jq` as
+command-line arguments. Measured on this repository: the index argument alone
+is 45,912 bytes and the manifest about 47,000, against a `CreateProcess` limit
+of 32,767 on Windows. Probed directly, `jq` here accepts a 32,000-byte
+argument and fails at 40,000.
+
+`run-codex-task.sh:166` calls `dr_snapshot` on every delegated task, so **the
+lane could not work on any repository above roughly a hundred files**, and the
+smoke gate was unpassable rather than merely unrun. A FAIL recorded before
+this fix would have been evidence about our own snapshot code, not about
+Codex.
+
+Fixed by passing both values to `jq` as files, with `--rawfile` and
+`--slurpfile` — the form already used by `dr_task_assert_snapshot` ten lines
+below, so the emitted JSON is unchanged. `tests/task-state.test.sh` gained a
+700-file fixture that reproduces the exact error; the suite went from 14 to 17
+assertions passing.
+
+Every other case in that suite uses a one-file fixture repository, which is
+why a size ceiling survived a full 17-task sub-project unnoticed.
