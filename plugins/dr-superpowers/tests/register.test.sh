@@ -156,5 +156,52 @@ check "open: --spec with a file is usage" "$RC" "2"
 run bash "$REG" open
 check "open: neither --spec nor a file is usage" "$RC" "2"
 
+# --- register set and add ---
+reg "$ROOT/w.md" '| 1 | First | - | - | open | - |' '| 2 | Second | C2 | live check | planned | - |'
+
+run bash "$REG" set "$ROOT/w.md" 1 done
+check "set: writes the state" "$RC" "0"
+check "set: the row is done" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 1 { print $5 }')" "done"
+check "set: the item survives" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 1 { print $2 }')" "First"
+
+run bash "$REG" set "$ROOT/w.md" 2 verify
+check "set: verify without a note is refused" "$RC" "2"
+run bash "$REG" set "$ROOT/w.md" 2 verify --note "owner live check owed"
+check "set: verify with a note is written" "$RC" "0"
+check "set: the note is stored" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 2 { print $6 }')" "owner live check owed"
+check "set: the assignment survives" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 2 { print $3 }')" "C2"
+
+run bash "$REG" set "$ROOT/w.md" 2 planned --assigned docs/superpowers/plans/p.md
+check "set: reassigns" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 2 { print $3 }')" "docs/superpowers/plans/p.md"
+check "set: a kept note survives a state change" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 2 { print $6 }')" "owner live check owed"
+
+run bash "$REG" set "$ROOT/w.md" 9 done
+check "set: an unknown identifier is refused" "$RC" "2"
+run bash "$REG" set "$ROOT/w.md" 1 finished
+check "set: an unknown state is refused" "$RC" "2"
+
+run bash "$REG" add "$ROOT/w.md" "Discovered during execution"
+check "add: appends" "$RC" "0"
+check "add: takes the next identifier" "$(register_rows "$ROOT/w.md" | cut -f1 | tr '\n' ' ')" "1 2 3 "
+check "add: defaults to open" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 3 { print $5 }')" "open"
+check "add: stores the item" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 3 { print $2 }')" "Discovered during execution"
+
+run bash "$REG" add "$ROOT/w.md" "Ruled out" --state deferred
+check "add: deferred without a note is refused" "$RC" "2"
+run bash "$REG" add "$ROOT/w.md" "Ruled out" --state deferred --note "disproportionate for this batch"
+check "add: deferred with a note is written" "$RC" "0"
+check "add: identifiers keep climbing" "$(register_rows "$ROOT/w.md" | cut -f1 | tr '\n' ' ')" "1 2 3 4 "
+
+run bash "$REG" add "$ROOT/w.md" "Holds a | pipe"
+check "add: a pipe is escaped on write" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 5 { print $2 }')" "Holds a | pipe"
+run bash "$REG" check "$ROOT/w.md"
+check "add: the written register still checks clean" "$RC" "0"
+
+# An empty table still accepts the first row.
+printf '# E — item register\n\n**Source:** s\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n\n## Notes\n\nTrailing prose.\n' > "$ROOT/empty.md"
+run bash "$REG" add "$ROOT/empty.md" "The first item"
+check "add: the first row of an empty table" "$(register_rows "$ROOT/empty.md" | cut -f1)" "1"
+check "add: trailing prose survives" "$(tail -n 1 "$ROOT/empty.md")" "Trailing prose."
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

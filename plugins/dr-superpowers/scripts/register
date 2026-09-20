@@ -123,11 +123,100 @@ cmd_open() {
   [ "$found" -eq 0 ]
 }
 
+# Free text reaches awk through the environment, not -v, which would process
+# backslash escapes in an item or a note.
+cmd_set() {
+  [ $# -ge 3 ] || usage
+  local file=$1 id=$2 state=$3
+  shift 3
+  local note="" assigned="" acceptance="" note_given=0 assigned_given=0 acceptance_given=0 row tmp
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --note) [ $# -ge 2 ] || usage; note=$2 note_given=1; shift 2 ;;
+      --assigned) [ $# -ge 2 ] || usage; assigned=$2 assigned_given=1; shift 2 ;;
+      --acceptance) [ $# -ge 2 ] || usage; acceptance=$2 acceptance_given=1; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  need_file "$file"
+  state_known "$state" || { echo "unknown state: $state; one of $REGISTER_STATES" >&2; exit 2; }
+  row=$(register_rows "$file" | awk -F'\t' -v i="$id" '$1 == i')
+  [ -n "$row" ] || { echo "no row with identifier $id in $file" >&2; exit 2; }
+  [ "$note_given" -eq 1 ] || note=$(cut -f6 <<<"$row")
+  if note_required "$state" && blank_note "$note"; then
+    echo "state $state needs --note" >&2
+    exit 2
+  fi
+
+  tmp=$(mktemp)
+  tr -d '\r' < "$file" | REG_STATE="$state" REG_NOTE="$note" REG_ASSIGNED="$assigned" REG_ACCEPT="$acceptance" \
+    awk -v want="$id" -v ag="$assigned_given" -v kg="$acceptance_given" "$_PLAN_AWK$_REGISTER_AWK"'
+      function esc(s) { gsub(/\|/, "\\|", s); return s }
+      { if (in_fence($0)) { print; next } }
+      {
+        n = reg_cells($0, c)
+        if (n != 8 || c[2] != want) { print; next }
+        a = (ag == "1") ? ENVIRON["REG_ASSIGNED"] : c[4]
+        k = (kg == "1") ? ENVIRON["REG_ACCEPT"] : c[5]
+        printf "| %s | %s | %s | %s | %s | %s |\n", c[2], esc(c[3]), esc(a), esc(k), ENVIRON["REG_STATE"], esc(ENVIRON["REG_NOTE"])
+      }
+    ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $file" >&2; exit 2; }
+  mv "$tmp" "$file"
+}
+
+cmd_add() {
+  [ $# -ge 2 ] || usage
+  local file=$1 item=$2
+  shift 2
+  local assigned="-" acceptance="-" state="open" note="-" max id at tmp
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --assigned) [ $# -ge 2 ] || usage; assigned=$2; shift 2 ;;
+      --acceptance) [ $# -ge 2 ] || usage; acceptance=$2; shift 2 ;;
+      --state) [ $# -ge 2 ] || usage; state=$2; shift 2 ;;
+      --note) [ $# -ge 2 ] || usage; note=$2; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  need_file "$file"
+  [ -n "$item" ] || usage
+  state_known "$state" || { echo "unknown state: $state; one of $REGISTER_STATES" >&2; exit 2; }
+  if note_required "$state" && blank_note "$note"; then
+    echo "state $state needs --note" >&2
+    exit 2
+  fi
+
+  max=$(register_rows "$file" | awk -F'\t' '$1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
+  id=$((max + 1))
+  # Insert after the last table line rather than at end of file, so a register
+  # that carries prose below its table keeps it.
+  at=$(tr -d '\r' < "$file" | awk "$_PLAN_AWK"'
+    { if (in_fence($0)) next }
+    /^[ \t]*\|/ { n = NR }
+    END { print n + 0 }')
+  [ "$at" -gt 0 ] || { echo "no table in $file" >&2; exit 2; }
+
+  tmp=$(mktemp)
+  tr -d '\r' < "$file" | REG_ITEM="$item" REG_ASSIGNED="$assigned" REG_ACCEPT="$acceptance" \
+    REG_STATE="$state" REG_NOTE="$note" \
+    awk -v at="$at" -v id="$id" '
+      function esc(s) { gsub(/\|/, "\\|", s); return s }
+      { print }
+      NR == at {
+        printf "| %s | %s | %s | %s | %s | %s |\n", id, esc(ENVIRON["REG_ITEM"]), \
+          esc(ENVIRON["REG_ASSIGNED"]), esc(ENVIRON["REG_ACCEPT"]), ENVIRON["REG_STATE"], esc(ENVIRON["REG_NOTE"])
+      }
+    ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $file" >&2; exit 2; }
+  mv "$tmp" "$file"
+}
+
 [ $# -ge 1 ] || usage
 verb=$1
 shift
 case $verb in
   check) cmd_check "$@" ;;
   open) cmd_open "$@" ;;
+  set) cmd_set "$@" ;;
+  add) cmd_add "$@" ;;
   *) usage ;;
 esac
