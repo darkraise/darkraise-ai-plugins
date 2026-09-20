@@ -32,7 +32,7 @@
 - Registry directory: `${DR_EXECUTORS_DIR:-<plugin-root>/reference/executors}`. The variable replaces the directory; it does not add to it.
 - Exit 2 on a usage error or a missing `jq`.
 
-**Registry entry schema** — `reference/executors/<id>.json`. Required: `id`, `locator`, `probe.command`, `probe.op`, `wrapper`, `session_dir`, `surfaces`, `blocks.gate`. Optional: `gate`, `reference`, `session_dir_env`, `blocks.assignment`, `blocks.successor`, `blocks.timeout`, `blocks.judge`, `reasons.not_enabled`, `reasons.logged_out`, `reasons.probe_failed`. An entry is valid when it parses as JSON, carries every required field, its `id` matches its filename stem, and no earlier entry claimed that id. An invalid entry is skipped by `list` with one diagnostic line on stderr.
+**Registry entry schema** — `reference/executors/<id>.json`. Required: `id`, `locator`, `probe.command`, `probe.op`, `wrapper`, `session_dir`, `surfaces`, `blocks.gate`. Optional: `gate`, `reference`, `session_dir_env`, `blocks.assignment`, `blocks.successor`, `blocks.timeout`, `blocks.judge`, `reasons.not_enabled`, `reasons.logged_out`, `reasons.probe_failed`. An entry is valid when it parses as JSON, carries every required field, its `id` matches `^[a-z][a-z0-9-]*$`, and its `id` matches its filename stem. An invalid entry is skipped by `list` with one diagnostic line on stderr. There is no duplicate-id rule: the stem check makes two entries claiming one id impossible inside a directory.
 
 **Executor id** — matches `^[a-z][a-z0-9-]*$`.
 
@@ -186,11 +186,16 @@ check "an id that disagrees with its filename is skipped" \
   "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
 rm -f "$TMP/reg/gamma.json"
 
+# A separate directory: NTFS is case-insensitive, so writing Alpha.json beside
+# alpha.json overwrites it, and the assertion would then pass for the wrong
+# reason.
+mkdir -p "$TMP/case"
 jq -n '{id:"Alpha", locator:"a", probe:{command:"b", op:"auth"}, wrapper:"c",
-        session_dir:"d", surfaces:["lane"], blocks:{gate:"gate"}}' > "$TMP/reg/Alpha.json"
+        session_dir:"d", surfaces:["lane"], blocks:{gate:"gate"}}' > "$TMP/case/Alpha.json"
+jq -n '{id:"zeta", locator:"a", probe:{command:"b", op:"auth"}, wrapper:"c",
+        session_dir:"d", surfaces:["lane"], blocks:{gate:"gate"}}' > "$TMP/case/zeta.json"
 check "an id outside the pattern is skipped" \
-  "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
-rm -f "$TMP/reg/Alpha.json"
+  "$(run "$TMP/case" list 2>/dev/null | tr '\n' ' ')" "zeta "
 
 # --- the shipped entry -----------------------------------------------------
 check "the shipped registry lists codex" \
@@ -291,7 +296,10 @@ command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 # matches the pattern, and its id matches its filename stem. The stem check is
 # what lets `get` find an entry by id without scanning every file.
 valid_entry() { # valid_entry <file> <stem>; prints the id when valid
-  local file="$1" stem="$2" id
+  local file="$1" stem="$2" id rc
+  # Captured, then tested: under `set -o pipefail` a `|| return 1` on this
+  # assignment would fire on jq's own failure, before the diagnostic below ever
+  # runs, and a malformed entry would be skipped in silence.
   id=$(jq -r '
     if (.id | type) != "string" then empty
     elif (.locator | type) != "string" then empty
@@ -301,24 +309,23 @@ valid_entry() { # valid_entry <file> <stem>; prints the id when valid
     elif (.session_dir | type) != "string" then empty
     elif (.surfaces | type) != "array" then empty
     elif (.blocks.gate | type) != "string" then empty
-    else .id end' "$file" 2>/dev/null | tr -d '\r') || return 1
-  [ -n "$id" ] || { printf 'executors: %s: missing or malformed required fields\n' "$stem" >&2; return 1; }
+    else .id end' "$file" 2>/dev/null | tr -d '\r')
+  rc=$?
+  { [ "$rc" -eq 0 ] && [ -n "$id" ]; } || { printf 'executors: %s: missing or malformed required fields\n' "$stem" >&2; return 1; }
   [[ "$id" =~ ^[a-z][a-z0-9-]*$ ]] || { printf 'executors: %s: id is not [a-z][a-z0-9-]*\n' "$id" >&2; return 1; }
   [ "$id" = "$stem" ] || { printf 'executors: %s.json: id is %s\n' "$stem" "$id" >&2; return 1; }
   printf '%s' "$id"
 }
 
-list_ids() { # one valid id per line, sorted, duplicates after the first dropped
-  local file stem id seen=""
+list_ids() { # one valid id per line, sorted
+  local file stem id
   [ -d "$DIR" ] || return 0
   for file in "$DIR"/*.json; do
     [ -e "$file" ] || continue
-    stem=$(basename "$file" .json)
+    # Parameter expansion, not basename: tests/detect.test.sh seals PATH, and a
+    # shell builtin cannot go missing from it.
+    stem=${file##*/}; stem=${stem%.json}
     id=$(valid_entry "$file" "$stem") || continue
-    case " $seen " in
-      *" $id "*) printf 'executors: %s: duplicate id, later entry ignored\n' "$id" >&2; continue ;;
-    esac
-    seen="$seen $id"
     printf '%s\n' "$id"
   done | sort
 }
@@ -357,7 +364,7 @@ esac
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 120 bash tests/executors.test.sh`
-Expected: PASS, `26 passed, 0 failed`.
+Expected: PASS, `28 passed, 0 failed`.
 
 - [ ] **Step 6: Commit**
 
@@ -554,7 +561,7 @@ printf 'stub - status=DONE exit=0 commits=0000000..0000000 thread=stub report=-\
 - [ ] **Step 7: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 120 bash tests/executors.test.sh`
-Expected: PASS, `36 passed, 0 failed`.
+Expected: PASS, `38 passed, 0 failed`.
 
 - [ ] **Step 8: Commit**
 
@@ -757,7 +764,7 @@ executor_session_mark_off() {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 120 bash tests/executor-session.test.sh`
-Expected: PASS, `20 passed, 0 failed`.
+Expected: PASS, `19 passed, 0 failed`.
 
 - [ ] **Step 5: Commit**
 
@@ -999,10 +1006,10 @@ Expected: a non-zero count — the stub id is absent from the roster entirely.
 
 - [ ] **Step 3: Rewrite the emit branch**
 
-In `plugins/dr-superpowers/scripts/detect-executors.sh`, replace the whole
-`if [ "$id" = codex ]` block inside `emit` — from that line to its matching
-`else` — with a registry-driven branch. The function's signature loses its
-`lane_implemented` argument, which the registry now answers:
+In `plugins/dr-superpowers/scripts/detect-executors.sh`, replace the **whole
+`emit` function, lines 32-107**, with the code below. It is a complete function
+definition, not a fragment to splice inside the existing one, and its signature
+loses the `lane_implemented` argument that the registry now answers:
 
 ```bash
 emit() { # emit <id> <batch_capable> <incapable_reason>
@@ -1117,17 +1124,31 @@ registry id first and then the PATH ids that no registry entry claimed:
 } | jq -s '.'
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [ ] **Step 5: Widen the suite's sealed PATH**
+
+`tests/detect.test.sh` seals `PATH` to `$TMP/bin` and shims only the commands
+the script needed before. `scripts/executors` also runs `sort`, and the new
+dispatch block runs `grep`. Without them `executors list` prints nothing, the
+codex row is emitted only from the registry loop and therefore vanishes, and
+every pre-existing Codex assertion fails.
+
+In that suite's dependency-shim loop, add the two commands:
+
+```bash
+for dep in jq timeout head tr node bash dirname cygpath sort grep; do
+```
+
+- [ ] **Step 6: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/detect.test.sh | tail -1`
 Expected: `59 passed, 0 failed`, with every pre-existing assertion still passing.
 
-- [ ] **Step 6: Confirm the live Codex row is unchanged**
+- [ ] **Step 7: Confirm the live Codex row is unchanged**
 
 Run: `cd D:/Repositories/Personal/darkraise-ai-plugins && timeout 120 bash plugins/dr-superpowers/scripts/detect-executors.sh | jq -c '.[] | select(.id=="codex")'`
 Expected: `present: true`, `version: "1.0.3"`, `authed: true`, `auth_status: "authenticated"`, `usable: true`, `reason: null` — identical to before this task.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add plugins/dr-superpowers/scripts/detect-executors.sh plugins/dr-superpowers/tests/detect.test.sh plugins/dr-superpowers/tests/fixtures/executors/bin/stub-probe.mjs
@@ -1139,7 +1160,8 @@ git commit -m "refactor(superpowers): drive the roster from the registry"
 ### Task 6: plan-lint executor validation and the lane warning
 
 **Files:**
-- Modify: `plugins/dr-superpowers/scripts/plan-lint:191-194` (block resolution), `:272-284` (the Executor branch and the lane candidate), `:294-308` (the warning)
+- Modify: `plugins/dr-superpowers/scripts/plan-lint:191-193` (block resolution), `:271-283` (the Executor branch and the lane candidate), `:294-300` (the warning comment and its `if`)
+- Modify: `plugins/dr-superpowers/scripts/lib/plan.sh:70-72` (a `DR_LADDER` override for the fixture)
 - Test: `plugins/dr-superpowers/tests/plan-lint.test.sh` (append one block)
 
 **Interfaces:**
@@ -1163,7 +1185,12 @@ its final summary line:
 
 ```bash
 # --- Executor lines are validated against their own executor ----------------
+# DR_LADDER points at a fixture ladder that is the shipped one plus the stub's
+# blocks: ladder_block reads one file, and the shipped ladder must not carry
+# test fixtures.
 export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
+export DR_LADDER="$TMP/stub-ladder.md"
+cat "$P/reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DR_LADDER"
 
 # A stub Executor line validates against the stub's own blocks. The fixture
 # ladder supplies them, so the shipped ladder is untouched.
@@ -1182,11 +1209,13 @@ lint s3.md
 has "the header must name the line's executor" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name stub"
 ```
 
-Add the fixture ladder blocks the stub validates against. Create
+Add the fixture ladder blocks the stub validates against. The suite
+concatenates this onto a copy of the shipped ladder, so it holds only the
+stub's own blocks. Create
 `plugins/dr-superpowers/tests/fixtures/stub-ladder.md`:
 
 ```markdown
-# Fixture ladder for the stub executor
+# Fixture ladder blocks for the stub executor
 
 ```stub-gate
 min_score 2
@@ -1208,7 +1237,32 @@ Run: `cd plugins/dr-superpowers && timeout 300 bash tests/plan-lint.test.sh 2>&1
 Expected: the three new assertions fail — a `stub` line is rejected because the
 current code compares it against `codex-assignment`.
 
-- [ ] **Step 3: Resolve blocks per executor**
+- [ ] **Step 3: Let the ladder path be overridden**
+
+`ladder_block` hardcodes the shipped ladder, so a fixture executor's blocks are
+unreachable and the stub assertions above cannot pass. Give it the override
+`run-codex-review.sh` already sets the precedent for with
+`CODEX_REVIEW_LADDER`. In `plugins/dr-superpowers/scripts/lib/plan.sh`, replace
+lines 70-72:
+
+```bash
+ladder_block() {
+  tr -d '\r' < "$_PLAN_LIB_DIR/../../reference/ladder.md" \
+```
+
+with:
+
+```bash
+# DR_LADDER is a test seam: a suite that needs a fixture executor's blocks
+# points it at the shipped ladder plus its own. Unset in production.
+ladder_block() {
+  tr -d '\r' < "${DR_LADDER:-$_PLAN_LIB_DIR/../../reference/ladder.md}" \
+```
+
+The shipped ladder gains no fixture blocks: it stays the production policy
+source, which is what the spec's §1 and §15 require.
+
+- [ ] **Step 4: Resolve blocks per executor**
 
 In `plugins/dr-superpowers/scripts/plan-lint`, replace lines 191-193
 
@@ -1239,9 +1293,9 @@ min_score=$(executor_gate codex min_score)
 max_risk=$(executor_gate codex max_risk)
 ```
 
-- [ ] **Step 4: Validate the Executor line against its own id**
+- [ ] **Step 5: Validate the Executor line against its own id**
 
-Replace the Executor branch at lines 272-284 with:
+Replace the Executor branch at lines 271-283 — from `executor=$(line Executor)` through the `fi` that closes it. **Line 284 is the outer `fi` and stays**: deleting it leaves the script syntactically invalid.
 
 ```bash
     executor=$(line Executor)
@@ -1270,9 +1324,9 @@ plan's output is byte-identical. The `codex-assignment` string that was
 hardcoded becomes `$eid-assignment` in the third message, which for Codex reads
 exactly as before.
 
-- [ ] **Step 5: Generalise the warning without changing its predicate**
+- [ ] **Step 6: Generalise the warning without changing its predicate**
 
-Replace lines 294-303 — the comment and the `if` — with:
+Replace lines 294-300 — the comment block and the `if` line only. **Lines 301-303 stay**: they are the `roster=` read, the `usable=` extraction and the inner `if`, and the replacement below does not restore them.
 
 ```bash
 # The lane probe is lazy: the detector costs about two seconds, so it runs only
@@ -1291,12 +1345,12 @@ The predicate is unchanged: session lane surface, plus a usable roster row,
 plus a lazy probe, plus non-inline mode. It never reads the header tick, which
 is why `p1.md` keeps warning.
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [ ] **Step 7: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/plan-lint.test.sh | tail -1`
 Expected: `0 failed`, with every pre-existing assertion unchanged.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add plugins/dr-superpowers/scripts/plan-lint plugins/dr-superpowers/tests/plan-lint.test.sh plugins/dr-superpowers/tests/fixtures/stub-ladder.md
@@ -1428,9 +1482,13 @@ plan_executors() {
   local n _title id
   while IFS=$'\t' read -r n _title; do
     [ -n "$n" ] || continue
+    # No `exit`: scripts/lib/plan.sh:92-94 records that an early exit leaves
+    # the upstream writer on a closed pipe, and under `pipefail` that SIGPIPE
+    # becomes the caller's status - and task-brief runs `set -euo pipefail`.
     id=$(plan_task_text "$1" "$n" | awk "$_PLAN_AWK"'
       in_fence($0) { next }
-      /^\*\*Executor:\*\*/ { sub(/^\*\*Executor:\*\*[ \t]*/, ""); print $1; exit }')
+      !found && /^\*\*Executor:\*\*/ { sub(/^\*\*Executor:\*\*[ \t]*/, ""); id = $1; found = 1 }
+      END { if (found) print id }')
     [ -n "$id" ] && printf '%s\t%s\n' "$n" "$id"
   done < <(plan_tasks "$1")
 }
@@ -1496,7 +1554,7 @@ git commit -m "feat(superpowers): delegate offloaded tasks in inline plans"
 ### Task 8: task-brief renders the executor marker
 
 **Files:**
-- Modify: `plugins/dr-superpowers/scripts/task-brief:56-63`
+- Modify: `plugins/dr-superpowers/scripts/task-brief:47-48` (the comment above the dispatch block)
 - Test: `plugins/dr-superpowers/tests/inline-mode.test.sh` (append one block)
 
 **Interfaces:**
@@ -1518,7 +1576,7 @@ summary:
 
 ```bash
 # --- the executor marker in the Dispatch line -------------------------------
-sed 's/^|//' > "$TMP/offload.md" <<'EOF'
+sed 's/^|//' > "$DTMP/offload.md" <<'EOF'
 |# Offload Fixture
 |
 |**Goal:** Fixture.
@@ -1542,16 +1600,16 @@ sed 's/^|//' > "$TMP/offload.md" <<'EOF'
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 
-hdr=$(timeout 60 bash "$P/scripts/task-brief" "$TMP/offload.md" --header 2>/dev/null)
+hdr=$(timeout 60 bash "$P/scripts/task-brief" "$DTMP/offload.md" --header 2>/dev/null)
 check "the header marks an offloaded task" \
   "$(grep -c 'Task 1 (executor)' <<<"$hdr")" "1"
 check "the header does not mark a plain task" \
   "$(grep -c 'Task 2' <<<"$hdr")" "0"
 
-brief=$(timeout 60 bash "$P/scripts/task-brief" "$TMP/offload.md" 1 2>/dev/null)
+brief=$(timeout 60 bash "$P/scripts/task-brief" "$DTMP/offload.md" 1 2>/dev/null)
 check "an offloaded brief is marked delegated" \
   "$(sed -n 2p <<<"$brief")" "**Dispatch:** delegated — total 2, risk 0"
-brief2=$(timeout 60 bash "$P/scripts/task-brief" "$TMP/offload.md" 2 2>/dev/null)
+brief2=$(timeout 60 bash "$P/scripts/task-brief" "$DTMP/offload.md" 2 2>/dev/null)
 check "a self-implemented brief carries no Dispatch line" \
   "$(grep -c '^\*\*Dispatch:\*\*' <<<"$brief2")" "0"
 ```
@@ -2007,9 +2065,11 @@ the wrapper, the reference and the successor block through `scripts/executors`
 rather than naming Codex. Codex keeps a section of its own for what is
 genuinely Codex-specific.
 
-The three code/document mismatches this file carried were corrected in
-`a74f8e8` before this plan began, so the rename inherits a correct document.
-Do not reintroduce them.
+`a74f8e8` corrected three **other** mismatches in this file before the plan
+began — the `exit=` field, the exit-2 assumption and the manual-staging branch.
+It did **not** touch the two defects the spec's §10 names, which are still live
+at lines 94, 241 and 246 and which Step 5 below removes. Task 12 removes the
+dead code behind them; this task removes the prose.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2077,7 +2137,58 @@ budget, the round-4 handback, the five-round cap, the retry-once rules, the
 exit-code table, the review-seat routing and the final-review round all apply
 unchanged. Only the names become parameters.
 
-- [ ] **Step 5: Add the per-executor section**
+- [ ] **Step 5: Remove the two defects the spec names**
+
+Three literal replacements, all in the renamed file.
+
+The poll loop does not exist: `run-codex-task.sh:241` runs
+`timeout $((timeout_s + 60)) node codex-client.mjs`, and the deadline, the
+interrupt and the reap belong to the client. Replace lines 94-97:
+
+```markdown
+pass no timeout, let the wrapper's own poll loop be the bound it already is, and
+wait for the completion notification. The wrapper polls for the rung's
+`codex-timeout` seconds, kills Codex, and always prints a status line, which is
+the guarantee that makes waiting safe.
+```
+
+with:
+
+```markdown
+pass no timeout and wait for the completion notification. The bound is the
+client's own deadline, taken from the rung's timeout block, with an outer
+`timeout` of that plus 60 seconds as a backstop; the wrapper always prints a
+status line, which is the guarantee that makes waiting safe.
+```
+
+Replace the same claim at lines 241-242:
+
+```markdown
+- **`note=timed-out`**, with `exit=124`, means the wrapper's poll loop hit the
+  rung's `codex-timeout` and killed Codex.
+```
+
+with:
+
+```markdown
+- **`note=timed-out`**, with `exit=124`, means the client reported that its own
+  deadline expired and it interrupted the turn.
+```
+
+And delete the unreachable survivor paragraph at lines 246-249 entirely:
+
+```markdown
+`note=codex-may-still-be-running` means the child outlived both kills and the
+grace window - only a timeout reaches that path, so it appears alongside
+`note=timed-out`. Check for and end that process before retrying, or the retry
+puts two Codex runs in the same worktree.
+```
+
+`survivor=yes` is never assigned, so that note can never print. What replaces
+it is the "When the client itself wedges" section in Step 6, which documents
+the state that *is* reachable.
+
+- [ ] **Step 6: Add the per-executor section**
 
 Append to `reference/executor-lane.md`:
 
@@ -2123,14 +2234,18 @@ unreconciled worktree puts two runs in one tree, which is the hazard the old
 fire.
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [ ] **Step 7: Run the test to verify it passes**
 
 Run: `cd plugins/dr-superpowers && timeout 300 bash tests/review-route.test.sh | tail -1`
-Expected: `0 failed`. The suite's existing `external-executor.md` path
-assertions move in Task 14; if any fails here, note it and fix it there rather
-than editing an assertion now.
 
-- [ ] **Step 7: Commit**
+Expected: the ten new assertions pass, **and the suite still fails** on the
+path pins that name the old filename — eight in this suite and three in
+`tests/inline-mode.test.sh`. That is expected and is Task 14's work: the rename
+lands here, the referrers move there. Record the failing count and do not edit
+an assertion in this task. The two suites return to `0 failed` at the end of
+Task 14.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add -A plugins/dr-superpowers/reference plugins/dr-superpowers/tests/review-route.test.sh
@@ -2247,7 +2362,9 @@ Expected: `4`.
 
 - [ ] **Step 3: Extend the definition in executing-plans**
 
-Replace lines 50-55 of `skills/executing-plans/SKILL.md`, which currently read:
+Replace this fragment in `skills/executing-plans/SKILL.md`. It **ends mid-line
+at `(total 4)\`.`** — the file continues ` Run` on the same line, so match the
+text only, not the line break:
 
 ```markdown
 **Delegated tasks.** A delegated task is not yours to implement: every heavy
@@ -2274,7 +2391,9 @@ brief's second line is `**Dispatch:** delegated — total <t>, risk <r>`, and
 
 - [ ] **Step 4: Replace the inert rule, both copies**
 
-In `skills/executing-plans/SKILL.md` at line 164, replace:
+In `skills/executing-plans/SKILL.md` at line 164, replace this fragment. It
+**ends mid-line at `§1.`** — the file continues with a separate sentence about
+`**Implementer:**` lines, which stays exactly as it is:
 
 ```markdown
 `**Executor:**` lines are inert for the tasks you
@@ -2291,8 +2410,23 @@ implemented here, and its `**Executor:**` line is read by
 executor's wrapper in place of an implementer subagent.
 ```
 
-Replace the second copy at `skills/writing-plans/SKILL.md:265` with the same
-two sentences.
+`skills/writing-plans/SKILL.md` carries the second copy of the same rule, but
+**not in those words** — the string "inert" appears nowhere in that file.
+Line 265 reads:
+
+```markdown
+Under dr-superpowers:executing-plans the lines are read only for the delegated tasks.
+```
+
+Replace that one sentence with:
+
+```markdown
+Under dr-superpowers:executing-plans the lines are read for the delegated
+tasks, which now include every task carrying an `**Executor:**` line.
+```
+
+It sits in a paragraph about `**Implementer:**` lines and Override lines, so
+replace the sentence alone and leave the paragraph around it intact.
 
 - [ ] **Step 5: Extend the other two definitions**
 
@@ -2332,12 +2466,35 @@ git commit -m "docs(superpowers): delegate offloaded tasks in the prose"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugins/dr-superpowers/tests/inline-mode.test.sh`, before its
-summary:
+Step 5 deletes a sentence that two suites pin verbatim, so those two pins are
+**replaced**, not appended to. This is the second legitimate assertion change
+in the plan, alongside Task 15's.
+
+In `plugins/dr-superpowers/tests/inline-mode.test.sh`, replace the pin at line
+88:
+
+```bash
+present "names the one kind it never runs" "$INLINE" 'Only `codex-empty-diff` belongs to a seat this mode never runs'
+```
+
+with:
 
 ```bash
 present "inline mode routes the executor empty-diff kind" "$INLINE" 'executor-empty-diff'
 absent "inline mode no longer says it never runs an external executor" "$INLINE" 'no external executor'
+```
+
+In `plugins/dr-superpowers/tests/review-route.test.sh`, replace the pin at line
+384:
+
+```bash
+present "inline mode names the one kind it never runs" "$P/skills/executing-plans/SKILL.md" 'Only `codex-empty-diff` belongs to a seat this mode never runs'
+```
+
+with:
+
+```bash
+present "inline mode reaches the executor empty-diff kind" "$P/skills/executing-plans/SKILL.md" 'executor-empty-diff'
 ```
 
 Append to `plugins/dr-superpowers/tests/review-route.test.sh`, before its

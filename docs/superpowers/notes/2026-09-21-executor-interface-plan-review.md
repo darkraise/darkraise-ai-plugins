@@ -60,6 +60,59 @@ third, which is what forces `--model opus --effort high`.
 
 ## Disposition
 
-Round 1 returned Criticals, so round 2 is required (`cap=2`). The revision
-touches Tasks 1, 5, 6, 7, 8, 9, 11, 13, 14, 15 and 16 — eleven of eighteen.
-Not started in the session that produced this record.
+Round 1 returned Criticals, so round 2 is required (`cap=2`).
+
+### Fixed — all nine Criticals, plus four other items
+
+Applied 2026-09-21; `plan-lint` still reports 0 errors afterwards.
+
+| # | How it was fixed |
+|---|---|
+| C1 | Task 6 gains a step adding a `DR_LADDER` override to `ladder_block`, following the `CODEX_REVIEW_LADDER` precedent. The suite concatenates the shipped ladder with `tests/fixtures/stub-ladder.md`, so the shipped ladder gains no fixture blocks |
+| C2 | Ranges corrected to 271-283 and 294-300, each saying explicitly which adjacent lines must survive; the Files line now reads `:191-193`, `:271-283`, `:294-300` |
+| C3 | `valid_entry` captures jq's status in `rc` and tests it separately, so the diagnostic survives `pipefail` |
+| C4 | The id-pattern case moved to its own `$TMP/case` directory, so `Alpha.json` cannot clobber `alpha.json` on NTFS |
+| C5 | Task 5 gains a step adding `sort` and `grep` to the suite's shim loop; `executors` now derives the stem with `${file##*/}` instead of `basename` |
+| C6 | `$TMP` replaced with the suite's own `$DTMP` in all four places |
+| C7 | The preamble's false claim about `a74f8e8` corrected, and a new Step 5 gives the three literal replacements that remove the poll-loop prose (lines 94-97, 241-242) and the survivor paragraph (246-249) |
+| C8 | Task 16 Step 1 now **replaces** the two pins at `inline-mode.test.sh:88` and `review-route.test.sh:384` rather than appending beside them |
+| C9 | Both "currently reads" fragments now state that they end mid-line, and the non-existent `writing-plans:265` "inert" target is replaced with the sentence that is actually there |
+| Imp 2 | Task 5 Step 3 now says "replace the whole `emit` function, lines 32-107" |
+| Imp 4 | `plan_executors`' awk uses a `found` flag and prints in `END`, never `exit` |
+| Imp 7 | The duplicate-id rule dropped from Contracts and from `list_ids` |
+| Imp 8 | Task 13's Step 7 now states the expected referrer failures instead of claiming `0 failed` |
+| Minors | Pass counts corrected to 28 / 38 / 19; the Files ranges for Tasks 6 and 8 corrected |
+
+### Still open — for the next session
+
+1. **Important 1** — Task 6 does not actually generalise the lane-eligible
+   warning as spec §6.2 requires: the candidate collection still uses Codex's
+   `min_score`/`max_risk` and the roster read is still
+   `select(.id == "codex")`. Either implement the loop over `executors list`,
+   or move the deferral into the spec's §15 and the register and say so in the
+   task.
+2. **Important 3** — Tasks 8, 9 and 11 have no failing Step 2, and Tasks 9 and
+   11 assert nothing about their own deliverable. Fold 8 and 9 into Task 7 as
+   verification steps, or mark them pin-only with no "verify it fails" step;
+   give Task 11 a `present` check on the release instruction it adds to
+   `delegated-task.md`.
+3. **Important 5** — spec §11's `writing-plans` row is unimplemented: the
+   four-band definition at `skills/writing-plans/SKILL.md:121-134` (now
+   contradicted by Task 7), the Execution-line paragraph §9.2 changes, the
+   per-ticked-executor roster flow at line 234, and the one-Executor-line
+   rule. `tests/inline-mode.test.sh:102-104` pin those sentences. Needs a new
+   task or folding into Task 15.
+4. **Important 6** — the "resumes its Codex session" sentences in
+   `reference/delegated-task.md` at lines 27, 50, 111, 196 and 278 are
+   unaddressed; Task 14 rewrites only the path string.
+5. **Important 9** — Task 15 Step 5 still leaves two prose edits to the
+   implementer without supplying the replacement sentences, and those two
+   edits gate two assertions.
+6. **Remaining Minors** — the `STUB_LOCATOR=off regrun` env-propagation
+   fragility, the two near-vacuous Task 13 assertions, the placeholder
+   inconsistency between Task 11 and Tasks 13/17, the hard-coded expected
+   totals in Tasks 4 and 11, and the misattributed verifier on the one
+   `unverified` assumption.
+
+Then re-lint, run **round 2** (`review-route --plan-round 2`, which prints a
+delta seat), and only then add the `**Plan review:**` header line.
