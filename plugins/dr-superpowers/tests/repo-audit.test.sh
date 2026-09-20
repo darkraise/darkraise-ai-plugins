@@ -87,5 +87,32 @@ check "usage: exit 2" "$status" "2"
 
 git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
 
+# --- item registers ---
+OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
+has "audit: the section exists" "$OUT" "## Item registers"
+# Scoped to the section: "- none" is already printed by Plans in flight and
+# Handoff, so an unscoped assertion would pass against a stub.
+SECTION=$(sed -n '/## Item registers/,/^$/p' <<<"$OUT")
+has "audit: no registers says so" "$SECTION" "- none"
+
+mkdir -p "$REPO/docs/superpowers/registers"
+cat > "$REPO/docs/superpowers/registers/r.md" <<'REG'
+# R — item register
+
+**Source:** owner list
+**Covers:** -
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Done thing | - | - | done | - |
+| 2 | Open thing | - | - | planned | - |
+| 3 | Owner check | - | live check | verify | owner live check owed |
+REG
+OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
+has "audit: counts open rows" "$OUT" "2 open"
+has "audit: counts rows awaiting the owner" "$OUT" "1 awaiting your check"
+has "audit: counts the whole register" "$OUT" "of 3 rows"
+has "audit: names the register" "$OUT" "docs/superpowers/registers/r.md"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
