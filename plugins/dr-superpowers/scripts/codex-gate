@@ -17,6 +17,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 POLICY="${DR_CODEX_POLICY:-$HERE/../reference/codex-plugin.json}"
 . "$HERE/lib/codex-session.sh"
+. "$HERE/lib/native-path.sh"
 
 die() { printf 'codex-gate: %s\n' "$1" >&2; exit 2; }
 
@@ -58,7 +59,7 @@ if [ "$source" = probe ]; then
       # The probe owns its deadline; this outer bound only guarantees the gate
       # returns if node itself wedges.
       ms="${DR_CODEX_GATE_TIMEOUT_MS:-30000}"
-      answer=$(timeout $((ms / 1000 + 15)) node "$HERE/lib/codex-gate.mjs" "$root" "$PWD" "$ms" 2>/dev/null | tail -1)
+      answer=$(timeout $((ms / 1000 + 15)) node "$HERE/lib/codex-gate.mjs" "$root" "$(dr_native_path "$PWD")" "$ms" 2>/dev/null | tail -1)
       usable=$(jq -r '.usable | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')
       reason=$(jq -r '.reason // empty' <<<"$answer" 2>/dev/null | tr -d '\r')
       epoch=$(jq -r '.resets_at_epoch // empty' <<<"$answer" 2>/dev/null | tr -d '\r')

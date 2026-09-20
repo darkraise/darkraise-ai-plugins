@@ -28,8 +28,8 @@ export function getCodexAvailability() {
 // The field name is copied from the source deliberately: a stub invented from
 // the plan would let the suite pass while production reported logged-out
 // forever.
-export async function getCodexAuthStatus() {
-  log("getCodexAuthStatus");
+export async function getCodexAuthStatus(cwd) {
+  log(`getCodexAuthStatus ${cwd ?? "-"}`);
   if (mode() === "throw") {
     throw new Error("stub: app-server exploded");
   }

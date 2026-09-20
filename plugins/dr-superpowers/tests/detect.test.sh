@@ -34,8 +34,12 @@ make_stub() { printf '#!%s\necho "%s"\n' "$BASH_BIN" "$2" > "$TMP/bin/$1"; chmod
 # dirname is external: both detect-executors.sh's HERE line and
 # scripts/codex-plugin:16 call it, and a sealed PATH without it resolves HERE
 # to the wrong directory and reports the plugin absent.
-for dep in jq timeout head tr node bash dirname; do
-  printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v "$dep")" > "$TMP/bin/$dep"
+# cygpath is shimmed only where it exists: scripts/lib/native-path.sh probes for
+# it and converts nothing without it, which is correct off Windows, so a stub
+# standing in for an absent cygpath would test a path production never takes.
+for dep in jq timeout head tr node bash dirname cygpath; do
+  dep_path=$(command -v "$dep") || continue
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$dep_path" > "$TMP/bin/$dep"
   chmod +x "$TMP/bin/$dep"
 done
 
@@ -98,6 +102,19 @@ check "a failed probe is distinct" "$(field codex auth_status "$out")" "probe_fa
 check "a failed probe is unusable" "$(field codex usable "$out")" "false"
 check "the probe's own text is not exposed" \
   "$(printf '%s%s' "$out" "$(cat "$TMP/probe.err")" | grep -c 'stub: app-server exploded')" "0"
+
+# --- the probe is handed a working directory the platform can use -----------
+# The codex plugin passes this cwd straight to spawnSync. Under Git Bash $PWD
+# is a POSIX path, which Windows cannot resolve: spawnSync fails with ENOENT
+# and the plugin reports {available:false, detail:"not found"} - the same shape
+# a missing binary produces. The roster then reads probe_failed and the whole
+# lane disappears with a reason naming the wrong cause.
+expected_cwd="$PWD"
+command -v cygpath >/dev/null 2>&1 && expected_cwd=$(cygpath -m "$PWD")
+: > "$TMP/cwd.log"
+STUB_EVENT_LOG="$TMP/cwd.log" run >/dev/null
+check "the auth probe receives a native-form cwd" \
+  "$(sed -n 's/^getCodexAuthStatus //p' "$TMP/cwd.log" | head -1)" "$expected_cwd"
 
 # --- antigravity is present but never dispatchable --------------------------
 # Its only agent-shaped subcommand opens a GUI chat session: no output file, no

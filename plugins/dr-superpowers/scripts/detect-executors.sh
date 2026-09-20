@@ -14,6 +14,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/native-path.sh"
 
 # Every field this script emits is built with jq. Without it the script would
 # exit 127 with empty stdout, which the dispatching skill reads as "no executor
@@ -48,7 +49,7 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
       plugin_root=${plugin_line#*root=}
       path=$plugin_root
       version=$(jq -Rn --arg v "${plugin_line#*version=}" '$v | sub(" root=.*"; "")')
-      auth_json=$(printf '{"op":"auth","cwd":"%s"}' "$PWD" \
+      auth_json=$(printf '{"op":"auth","cwd":"%s"}' "$(dr_native_path "$PWD")" \
         | timeout 60 node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>/dev/null)
       case "$(jq -r '.authed | tojson' <<<"${auth_json:-{\}}" 2>/dev/null)" in
         true)  authed=true;  auth_status=authenticated ;;
