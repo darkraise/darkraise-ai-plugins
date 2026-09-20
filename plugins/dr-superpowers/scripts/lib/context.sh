@@ -115,6 +115,34 @@ ctx_model_window() {
   esac
 }
 
+# Codex rollout entries are one JSON object per line. The context size is the
+# last token_count event's last_token_usage.input_tokens: it already reflects a
+# compaction, so nothing here reads the compacted record, and total_token_usage
+# is a cumulative counter (28 million in one observed session) that would read
+# as a context size if taken by mistake. An entry whose info is null carries no
+# usage and is skipped.
+ctx_rollout_reduce() {
+  tr -d '\r' | ctx_jq -R -r -n '
+    [inputs | select(length > 0) | (try fromjson catch null) | objects
+     | select(.type == "event_msg")
+     | .payload | objects | select(.type == "token_count")
+     | .info | objects
+     | .last_token_usage | objects
+     | .input_tokens | numbers]
+    | last // empty' 2>/dev/null
+}
+
+# ctx_measure_rollout FILE — the context size, or nothing. Reads the tail first:
+# rollouts reach tens of megabytes and one compacted entry embeds a whole
+# replacement_history.
+ctx_measure_rollout() {
+  local out
+  out=$(tail -n 400 "$1" | ctx_rollout_reduce)
+  [ -n "$out" ] || out=$(ctx_rollout_reduce < "$1")
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+
 # autoCompactWindow from the user settings, or nothing. Read without jq so the
 # budget stays printable when jq is missing.
 ctx_auto_compact_window() {

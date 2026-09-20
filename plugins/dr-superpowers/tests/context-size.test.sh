@@ -156,5 +156,50 @@ check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
 run extra
 check "usage: exit 2" "$status" "2"
 
+# --- Codex rollout measurement ---
+# The context size is the last token_count event's last_token_usage.input_tokens.
+# A compaction is already reflected in it, so no boundary arithmetic applies,
+# and total_token_usage is a cumulative counter that must never be read.
+. "$HERE/../scripts/lib/context.sh"
+
+meta() { # meta <cwd> [originator] [source]
+  # Built with jq, never printf: a native Windows cwd carries single
+  # backslashes, and pasting one into a JSON string produces invalid escapes
+  # (`\U`, `\A`) that jq then refuses. That would leave `.payload.cwd` empty and
+  # make every discovery test pass or fail for the wrong reason.
+  # MSYS_NO_PATHCONV=1 is already exported above, which keeps --arg opaque.
+  ctx_jq -c -n --arg cwd "$1" --arg orig "${2:-}" --arg src "${3:-cli}" \
+    '{timestamp:"2026-09-15T14:52:58.691Z",ordinal:0,type:"session_meta",
+      payload:({session_id:"01a0a58e-8e6c-72b0-92a3-b1586a8ca0ec",cwd:$cwd,
+                source:$src,cli_version:"0.154.0",model_provider:"openai"}
+               + (if $orig == "" then {} else {originator:$orig} end))}'
+}
+usage_line() { # usage_line <last_input_tokens> <total_input_tokens>
+  printf '{"timestamp":"2026-09-15T14:53:06.085Z","ordinal":10,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%s,"cached_input_tokens":0,"output_tokens":7,"total_tokens":%s},"last_token_usage":{"input_tokens":%s,"cached_input_tokens":0,"output_tokens":7,"total_tokens":%s}}}}\n' \
+    "$2" "$2" "$1" "$1"
+}
+null_usage() { printf '{"timestamp":"2026-09-15T14:53:06.085Z","ordinal":9,"type":"event_msg","payload":{"type":"token_count","info":null}}\n'; }
+compacted_line() { printf '{"timestamp":"2026-09-15T14:59:00.000Z","ordinal":20,"type":"compacted","payload":{"message":"","replacement_history":[{"type":"message","role":"user"}]}}\n'; }
+
+ROLL="$TMP/roll.jsonl"
+{ meta 'C:\x'; usage_line 19545 19545; usage_line 171517 400000; } > "$ROLL"
+check "rollout: measures the last last_token_usage" "$(ctx_measure_rollout "$ROLL")" "171517"
+
+{ meta 'C:\x'; usage_line 171517 400000; null_usage; } > "$ROLL"
+check "rollout: skips a null info" "$(ctx_measure_rollout "$ROLL")" "171517"
+
+{ meta 'C:\x'; usage_line 239510 900000; compacted_line; usage_line 51326 950000; } > "$ROLL"
+check "rollout: takes the post-compaction reading" "$(ctx_measure_rollout "$ROLL")" "51326"
+
+{ meta 'C:\x'; printf 'not json\n'; } > "$ROLL"
+ctx_measure_rollout "$ROLL" >/dev/null 2>&1
+check "rollout: a file with no usage returns 1" "$?" "1"
+
+# The tail is read first because rollouts reach tens of megabytes; the
+# whole-file fallback is what finds a reading that sits above it.
+{ meta 'C:\x'; usage_line 88000 99000; } > "$ROLL"
+i=0; while [ "$i" -lt 500 ]; do compacted_line >> "$ROLL"; i=$((i + 1)); done
+check "rollout: falls back past a 400-line tail" "$(ctx_measure_rollout "$ROLL")" "88000"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
