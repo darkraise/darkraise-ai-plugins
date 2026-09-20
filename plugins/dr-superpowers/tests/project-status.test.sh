@@ -128,5 +128,19 @@ present "finishing: discovered work becomes a row" "$FIN" "scripts/register add"
 present "finishing: verify is the owner's state" "$FIN" \
   "a check only your human partner can perform"
 
+# --- the design surfaces open and assign rows ---
+BRAIN="$P/skills/brainstorming/SKILL.md"
+PLANS="$P/skills/writing-plans/SKILL.md"
+present "brainstorming: the trigger is two or more items" "$BRAIN" \
+  "two or more distinct items"
+present "brainstorming: the register comes before the spec" "$BRAIN" \
+  "docs/superpowers/registers/YYYY-MM-DD-<slug>.md"
+present "brainstorming: an existing register is read first" "$BRAIN" \
+  "scripts/register open"
+present "writing-plans: rows are assigned" "$PLANS" "scripts/register set"
+present "writing-plans: tasks cite rows" "$PLANS" "**Items:**"
+present "writing-plans: a design-time deferral becomes a row" "$PLANS" \
+  "deferred"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

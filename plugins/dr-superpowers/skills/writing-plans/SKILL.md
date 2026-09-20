@@ -158,6 +158,10 @@ delegated are the **self-implemented** tasks.
   implementer sees only their own task plus Global Constraints and
   Contracts; this block is how they learn which names they touch.]
 
+**Items:** [only when a register covers this plan's spec: the register row
+identifiers this task discharges, comma-separated, for example `4, 16`. Omit
+the line otherwise.]
+
 - [ ] **Step 1: Write the failing test**
 
 ```python
@@ -229,7 +233,8 @@ user's inline or delegation preference on either host.
    [external-executor.md](../../reference/external-executor.md) §Planning,
    which runs `scripts/codex-gate` before the roster and offers Codex only when
    the gate prints `lane=true`. If no executor is usable, ask nothing.
-5. **Write the lines** directly below the task's `**Interfaces:**` block, in
+5. **Write the lines** directly below the task's `**Items:**` line, or its
+   `**Interfaces:**` block when there is no Items line, in
    this order:
    - `**Implementer:**` — always; the fully qualified agent, for example
      `dr-superpowers:impl-sonnet-medium`
@@ -260,6 +265,24 @@ reports it as a warning. Never write an Override line yourself. Under
 dr-superpowers:executing-plans the lines are read only for the delegated tasks.
 [assigning-implementers.md](references/assigning-implementers.md) explains why
 each of these rules exists.
+
+## Assign the register rows
+
+When a register covers this plan's spec, the plan is where its rows become
+work.
+
+1. Set every row this plan schedules with
+   `scripts/register set <register> <id> planned --assigned <this plan's
+   repository-relative path>`, and give it an `--acceptance` if it has none:
+   that cell is what lets finishing decide between `done` and `verify`.
+2. Put the identifiers on the tasks that discharge them, as `**Items:**` lines.
+3. Record a deferral as a row, not as prose. An item this plan will not answer
+   is `scripts/register set <register> <id> deferred --note "<the reason>"`. An
+   "Out of scope" heading is read by nothing, which is how design-time
+   deferrals were lost.
+
+`plan-lint` then checks both directions: an assigned row no task cites, and a
+task citing a row no register holds.
 
 ## No Placeholders
 

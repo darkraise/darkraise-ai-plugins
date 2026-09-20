@@ -94,14 +94,16 @@ your path and complete them in order.
 5. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
 
 **Architectural:**
-1. **Explore project context** — check files, docs, recent commits
-2. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
-3. **Propose 2-3 approaches** — with trade-offs and your recommendation
-4. **Present design** — in sections scaled to their complexity, get user approval after each section
-5. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-6. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-7. **User reviews written spec** — ask user to review the spec file before proceeding
-8. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+1. **Open the item register** — when the request or a review carries two or
+   more distinct items, before the spec
+2. **Explore project context** — check files, docs, recent commits
+3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
+4. **Propose 2-3 approaches** — with trade-offs and your recommendation
+5. **Present design** — in sections scaled to their complexity, get user approval after each section
+6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+8. **User reviews written spec** — ask user to review the spec file before proceeding
+9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
@@ -170,12 +172,29 @@ is the whole process.
   constraint outranks the spec you are about to write, and a rejected approach
   is the one a fresh design most reliably re-proposes. Neither is an error when
   absent.
+- Run `scripts/register open --spec <any spec this work touches>` and read every
+  register covering the area. A row deferred months ago is a decision this
+  design inherits; a findings file nobody reopens is how it was lost before.
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
 - Prefer multiple choice questions when possible, but open-ended is fine too
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
+
+**Opening an item register:**
+
+When a request, a review or a batch arrives carrying two or more distinct items,
+write them down before designing anything. Create
+`docs/superpowers/registers/YYYY-MM-DD-<slug>.md` with a `**Source:**` line
+naming where the items came from, a `**Covers:**` line holding `-` until a spec
+exists, and the table header
+`| # | Item | Assigned | Acceptance | State | Note |`. Add each item with
+`scripts/register add <file> "<the requester's words>"` — their words, not your
+paraphrase — and confirm the file with `scripts/register check <file>`.
+
+The register is the authority on whether the work is finished. A list that
+lives only in the conversation is a list that gets shorter every session.
 
 **Exploring approaches:**
 
