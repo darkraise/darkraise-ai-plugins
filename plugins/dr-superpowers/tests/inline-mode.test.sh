@@ -217,6 +217,8 @@ absent "subagent mode no longer denies the Codex budget line" "$SDD" \
   'On Codex there is no budget line'
 absent "inline mode no longer denies the Codex budget line" "$INLINE" \
   'and there is no budget'
+present "subagent mode names the measured Codex line" "$SDD" \
+  'carries a measured number but no verdict'
 present "inline mode names the measured Codex line" "$INLINE" \
   'carries a measured number but no verdict'
 present "the handoff skill keeps the count rule authoritative" "$P/skills/handoff/SKILL.md" \

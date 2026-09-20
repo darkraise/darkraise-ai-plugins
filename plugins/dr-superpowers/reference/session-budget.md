@@ -55,12 +55,15 @@ count rule below still decides when a Codex session hands off.
 Each Codex measurement appends a row to
 `<primary checkout>/.superpowers/sdd/budget-log.tsv`, and
 `scripts/context-size --observations` prints it back as the growth between
-consecutive task briefs — the data a later phase needs to set the budget. A
-negative delta is a compaction, reported as `compacted` rather than a number.
+consecutive task briefs within each session, followed by one `span` line per
+session (`<session>  span  40k -> 31k`) — the data a later phase needs to set the
+budget. A negative delta is a compaction, reported as `compacted` rather than a
+number.
 
 `source` is `record` (the SessionStart hook's session record), `record?` (a
 newer transcript exists in the same directory: two sessions may share it) or
-`guessed` (no record; the newest transcript for the directory). `unknown` means
+`guessed` (no record; the newest transcript for the directory) or, on a Codex
+host, `rollout` (the session's own rollout file). `unknown` means
 apply the count rule on Codex and the phase stops everywhere.
 
 `scripts/task-brief` and `scripts/review-package` print it as their last line,

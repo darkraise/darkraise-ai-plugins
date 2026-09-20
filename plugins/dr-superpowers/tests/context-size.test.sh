@@ -320,6 +320,7 @@ check "log: the checkout stays clean" "$(git -C "$REPO" status --porcelain=v1 --
 
 DR_SUPERPOWERS_BUDGET_CALLER=task-brief:3 run
 check "log: the caller tag lands in field 3" "$(awk -F'\t' 'END {print $3}' "$LOG")" "task-brief:3"
+check "log: a second measurement appends" "$(wc -l < "$LOG" | tr -d ' ')" "2"
 
 # The tag the shipped script writes, not one the test sets by hand:
 # ctx_observations filters on exactly this shape. Task 7 is deliberately a
@@ -360,6 +361,18 @@ has "observations: the session span" "$out" "sess-a  span  40k -> 31k"
 lacks_obs() { if grep -qF -- "$1" <<<"$out"; then printf 'FAIL - observations: %s\n' "$2"; fail=$((fail + 1)); else printf 'ok   - observations: %s\n' "$2"; pass=$((pass + 1)); fi; }
 lacks_obs "+1k" "a review-package row is never a pairing point"
 lacks_obs "Task 3 -> Task 9" "does not pair across session ids"
+# Two sessions share one log, so their rows interleave.
+{ printf '2026-09-20T10:00:00Z\t40000\ttask-brief:1\tsess-a\n'
+  printf '2026-09-20T10:01:00Z\t50000\ttask-brief:1\tsess-b\n'
+  printf '2026-09-20T10:05:00Z\t78000\ttask-brief:2\tsess-a\n'
+  printf '2026-09-20T10:06:00Z\t65000\ttask-brief:2\tsess-b\n'
+} > "$LOG"
+run --observations
+has "observations: interleaved sessions pair within themselves (a)" "$out" "sess-a  Task 1 -> Task 2  +38k"
+has "observations: interleaved sessions pair within themselves (b)" "$out" "sess-b  Task 1 -> Task 2  +15k"
+printf '2026-09-20T10:00:00Z\t40000\ttask-brief:1\t\n2026-09-20T10:05:00Z\t78000\ttask-brief:2\t\n' > "$LOG"
+run --observations
+check "observations: rows without a session id are not paired" "$out" ""
 : > "$LOG"
 run --observations
 check "observations: an empty log exits 0" "$status" "0"
@@ -370,6 +383,15 @@ check "observations: an absent log exits 0" "$status" "0"
 check "observations: an absent log prints nothing" "$out" ""
 run --observations extra
 check "observations: a stray argument exits 2" "$status" "2"
+
+# --- a Codex-only host: no Claude transcript at all ---
+export CODEX_HOME="$TMP/codex4"
+mkdir -p "$CODEX_HOME/sessions/2026/09/15"
+{ meta "$REPO_NATIVE"; usage_line 150000 999999; } > "$CODEX_HOME/sessions/2026/09/15/rollout-only.jsonl"
+HOME="$TMP/empty" run
+check "codex only: measured line" "$out" "budget: 150k measured — unknown — source: rollout"
+check "codex only: exit 3" "$status" "3"
+rm -rf "$CODEX_HOME"; unset CODEX_HOME
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

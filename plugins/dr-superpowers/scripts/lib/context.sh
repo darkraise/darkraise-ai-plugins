@@ -233,7 +233,7 @@ ctx_log_observation() {
   base="$primary/.superpowers/sdd"
   mkdir -p "$base" 2>/dev/null || return 0
   [ -f "$base/.gitignore" ] || printf '*\n' > "$base/.gitignore" 2>/dev/null || return 0
-  sid=$(head -n 1 "$CTX_ROLLOUT" 2>/dev/null | tr -d '\r' \
+  sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
     | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
   printf '%s\t%s\t%s\t%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DR_SUPERPOWERS_BUDGET_CALLER:-direct}" "$sid" \
@@ -298,8 +298,8 @@ ctx_observations() {
   primary=$(ctx_primary_root) || return 0
   log="$primary/.superpowers/sdd/budget-log.tsv"
   [ -f "$log" ] || return 0
-  tr -d '\r' < "$log" | awk -F'\t' '
-    $3 ~ /^task-brief:[0-9]+$/ {
+  tr -d '\r' < "$log" | sort -s -t $'\t' -k4,4 -k1,1 | awk -F'\t' '
+    $3 ~ /^task-brief:[0-9]+$/ && $4 != "" {
       n = substr($3, 12)
       if ($4 == sid) {
         d = $2 - prev
