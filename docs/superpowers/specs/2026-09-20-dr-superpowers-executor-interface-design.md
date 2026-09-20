@@ -1,65 +1,79 @@
 # A lane-agnostic executor interface
 
-**Status:** approved design, not yet planned
+**Status:** approved design, revised after review round 1, not yet planned
 **Sub-project:** A of two. B is `dr-opencode`, the second executor instance.
 **Forced by:** docs/superpowers/notes/2026-09-20-dr-opencode-spec-review.md
+**Review round 1:** docs/superpowers/notes/2026-09-20-executor-interface-review.md
 **Superseded design:** docs/superpowers/specs/2026-09-20-dr-opencode-executor-design.md
 **Register:** docs/superpowers/registers/2026-09-20-opencode-executor.md
 **Owner decisions:** 2026-09-20 brainstorming session
 
 ## 1. Purpose
 
-dr-superpowers offloads plan tasks to one external CLI. The intent was always
-an *external executor lane* with Codex as its occupant, but the implementation
+dr-superpowers offloads plan tasks to one external CLI. The intent was always an
+*external executor lane* with Codex as its occupant, but the implementation
 names Codex directly in the lint rules, the session library, the ruling kinds,
 the roster and the skill prose. Two review seats, asked to judge a design that
 proposed adding a second executor beside it, independently concluded that no
 second executor can be added without first separating the two.
 
 This sub-project performs that separation. It adds no executor. Its deliverable
-is that adding one becomes a configuration change plus a wrapper, rather than a
+is that adding one becomes a registry entry plus a wrapper, rather than a
 rewrite of eight files.
 
-**It has no user-visible benefit on its own.** That is accepted: the payoff is
-sub-project B, and the cost of skipping it is a second hardcoded lane beside
-the first.
+**It has no user-visible benefit on its own** beyond §9's offload. That is
+accepted: the payoff is sub-project B, and the cost of skipping it is a second
+hardcoded lane beside the first.
+
+Every file path below was read during this design. Where an earlier draft
+described behaviour from the reference documents rather than the code, review
+round 1 caught it; §9 in particular is rewritten around what `scripts/lib/plan.sh`
+and `scripts/task-brief` actually do.
 
 ## 2. What forced it
 
-From the merged review findings, the Critical items this sub-project answers:
+From the merged findings of the superseded spec's review, the Critical items
+this sub-project answers:
 
 | # | Finding | Evidence |
 |---|---|---|
-| 1 | `plan-lint` requires every `**Executor:**` line to name the `codex-assignment` rung and the header to say `codex`, so any other executor is two ERRORs and writing-plans demands zero | `scripts/plan-lint:272-279` |
-| 2 | `lib/codex-session.sh` hardcodes one directory and the `usable/review/lane` fields; a second lane's rate-limit mark-off would switch off Codex's review seats | `scripts/lib/codex-session.sh:13,24,41` |
-| 5 | `opencode-empty-diff` is rejected: the ruling allowlist is Codex-specific | `scripts/review-route:187` |
-| 7 | The surfaces that actually drive dispatch — writing-plans, delegated-task, the ledger grammar — are Codex-specific prose | skill files |
-| 8 | Inline mode implements exactly the band a cheap executor would serve, so the lane would never fire in an inline plan | `skills/executing-plans/SKILL.md:164` |
-| 9 | `detect-executors.sh`'s plugin branch is `if [ "$id" = codex ]`, with the locator, the client and three `/codex:setup` remedies hardcoded | `scripts/detect-executors.sh:40,75-87` |
+| 1 | `plan-lint` requires every `**Executor:**` line to name the `codex-assignment` rung and the header to say `codex` | `scripts/plan-lint:272-279` |
+| 2 | `lib/codex-session.sh` hardcodes one directory and the `usable/review/lane` fields; a second lane's mark-off would switch off Codex's review seats | `scripts/lib/codex-session.sh:13,24,41` |
+| 5 | The ruling allowlist is Codex-specific | `scripts/review-route:187` |
+| 7 | The surfaces that drive dispatch are Codex-specific prose | skill files |
+| 8 | Inline mode implements exactly the band a cheap executor would serve | `skills/executing-plans/SKILL.md:164` |
+| 9 | `detect-executors.sh`'s plugin branch is `if [ "$id" = codex ]` with three `/codex:setup` remedies hardcoded | `scripts/detect-executors.sh:40,75-87` |
 
-One claim from the superseded spec survived review and is load-bearing here:
-`lib/task-state.sh`, `lib/task-execution.sh` and `scripts/repo-audit` contain no
-Codex reference at all. The durable task record, snapshotting, scoped staging
-and commit recovery are already lane-agnostic and are not touched.
+One claim survived review and is load-bearing: `lib/task-state.sh`,
+`lib/task-execution.sh` and `scripts/repo-audit` contain no Codex reference.
+The durable task record, snapshotting, scoped staging and commit recovery are
+already executor-neutral and are not touched.
 
 ## 3. Decisions
 
 | # | Decision | Rationale |
 |---|---|---|
-| D1 | A registry of per-executor data files, with each executor keeping its own gate and locator script | Auth models genuinely differ — Codex authenticates through a plugin app-server, another executor may use an API key. Forcing one gate script would be false generality. What must be shared is the *state*, not the probe |
-| D2 | Inline mode offloads cheap tasks downward, mirroring its upward delegation | An executor lane whose band is exactly what inline mode keeps for itself can never fire. Chosen by the owner over restricting the lane to subagent plans |
-| D3 | `executor-empty-diff` replaces `codex-empty-diff`, old name still accepted | The `--kind risk3` precedent in `run-codex-review.sh`. A hard rename breaks in-flight plans for no gain |
-| D4 | A fixture executor id, used only by the test suites | It proves the abstraction supports a second executor without any second CLI being installed, so B inherits a tested seam instead of discovering one |
-| D5 | Codex's observable behaviour is unchanged except where §9 and §10 say otherwise | This is a refactor. Every deviation is named, and everything unnamed must stay byte-identical in effect |
+| D1 | A registry of per-executor data files, each executor keeping its own gate and locator script | Auth models genuinely differ. What must be shared is the *state*, not the probe |
+| D2 | Inline mode offloads cheap tasks downward, mirroring its upward delegation | A lane whose band is exactly what inline mode keeps for itself can never fire. Owner's choice over restricting the lane to subagent plans |
+| D3 | `executor-empty-diff` replaces `codex-empty-diff`, old name still accepted | The `--kind risk3` precedent. A hard rename breaks in-flight plans for no gain |
+| D4 | A fixture executor id, used only by the suites, reached through a directory override | It proves the abstraction supports a second executor with no second CLI installed |
+| D5 | Codex's observable behaviour is unchanged except where §9 and §10 say otherwise | This is a refactor. Every deviation is named; anything unnamed must stay identical in effect |
+| D6 | The ledger keeps the field name `thread` | `task-state.sh` stores `thread`, the wrapper prints `thread=`. Renaming to `session` would make a third name for one value and create a compatibility cost that is entirely self-inflicted |
 
 ## 4. The registry
 
-`reference/executors/<id>.json`, one per executor. The Codex entry:
+`reference/executors/<id>.json`, one per executor. The directory is
+`${DR_EXECUTORS_DIR:-<plugin-root>/reference/executors}`, following the
+`DR_CODEX_POLICY` precedent; every reader below honours that variable, which is
+how §12's fixture executor exists without touching the shipped registry.
+
+The Codex entry:
 
 ```json
 {
   "id": "codex",
   "locator": "scripts/codex-plugin",
+  "probe": { "command": "scripts/lib/codex-client.mjs", "op": "auth" },
   "gate": "scripts/codex-gate",
   "wrapper": "scripts/run-codex-task.sh",
   "reference": "reference/executor-lane.md",
@@ -73,7 +87,6 @@ and commit recovery are already lane-agnostic and are not touched.
     "timeout": "codex-timeout",
     "judge": "codex-judge"
   },
-  "remedy": "/codex:setup",
   "reasons": {
     "not_enabled": "the codex plugin is not enabled in this profile",
     "logged_out": "the codex plugin is installed but not logged in; run /codex:setup",
@@ -83,220 +96,379 @@ and commit recovery are already lane-agnostic and are not touched.
 ```
 
 Every existing name is preserved, including the ladder block literally called
-`gate` and the environment variable `DR_CODEX_SESSION_DIR`. The registry
-records what is, so that nothing about Codex has to move for the abstraction to
-exist. A second executor names its own blocks and directory.
+`gate`, the environment variable `DR_CODEX_SESSION_DIR` and the remedy text
+embedded in the reason strings. The registry records what is, so nothing about
+Codex has to move for the abstraction to exist.
 
-`scripts/executors` is the only reader:
+`session_dir` is relative to `$HOME/.claude/dr-superpowers/`, which is today's
+base path. `session_dir_env`, when set, replaces the whole resolved path.
+
+### 4.1 The two contracts the registry points at
+
+Both are interfaces today, enforced by their callers' parsing, and both must be
+written down because §12's stub has to satisfy them.
+
+**The locator** prints one line and exits 0 for ok, 1 for off, 2 for a usage or
+dependency error:
+
+```
+<id>-plugin ok version=<v> root=<path to end of line>
+<id>-plugin off reason=<token>
+```
+
+`detect-executors.sh:49-51` and `codex-gate:57-58` parse exactly this.
+
+**The probe** reads one JSON request on stdin and prints one JSON object. The
+roster sends `{"op": "<probe.op>", "cwd": "<native-form path>"}` and reads
+`.authed`, which is `true`, `false`, or absent for a failed probe — mapping to
+`authenticated`, `logged_out` and `probe_failed` respectively. The probe is
+invoked as `node <probe.command> <locator root>`.
+
+**The probe is not the gate.** `codex-gate` additionally reads quota, consults
+the trust record and writes session state; using it as the roster's probe would
+change Codex's roster behaviour and cache an answer the roster is not entitled
+to write. They stay separate.
+
+### 4.2 `scripts/executors`
+
+The only reader of the registry:
 
 | Invocation | Output |
 |---|---|
-| `executors list` | one id per line, for every readable registry file |
-| `executors get <id> <dotted.key>` | one field, exit 1 when the id or key is absent |
-| `executors path <id> <key>` | a field holding a plugin-relative path, resolved absolute |
+| `executors list` | one id per line, for every readable entry in the registry directory |
+| `executors get <id> <dotted.key>` | one field; an array prints one element per line; exit 1 when the id or key is absent |
+| `executors path <id> <key>` | a path field resolved absolute against the plugin root |
 
-Nothing else parses the registry. A script that needs three fields calls it
-three times; these are local process spawns on paths already taken, and one
-parser is worth more than the spawns cost.
+Nothing else parses the registry. A caller needing three fields calls it three
+times; these are local spawns on paths already taken, and one parser is worth
+more than the spawns cost.
 
-An id is `[a-z][a-z0-9-]*`. An unknown id anywhere is an error naming
-`executors list`, never a silent skip: a silent skip is how a lane disappears
-without saying so, which is the failure mode `detect-executors.sh` was already
-written to avoid.
+An id matches `[a-z][a-z0-9-]*`. An unknown id is an error naming
+`executors list` **when it appears in an `**Executor:**` line or is passed to
+`executors get`**. It is not an error elsewhere: §8 keeps PATH-probed ids
+(`cursor-agent`, `opencode`, `antigravity`) that have no registry entry, and
+those are reported exactly as they are today.
+
+### 4.3 Which fields are read, and by whom
+
+Stated so a reviewer can check for dead schema rather than infer it.
+
+| Field | Read by |
+|---|---|
+| `locator`, `probe`, `reasons` | `detect-executors.sh` (§8) |
+| `session_dir`, `session_dir_env`, `surfaces` | `lib/executor-session.sh` (§5) |
+| `blocks.gate`, `blocks.assignment` | `plan-lint` (§6) |
+| `wrapper` | `detect-executors.sh`, to decide that a lane exists (§8) |
+| `gate`, `reference`, `blocks.successor`, `blocks.timeout`, `blocks.judge` | **Nothing in this sub-project.** `run-codex-task.sh` and `run-codex-review.sh` keep their literal block names per §13 |
+
+The five unread fields are kept deliberately: they are the facts sub-project B
+needs, and recording them now is what makes B a registry entry rather than a
+schema change. The plan must not add readers for them.
 
 ## 5. Session state
 
 `scripts/lib/executor-session.sh` replaces `scripts/lib/codex-session.sh`. Same
 mechanism — one file per Claude Code session, keyed by session id, readers fail
-closed, week-old files pruned — with the executor id as the first argument of
-every function:
+closed, week-old files pruned on write — with the executor id as the first
+argument:
 
 ```
-executor_session_dir <id>          # registry session_dir, overridable by its session_dir_env
-executor_session_file <id>         # <dir>/<sid>.json; fails with no session id
-executor_session_on <id> <surface> # true only when this session's gate opened that surface
+executor_session_id                        # unchanged; no id argument
+executor_session_dir <id>
+executor_session_file <id>                 # fails when there is no session id
+executor_session_on <id> <surface>
 executor_session_write <id> <json>
-executor_session_mark_off <id> <reason> [resets_at_epoch]
+executor_session_mark_off <id> <reason>
 ```
 
-`mark_off` writes `usable:false` plus every surface in that executor's
-`surfaces` list set false, and touches no other executor's file. This is
-finding 2: today a second lane hitting a rate limit would mark the one shared
-file off and take Codex's review seats down with it.
+`mark_off` writes the record `codex_session_mark_off` writes today, with the
+surface list taken from the registry rather than hardcoded:
 
-`codex-session.sh` is deleted rather than kept as a shim. Its four callers —
-`codex-gate`, `plan-lint`, `review-route`, `run-codex-review.sh` — are updated
-in the same change. A shim would leave two ways to reach the same state, which
-is the ambiguity this sub-project exists to remove.
+```json
+{ "session_id": …, "usable": false, "<each surface>": false,
+  "reason": …, "checked_at": …, "resets_at": null, "resets_at_epoch": null,
+  "plugin_version": "<preserved from the prior file>" }
+```
+
+Preserving `plugin_version` and writing `reason`, `checked_at` and both
+`resets_at` fields is not optional: `codex-gate:39-50` reads all of them back
+out of the cache, and `tests/codex-gate.test.sh:247` asserts `reason`. The
+earlier draft's optional `resets_at_epoch` argument is dropped — no caller
+passes one, because a gate with a reset time writes through
+`executor_session_write`, not through `mark_off`.
+
+`mark_off` touches only its own executor's file. This is finding 2: today a
+second lane hitting a rate limit would mark the one shared file off and take
+Codex's review seats down with it.
+
+`codex-session.sh` is deleted rather than kept as a shim; a shim would leave two
+ways to reach one state. It has **five** callers, not four: `codex-gate`,
+`plan-lint`, `review-route`, `run-codex-review.sh`, and
+`tests/codex-gate.test.sh:236`, which sources it directly and calls
+`codex_session_on` and `codex_session_mark_off`. That test's harness lines
+change; its `check` assertions do not (§12).
 
 Existing `~/.claude/dr-superpowers/codex-sessions/<sid>.json` files keep their
 path, because the registry records that directory. Nothing is migrated.
 
 ## 6. `plan-lint`
 
-The `**Executor:**` line's first token is the executor id. Validation becomes:
+Two independent code paths touch executors, and they have different predicates.
+The earlier draft conflated them; they are specified separately here.
 
-1. The id must be in `executors list`, else ERROR naming the registry.
-2. The header's `> **External executors:**` line must name that id.
-3. The task must pass that executor's gate block, read via
-   `blocks.gate` — `min_score`, `max_risk`, and any further keys that block
-   defines.
-4. The rung must match that executor's `blocks.assignment` row for the task's
-   total.
+### 6.1 Validating an `**Executor:**` line
 
-The lane-eligible warning at `plan-lint:279-282` becomes per-executor: a task
-that no ticked executor's gate admits gets no warning, and a task admitted by
-one gets that executor's rung suggested.
+The line's first token is the executor id. The rules, in order, preserving
+today's three ERRORs verbatim with the id templated in:
 
-**The plan syntax does not change.** `**Executor:** codex gpt-5.5 / high`
-already leads with the id, and `> **External executors:** codex` already names
-it. No existing plan needs migrating, and `tests/plan-lint.test.sh`'s existing
-Codex fixtures must pass unchanged — that is the regression bar for this
-section.
+1. The id must be in `executors list`, else ERROR naming the registry. (New.)
+2. The Override rule: an Executor line on an overridden task is an ERROR.
+   Unchanged, and omitted from the earlier draft.
+3. The task must pass that executor's gate block — read via `blocks.gate`,
+   and reading **exactly `min_score` and `max_risk`**, as today. The block also
+   carries `require_rule_s_clean` and `require_external_enabled`, which
+   plan-lint enforces as rules 2 and 5 rather than by evaluating keys; the
+   earlier draft's "any further keys that block defines" invited a generic key
+   evaluator nobody specified and is withdrawn.
+4. The rung must match that executor's `blocks.assignment` row for the total.
+5. The header's `> **External executors:**` line must name that id.
+
+The three pinned messages at `tests/plan-lint.test.sh:391-395` keep their exact
+wording with `codex` substituted by the id, so a Codex plan's output is
+byte-identical.
+
+### 6.2 The lane-eligible warning
+
+**Its predicate is not the header tick.** Today, at `plan-lint:294-308`, the
+warning fires when a task is eligible (clean, non-overridden, within the gate,
+no Executor line) **and** `codex_session_on lane` **and** the roster reports
+`usable` **and** lazy probing is enabled **and** the plan is not inline. The
+`p1.md` fixture at `tests/plan-lint.test.sh:416-420` carries no External
+executors header and still expects the warning, so a tick-based predicate would
+break a fixture §12 declares unchangeable.
+
+Generalised: for each id in `executors list` with `executor_session_on <id> lane`
+and a `usable` roster row, warn on tasks that id's gate admits, naming that id's
+rung. Codex alone is registered, so the output is unchanged.
+
+### 6.3 The inline skip
+
+`plan-lint:300` skips the warning for inline plans, and its comment at 294-299
+justifies the skip with "Executor lines are inert under inline execution" —
+the premise §9 removes. `tests/plan-lint.test.sh:452` pins the skip.
+
+**The skip stays and only the comment is rewritten.** Under §9 an inline plan
+can carry Executor lines, so the warning becomes meaningful there, but turning
+it on would change an existing fixture for a warning that is advisory. The new
+comment says the skip is a deliberate deferral, and a register row records it.
 
 ## 7. `review-route`
 
-Two changes, both narrow.
-
 The ruling allowlist gains `executor-empty-diff` and keeps `codex-empty-diff`
 as an accepted alias resolving to it, exactly as `--kind risk3` is kept as the
-earlier name of `--kind task`. `subagent-driven-development/SKILL.md`'s ruling
-table and the ruling prompt name the new kind and stop naming the Codex one.
+earlier name of `--kind task`.
 
-The Codex-off rows consult `executor_session_on <id> review` for the executor
-under consideration rather than a single Codex answer.
+The kind is named in three places beyond the script:
+`skills/subagent-driven-development/SKILL.md`'s ruling table,
+`skills/subagent-driven-development/references/ruling-prompt.md:96`, which
+explains the kind to the judge, and `skills/executing-plans/SKILL.md:346-347`
+(§9). All three are in §11's table.
 
-**Seat routing is otherwise untouched.** A task carrying an `**Executor:**`
-line of any id still routes to a Claude judge, because the rule was never about
-which CLI wrote the diff — it is that no executor reviews its own work. That
-rule already generalises and needs only its Codex-only phrasing widened.
+The Codex-off rows call `executor_session_on codex review` literally. Codex is
+the only executor with a review surface (§15), so nothing iterates.
+
+**Seat routing is otherwise untouched.** `review-route:257-260` keys on the
+presence of an `**Executor:**` line, not on the word `codex`, so the
+"no executor reviews its own work" rule already generalises and needs only its
+prose widened.
 
 ## 8. `detect-executors.sh`
 
-The `if [ "$id" = codex ]` branch becomes "if the id has a registry entry". For
-such an id the roster runs that entry's `locator`, then its companion auth
-probe, and takes every reason string from the entry's `reasons` map. Ids with
-no registry entry keep the PATH probe.
+Registry ids are enumerated from `executors list` and emitted first; the three
+PATH-probed ids stay as literal `emit` calls. For a registry id the roster runs
+that entry's `locator`, then its `probe` per §4.1, and takes every reason
+string from the entry's `reasons` map — replacing `if [ "$id" = codex ]` at
+line 40 and the three hardcoded remedies at 75-87.
 
-`lane_implemented` stops being a hand-maintained argument to `emit` and becomes
-"this id has a registry entry naming a readable wrapper". That is the fact the
-field was always standing in for, and it cannot drift from reality.
+`batch_capable` stays a hand-maintained argument for PATH-probed ids and is
+`true` by definition for a registry id: an executor with a wrapper is one that
+runs headlessly. `lane_implemented` stops being an argument and becomes "this
+id's entry names a readable `wrapper`" — the fact the field always stood in
+for, and one that cannot drift.
 
-The reason for a batch-capable id with no lane is rewritten to name
-`executors list` rather than asserting that only Codex has a wrapper.
+The cwd handed to the probe is converted with `dr_native_path` (`1bc0602`).
+
+The "only codex has a wrapper" reason string is rewritten to name
+`executors list`.
 
 ## 9. Inline offload — the one behaviour change
 
-Today an inline plan delegates a task when it is too heavy to implement in
-session: total 5 or more, or risk 3, plus total-4 tasks while they are a third
-of the plan or fewer. `plan-header.md` records the set as
-`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4)`.
+The earlier draft placed this in `writing-plans` at plan time. **That was
+wrong.** The delegated set is computed mechanically at execution time by
+`plan_delegated` (`scripts/lib/plan.sh:157-169`) from `plan_scores` alone, and
+`scripts/task-brief:56-75` renders it into the workspace's `plan-header.md` and
+into each delegated brief's second line. No `**Dispatch:**` line exists in the
+plan file, and `writing-plans` never writes one.
 
-**A task an executor's lane gate admits joins that set.** It is a delegated
-task whose dispatch is the wrapper rather than an implementer subagent — which
-`reference/delegated-task.md` §1 already does for any delegated task carrying
-an `**Executor:**` line. So the brief, the review seat, the fix rounds, the
-five-round cap and the ledger line all apply unchanged; what changes is only
-which tasks reach that path.
+### 9.1 `plan_delegated` gains a third row kind
 
-The header line gains the marker:
+It emits `<task>\t<kind>` rows, today `heavy` and `total 4`. It gains
+`executor`, and — because `plan_scores` yields only totals and risks — it reads
+the task text for an `**Executor:**` line rather than re-evaluating a gate.
+**The Executor line is the decision**; it was made when the plan was written,
+and execution time must not second-guess it.
 
-```
-**Dispatch:** delegated — Task 3 (heavy), Task 5 (total 4), Task 1 (executor), Task 2 (executor)
-```
+Precedence: `executor` wins over `total 4` when a task has both. A heavy task
+can never carry an Executor line — the gate caps risk at 1 and Rule S caps a
+compliant total at 4 — so `heavy` and `executor` cannot collide. The
+third-of-the-plan rule continues to apply to `total 4` rows only.
 
-The set is computed by `writing-plans` when the plan is written, as the
-existing set is, so `executing-plans` reads a decision rather than making one.
-`executing-plans` loses the sentence saying `**Executor:**` lines are inert and
-gains the rule that an `(executor)` task is dispatched, not implemented.
+`task-brief` renders the new kind as `Task <n> (executor)` in the header's
+Dispatch line, with no change to its format, and gives such a task the same
+`**Dispatch:** delegated — total <t>, risk <r>` second line every delegated
+task gets. `task-brief`'s `dispatch=1` guard is unchanged: in subagent mode the
+set stays empty because every task is dispatched anyway.
 
-**This changes the existing Codex lane.** Codex's gate is `min_score 2,
-max_risk 1`, so an inline plan that ticks Codex will now offload its total-2
-and total-3 tasks at risk 0 or 1, and any total-4 task at risk 0 or 1 that the
-existing third-of-the-plan rule left in session. All of those were previously
-implemented by the session itself. That is the intended effect and the reason
-the owner chose it: inline mode already delegates upward when a task exceeds
-what the session should do itself, and this is the mirror image. It is called
-out here because it is the one place where a reader expecting a pure refactor
-will find behaviour that moved.
+### 9.2 The consequence for `plan-lint`'s inline model and effort
+
+`plan-lint:326-350` derives an inline plan's required model and effort from
+`plan_delegated`, so adding rows changes its verdicts. Two effects, both
+intended, both named here because §12's regression bar would otherwise read
+them as defects:
+
+- `self_max` excludes delegated tasks, so an offloaded total-4 task no longer
+  forces `--model opus`. Correct: the session does not implement it.
+- `need=high` fires whenever anything is delegated, so an inline plan whose
+  only offloaded task is a total 2 now requires `--effort high`. Also correct:
+  the session is orchestrating a dispatch, a review seat and a fix loop.
+
+The NOTE line `delegated: Task <n> (<kind>)` gains the executor rows.
+
+The plan must enumerate every `tests/plan-lint.test.sh` fixture whose expected
+output moves, and each such change is justified against one of these two
+bullets or treated as a defect.
+
+### 9.3 `executing-plans`
+
+The sentence at line 164 saying `**Executor:**` lines are inert is replaced by
+the rule that a task whose brief's second line marks it delegated is
+dispatched, which already routes an Executor line through
+`reference/delegated-task.md` §1. `writing-plans/SKILL.md:265` carries a second
+copy of the "inert" rule and is corrected with it.
+
+`executing-plans/SKILL.md:346-347` says "Only `codex-empty-diff` belongs to a
+seat this mode never runs (no external executor)" and omits the kind from its
+ruling table. Under §9 an inline session runs executor fix rounds, so an
+empty-diff round is reachable: the sentence goes and the table gains
+`executor-empty-diff`. `tests/inline-mode.test.sh:88` and
+`tests/review-route.test.sh:384` pin that sentence and move with it.
+
+### 9.4 What moves, exactly
+
+Codex's gate is `min_score 2, max_risk 1`, and Rule S caps a compliant total at
+4, so the eligible band is totals 2 to 4 at risk 0 or 1. Of those, an inline
+plan today already delegates the total-4 tasks while they are a third of the
+plan or fewer, and a delegated task carrying an Executor line already runs on
+Codex through `delegated-task.md` §1. **What newly moves is the
+self-implemented remainder:** totals 2 and 3 at risk 0 or 1, plus total-4 tasks
+the third-of-the-plan rule left in session.
 
 **An offloaded task whose executor is unavailable at dispatch stays
-delegated.** The roster guard already substitutes the task's
-`**Implementer:**` agent and says so aloud; that path is unchanged, so such a
+delegated.** The roster guard (`external-executor.md:110-128`) already
+substitutes the task's `**Implementer:**` agent and says so aloud, so such a
 task runs as an ordinary delegated subagent with its own review seat rather
-than falling back to in-session implementation. This is deliberate: the plan's
-Dispatch line is a record of what the session does not implement, and a
-run-time availability answer must not silently change that.
+than reverting to in-session implementation. The plan's dispatch set is a
+record of what the session does not implement, and a run-time availability
+answer must not silently change it.
 
-The mode-selection rule in `using-superpowers` §Process Depth is **not**
-changed. Whether a plan is inline or subagent still follows the heavy-task
-majority; offloading does not make a plan more or less inline.
+This lands in its own commit, late in the plan, so it can be reverted without
+unpicking the abstraction.
 
 ## 10. The reference, and two defects in it
 
 `reference/external-executor.md` becomes `reference/executor-lane.md`: the
-planning flow, the dispatch contract, the failure taxonomy and the resume rules
-stated once in executor-neutral terms, with a short per-executor section for
-what differs. `external-executor.md` is deleted; `legacy-names.md` is not the
-right place for a reference rename, so every referrer is updated in the same
-change.
+planning flow, dispatch contract, failure taxonomy and resume rules stated once
+in executor-neutral terms, with a per-executor section for what differs.
 
-Two live defects in that file are fixed while it is being rewritten. Both were
-found by checking the superseded spec's claim that it copied a poll loop:
+The file is linked from eight places, all of which are updated in the same
+change: `README.md`, `reference/delegated-task.md` (lines 27, 50, 196, 278,
+which also describe resuming "its Codex session"), `reference/final-review.md`,
+`skills/subagent-driven-development/references/escalation.md` (which likewise
+says an external task resumes a Codex session),
+`skills/subagent-driven-development/SKILL.md`, `skills/writing-plans/SKILL.md`,
+`tests/inline-mode.test.sh:70-72,180` and `tests/review-route.test.sh:346-347,387`.
 
-- The file says the wrapper polls for the rung's timeout and kills Codex
-  (lines 94-95, 233). There is no poll loop. `run-codex-task.sh:241` runs
+Two live defects are fixed while the file is rewritten:
+
+- It says the wrapper polls for the rung's timeout and kills Codex (lines
+  94-97, 233-236). There is no poll loop: `run-codex-task.sh:241` runs
   `timeout $((timeout_s + 60)) node codex-client.mjs`, and the deadline, the
-  interrupt and the reap belong to the client.
-- The file documents `note=codex-may-still-be-running` as an outcome a
-  controller must detect and clean up before retrying. `survivor=yes` is never
-  assigned anywhere in `run-codex-task.sh`, so the note cannot be printed and
-  the controller is being told to handle a state it can never observe. Either
-  the note is removed from both files, or the wrapper is given the check that
-  would set it. **This spec removes it**, and records in the new reference that
-  child-process survival is the client's responsibility, because that is where
-  the deadline already lives. Reinstating a survivor check belongs with
-  whichever executor needs one.
+  interrupt and the reap belong to the client. The stale comment at
+  `run-codex-task.sh:106-107` is corrected with it.
+- It documents `note=codex-may-still-be-running` as an outcome a controller
+  must detect and clean up. `survivor=yes` is never assigned, so the note
+  cannot print. **The note and its dead statements are removed** —
+  `survivor=no` at line 275, the conditional `note=` at 364 and the comment at
+  360-361 — which §13 explicitly permits.
 
-The stale comment at `run-codex-task.sh:106-107`, which also describes the
-absent poll loop, is corrected in the same change.
+**Removing the note does not remove the hazard, so the new reference documents
+the real one.** The outer `timeout $((timeout_s + 60))` fires only when the
+client itself wedges; then `$result` is empty, `timedOut` is unset, the run
+reports `exit=1 status=BLOCKED` with no note, and a grandchild may survive on
+Windows. The controller's only observable is the `reaped` field the wrapper
+records in the durable task record (`run-codex-task.sh:266-268`). The new
+reference tells the controller to read `state.json`'s `reaped` before retrying
+a BLOCKED run that printed no error, and says child-process survival is the
+client's responsibility *while the client lives*.
 
-## 11. Skill prose
+## 11. Skill and reference prose
 
 | File | Change |
 |---|---|
-| `skills/writing-plans/SKILL.md` | The roster question and gate flow run per ticked executor; the header's Dispatch line records `(executor)` tasks |
-| `skills/subagent-driven-development/SKILL.md` | Ledger grammar becomes `executor <id> <model>/<effort>, session <sid>`; the ruling table names `executor-empty-diff` |
-| `skills/executing-plans/SKILL.md` | The "Executor lines are inert" sentence is replaced by the offload rule |
-| `skills/handoff/SKILL.md` | Executor state recorded per id |
-| `reference/delegated-task.md` | §1 reads the executor id from the line rather than assuming Codex |
+| `scripts/lib/plan.sh` | `plan_delegated` gains the `executor` row kind (§9.1) |
+| `scripts/task-brief` | Renders `(executor)` in the header line (§9.1) |
+| `skills/writing-plans/SKILL.md` | The roster question and gate flow run per ticked executor; line 265's "inert" copy; the Choosing the Execution line paragraph at 119-143, whose model and effort rule §9.2 changes |
+| `skills/subagent-driven-development/SKILL.md` | Ledger grammar becomes `executor <id> <model>/<effort>, thread <id>`; the ruling table names `executor-empty-diff` |
+| `skills/subagent-driven-development/references/ruling-prompt.md` | Line 96 explains `executor-empty-diff` |
+| `skills/subagent-driven-development/references/escalation.md` | The link, and "resumes a Codex session" |
+| `skills/executing-plans/SKILL.md` | §9.3 |
+| `reference/delegated-task.md` | §1 reads the executor id from the line; the link and the Codex-session wording |
+| `reference/final-review.md` | The link |
+| `skills/handoff/SKILL.md` | **No change.** It records no executor state today, so there is nothing to generalise; the earlier draft's row is withdrawn |
 
-The ledger grammar change is the one with a compatibility cost: a resumed plan
-whose ledger carries `executor codex gpt-5.5/high, thread 01a0...` must still
-be readable. `resume-execution` and `repo-audit` parse the ledger, so both
-grammars are accepted on read and only the new one is written.
+**The ledger keeps `thread`** (D6). The earlier draft claimed
+`resume-execution` and `repo-audit` parse the clause and would need both
+grammars; that is false. `repo-audit:55-68` reads only `ledger_plan`,
+`ledger_done` and the last line; `resume-execution/SKILL.md` contains no
+`executor`, `thread` or `codex` string; `review-route`'s `task_agents` regex
+stops at `(assigned`. The clause's only readers are controller prose. So the
+only change is `codex` becoming `<id>`, and no dual-grammar parsing is needed
+anywhere.
 
 ## 12. Testing
 
-**The fixture executor is the central device.** The suites ship
-`tests/fixtures/executors/stub.json` plus a stub locator, gate and wrapper. It
-exists only under test — `executors list` in production sees only the shipped
-registry — and it is what proves the abstraction rather than merely asserting
-it.
+**The fixture executor is the central device.** The suites ship a registry
+directory containing `stub.json` plus a stub locator, probe, gate and wrapper,
+reached by pointing `DR_EXECUTORS_DIR` at it. It exists only under test, and it
+is what proves the abstraction rather than merely asserting it. The stub
+locator emits the §4.1 grammar and the stub probe honours the §4.1 request and
+`authed` contract.
 
 | Suite | Covers |
 |---|---|
-| `tests/executors.test.sh` (new) | `executors list/get/path`, unknown id, malformed entry, id validation |
-| `tests/executor-session.test.sh` (new) | Per-id files, surfaces from the registry, `mark_off` touching one executor only, no session id, pruning |
-| `tests/plan-lint.test.sh` | Existing Codex fixtures unchanged, plus a `stub` Executor line accepted and an unknown id rejected |
+| `tests/executors.test.sh` (new) | `list/get/path`, `DR_EXECUTORS_DIR`, unknown id, malformed entry, id validation, array output |
+| `tests/executor-session.test.sh` (new) | Per-id files, surfaces from the registry, the full `mark_off` record including preserved `plugin_version`, one executor's mark-off leaving another's file alone, no session id, pruning |
+| `tests/plan-lib.test.sh` | The `executor` row kind, its precedence over `total 4`, and that `heavy` is unaffected |
+| `tests/plan-lint.test.sh` | Existing Codex fixtures byte-identical for §6.1 and §6.2; a `stub` Executor line accepted; an unknown id rejected; the §9.2 fixtures whose model/effort expectations move, each justified |
 | `tests/review-route.test.sh` | `executor-empty-diff` accepted, `codex-empty-diff` still accepted, a `stub` Executor task routed to a Claude judge |
-| `tests/detect.test.sh` | Registry-driven probe for a fixture id, remedies from the registry, PATH probe for a non-registry id |
-| `tests/inline-mode.test.sh` | The Dispatch line's `(executor)` markers, and the prose rule replacing "inert" |
-| `tests/codex-gate.test.sh`, `tests/codex-client.test.sh`, `tests/codex-review.test.sh`, `tests/lanes.test.sh`, `tests/executor-recovery.test.sh` | Must pass with no assertion changed except where §9 and §10 moved behaviour |
+| `tests/detect.test.sh` | Registry-driven locator and probe for the stub id, reasons from the registry, PATH probe unchanged for non-registry ids |
+| `tests/inline-mode.test.sh` | The `(executor)` marker, the replaced "inert" prose, the ruling-table addition |
+| `tests/codex-gate.test.sh` | Harness lines change to the new library (§5); every `check` assertion unchanged |
+| `tests/codex-client.test.sh`, `tests/codex-review.test.sh`, `tests/lanes.test.sh`, `tests/executor-recovery.test.sh`, `tests/run-codex-task.test.sh` | Pass with no assertion changed, except `run-codex-task.test.sh` where §10 removes the survivor statements |
 
-That last row is the regression bar. Any other edit to an existing assertion is
-a signal that Codex's behaviour moved when it should not have, and it is
-treated as a defect rather than a test update.
+That table is the regression bar. An edit to an existing assertion outside the
+rows that name one is a signal that Codex's behaviour moved when it should not
+have, and is treated as a defect rather than a test update.
 
 Repository validation per CLAUDE.md: `node scripts/validate-repository.mjs`,
 both test runners, and `claude plugin validate` on the marketplace and every
@@ -305,20 +477,27 @@ process started is terminated.
 
 ## 13. What does not change
 
-Stated explicitly so a reviewer can check the claim rather than infer it:
+Stated so a reviewer can check the claim rather than infer it. Review round 1
+found three entries of the earlier draft's list to be false; they have been
+moved to §11 and §12.
 
-- `lib/task-state.sh`, `lib/task-execution.sh`, `scripts/repo-audit` — already
-  executor-neutral, verified by grep.
+- `lib/task-state.sh`, `lib/task-execution.sh`, `scripts/repo-audit` — verified
+  by grep to contain no Codex reference.
 - `run-codex-task.sh`'s staging, commit, write-set validation and recovery
-  paths. Only the stale comment at 106-107 changes.
-- `scripts/codex-gate` and `scripts/codex-plugin` keep their names, their
-  output grammar and their logic; they gain the registry only as the source of
-  the session directory.
+  paths. Two carve-outs: the stale comment at 106-107, and the survivor
+  statements at 275, 360-361 and 364 that §10 removes.
+- `scripts/codex-gate` and `scripts/codex-plugin` keep their names, output
+  grammar and logic; the gate changes only to call the new session library.
+- `scripts/run-codex-review.sh` and `run-codex-task.sh` keep their literal
+  ladder block names; they do not read the registry.
 - The plan file syntax, so no existing plan is migrated.
-- `criteria/`, the review schemas, and every judge prompt.
-- The mode-selection rule in `using-superpowers`.
-- The ladder's scoring rubric, Rule S, the assignment, escalation and reserve
-  tables.
+- `criteria/` and the review schemas. **Not** "every judge prompt":
+  `ruling-prompt.md` changes, per §11.
+- The mode-selection rule in `using-superpowers` §Process Depth. Whether a plan
+  is inline or subagent still follows the heavy-task majority; offloading does
+  not make a plan more or less inline.
+- The ladder's scoring rubric, Rule S, and the assignment, escalation and
+  reserve tables.
 
 ## 14. Repository integration
 
@@ -326,38 +505,41 @@ Stated explicitly so a reviewer can check the claim rather than infer it:
 |---|---|
 | `plugins/dr-superpowers/.claude-plugin/plugin.json` | 1.15.1 to 1.16.0 |
 | `plugins/dr-superpowers/.codex-plugin/plugin.json` | Same version |
-| `plugins/dr-superpowers/README.md` | The lane described per executor |
+| `plugins/dr-superpowers/README.md` | The lane described per executor; the renamed reference |
 | `tests/review-route.test.sh` | Its two pinned version assertions |
 
 No catalog or marketplace change: this sub-project adds no plugin.
 
 ## 15. Out of scope
 
-- **Any second executor.** That is sub-project B. This one ships with exactly
-  one registry entry.
-- **Unifying the wrapper.** `run-executor-task.sh` with per-executor adapters
-  was considered and declined: it rewrites the script that owns staging and
-  commit while its only caller works correctly. B adds a second wrapper reusing
-  the same two libraries; a later sub-project may merge them once two exist to
-  compare.
-- **The review-seat runner.** `run-codex-review.sh` stays Codex-only. No
-  executor but Codex has a review surface, and D4 of the superseded spec keeps
-  it that way.
-- **The calibration decision.** Whether `trust.calibration` should be
-  re-baselined against astra is recorded in
-  `2026-09-20-review-routing-calibration.md` and is independent of this work.
+- **Any second executor.** Sub-project B. This one ships one registry entry.
+- **Unifying the wrapper.** Declined: it rewrites the script that owns staging
+  and commit while its only caller works correctly. B adds a second wrapper
+  reusing the same two libraries; a later sub-project may merge them once two
+  exist to compare.
+- **The review-seat runner.** `run-codex-review.sh` stays Codex-only; no other
+  executor has a review surface.
+- **Turning on the lane-eligible warning for inline plans** (§6.3), deferred to
+  a register row.
+- **The calibration decision**, recorded in
+  `2026-09-20-review-routing-calibration.md`.
 
 ## 16. Risks
 
 **The regression bar is the whole risk.** This sub-project touches the lint
-rule, the routing table, the session state and four skills, and its success
-condition is that Codex behaves identically afterwards. The mitigation is §12's
-rule that an existing assertion changing is a defect signal, not a test update
-— but a suite can only catch what it asserts, and the skill prose is covered by
-`present`/`absent` string checks rather than by execution.
+rules, the routing table, the session state, two shared shell libraries and six
+skill or reference files, and its success condition is that Codex behaves
+identically afterwards. §12's rule — an unexplained assertion change is a
+defect signal — is the mitigation, but a suite catches only what it asserts,
+and the skill prose is covered by string checks rather than by execution.
 
-**The inline offload is not covered by that bar**, by construction: it is a
-deliberate behaviour change to an existing lane, and the first plan executed
-after it will offload tasks that previously ran in session. It should land in
-its own commit, late in the plan, so it can be reverted without unpicking the
-abstraction.
+**§9 is not covered by that bar**, by construction: it is a deliberate
+behaviour change, it moves `plan-lint` verdicts for inline plans (§9.2), and
+the first plan executed afterwards will offload tasks that previously ran in
+session. Its own commit, late in the plan.
+
+**The earlier draft's failure mode is the one to watch during planning.** It
+described dispatch from the reference documents rather than from `plan.sh` and
+`task-brief`, and every Critical in round 1 followed from that. Each task in
+the plan must cite the file and line it changes, and a task whose description
+can be satisfied without opening that file is under-specified.
