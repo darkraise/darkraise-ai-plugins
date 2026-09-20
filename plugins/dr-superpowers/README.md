@@ -464,3 +464,30 @@ review, `codex-review-schema.json` for the Codex task seats, and
   the shape of the verdict it parses back.
 - `codex-task-contract.md` is appended to every prompt the wrapper sends,
   resume rounds included.
+
+### Item registers
+
+A register is the list of source items a body of work must answer, and the
+authority on whether that work is finished. One file per incoming list —
+an owner's list, a review's findings, a batch — at
+`docs/superpowers/registers/YYYY-MM-DD-<slug>.md`, committed, and required
+whenever a request carries two or more distinct items.
+
+Each row carries an identifier, the requester's words, an assignment, an
+acceptance, a state and a note. The states are
+open, planned, doing, verify, done, deferred, n/a
+— the first four unresolved, with `verify` meaning built and the owner's
+confirmation still owed. A note is mandatory for verify, deferred and n/a,
+because those three record a decision rather than progress.
+
+`scripts/register` reads and writes them: `check` validates a file, `open`
+reports the unresolved rows for a file or a spec and exits 1 while any remain,
+and `set` and `add` are the only writers. Readers resolve a register from a
+plan's `**Spec:**` and `**Program:**` spec paths rather than from a pointer in
+the plan, so the link cannot go stale.
+
+No surface may claim a body of work complete while a row is unresolved:
+`next-step` reports the open rows instead of "every sub-project is done",
+`plan-lint` rejects a `last` Program line that a register contradicts, and
+`project-status` lists the open rows. When no register covers a spec, every
+surface behaves exactly as it did before.

@@ -183,6 +183,11 @@ a ledger file, not only in todos.
 - Create the ledger with its identity as the first line:
   `# SDD ledger — plan: <plan file path>` — the path exactly as you pass it to
   the scripts (checkout-relative or absolute; `next-step` resolves both).
+- When a register covers this plan's spec, mark the rows this plan carries as
+  in flight once, at the start of the run:
+  `scripts/register set <register> <id> doing`. The register is read by
+  `next-step`, `repo-audit` and dr-superpowers:project-status, so a run that
+  never says it started reads as unscheduled work everywhere else.
 - Create `<workspace>/handoff.md` from the template in dr-superpowers:handoff
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes —

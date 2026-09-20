@@ -142,5 +142,14 @@ present "writing-plans: tasks cite rows" "$PLANS" "**Items:**"
 present "writing-plans: a design-time deferral becomes a row" "$PLANS" \
   "deferred"
 
+# --- execution marks rows doing, and the README documents the artifact ---
+for skill_file in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md"; do
+  present "execution: rows go to doing at the start ($(basename "$(dirname "$skill_file")"))" \
+    "$skill_file" "scripts/register set"
+done
+present "README: the register is documented" "$P/README.md" "docs/superpowers/registers/"
+present "README: the states are documented" "$P/README.md" \
+  "open, planned, doing, verify, done, deferred, n/a"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
