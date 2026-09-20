@@ -14,6 +14,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/register.sh"
 . "$HERE/lib/codex-session.sh"
 ROUTING="$HERE/../reference/codex-routing.json"
 
@@ -74,6 +75,57 @@ if [ -n "$program" ]; then
     [ -f "$root/$ppath" ] || say ERROR header "Program path does not exist: $ppath"
   else
     say ERROR header "Program line does not match '**Program:** <path> — sub-project <k> of <n> — next: <title>' or '… — last'"
+  fi
+fi
+
+# --- item registers ---
+# A register is the authority on whether the work is finished; the Program line
+# is a pointer. These checks answer both directions of "is every item covered".
+reg_specs=()
+[ -z "${spec_path:-}" ] || reg_specs+=("$spec_path")
+[ -z "${ppath:-}" ] || [ "${ppath:-}" = "${spec_path:-}" ] || reg_specs+=("$ppath")
+if [ ${#reg_specs[@]} -gt 0 ]; then
+  # git prints the top level as D:/… under Git Bash where pwd prints /d/…, so
+  # the path is canonicalised the way lib/plan.sh already does before stripping.
+  plan_rel=$(plan_repo_canon "$plan" 2>/dev/null || printf '%s' "$plan")
+  plan_rel=${plan_rel#"$root"/}
+  : > "$TMP/reg-ids"
+  : > "$TMP/reg-open"
+  while IFS= read -r reg_file; do
+    [ -n "$reg_file" ] || continue
+    register_rows "$reg_file" | cut -f1 >> "$TMP/reg-ids"
+    register_open "$reg_file" >> "$TMP/reg-open"
+  done < <(register_for_spec "$root" "${reg_specs[@]}")
+
+  if [ -s "$TMP/reg-ids" ]; then
+    cited=$(awk "$_PLAN_AWK"'
+      in_fence($0) { next }
+      index($0, "**Items:**") == 1 {
+        line = substr($0, 11)
+        gsub(/[^0-9]+/, " ", line)
+        print line
+      }
+    ' "$src" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un || true)
+
+    [ -n "$cited" ] \
+      || say WARN header "a register covers this plan's spec but no task carries an **Items:** line"
+
+    while IFS=$'\t' read -r rid ritem rassigned _ _ _; do
+      [ "$rassigned" = "$plan_rel" ] || continue
+      grep -qx "$rid" <<<"$cited" \
+        || say ERROR header "register row #$rid is assigned to this plan but no task cites it"
+    done < "$TMP/reg-open"
+
+    for rid in $cited; do
+      grep -qx "$rid" "$TMP/reg-ids" \
+        || say ERROR header "**Items:** cites #$rid, which no covering register holds"
+    done
+
+    if grep -qE "$SEP"'last[ \t]*$' <<<"$program"; then
+      others=$(awk -F'\t' -v p="$plan_rel" '$3 != p { printf "%s#%s", (c++ ? ", " : ""), $1 }' "$TMP/reg-open")
+      [ -z "$others" ] \
+        || say ERROR header "Program line says 'last' while register rows are open: $others"
+    fi
   fi
 fi
 

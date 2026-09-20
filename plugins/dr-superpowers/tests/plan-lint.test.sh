@@ -483,5 +483,97 @@ sed 's/$/\r/' clean.md > crlf.md
 lint crlf.md
 check "CRLF plan: exit 0" "$status" "0"
 
+# --- item registers ---
+LREPO="$TMP/lint-registers"
+git init -q -b main "$LREPO"
+mkdir -p "$LREPO/docs/superpowers/plans" "$LREPO/docs/superpowers/specs" "$LREPO/docs/superpowers/registers"
+: > "$LREPO/docs/superpowers/specs/s-design.md"
+cat > "$LREPO/docs/superpowers/registers/r.md" <<'REG'
+# R — item register
+
+**Source:** review 2026-09-20
+**Covers:** docs/superpowers/specs/s-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Covered | docs/superpowers/plans/p.md | - | planned | - |
+| 2 | Someone else's | C2 | - | planned | - |
+REG
+
+write_plan() { # write_plan <program-suffix> <items-line>
+  cat > "$LREPO/docs/superpowers/plans/p.md" <<PLAN
+# P Implementation Plan
+
+**Goal:** g
+**Spec:** docs/superpowers/specs/s-design.md
+**Execution:** inline — \`claude --model sonnet --effort low\` — small
+**Program:** \`docs/superpowers/specs/s-design.md\` — sub-project 1 of 2 — $1
+
+## Global Constraints
+
+None.
+
+## Contracts
+
+None.
+
+## Assumptions (evidence)
+
+- none
+
+## Task index
+
+1. One
+
+---
+
+### Task 1: One
+
+**Files:**
+- Create: \`a.txt\`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: nothing
+$2
+**Implementer:** dr-superpowers:impl-haiku
+**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+
+- [ ] **Step 1: Do it**
+
+\`\`\`bash
+echo hi > a.txt
+\`\`\`
+PLAN
+}
+
+write_plan "next: Two" "**Items:** 1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+lacks "plan-lint: a cited row is covered" "$OUT" "register row #1"
+
+write_plan "next: Two" ""
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: an uncited assigned row is an error" "$OUT" \
+  "ERROR header: register row #1 is assigned to this plan but no task cites it"
+has "plan-lint: a plan with no Items line warns" "$OUT" \
+  "WARN header: a register covers this plan's spec but no task carries an **Items:** line"
+
+write_plan "next: Two" "**Items:** 1, 9"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: a dangling citation is an error" "$OUT" \
+  "ERROR header: **Items:** cites #9, which no covering register holds"
+
+write_plan "last" "**Items:** 1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: 'last' with another sub-project's open row is an error" "$OUT" \
+  "ERROR header: Program line says 'last' while register rows are open: #2"
+
+# A plan with no covering register lints exactly as it did before.
+rm "$LREPO/docs/superpowers/registers/r.md"
+write_plan "last" ""
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+lacks "plan-lint: no register means no register findings" "$OUT" "register row"
+lacks "plan-lint: no register means no premature-last finding" "$OUT" "register rows are open"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
