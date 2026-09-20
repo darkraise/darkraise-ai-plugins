@@ -90,12 +90,17 @@ Implementation complete. You're on a detached HEAD (externally managed workspace
 Which option?
 ```
 
-Directly above the menu, write one line saying what follows the plan, read
-from its `**Program:**` line: `After integration: sub-project <k+1> (<title>)
-of <spec>` when it names `next: <title>`, `After integration: the program is
+Directly above the menu, write one line saying what follows the plan. Run
+`scripts/register open --spec <the plan's Spec path>` first. While it exits 1,
+the line is `After integration: <n> register rows are still open — #<id>
+<item>`, whatever the Program line says.
+
+Only when every covering register is fully resolved does the Program line
+answer, read as before: `After integration: sub-project <k+1> (<title>) of
+<spec>` when it names `next: <title>`, `After integration: the program is
 complete` when it is the last sub-project, and `After integration: no
-follow-on work recorded` when there is no Program line or no plan. Step 7
-turns this into the launch block once the choice is made.
+follow-on work recorded` when there is no Program line or no plan. Step 7 turns
+this into the launch block once the choice is made.
 
 Present the menu exactly as written — concise, with every option coming
 from the list above. The menu is the last thing in your message: rulings,
@@ -231,18 +236,27 @@ line — not the plan file's own date. Commit an Option 1 index line as
 `docs(plans): complete <slug>`, which fits the 50-character subject limit where
 a full basename would not.
 
-**Carry open findings with it.** The ledger is the only record of what the
-run left open, and Step 6 deletes it. In the same commit as the index line,
-write `docs/superpowers/notes/<slug>-followups.md` listing, one bullet each
-with its task number:
+**Carry open findings with it.** The ledger is the only record of what the run
+left open, and Step 6 deletes it.
 
-- every `minor (deferred)` line and every `parked` line;
-- every complete line's `discovered:` field that is not `none`;
-- every final-review finding you left for your human partner, such as a
-  behaviour choice or pre-existing drift.
+When a register covers this plan's spec, it is where open work lives, and the
+prose note is not written. In the same commit as the index line:
 
-Write nothing when all three are empty. The file travels with the same
-outcomes as the index line: Options 1 and 2 only.
+- resolve every row this plan covered — one its tasks cite, or one whose
+  `Assigned` cell is this plan's path — with
+  `scripts/register set <register> <id> done`, or `verify --note <what is owed>`
+  when the row's acceptance names a check only your human partner can perform;
+- add a row for every `minor (deferred)` line, every `parked` line, every
+  complete line's `discovered:` field that is not `none`, and every final-review
+  finding you left for your human partner, with
+  `scripts/register add <register> "<item>"` — `--state deferred --note <the
+  ruling>` when it is not work anyone will do, plain `open` when it is.
+
+When no register covers the plan, write
+`docs/superpowers/notes/<slug>-followups.md` instead, listing those same
+findings one bullet each with its task number. Write nothing when all of them
+are empty. Either artifact travels with the same outcomes as the index line:
+Options 1 and 2 only.
 
 ## Step 6: Cleanup Workspace
 

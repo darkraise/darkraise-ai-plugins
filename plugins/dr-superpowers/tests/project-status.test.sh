@@ -117,5 +117,16 @@ else
   printf 'ok   - status: the old single-source rule is gone\n'; pass=$((pass + 1))
 fi
 
+# --- finishing resolves register rows ---
+FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+present "finishing: the register gates the completion line" "$FIN" \
+  "Only when every covering register is fully resolved"
+present "finishing: an unresolved register changes the line" "$FIN" \
+  "After integration: <n> register rows are still open"
+present "finishing: rows are resolved through the script" "$FIN" "scripts/register set"
+present "finishing: discovered work becomes a row" "$FIN" "scripts/register add"
+present "finishing: verify is the owner's state" "$FIN" \
+  "a check only your human partner can perform"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
