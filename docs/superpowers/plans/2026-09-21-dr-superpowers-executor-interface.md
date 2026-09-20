@@ -12,6 +12,8 @@
 
 **Execution:** inline — `claude --model opus --effort high` — 2 of 18 tasks are heavy (Tasks 4 and 7), so the plan is inline; the 8 four-band tasks exceed a third of 18 and therefore stay in session, which sets the model to opus, and the effort is raised to high because the plan delegates.
 
+**Plan review:** 2026-09-21 — dr-superpowers:judge-opus — executability 14 / coherence 15 / coverage 18 / assumptions 16 (round 3)
+
 ## Global Constraints
 
 - Codex's observable behaviour is unchanged except where this plan's Tasks 8, 12 and 13 state otherwise. Any other change to an existing test assertion is a defect, not a test update.
