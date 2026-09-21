@@ -314,8 +314,9 @@ produced a diff to review, because the resume run failed the way an initial run
 can fail. When a run fails is written for initial runs and does not apply here
 unchanged, because two of its responses are unavailable to a fix round.
 
-**The successor column is never consulted.** `codex-successor` is read only by a
-failed initial run - [ladder.md](ladder.md) says so, and the reason is that
+**The successor column is never consulted.** That executor's successor block
+(`executors get <id> blocks.successor`) is read only by a failed initial run -
+[ladder.md](ladder.md) says so, and the reason is that
 changing rung mid-fix-loop discards the session context those rounds exist to
 preserve. A fix round that cannot proceed leaves the lane by `HANDBACK` instead,
 which is where round 4 was taking it anyway.
@@ -506,7 +507,7 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
-| A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
+| A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: that executor's successor block (`executors get <id> blocks.successor`) is read only by a failed initial run |
 | A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
 | A review seat's status line says `FALLBACK` | The preferred judge rung refused the run and the runner already used the fallback once. Not a failure: record the substitution and its reason in the ledger line you are already writing |
 

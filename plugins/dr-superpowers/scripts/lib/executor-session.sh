@@ -15,8 +15,10 @@
 
 _EXECUTOR_SESSION_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# The helper's stderr is not swallowed: a malformed registry entry is an
+# installation fault, and silencing it turns the lane off with no diagnostic.
 _executor_session_field() { # _executor_session_field <id> <key>
-  bash "$_EXECUTOR_SESSION_LIB_DIR/../executors" get "$1" "$2" 2>/dev/null
+  bash "$_EXECUTOR_SESSION_LIB_DIR/../executors" get "$1" "$2"
 }
 
 executor_session_id() { printf '%s' "${CLAUDE_CODE_SESSION_ID:-}"; }

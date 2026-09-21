@@ -66,5 +66,15 @@ executor_session_write codex '{"session_id":"session-test","usable":true}'
 check "a week-old session file is pruned on write" \
   "$([ -f "$TMP/codex/ancient.json" ] && echo kept || echo pruned)" "pruned"
 
+# A malformed entry is an installation fault, so the helper's diagnostic must
+# reach the caller rather than being swallowed into a mute lane shutdown.
+mkdir -p "$TMP/bad"
+printf 'not json\n' > "$TMP/bad/codex.json"
+check "a malformed entry still fails closed" \
+  "$(DR_EXECUTORS_DIR="$TMP/bad" executor_session_file codex >/dev/null 2>&1; echo $?)" "1"
+check "a malformed entry says why on stderr" \
+  "$(DR_EXECUTORS_DIR="$TMP/bad" executor_session_file codex 2>&1 >/dev/null | head -1 | tr -d '\r')" \
+  "executors: codex: missing or malformed required fields"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
