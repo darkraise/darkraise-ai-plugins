@@ -226,15 +226,20 @@ r5_bad="" max_total=0 lane=""
 # every unit is checked on its own.
 for n in $nums; do
   full=$(plan_task_text "$src" "$n")
-  parts=$(grep -oE '^#### Part [A-Z]:' <<<"$full" | awk '{ print substr($3, 1, 1) }' || true)
+  parts=$(plan_task_parts <<<"$full")
+  if [ -n "$parts" ] \
+     && [ "$(plan_lines Evaluation <<<"$full" | grep -c .)" \
+          -gt "$(plan_eval_lines <<<"$full" | grep -c .)" ]; then
+    say NOTE "Task $n" "an **Evaluation:** line above the first part does not score the task"
+  fi
   for part in ${parts:--}; do
   if [ "$part" = - ]; then
     where="Task $n" text=$full
   else
     where="Task $n part $part"
-    text=$(awk -v p="$part" '/^#### Part [A-Z]:/ { on = (substr($3, 1, 1) == p) } on' <<<"$full")
+    text=$(plan_part_text "$part" <<<"$full")
   fi
-  line() { grep -m 1 -E "^\*\*$1:\*\*" <<<"$text" || true; }
+  line() { plan_lines "$1" <<<"$text" | head -n 1; }
   sev=ERROR
   [ -n "$(line Override)" ] && sev=WARN
   grep -qE '^\*\*Files:\*\*' <<<"$text" || say ERROR "$where" "missing **Files:** block"

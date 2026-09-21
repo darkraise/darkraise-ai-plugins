@@ -707,5 +707,63 @@ inline_plan i2.md '**Execution:** inline — `claude --model sonnet --effort low
 lint i2.md
 has "an offloading inline plan needs high effort" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 
+# --- the shared Evaluation reader ---
+# A task whose only score sits inside a fence used to pass: the linter read the
+# example as the task's line, so an unscored task reached execution unrouted.
+lintplan() { # lintplan <file> <task body>
+  { cat <<'HDR'
+# Demo Implementation Plan
+
+**Goal:** Demo.
+
+**Spec:** `docs/spec.md`
+
+**Execution:** inline — `claude --model sonnet --effort medium` — one light task
+
+**Plan review:** 2026-09-21 — dr-superpowers:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+
+## Global Constraints
+
+- Bash only.
+
+## Contracts
+
+None
+
+## Assumptions (evidence)
+
+- None.
+
+## Task index
+
+1. One
+
+---
+
+HDR
+    printf '%s\n' "$2"
+  } > "$1"
+}
+
+lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
+lint fenced-only.md
+has "a fenced-only score is a missing Evaluation line" "$out" "ERROR Task 1: missing **Evaluation:** line"
+
+lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lint stale-parent.md
+has "a stale parent score is a NOTE" "$out" \
+  "NOTE Task 1: an **Evaluation:** line above the first part does not score the task"
+lacks "a stale parent score is not an error" "$out" "ERROR Task 1"
+check "the stale-parent fixture is otherwise clean" "$status" "0"
+
+lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lint clean-split.md
+lacks "a clean split earns no NOTE" "$out" "above the first part"
+check "the clean-split fixture lints clean" "$status" "0"
+
+lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
+lint fenced-part.md
+lacks "a fenced part heading does not create a part" "$out" "Task 1 part A"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
