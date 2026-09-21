@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Read the executor registry. Every other script reaches an executor's
+# description through this one, so there is a single parser and a single
+# definition of what makes an entry valid.
+#
+# An invalid entry is skipped rather than fatal. One malformed file must not
+# empty the roster: a reader that sees no executors concludes no lane is
+# available, which is the silent downgrade the roster was written to avoid.
+#
+# Usage: executors list
+#        executors get  <id> <dotted.key>
+#        executors path <id> <dotted.key>
+# Exit: 0 answered; 1 unknown id or key; 2 usage error or missing jq.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+DIR="${DR_EXECUTORS_DIR:-$ROOT/reference/executors}"
+
+die() { printf 'executors: %s\n' "$1" >&2; exit 2; }
+
+command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
+[ $# -ge 1 ] || die "usage: executors list | get <id> <key> | path <id> <key>"
+
+# An entry is valid when it parses, carries every required field, its id
+# matches the pattern, and its id matches its filename stem. The stem check is
+# what lets `get` find an entry by id without scanning every file.
+valid_entry() { # valid_entry <file> <stem>; prints the id when valid
+  local file="$1" stem="$2" id rc
+  # Captured, then tested: under `set -o pipefail` a `|| return 1` on this
+  # assignment would fire on jq's own failure, before the diagnostic below ever
+  # runs, and a malformed entry would be skipped in silence.
+  id=$(jq -r '
+    if (.id | type) != "string" then empty
+    elif (.locator | type) != "string" then empty
+    elif (.probe.command | type) != "string" then empty
+    elif (.probe.op | type) != "string" then empty
+    elif (.wrapper | type) != "string" then empty
+    elif (.session_dir | type) != "string" then empty
+    elif (.surfaces | type) != "array" then empty
+    elif (.blocks.gate | type) != "string" then empty
+    else .id end' "$file" 2>/dev/null | tr -d '\r')
+  rc=$?
+  { [ "$rc" -eq 0 ] && [ -n "$id" ]; } || { printf 'executors: %s: missing or malformed required fields\n' "$stem" >&2; return 1; }
+  [[ "$id" =~ ^[a-z][a-z0-9-]*$ ]] || { printf 'executors: %s: id is not [a-z][a-z0-9-]*\n' "$id" >&2; return 1; }
+  [ "$id" = "$stem" ] || { printf 'executors: %s.json: id is %s\n' "$stem" "$id" >&2; return 1; }
+  printf '%s' "$id"
+}
+
+list_ids() { # one valid id per line, sorted
+  local file stem id
+  [ -d "$DIR" ] || return 0
+  for file in "$DIR"/*.json; do
+    [ -e "$file" ] || continue
+    # Parameter expansion, not basename: tests/detect.test.sh seals PATH, and a
+    # shell builtin cannot go missing from it.
+    stem=${file##*/}; stem=${stem%.json}
+    id=$(valid_entry "$file" "$stem") || continue
+    printf '%s\n' "$id"
+  done | sort
+}
+
+entry_file() { # entry_file <id>; prints the path when the id is valid
+  local file="$DIR/$1.json"
+  [ -f "$file" ] || return 1
+  valid_entry "$file" "$1" >/dev/null || return 1
+  printf '%s' "$file"
+}
+
+case "$1" in
+  list)
+    [ $# -eq 1 ] || die "usage: executors list"
+    list_ids
+    ;;
+  get|path)
+    [ $# -eq 3 ] || die "usage: executors $1 <id> <key>"
+    file=$(entry_file "$2") || exit 1
+    # getpath with a split key, so a dotted key reaches a nested field and a
+    # plain key still works. `values` drops null, which is how an absent key
+    # becomes exit 1 rather than the string "null".
+    value=$(jq -r --arg k "$3" 'getpath($k | split(".")) | values
+      | if type == "array" then .[] else . end' "$file" 2>/dev/null | tr -d '\r')
+    [ -n "$value" ] || exit 1
+    if [ "$1" = path ]; then
+      case "$value" in /*|[A-Za-z]:*) printf '%s\n' "$value" ;; *) printf '%s/%s\n' "$ROOT" "$value" ;; esac
+    else
+      printf '%s\n' "$value"
+    fi
+    ;;
+  *) die "unknown subcommand: $1" ;;
+esac

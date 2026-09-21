@@ -1,0 +1,23 @@
+{
+  "id": "codex",
+  "locator": "scripts/codex-plugin",
+  "probe": { "command": "scripts/lib/codex-client.mjs", "op": "auth" },
+  "gate": "scripts/codex-gate",
+  "wrapper": "scripts/run-codex-task.sh",
+  "reference": "reference/executor-lane.md",
+  "session_dir": "codex-sessions",
+  "session_dir_env": "DR_CODEX_SESSION_DIR",
+  "surfaces": ["review", "lane"],
+  "blocks": {
+    "gate": "gate",
+    "assignment": "codex-assignment",
+    "successor": "codex-successor",
+    "timeout": "codex-timeout",
+    "judge": "codex-judge"
+  },
+  "reasons": {
+    "not_enabled": "the codex plugin is not enabled in this profile",
+    "logged_out": "the codex plugin is installed but not logged in; run /codex:setup",
+    "probe_failed": "the codex plugin auth probe failed; run /codex:setup"
+  }
+}
