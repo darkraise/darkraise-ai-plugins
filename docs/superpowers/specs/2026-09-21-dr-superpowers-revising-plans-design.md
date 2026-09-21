@@ -160,7 +160,7 @@ Prints what the plan is missing, one row per scoring unit, and a recommendation:
 
 ```
 header  execution=<mode|missing>  executors=<ids|missing>  sections=<missing list|ok>
-unit <id>  score=<total|?|-> risk=<r|?|-> rule_s=<ok|violated>  gate=<pass|fail:<condition>|unknown>  executor=<id|none>  rung=<id> <model>/<effort>
+unit <id>  score=<total|?|->  risk=<r|?|->  rule_s=<ok|violated|unknown>  gate=<pass|fail:<condition>|unknown>  executor=<id|none>  rungs=<id>:<model>/<effort>[,...]
 recommend  execution=<inline|subagent>  model=<model>  effort=<effort>  delegated=<n>/<tasks>
 ```
 
@@ -179,11 +179,20 @@ executor. Nothing in the plan file marks a batch, so revision writes an
 decision overrides it later. A revision that tried to predict batches would be
 guessing at a decision made with information it does not have.
 
-**`rung` names its executor.** Each eligible executor's rung is resolved through
-that executor's registry entry — `executors get <id> blocks.assignment` — never
-from a hardcoded table, so a second registered executor needs no change here.
-Where several executors are eligible the script lists each; choosing between
-them is the skill's judgment.
+**`rungs` names every executor that would take the unit.** Each executor's
+thresholds and rung come from its own registry entry — `executors get <id>
+blocks.gate` and `blocks.assignment` — never from a hardcoded table. Where
+several ticked executors admit a unit the script lists each; choosing between
+them is the skill's judgment, and the plan carries at most one `**Executor:**`
+line.
+
+**Single-plan mode applies the whole gate, including `require_external_enabled`.**
+A unit whose scores pass while the header ticks no executor that admits it
+reports `gate=fail:not_enabled`, not `gate=pass`. Reporting it as passing would
+invite an `**Executor:**` line naming an executor nobody selected. This is the
+one place single-plan mode and the survey differ: the survey answers "how much
+*could* be delegated", so it ignores selection, while single-plan mode answers
+"what this plan should now say", which selection decides.
 
 **`recommend`** applies the `writing-plans` execution rule mechanically over the
 revised scores: the heavy count, the four-band population and the third
