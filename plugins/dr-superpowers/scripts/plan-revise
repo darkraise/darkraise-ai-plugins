@@ -9,7 +9,8 @@
 # eligible executors, and the edits themselves — stays with the skill.
 #
 # Usage: plan-revise PLAN_FILE
-# Exit: 0 reported; 1 no task to revise; 2 usage or a missing path.
+#        plan-revise --survey DIR
+# Exit: 0 reported; 1 nothing to revise; 2 usage or a missing path.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -18,7 +19,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LADDER="${DR_PLAN_REVISE_LADDER:-$HERE/../reference/ladder.md}"
 
 die() { printf 'plan-revise: %s\n' "$1" >&2; exit 2; }
-usage() { die "usage: plan-revise PLAN_FILE"; }
+usage() { die "usage: plan-revise PLAN_FILE | plan-revise --survey DIR"; }
 
 # block NAME — the body of the ```NAME fenced block in the ladder, blank lines
 # dropped. The ladder is the single source for thresholds and rungs; a constant
@@ -123,6 +124,137 @@ plan_units() {
     fi
   done < <(plan_tasks "$1")
 }
+
+# ledger_for PLAN — the ledger whose identity line names PLAN, searched across
+# every worktree of the plan's repository, because execution may run in a linked
+# worktree while the plan is read from the primary checkout. Each worktree holds
+# its own copy of the plan at the same repository-relative path, so the identity
+# is compared inside the worktree being searched — plan_repo_canon embeds the
+# worktree root, and comparing across roots never matches.
+ledger_for() {
+  local slug rel wt f named
+  slug=$(basename "$1" .md)
+  rel=$(git -C "$(dirname "$1")" rev-parse --show-prefix 2>/dev/null)$(basename "$1")
+  [ -n "$rel" ] || return 0
+  local roots root best
+  roots=$(git -C "$(dirname "$1")" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+  while IFS= read -r wt; do
+    [ -n "$wt" ] || continue
+    f="$wt/.superpowers/sdd/$slug/progress.md"
+    [ -f "$f" ] || continue
+    named=$(ledger_plan "$f")
+    [ -n "$named" ] || continue
+    # An absolute path may name any worktree's root, not just this one, so
+    # every root is stripped rather than only the one being searched.
+    case $named in /*)
+      # A worktree created inside the primary checkout has the primary root as
+      # a prefix of its own, so the longest matching root is the right one.
+      best=""
+      while IFS= read -r root; do
+        [ -n "$root" ] || continue
+        case $named in "$root"/*)
+          [ "${#root}" -gt "${#best}" ] && best=$root ;;
+        esac
+      done <<<"$roots"
+      [ -n "$best" ] && named=${named#"$best"/} ;;
+    esac
+    [ "$named" = "$rel" ] || continue
+    printf '%s\t%s\n' "$wt" "$f"
+    return 0
+  done <<<"$roots"
+}
+
+# completed_form PLAN — "merged", "pr" or nothing, from the completed.md beside
+# the plan. The entry is matched on the plan's recorded repository-relative
+# path, not a basename substring: "docs/scored.md" is a substring of
+# "docs/unscored.md" and would otherwise claim another plan's outcome. Merged
+# outranks via PR whatever their order, because finishing-a-development-branch
+# writes the via-PR line before the push and the merged line after the merge.
+completed_form() {
+  local f rel hits
+  f="$(cd "$(dirname "$1")" && pwd)/completed.md"
+  [ -f "$f" ] || return 0
+  rel=$(git -C "$(dirname "$1")" rev-parse --show-prefix 2>/dev/null)$(basename "$1")
+  hits=$(grep -F "\`$rel\`" "$f" 2>/dev/null) || return 0
+  [ -n "$hits" ] || return 0
+  if grep -qF 'merged into' <<<"$hits"; then printf 'merged\n'
+  elif grep -qF 'via PR' <<<"$hits"; then printf 'pr\n'
+  fi
+}
+
+# steps PLAN — "<checked> <unchecked>" step counts outside fences. Evidence
+# only: a subagent-mode plan records its progress in the ledger, not the file.
+steps() {
+  awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^- \[x\]/ { d++ }
+    /^- \[ \]/ { o++ }
+    END { printf "%d %d\n", d + 0, o + 0 }
+  ' "$1"
+}
+
+survey() {
+  local dir=$1 f rows=0 a score risk fl sp cp
+  local tasks scored unparsed eligible live evidence lf form execution exec_mode ok
+  for f in "$dir"/*.md; do
+    [ -f "$f" ] || continue
+    tasks=$(plan_tasks "$f" | grep -c .)
+    [ "$tasks" -gt 0 ] || continue
+    rows=$((rows + 1))
+    scored=0 unparsed=0 eligible=0
+    while IFS=$'\t' read -r _id text; do
+      [ -n "$_id" ] || continue
+      a=$(plan_eval_lines <<<"$(printf '%s' "$text" | tr '\v' '\n')" | axes)
+      case "$a" in '?'|'-') unparsed=$((unparsed + 1)); continue ;; esac
+      scored=$((scored + 1))
+      set -- $a
+      fl=$1 sp=$2 cp=$3 risk=$4 score=$5
+      [ $((fl + sp + cp)) -ge 4 ] && continue
+      [ "$sp" -eq 3 ] && continue
+      # Potential eligibility: any registered executor, ticked or not, because
+      # the survey answers how much COULD be delegated.
+      ok=$(awk -v t="$score" -v r="$risk" 'NF && $2 <= t && r <= $3 { print 1; exit }' <<<"$EXEC_TABLE")
+      [ -n "$ok" ] && eligible=$((eligible + 1))
+    done <<<"$(plan_units "$f")"
+
+    if [ "$scored" -eq 0 ]; then eligible=-
+    elif [ "$unparsed" -gt 0 ]; then eligible="$eligible+?"
+    fi
+
+    lf=$(ledger_for "$f")
+    form=$(completed_form "$f")
+    if [ -n "$lf" ]; then
+      live=yes evidence="ledger in $(cut -f1 <<<"$lf")"
+    elif [ "$form" = merged ]; then
+      live=no evidence="completed.md merged"
+    elif [ "$form" = pr ]; then
+      live=unknown evidence="completed.md via PR, no ledger"
+    else
+      live=unknown evidence="steps $(steps "$f") (done open), no ledger"
+    fi
+
+    exec_mode=-
+    if [[ "$(plan_header_line "$f" Execution)" =~ ^\*\*Execution:\*\*[[:space:]]+(inline|subagent) ]]; then
+      exec_mode=${BASH_REMATCH[1]}
+    fi
+    execution=$(header_executors "$f")
+    [ -n "$execution" ] && execution=$(tr -s ' ' ',' <<<"$execution" | sed 's/,$//') || execution=-
+
+    printf 'plan  %s  tasks=%s  scored=%s  unparsed=%s  eligible=%s  exec=%s  executors=%s  live=%s  %s\n' \
+      "$(basename "$f")" "$tasks" "$scored" "$unparsed" "$eligible" \
+      "$exec_mode" "$execution" "$live" "$evidence"
+  done
+  [ "$rows" -gt 0 ] || return 1
+  printf 'surveyed  plans=%s\n' "$rows"
+  return 0
+}
+
+if [ "${1:-}" = --survey ]; then
+  [ $# -eq 2 ] || usage
+  [ -d "$2" ] || die "no such directory: $2"
+  survey "$2"
+  exit $?
+fi
 
 [ $# -eq 1 ] || usage
 plan=$1

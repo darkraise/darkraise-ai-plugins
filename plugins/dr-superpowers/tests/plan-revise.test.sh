@@ -215,5 +215,79 @@ printf '# No tasks\n' > "$REPO/docs/empty.md"
 (cd "$REPO" && bash "$SCRIPT" docs/missing.md >/dev/null 2>&1); check "a missing plan exits 2" "$?" "2"
 (cd "$REPO" && bash "$SCRIPT" >/dev/null 2>&1); check "no argument exits 2" "$?" "2"
 
+# --- survey mode ---
+SUR="$TMP/sur"
+mkdir -p "$SUR/docs"
+git -C "$SUR" init -q
+git -C "$SUR" config user.email t@t
+git -C "$SUR" config user.name t
+survey() { (cd "$SUR" && bash "$SCRIPT" --survey docs); }
+row() { survey | grep -m 1 "^plan  $1"; }
+splan() { # splan <name> <body>
+  printf '# P\n\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n%s\n' "$2" > "$SUR/docs/$1.md"
+}
+
+splan scored '**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2'
+splan unscored ''
+printf '# P\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Evaluation:** spec completeness 1 (exact signatures given), coupling 0\n\n### Task 2: Two\n\n**Files:**\n- Create: `y`\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$SUR/docs/mixed.md"
+printf 'not a plan\n' > "$SUR/docs/completed.md"
+
+check "a scored plan counts its eligible units" "$(field eligible "$(row scored)")" "1"
+check "an unscored plan reports a dash" "$(field eligible "$(row unscored)")" "-"
+check "a mixed plan reports the known count and an unknown" "$(field eligible "$(row mixed)")" "1+?"
+check "a file with no task is skipped" "$(survey | grep -c 'completed')" "0"
+check "the survey counts tasks" "$(field tasks "$(row mixed)")" "2"
+check "the survey counts unparsed units" "$(field unparsed "$(row mixed)")" "1"
+# The survey answers "how much could be delegated", so it ignores selection.
+check "the survey counts eligibility without a ticked executor" "$(field eligible "$(row scored)")" "1"
+
+# --- liveness precedence ---
+check "no ledger and no completed entry is unknown" "$(field live "$(row scored)")" "unknown"
+
+mkdir -p "$SUR/.superpowers/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\nTask 1: complete (x)\n' \
+  > "$SUR/.superpowers/sdd/scored/progress.md"
+check "a ledger naming the plan is live" "$(field live "$(row scored)")" "yes"
+
+printf '# SDD ledger — plan: docs/other.md\n' > "$SUR/.superpowers/sdd/scored/progress.md"
+check "a ledger naming another plan is not this plan's" "$(field live "$(row scored)")" "unknown"
+rm -rf "$SUR/.superpowers"
+
+# completed.md names the plan by its recorded path, so a shorter basename that
+# is a substring of a longer one must not match it.
+printf -- '- 2026-09-21 `docs/unscored.md` — merged into `main` at abc1234\n' > "$SUR/docs/completed.md"
+check "a substring of another plan's entry does not match" "$(field live "$(row scored)")" "unknown"
+printf -- '- 2026-09-21 `docs/scored.md` — merged into `main` at abc1234\n' > "$SUR/docs/completed.md"
+check "a merged entry is not live" "$(field live "$(row scored)")" "no"
+printf -- '- 2026-09-21 `docs/scored.md` — via PR\n' > "$SUR/docs/completed.md"
+check "a via-PR entry is unknown, not done" "$(field live "$(row scored)")" "unknown"
+# merged outranks a later via-PR line for the same plan.
+printf -- '- 2026-09-20 `docs/scored.md` — merged into `main` at abc1234\n- 2026-09-21 `docs/scored.md` — via PR\n' > "$SUR/docs/completed.md"
+check "merged outranks a later via-PR entry" "$(field live "$(row scored)")" "no"
+
+mkdir -p "$SUR/.superpowers/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$SUR/.superpowers/sdd/scored/progress.md"
+check "a ledger outranks a completed entry" "$(field live "$(row scored)")" "yes"
+rm -rf "$SUR/.superpowers"
+rm -f "$SUR/docs/completed.md"
+
+# A ledger may live in a linked worktree while the plan is read from the primary
+# checkout. Each worktree holds its own copy of the plan at the same repo path,
+# so the identity check must resolve the plan inside the worktree it searches.
+git -C "$SUR" add -A >/dev/null 2>&1
+git -C "$SUR" commit -qm base >/dev/null 2>&1
+git -C "$SUR" worktree add -q "$TMP/wt" -b feature >/dev/null 2>&1
+mkdir -p "$TMP/wt/.superpowers/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.superpowers/sdd/scored/progress.md"
+check "a ledger in a linked worktree is found" "$(field live "$(row scored)")" "yes"
+check "the evidence names the worktree that holds it" \
+  "$(row scored | grep -c "$TMP/wt")" "1"
+git -C "$SUR" worktree remove --force "$TMP/wt" >/dev/null 2>&1
+
+(cd "$SUR" && bash "$SCRIPT" --survey docs >/dev/null 2>&1); check "a directory with plans exits 0" "$?" "0"
+mkdir -p "$SUR/none"
+(cd "$SUR" && bash "$SCRIPT" --survey none >/dev/null 2>&1); check "a directory with no plans exits 1" "$?" "1"
+(cd "$SUR" && bash "$SCRIPT" --survey missing >/dev/null 2>&1); check "a missing directory exits 2" "$?" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
