@@ -29,7 +29,7 @@ jq -nc --arg p "$STUB_PLUGIN" \
   '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
   > "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
 export DR_CODEX_POLICY="$TMP/policy.json"
-jq -nc '{plugin:"codex@openai-codex", versions:["1.0.3"],
+jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1,
          trust:{calibration:"pending", smoke:"pending"}}' > "$DR_CODEX_POLICY"
 
 # A fixture ladder, because the shipped codex-judge rows bound a run at 1800

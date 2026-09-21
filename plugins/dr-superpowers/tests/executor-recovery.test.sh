@@ -35,7 +35,7 @@ jq -nc --arg p "$STUB_PLUGIN" \
   '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
   > "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
 export DR_CODEX_POLICY="$fixture/policy.json"
-jq -nc '{plugin:"codex@openai-codex", versions:["1.0.3"],
+jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1,
          trust:{calibration:"pending", smoke:"pending"}}' > "$DR_CODEX_POLICY"
 
 export STUB_MODE=ok STUB_EVENT_LOG="$fixture/events.log"

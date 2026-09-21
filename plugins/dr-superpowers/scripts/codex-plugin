@@ -14,7 +14,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# Tests point this at a copy; the shipped file is the allowlist and trust record.
+# Tests point this at a copy; the shipped file is the version policy and trust record.
 POLICY="${DR_CODEX_POLICY:-$HERE/../reference/codex-plugin.json}"
 
 die() { printf 'codex-plugin: %s\n' "$1" >&2; exit 2; }
@@ -55,7 +55,14 @@ version=$(jq -r '.version // empty' <<<"$entry" | tr -d '\r')
 [ "$(jq -r '.version // empty' "$root/.claude-plugin/plugin.json" 2>/dev/null | tr -d '\r')" = "$version" ] \
   || off plugin-missing
 
-jq -e --arg v "$version" '.versions | index($v) != null' "$POLICY" >/dev/null 2>&1 \
+# The lane drives the plugin's own libraries, so a major bump is the change that
+# must stop it; the plugin updates too often for an exact allowlist to be
+# anything but a standing outage.
+jq -e --arg v "$version" '
+  def semver: split(".") | map(sub("[^0-9].*$"; "") | tonumber? // 0);
+  ($v | semver) as $cur
+  | ($cur >= (.min_version | semver)) and ($cur[0] <= .max_major)
+' "$POLICY" >/dev/null 2>&1 \
   || off "plugin-version:$version"
 
 printf 'codex-plugin ok version=%s root=%s\n' "$version" "$root"

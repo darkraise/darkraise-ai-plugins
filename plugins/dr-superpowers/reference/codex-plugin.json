@@ -1,5 +1,7 @@
 {
   "plugin": "codex@openai-codex",
-  "versions": ["1.0.3"],
+  "min_version": "1.0.3",
+  "max_major": 1,
+  "calibrated": "1.0.3",
   "trust": { "calibration": "pass", "smoke": "pass" }
 }

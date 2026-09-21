@@ -55,7 +55,7 @@ printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/setting
 jq -nc --arg p "$STUB_PLUGIN" \
   '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
   > "$TMP/config/plugins/installed_plugins.json"
-jq -nc '{plugin:"codex@openai-codex", versions:["1.0.3"],
+jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1,
          trust:{calibration:"pending", smoke:"pending"}}' > "$TMP/policy.json"
 
 # The codex row is probed through the plugin now, not through a codex binary on

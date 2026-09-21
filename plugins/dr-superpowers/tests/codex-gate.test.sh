@@ -38,8 +38,10 @@ locate() { # locate; sets out and rc
 
 # --- the locator -------------------------------------------------------------
 check "codex-plugin exists" "$([ -f "$P/scripts/codex-plugin" ] && echo yes || echo no)" "yes"
-check "the policy file allows 1.0.3" \
-  "$(jq -r '.versions | index("1.0.3") != null' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "true"
+check "the policy file states a version floor and a major ceiling" \
+  "$(jq -r '[.min_version, (.max_major | tostring)] | join(",")' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "1.0.3,1"
+check "the policy file records the version the trust gates were measured against" \
+  "$(jq -r '.calibrated' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "1.0.3"
 check "the policy file records the gates that passed" \
   "$(jq -r '[.trust.calibration, .trust.smoke] | join(",")' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "pass,pass"
 
@@ -57,8 +59,14 @@ rm "$CFG/plugins/installed_plugins.json"; locate
 check "a plugin missing from the registry is not installed" "$out" "codex-plugin off reason=plugin-not-installed"
 install_plugin 1.0.3 1.0.2; locate
 check "a manifest that disagrees with the registry is missing" "$out" "codex-plugin off reason=plugin-missing"
-install_plugin 1.0.4 1.0.4; locate
-check "a version outside the allowlist is off" "$out" "codex-plugin off reason=plugin-version:1.0.4"
+install_plugin 1.0.6 1.0.6; locate
+check "a patch above the floor is ok" "$out" "codex-plugin ok version=1.0.6 root=$PLUG"
+install_plugin 1.4.0 1.4.0; locate
+check "a minor above the floor is ok" "$out" "codex-plugin ok version=1.4.0 root=$PLUG"
+install_plugin 1.0.2 1.0.2; locate
+check "a version below the floor is off" "$out" "codex-plugin off reason=plugin-version:1.0.2"
+install_plugin 2.0.0 2.0.0; locate
+check "a major above the ceiling is off" "$out" "codex-plugin off reason=plugin-version:2.0.0"
 install_plugin 1.0.3 1.0.3
 mv "$PLUG/scripts/lib/app-server.mjs" "$TMP/app-server.mjs"; locate
 check "an install without the client library is missing" "$out" "codex-plugin off reason=plugin-missing"
