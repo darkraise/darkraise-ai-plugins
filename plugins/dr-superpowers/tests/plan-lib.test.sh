@@ -229,5 +229,92 @@ check "ledger_left_inline: a quoted marker is not a switch" "$(ledger_left_inlin
 printf 'Task 5: escalated inline -> subagent\n' | sed 's/$/\r/' >> "$L"
 check "ledger_left_inline: a bare CRLF marker counts" "$(ledger_left_inline "$L")" "5"
 
+# --- plan_executors ---------------------------------------------------------
+sed 's/^|//' > "$TMP/exec.md" <<'EOF'
+|# Executors Fixture
+|
+|### Task 1: plain
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 2: offloaded
+|
+|**Implementer:** dr-superpowers:impl-sonnet-medium
+|**Executor:** codex gpt-5.5 / medium
+|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+|
+|### Task 3: fenced only
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|```markdown
+|**Executor:** codex gpt-5.5 / medium
+|```
+|
+|### Task 4: split, executor on part A, heavy part B
+|
+|#### Part A: cheap
+|
+|**Implementer:** dr-superpowers:impl-sonnet-medium
+|**Executor:** codex gpt-5.5 / medium
+|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+|
+|#### Part B: risky
+|
+|**Implementer:** dr-superpowers:impl-opus-high
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
+EOF
+
+check "plan_executors names an offloaded task" \
+  "$(plan_executors "$TMP/exec.md" | awk -F'\t' '$1 == 2 { print $2 }')" "codex"
+check "plan_executors ignores a fenced Executor line" \
+  "$(plan_executors "$TMP/exec.md" | awk -F'\t' '$1 == 3 { print $2 }')" ""
+check "plan_executors matches a line in any part" \
+  "$(plan_executors "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "codex"
+check "plan_executors emits one row per task" \
+  "$(plan_executors "$TMP/exec.md" | wc -l | tr -d ' ')" "2"
+
+# --- plan_delegated gains the executor kind --------------------------------
+check "an offloaded task is delegated as executor" \
+  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 2 { print $2 }')" "executor"
+check "a plain task is not delegated" \
+  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 1 { print $2 }')" ""
+check "heavy wins over executor on a split task" \
+  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "heavy"
+
+# --- the four-band threshold counts the original population ----------------
+# Six tasks, three at total 4, one of them offloaded. 3 x 3 > 6, so no
+# four-band task delegates. If the offloaded one left the numerator, 3 x 2 <= 6
+# would newly delegate the other two - tasks nobody marked for offload.
+{ printf '# Threshold Fixture\n\n'
+  for i in 1 2 3; do
+    printf '### Task %s: four band\n\n**Implementer:** dr-superpowers:impl-opus-low\n' "$i"
+    [ "$i" = 1 ] && printf '**Executor:** codex gpt-5.6-sol / high\n'
+    printf '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4\n\n'
+  done
+  for i in 4 5 6; do
+    printf '### Task %s: small\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n' "$i"
+  done
+} > "$TMP/threshold.md"
+
+check "the offloaded four-band task delegates as executor" \
+  "$(plan_delegated "$TMP/threshold.md" | awk -F'\t' '$1 == 1 { print $2 }')" "executor"
+check "the other four-band tasks stay in session" \
+  "$(plan_delegated "$TMP/threshold.md" | awk -F'\t' '$1 == 2 || $1 == 3 { print $2 }' | tr '\n' ',')" ""
+check "the delegated set is the offloaded task alone" \
+  "$(plan_delegated "$TMP/threshold.md" | wc -l | tr -d ' ')" "1"
+
+# --- absence is not failure -------------------------------------------------
+# threshold.md's last task carries no Executor line, which is the case that
+# leaks a non-zero status out of the loop. The second assertion is the one that
+# matters: it calls plan_delegated directly under errexit, the caller shape that
+# would silently emit no rows.
+check "plan_executors exits 0 when the final task has no Executor line" \
+  "$(plan_executors "$TMP/threshold.md" >/dev/null; echo $?)" "0"
+check "plan_delegated emits its rows under set -euo pipefail" \
+  "$(bash -c 'set -euo pipefail; . "$1"; plan_delegated "$2" | wc -l | tr -d " "' _ "$HERE/../scripts/lib/plan.sh" "$TMP/threshold.md")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

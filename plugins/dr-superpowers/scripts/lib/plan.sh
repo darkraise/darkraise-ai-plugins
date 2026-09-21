@@ -146,23 +146,58 @@ plan_scores() {
   done < <(plan_tasks "$1")
 }
 
+# plan_executors FILE — `<task>\t<id>` for every task carrying an Executor
+# line outside a fenced block, in any part. One row per task: a split task
+# whose parts each name one takes the first. Exit 0 whether or not any task
+# carries a line: ordinary absence is not a failure.
+#
+# The Executor line is the decision the plan already made. Nothing here
+# re-evaluates a gate, because execution time must not second-guess planning.
+plan_executors() {
+  local n _title id
+  while IFS=$'\t' read -r n _title; do
+    [ -n "$n" ] || continue
+    # No `exit`: scripts/lib/plan.sh:92-94 records that an early exit leaves
+    # the upstream writer on a closed pipe, and under `pipefail` that SIGPIPE
+    # becomes the caller's status - and task-brief runs `set -euo pipefail`.
+    id=$(plan_task_text "$1" "$n" | awk "$_PLAN_AWK"'
+      in_fence($0) { next }
+      !found && /^\*\*Executor:\*\*/ { sub(/^\*\*Executor:\*\*[ \t]*/, ""); id = $1; found = 1 }
+      END { if (found) print id }')
+    # An `if`, not `[ -n "$id" ] && printf`: the last iteration's status becomes
+    # the function's, so a final task with no Executor line would return 1 and
+    # abort plan_delegated's `execs=` assignment under errexit, emitting no rows
+    # at all - and an empty delegated set reads as "nothing is delegated".
+    if [ -n "$id" ]; then printf '%s\t%s\n' "$n" "$id"; fi
+  done < <(plan_tasks "$1")
+}
+
 # plan_heavy FILE — the task numbers mixed mode delegates: a highest total of 5
 # or more, or a highest risk of 3. One per line, ascending.
 plan_heavy() {
   plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
 }
 
-# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>heavy"
-# or "N<TAB>total 4" line each, ascending. Heavy tasks always. Tasks whose
+# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>heavy",
+# "N<TAB>executor" or "N<TAB>total 4" line each, ascending. Heavy tasks always,
+# then the tasks an Executor line marks for an external executor. Tasks whose
 # highest total is exactly 4 only while they are a third of the plan or fewer:
 # past that, one Opus session costs less than a seat for each of them.
 plan_delegated() {
-  local tasks
+  local tasks execs
   tasks=$(plan_tasks "$1" | grep -c . || true)
-  plan_scores "$1" | awk -F'\t' -v n="$tasks" '
+  execs=$(plan_executors "$1" | cut -f1 | tr '\n' ' ')
+  plan_scores "$1" | awk -F'\t' -v n="$tasks" -v execs=" $execs" '
     $2 == "-" || $2 == "?" { next }
+    # Heavy first: a heavy task is delegated whatever else it is, and the
+    # (heavy) label is what the preflight ruling keys on.
     $2 + 0 >= 5 || $3 + 0 == 3 { row[++k] = $1 "\theavy"; next }
-    $2 + 0 == 4 { row[++k] = $1 "\ttotal 4"; four++ }
+    # A total-4 task counts toward the four-band population whether or not it
+    # is offloaded. Removing it from the numerator could flip the threshold
+    # and newly delegate other four-band tasks nobody marked.
+    $2 + 0 == 4 { four++ }
+    index(execs, " " $1 " ") > 0 { row[++k] = $1 "\texecutor"; next }
+    $2 + 0 == 4 { row[++k] = $1 "\ttotal 4" }
     END {
       for (i = 1; i <= k; i++)
         if (row[i] !~ /\ttotal 4$/ || 3 * four <= n + 0) print row[i]
