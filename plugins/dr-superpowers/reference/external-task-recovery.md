@@ -1,9 +1,13 @@
 # External task ownership and recovery
 
-This protocol is for Claude-hosted Codex CLI offload only. Native Codex uses
+This protocol is for Claude-hosted external executor offload only, whichever
+executor the task names. Native Codex uses
 [native-codex.md](native-codex.md). Keep the CLI model table separate from native
-model metadata. Prerequisites are Bash, Git, jq, GNU timeout/coreutils, a working
-Codex CLI, and successful bounded `codex login status` detection.
+model metadata. `<id>` below is the first token of that task's `**Executor:**`
+line, and its wrapper is resolved with
+`bash "$(bash <plugin-root>/scripts/executors path <id> wrapper)"`.
+Prerequisites are Bash, Git, jq, GNU timeout/coreutils, a working CLI for that
+executor, and successful bounded login detection through its own gate.
 
 Reserve a linked Superpowers worktree for one task. Initial execution requires
 a clean index and no tracked/untracked changes. Stop only controller-owned
@@ -44,12 +48,12 @@ backwards, and neither clarification nor transport retries reset review history.
 - `handed-back`: ownership was transferred to Claude; the external task ID can
   never resume. Subsequent Claude work follows its own verification protocol.
 
-Control operations never launch Codex:
+Control operations never launch the executor:
 
 ```bash
-bash <plugin-root>/scripts/run-codex-task.sh --cwd <worktree> --task-id <id> --recover-commit
-bash <plugin-root>/scripts/run-codex-task.sh --cwd <worktree> --task-id <id> --handback
-bash <plugin-root>/scripts/run-codex-task.sh --cwd <worktree> --task-id <id> --release
+bash "$(bash <plugin-root>/scripts/executors path <id> wrapper)" --cwd <worktree> --task-id <task-id> --recover-commit
+bash "$(bash <plugin-root>/scripts/executors path <id> wrapper)" --cwd <worktree> --task-id <task-id> --handback
+bash "$(bash <plugin-root>/scripts/executors path <id> wrapper)" --cwd <worktree> --task-id <task-id> --release
 ```
 
 Commit recovery revalidates the pending snapshot and candidate. A commit already

@@ -183,5 +183,17 @@ check 'the release resolves the wrapper through the registry' \
 check 'a HANDBACK reconciles instead of releasing' \
   "$(grep -c 'reconcile rather than release' "$LOOP")" 1
 
+present() { # present <name> <file> <needle>
+  if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'ok - %s\n' "$1"; pass=$((pass+1))
+  else printf 'FAIL - %s: missing [%s] in %s\n' "$1" "$3" "$2"; fail=$((fail+1)); fi
+}
+absent() { # absent <name> <file> <needle>
+  if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'FAIL - %s: unexpected [%s] in %s\n' "$1" "$3" "$2"; fail=$((fail+1))
+  else printf 'ok - %s\n' "$1"; pass=$((pass+1)); fi
+}
+REC="$(cd "$(dirname "$SCRIPT")/.." && pwd)/reference/external-task-recovery.md"
+present "the recovery guide resolves the wrapper through the registry" "$REC" 'path <id> wrapper'
+absent "the recovery guide no longer hardcodes the Codex wrapper" "$REC" 'run-codex-task.sh'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
