@@ -575,5 +575,43 @@ present "README records trust per surface" "$RD" 'recorded per surface in `refer
 present "the program design records the session gate" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" 'A session gate (`scripts/codex-gate`) reads'
 present "the program design names sub-project 9" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-16 (sub-project 9 spec).**'
 
+# --- ruling kinds are executor-neutral --------------------------------------
+# --ruling calls plan_shape, which scans every task's score regardless of
+# which id was requested (see "an unparseable Evaluation line fails a plan
+# round" above), so it needs the fixture without Task 9's broken line, same
+# as the plan-round checks.
+out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 1 2>/dev/null); rc=$?
+check "the neutral ruling kind is accepted" "$rc" "0"
+check "the neutral kind prints itself" \
+  "$out" "review-seat ruling=executor-empty-diff tasks=1 primary=dr-superpowers:judge-opus fallback=- reason=routine"
+
+out=$(bash "$ROUTE" "$TMP/round.md" --ruling codex-empty-diff 1 2>/dev/null); rc=$?
+check "the legacy ruling kind is still accepted" "$rc" "0"
+check "the legacy kind prints its own spelling, not the new one" \
+  "$out" "review-seat ruling=codex-empty-diff tasks=1 primary=dr-superpowers:judge-opus fallback=- reason=routine"
+
+out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 8 2>/dev/null)
+check "a risk-3 task still routes the neutral kind to Fable" \
+  "$out" "review-seat ruling=executor-empty-diff tasks=8 primary=dr-superpowers:judge-fable fallback=- reason=risk"
+
+bash "$ROUTE" "$TMP/round.md" --ruling nonsense-kind 1 >/dev/null 2>&1
+check "an unknown ruling kind is still rejected" "$?" "2"
+
+# --- a task on a second executor still gets a Claude review seat ------------
+# The spec's §12 asks for this row. Routing decides who *reviews* a task, and
+# that has never depended on which executor produced the diff, so a stub
+# Executor line must route exactly as the codex line it replaces does.
+# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-5.5 /
+# high` (lines 84 and 90), so this rewrites both; only Task 5 is asserted on.
+# Swapping the executor and nothing else is the sharpest possible test.
+sed 's|\*\*Executor:\*\* codex gpt-5.5 / high|**Executor:** stub stub-model / high|' \
+  "$TMP/plan.md" > "$TMP/stub-plan.md"
+codex_seat=$(bash "$ROUTE" "$TMP/plan.md" --task 5 2>/dev/null)
+stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
+  bash "$ROUTE" "$TMP/stub-plan.md" --task 5 2>/dev/null)
+check "a stub Executor task routes exactly as a codex one does" "$stub_seat" "$codex_seat"
+check "the stub task's seat is a Claude judge" \
+  "$(grep -c 'primary=dr-superpowers:judge-' <<<"$stub_seat")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

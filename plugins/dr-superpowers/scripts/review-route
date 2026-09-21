@@ -184,7 +184,13 @@ case "$1" in
     [ $# -ge 1 ] || usage
     kind=$1; shift
     case $kind in
-      preflight|plan-conflict|cannot-verify|breaker|blocked-plan|codex-empty-diff|final-residual) ;;
+      # executor-empty-diff is the neutral kind. codex-empty-diff is its
+      # earlier name and stays accepted, but it is not canonicalised: the
+      # printf below echoes $kind, so rewriting it here would change an
+      # existing caller's output.
+      preflight|plan-conflict|cannot-verify|breaker|blocked-plan) ;;
+      executor-empty-diff|codex-empty-diff) ;;
+      final-residual) ;;
       *) die "not a ruling kind: $kind" ;;
     esac
     plan_shape
