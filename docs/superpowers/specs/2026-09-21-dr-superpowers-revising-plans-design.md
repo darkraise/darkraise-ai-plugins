@@ -298,10 +298,11 @@ the authority it must match:
 5. **Gate each executor, then run the roster.** Enumerate executors with
    `executors list`. For each, *run* its gate — `bash "$(bash <plugin-root>/scripts/executors path <id> gate)"`,
    which is a script to execute, not a path to print — and say its line aloud
-   when it ends `source=probe`. Run `detect-executors.sh` only for executors
-   whose gate printed `lane=true`. An executor a constraint declares on is
-   auto-ticked only when the roster also reports it `usable`; a constraint cannot
-   tick an executor that is not there.
+   when it ends `source=probe`. Run `detect-executors.sh` once — it takes no id
+   argument and probes every registered executor — and ignore every row whose
+   gate did not print `lane=true`. An executor a constraint declares on is
+   auto-ticked only when its gate printed `lane=true` and the roster also
+   reports it `usable`; a constraint cannot tick an executor that is not there.
 6. **Offer the rest**, as the multi-select question in `executor-lane.md`
    §Planning, naming every other detected executor with its reason. If none is
    usable, ask nothing. Record the tick as the header's
