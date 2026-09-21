@@ -103,10 +103,10 @@ if [ -z "$timeout_s" ]; then
   timeout_s=$(block codex-timeout | awk -v k="$model/$effort" '$1 == k {print $2}')
   [ -n "$timeout_s" ] || die "no codex-timeout row for $model/$effort"
 fi
-# Whole seconds only. `[ "$waited" -lt "$timeout_s" ]` errors and evaluates
-# false on a value like "30m", so the poll loop never runs, the tree is killed
-# about a second after launch, and the run is reported as BLOCKED - the exact
-# opposite of what raising the timeout was meant to do.
+# Whole seconds only. The value becomes the client's deadline and the outer
+# coreutils bound below; a value like "30m" makes the arithmetic below fail
+# and the run is reported as BLOCKED - the exact opposite of what raising the
+# timeout was meant to do.
 printf '%s' "$timeout_s" | grep -qE '^[0-9]+$' || die "--timeout must be whole seconds: $timeout_s"
 if [ -n "$review_round" ]; then
   [[ "$review_round" =~ ^[1-5]$ ]] && [ -n "$thread" ] || die '--review-round requires a resume and a round from 1 to 5'
@@ -272,7 +272,6 @@ timed_out=no
 rc=0
 [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
 [ "$timed_out" = yes ] && rc=124
-survivor=no
 
 # Event field naming has varied across Codex releases, so match on any of the
 # shapes rather than pinning one that a later version may rename.
@@ -357,11 +356,10 @@ head=$(git -C "$cwd" rev-parse HEAD)
 } > "$report"
 cp -- "$report" "$human_report" || die 'cannot write human-readable report; authoritative report retained in task directory'
 
-# Notes accumulate rather than replace one another: a run can both time out and
-# leave a survivor, and the old single-slot note reported only the second.
+# Notes accumulate rather than replace one another, so a run that earns two
+# reports both.
 notes=""
 [ "$timed_out" = yes ] && notes="$notes note=timed-out"
-[ "$survivor" = yes ] && notes="$notes note=codex-may-still-be-running"
 printf 'codex %s/%s status=%s exit=%s commits=%s..%s thread=%s report=%s%s\n' \
   "$model" "$effort" "$status" "$rc" "${base:0:7}" "${head:0:7}" "$thread_id" "$human_report" "$notes"
 
