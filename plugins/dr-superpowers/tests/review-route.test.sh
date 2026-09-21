@@ -620,10 +620,11 @@ check "the stub task's seat is a Claude judge" \
 # --- the executor lane reference -------------------------------------------
 LANE="$P/reference/executor-lane.md"
 check "the neutral reference exists" "$([ -f "$LANE" ] && echo yes || echo no)" "yes"
-# The old path is spelled in two pieces on purpose. Task 14 rewrites every
-# literal `executor-lane` in this repository with sed; written whole, this
-# assertion would be rewritten to test the new file, which exists, and would
-# then fail. The two pieces concatenate at runtime and match no sed pattern.
+# The old path is spelled in two pieces on purpose. The rename that produced
+# executor-lane.md rewrote every literal spelling of the OLD path in this
+# repository with sed; written whole, this assertion would have been rewritten
+# to test the new file, which exists, and would then fail. The two pieces
+# concatenate at runtime and match no sed pattern. Never join them.
 OLDREF="external-""executor.md"
 check "the Codex-only reference is gone" \
   "$([ -f "$P/reference/$OLDREF" ] && echo present || echo gone)" "gone"

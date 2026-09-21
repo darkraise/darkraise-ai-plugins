@@ -429,7 +429,14 @@ escalation, reserve, and external CLI tables. Native Codex reads
 score, request format, and plan conversion. `scripts/select-native-tier.sh`
 validates raw scores and history before returning a native routing decision.
 
-`reference/executor-lane.md` holds the Claude-hosted Codex CLI lane,
+`reference/executors/` holds one JSON entry per external executor and
+`scripts/executors` is the only reader of it: `executors list` prints every
+valid id, `executors get <id> <dotted.key>` one field, and
+`executors path <id> <dotted.key>` that field resolved against the plugin root.
+An entry names the executor's locator, probe, wrapper, gate, session directory,
+surfaces and ladder blocks, so adding an executor is an entry, a wrapper and a
+ladder block rather than an edit to every script. `reference/executor-lane.md`
+states the entry schema and holds the Claude-hosted external executor lanes,
 `reference/legacy-names.md` translates names written under older plugin
 prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
 stops and the Compact Instructions block, and `reference/final-review.md` holds

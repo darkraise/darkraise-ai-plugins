@@ -272,8 +272,8 @@ recorded approved amendment or baseline before automatic work continues.
 
 ## Resuming an executor task
 
-Fix rounds 1 to 3 resume the same Codex session, as a Claude implementer's
-rounds do, to preserve its model, effort, and context. The resume-or-re-dispatch
+Fix rounds 1 to 3 resume that executor's own session, as a Claude
+implementer's rounds do, to preserve its model, effort, and context. The resume-or-re-dispatch
 cache rule (R4) does not apply here: the session runs on a separate
 subscription, so there is no Claude cache cost to protect. Write the open
 findings verbatim into a file and pass that file as the brief - the wrapper
@@ -499,19 +499,45 @@ rules on every rejection ([final-review.md](final-review.md)).
 
 | Situation | Response |
 |-----------|----------|
-| Task has an `**Executor:**` line and `scripts/codex-gate` does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
+| Task has an `**Executor:**` line and that executor's gate does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
 | Task has an `**Executor:**` line, the gate prints `lane=true`, and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
 | The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`/`ultra`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
-| Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
+| Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
 | A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
 | A review seat's status line says `FALLBACK` | The preferred judge rung refused the run and the runner already used the fallback once. Not a failure: record the substitution and its reason in the ledger line you are already writing |
 
 Every ruling above is logged as `Ruling: <what> — <why> — <cost if wrong>` and
 said aloud. None of them stops the run.
+
+## The executor registry
+
+One JSON entry per executor lives in `reference/executors/<id>.json`, and
+`scripts/executors` is the only reader of it. An entry is valid when it parses
+as JSON, carries every required field, its `id` matches `^[a-z][a-z0-9-]*$`,
+and its `id` equals its filename stem; an invalid entry is skipped by
+`executors list` with one diagnostic line on stderr.
+
+| Field | Required | What it names |
+|---|---|---|
+| `id` | yes | The executor id, the first token of an `**Executor:**` line |
+| `locator` | yes | The script that reports presence, version and install root |
+| `probe.command`, `probe.op` | yes | The Node probe and the operation that answers `.authed` |
+| `wrapper` | yes | The task wrapper the dispatch step runs |
+| `session_dir` | yes | The per-session state directory under `$HOME/.claude/dr-superpowers/` |
+| `surfaces` | yes | The surfaces this executor staffs, for example `lane` and `review` |
+| `blocks.gate` | yes | The [ladder.md](ladder.md) block holding `min_score` and `max_risk` |
+| `gate` | no | The executor's own gate script |
+| `reference` | no | A reference file for this executor |
+| `session_dir_env` | no | An environment variable that replaces `session_dir` |
+| `blocks.assignment`, `blocks.successor`, `blocks.timeout`, `blocks.judge` | no | The executor's other ladder blocks |
+| `reasons.not_enabled`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
+
+`${DR_EXECUTORS_DIR}` replaces the registry directory when set; it does not add
+to it. Adding an executor is an entry here, a wrapper, and its ladder blocks.
 
 ## Per-executor: codex
 

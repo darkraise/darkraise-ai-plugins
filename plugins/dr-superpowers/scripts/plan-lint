@@ -207,7 +207,16 @@ executor_rung() { # executor_rung <id> <total>
 lane_gates=""
 while read -r eid; do
   [ -n "$eid" ] || continue
-  lane_gates="$lane_gates$eid"$'\t'"$(executor_gate "$eid" min_score)"$'\t'"$(executor_gate "$eid" max_risk)"$'\n'
+  gmin=$(executor_gate "$eid" min_score) gmax=$(executor_gate "$eid" max_risk)
+  # An entry whose `blocks.gate` names no ladder block cannot be gated, so it
+  # is never offered as a lane candidate. One diagnostic per entry, and the
+  # run continues, exactly as `executors list` treats an invalid entry.
+  if [ -z "$gmin" ] || [ -z "$gmax" ]; then
+    printf 'plan-lint: %s gate block %s is missing from the ladder\n' \
+      "$eid" "$(executor_field "$eid" blocks.gate)" >&2
+    continue
+  fi
+  lane_gates="$lane_gates$eid"$'\t'"$gmin"$'\t'"$gmax"$'\n'
 done < <(bash "$HERE/executors" list 2>/dev/null)
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
 r5_bad="" max_total=0 lane=""
@@ -294,10 +303,16 @@ for n in $nums; do
         say ERROR "$where" "Executor names no registered executor: $eid (run 'executors list')"
       else
         emin=$(executor_gate "$eid" min_score) emax=$(executor_gate "$eid" max_risk)
-        { [ "$t" -ge "${emin:-0}" ] && [ "$d" -le "${emax:-3}" ]; } \
-          || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score ${emin:-0}, max_risk ${emax:-3})"
+        # A gate that cannot be read cannot certify the task, so an absent
+        # block is an error rather than an open gate.
+        if [ -z "$emin" ] || [ -z "$emax" ]; then
+          say ERROR "$where" "$eid's gate block '$(executor_field "$eid" blocks.gate)' is missing from the ladder"
+        else
+          { [ "$t" -ge "$emin" ] && [ "$d" -le "$emax" ]; } \
+            || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $emin, max_risk $emax)"
+        fi
         rung=$(executor_rung "$eid" "$t")
-        { [ -n "$rung" ] && [[ "$executor" == *"$eid $rung"* ]]; } || say ERROR "$where" "Executor does not name the $eid-assignment rung for total $t ($eid ${rung:-none})"
+        { [ -n "$rung" ] && [[ "$executor" == *"$eid $rung"* ]]; } || say ERROR "$where" "Executor does not name the $(executor_field "$eid" blocks.assignment) rung for total $t ($eid ${rung:-none})"
         [[ "$externals" == *"$eid"* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name $eid"
       fi
     elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ]; then
@@ -306,7 +321,7 @@ for n in $nums; do
       # expects the warning.
       while IFS=$'\t' read -r lid lmin lmax; do
         [ -n "$lid" ] || continue
-        { [ "$t" -ge "${lmin:-0}" ] && [ "$d" -le "${lmax:-3}" ]; } || continue
+        { [ "$t" -ge "$lmin" ] && [ "$d" -le "$lmax" ]; } || continue
         rung=$(executor_rung "$lid" "$t")
         [ -z "$rung" ] || lane="$lane$where"$'\t'"$lid"$'\t'"$rung"$'\n'
       done <<<"$lane_gates"

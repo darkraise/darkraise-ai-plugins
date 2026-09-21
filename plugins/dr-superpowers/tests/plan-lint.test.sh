@@ -590,6 +590,17 @@ variant s1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - c
 lint s1.md
 lacks "a stub Executor line is accepted" "$out" "ERROR Task 1"
 
+# A gate block the ladder does not carry cannot certify a task, so it is an
+# error rather than an open gate. Only the gate fence is renamed, so
+# stub-assignment still resolves and the rung error does not also fire.
+DR_LADDER="$TMP/stub-ladder-nogate.md"
+cat "$HERE/../reference/ladder.md" > "$DR_LADDER"
+sed 's/^```stub-gate$/```stub-gate-unused/' "$HERE/fixtures/stub-ladder.md" >> "$DR_LADDER"
+lint s1.md
+has "a missing gate block is an error, not an open gate" "$out" \
+  "ERROR Task 1: stub's gate block 'stub-gate' is missing from the ladder"
+DR_LADDER="$TMP/stub-ladder.md"
+
 # An id with no registry entry is rejected, naming the registry.
 variant s2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** nosuch m \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** nosuch/'
 lint s2.md

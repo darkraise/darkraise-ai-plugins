@@ -32,7 +32,7 @@ command -v timeout >/dev/null 2>&1 || {
 emit() { # emit <id> <batch_capable> <incapable_reason>
   local id="$1" capable="$2" incapable_reason="$3"
   local path present version authed reason usable auth_status=not_applicable
-  local registered=no entry_reason
+  local registered=no
 
   # A registry id is reached only through its own locator and probe: presence,
   # version and login state come from them, never from a PATH probe. Every
@@ -75,7 +75,14 @@ emit() { # emit <id> <batch_capable> <incapable_reason>
 
   usable=false
   reason=null
-  entry_reason() { bash "$HERE/executors" get "$id" "reasons.$1" 2>/dev/null; }
+  # A `reasons.*` key is optional, so an entry that declares none must still
+  # produce a message: an empty reason would emit `usable:false reason:""`,
+  # which reads as neither a cause nor an absent field.
+  entry_reason() {
+    local r; r=$(bash "$HERE/executors" get "$id" "reasons.$1" 2>/dev/null)
+    [ -n "$r" ] || r="$id is not usable ($1); its registry entry declares no reasons.$1 message"
+    printf '%s' "$r"
+  }
   if [ "$present" != true ]; then
     if [ "$registered" = yes ]; then
       reason=$(jq -Rn --arg r "$(entry_reason not_enabled)" '$r')

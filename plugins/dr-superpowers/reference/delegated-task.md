@@ -357,8 +357,9 @@ message as your other bookkeeping:
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
   ` (codex off — <reason>)` when `review-route` printed `reason=codex-off`
 
-**Release the worktree when the task is complete.** A task that reached a
-reviewed complete line no longer owns its worktree:
+**Release the worktree when the task is complete.** A task that ran on an
+external executor and reached a reviewed complete line no longer owns its
+worktree:
 
 ```bash
 bash "$(bash "<plugin-root>/scripts/executors" path <id> wrapper)" \
@@ -374,7 +375,7 @@ sequence, which makes this the ordinary case rather than a recovery step.
 **After a `HANDBACK`, reconcile rather than release.** The Claude implementer
 inherits the worktree, its commits and its report, so ownership passes to a
 task that is still in flight. Follow
-[external-task-recovery.md](external-task-recovery.md) §Ownership before the
+[external-task-recovery.md](external-task-recovery.md) before the
 implementer is dispatched; a bare `--release` there would drop the record the
 recovery procedure reads.
 
