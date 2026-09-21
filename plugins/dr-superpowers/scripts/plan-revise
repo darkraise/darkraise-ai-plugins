@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+# Report what a plan written before the external executor lane is missing, and
+# which of its scoring units the lane gate would admit, so
+# dr-superpowers:revising-plans edits from a computed answer rather than from
+# arithmetic done by hand across a long plan.
+#
+# This script writes nothing. Every mechanical rule lives here, where a test can
+# reach it; every judgment — scoring a task, splitting one, choosing between
+# eligible executors, and the edits themselves — stays with the skill.
+#
+# Usage: plan-revise PLAN_FILE
+# Exit: 0 reported; 1 no task to revise; 2 usage or a missing path.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+# Tests point this at a fixture ladder; production reads the shipped blocks.
+LADDER="${DR_PLAN_REVISE_LADDER:-$HERE/../reference/ladder.md}"
+
+die() { printf 'plan-revise: %s\n' "$1" >&2; exit 2; }
+usage() { die "usage: plan-revise PLAN_FILE"; }
+
+# block NAME — the body of the ```NAME fenced block in the ladder, blank lines
+# dropped. The ladder is the single source for thresholds and rungs; a constant
+# copied into a script is a constant that drifts.
+block() {
+  awk -v want="$1" '
+    $0 == "```" want { f = 1; next }
+    f && $0 == "```" { exit }
+    f && NF { print }
+  ' "$LADDER"
+}
+
+EXEC_IDS=$(bash "$HERE/executors" list 2>/dev/null)
+[ -n "$EXEC_IDS" ] || die "no executor is registered"
+
+# Each executor's thresholds and rungs come from its own registry entry, so a
+# second registered executor needs no change here.
+exec_gate() { # exec_gate <id> <key>
+  local b; b=$(bash "$HERE/executors" get "$1" blocks.gate 2>/dev/null)
+  [ -n "$b" ] || return 1
+  block "$b" | awk -v k="$2" '$1 == k { print $2; exit }'
+}
+exec_rung() { # exec_rung <id> <total>
+  local b; b=$(bash "$HERE/executors" get "$1" blocks.assignment 2>/dev/null)
+  [ -n "$b" ] || return 1
+  block "$b" | awk -v t="$2" '$1 == t { print $2 "/" $3; exit }'
+}
+
+# EXEC_TABLE — "<id> <min_score> <max_risk>" per registered executor, read once.
+# Every exec_gate call is three subprocesses, and the survey would otherwise pay
+# them once per executor per unit across a whole directory of plans.
+EXEC_TABLE=$(for _eid in $EXEC_IDS; do
+  _mn=$(exec_gate "$_eid" min_score) || true
+  _mx=$(exec_gate "$_eid" max_risk) || true
+  [ -n "$_mn" ] && [ -n "$_mx" ] && printf '%s %s %s\n' "$_eid" "$_mn" "$_mx"
+done)
+
+# effort_of TOTAL — the assignment table's effort for a total, which is the
+# suffix of the agent name. impl-haiku carries no suffix and counts as low.
+effort_of() {
+  case "$(block assignment | awk -v t="$1" '$1 == t { print $2; exit }')" in
+    impl-haiku|*-low) printf 'low\n' ;;
+    *-medium) printf 'medium\n' ;;
+    *) printf 'high\n' ;;
+  esac
+}
+
+# axes — reads Evaluation lines on stdin; prints "files spec coupling risk total"
+# taking the highest total and the highest risk INDEPENDENTLY, exactly as
+# plan_scores does, so a disqualifying risk on a lower-total line is not lost.
+# Prints "?" when any line does not parse and "-" when there are none.
+axes() {
+  local sep='( — | – | - | -- )' line any=0
+  local bt=-1 br=-1 bf=0 bs=0 bc=0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    any=1
+    if [[ "$line" =~ ^\*\*Evaluation:\*\*\ files\ ([0-9]+)$sep"spec "([0-9]+)$sep"coupling "([0-9]+)$sep"risk "([0-9]+)\ =\ ([0-9]+) ]]; then
+      [ "${BASH_REMATCH[7]}" -le "$br" ] || br=${BASH_REMATCH[7]}
+      if [ "${BASH_REMATCH[8]}" -gt "$bt" ]; then
+        bt=${BASH_REMATCH[8]}
+        bf=${BASH_REMATCH[1]} bs=${BASH_REMATCH[3]} bc=${BASH_REMATCH[5]}
+      fi
+    else
+      printf '?\n'; return 0
+    fi
+  done
+  [ "$any" -eq 1 ] || { printf -- '-\n'; return 0; }
+  printf '%s %s %s %s %s\n' "$bf" "$bs" "$bc" "$br" "$bt"
+}
+
+# header_executors PLAN — the ids on the header's External executors line,
+# space separated. Read from the header only and outside fences, so a fenced
+# example in a task body is never mistaken for the plan's selection.
+header_executors() {
+  plan_header "$1" | awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    index($0, "> **External executors:**") == 1 {
+      sub(/^> \*\*External executors:\*\*[ \t]*/, "")
+      print; exit
+    }
+  '
+}
+
+# plan_units PLAN — "id<TAB>text" per scoring unit: one row per part when the
+# task has parts, otherwise one row for the task. Newlines travel as \v so one
+# unit stays one line.
+plan_units() {
+  local n _title text parts part
+  while IFS=$'\t' read -r n _title; do
+    [ -n "$n" ] || continue
+    text=$(plan_task_text "$1" "$n")
+    parts=$(plan_task_parts <<<"$text")
+    if [ -z "$parts" ]; then
+      printf '%s\t%s\n' "$n" "$(printf '%s' "$text" | tr '\n' '\v')"
+    else
+      while IFS= read -r part; do
+        [ -n "$part" ] || continue
+        printf '%s%s\t%s\n' "$n" "$part" \
+          "$(plan_part_text "$part" <<<"$text" | tr '\n' '\v')"
+      done <<<"$parts"
+    fi
+  done < <(plan_tasks "$1")
+}
+
+[ $# -eq 1 ] || usage
+plan=$1
+[ -f "$plan" ] || die "no such plan file: $plan"
+
+# --- header ---
+# The mode is the token after the label. A glob over the whole line reads the
+# reason prose, where an inline plan may well name subagent mode.
+exec_mode=missing
+if [[ "$(plan_header_line "$plan" Execution)" =~ ^\*\*Execution:\*\*[[:space:]]+(inline|subagent) ]]; then
+  exec_mode=${BASH_REMATCH[1]}
+fi
+
+ticked=$(header_executors "$plan")
+if [ -n "$ticked" ]; then execs=$(tr -s ' ' ',' <<<"$ticked" | sed 's/,$//'); else execs=missing; fi
+
+header_headings=$(plan_header "$plan" | awk "$_PLAN_AWK"'in_fence($0) { next } /^## / { print }')
+missing_sections=""
+for section in "Global Constraints" "Contracts" "Assumptions (evidence)" "Task index"; do
+  grep -qxF "## $section" <<<"$header_headings" \
+    || missing_sections="${missing_sections:+$missing_sections,}$section"
+done
+printf 'header  execution=%s  executors=%s  sections=%s\n' \
+  "$exec_mode" "$execs" "${missing_sections:-ok}"
+
+# --- units ---
+units=$(plan_units "$plan")
+[ -n "$units" ] || { printf 'plan-revise: no task in %s\n' "$plan" >&2; exit 1; }
+
+tasks=$(plan_tasks "$plan" | grep -c .)
+while IFS=$'\t' read -r id text; do
+  [ -n "$id" ] || continue
+  body=$(printf '%s' "$text" | tr '\v' '\n')
+  a=$(plan_eval_lines <<<"$body" | axes)
+  ex=$(plan_lines Executor <<<"$body" | head -n 1 | sed 's/^\*\*Executor:\*\*[[:space:]]*//' | awk '{ print $1 }')
+  [ -n "$ex" ] || ex=none
+  rungs=""
+  case "$a" in
+    '?') score='?' risk='?' rules=unknown gate=unknown ;;
+    '-') score='-' risk='-' rules=unknown gate=unknown ;;
+    *)
+      set -- $a
+      f=$1 s=$2 c=$3 risk=$4 score=$5
+      if [ $((f + s + c)) -ge 4 ] || [ "$s" -eq 3 ]; then rules=violated; else rules=ok; fi
+      if [ "$rules" = violated ]; then gate=fail:rule_s
+      elif [ -n "$(plan_lines Override <<<"$body")" ]; then
+        # plan-lint makes any Executor line on an overridden task a hard error,
+        # whatever the scores say, so this unit can never carry one.
+        gate=fail:override
+      else
+        # Each ticked executor is asked on its own thresholds; a unit no ticked
+        # executor admits has not passed, whatever its score.
+        gate="" asked=0
+        for eid in $ticked; do
+          mn=$(exec_gate "$eid" min_score) || true
+          mx=$(exec_gate "$eid" max_risk) || true
+          # A ticked id this installation does not register, or whose registry
+          # entry names an absent ladder block, yields no thresholds. Saying
+          # "fail:total" there would contradict the scores on screen.
+          if [ -z "$mn" ] || [ -z "$mx" ]; then
+            printf 'plan-revise: %s: no gate thresholds for ticked executor %s\n' "$id" "$eid" >&2
+            continue
+          fi
+          if [ "$score" -lt "$mn" ]; then asked=1 gate=${gate:-fail:total}; continue; fi
+          if [ "$risk" -gt "$mx" ]; then asked=1 gate=fail:risk; continue; fi
+          r=$(exec_rung "$eid" "$score") || true
+          # A missing rung is an incomplete table, not a judgment about the
+          # unit, so it leaves asked alone exactly as unreadable thresholds do.
+          [ -n "$r" ] || { printf 'plan-revise: %s: %s states no rung for total %s\n' "$id" "$eid" "$score" >&2; continue; }
+          asked=1
+          rungs="${rungs:+$rungs,}$eid:$r"
+        done
+        # No threshold could be read from anything ticked, so the lane is shut
+        # for this plan whatever the scores are. No floor is written here: the
+        # thresholds live in the ladder.
+        if [ -n "$rungs" ]; then gate=pass
+        elif [ "$asked" -eq 0 ]; then gate=fail:not_enabled
+        else gate=${gate:-fail:total}; fi
+      fi ;;
+  esac
+  if [ -n "$rungs" ]; then
+    printf 'unit %s  score=%s  risk=%s  rule_s=%s  gate=%s  executor=%s  rungs=%s\n' \
+      "$id" "$score" "$risk" "$rules" "$gate" "$ex" "$rungs"
+  else
+    printf 'unit %s  score=%s  risk=%s  rule_s=%s  gate=%s  executor=%s  rungs=\n' \
+      "$id" "$score" "$risk" "$rules" "$gate" "$ex"
+  fi
+done <<<"$units"
+
+# --- the recommendation ---
+# It counts tasks, not units. plan_delegated already reduces a split task to its
+# highest band and applies the four-band third threshold, so reading it here is
+# what keeps this report and the execution skills agreeing.
+heavy=$(plan_heavy "$plan" | grep -c . || true)
+deleg_ids=$(plan_delegated "$plan" | cut -f1 | tr '\n' ' ')
+delegated=$(printf '%s' "$deleg_ids" | wc -w | tr -d ' ')
+any_four_self=0 max_self=-1
+while IFS=$'\t' read -r tn total trisk; do
+  [ -n "$tn" ] || continue
+  case "$total" in '-'|'?') continue ;; esac
+  case " $deleg_ids " in *" $tn "*) continue ;; esac
+  [ "$total" -eq 4 ] && any_four_self=1
+  [ "$total" -gt "$max_self" ] && max_self=$total
+done <<<"$(plan_scores "$plan")"
+
+if [ $((heavy * 2)) -gt "$tasks" ]; then
+  rec_mode=subagent rec_model=sonnet rec_effort=high
+else
+  rec_mode=inline
+  if [ "$any_four_self" -eq 1 ]; then rec_model=opus; else rec_model=sonnet; fi
+  if [ "$delegated" -gt 0 ] || [ "$max_self" -lt 0 ]; then
+    rec_effort=high
+  else
+    rec_effort=$(effort_of "$max_self")
+  fi
+fi
+printf 'recommend  execution=%s  model=%s  effort=%s  delegated=%s/%s\n' \
+  "$rec_mode" "$rec_model" "$rec_effort" "$delegated" "$tasks"
+exit 0
