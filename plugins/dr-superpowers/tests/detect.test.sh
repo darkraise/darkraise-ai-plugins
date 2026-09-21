@@ -81,6 +81,25 @@ check "no plugin: codex not usable" "$(field codex usable "$out")" "false"
 check "no plugin: the reason names the plugin, not PATH" \
   "$(field codex reason "$out" | grep -qi 'plugin' && echo yes || echo no)" "yes"
 
+# A locator that refuses for a reason other than enablement must say which one.
+# Reporting every refusal as "not enabled" sends the reader to enable a plugin
+# that is already enabled, which is the one thing they cannot fix.
+printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
+cp -r "$STUB_PLUGIN" "$TMP/stub-9.9.9"
+printf '{"name":"codex","version":"9.9.9"}\n' > "$TMP/stub-9.9.9/.claude-plugin/plugin.json"
+jq -nc --arg p "$TMP/stub-9.9.9" \
+  '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"9.9.9"}]}}' \
+  > "$TMP/config/plugins/installed_plugins.json"
+out=$(run)
+check "an untrusted version is not usable" "$(field codex usable "$out")" "false"
+check "an untrusted version names the version, not enablement" \
+  "$(field codex reason "$out" | grep -c '9\.9\.9')" "1"
+check "an untrusted version does not claim the plugin is disabled" \
+  "$(field codex reason "$out" | grep -ci 'not enabled')" "0"
+jq -nc --arg p "$STUB_PLUGIN" \
+  '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
+  > "$TMP/config/plugins/installed_plugins.json"
+
 # --- codex enabled and logged in, both answered by the plugin ----------------
 printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
 out=$(run)

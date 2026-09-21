@@ -17,6 +17,8 @@
   },
   "reasons": {
     "not_enabled": "the codex plugin is not enabled in this profile",
+    "not_installed": "the codex plugin is enabled but not installed in this profile",
+    "missing": "the codex plugin install is incomplete; reinstall it",
     "logged_out": "the codex plugin is installed but not logged in; run /codex:setup",
     "probe_failed": "the codex plugin auth probe failed; run /codex:setup"
   }

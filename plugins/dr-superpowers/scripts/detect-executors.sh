@@ -32,7 +32,7 @@ command -v timeout >/dev/null 2>&1 || {
 emit() { # emit <id> <batch_capable> <incapable_reason>
   local id="$1" capable="$2" incapable_reason="$3"
   local path present version authed reason usable auth_status=not_applicable
-  local registered=no
+  local registered=no locator_reason=
 
   # A registry id is reached only through its own locator and probe: presence,
   # version and login state come from them, never from a PATH probe. Every
@@ -48,7 +48,11 @@ emit() { # emit <id> <batch_capable> <incapable_reason>
     locator=$(bash "$HERE/executors" path "$id" locator 2>/dev/null)
     probe_cmd=$(bash "$HERE/executors" path "$id" probe.command 2>/dev/null)
     probe_op=$(bash "$HERE/executors" get "$id" probe.op 2>/dev/null)
-    if [ -n "$locator" ] && locator_line=$(bash "$locator" 2>/dev/null); then
+    # A locator states why it said no. Dropping that and reporting the first
+    # reason in the list sends the reader to fix something that is not broken.
+    if [ -n "$locator" ] && ! locator_line=$(bash "$locator" 2>/dev/null); then
+      case "$locator_line" in *reason=*) locator_reason=${locator_line#*reason=} ;; esac
+    elif [ -n "$locator" ]; then
       present=true
       locator_root=${locator_line#*root=}
       path=$locator_root
@@ -85,7 +89,13 @@ emit() { # emit <id> <batch_capable> <incapable_reason>
   }
   if [ "$present" != true ]; then
     if [ "$registered" = yes ]; then
-      reason=$(jq -Rn --arg r "$(entry_reason not_enabled)" '$r')
+      case "$locator_reason" in
+        plugin-version:*)
+          reason=$(jq -Rn --arg r "the $id plugin is version ${locator_reason#plugin-version:}, outside the version range this lane trusts" '$r') ;;
+        plugin-not-installed) reason=$(jq -Rn --arg r "$(entry_reason not_installed)" '$r') ;;
+        plugin-missing)       reason=$(jq -Rn --arg r "$(entry_reason missing)" '$r') ;;
+        *)                    reason=$(jq -Rn --arg r "$(entry_reason not_enabled)" '$r') ;;
+      esac
     else
       reason='"not on PATH"'
     fi
