@@ -633,5 +633,68 @@ lacks "no executor has a lane surface: no warning" "$out" "lane-eligible"
 check "no executor has a lane surface: the roster never runs" "$(calls)" "0"
 lane_surface true
 unset PLAN_LINT_ROSTER DR_STUB_SESSION_DIR DR_OPENCODE_SESSION_DIR
+
+# --- an inline plan that offloads ------------------------------------------
+# Two consequences, both intended: an offloaded task leaves self_max, so a
+# total-4 offload no longer forces opus; and any delegation raises the
+# required effort to high.
+# The Execution line is substituted with the suite's own `sed 's/^|//'` idiom
+# rather than perl: it is the only text-editing tool this suite uses, and the
+# line contains no character the shell or sed would reinterpret here.
+inline_plan() { # inline_plan <file> <execution line>
+  sed 's/^|//' > "$TMP/$1" <<'EOF'
+|# Inline Offload Fixture
+|
+|**Goal:** Fixture.
+|
+|**Spec:** docs/superpowers/specs/fixture.md
+|
+|EXECUTION_LINE
+|
+|## Global Constraints
+|
+|None.
+|
+|## Contracts
+|
+|None.
+|
+|## Assumptions (evidence)
+|
+|- Fixture.
+|
+|## Task index
+|
+|1. offloaded four band
+|2. small
+|
+|> **External executors:** codex
+|
+|### Task 1: offloaded four band
+|
+|**Implementer:** dr-superpowers:impl-opus-low
+|**Executor:** codex gpt-5.6-sol / high
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
+|
+|### Task 2: small
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+EOF
+  # awk does a literal, one-shot replacement: no regex metacharacter in $2 is
+  # reinterpreted, and no escape survives into the file.
+  awk -v line="$2" '$0 == "EXECUTION_LINE" { print line; next } { print }' \
+    "$TMP/$1" > "$TMP/$1.tmp" && mv "$TMP/$1.tmp" "$TMP/$1"
+}
+
+inline_plan i1.md '**Execution:** inline — `claude --model sonnet --effort high` — fixture'
+lint i1.md
+lacks "an offloaded total-4 task does not force opus" "$out" "needs --model opus"
+has "an offloading inline plan lists its delegated task" "$out" "NOTE header: delegated: Task 1 (executor)"
+
+inline_plan i2.md '**Execution:** inline — `claude --model sonnet --effort low` — fixture'
+lint i2.md
+has "an offloading inline plan needs high effort" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
