@@ -160,17 +160,24 @@ Prints what the plan is missing, one row per scoring unit, and a recommendation:
 
 ```
 header  execution=<mode|missing>  executors=<ids|missing>  sections=<missing list|ok>
-unit <id>  score=<total|?|-> risk=<r|?|-> rule_s=<ok|violated>  gate=<pass|fail:<condition>|unknown>  executor=<id|none|exempt:batched>  rung=<id> <model>/<effort>
+unit <id>  score=<total|?|-> risk=<r|?|-> rule_s=<ok|violated>  gate=<pass|fail:<condition>|unknown>  executor=<id|none>  rung=<id> <model>/<effort>
 recommend  execution=<inline|subagent>  model=<model>  effort=<effort>  delegated=<n>/<tasks>
 ```
 
 `<id>` is a task number, or a task number and a part letter for a split task.
 
 **Every row says what is actionable**, which is what makes §6's verification
-step possible: a unit already carrying an `**Executor:**` line reports it, and a
-batched task reports `exempt:batched` rather than `gate=pass`, so "no remaining
-`gate=pass` unit without an executor" is a condition the output can actually
+step possible: a unit already carrying an `**Executor:**` line reports it, so
+"every `gate=pass` unit carries an executor" is a condition the output can
 express.
+
+**Batching is not represented here, because a plan cannot represent it.**
+`subagent-driven-development` decides batches at dispatch from the briefs of
+contiguous candidate tasks, and a batched task then never runs on an external
+executor. Nothing in the plan file marks a batch, so revision writes an
+`**Executor:**` line on every unit the gate passes and the dispatcher's batching
+decision overrides it later. A revision that tried to predict batches would be
+guessing at a decision made with information it does not have.
 
 **`rung` names its executor.** Each eligible executor's rung is resolved through
 that executor's registry entry — `executors get <id> blocks.assignment` — never
@@ -292,11 +299,10 @@ the authority it must match:
    `> **External executors:**` line.
 7. **Apply the gate.** Run `plan-revise PLAN_FILE` and give every `gate=pass`
    unit an `**Executor:**` line at the rung it printed for the ticked executor.
-   A batched task takes none.
 8. **Settle the `**Execution:**` line** from `plan-revise`'s `recommend` row.
 9. **Verify.** `plan-lint PLAN_FILE` clean, and a re-run of `plan-revise` in
-   which every unit is `gate=fail`, `executor=<id>` or `exempt:batched`, and the
-   header's `execution` matches the `recommend` row.
+   which every unit is `gate=fail` or `executor=<id>`, and the header's
+   `execution` matches the `recommend` row.
 
 Where a task's description is too thin to score honestly, the skill leaves it
 unscored, says which task and why, and lets `plan-lint` report the plan as
@@ -348,11 +354,13 @@ For `plan-revise`:
 - each liveness precedence rule, including a ledger whose identity line names a
   different plan, and a `via PR` entry yielding `unknown`;
 - a ledger in a linked worktree;
-- a batched task reporting `exempt:batched`;
 - the `recommend` row against `writing-plans`' rule, including the four-band
   third threshold;
-- the rung resolved through the registry, with a second fixture executor, so no
-  test asserts a model literal in two places;
+- the rung resolved through the registry, driven by the `stub` executor in
+  `tests/fixtures/executors/stub.json` with `tests/fixtures/stub-ladder.md`, so
+  a second registered executor is exercised rather than assumed;
+- a unit admitted by two ticked executors, which reports both rungs;
+- a unit whose scores pass while no executor is ticked, which does not pass;
 - exits: empty directory, unparseable plan, already-revised plan.
 
 Skill prose assertions join the existing `inline-mode.test.sh` pattern.
@@ -383,10 +391,17 @@ Skill prose assertions join the existing `inline-mode.test.sh` pattern.
 **§5a changes how existing plans route and delegate.** A plan in flight whose
 split task carries a leftover line will route that task to a cheaper seat, and
 an inline plan may delegate a different set of tasks than it did yesterday — in
-the reproduced case, none at all. The rule and both call sites must land in one
-commit with their tests, so a bisect never lands between them, and any plan
-mid-execution should be re-checked against `plan-revise`'s `recommend` row
-before its next task is dispatched.
+the reproduced case, none at all. Any plan mid-execution should be re-checked
+against `plan-revise`'s `recommend` row before its next task is dispatched.
+
+The rule and its call sites land in consecutive commits on one branch rather
+than in a single commit. There are three call sites, not two — `plan-lint` reads
+these lines directly as well — and a task touching the helper, all three scripts
+and four test suites scores `files 3`, which Rule S forbids. The intermediate
+commits are not a regression: `review-route` and `plan-lint` already disagree
+with `plan_scores` today, so a bisect landing between them finds the shipped
+inconsistency, not a new one. Nothing outside the branch observes the
+intermediate states.
 
 **Repairing a legacy plan is a long run.** A 58-task plan needs every task read.
 The survey exists partly so that cost is visible before it is paid.
