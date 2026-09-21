@@ -287,7 +287,7 @@ would only buy more `TIMEOUT` rows, because more thinking takes more wall
 clock on exactly the plans that already ran out of it.
 
 The two rows carry different bounds on purpose. `gpt-6-astra/xhigh` appears
-only here, so its 3600 is free to be set for review work. `gpt-5.6-sol/xhigh`
+only here, so its 5400 is free to be set for review work. `gpt-5.6-sol/xhigh`
 also appears in `codex-timeout`, where 2400 bounds *task execution*, and
 `tests/lanes.test.sh` requires the two blocks to agree on any pair they share
 — a constant in two places drifts otherwise. Widening the judge row would mean
