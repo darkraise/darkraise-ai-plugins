@@ -44,7 +44,9 @@ if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>
   exit 4
 fi
 
-# Mixed mode: an inline plan delegates the tasks plan_delegated names. The
+# Mixed mode: an inline plan delegates the tasks plan_delegated names - heavy
+# tasks, four-band tasks under the threshold, and tasks carrying an Executor
+# line. The kind is interpolated, so a new row kind needs no change here. The
 # lines are computed here so an executing session never re-scores a task.
 dispatch=0
 if ! grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")" \

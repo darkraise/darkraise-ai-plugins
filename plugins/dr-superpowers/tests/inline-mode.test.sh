@@ -296,6 +296,45 @@ brief "$DTMP/three4.md" 1 "$DTMP/t1.md"
 check "total-4 tasks past a third get no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/t1.md")" "0"
 brief --header "$DTMP/three4.md" "$DTMP/th.md"
 check "total-4 tasks past a third leave no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/th.md")" "0"
+
+# --- the executor marker in the Dispatch line -------------------------------
+sed 's/^|//' > "$DTMP/offload.md" <<'EOF'
+|# Offload Fixture
+|
+|**Goal:** Fixture.
+|
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
+|
+|## Task index
+|
+|1. offloaded
+|2. plain
+|
+|### Task 1: offloaded
+|
+|**Implementer:** dr-superpowers:impl-sonnet-medium
+|**Executor:** codex gpt-5.5 / medium
+|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+|
+|### Task 2: plain
+|
+|**Implementer:** dr-superpowers:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+EOF
+
+brief --header "$DTMP/offload.md" "$DTMP/oh.md"
+check "the header marks an offloaded task" \
+  "$(grep -c 'Task 1 (executor)' "$DTMP/oh.md")" "1"
+check "the header does not mark a plain task" \
+  "$(grep -c 'Task 2' "$DTMP/oh.md")" "0"
+
+brief "$DTMP/offload.md" 1 "$DTMP/ob1.md"
+check "an offloaded brief is marked delegated" \
+  "$(sed -n 2p "$DTMP/ob1.md")" "**Dispatch:** delegated — total 2, risk 0"
+brief "$DTMP/offload.md" 2 "$DTMP/ob2.md"
+check "a self-implemented brief carries no Dispatch line" \
+  "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/ob2.md")" "0"
+
 rm -rf "$DTMP"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
