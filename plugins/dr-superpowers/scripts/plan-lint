@@ -188,9 +188,27 @@ awk "$_PLAN_AWK"'
 # --- per task ---
 assignment=$(ladder_block assignment)
 reserve=$(ladder_block reserve | awk '{ print $1 }' | grep -vxF BLOCKED | grep -vxF -f <(awk '{ print $2 }' <<<"$assignment") || true)
-gate=$(ladder_block gate)
-min_score=$(awk '$1 == "min_score" { print $2 }' <<<"$gate")
-max_risk=$(awk '$1 == "max_risk" { print $2 }' <<<"$gate")
+# An executor's gate and assignment blocks are named by its registry entry.
+# Codex's gate block is literally called `gate`, so nothing moves for it.
+executor_field() { bash "$HERE/executors" get "$1" "$2" 2>/dev/null; }
+executor_gate() { # executor_gate <id> <min_score|max_risk>
+  local block; block=$(executor_field "$1" blocks.gate)
+  [ -n "$block" ] || return 1
+  awk -v k="$2" '$1 == k { print $2 }' <<<"$(ladder_block "$block")"
+}
+executor_rung() { # executor_rung <id> <total>
+  local block; block=$(executor_field "$1" blocks.assignment)
+  [ -n "$block" ] || return 1
+  awk -v t="$2" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block "$block")"
+}
+# `<id>\t<min_score>\t<max_risk>` per registered executor, read once: the loop
+# below tests every task against every executor's gate, and each `executors`
+# call is a subprocess.
+lane_gates=""
+while read -r eid; do
+  [ -n "$eid" ] || continue
+  lane_gates="$lane_gates$eid"$'\t'"$(executor_gate "$eid" min_score)"$'\t'"$(executor_gate "$eid" max_risk)"$'\n'
+done < <(bash "$HERE/executors" list 2>/dev/null)
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
 r5_bad="" max_total=0 lane=""
 
@@ -270,16 +288,28 @@ for n in $nums; do
     fi
     executor=$(line Executor)
     if [ -n "$executor" ]; then
+      eid=$(sed -E 's/^\*\*Executor:\*\*[[:space:]]*([^[:space:]]+).*/\1/' <<<"$executor")
       [ "$sev" = ERROR ] || say ERROR "$where" "an Executor line on an overridden task fails the lane gate"
-      { [ "$t" -ge "$min_score" ] && [ "$d" -le "$max_risk" ]; } \
-        || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $min_score, max_risk $max_risk)"
-      rung=$(awk -v t="$t" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block codex-assignment)")
-      { [ -n "$rung" ] && [[ "$executor" == *"codex $rung"* ]]; } || say ERROR "$where" "Executor does not name the codex-assignment rung for total $t (codex ${rung:-none})"
-      [[ "$externals" == *codex* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name codex"
-    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] \
-         && [ "$t" -ge "$min_score" ] && [ "$d" -le "$max_risk" ]; then
-      rung=$(awk -v t="$t" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block codex-assignment)")
-      [ -z "$rung" ] || lane="$lane$where"$'\t'"$rung"$'\n'
+      if ! bash "$HERE/executors" get "$eid" id >/dev/null 2>&1; then
+        say ERROR "$where" "Executor names no registered executor: $eid (run 'executors list')"
+      else
+        emin=$(executor_gate "$eid" min_score) emax=$(executor_gate "$eid" max_risk)
+        { [ "$t" -ge "${emin:-0}" ] && [ "$d" -le "${emax:-3}" ]; } \
+          || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score ${emin:-0}, max_risk ${emax:-3})"
+        rung=$(executor_rung "$eid" "$t")
+        { [ -n "$rung" ] && [[ "$executor" == *"$eid $rung"* ]]; } || say ERROR "$where" "Executor does not name the $eid-assignment rung for total $t ($eid ${rung:-none})"
+        [[ "$externals" == *"$eid"* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name $eid"
+      fi
+    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ]; then
+      # One candidate row per executor whose own gate admits the task. The
+      # header tick is deliberately not read: p1.md carries none and still
+      # expects the warning.
+      while IFS=$'\t' read -r lid lmin lmax; do
+        [ -n "$lid" ] || continue
+        { [ "$t" -ge "${lmin:-0}" ] && [ "$d" -le "${lmax:-3}" ]; } || continue
+        rung=$(executor_rung "$lid" "$t")
+        [ -z "$rung" ] || lane="$lane$where"$'\t'"$lid"$'\t'"$rung"$'\n'
+      done <<<"$lane_gates"
     fi
   fi
   for v in "$a" "$b" "$c" "$d"; do
@@ -292,17 +322,29 @@ for n in $nums; do
 done
 
 # The lane probe is lazy: the detector costs about two seconds, so it runs only
-# when some task could have taken the lane and did not, and only when this
-# session's Codex gate opened the lane surface. A plan without Executor lines is
-# correct on a machine where Codex is unusable, so every outcome other than a
-# usable codex row prints nothing. Inline plans are skipped: Executor lines are
-# inert under inline execution, so the warning would be noise.
-if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ] && executor_session_on codex lane; then
-  roster=$(timeout 30 bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}" 2>/dev/null) || roster=""
-  usable=$(jq -r '.[]? | select(.id == "codex") | .usable' <<<"$roster" 2>/dev/null | tr -d '\r')
-  if [ "$usable" = true ]; then
-    while IFS=$'\t' read -r w r; do
-      [ -z "$w" ] || say WARN "$w" "lane-eligible with no **Executor:** line (codex $r)"
+# when some task could have taken the lane and did not, and only for an
+# executor whose lane surface this session's gate opened. A plan without
+# Executor lines is correct on a machine where no executor is usable, so every
+# outcome other than a usable roster row prints nothing. Inline plans are
+# skipped: an inline plan may now carry Executor lines, so this warning would
+# be meaningful there, but turning it on changes a pinned fixture for an
+# advisory message. That is a deliberate deferral, recorded in the register,
+# not an oversight.
+if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ]; then
+  # The session test is free and the roster costs seconds, so no executor
+  # survives to the probe unless its own lane surface is on.
+  on_ids=""
+  for eid in $(cut -f 2 <<<"$lane" | sort -u); do
+    executor_session_on "$eid" lane && on_ids="$on_ids $eid "
+  done
+  if [ -n "$on_ids" ]; then
+    roster=$(timeout 30 bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}" 2>/dev/null) || roster=""
+    usable_ids=$(jq -r '.[]? | select(.usable == true) | .id' <<<"$roster" 2>/dev/null | tr -d '\r')
+    while IFS=$'\t' read -r w eid r; do
+      [ -n "$w" ] || continue
+      [[ "$on_ids" == *" $eid "* ]] || continue
+      grep -qxF "$eid" <<<"$usable_ids" || continue
+      say WARN "$w" "lane-eligible with no **Executor:** line ($eid $r)"
     done <<<"$lane"
   fi
 fi

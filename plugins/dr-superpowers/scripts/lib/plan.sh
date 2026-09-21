@@ -67,8 +67,10 @@ plan_primary_root() {
 
 # ladder_block TAG — the lines of reference/ladder.md's ```TAG fenced block,
 # blank lines dropped.
+# DR_LADDER is a test seam: a suite that needs a fixture executor's blocks
+# points it at the shipped ladder plus its own. Unset in production.
 ladder_block() {
-  tr -d '\r' < "$_PLAN_LIB_DIR/../../reference/ladder.md" \
+  tr -d '\r' < "${DR_LADDER:-$_PLAN_LIB_DIR/../../reference/ladder.md}" \
     | awk -v tag="$1" 'stop { next } $0 == "```" tag { f = 1; next } f && /^```/ { stop = 1; next } f && NF { print }'
 }
 

@@ -575,5 +575,63 @@ OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
 lacks "plan-lint: no register means no premature-last finding" "$OUT" "register rows are open"
 
+# --- Executor lines are validated against their own executor ----------------
+# DR_LADDER points at a fixture ladder that is the shipped one plus the stub's
+# blocks: ladder_block reads one file, and the shipped ladder must not carry
+# test fixtures.
+# This suite defines no $P; the plugin root is "$HERE/.." here.
+export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
+export DR_LADDER="$TMP/stub-ladder.md"
+cat "$HERE/../reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DR_LADDER"
+
+# A stub Executor line validates against the stub's own blocks. The fixture
+# ladder supplies them, so the shipped ladder is untouched.
+variant s1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** stub/'
+lint s1.md
+lacks "a stub Executor line is accepted" "$out" "ERROR Task 1"
+
+# An id with no registry entry is rejected, naming the registry.
+variant s2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** nosuch m \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** nosuch/'
+lint s2.md
+has "an unregistered Executor id is an error" "$out" "ERROR Task 1: Executor names no registered executor: nosuch (run 'executors list')"
+
+# The header must name the line's own id, not merely some executor.
+variant s3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
+lint s3.md
+has "the header must name the line's executor" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name stub"
+
+# --- the lane-eligible warning is per executor ------------------------------
+# The generalisation is invisible while codex is the only entry, so prove it
+# where it can be seen: the stub's lane surface is on and its roster row is
+# usable, codex's row is not, and the warning names the stub's own rung from
+# the stub-assignment block.
+# opencode.json borrows the stub's gate block, so it becomes a lane candidate
+# too and its session file is read. Export its directory as well, or that read
+# falls back to the real $HOME.
+export DR_STUB_SESSION_DIR="$TMP/stub-sessions"
+export DR_OPENCODE_SESSION_DIR="$TMP/opencode-sessions"
+mkdir -p "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
+printf '{"session_id":"plan-lint-test","usable":true,"lane":true}\n' \
+  > "$DR_STUB_SESSION_DIR/plan-lint-test.json"
+cat > stub-roster.sh <<EOF
+printf 'called\n' >> "$TMP/probe-calls"
+echo '[{"id":"codex","usable":false,"reason":"off"},{"id":"stub","usable":true,"reason":null}]'
+EOF
+export PLAN_LINT_ROSTER="$TMP/stub-roster.sh"
+rm -f probe-calls; lint p1.md
+has "a second executor warns with its own rung" "$out" \
+  "WARN Task 1: lane-eligible with no **Executor:** line (stub stub-model / medium)"
+lacks "an executor whose roster row is unusable does not warn" "$out" \
+  "lane-eligible with no **Executor:** line (codex"
+check "the per-executor warning still probes once" "$(calls)" "1"
+
+# With no lane surface for either id, nothing warns and nothing probes.
+rm -rf "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
+lane_surface false
+rm -f probe-calls; lint p1.md
+lacks "no executor has a lane surface: no warning" "$out" "lane-eligible"
+check "no executor has a lane surface: the roster never runs" "$(calls)" "0"
+lane_surface true
+unset PLAN_LINT_ROSTER DR_STUB_SESSION_DIR DR_OPENCODE_SESSION_DIR
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
