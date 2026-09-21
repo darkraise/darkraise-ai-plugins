@@ -141,7 +141,9 @@ asked.
    awaiting a merge.
 4. Anything else — `live=unknown`, with the checked and unchecked step counts
    printed as evidence. Checkbox counts are evidence, never a verdict: a
-   subagent-mode plan records progress in the ledger, not in the file.
+   subagent-mode plan records progress in the ledger, not in the file. The
+   survey never decides past this rule; §6 step 1 lets a human confirmation do
+   so.
 
 A ledger may live in a linked worktree rather than the primary checkout, so the
 survey resolves ledgers across the worktrees `git worktree list` reports and says
@@ -281,9 +283,13 @@ this order — the order matters, and §Planning of `reference/executor-lane.md`
 the authority it must match:
 
 1. **Refuse a plan under execution**, by the §4 precedence contract. `live=yes`
-   stops the skill and names `plan-amend`. `live=unknown` also stops it, and
-   says which signals disagreed: editing a plan that might be running is the
-   failure this guard exists to prevent.
+   stops the skill and names `plan-amend`. `live=unknown` from rule 3 (a `via PR`
+   line and no ledger) also stops it, because the plan may be awaiting a merge.
+   `live=unknown` from rule 4 (no ledger and no `completed.md` entry) stops it
+   until the human partner, shown the step counts, confirms that the plan is not
+   being executed in any clone; the skill then continues. Editing a plan that
+   might be running is the failure this guard exists to prevent, and only a
+   human can rule out a run in a clone the survey cannot see.
 2. **Repair the plan's structure.** Add the header sections `plan-lint` requires
    and the plan lacks — Global Constraints, Contracts, Assumptions, Task index —
    drawn from the plan's own content, not invented.
