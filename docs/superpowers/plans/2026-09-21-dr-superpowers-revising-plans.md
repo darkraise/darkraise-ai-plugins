@@ -12,6 +12,8 @@
 
 **Execution:** inline — `claude --model sonnet --effort high` — 1 of 7 tasks is heavy and 1 is four-band, so the majority is not heavy; the four-band task is within a third of the plan and five tasks carry an `**Executor:**` line, so every task is delegated and the controller only dispatches and reviews.
 
+**Plan review:** 2026-09-21 — dr-superpowers:judge-opus — executability 18 / coherence 16 / coverage 18 / assumptions 19 (round 3)
+
 > **External executors:** codex
 
 ## Global Constraints
@@ -44,7 +46,7 @@ Names one task produces and another consumes. Use them exactly as written.
 
 ```
 header  execution=<inline|subagent|missing>  executors=<ids|missing>  sections=<ok|comma-list>
-unit <id>  score=<total|?|->  risk=<r|?|->  rule_s=<ok|violated|unknown>  gate=<pass|fail:total|fail:risk|fail:rule_s|fail:not_enabled|unknown>  executor=<id|none>  rungs=<id>:<model>/<effort>[,<id>:<model>/<effort>]
+unit <id>  score=<total|?|->  risk=<r|?|->  rule_s=<ok|violated|unknown>  gate=<pass|fail:total|fail:risk|fail:rule_s|fail:override|fail:not_enabled|unknown>  executor=<id|none>  rungs=<id>:<model>/<effort>[,<id>:<model>/<effort>]
 recommend  execution=<inline|subagent>  model=<sonnet|opus>  effort=<low|medium|high>  delegated=<n>/<tasks>
 ```
 
@@ -55,6 +57,10 @@ Task 4 also produces these shell functions and variables inside that file, which
 ```bash
 # LADDER                — the ladder path, overridable by DR_PLAN_REVISE_LADDER
 # EXEC_IDS              — every registered executor id, one per line
+# EXEC_TABLE            — "<id> <min_score> <max_risk>" per registered executor
+#                         whose gate block is readable, one per line, read once.
+#                         Task 5's survey reads it; keep it even though
+#                         single-plan mode does not
 # block NAME            — the body of the ```NAME fenced block in $LADDER
 # exec_gate ID KEY      — that executor's gate threshold (min_score, max_risk)
 # exec_rung ID TOTAL    — that executor's rung as "<model>/<effort>"
@@ -995,11 +1001,13 @@ while IFS=$'\t' read -r id text; do
             printf 'plan-revise: %s: no gate thresholds for ticked executor %s\n' "$id" "$eid" >&2
             continue
           fi
-          asked=1
-          if [ "$score" -lt "$mn" ]; then gate=${gate:-fail:total}; continue; fi
-          if [ "$risk" -gt "$mx" ]; then gate=fail:risk; continue; fi
+          if [ "$score" -lt "$mn" ]; then asked=1 gate=${gate:-fail:total}; continue; fi
+          if [ "$risk" -gt "$mx" ]; then asked=1 gate=fail:risk; continue; fi
           r=$(exec_rung "$eid" "$score") || true
+          # A missing rung is an incomplete table, not a judgment about the
+          # unit, so it leaves asked alone exactly as unreadable thresholds do.
           [ -n "$r" ] || { printf 'plan-revise: %s: %s states no rung for total %s\n' "$id" "$eid" "$score" >&2; continue; }
+          asked=1
           rungs="${rungs:+$rungs,}$eid:$r"
         done
         # No threshold could be read from anything ticked, so the lane is shut
@@ -1092,7 +1100,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `plugins/dr-superpowers/tests/plan-revise.test.sh` (append a section)
 
 **Interfaces:**
-- Consumes: `block`, `axes`, `plan_units`, `header_executors`, `exec_gate`, `EXEC_IDS`, `LADDER` — Contracts, Task 4 block; `ledger_plan` and `plan_header_line` from `lib/plan.sh`. It does not call `plan_ledger`: that helper resolves only the plan's own worktree, which is the defect `ledger_for` exists to avoid.
+- Consumes: `block`, `axes`, `plan_units`, `header_executors`, `EXEC_TABLE`, `LADDER` — Contracts, Task 4 block; `ledger_plan` and `plan_header_line` from `lib/plan.sh`. It does not call `plan_ledger`: that helper resolves only the plan's own worktree, which is the defect `ledger_for` exists to avoid. It does not call `plan_ledger`: that helper resolves only the plan's own worktree, which is the defect `ledger_for` exists to avoid.
 - Produces: the `--survey` row grammar — Contracts, Task 5 block. Task 6's skill runs it.
 
 **Implementer:** dr-superpowers:impl-sonnet-high
@@ -1215,7 +1223,7 @@ ledger_for() {
   slug=$(basename "$1" .md)
   rel=$(git -C "$(dirname "$1")" rev-parse --show-prefix 2>/dev/null)$(basename "$1")
   [ -n "$rel" ] || return 0
-  local roots root
+  local roots root best
   roots=$(git -C "$(dirname "$1")" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
   while IFS= read -r wt; do
     [ -n "$wt" ] || continue
@@ -1226,10 +1234,16 @@ ledger_for() {
     # An absolute path may name any worktree's root, not just this one, so
     # every root is stripped rather than only the one being searched.
     case $named in /*)
+      # A worktree created inside the primary checkout has the primary root as
+      # a prefix of its own, so the longest matching root is the right one.
+      best=""
       while IFS= read -r root; do
         [ -n "$root" ] || continue
-        case $named in "$root"/*) named=${named#"$root"/}; break ;; esac
-      done <<<"$roots" ;;
+        case $named in "$root"/*)
+          [ "${#root}" -gt "${#best}" ] && best=$root ;;
+        esac
+      done <<<"$roots"
+      [ -n "$best" ] && named=${named#"$best"/} ;;
     esac
     [ "$named" = "$rel" ] || continue
     printf '%s\t%s\n' "$wt" "$f"
@@ -1286,7 +1300,7 @@ survey() {
       [ "$sp" -eq 3 ] && continue
       # Potential eligibility: any registered executor, ticked or not, because
       # the survey answers how much COULD be delegated.
-      ok=$(awk -v t="$score" -v r="$risk" '$2 <= t && r <= $3 { print 1; exit }' <<<"$EXEC_TABLE")
+      ok=$(awk -v t="$score" -v r="$risk" 'NF && $2 <= t && r <= $3 { print 1; exit }' <<<"$EXEC_TABLE")
       [ -n "$ok" ] && eligible=$((eligible + 1))
     done <<<"$(plan_units "$f")"
 
