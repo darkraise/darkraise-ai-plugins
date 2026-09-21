@@ -289,5 +289,25 @@ mkdir -p "$SUR/none"
 (cd "$SUR" && bash "$SCRIPT" --survey none >/dev/null 2>&1); check "a directory with no plans exits 1" "$?" "1"
 (cd "$SUR" && bash "$SCRIPT" --survey missing >/dev/null 2>&1); check "a missing directory exits 2" "$?" "2"
 
+# --- the skill's prose, pinned where a rule would otherwise rot ---
+SK="$HERE/../skills/revising-plans/SKILL.md"
+present() { # present <name> <file> <needle>
+  local n; n=$(grep -cF -- "$3" "$2" 2>/dev/null); [ -n "$n" ] || n=0
+  check "$1" "$([ "$n" -ge 1 ] && echo yes || echo no)" "yes"
+}
+check "the skill exists" "$([ -f "$SK" ] && echo yes || echo no)" "yes"
+present "the skill is named" "$SK" "name: revising-plans"
+present "the skill refuses a live plan" "$SK" "Never edit a plan whose ledger names it"
+present "the skill runs each gate rather than printing its path" "$SK" 'bash "$(bash <plugin-root>/scripts/executors path <id> gate)"'
+present "the skill names the amend script, not a skill" "$SK" "bash <plugin-root>/scripts/plan-amend"
+present "the skill scores before offering an executor" "$SK" "Scoring precedes the executor question"
+present "the skill ticks only an executor the roster reports usable" "$SK" "and the roster reports it"
+present "the skill filters the roster by the gate" "$SK" "ignore every row whose gate did not print"
+present "the skill re-runs the report before settling execution" "$SK" "Re-run plan-revise after writing the Executor"
+present "the skill reconciles an existing Executor line" "$SK" "replace it with the printed rung"
+present "the skill leaves a thin task unscored" "$SK" "A guessed score is worse than a visible gap"
+present "the skill allows the split Rule S requires" "$SK" "Splitting a task Rule S rejects is part of this skill"
+present "the routing table lists the skill" "$HERE/../skills/using-superpowers/SKILL.md" "dr-superpowers:revising-plans"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

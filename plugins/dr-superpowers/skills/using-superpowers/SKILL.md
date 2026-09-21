@@ -25,6 +25,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | A bug, failing test or surprise | dr-superpowers:systematic-debugging |
 | An approach decision is open | dr-superpowers:selecting-approaches |
 | A spec is approved | dr-superpowers:writing-plans |
+| A plan predates the executor lane | dr-superpowers:revising-plans |
 | Executing a plan | the skill its `**Execution:**` line names: dr-superpowers:subagent-driven-development or dr-superpowers:executing-plans |
 | Writing code | dr-superpowers:test-driven-development |
 | Isolating work | dr-superpowers:using-git-worktrees |

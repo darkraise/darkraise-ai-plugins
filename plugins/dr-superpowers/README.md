@@ -140,6 +140,8 @@ is already there rather than re-deriving the assignment at dispatch. Under
 inline plan delegates; for the tasks the session implements itself they are
 inert, so nothing falls back.
 
+`revising-plans` brings a plan written before the external executor lane up to the current format, scoring what is unscored and writing the `**Executor:**` and `**Execution:**` lines from `scripts/plan-revise`.
+
 The following observations were made against the external CLI lane on Windows
 with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy
 evidence, not native Codex capability declarations:
