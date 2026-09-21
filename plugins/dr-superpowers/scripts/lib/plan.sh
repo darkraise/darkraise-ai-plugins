@@ -123,15 +123,58 @@ plan_task_text() {
   '
 }
 
+# plan_lines LABEL — the `**LABEL:**` lines of the task text on stdin that lie
+# outside every fenced block, in order. A plan that shows a line inside a fence
+# is documenting the format, not annotating a task.
+plan_lines() {
+  awk -v lab="$1" "$_PLAN_AWK"'
+    in_fence($0) { next }
+    index($0, "**" lab ":**") == 1 { print }
+  '
+}
+
+# plan_task_parts — the part letters of the task text on stdin, in order, one
+# per line. A `#### Part <L>:` heading inside a fence is an example, not a part.
+plan_task_parts() {
+  awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^#### Part [A-Z]:/ { print substr($3, 1, 1) }
+  '
+}
+
+# plan_part_text PART — the text of one part of the task text on stdin, from its
+# heading to the next part heading. A fenced line belongs to the part that
+# opened the fence, so a fenced part heading neither opens nor closes a part.
+plan_part_text() {
+  awk -v p="$1" "$_PLAN_AWK"'
+    in_fence($0) { if (on) print; next }
+    /^#### Part [A-Z]:/ { on = (substr($3, 1, 1) == p) }
+    on { print }
+  '
+}
+
+# plan_eval_lines — the **Evaluation:** lines that score the task text on stdin.
+# Fenced lines never score. When the text holds any part heading, only the lines
+# at or after the first one score: a line left above `#### Part A` scores the
+# task as it stood before the split, which is the score that forced the split.
+plan_eval_lines() {
+  awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^#### Part [A-Z]:/ { parts = 1; next }
+    /^\*\*Evaluation:\*\*/ { if (parts) print; else pre[++k] = $0 }
+    END { if (!parts) for (i = 1; i <= k; i++) print pre[i] }
+  '
+}
+
 # plan_scores FILE — one "N<TAB>total<TAB>risk" line per task: the highest total
-# and the highest risk among the task's Claude-host **Evaluation:** lines outside
-# fences (a split task has one per part). "N<TAB>-<TAB>-" when the task has no
+# and the highest risk among the task's Claude-host **Evaluation:** lines, as
+# plan_eval_lines selects them. "N<TAB>-<TAB>-" when the task has no
 # Evaluation line, "N<TAB>?<TAB>?" when one does not parse.
 plan_scores() {
   local sep='( — | – | - | -- )' n _title evs ev tot risk bad
   while IFS=$'\t' read -r n _title; do
     [ -n "$n" ] || continue
-    evs=$(plan_task_text "$1" "$n" | awk "$_PLAN_AWK"'in_fence($0) { next } /^\*\*Evaluation:\*\*/ { print }')
+    evs=$(plan_task_text "$1" "$n" | plan_eval_lines)
     if [ -z "$evs" ]; then printf '%s\t-\t-\n' "$n"; continue; fi
     tot=-1 risk=-1 bad=0
     while IFS= read -r ev; do

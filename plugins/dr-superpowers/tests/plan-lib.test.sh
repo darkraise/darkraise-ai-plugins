@@ -316,5 +316,54 @@ check "plan_executors exits 0 when the final task has no Executor line" \
 check "plan_delegated emits its rows under set -euo pipefail" \
   "$(bash -c 'set -euo pipefail; . "$1"; plan_delegated "$2" | wc -l | tr -d " "' _ "$HERE/../scripts/lib/plan.sh" "$TMP/threshold.md")" "1"
 
+# --- the shared Evaluation reader ---
+# Two shipped defects motivate these. A line left above `#### Part A` scores the
+# task as it was before the split, which is the score that forced the split. And
+# a plan that shows an example line inside a fence is documenting the format.
+printf '# P\n\n### Task 1: Split\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/split.md"
+check "plan_eval_lines: a stale parent line does not score a split task" \
+  "$(plan_task_text "$TMP/split.md" 1 | plan_eval_lines | grep -c .)" "2"
+check "plan_scores: a split task scores from its parts" \
+  "$(plan_scores "$TMP/split.md" | tr '\t\n' ' |')" "1 2 0|"
+check "plan_heavy: a split task is not heavy on its stale parent score" \
+  "$(plan_heavy "$TMP/split.md")" ""
+
+printf '# P\n\n### Task 1: Fenced\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 3 = 6\n```\n' > "$TMP/fenced.md"
+check "plan_eval_lines: a fenced example does not score" \
+  "$(plan_task_text "$TMP/fenced.md" 1 | plan_eval_lines | grep -c .)" "1"
+check "plan_scores: a fenced example does not score" \
+  "$(plan_scores "$TMP/fenced.md" | tr '\t\n' ' |')" "1 2 0|"
+
+printf '# P\n\n### Task 1: Fenced part\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: example\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 3 = 6\n```\n' > "$TMP/fencedpart.md"
+check "plan_task_parts: a fenced part heading is not a part" \
+  "$(plan_task_text "$TMP/fencedpart.md" 1 | plan_task_parts)" ""
+check "plan_scores: a fenced part heading does not suppress the real line" \
+  "$(plan_scores "$TMP/fencedpart.md" | tr '\t\n' ' |')" "1 2 0|"
+
+check "plan_task_parts: real parts, in order" \
+  "$(plan_task_text "$TMP/split.md" 1 | plan_task_parts | tr '\n' ' ')" "A B "
+check "plan_part_text: one part's text only" \
+  "$(plan_task_text "$TMP/split.md" 1 | plan_part_text B | grep -c '^\*\*Evaluation')" "1"
+check "plan_part_text: an absent part is empty" \
+  "$(plan_task_text "$TMP/split.md" 1 | plan_part_text Z)" ""
+
+printf '# P\n\n### Task 1: Executor\n\n**Executor:** codex gpt-5.5 / medium\n\n```markdown\n**Executor:** codex gpt-5.6-sol / high\n```\n' > "$TMP/exec.md"
+check "plan_lines: a fenced label line is not a line" \
+  "$(plan_task_text "$TMP/exec.md" 1 | plan_lines Executor | grep -c .)" "1"
+
+# The four-band threshold moves in both directions, so both are pinned. With the
+# stale line the plan delegates two of three tasks; without it, two of three are
+# four-band, 3 x 2 > 3, and nothing is delegated.
+printf '# P\n\n### Task 1: One\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 0 = 5\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n### Task 2: Two\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n### Task 3: Three\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/fourband.md"
+check "plan_delegated: the corrected score drops the plan below the four-band third" \
+  "$(plan_delegated "$TMP/fourband.md" | tr '\t\n' ' |')" ""
+
+printf '# P\n\n### Task 1: One\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 0 = 5\n\n### Task 2: Two\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n### Task 3: Three\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/unsplit.md"
+check "plan_delegated: an unsplit plan is unchanged by the fix" \
+  "$(plan_delegated "$TMP/unsplit.md" | tr '\t\n' ' |')" "1 heavy|2 total 4|"
+
+check "plan_executors: unchanged by the fix" \
+  "$(plan_executors "$TMP/exec.md" | tr '\t\n' ' |')" "1 codex|"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
