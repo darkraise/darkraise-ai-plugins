@@ -355,6 +355,27 @@ message as your other bookkeeping:
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
   ` (codex off — <reason>)` when `review-route` printed `reason=codex-off`
 
+**Release the worktree when the task is complete.** A task that reached a
+reviewed complete line no longer owns its worktree:
+
+```bash
+bash "$(bash "<plugin-root>/scripts/executors" path <id> wrapper)" \
+  --cwd <worktree-root> --task-id <stable-task-id> --release
+```
+
+`<id>` is the first token of the task's `**Executor:**` line.
+`scripts/lib/task-state.sh` keeps an `owner.json` per worktree and refuses a
+different task id in it, so an unreleased worktree fails the next offload's
+preflight. An inline plan offloads several tasks into one worktree in
+sequence, which makes this the ordinary case rather than a recovery step.
+
+**After a `HANDBACK`, reconcile rather than release.** The Claude implementer
+inherits the worktree, its commits and its report, so ownership passes to a
+task that is still in flight. Follow
+[external-task-recovery.md](external-task-recovery.md) §Ownership before the
+implementer is dispatched; a bare `--release` there would drop the record the
+recovery procedure reads.
+
 Then mark the todo complete and move on. Never move to the next task while
 the review has open Critical/Important issues that are neither fixed nor
 parked-with-ruling at the cap.

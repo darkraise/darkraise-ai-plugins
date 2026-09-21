@@ -154,5 +154,34 @@ rm -f "$fixture/primary/.git/hooks/pre-commit"
 bash "$SCRIPT" --cwd "$fixture/recovery-guard" --task-id task-one --recover-commit > "$fixture/out" 2> "$fixture/err"
 check 'recovery refuses unrelated staged content' "$?" 2
 check 'recovery preserves unrelated index entry' "$(git -C "$fixture/recovery-guard" show :unrelated.txt)" 'hook write'
+
+# --- consecutive offloads in one worktree -----------------------------------
+# tests/executor-recovery.test.sh:112-117 already proves that --release lets a
+# released worktree take a new task, so that case is not repeated. What is new
+# is the refusal the release prevents, and the instruction that makes the
+# release part of the loop rather than a recovery step somebody remembers.
+git -C "$fixture/primary" worktree add -qb consecutive "$fixture/consecutive"
+
+# produced.txt, not a fresh name: run() passes the suite's shared --write-set,
+# which holds only base.txt, produced.txt and "new file.txt", so any other path
+# is refused as out of scope (lines 93-96) before ownership is ever reached.
+STUB_WRITE_PATH=produced.txt run --cwd "$fixture/consecutive" --task-id offload-one
+check 'first offloaded task succeeds' "$?" 0
+
+STUB_WRITE_PATH=produced.txt run --cwd "$fixture/consecutive" --task-id offload-two; rc=$?
+# The exit status alone would go green for any refusal at all; the reason is
+# pinned with it so only the owner.json check at task-state.sh:125-127 counts.
+check 'a second task without a release is refused for ownership' \
+  "$([ "$rc" -ne 0 ] && grep -qF 'reserved by another task' "$fixture/err" && echo refused || echo allowed)" refused
+
+# The deliverable is the instruction, so assert it directly.
+LOOP="$HERE/../reference/delegated-task.md"
+check 'the loop tells the controller to release the worktree' \
+  "$(grep -c 'Release the worktree when the task is complete' "$LOOP")" 1
+check 'the release resolves the wrapper through the registry' \
+  "$(grep -cF 'executors" path <id> wrapper' "$LOOP")" 1
+check 'a HANDBACK reconciles instead of releasing' \
+  "$(grep -c 'reconcile rather than release' "$LOOP")" 1
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
