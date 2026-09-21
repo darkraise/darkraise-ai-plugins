@@ -102,5 +102,26 @@ check "the shipped codex probe resolves to a real file" \
 check "no arguments is a usage error" "$(bash "$EXEC" >/dev/null 2>&1; echo $?)" "2"
 check "an unknown subcommand is a usage error" "$(bash "$EXEC" frobnicate >/dev/null 2>&1; echo $?)" "2"
 
+# --- the shipped test fixture registry --------------------------------------
+FIX="$HERE/fixtures/executors"
+check "the fixture registry lists three ids" \
+  "$(run "$FIX" list | tr '\n' ' ')" "codex opencode stub "
+check "the fixture codex entry matches the shipped one" \
+  "$(diff -q "$FIX/codex.json" "$P/reference/executors/codex.json" >/dev/null && echo same || echo differs)" "same"
+check "the stub locator is executable" \
+  "$([ -x "$FIX/bin/stub-plugin" ] && echo yes || echo no)" "yes"
+check "the stub locator emits the ok grammar" \
+  "$(bash "$FIX/bin/stub-plugin" | sed 's/root=.*/root=X/')" "stub-plugin ok version=0.0.0-stub root=X"
+check "the stub locator exits 0 when ok" "$(bash "$FIX/bin/stub-plugin" >/dev/null; echo $?)" "0"
+check "the stub locator can report off" \
+  "$(STUB_LOCATOR=off bash "$FIX/bin/stub-plugin")" "stub-plugin off reason=plugin-not-enabled"
+check "the stub locator exits 1 when off" \
+  "$(STUB_LOCATOR=off bash "$FIX/bin/stub-plugin" >/dev/null; echo $?)" "1"
+check "the stub probe answers authed" \
+  "$(printf '{"op":"auth","cwd":"."}' | node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed')" "true"
+check "the stub probe can answer logged out" \
+  "$(printf '{"op":"auth","cwd":"."}' | STUB_PROBE=logged-out node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed')" "false"
+check "the stub probe can fail without an authed field" \
+  "$(printf '{"op":"auth","cwd":"."}' | STUB_PROBE=throw node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed // "absent"')" "absent"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

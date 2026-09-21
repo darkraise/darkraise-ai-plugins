@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub wrapper. Its existence is what makes the stub id lane-implemented in
+# detect-executors.sh; no suite in this sub-project runs it.
+set -uo pipefail
+printf 'stub - status=DONE exit=0 commits=0000000..0000000 thread=stub report=-\n'
