@@ -395,7 +395,7 @@ absent "the final round no longer cites the risk-3 seat" "$EXEC" 'Unlike the ris
 present "the ladder names the light tier" "$LAD" '`--tier light` runs the last row directly'
 present "planning runs the gate before the roster" "$EXEC" 'Unless it prints `lane=true`, stop here:'
 present "dispatch runs the gate before guarding the roster" "$EXEC" '1. **Gate, then guard the roster.**'
-present "a failed run refreshes the gate" "$EXEC" 'bash "<plugin-root>/scripts/codex-gate" --refresh'
+present "a failed run refreshes the gate" "$EXEC" 'bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh'
 present "the final Codex round needs the review surface" "$EXEC" 'Unless it prints `review=true`, skip the round'
 present "the task seats name the runner's gate" "$EXEC" 'codex is off for this session (<reason>)'
 
@@ -612,6 +612,28 @@ stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
 check "a stub Executor task routes exactly as a codex one does" "$stub_seat" "$codex_seat"
 check "the stub task's seat is a Claude judge" \
   "$(grep -c 'primary=dr-superpowers:judge-' <<<"$stub_seat")" "1"
+
+# --- the executor lane reference -------------------------------------------
+LANE="$P/reference/executor-lane.md"
+check "the neutral reference exists" "$([ -f "$LANE" ] && echo yes || echo no)" "yes"
+# The old path is spelled in two pieces on purpose. Task 14 rewrites every
+# literal `external-executor` in this repository with sed; written whole, this
+# assertion would be rewritten to test the new file, which exists, and would
+# then fail. The two pieces concatenate at runtime and match no sed pattern.
+OLDREF="external-""executor.md"
+check "the Codex-only reference is gone" \
+  "$([ -f "$P/reference/$OLDREF" ] && echo present || echo gone)" "gone"
+present "the reference resolves the gate through the registry" "$LANE" 'executors path <id> gate'
+present "the reference names the blocks through the registry" "$LANE" 'executors get <id> blocks.assignment'
+present "the reference resolves the wrapper through the registry" "$LANE" 'executors path <id> wrapper'
+present "the reference keeps a per-executor section" "$LANE" '## Per-executor: codex'
+present "the reference names the neutral ruling kind" "$LANE" 'executor-empty-diff'
+present "the reference keeps the background-call rule" "$LANE" 'background Bash call'
+present "the reference keeps the two-failure budget" "$LANE" 'At most two executor runs may *fail* per task before Claude takes over'
+present "the reference documents the wedged-client case" "$LANE" "Read the durable task record's \`phase\` and \`reaped\` as **evidence, not proof**"
+present "the reference resumes an executor task, not a Codex one" "$LANE" '## Resuming an executor task'
+absent "the reference no longer claims a wrapper poll loop" "$LANE" "wrapper's own poll loop"
+absent "the reference no longer names the unreachable survivor note" "$LANE" 'codex-may-still-be-running'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

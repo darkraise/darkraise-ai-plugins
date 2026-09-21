@@ -1,8 +1,15 @@
 # External executor lane
 
-This reference holds the Claude-hosted Codex CLI lane.
+This reference holds the Claude-hosted external executor lanes. Everything
+below is written for an executor id `<id>`, which the task's `**Executor:**`
+line names as its first token. Resolve that executor's scripts and policy
+through `scripts/executors`: its gate is `bash "$(executors path <id> gate)"`,
+its wrapper `bash "$(executors path <id> wrapper)"`, and its ladder blocks are
+named by `executors get <id> blocks.assignment`, `blocks.successor` and
+`blocks.timeout`. Where an executor needs something this file cannot say
+generically, its own section at the foot of this file says it.
 dr-superpowers:writing-plans reads Planning; dr-superpowers:subagent-driven-development
-reads everything else. A native Codex host never uses this lane: it follows
+reads everything else. A native Codex host never uses these lanes: it follows
 [native-codex.md](native-codex.md), and a Claude `**Executor:**` line never
 starts recursive CLI offload in a Codex host.
 
@@ -17,12 +24,12 @@ Run this once per plan, after scoring every task and before writing any
 assignment line. Run the session gate first:
 
 ```bash
-bash "<plugin-root>/scripts/codex-gate"
+bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"
 ```
 
 Say its line aloud when it ends `source=probe`. Unless it prints `lane=true`, stop here:
 ask nothing, run no roster, and write the plan Claude-only, saying
-`codex off — <reason>` in one line, `<reason>` being the gate's `reason`
+`<id> off — <reason>` in one line, `<reason>` being the gate's `reason`
 (`untrusted` when it printed `usable=true`). Otherwise run the roster:
 
 ```bash
@@ -43,27 +50,28 @@ Claude-only - an empty checkbox is a worse answer than no checkbox.
 Record the tick as one appended blockquote line in the plan header:
 
 ```markdown
-> **External executors:** codex
+> **External executors:** <id>
 ```
 
 Then apply the lane gate from the `gate` block of [ladder.md](ladder.md) to each
 task. All four conditions must hold:
 
-- an executor was ticked,
+- the executor named on the line was ticked,
 - the task cleared Rule S without a human override,
 - `total >= min_score`,
 - `risk <= max_risk`.
 
-A task that passes the gate takes its model and effort from that file's
-`codex-assignment` block and gains one extra line. A task that fails it is
-assigned from the Claude table exactly as before and gains nothing.
+A task that passes the gate takes its model and effort from that executor's
+assignment block (`executors get <id> blocks.assignment`) and gains one extra
+line. A task that fails it is assigned from the Claude table exactly as before
+and gains nothing.
 
 **The `**Implementer:**` line still names the Claude agent for the score.** The
 executor is an override on a second line, never a replacement on the first:
 
 ```markdown
 **Implementer:** dr-superpowers:impl-sonnet-medium
-**Executor:** codex gpt-5.5 / medium
+**Executor:** <id> <model> / <effort>
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 ```
 
@@ -91,10 +99,10 @@ has misdiagnosed its own harness.
 
 A background call is not bound by `timeout` at all - measured, not assumed: a
 25-second command under a 5000 ms timeout ran to completion and exited 0. So
-pass no timeout, let the wrapper's own poll loop be the bound it already is, and
-wait for the completion notification. The wrapper polls for the rung's
-`codex-timeout` seconds, kills Codex, and always prints a status line, which is
-the guarantee that makes waiting safe.
+pass no timeout and wait for the completion notification. The bound is the
+client's own deadline, taken from the rung's timeout block, with an outer
+`timeout` of that plus 60 seconds as a backstop; the wrapper always prints a
+status line, which is the guarantee that makes waiting safe.
 
 If you have a reason to run one in the foreground anyway, the ceiling is raised
 by the `BASH_MAX_TIMEOUT_MS` environment variable, which your human partner sets
@@ -107,7 +115,7 @@ checkout. Fingerprints detect drift, not who wrote it. Never remove a blocked or
 unreconciled worktree. Read [external-task-recovery.md](external-task-recovery.md)
 for ownership, artifacts, approved write sets, and recovery operations.
 
-1. **Gate, then guard the roster.** Run `bash "<plugin-root>/scripts/codex-gate"`
+1. **Gate, then guard the roster.** Run `bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"`
    first, saying its line aloud when it ends `source=probe`.
    Unless it prints `lane=true`, run neither the roster nor the wrapper:
    dispatch the task's `**Implementer:**` agent on the Claude lane, say the
@@ -122,7 +130,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    entry's `reason` field:
 
    ```
-   Task <N>: implementer impl-sonnet-medium (assigned; base <sha7>; executor codex unavailable - <reason>)
+   Task <N>: implementer impl-sonnet-medium (assigned; base <sha7>; executor <id> unavailable - <reason>)
    ```
 
    Never fall back silently. A silent fallback makes the whole lane invisible.
@@ -131,7 +139,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    worktree's repository root:
 
    ```bash
-   bash "<plugin-root>/scripts/run-codex-task.sh" \
+   bash "$(bash "<plugin-root>/scripts/executors" path <id> wrapper)" \
      --brief <brief> --report <workspace>/task-<N>-report.md \
      --cwd <worktree-root> --task-id <stable-task-id> --write-set <approved-paths.json> --model <model> --effort <effort>
    ```
@@ -143,10 +151,11 @@ for ownership, artifacts, approved write sets, and recovery operations.
    under that worktree's Git directory, and stages only its verified scoped diff.
    Human-readable reports belong outside the checkout or in its ignored
    `.superpowers` workspace. An unignored report path is rejected.
-   The `**Executor:**` line writes the rung as `codex <model> / <effort>`; the
-   wrapper takes the two as separate flags. The timeout comes from
-   [ladder.md](ladder.md)'s `codex-timeout` block, keyed by `<model>/<effort>`;
-   do not pass `--timeout` unless you are deliberately overriding it.
+   The `**Executor:**` line writes the rung as `<id> <model> / <effort>`; the
+   wrapper takes the two as separate flags. The timeout comes from that
+   executor's timeout block in [ladder.md](ladder.md), keyed by
+   `<model>/<effort>`; do not pass `--timeout` unless you are deliberately
+   overriding it.
 
    Record BASE before the run. The wrapper's status line reports the same range
    as `commits=<a7>..<b7>` once the run finishes.
@@ -155,7 +164,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    thread id from its `thread=` field:
 
    ```
-   Task <N>: implementer impl-sonnet-medium (assigned; base <sha7>; executor codex gpt-5.5/medium, thread 01a0...)
+   Task <N>: implementer impl-sonnet-medium (assigned; base <sha7>; executor <id> <model>/<effort>, thread 01a0...)
    ```
 
    The thread id must reach the ledger. It also lands in the report file. If it
@@ -185,7 +194,7 @@ wrapper's exit code says which case you are in:
 | 2 | No status line was printed. Read the wrapper's own stderr before doing anything - see below |
 
 **Refresh the gate first.** After any run whose status is not `DONE`, run
-`bash "<plugin-root>/scripts/codex-gate" --refresh` before the next Codex use of
+`bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh` before the next Codex use of
 any kind - a retry, a successor rung, a resume or a review seat - so a quota or
 login failure turns Codex off for the rest of the session. When the refreshed
 line no longer says `lane=true`, the response is `HANDBACK` whatever the tables
@@ -214,7 +223,7 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 |---------|----------|
 | Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section | Retry once at the same rung |
 | Timeout - `note=timed-out` on the status line, `exit=124` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
-| Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via the `codex-successor` block and run once |
+| Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Any failure a second time | `HANDBACK` |
 
@@ -238,21 +247,16 @@ underneath.
   `exit=1` with a `## Codex error` section is an ordinary failed run. `exit=0`
   with `status=BLOCKED` is the odd one: Codex finished cleanly and wrote no
   verdict, which is a capability failure.
-- **`note=timed-out`**, with `exit=124`, means the wrapper's poll loop hit the
-  rung's `codex-timeout` and killed Codex. You do not have to infer this from
-  wall time - which you could not do anyway, since the wrapper runs as a
+- **`note=timed-out`**, with `exit=124`, means the client reported that its own
+  deadline expired and it interrupted the turn. You do not have to infer this
+  from wall time - which you could not do anyway, since the wrapper runs as a
   background call and you are not watching the clock.
-
-`note=codex-may-still-be-running` means the child outlived both kills and the
-grace window - only a timeout reaches that path, so it appears alongside
-`note=timed-out`. Check for and end that process before retrying, or the retry
-puts two Codex runs in the same worktree.
 
 A second `NEEDS_CONTEXT` on the same task is a capability failure: take the
 successor rung or hand back. A one-shot agent that could not resolve the brief
 after one clarification will not resolve it after two.
 
-At most two Codex runs may *fail* per task before Claude takes over. Fix-round
+At most two executor runs may *fail* per task before Claude takes over. Fix-round
 resumes are not failures and do not count against that budget. `HANDBACK` is an
 action, not a rung: dispatch the task's `**Implementer:**` agent on the Claude
 lane and let the ordinary ladder govern from there. Record it inside the line the
@@ -266,7 +270,7 @@ recovered without a model call. Never recover through whole-tree staging or
 infer ownership from an old report. Scope changes and manual repairs need a
 recorded approved amendment or baseline before automatic work continues.
 
-## Resuming a Codex task
+## Resuming an executor task
 
 Fix rounds 1 to 3 resume the same Codex session, as a Claude implementer's
 rounds do, to preserve its model, effort, and context. The resume-or-re-dispatch
@@ -276,7 +280,7 @@ findings verbatim into a file and pass that file as the brief - the wrapper
 appends the task contract to every run, resume included:
 
 ```bash
-bash "<plugin-root>/scripts/run-codex-task.sh" \
+bash "$(bash "<plugin-root>/scripts/executors" path <id> wrapper)" \
   --brief <feedback-file> --report <workspace>/task-<N>-report-r<K>.md \
   --cwd <worktree-root> --task-id <stable-task-id> --write-set <approved-paths.json> --model <model> --effort <effort> --resume <thread-id> --review-round <K>
 ```
@@ -334,7 +338,7 @@ initial run, where producing nothing means the agent could not start. A fix roun
 that returns `DONE` with an empty diff has read the findings and elected to
 change nothing, which is a position, not a failure. Read the report's summary:
 if it argues the findings are already addressed or wrong, send that claim to
-the ruling seat as a `codex-empty-diff` item (subagent-driven-development, The
+the ruling seat as an `executor-empty-diff` item (subagent-driven-development, The
 Ruling Seat) and carry out its verdict. Do not re-dispatch the round to force a diff. Two
 consecutive empty-diff rounds are a stalled loop - `HANDBACK`.
 
@@ -432,11 +436,11 @@ Fable's verdicts and scores are the task's.
 The final whole-branch review adds this round. Run the session gate first:
 
 ```bash
-bash "<plugin-root>/scripts/codex-gate"
+bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"
 ```
 
 Say its line aloud when it ends `source=probe`.
-Unless it prints `review=true`, skip the round: say `codex off — <reason>`,
+Unless it prints `review=true`, skip the round: say `<id> off — <reason>`,
 `<reason>` being the gate's `reason` (when it printed `usable=true`:
 `untrusted`, or `no session id` when `CLAUDE_CODE_SESSION_ID` is unset — the
 gate stores its answer per session, so without that id it opens no surface),
@@ -503,8 +507,47 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two Codex runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: `codex-successor` is read only by a failed initial run |
-| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as a `codex-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
+| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
 | A review seat's status line says `FALLBACK` | The preferred judge rung refused the run and the runner already used the fallback once. Not a failure: record the substitution and its reason in the ledger line you are already writing |
 
 Every ruling above is logged as `Ruling: <what> — <why> — <cost if wrong>` and
 said aloud. None of them stops the run.
+
+## Per-executor: codex
+
+Everything above applies to Codex with `<id>` read as `codex`. What is
+specific to it:
+
+- **Review seats.** Codex is the only executor with a `review` surface, so the
+  seats described above — `codex:light`, `codex:heavy`,
+  `codex:heavy+judge-fable` — and the final-review round are Codex's alone.
+  `scripts/run-codex-review.sh` is not registry-aware and takes its model from
+  the `codex-judge` block directly. An executor whose registry entry does not
+  list `review` in `surfaces` staffs no seat.
+- **The locator and the gate.** Codex is reached only through the official
+  `codex@openai-codex` plugin, which owns the binary. `scripts/codex-plugin`
+  locates it and `scripts/codex-gate` reads login and quota through the
+  plugin's own client. Another executor's gate answers whatever question its
+  own authentication poses.
+- **Quota.** Codex reports a reset time, which the gate caches, so a quota
+  answer is re-probed once that time has passed. An executor whose provider
+  publishes no reset time marks itself off for the session instead.
+- **Effort values.** `low`, `medium`, `high`, `xhigh` and `ultra`; `minimal`
+  is rejected. Another executor's efforts are whatever its assignment block
+  names, and its wrapper validates them.
+
+## When the client itself wedges
+
+The wrapper bounds its client with `timeout $((timeout_s + 60))`, which fires
+only when the client fails to honour its own deadline. That run reports
+`exit=1 status=BLOCKED` with no error section, and on Windows a grandchild may
+outlive it.
+
+Read the durable task record's `phase` and `reaped` as **evidence, not proof**.
+`reaped: false` can mean the client correctly left a pre-existing broker alone
+rather than that a process survived, and a reap can report success while
+teardown failed. Where the evidence is inconclusive — `reaped: false` with no
+recorded pre-existing broker, or a client that never answered — reconcile
+process ownership before retrying, resuming or handing back. A retry into an
+unreconciled worktree puts two runs in one tree, which is the hazard the old
+survivor note gestured at without ever being able to fire.
