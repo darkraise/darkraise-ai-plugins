@@ -25,7 +25,7 @@ to preserve.
 None of the three applies to a task running on an external executor. Its fix
 rounds resume the same Codex session and it leaves the lane by `HANDBACK`
 instead of by climbing a rung - see
-[external-executor.md](../../../reference/external-executor.md).
+[executor-lane.md](../../../reference/executor-lane.md).
 
 ## Escalating out of inline mode
 

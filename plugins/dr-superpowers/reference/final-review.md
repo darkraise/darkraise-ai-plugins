@@ -43,7 +43,7 @@ re-deriving the branch diff with git commands.
    Codex-host plan takes its final-review seat from
    [native-codex.md](native-codex.md) instead.
 2. **Codex round.** Run the round in
-   [external-executor.md](external-executor.md) §Final-review Codex round. Its
+   [executor-lane.md](executor-lane.md) §Final-review Codex round. Its
    runner reports one of four outcomes: `OK` and `FALLBACK` produce findings
    for step 3, and `FALLBACK` also means the preferred judge rung refused the
    run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say

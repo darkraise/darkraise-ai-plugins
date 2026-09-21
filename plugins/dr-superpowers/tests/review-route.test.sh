@@ -343,8 +343,8 @@ present "the delegated loop runs the light tier for codex:light" "$DT" '`codex:l
 present "the delegated loop has the risk 3 section" "$DT" '**Risk 3.** On `primary=codex:heavy+judge-fable`'
 absent "the delegated loop drops the risk 2 section" "$DT" '**Risk 2 and above.**'
 present "the delegated loop falls back to Opus on exit 2" "$DT" 'review with `dr-superpowers:judge-opus` and say why, quoting its message.'
-present "the task seats reserve Fable for risk 3" "$P/reference/external-executor.md" 'and `codex:heavy+judge-fable` at risk 3.'
-present "the second pass points at the delegated loop" "$P/reference/external-executor.md" 'per [delegated-task.md](delegated-task.md) §3 Review the task.'
+present "the task seats reserve Fable for risk 3" "$P/reference/executor-lane.md" 'and `codex:heavy+judge-fable` at risk 3.'
+present "the second pass points at the delegated loop" "$P/reference/executor-lane.md" 'per [delegated-task.md](delegated-task.md) §3 Review the task.'
 absent "README drops risk 2 Fable reviews" "$P/README.md" 'at risk 2 or above'
 present "the second pass runs at risk 3 only" "$P/skills/subagent-driven-development/references/task-reviewer-prompt.md" '[Include this section only on a risk 3 task whose Codex seat'
 absent "SDD no longer averages three seats" "$SDD" 'average each criterion'
@@ -383,8 +383,8 @@ for f in "$P/skills/subagent-driven-development/SKILL.md" \
 done
 present "inline mode names the one kind it never runs" "$P/skills/executing-plans/SKILL.md" 'Only `codex-empty-diff` belongs to a seat this mode never runs'
 
-# --- external-executor and ladder prose ------------------------------------------
-EXEC="$P/reference/external-executor.md"
+# --- executor-lane and ladder prose ------------------------------------------
+EXEC="$P/reference/executor-lane.md"
 LAD="$P/reference/ladder.md"
 present "the lane reference has the task seats section" "$EXEC" '## Codex task review seats'
 absent "the lane reference drops the risk-3 seat section" "$EXEC" '## Risk-3 Codex seat'
@@ -617,7 +617,7 @@ check "the stub task's seat is a Claude judge" \
 LANE="$P/reference/executor-lane.md"
 check "the neutral reference exists" "$([ -f "$LANE" ] && echo yes || echo no)" "yes"
 # The old path is spelled in two pieces on purpose. Task 14 rewrites every
-# literal `external-executor` in this repository with sed; written whole, this
+# literal `executor-lane` in this repository with sed; written whole, this
 # assertion would be rewritten to test the new file, which exists, and would
 # then fail. The two pieces concatenate at runtime and match no sed pattern.
 OLDREF="external-""executor.md"

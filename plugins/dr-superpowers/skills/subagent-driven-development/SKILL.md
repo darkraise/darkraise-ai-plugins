@@ -337,7 +337,7 @@ that arises at one point into one dispatch:
 | `cannot-verify` | Every "⚠️ Cannot verify from diff" item, before the task completes |
 | `breaker` | Every finding still open after round 5/5 |
 | `blocked-plan` | An implementer BLOCKED because the plan is wrong |
-| `codex-empty-diff` | A Codex fix round that returned DONE with an empty diff and an argument ([external-executor.md](../../reference/external-executor.md)) |
+| `codex-empty-diff` | A Codex fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../reference/executor-lane.md)) |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` — `<task>` is the task

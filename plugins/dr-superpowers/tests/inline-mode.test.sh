@@ -67,9 +67,9 @@ check "the ruling prompt exists" \
 present "final review links the code reviewer" "$FINAL" "../skills/requesting-code-review/references/code-reviewer.md"
 check "the code reviewer reference exists" \
   "$([ -f "$P/skills/requesting-code-review/references/code-reviewer.md" ] && echo yes || echo no)" "yes"
-present "final review links the external executor" "$FINAL" "external-executor.md"
+present "final review links the external executor" "$FINAL" "executor-lane.md"
 check "the external executor reference exists" \
-  "$([ -f "$P/reference/external-executor.md" ] && echo yes || echo no)" "yes"
+  "$([ -f "$P/reference/executor-lane.md" ] && echo yes || echo no)" "yes"
 present "final review links the re-review prompt" "$FINAL" "../skills/subagent-driven-development/references/re-review-prompt.md"
 check "the re-review prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/re-review-prompt.md" ] && echo yes || echo no)" "yes"
@@ -177,7 +177,7 @@ present "the fixer records rejections" "$FINAL" 'under `REJECTED: <finding>`'
 present "disputed rejections go to the ruling seat" "$FINAL" '`REJECTION DISPUTED` in the'
 present "the re-review rules on rejections" "$RRP" 'REJECTION UPHELD |'
 present "an upheld rejection closes" "$RRP" 'An upheld rejection is closed; a disputed one is open.'
-present "the Codex round rationale covers one list" "$P/reference/external-executor.md" 'with one list the'
+present "the Codex round rationale covers one list" "$P/reference/executor-lane.md" 'with one list the'
 absent "README drops the always-third-seat claim" "$P/README.md" 'which is why every finding goes through a third seat'
 
 # --- the delegated loop: one copy, shared by both execution skills ---

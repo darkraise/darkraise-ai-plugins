@@ -24,7 +24,7 @@ session on Opus.
 | Seat | Agent | Model argument |
 |---|---|---|
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
-| External implementer | The task's `**Executor:**` line, via [external-executor.md](external-executor.md) | Set by the wrapper |
+| External implementer | The task's `**Executor:**` line, via [executor-lane.md](executor-lane.md) | Set by the wrapper |
 | Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; `dr-superpowers:judge-opus` wherever it names `judge-fable` and Fable is unavailable or your human partner declined it — say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | general-purpose | Explicit, cheap-to-mid |
 
@@ -47,7 +47,7 @@ Record BASE (`git rev-parse HEAD`) before dispatching — the review package,
 the fix-round diffs, and the assigned line need it.
 
 **Read the task's `**Executor:**` line first.** A task carrying one runs on
-that CLI — follow [external-executor.md](external-executor.md)
+that CLI — follow [executor-lane.md](executor-lane.md)
 §Dispatch — and the steps here are its fallback. A task without one takes
 these steps directly.
 
@@ -108,7 +108,7 @@ these steps directly.
 | A name in neither the assignment nor the reserve table, after legacy translation | Score at dispatch and dispatch the scored agent |
 | The implementer's model is unavailable on this account | Same effort one model down; where none exists, the ladder successor — see [escalation.md](../skills/subagent-driven-development/references/escalation.md) |
 | Fable unavailable inside a reserve chain entered automatically | `Task <N>: BLOCKED` with the reason — the Opus rungs below it already failed |
-| An `**Executor:**` line the wrapper cannot run | `HANDBACK` to the `**Implementer:**` agent — see [external-executor.md](external-executor.md) §Failure rows |
+| An `**Executor:**` line the wrapper cannot run | `HANDBACK` to the `**Implementer:**` agent — see [executor-lane.md](executor-lane.md) §Failure rows |
 
 ## 2. Handle the report
 
@@ -193,7 +193,7 @@ judge that returns scores but drops the verdicts has produced an unusable
 review — re-dispatch it.
 
 **Codex seats.** Write the task-reviewer prompt for Codex as
-[external-executor.md](external-executor.md) §Codex task review
+[executor-lane.md](executor-lane.md) §Codex task review
 seats describes, to `<workspace>/task-<N>-review-codex-prompt.md`, and run it
 as a background Bash call with no timeout:
 
@@ -275,7 +275,7 @@ alone. Otherwise dispatch a fresh copy of the same agent carrying the brief
 path, the report-file path, and the findings — the report file is the
 persistent memory either way — and note `fresh (<why>)` on the fix-round line.
 That is not an escalation. A task on an external executor resumes its Codex
-session instead — see [external-executor.md](external-executor.md)
+session instead — see [executor-lane.md](executor-lane.md)
 §Resuming a Codex task.
 
 **Rounds 4-5 — escalate.** Dispatch a fresh implementer on the successor rung

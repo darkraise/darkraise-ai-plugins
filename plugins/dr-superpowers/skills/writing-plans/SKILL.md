@@ -230,7 +230,7 @@ user's inline or delegation preference on either host.
    Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
    tier. Only a human edit puts one in a plan.
 4. **Offer an external executor** once per plan and apply the lane gate — see
-   [external-executor.md](../../reference/external-executor.md) §Planning,
+   [executor-lane.md](../../reference/executor-lane.md) §Planning,
    which runs `scripts/codex-gate` before the roster and offers Codex only when
    the gate prints `lane=true`. If no executor is usable, ask nothing.
 5. **Write the lines** directly below the task's `**Items:**` line, or its

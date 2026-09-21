@@ -426,7 +426,7 @@ escalation, reserve, and external CLI tables. Native Codex reads
 score, request format, and plan conversion. `scripts/select-native-tier.sh`
 validates raw scores and history before returning a native routing decision.
 
-`reference/external-executor.md` holds the Claude-hosted Codex CLI lane,
+`reference/executor-lane.md` holds the Claude-hosted Codex CLI lane,
 `reference/legacy-names.md` translates names written under older plugin
 prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
 stops and the Compact Instructions block, and `reference/final-review.md` holds
