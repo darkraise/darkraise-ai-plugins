@@ -15,7 +15,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 . "$HERE/lib/register.sh"
-. "$HERE/lib/codex-session.sh"
+. "$HERE/lib/executor-session.sh"
 ROUTING="$HERE/../reference/codex-routing.json"
 
 usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]" >&2; exit 2; }
@@ -297,7 +297,7 @@ done
 # correct on a machine where Codex is unusable, so every outcome other than a
 # usable codex row prints nothing. Inline plans are skipped: Executor lines are
 # inert under inline execution, so the warning would be noise.
-if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ] && codex_session_on lane; then
+if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ] && executor_session_on codex lane; then
   roster=$(timeout 30 bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}" 2>/dev/null) || roster=""
   usable=$(jq -r '.[]? | select(.id == "codex") | .usable' <<<"$roster" 2>/dev/null | tr -d '\r')
   if [ "$usable" = true ]; then

@@ -21,7 +21,7 @@ ROSTER="${CODEX_REVIEW_ROSTER:-$HERE/detect-executors.sh}"
 # Tests point this at a stub gate. Unset in production, where scripts/codex-gate
 # answers from this session's cache or probes the codex plugin.
 GATE="${CODEX_REVIEW_GATE:-$HERE/codex-gate}"
-. "$HERE/lib/codex-session.sh"
+. "$HERE/lib/executor-session.sh"
 
 die() { printf 'run-codex-review: %s\n' "$1" >&2; exit 2; }
 
@@ -254,7 +254,7 @@ if [ "$rc" -eq 0 ] && valid_output; then
 fi
 
 if [ "$(jq -r '.quota' <<<"$result")" = true ]; then
-  codex_session_mark_off quota
+  executor_session_mark_off codex quota
   status "$model" "$effort" FAILED "$rc"; exit 1
 fi
 
@@ -277,7 +277,7 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   if [ "$rc" -eq 0 ] && valid_output; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
-  [ "$(jq -r '.quota' <<<"$result")" = true ] && codex_session_mark_off quota
+  [ "$(jq -r '.quota' <<<"$result")" = true ] && executor_session_mark_off codex quota
   status "$back_model" "$back_effort" FAILED "$rc"; exit 1
 fi
 

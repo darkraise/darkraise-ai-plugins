@@ -233,17 +233,18 @@ gate usable --bogus
 check "an unknown flag is a usage error" "$rc" "2"
 
 # --- the session readers -----------------------------------------------------
-. "$P/scripts/lib/codex-session.sh"
+export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
+. "$P/scripts/lib/executor-session.sh"
 export DR_CODEX_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID=s1
 on() { # on <name> <surface> <want: on|off>
-  if codex_session_on "$2"; then check "$1" on "$3"; else check "$1" off "$3"; fi
+  if executor_session_on codex "$2"; then check "$1" on "$3"; else check "$1" off "$3"; fi
 }
 fresh; mkdir -p "$SESS"
 on "no file is off" review off
 printf '{"session_id":"s1","usable":true,"review":true,"lane":false}\n' > "$SESS/s1.json"
 on "an open review surface is on" review on
 on "a closed lane is off" lane off
-codex_session_mark_off quota
+executor_session_mark_off codex quota
 check "mark_off closes both surfaces" "$(field usable)/$(field review)/$(field lane)/$(field reason)" "false/false/false/quota"
 on "a marked-off session is off" review off
 printf 'not json' > "$SESS/s1.json"

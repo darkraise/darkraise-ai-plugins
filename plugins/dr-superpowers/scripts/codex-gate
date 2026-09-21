@@ -16,7 +16,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 POLICY="${DR_CODEX_POLICY:-$HERE/../reference/codex-plugin.json}"
-. "$HERE/lib/codex-session.sh"
+. "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
 
 die() { printf 'codex-gate: %s\n' "$1" >&2; exit 2; }
@@ -32,7 +32,7 @@ command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
 usable="" reason="" resets="" epoch="" version="" source=probe
-file=$(codex_session_file) || file=""
+file=$(executor_session_file codex) || file=""
 if [ "$refresh" -eq 0 ] && [ -n "$file" ] && [ -r "$file" ]; then
   # A unit separator, not a tab: read collapses runs of whitespace separators,
   # which would shift every field after an empty one.
@@ -85,7 +85,7 @@ if [ "$usable" = true ] && [ -n "$file" ]; then
 fi
 
 if [ -n "$file" ]; then
-  codex_session_write "$(jq -cn --arg sid "$(codex_session_id)" \
+  executor_session_write codex "$(jq -cn --arg sid "$(executor_session_id)" \
     --argjson usable "$usable" --argjson review "$review" --argjson lane "$lane" \
     --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg resets "$resets" --arg epoch "$epoch" --arg version "$version" \

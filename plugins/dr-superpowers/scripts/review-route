@@ -24,7 +24,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
-. "$HERE/lib/codex-session.sh"
+. "$HERE/lib/executor-session.sh"
 
 SONNET=dr-superpowers:judge-sonnet-high
 OPUS=dr-superpowers:judge-opus
@@ -169,7 +169,7 @@ case "$1" in
     [ "$intricate" -eq 0 ] || claude=$FABLE
     if [ "$r" -gt $((cap + 1)) ]; then
       die "plan round $r is past the cap ($cap) and its one cap-critical round"
-    elif [ "$r" -eq 1 ] && codex_session_on review; then
+    elif [ "$r" -eq 1 ] && executor_session_on codex review; then
       printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round cap=%s\n' "$claude" "$cap"
     elif [ "$r" -eq 1 ]; then
       printf 'review-seat plan-round=1 primary=%s fallback=- reason=codex-off cap=%s\n' "$claude" "$cap"
@@ -258,7 +258,7 @@ if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 3 ]; then
   primary=$FABLE fallback=- reason=executor
 elif [ "$executor" -eq 1 ]; then
   primary=$(band "$max_total") fallback=- reason=executor
-elif ! codex_session_on review; then
+elif ! executor_session_on codex review; then
   # Codex is off for this session, so the Codex rows name their Claude seat
   # directly, and there is nothing left to fall back to. Risk 3 stays with Fable.
   if [ "$max_risk" -ge 3 ]; then primary=$FABLE; else primary=$(band "$max_total"); fi
