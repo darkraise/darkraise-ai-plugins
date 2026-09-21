@@ -332,7 +332,7 @@ present "the delta template may read beyond the delta" "$PRP" 'The delta is wher
 # --- the session gate in writing-plans -------------------------------------------
 present "writing-plans runs the gate before each round" "$WP" 'run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),'
 present "writing-plans routes a codex-off round 1 by intricacy" "$WP" '**`reason=codex-off`** (round 1 while the gate has not opened the review'
-present "writing-plans offers the lane only on lane=true" "$WP" 'offers Codex only when'
+present "writing-plans offers the lane only on lane=true" "$WP" 'for every executor whose gate prints `lane=true`'
 
 # --- task review prose -----------------------------------------------------------
 SDD="$P/skills/subagent-driven-development/SKILL.md"

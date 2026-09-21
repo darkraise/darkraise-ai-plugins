@@ -48,11 +48,14 @@ Subagent availability has nothing to do with it - the line decides, and only
 your human partner overrides it.
 
 **Delegated tasks.** A delegated task is not yours to implement: every heavy
-task, and each total-4 task while those are a third of the plan or fewer, so it
-gets an independent review without putting the whole session on Opus. Its
-brief's second line is `**Dispatch:** delegated — total <t>, risk <r>`, and
-`plan-header.md` ends with
-`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4)`. Run
+task, each total-4 task while those are a third of the plan or fewer,
+and every task carrying an `**Executor:**` line, so it gets an independent
+review without putting the whole session on Opus. An offloaded task is
+delegated for the same reason the others are — the session does not implement
+it — and it runs on its executor's wrapper rather than an implementer
+subagent. Its brief's second line is
+`**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` ends with
+`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4), Task <c> (executor)`. Run
 [delegated-task.md](../../reference/delegated-task.md) for it: an implementer
 subagent, the review seat `scripts/review-route` prints, fix rounds up to 5 and
 a reviewed complete line. Read that file the first time a delegated task comes
@@ -161,9 +164,10 @@ passed it.
 skills and agents under older plugin prefixes. Translate each with
 [legacy-names.md](../../reference/legacy-names.md) at read time, never edit the
 plan, and log one `Ruling: translated <old> -> <new> — legacy plugin name —
-none` per distinct name. `**Executor:**` lines are inert for the tasks you
-implement; a delegated task's is read by
-[delegated-task.md](../../reference/delegated-task.md) §1. `**Implementer:**` lines are inert for the tasks
+none` per distinct name. A task whose brief's second line marks it delegated is dispatched, never
+implemented here, and its `**Executor:**` line is read by
+[delegated-task.md](../../reference/delegated-task.md) §1, which runs that
+executor's wrapper in place of an implementer subagent. `**Implementer:**` lines are inert for the tasks
 you implement; translate a delegated task's `**Implementer:**` agent before dispatching it.
 
 **Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated`

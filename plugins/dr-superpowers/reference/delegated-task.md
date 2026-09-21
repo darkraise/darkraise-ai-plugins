@@ -6,7 +6,9 @@ dr-superpowers:executing-plans runs it for each task whose brief carries
 `**Dispatch:** delegated`: a heavy task, too large or risky to implement in the
 session, or a total-4 task in a plan where those are a third of the tasks or
 fewer, delegated so it gets an independent review without putting the whole
-session on Opus.
+session on Opus,
+and every task carrying an `**Executor:**` line, which runs on that executor's
+wrapper instead of an implementer subagent.
 
 ## Contract
 

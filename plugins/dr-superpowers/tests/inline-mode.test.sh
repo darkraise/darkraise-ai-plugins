@@ -98,7 +98,7 @@ present "a delegating plan gets a preflight" "$INLINE" 'send one `preflight` ite
 present "the preflight keys on a heavy task" "$INLINE" 'naming at least one `(heavy)` task'
 absent "the kinds table no longer keys the preflight on any delegation" "$INLINE" 'when the plan delegates any task'
 present "the preflight arises only for a heavy task" "$INLINE" '`preflight` arises only for a plan with a heavy task'
-present "inline mode names both delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4)`'
+present "inline mode names all three delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4), Task <c> (executor)`'
 present "writing-plans defines four-band tasks" "$P/skills/writing-plans/SKILL.md" 'A task is **four-band**'
 present "writing-plans delegates total-4 tasks up to a third" "$P/skills/writing-plans/SKILL.md" 'are a third of the plan or fewer (`3 x four-band <= N`)'
 present "using-superpowers names total-4 delegation" "$P/skills/using-superpowers/SKILL.md" 'total-4 tasks while they are a third of the plan or fewer'
@@ -336,5 +336,20 @@ check "a self-implemented brief carries no Dispatch line" \
   "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/ob2.md")" "0"
 
 rm -rf "$DTMP"
+# --- the third delegation reason, in every place that defines the set -------
+# One sentence fragment, repeated verbatim in five files, so a later edit to
+# any one of them is caught here rather than in a plan that misroutes a task.
+EXEC_REASON='and every task carrying an `**Executor:**` line'
+present "inline mode delegates every Executor line" "$INLINE" "$EXEC_REASON"
+present "writing-plans delegates every Executor line" "$P/skills/writing-plans/SKILL.md" "$EXEC_REASON"
+present "using-superpowers delegates every Executor line" "$P/skills/using-superpowers/SKILL.md" "$EXEC_REASON"
+present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
+present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" "$EXEC_REASON"
+present "the four-band population still counts an offloaded task" "$P/skills/writing-plans/SKILL.md" 'A total-4 task counts toward that third whether or not it is offloaded'
+present "writing-plans gates the roster per executor" "$P/skills/writing-plans/SKILL.md" 'for every executor whose gate prints `lane=true`'
+present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/SKILL.md" 'A task carries at most one `**Executor:**` line'
+absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
+absent "writing-plans no longer reads executor lines only when delegated" "$P/skills/writing-plans/SKILL.md" 'the lines are read only for the delegated tasks'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

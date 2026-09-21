@@ -119,20 +119,26 @@ names the native pair: `**Execution:** <inline|subagent> — codex <model> / <ef
 
 A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
 A task is **four-band** when it is not heavy and its highest total is exactly 4.
-An inline plan delegates its heavy tasks, and its four-band tasks while they
-are a third of the plan or fewer (`3 x four-band <= N`): each runs through
+An inline plan delegates its heavy tasks, its four-band tasks while they
+are a third of the plan or fewer (`3 x four-band <= N`),
+and every task carrying an `**Executor:**` line: each runs through
 [delegated-task.md](../../reference/delegated-task.md) with an implementer
-subagent and the full per-task review. Past that third, one Opus session costs
-less than a seat per task, and no four-band task is delegated. The tasks not
-delegated are the **self-implemented** tasks.
+subagent — or, for an Executor line, that executor's wrapper — and the full
+per-task review. Past that third, one Opus session costs less than a seat per
+task, and no four-band task is delegated.
+A total-4 task counts toward that third whether or not it is offloaded:
+dropping it from the count could flip the threshold and newly delegate
+four-band tasks nobody marked. The tasks not delegated are the
+**self-implemented** tasks.
 
 - `subagent` when more than half the tasks are heavy:
   `claude --model sonnet --effort high`. The controller owns no judgment calls
   — the ruling seat does — so it needs no stronger model. Four-band tasks never
   count toward this majority.
 - Otherwise `inline`, the default. The model is `opus` when a self-implemented
-  task totals 4 (so only when four-band tasks exceed a third of the plan), and
-  `sonnet` otherwise. `<e>` is the assignment-table effort of the highest
+  task totals 4 — so only when four-band tasks exceed a third of the plan and
+  at least one of them carries no `**Executor:**` line — and `sonnet`
+  otherwise. `<e>` is the assignment-table effort of the highest
   self-implemented total (`impl-haiku` counts as `low`),
   raised to `high` when any task is delegated:
   `claude --model <sonnet|opus> --effort <e>`. When every task is heavy
@@ -229,10 +235,13 @@ user's inline or delegation preference on either host.
 3. **Assign** from the assignment table, which the total indexes directly.
    Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
    tier. Only a human edit puts one in a plan.
-4. **Offer an external executor** once per plan and apply the lane gate — see
-   [executor-lane.md](../../reference/executor-lane.md) §Planning,
-   which runs `scripts/codex-gate` before the roster and offers Codex only when
-   the gate prints `lane=true`. If no executor is usable, ask nothing.
+4. **Offer an external executor** and apply the lane gate — see
+   [executor-lane.md](../../reference/executor-lane.md) §Planning. Every id
+   `scripts/executors list` prints has its own gate; run each, resolved with
+   `bash "$(bash scripts/executors path <id> gate)"`, before the roster, and
+   make the offer once per plan
+   for every executor whose gate prints `lane=true`. If none is usable, ask
+   nothing.
 5. **Write the lines** directly below the task's `**Items:**` line, or its
    `**Interfaces:**` block when there is no Items line, in
    this order:
@@ -255,6 +264,13 @@ user's inline or delegation preference on either host.
 6. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
    task by a heading that begins with `Task <N>`.
 
+**A task carries at most one `**Executor:**` line, and you choose it.** When
+two ticked executors' gates both admit a task, nothing mechanical picks
+between them: write one line, and `plan-lint` validates only what is written.
+No precedence rule is introduced here — with one registered executor there is
+no choice to make, and a rule invented now would be untested against a real
+second executor.
+
 A human may edit any `**Implementer:**` line by hand;
 dr-superpowers:subagent-driven-development obeys it and never recomputes.
 Leave the `**Evaluation:**` line in place — the gap between the score and the
@@ -262,7 +278,8 @@ choice is the interesting part. A hand edit that breaks a checked rule — a
 reserve tier, a kept `spec = 3`, a table mismatch — carries an
 `**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
 reports it as a warning. Never write an Override line yourself. Under
-dr-superpowers:executing-plans the lines are read only for the delegated tasks.
+dr-superpowers:executing-plans the lines are read for the delegated tasks,
+which include every task carrying an `**Executor:**` line.
 [assigning-implementers.md](references/assigning-implementers.md) explains why
 each of these rules exists.
 
