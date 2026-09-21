@@ -62,6 +62,9 @@ work starts rather than after.
 5. **The reviewer needs no per-task revision.** `review-route` derives the seat
    from the `**Evaluation:**` line at execution time. Decision 2 is the reviewer
    fix.
+6. **The split-task scoring defect is fixed at the source, not worked around.**
+   `plan-revise` would otherwise be the second caller to implement the rule
+   privately, which is how the first two drifted. See §5a.
 
 ## 4. `scripts/plan-revise` — survey mode
 
@@ -104,12 +107,8 @@ task <id>  score=<total> risk=<r> spec=<s>  gate=<pass|fail:<condition>>  rung=<
 ```
 
 `<id>` is a task number, or a task number and a part letter for a split task, so
-a split task's parts are scored from their own part bodies. A leftover
-`**Evaluation:**` line above `#### Part A` is a known defect — item 1 of
-`docs/superpowers/registers/2026-09-20-review-fixes-deferrals.md`, where
-`plan_scores` and `review-route` both count it. `plan-revise` must not inherit
-it: a task with parts takes its scores from the parts alone. This design does
-not fix the defect in the shared library; it declines to reproduce it.
+a split task's parts are scored from their own part bodies. The rule comes from
+§5a, which fixes it for every caller rather than only for this script.
 
 `rung` comes from the `codex-assignment` block of `reference/ladder.md`, read
 through `executors get <id> blocks.assignment`, never hardcoded.
@@ -118,6 +117,50 @@ The script writes nothing. It reports; the skill edits.
 
 Exit 0 when the plan parsed, 1 when it holds no task the skill could revise,
 2 on usage or a missing file.
+
+## 5a. The split-task scoring defect, fixed at the source
+
+Item 1 of `docs/superpowers/registers/2026-09-20-review-fixes-deferrals.md`
+records that a leftover `**Evaluation:**` line above `#### Part A` is counted by
+`plan_scores` and by `review-route`. Reproduced on 2026-09-21 against a plan
+whose Task 1 carries a stale whole-task line scoring 6 and two parts each
+scoring 2:
+
+| Call | Reported | Correct |
+|---|---|---|
+| `plan_scores` | `1  6  1` | `1  2  0` |
+| `plan_heavy` | Task 1 is heavy | not heavy |
+| `review-route --task 1` | `primary=codex:heavy fallback=judge-opus reason=band` | the light band |
+| `review-route --task 1A` | `primary=codex:light fallback=judge-sonnet-high` | already correct |
+
+The part ids are already right, because `review-route` filters the text to the
+part first. Only the whole-task id is wrong, and it is wrong for every consumer
+of `plan_scores`: `plan_heavy`, `plan_delegated`, `plan-lint` and `task-brief`
+as well as `review-route`.
+
+**The rule.** When a task's text contains any `#### Part <L>:` heading, only the
+`**Evaluation:**` lines at or after the first such heading score it. When it
+contains none, the lines in the task body score it, as now. A line left above
+`#### Part A` scores the task as it stood *before* the split — which is the
+score that forced the split, so it is always the wrong one.
+
+**Where it lives.** One helper in `scripts/lib/plan.sh`, applied to task text,
+used by `plan_scores` and by `review-route`'s own loop over a task id with no
+part letter. Two call sites implementing one rule is how the two drifted apart
+in the first place.
+
+The helper's contract is total, not advisory: nothing else in the library may
+read `**Evaluation:**` lines directly from task text.
+
+**`plan-lint` gains a NOTE**, not an error, when a task has parts and also an
+`**Evaluation:**` line above the first one. Once the line stops counting, a
+reader who sees it still reads the old total off the page while the tooling
+uses another; saying so is cheaper than leaving the trap. It is a NOTE because
+the plan is correct as the tooling now reads it.
+
+This is a behaviour change to shipped routing. It lowers seats, never raises
+them, so the failure mode of getting it wrong is a cheaper reviewer on a task
+that was already reviewed at the higher seat under the old behaviour.
 
 ## 6. The skill: `revising-plans`
 
@@ -151,9 +194,10 @@ the project's plan directory and reports, writing nothing.
 
 ## 7. What this does not change
 
-The plan format, the ladder, the gate thresholds, the wrapper, the review seats
-and the ledger are all untouched. A revised plan is indistinguishable from a
-plan written today; that is the whole acceptance criterion.
+The plan format, the ladder, the gate thresholds, the wrapper and the ledger are
+all untouched. A revised plan is indistinguishable from a plan written today;
+that is the whole acceptance criterion. The one deliberate behaviour change is
+§5a, which corrects a seat that was already wrong.
 
 `plan-lint`'s lane-eligible warning stays off for inline plans. Item 5 of
 `docs/superpowers/registers/2026-09-20-opencode-executor.md` deferred turning it
@@ -170,6 +214,11 @@ over fixture plans covering:
 - a plan with no `**Evaluation:**` lines, reporting `eligible=-` rather than `0`;
 - a plan with a split task, scored from its parts and not from a leftover
   `**Evaluation:**` line above `#### Part A`;
+- the §5a fix, in the suites that own the affected code: `plan-lib.test.sh` for
+  `plan_scores`, `plan_heavy` and `plan_delegated` over the reproduction above;
+  `review-route.test.sh` for the whole-task id dropping to the light band while
+  the part ids are unchanged; `plan-lint.test.sh` for the new NOTE; and
+  `task-brief.test.sh` for the band it hands an implementer;
 - the gate boundaries: `total 1` fails, `total 2` passes, `risk 2` fails,
   `spec 3` fails;
 - a plan with a ledger present, which the survey reports `live=yes`;
@@ -188,13 +237,14 @@ already pins `writing-plans` prose by exact string.
 - `skills/using-superpowers/SKILL.md` — one routing row.
 - `scripts/plan-revise` — new.
 - `tests/plan-revise.test.sh` — new.
+- `scripts/lib/plan.sh`, `scripts/review-route`, `scripts/plan-lint` — §5a.
+- `docs/superpowers/registers/2026-09-20-review-fixes-deferrals.md` — item 1
+  moves to `done` through `scripts/register set`, with §5a as its note.
 - `README.md` — the skill inventory prose.
 - Both manifests — a version bump, kept equal.
 
 ## 10. Out of scope
 
-- Fixing the shared `plan_scores` split-task defect. `plan-revise` avoids it;
-  the register row owns the fix.
 - Turning on `plan-lint`'s lane-eligible warning for inline plans.
 - Any automatic repo-wide revision. The survey reports; a revision is always
   invoked on one named plan.
@@ -211,6 +261,13 @@ written.** The rubric is applied to a task description written under a different
 process. Where a task's description is too thin to score, the skill says so and
 leaves the task unscored rather than guessing; `plan-lint` then reports the plan
 as incomplete, which is the honest outcome.
+
+**§5a changes how existing plans route.** Any plan in flight whose split task
+carries a leftover line will, after this ships, route that task to a cheaper
+seat than it did yesterday. That is the correction, not a regression — the seat
+it used was computed from a score the split had already invalidated — but it is
+a live behaviour change and the plan should land it in one commit with its
+tests, so a bisect never lands between the rule and its callers.
 
 **The roster can change between revision and execution.** This is not new:
 `reference/executor-lane.md` §Dispatch already re-checks the roster at dispatch
