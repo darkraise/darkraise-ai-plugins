@@ -242,7 +242,7 @@ for n in $nums; do
   line() { plan_lines "$1" <<<"$text" | head -n 1; }
   sev=ERROR
   [ -n "$(line Override)" ] && sev=WARN
-  grep -qE '^\*\*Files:\*\*' <<<"$text" || say ERROR "$where" "missing **Files:** block"
+  [ -n "$(line Files)" ] || say ERROR "$where" "missing **Files:** block"
   impl=$(line Implementer)
   ev=$(line Evaluation)
   [ -n "$impl" ] || say ERROR "$where" "missing **Implementer:** line"

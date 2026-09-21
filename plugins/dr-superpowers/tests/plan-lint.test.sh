@@ -765,5 +765,9 @@ lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.t
 lint fenced-part.md
 lacks "a fenced part heading does not create a part" "$out" "Task 1 part A"
 
+lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
+lint fenced-files.md
+has "a fenced-only Files block is a missing Files block" "$out" "ERROR Task 1: missing **Files:** block"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
