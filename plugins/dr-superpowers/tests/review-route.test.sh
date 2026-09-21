@@ -651,5 +651,45 @@ absent "escalation no longer names a Codex session" "$ESC" 'rounds resume the sa
 present "the loop resumes the executor's own session" "$LOOP" "A task on an external executor resumes that executor's own session instead"
 absent "the loop no longer names a Codex session" "$LOOP" 'resumes its Codex'
 
+# --- the shared Evaluation reader ---
+# Two shipped defects: a fenced example line escalated the seat to the risk-3
+# rung, and a stale line above `#### Part A` routed a split task on the score
+# that forced the split.
+# The suite leaves the review surface closed, and a closed surface routes every
+# seat to Claude with reason=codex-off, which is not what these cases are about.
+review_surface true
+
+seat() { # seat <file> <id>; sets out and rc
+  out=$(bash "$ROUTE" "$1" --task "$2" 2>"$TMP/err"); rc=$?
+}
+LIGHT="primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
+
+printf '# P\n\n### Task 1: Fenced\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 3 = 6\n```\n' > "$TMP/ev-fenced.md"
+seat "$TMP/ev-fenced.md" 1
+check "a fenced example does not escalate the seat" "$out" "review-seat task=1 $LIGHT"
+check "a fenced example exits 0" "$rc" "0"
+
+printf '# P\n\n### Task 1: Split\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/ev-split.md"
+seat "$TMP/ev-split.md" 1
+check "a whole-task id routes on its parts" "$out" "review-seat task=1 $LIGHT"
+seat "$TMP/ev-split.md" 1A
+check "a part id is unchanged" "$out" "review-seat task=1A $LIGHT"
+
+# A part filter that does not skip fences reads an example inside the part.
+printf '# P\n\n### Task 1: Split with an example\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 3 = 6\n```\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/ev-partfence.md"
+seat "$TMP/ev-partfence.md" 1A
+check "a fenced example inside a part does not escalate it" "$out" "review-seat task=1A $LIGHT"
+seat "$TMP/ev-partfence.md" 1
+check "a fenced example inside a part does not escalate the whole task" "$out" "review-seat task=1 $LIGHT"
+
+printf '# P\n\n### Task 1: Fenced executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Executor:** codex gpt-5.5 / medium\n```\n' > "$TMP/ev-fexec.md"
+seat "$TMP/ev-fexec.md" 1
+check "a fenced Executor line does not claim the task is offloaded" "$out" "review-seat task=1 $LIGHT"
+
+printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-5.5 / medium\n' > "$TMP/ev-rexec.md"
+seat "$TMP/ev-rexec.md" 1
+check "a real Executor line still routes to a Claude judge" "$out" \
+  "review-seat task=1 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

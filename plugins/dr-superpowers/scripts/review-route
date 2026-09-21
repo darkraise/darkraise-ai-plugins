@@ -234,11 +234,11 @@ for id in "$@"; do
   n=${BASH_REMATCH[1]} part=${BASH_REMATCH[2]}
   text=$(plan_task_text "$src" "$n") || die "no Task $n in the plan"
   if [ -n "$part" ]; then
-    text=$(awk -v p="$part" '/^#### Part [A-Z]:/ { on = (substr($3, 1, 1) == p) } on' <<<"$text")
+    text=$(plan_part_text "$part" <<<"$text")
     [ -n "$text" ] || die "no part $part in Task $n"
   fi
-  grep -qE '^\*\*Executor:\*\*' <<<"$text" && executor=1
-  evs=$(grep -E '^\*\*Evaluation:\*\*' <<<"$text" || true)
+  [ -z "$(plan_lines Executor <<<"$text")" ] || executor=1
+  evs=$(plan_eval_lines <<<"$text")
   [ -n "$evs" ] || die "Task $id has no **Evaluation:** line"
   # A task without a part letter carries every part's Evaluation line, so it
   # routes on its heaviest part.
