@@ -85,7 +85,8 @@ done
 # The skill names all seven kinds - three it runs and four it explains away -
 # so "states the three and no others" is not greppable. Assert the three plus
 # the sentence that excludes the rest.
-present "names the one kind it never runs" "$INLINE" 'Only `codex-empty-diff` belongs to a seat this mode never runs'
+present "inline mode routes the executor empty-diff kind" "$INLINE" 'executor-empty-diff'
+absent "inline mode no longer says it never runs an external executor" "$INLINE" 'no external executor'
 for k in preflight cannot-verify breaker; do
   present "claims the $k kind for delegated work" "$INLINE" "\`$k\`"
 done

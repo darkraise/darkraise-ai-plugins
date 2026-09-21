@@ -345,10 +345,12 @@ and delegated tasks are all this mode dispatches before the final review.
 | `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
 | `cannot-verify` | A delegated task's "⚠️ Cannot verify from diff" item |
 | `breaker` | A delegated task's findings still open after round 5/5 |
+| `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
-Only `codex-empty-diff` belongs to a seat this mode never runs (no external
-executor), and `preflight` arises only for a plan with a heavy task.
+`executor-empty-diff` is reachable here too: an inline plan dispatches its
+offloaded tasks, so one of their fix rounds can return DONE with an empty diff,
+and `preflight` arises only for a plan with a heavy task.
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` - `<task>` is the task
 number the items concern, or `plan` for a plan-level point, so a recurring

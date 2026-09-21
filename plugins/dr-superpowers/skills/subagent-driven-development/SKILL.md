@@ -262,7 +262,7 @@ This skill owns every line in `<workspace>/progress.md`. The grammar:
 
 ```
 # SDD ledger — plan: <path>
-Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; executor codex <m>/<e>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
+Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; executor <id> <model>/<effort>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
 Task <N>: fix round R/5 (X addressed, Y open — <one-liners>; commits a..b[; progress p -> q]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
 Group <a>-<b>: review round R/5 (<same fields as a fix round>)
 Task <N>: escalated inline -> subagent — <trigger>          (written by inline mode only)
@@ -337,7 +337,7 @@ that arises at one point into one dispatch:
 | `cannot-verify` | Every "⚠️ Cannot verify from diff" item, before the task completes |
 | `breaker` | Every finding still open after round 5/5 |
 | `blocked-plan` | An implementer BLOCKED because the plan is wrong |
-| `codex-empty-diff` | A Codex fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../reference/executor-lane.md)) |
+| `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../reference/executor-lane.md)) |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` — `<task>` is the task

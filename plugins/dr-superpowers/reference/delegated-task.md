@@ -276,9 +276,9 @@ implementer finished; if no such figure was reported, the time test decides
 alone. Otherwise dispatch a fresh copy of the same agent carrying the brief
 path, the report-file path, and the findings — the report file is the
 persistent memory either way — and note `fresh (<why>)` on the fix-round line.
-That is not an escalation. A task on an external executor resumes its Codex
-session instead — see [executor-lane.md](executor-lane.md)
-§Resuming a Codex task.
+That is not an escalation.
+A task on an external executor resumes that executor's own session instead
+— see [executor-lane.md](executor-lane.md) §Resuming an executor task.
 
 **Rounds 4-5 — escalate.** Dispatch a fresh implementer on the successor rung
 from [ladder.md](ladder.md)'s escalation table, with the brief

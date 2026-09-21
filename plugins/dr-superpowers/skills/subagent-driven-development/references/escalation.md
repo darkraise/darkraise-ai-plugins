@@ -22,9 +22,10 @@ cache rule), which preserves its model, its effort, and its context.
 Re-dispatching a different tier there discards exactly what those rounds exist
 to preserve.
 
-None of the three applies to a task running on an external executor. Its fix
-rounds resume the same Codex session and it leaves the lane by `HANDBACK`
-instead of by climbing a rung - see
+None of the three applies to a task running on an external executor.
+Its fix rounds resume that executor's own session - the one its
+`**Executor:**` line names - and it leaves the lane by `HANDBACK` instead of
+by climbing a rung - see
 [executor-lane.md](../../../reference/executor-lane.md).
 
 ## Escalating out of inline mode

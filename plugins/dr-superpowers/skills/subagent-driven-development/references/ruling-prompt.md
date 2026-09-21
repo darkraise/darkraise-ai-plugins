@@ -93,8 +93,9 @@ Subagent ([JUDGE]):
     - breaker: findings still open after the fifth fix round.
     - blocked-plan: an implementer reported BLOCKED because the plan is
       wrong.
-    - codex-empty-diff: a Codex fix round changed nothing and argues that the
-      findings are already addressed or wrong. PARK accepts the argument.
+    - executor-empty-diff: an external executor's fix round changed nothing
+      and argues that the findings are already addressed or wrong. PARK
+      accepts the argument.
     - final-residual: findings still open after the final review's one fix
       wave.
 

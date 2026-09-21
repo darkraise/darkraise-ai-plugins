@@ -381,7 +381,7 @@ for f in "$P/skills/subagent-driven-development/SKILL.md" \
          "$P/skills/executing-plans/SKILL.md"; do
   absent "no risk3-spread in ${f#"$P/"}" "$f" 'risk3-spread'
 done
-present "inline mode names the one kind it never runs" "$P/skills/executing-plans/SKILL.md" 'Only `codex-empty-diff` belongs to a seat this mode never runs'
+present "inline mode reaches the executor empty-diff kind" "$P/skills/executing-plans/SKILL.md" 'executor-empty-diff'
 
 # --- executor-lane and ladder prose ------------------------------------------
 EXEC="$P/reference/executor-lane.md"
@@ -634,6 +634,17 @@ present "the reference documents the wedged-client case" "$LANE" "Read the durab
 present "the reference resumes an executor task, not a Codex one" "$LANE" '## Resuming an executor task'
 absent "the reference no longer claims a wrapper poll loop" "$LANE" "wrapper's own poll loop"
 absent "the reference no longer names the unreachable survivor note" "$LANE" 'codex-may-still-be-running'
+
+RP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
+ESC="$P/skills/subagent-driven-development/references/escalation.md"
+LOOP="$P/reference/delegated-task.md"
+present "the ruling prompt explains the neutral kind" "$RP" 'executor-empty-diff'
+absent "the ruling prompt no longer names the Codex-only kind" "$RP" 'codex-empty-diff'
+present "the ledger grammar is executor-neutral" "$SDD" 'executor <id> <model>/<effort>, thread'
+present "escalation resumes the executor's own session" "$ESC" "Its fix rounds resume that executor's own session"
+absent "escalation no longer names a Codex session" "$ESC" 'rounds resume the same Codex session'
+present "the loop resumes the executor's own session" "$LOOP" "A task on an external executor resumes that executor's own session instead"
+absent "the loop no longer names a Codex session" "$LOOP" 'resumes its Codex'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
