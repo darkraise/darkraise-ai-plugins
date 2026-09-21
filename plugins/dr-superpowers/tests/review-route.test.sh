@@ -563,8 +563,8 @@ present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**
 absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
 present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
 present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'
-present "the Claude manifest is 1.15.1" "$P/.claude-plugin/plugin.json" '"version": "1.15.1"'
-present "the Codex manifest is 1.15.1" "$P/.codex-plugin/plugin.json" '"version": "1.15.1"'
+present "the Claude manifest is 1.16.0" "$P/.claude-plugin/plugin.json" '"version": "1.16.0"'
+present "the Codex manifest is 1.16.0" "$P/.codex-plugin/plugin.json" '"version": "1.16.0"'
 present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
 present "approach ranking runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'Dispatch one `dr-superpowers:judge-opus` to run the ring'
 present "the budget reference derives the budget" "$P/reference/session-budget.md" 'min(`autoCompactWindow`, model window) × 93% − 140,000'
@@ -610,8 +610,12 @@ codex_seat=$(bash "$ROUTE" "$TMP/plan.md" --task 5 2>/dev/null)
 stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
   bash "$ROUTE" "$TMP/stub-plan.md" --task 5 2>/dev/null)
 check "a stub Executor task routes exactly as a codex one does" "$stub_seat" "$codex_seat"
+# The seat name is spelled in two pieces on purpose. validate-repository.mjs
+# resolves every `dr-superpowers:<name>` it finds against skills/ and agents/,
+# and this needle is a grep prefix matching three judges, not one agent name.
+JUDGEREF='primary=dr-superpowers:''judge-'
 check "the stub task's seat is a Claude judge" \
-  "$(grep -c 'primary=dr-superpowers:judge-' <<<"$stub_seat")" "1"
+  "$(grep -c "$JUDGEREF" <<<"$stub_seat")" "1"
 
 # --- the executor lane reference -------------------------------------------
 LANE="$P/reference/executor-lane.md"
