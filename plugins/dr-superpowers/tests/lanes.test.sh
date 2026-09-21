@@ -136,7 +136,7 @@ check "codex-judge has exactly two rows" "$rows" "2"
 # Exact pairs, not merely "two distinct rows". A test that only asserts
 # distinctness admits a fallback the owner never approved, and admits a row
 # that does not run at high.
-check "codex-judge preferred row" "$(printf '%s\n' "$judge" | sed -n 1p)" "gpt-6-astra xhigh 3600"
+check "codex-judge preferred row" "$(printf '%s\n' "$judge" | sed -n 1p)" "gpt-6-astra xhigh 5400"
 check "codex-judge fallback row" "$(printf '%s\n' "$judge" | sed -n 2p)" "gpt-5.6-sol xhigh 2400"
 
 bad_judge=NONE

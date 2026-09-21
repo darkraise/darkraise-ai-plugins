@@ -275,7 +275,7 @@ and the final-review round — takes its model from this block, not from
 other seat uses the first row with its fallback.
 
 ```codex-judge
-gpt-6-astra xhigh 3600
+gpt-6-astra xhigh 5400
 gpt-5.6-sol xhigh 2400
 ```
 
@@ -307,6 +307,10 @@ catalog: `scripts/run-codex-review.sh` attempts the first row and falls back
 once to the last row on a refusal, which is the only evidence of entitlement
 that has ever been reliable.
 
-1800 seconds is a provisional operational budget, not a derived figure. The only
-measurement is a `gpt-5.6-sol/high` whole-branch round at roughly four minutes on
-2026-09-14. Revise it when real runs warrant it.
+The judge bounds are provisional operational budgets, not derived figures. Two
+measurements exist: a `gpt-5.6-sol/high` whole-branch round at roughly four
+minutes on 2026-09-14, and `project-state` completing at `gpt-6-astra/xhigh`
+inside 3600 on 2026-09-21 after exceeding 1800 twice at `high`. The astra row
+was raised to 5400 on 2026-09-21 for headroom above that single completion, on
+the owner's instruction; nothing measures where its ceiling actually is.
+Revise them when real runs warrant it.
