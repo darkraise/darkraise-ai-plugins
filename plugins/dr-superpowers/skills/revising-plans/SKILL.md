@@ -34,13 +34,20 @@ Create a todo per item and work them in order. The order matters: the gate reads
 the scores, so scoring cannot follow the executor question.
 
 1. **Refuse a plan that may be running.** Run `plan-revise --survey` on the
-   plan's directory and read its `live=` field. Stop on `live=yes` and on
-   `live=unknown`, quoting the evidence, and name
-   `bash <plugin-root>/scripts/plan-amend` as the route for a plan under
-   execution — it is a script, not a skill, and it appends to the plan's
-   workspace instead of editing the file.
-   Never edit a plan whose ledger names it: during execution the file is
-   immutable and the ledger is keyed to it.
+   plan's directory and read its `live=` field.
+   - `live=yes`: stop, quoting the evidence, and name
+     `bash <plugin-root>/scripts/plan-amend` as the route for a plan under
+     execution — it is a script, not a skill, and it appends to the plan's
+     workspace instead of editing the file.
+     Never edit a plan whose ledger names it: during execution the file is
+     immutable and the ledger is keyed to it.
+   - `live=unknown` with the evidence `completed.md via PR, no ledger`: stop,
+     quoting it. The plan may be awaiting a merge.
+   - `live=unknown` with evidence that reads `steps <done> <open> (done open),
+     no ledger`: nothing records the plan as run or merged, but a clone this
+     survey cannot see may be running it. Quote the evidence and ask your human
+     partner to confirm that the plan is not being executed in any clone.
+     Continue only on that explicit confirmation; without it, stop.
 2. **Repair the header.** `plan-revise`'s `header` row lists the sections the
    plan lacks. Add them from the plan's own content: Global Constraints from its
    stated rules, Contracts from the names tasks already exchange, Assumptions

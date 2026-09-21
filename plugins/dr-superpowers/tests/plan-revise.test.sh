@@ -298,6 +298,8 @@ present() { # present <name> <file> <needle>
 check "the skill exists" "$([ -f "$SK" ] && echo yes || echo no)" "yes"
 present "the skill is named" "$SK" "name: revising-plans"
 present "the skill refuses a live plan" "$SK" "Never edit a plan whose ledger names it"
+present "the skill hard-stops a plan awaiting a merge" "$SK" "completed.md via PR, no ledger"
+present "the skill continues on a no-ledger plan only after confirmation" "$SK" "Continue only on that explicit confirmation"
 present "the skill runs each gate rather than printing its path" "$SK" 'bash "$(bash <plugin-root>/scripts/executors path <id> gate)"'
 present "the skill names the amend script, not a skill" "$SK" "bash <plugin-root>/scripts/plan-amend"
 present "the skill scores before offering an executor" "$SK" "Scoring precedes the executor question"
