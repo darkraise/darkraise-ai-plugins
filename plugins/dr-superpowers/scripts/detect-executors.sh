@@ -29,28 +29,32 @@ command -v timeout >/dev/null 2>&1 || {
   exit 2
 }
 
-emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
-  local id="$1" capable="$2" lane="$3" incapable_reason="$4"
+emit() { # emit <id> <batch_capable> <incapable_reason>
+  local id="$1" capable="$2" incapable_reason="$3"
   local path present version authed reason usable auth_status=not_applicable
+  local registered=no entry_reason
 
-  # Codex is reached only through the official plugin, which owns the binary:
-  # presence, version and login state come from the locator and the client,
-  # never from a PATH probe. Every other id keeps the PATH probe, because no
-  # plugin owns it.
-  if [ "$id" = codex ]; then
+  # A registry id is reached only through its own locator and probe: presence,
+  # version and login state come from them, never from a PATH probe. Every
+  # other id keeps the PATH probe, because no registry entry owns it.
+  if bash "$HERE/executors" get "$id" id >/dev/null 2>&1; then
+    registered=yes
     path=""
     present=false
     version=null
     authed=null
     auth_status=not_applicable
-    local plugin_line plugin_root auth_json
-    if plugin_line=$(bash "$HERE/codex-plugin" 2>/dev/null); then
+    local locator probe_cmd probe_op locator_line locator_root auth_json
+    locator=$(bash "$HERE/executors" path "$id" locator 2>/dev/null)
+    probe_cmd=$(bash "$HERE/executors" path "$id" probe.command 2>/dev/null)
+    probe_op=$(bash "$HERE/executors" get "$id" probe.op 2>/dev/null)
+    if [ -n "$locator" ] && locator_line=$(bash "$locator" 2>/dev/null); then
       present=true
-      plugin_root=${plugin_line#*root=}
-      path=$plugin_root
-      version=$(jq -Rn --arg v "${plugin_line#*version=}" '$v | sub(" root=.*"; "")')
-      auth_json=$(printf '{"op":"auth","cwd":"%s"}' "$(dr_native_path "$PWD")" \
-        | timeout 60 node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>/dev/null)
+      locator_root=${locator_line#*root=}
+      path=$locator_root
+      version=$(jq -Rn --arg v "${locator_line#*version=}" '$v | sub(" root=.*"; "")')
+      auth_json=$(printf '{"op":"%s","cwd":"%s"}' "$probe_op" "$(dr_native_path "$PWD")" \
+        | timeout 60 node "$probe_cmd" "$locator_root" 2>/dev/null)
       case "$(jq -r '.authed | tojson' <<<"${auth_json:-{\}}" 2>/dev/null)" in
         true)  authed=true;  auth_status=authenticated ;;
         false) authed=false; auth_status=logged_out ;;
@@ -71,21 +75,26 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
 
   usable=false
   reason=null
+  entry_reason() { bash "$HERE/executors" get "$id" "reasons.$1" 2>/dev/null; }
   if [ "$present" != true ]; then
-    if [ "$id" = codex ]; then
-      reason='"the codex plugin is not enabled in this profile"'
+    if [ "$registered" = yes ]; then
+      reason=$(jq -Rn --arg r "$(entry_reason not_enabled)" '$r')
     else
       reason='"not on PATH"'
     fi
   elif [ "$capable" != true ]; then
     reason=$(jq -Rn --arg r "$incapable_reason" '$r')
-  elif [ "$lane" != true ]; then
-    reason=$(jq -Rn --arg r "no executor lane is implemented for $id in this plugin; only codex has a wrapper" '$r')
+  elif [ "$registered" != yes ]; then
+    reason=$(jq -Rn --arg r "no executor lane is implemented for $id in this plugin; run 'executors list' for the registered executors" '$r')
+  elif [ ! -r "$(bash "$HERE/executors" path "$id" wrapper 2>/dev/null)" ]; then
+    # Registered but broken: an installation fault rather than an executor
+    # state, so the message is generated rather than taken from the map.
+    reason=$(jq -Rn --arg r "the $id executor is registered but its wrapper is missing" '$r')
   elif [ "$authed" = false ]; then
-    reason='"the codex plugin is installed but not logged in; run /codex:setup"'
+    reason=$(jq -Rn --arg r "$(entry_reason logged_out)" '$r')
   elif [ "$auth_status" = probe_failed ]; then
-    reason='"the codex plugin auth probe failed; run /codex:setup"'
-  elif [ "$version" = null ]; then
+    reason=$(jq -Rn --arg r "$(entry_reason probe_failed)" '$r')
+  elif [ "$version" = null ] && [ "$registered" != yes ]; then
     reason='"version probe failed; check the CLI installation"'
   else
     usable=true
@@ -107,8 +116,16 @@ emit() { # emit <id> <batch_capable> <lane_implemented> <incapable_reason>
 }
 
 {
-  emit codex true true ""
-  emit cursor-agent true false ""
-  emit opencode true false ""
-  emit antigravity false false "installed, but its only agent mode (antigravity chat -m agent) opens a GUI editor session with no output file, no completion signal, and no exit code tied to the work"
+  registered=$(bash "$HERE/executors" list 2>/dev/null)
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    emit "$id" true ""
+  done <<<"$registered"
+
+  # Ids with no registry entry. Each is skipped when registered, so a second
+  # executor never produces two rows under one id.
+  path_row() { grep -qxF "$1" <<<"$registered" || emit "$1" "$2" "$3"; }
+  path_row cursor-agent true ""
+  path_row opencode true ""
+  path_row antigravity false "installed, but its only agent mode (antigravity chat -m agent) opens a GUI editor session with no output file, no completion signal, and no exit code tied to the work"
 } | jq -s '.'

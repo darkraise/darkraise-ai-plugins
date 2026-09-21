@@ -37,7 +37,7 @@ make_stub() { printf '#!%s\necho "%s"\n' "$BASH_BIN" "$2" > "$TMP/bin/$1"; chmod
 # cygpath is shimmed only where it exists: scripts/lib/native-path.sh probes for
 # it and converts nothing without it, which is correct off Windows, so a stub
 # standing in for an absent cygpath would test a path production never takes.
-for dep in jq timeout head tr node bash dirname cygpath; do
+for dep in jq timeout head tr node bash dirname cygpath sort grep; do
   dep_path=$(command -v "$dep") || continue
   printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$dep_path" > "$TMP/bin/$dep"
   chmod +x "$TMP/bin/$dep"
@@ -180,5 +180,64 @@ row=$(STUB_MODE=logged-out run | jq -c '.[] | select(.id=="codex")')
 check "logged out: names the plugin setup command, not codex login" \
   "$(jq -r '.reason' <<<"$row" | grep -c 'codex:setup')" "1"
 
+# --- the roster is driven by the registry ----------------------------------
+# A registry id is probed through its own locator and probe, and its reasons
+# come from its entry. A registered id must also suppress its PATH-probe row:
+# two rows with one id would break every consumer that selects by id.
+FIXREG="$HERE/fixtures/executors"
+regrun() { PATH="$TMP/bin" CLAUDE_CONFIG_DIR="$TMP/config" CLAUDE_PROJECT_DIR= \
+           DR_CODEX_POLICY="$TMP/policy.json" DR_EXECUTORS_DIR="$FIXREG" \
+           STUB_MODE="${STUB_MODE:-ok}" "$BASH_BIN" "$SCRIPT"; }
+
+out=$(regrun)
+check "the stub executor appears in the roster" "$(field stub present "$out")" "true"
+check "the stub executor is usable" "$(field stub usable "$out")" "true"
+check "the stub executor is batch capable by virtue of its wrapper" \
+  "$(field stub batch_capable "$out")" "true"
+check "a usable registry executor carries no reason" "$(field stub reason "$out")" "null"
+check "the stub row's path is its locator root" \
+  "$(field stub path "$out" | grep -c 'fixtures/executors')" "1"
+
+out=$(STUB_LOCATOR=off regrun)
+check "a locator that reports off is not present" "$(field stub present "$out")" "false"
+check "an off locator uses the entry's not_enabled reason" \
+  "$(field stub reason "$out")" "the stub executor is not enabled in this profile"
+
+out=$(STUB_PROBE=logged-out regrun)
+check "a logged-out probe is explicit" "$(field stub auth_status "$out")" "logged_out"
+check "a logged-out executor is not usable" "$(field stub usable "$out")" "false"
+check "a logged-out executor uses the entry's remedy" \
+  "$(field stub reason "$out" | grep -c '/stub:setup')" "1"
+
+out=$(STUB_PROBE=throw regrun)
+check "a probe without authed is a failed probe" "$(field stub auth_status "$out")" "probe_failed"
+check "a failed probe uses the entry's probe_failed reason" \
+  "$(field stub reason "$out" | grep -c '/stub:setup')" "1"
+
+# A registered id suppresses its PATH row even when the binary is on PATH.
+make_stub opencode "opencode 1.0.0"
+out=$(regrun)
+check "a registered id yields exactly one row" \
+  "$(jq '[.[] | select(.id == "opencode")] | length' <<<"$out")" "1"
+check "the registered opencode row is lane-implemented" \
+  "$(field opencode usable "$out")" "true"
+rm -f "$TMP/bin/opencode"
+
+# An unregistered batch-capable id keeps the PATH probe and its missing-lane
+# reason, which must name the registry rather than assert codex is unique.
+make_stub cursor-agent "cursor-agent 1.0.0"
+out=$(regrun)
+check "an unregistered id is still not usable" "$(field cursor-agent usable "$out")" "false"
+check "the missing-lane reason names the registry" \
+  "$(field cursor-agent reason "$out" | grep -c 'executors list')" "1"
+rm -f "$TMP/bin/cursor-agent"
+
+# The probe receives a native-form cwd, as the codex probe does.
+: > "$TMP/probe-cwd.log"
+STUB_PROBE_LOG="$TMP/probe-cwd.log" regrun >/dev/null
+expected_cwd="$PWD"
+command -v cygpath >/dev/null 2>&1 && expected_cwd=$(cygpath -m "$PWD")
+check "a registry probe receives a native-form cwd" \
+  "$(head -1 "$TMP/probe-cwd.log")" "$expected_cwd"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

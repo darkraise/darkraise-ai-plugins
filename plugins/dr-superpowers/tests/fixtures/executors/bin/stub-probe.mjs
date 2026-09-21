@@ -22,4 +22,12 @@ if (mode === "throw") {
   answer.reason = answer.authed ? null : "logged-out";
 }
 
+if (process.env.STUB_PROBE_LOG) {
+  const { appendFileSync } = await import("node:fs");
+  try {
+    appendFileSync(process.env.STUB_PROBE_LOG, `${request.cwd ?? "-"}\n`);
+  } catch {
+    // A test that cannot write its own log fails on the assertion instead.
+  }
+}
 process.stdout.write(`${JSON.stringify(answer)}\n`);
