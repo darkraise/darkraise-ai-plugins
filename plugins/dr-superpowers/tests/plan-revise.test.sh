@@ -280,8 +280,10 @@ git -C "$SUR" worktree add -q "$TMP/wt" -b feature >/dev/null 2>&1
 mkdir -p "$TMP/wt/.superpowers/sdd/scored"
 printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.superpowers/sdd/scored/progress.md"
 check "a ledger in a linked worktree is found" "$(field live "$(row scored)")" "yes"
+# Git reports native paths on Windows; mktemp uses Git Bash's POSIX spelling.
+WT_ROOT="$(git -C "$TMP/wt" rev-parse --show-toplevel)"
 check "the evidence names the worktree that holds it" \
-  "$(row scored | grep -c "$TMP/wt")" "1"
+  "$(row scored | grep -cF -- "ledger in $WT_ROOT")" "1"
 git -C "$SUR" worktree remove --force "$TMP/wt" >/dev/null 2>&1
 
 (cd "$SUR" && bash "$SCRIPT" --survey docs >/dev/null 2>&1); check "a directory with plans exits 0" "$?" "0"
