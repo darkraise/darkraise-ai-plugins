@@ -14,11 +14,11 @@ function list(...args) {
 
 test('Windows shards cover every discovered suite exactly once', () => {
   const all = list();
-  const shards = Array.from({ length: 4 }, (_, i) => list('--shard', `${i + 1}/4`));
+  const shards = Array.from({ length: 6 }, (_, i) => list('--shard', `${i + 1}/6`));
   assert.ok(shards.every(shard => shard.length > 0));
   assert.deepEqual(shards.flat().sort(), all.sort());
   assert.equal(new Set(shards.flat()).size, all.length);
-  assert.deepEqual(list('--shard', '1/4'), shards[0]);
+  assert.deepEqual(list('--shard', '1/6'), shards[0]);
 });
 
 test('new suites are included automatically and unsharded runs retain their order', () => {

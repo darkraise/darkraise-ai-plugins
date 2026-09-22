@@ -48,26 +48,40 @@ root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || pwd)
 SEP='( — | – | - | -- )'
 header=$(plan_header "$src")
 
+# Parse fenced labels once per input, rather than starting awk (and often head)
+# for every field. Keep first-match semantics and the shared fence parser.
+label_lines() {
+  awk "$_PLAN_AWK"'in_fence($0) { next } /^\*\*/ { print }'
+}
+first_label() { # first_label <label> <unfenced lines>
+  local candidate
+  while IFS= read -r candidate; do
+    if [[ "$candidate" == "**$1:**"* ]]; then printf '%s\n' "$candidate"; return 0; fi
+  done <<<"$2"
+}
+header_labels=$(label_lines < "$src")
+header_line() { first_label "$1" "$header_labels"; }
+
 codex=0
 grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
 
 # --- header labels and sections ---
 for label in Goal Spec Execution; do
-  [ -n "$(plan_header_line "$src" "$label")" ] || say ERROR header "missing **$label:** line"
+  [ -n "$(header_line "$label")" ] || say ERROR header "missing **$label:** line"
 done
 header_headings=$(awk "$_PLAN_AWK"'in_fence($0) { next } /^## / { print }' <<<"$header")
 for section in "Global Constraints" "Contracts" "Assumptions (evidence)" "Task index"; do
   grep -qxF "## $section" <<<"$header_headings" || say ERROR header "missing '## $section' section"
 done
-[ -n "$(plan_header_line "$src" 'Plan review')" ] || say WARN header "no **Plan review:** line yet"
+[ -n "$(header_line 'Plan review')" ] || say WARN header "no **Plan review:** line yet"
 
-spec_line=$(plan_header_line "$src" Spec)
+spec_line=$(header_line Spec)
 if [ -n "$spec_line" ]; then
   spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$spec_line")
   [ -f "$root/$spec_path" ] || say ERROR header "Spec path does not exist: $spec_path"
 fi
 
-program=$(plan_header_line "$src" Program)
+program=$(header_line Program)
 if [ -n "$program" ]; then
   if [[ "$program" =~ ^\*\*Program:\*\*\ \`?([^\`\ ]+)\`?$SEP"sub-project "([0-9]+)" of "([0-9]+)$SEP(next:\ .+|last)$ ]]; then
     ppath=${BASH_REMATCH[1]} k=${BASH_REMATCH[3]} n=${BASH_REMATCH[4]}
@@ -153,7 +167,7 @@ index_lines=$(awk '$0 == "## Task index" { on = 1; next } on && /^## / { exit } 
 [ "$index_lines" = "$tasks" ] || say ERROR header "Task index does not match the task headings (numbers and titles, in order)"
 
 # --- Execution line (R6) ---
-execution=$(plan_header_line "$src" Execution)
+execution=$(header_line Execution)
 mode="" exec_model="" exec_effort=""
 if [ -n "$execution" ]; then
   if [ "$codex" -eq 1 ]; then
@@ -190,7 +204,20 @@ assignment=$(ladder_block assignment)
 reserve=$(ladder_block reserve | awk '{ print $1 }' | grep -vxF BLOCKED | grep -vxF -f <(awk '{ print $2 }' <<<"$assignment") || true)
 # An executor's gate and assignment blocks are named by its registry entry.
 # Codex's gate block is literally called `gate`, so nothing moves for it.
-executor_field() { bash "$HERE/executors" get "$1" "$2" 2>/dev/null; }
+executor_field() {
+  # The registry cannot change during one lint invocation. Cache both successes
+  # and misses on disk so command-substitution subshells share the result.
+  # Validate the id before using it as a filename; it can come from plan text.
+  [[ "$1" =~ ^[a-z][a-z0-9-]*$ ]] || return 1
+  local cache="$TMP/executor-$1-$2" value
+  if [ ! -f "$cache" ]; then
+    value=$(bash "$HERE/executors" get "$1" "$2" 2>/dev/null) || value=""
+    printf '%s' "$value" > "$cache"
+  fi
+  value=$(< "$cache")
+  [ -n "$value" ] || return 1
+  printf '%s\n' "$value"
+}
 executor_gate() { # executor_gate <id> <min_score|max_risk>
   local block; block=$(executor_field "$1" blocks.gate)
   [ -n "$block" ] || return 1
@@ -239,7 +266,8 @@ for n in $nums; do
     where="Task $n part $part"
     text=$(plan_part_text "$part" <<<"$full")
   fi
-  line() { plan_lines "$1" <<<"$text" | head -n 1; }
+  task_labels=$(label_lines <<<"$text")
+  line() { first_label "$1" "$task_labels"; }
   sev=ERROR
   [ -n "$(line Override)" ] && sev=WARN
   [ -n "$(line Files)" ] || say ERROR "$where" "missing **Files:** block"

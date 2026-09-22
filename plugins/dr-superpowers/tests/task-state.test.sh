@@ -54,6 +54,27 @@ dr_task_unlock
 printf '{broken' > "$DR_TASK_DIR/state.json"
 (dr_task_open "$fixture/work" task-1 "$fixture/scope.json") >/dev/null 2>&1
 check 'malformed state cannot become a fresh task' "$?" 2
+
+# Batched JSON serialization must preserve filenames and deleted entries.
+git -C "$fixture/primary" worktree add -q --detach "$fixture/encoding" HEAD
+odd="space [brackets] 'quote'.txt"
+case "${OSTYPE:-}" in
+  msys*|cygwin*) ;;
+  *) odd+=$'\tnewline\n"backslash\\.txt' ;;
+esac
+printf 'special content\n' > "$fixture/encoding/$odd"
+rm "$fixture/encoding/base.txt"
+dr_snapshot "$fixture/encoding" "$fixture/encoding.json"
+check 'special filenames and deletions can be snapshotted' "$?" 0
+jq -e --arg path "$odd" '.files | any(.path == $path and .kind == "file" and .mode == "100644" and (.hash | length > 0))' \
+  "$fixture/encoding.json" >/dev/null
+check 'filename characters survive JSON serialization' "$?" 0
+jq -e '.files | any(.path == "base.txt" and .kind == "deleted" and .mode == "0" and .hash == "")' \
+  "$fixture/encoding.json" >/dev/null
+check 'deleted files retain their empty hash and mode' "$?" 0
+dr_task_assert_snapshot "$fixture/encoding.json" >/dev/null 2>&1
+check 'special filenames and deletions round-trip' "$?" 0
+
 # --- a worktree large enough to exceed the OS argument limit ----------------
 # dr_snapshot passed the base64 index and the whole file manifest to jq as
 # command-line arguments. Windows caps a command line at 32767 bytes, so on any

@@ -4,24 +4,29 @@ dr_state_error() { printf 'task-state: %s\n' "$1" >&2; return 2; }
 dr_canonical() { (cd -- "$1" && pwd -P); }
 
 dr_snapshot() {
-  local root output="$2" index files path hash mode kind temp indexfile filesfile
+  local root output="$2" index files path hash mode kind temp indexfile filesfile filemode
   root="$(dr_canonical "$1")" || return 2
   temp="$(mktemp "${output}.XXXXXX")" || return 2
   index="$(git -C "$root" ls-files --stage -z | base64 | tr -d '\r\n')" || { rm -f "$temp"; return 2; }
+  filemode=$(git -C "$root" config --bool core.filemode) || filemode=false
   files="$({ git -C "$root" ls-tree -r --name-only -z HEAD; git -C "$root" ls-files -c -o --exclude-standard -z; } | sort -zu | while IFS= read -r -d '' path; do
     if [ -L "$root/$path" ]; then
       kind=symlink; mode=120000
       hash="$(readlink -- "$root/$path" | git -C "$root" hash-object --stdin)" || exit 2
     elif [ -f "$root/$path" ]; then
       kind=file; mode=100644
-      if [ "$(git -C "$root" config --bool core.filemode)" = true ] && [ -x "$root/$path" ]; then mode=100755; fi
+      if [ "$filemode" = true ] && [ -x "$root/$path" ]; then mode=100755; fi
       hash="$(git -C "$root" hash-object --no-filters -- "$path")" || exit 2
     elif [ ! -e "$root/$path" ]; then kind=deleted; mode=0; hash=''
     else exit 2
     fi
-    jq -cn --arg path "$path" --arg hash "$hash" --arg mode "$mode" --arg kind "$kind" \
-      '{path:$path,hash:$hash,mode:$mode,kind:$kind}' || exit 2
-  done | jq -s 'sort_by(.path)')" || { rm -f "$temp"; return 2; }
+    # NUL delimiters preserve tabs/newlines and other JSON-special filename
+    # characters. Serialize once for the whole tree, not once per file.
+    printf '%s\0%s\0%s\0%s\0' "$path" "$hash" "$mode" "$kind" || exit 2
+  done | jq -Rs 'split("\u0000") | . as $f |
+    [range(0; length - 1; 4) as $i |
+      {path:$f[$i], hash:$f[$i+1], mode:$f[$i+2], kind:$f[$i+3]}] |
+    sort_by(.path)')" || { rm -f "$temp"; return 2; }
   local head gitdir
   head="$(git -C "$root" rev-parse HEAD)" || { rm -f "$temp"; return 2; }
   gitdir="$(git -C "$root" rev-parse --absolute-git-dir)" || { rm -f "$temp"; return 2; }
