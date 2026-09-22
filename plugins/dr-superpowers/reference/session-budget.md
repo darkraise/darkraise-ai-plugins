@@ -13,7 +13,7 @@ never earlier.
 | Item | Value | Source |
 |------|-------|--------|
 | Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-19 |
-| Model window | 1,000,000 for Fable 5.1, Opus 5 and Sonnet 5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24 |
+| Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes |
 | `autoCompactWindow` | 650,000, in `~/.claude/settings.json` | Set 2026-09-11 |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
 | Hook output cap | 10,000 characters; longer output becomes a file reference | Claude Code hooks reference |
