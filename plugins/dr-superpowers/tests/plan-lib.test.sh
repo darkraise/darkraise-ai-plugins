@@ -241,7 +241,7 @@ sed 's/^|//' > "$TMP/exec.md" <<'EOF'
 |### Task 2: offloaded
 |
 |**Implementer:** dr-superpowers:impl-sonnet-medium
-|**Executor:** codex gpt-5.5 / medium
+|**Executor:** codex gpt-6-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 3: fenced only
@@ -250,7 +250,7 @@ sed 's/^|//' > "$TMP/exec.md" <<'EOF'
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |```markdown
-|**Executor:** codex gpt-5.5 / medium
+|**Executor:** codex gpt-6-sol / medium
 |```
 |
 |### Task 4: split, executor on part A, heavy part B
@@ -258,7 +258,7 @@ sed 's/^|//' > "$TMP/exec.md" <<'EOF'
 |#### Part A: cheap
 |
 |**Implementer:** dr-superpowers:impl-sonnet-medium
-|**Executor:** codex gpt-5.5 / medium
+|**Executor:** codex gpt-6-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |#### Part B: risky
@@ -291,7 +291,7 @@ check "heavy wins over executor on a split task" \
 { printf '# Threshold Fixture\n\n'
   for i in 1 2 3; do
     printf '### Task %s: four band\n\n**Implementer:** dr-superpowers:impl-opus-low\n' "$i"
-    [ "$i" = 1 ] && printf '**Executor:** codex gpt-5.6-sol / high\n'
+    [ "$i" = 1 ] && printf '**Executor:** codex gpt-6-sol / high\n'
     printf '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4\n\n'
   done
   for i in 4 5 6; do
@@ -347,7 +347,7 @@ check "plan_part_text: one part's text only" \
 check "plan_part_text: an absent part is empty" \
   "$(plan_task_text "$TMP/split.md" 1 | plan_part_text Z)" ""
 
-printf '# P\n\n### Task 1: Executor\n\n**Executor:** codex gpt-5.5 / medium\n\n```markdown\n**Executor:** codex gpt-5.6-sol / high\n```\n' > "$TMP/exec.md"
+printf '# P\n\n### Task 1: Executor\n\n**Executor:** codex gpt-6-sol / medium\n\n```markdown\n**Executor:** codex gpt-6-sol / high\n```\n' > "$TMP/exec.md"
 check "plan_lines: a fenced label line is not a line" \
   "$(plan_task_text "$TMP/exec.md" 1 | plan_lines Executor | grep -c .)" "1"
 

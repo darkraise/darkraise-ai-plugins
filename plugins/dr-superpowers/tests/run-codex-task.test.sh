@@ -67,16 +67,16 @@ check "contract names both checkpoint fields" \
 # --- validation happens before anything is spawned --------------------------
 check "rejects a model absent from codex-assignment" "$(rc_of --model gpt-4o --effort medium)" "2"
 check "rejects luna, which 400s on a ChatGPT account" "$(rc_of --model luna --effort medium)" "2"
-check "rejects an invalid effort" "$(rc_of --model gpt-5.5 --effort minimal)" "2"
+check "rejects an invalid effort" "$(rc_of --model gpt-6-sol --effort minimal)" "2"
 check "rejects a missing brief" \
   "$(bash "$SCRIPT" --brief "$TMP/nope.md" --report "$TMP/r.md" --cwd "$TMP/work" \
-      --model gpt-5.5 --effort medium --dry-run >/dev/null 2>&1; echo $?)" "2"
-check "accepts a valid rung" "$(rc_of --model gpt-5.5 --effort medium)" "0"
+      --model gpt-6-sol --effort medium --dry-run >/dev/null 2>&1; echo $?)" "2"
+check "accepts a valid rung" "$(rc_of --model gpt-6-sol --effort medium)" "0"
 
 # --- the composed turn request ----------------------------------------------
-req=$(dry --model gpt-5.5 --effort medium | sed -n '2p')
+req=$(dry --model gpt-6-sol --effort medium | sed -n '2p')
 check "dry run: prints a turn request" "$(jq -r '.op' <<<"$req")" "turn"
-check "dry run: carries the model" "$(jq -r '.model' <<<"$req")" "gpt-5.5"
+check "dry run: carries the model" "$(jq -r '.model' <<<"$req")" "gpt-6-sol"
 check "dry run: carries the effort" "$(jq -r '.effort' <<<"$req")" "medium"
 check "dry run: workspace-write sandbox" "$(jq -r '.sandbox' <<<"$req")" "workspace-write"
 check "dry run: persists the thread" "$(jq -r '.persistThread' <<<"$req")" "true"
@@ -87,20 +87,20 @@ check "dry run: never bypasses the sandbox" \
   "$(jq -r '.sandbox' <<<"$req" | grep -c 'bypass')" "0"
 
 # --- timeouts come from the table unless overridden -------------------------
-check "deadline defaults from codex-timeout" "$(jq -r '.deadlineMs' <<<"$req")" "900000"
+check "deadline defaults from codex-timeout" "$(jq -r '.deadlineMs' <<<"$req")" "1200000"
 check "explicit timeout wins" \
-  "$(dry --model gpt-5.5 --effort medium --timeout 42 | sed -n '2p' | jq -r '.deadlineMs')" "42000"
+  "$(dry --model gpt-6-sol --effort medium --timeout 42 | sed -n '2p' | jq -r '.deadlineMs')" "42000"
 
 # A resumed run must still re-send the model and the effort: the client starts a
 # fresh thread unless resumeThreadId is set, and a resumed thread has to carry
 # the tier the ledger recorded.
-res=$(dry --model gpt-5.5 --effort high --resume 01a0-thread | sed -n '2p')
+res=$(dry --model gpt-6-sol --effort high --resume 01a0-thread | sed -n '2p')
 check "resume carries the thread id" "$(jq -r '.resumeThreadId' <<<"$res")" "01a0-thread"
-check "resume re-sends the model" "$(jq -r '.model' <<<"$res")" "gpt-5.5"
+check "resume re-sends the model" "$(jq -r '.model' <<<"$res")" "gpt-6-sol"
 check "resume re-sends the effort" "$(jq -r '.effort' <<<"$res")" "high"
 check "resume still asks for a persisted thread" "$(jq -r '.persistThread' <<<"$res")" "true"
 
-plain=$(dry --model gpt-5.5 --effort medium | sed -n '2p')
+plain=$(dry --model gpt-6-sol --effort medium | sed -n '2p')
 check "a non-resume run sends no thread id" "$(jq -r '.resumeThreadId' <<<"$plain")" "null"
 check "a non-resume run still names the worktree" "$(jq -r '.cwd' <<<"$plain")" "$(as_arg "$TMP/work")"
 check "a non-resume run still asks for workspace-write" "$(jq -r '.sandbox' <<<"$plain")" "workspace-write"
@@ -108,10 +108,10 @@ check "a non-resume run still asks for workspace-write" "$(jq -r '.sandbox' <<<"
 # --- malformed input fails fast, and the dry run tells the truth ------------
 check "a trailing flag with no value exits 2 rather than hanging" \
   "$(timeout 10 bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
-      --cwd "$TMP/work" --model gpt-5.5 --effort medium --resume \
+      --cwd "$TMP/work" --model gpt-6-sol --effort medium --resume \
       >/dev/null 2>&1; echo $?)" "2"
 
-check "rejects an unknown flag" "$(rc_of --model gpt-5.5 --effort medium --bogus x)" "2"
+check "rejects an unknown flag" "$(rc_of --model gpt-6-sol --effort medium --bogus x)" "2"
 # Assert the message, not just the exit code: a multi-word effort already exited
 # 2 before the fix, via an unrelated timeout-lookup miss. Only the message proves
 # the effort check itself rejected it.
@@ -122,7 +122,7 @@ check "rejects an unknown flag" "$(rc_of --model gpt-5.5 --effort medium --bogus
 # instead of grep's match result, so the check would fail regardless of the
 # message. Command substitution sidesteps that: only the text is captured.
 msg=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
-      --cwd "$TMP/work" --model gpt-5.5 --effort 'medium high' --dry-run 2>&1 >/dev/null)
+      --cwd "$TMP/work" --model gpt-6-sol --effort 'medium high' --dry-run 2>&1 >/dev/null)
 check "rejects a multi-word effort at the effort check, not downstream" \
   "$(grep -qF 'invalid reasoning effort' <<<"$msg" && echo yes || echo no)" "yes"
 
@@ -131,10 +131,10 @@ check "rejects a multi-word effort at the effort check, not downstream" \
 # and the tree is killed about a second after launch - reported as BLOCKED. A
 # controller following the Timeout row ("retry with --timeout raised") is
 # exactly who writes 30m.
-check "rejects a non-numeric timeout" "$(rc_of --model gpt-5.5 --effort medium --timeout 30m)" "2"
-check "rejects a seconds-suffixed timeout" "$(rc_of --model gpt-5.5 --effort medium --timeout 1800s)" "2"
+check "rejects a non-numeric timeout" "$(rc_of --model gpt-6-sol --effort medium --timeout 30m)" "2"
+check "rejects a seconds-suffixed timeout" "$(rc_of --model gpt-6-sol --effort medium --timeout 1800s)" "2"
 tmsg=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" --cwd "$TMP/work" \
-      --model gpt-5.5 --effort medium --timeout 30m --dry-run 2>&1 >/dev/null)
+      --model gpt-6-sol --effort medium --timeout 30m --dry-run 2>&1 >/dev/null)
 check "a non-numeric timeout is rejected at the timeout check" \
   "$(grep -qF 'whole seconds' <<<"$tmsg" && echo yes || echo no)" "yes"
 
@@ -143,7 +143,7 @@ check "a non-numeric timeout is rejected at the timeout check" \
 # not reach DONE", costing the controller a rung for a typo.
 check "rejects a report directory that does not exist" \
   "$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/no-such-dir/report.md" \
-      --cwd "$TMP/work" --model gpt-5.5 --effort medium --dry-run >/dev/null 2>&1; echo $?)" "2"
+      --cwd "$TMP/work" --model gpt-6-sol --effort medium --dry-run >/dev/null 2>&1; echo $?)" "2"
 
 # jq parses every verdict. Absent, the parse falls back to BLOCKED, which the
 # controller cannot tell from a real block - it spends a rung and a second paid
@@ -154,7 +154,7 @@ mkdir -p "$TMP/nojq"
 printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$(command -v dirname)" > "$TMP/nojq/dirname"
 chmod +x "$TMP/nojq/dirname"
 jq_rc=$(PATH="$TMP/nojq" "$BASH_BIN" "$SCRIPT" --brief "$TMP/brief.md" \
-      --report "$TMP/report.md" --cwd "$TMP/work" --model gpt-5.5 --effort medium \
+      --report "$TMP/report.md" --cwd "$TMP/work" --model gpt-6-sol --effort medium \
       --dry-run >/dev/null 2>"$TMP/jq.err"; echo $?)
 check "a missing jq exits 2 before anything is spawned" "$jq_rc" "2"
 check "a missing jq names the dependency rather than failing downstream" \
@@ -169,7 +169,7 @@ check "rejected input prints nothing on stdout" \
 # what it printed and confirm a space-containing path arrives whole.
 mkdir -p "$TMP/dir with space"
 spaced=$(bash "$SCRIPT" --brief "$TMP/brief.md" --report "$TMP/report.md" \
-  --cwd "$TMP/dir with space" --model gpt-5.5 --effort medium --dry-run 2>/dev/null \
+  --cwd "$TMP/dir with space" --model gpt-6-sol --effort medium --dry-run 2>/dev/null \
   | sed -n '2p')
 check "dry run carries a space-containing path whole" \
   "$(jq -r '.cwd' <<<"$spaced")" "$(as_arg "$TMP/dir with space")"

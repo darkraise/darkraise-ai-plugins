@@ -81,13 +81,13 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |### Task 5: executor
 |
 |**Implementer:** dr-superpowers:impl-sonnet-high
-|**Executor:** codex gpt-5.5 / high
+|**Executor:** codex gpt-6-sol / high
 |**Evaluation:** files 1 - spec 0 - coupling 1 - risk 1 = 3
 |
 |### Task 6: executor risky
 |
 |**Implementer:** dr-superpowers:impl-sonnet-high
-|**Executor:** codex gpt-5.5 / high
+|**Executor:** codex gpt-6-sol / high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3
 |
 |### Task 7: split
@@ -120,7 +120,7 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |### Task 11: executor risk three
 |
 |**Implementer:** dr-superpowers:impl-opus-low
-|**Executor:** codex gpt-5.5 / high
+|**Executor:** codex gpt-6-sol / high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
 EOF
 
@@ -603,10 +603,10 @@ check "an unknown ruling kind is still rejected" "$?" "2"
 # The spec's §12 asks for this row. Routing decides who *reviews* a task, and
 # that has never depended on which executor produced the diff, so a stub
 # Executor line must route exactly as the codex line it replaces does.
-# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-5.5 /
+# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-6-sol /
 # high` (lines 84 and 90), so this rewrites both; only Task 5 is asserted on.
 # Swapping the executor and nothing else is the sharpest possible test.
-sed 's|\*\*Executor:\*\* codex gpt-5.5 / high|**Executor:** stub stub-model / high|' \
+sed 's|\*\*Executor:\*\* codex gpt-6-sol / high|**Executor:** stub stub-model / high|' \
   "$TMP/plan.md" > "$TMP/stub-plan.md"
 codex_seat=$(bash "$ROUTE" "$TMP/plan.md" --task 5 2>/dev/null)
 stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
@@ -684,11 +684,11 @@ check "a fenced example inside a part does not escalate it" "$out" "review-seat 
 seat "$TMP/ev-partfence.md" 1
 check "a fenced example inside a part does not escalate the whole task" "$out" "review-seat task=1 $LIGHT"
 
-printf '# P\n\n### Task 1: Fenced executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Executor:** codex gpt-5.5 / medium\n```\n' > "$TMP/ev-fexec.md"
+printf '# P\n\n### Task 1: Fenced executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Executor:** codex gpt-6-sol / medium\n```\n' > "$TMP/ev-fexec.md"
 seat "$TMP/ev-fexec.md" 1
 check "a fenced Executor line does not claim the task is offloaded" "$out" "review-seat task=1 $LIGHT"
 
-printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-5.5 / medium\n' > "$TMP/ev-rexec.md"
+printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-6-sol / medium\n' > "$TMP/ev-rexec.md"
 seat "$TMP/ev-rexec.md" 1
 check "a real Executor line still routes to a Claude judge" "$out" \
   "review-seat task=1 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"

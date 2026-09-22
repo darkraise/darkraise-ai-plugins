@@ -347,3 +347,20 @@ To apply it: set `trust.calibration` to `pass` in
 `plugins/dr-superpowers/reference/codex-plugin.json`, change the
 `codex-gate.test.sh` trust assertion from `pending,pass` to `pass,pass`, and
 commit both with this note.
+
+## Smoke test — `gpt-6-sol`, 2026-09-23
+
+Run: 2026-09-23, Codex codex-cli 0.155.1; advanced runtime available,
+`gpt-6-sol / low` (the lane's lowest rung after the move off `gpt-5.5`),
+ChatGPT Pro sign-in, Linux, disposable linked worktree. Same brief and checks
+as the 2026-09-21 run above.
+
+- Status line: `codex gpt-6-sol/low status=DONE exit=0 commits=e3610ad..c0fd959 thread=01a0ca7a-64ea-7960-b89b-ffd1372ecfe1`
+- Wrapper exit: 0
+- Commit: `c0fd959 test(superpowers): add codex smoke file`, one commit
+- File content correct: yes — `codex lane smoke test`, 22 bytes including the newline
+- Write set honoured: yes — `1 file changed, 1 insertion(+)`, `smoke.txt` only
+- Worktree clean afterwards: yes
+
+Result: PASS. `trust.smoke` was already `pass`; this run shows the new model
+works through the lane on this account.

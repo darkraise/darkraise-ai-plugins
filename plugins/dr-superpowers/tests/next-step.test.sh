@@ -441,7 +441,7 @@ has "blocked: latest.md carries the block" "$(cat "$REPO/.superpowers/handoff/la
 # schemas, never from an executable), so the adhoc and draft paths take it as a
 # flag. A plan carries `Host: codex` in its header instead.
 CODEX_DESIGN='codex -m gpt-6-astra -c model_reasoning_effort=high'
-CODEX_BUILD='codex -m gpt-5.6-sol -c model_reasoning_effort=high'
+CODEX_BUILD='codex -m gpt-6-sol -c model_reasoning_effort=high'
 
 run "$REPO" --adhoc --phase design --host codex --next "Scope item C with dr-superpowers:brainstorming"
 check "adhoc design on codex: exits 0" "$status" "0"

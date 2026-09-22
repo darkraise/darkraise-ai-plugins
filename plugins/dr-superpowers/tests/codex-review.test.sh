@@ -39,7 +39,7 @@ export CODEX_REVIEW_LADDER="$TMP/ladder.md"
 fence='```'
 { printf '%scodex-judge\n' "$fence"
   printf 'gpt-6-astra high 2\n'
-  printf 'gpt-5.6-sol high 2\n'
+  printf 'gpt-6-sol high 2\n'
   printf '%s\n' "$fence"; } > "$CODEX_REVIEW_LADDER"
 
 # --kind final composes its own prompt from `git diff <base>...HEAD`, so the
@@ -187,7 +187,7 @@ check "TIMEOUT does not run a second seat" "$(cat "$TMP/calls")" "1"
 
 out=$(STUB_REFUSE_ONCE=1 seat final --out "$TMP/o.md" --base main); rc=$?
 present "a refused model falls back once" "$out" "status=FALLBACK"
-present "the fallback line names the model that ran" "$out" "codex-judge gpt-5.6-sol/high"
+present "the fallback line names the model that ran" "$out" "codex-judge gpt-6-sol/high"
 check "FALLBACK exits 0" "$rc" "0"
 check "the fallback runs exactly one extra seat" "$(cat "$TMP/calls")" "2"
 
@@ -214,9 +214,9 @@ check "a thrown turn runs no second seat" "$(cat "$TMP/calls")" "1"
 # It travels in the result's own stderr field now and reaches the runner's
 # message rather than a log file.
 STUB_REFUSE_ONCE=1 seat final --out "$TMP/o.md" --base main >/dev/null
-check "the refusal is quoted before the fallback runs"   "$(grep -c 'refused (.*); falling back to gpt-5.6-sol/high' "$TMP/err")" "1"
+check "the refusal is quoted before the fallback runs"   "$(grep -c 'refused (.*); falling back to gpt-6-sol/high' "$TMP/err")" "1"
 check "both seats ran, preferred rung first"   "$(awk '/^runAppServerTurn/{print $2}' "$TMP/events.log" | tr '
-' ',')"   "gpt-6-astra/high,gpt-5.6-sol/high,"
+' ',')"   "gpt-6-astra/high,gpt-6-sol/high,"
 check "no seat ever reaches a review entry point"   "$(grep -c 'runAppServerReview' "$TMP/events.log")" "0"
 
 # --- task and plan kinds, and the light tier ---------------------------------
@@ -227,11 +227,11 @@ check "task: passes the task-review schema"   "$(jq -r '.schemaPath' <<<"$r" | g
 present "task defaults to the heavy tier" "$out" "codex-judge gpt-6-astra/high"
 
 out=$(run --kind task --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-present "the light tier selects the last judge row" "$out" "codex-judge gpt-5.6-sol/high"
+present "the light tier selects the last judge row" "$out" "codex-judge gpt-6-sol/high"
 present "the light tier reports no catalog evidence" "$out" "evidence=none"
 
 out=$(run --kind risk3 --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-present "risk3 accepts the light tier" "$out" "codex-judge gpt-5.6-sol/high"
+present "risk3 accepts the light tier" "$out" "codex-judge gpt-6-sol/high"
 
 out=$(run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
@@ -308,7 +308,7 @@ check "the marked-off file keeps the plugin version" "$(jq -r '.plugin_version' 
 
 open_session
 out=$(STUB_REFUSE_ONCE=1 STUB_SECOND_MODE=quota seat final --out "$TMP/o.md" --base main); rc=$?
-present "a quota error on the fallback run is FAILED" "$out" "codex-judge gpt-5.6-sol/high status=FAILED exit=1"
+present "a quota error on the fallback run is FAILED" "$out" "codex-judge gpt-6-sol/high status=FAILED exit=1"
 check "the quota fallback ran exactly one extra seat" "$(calls)" "2"
 check "a quota error on the fallback run turns Codex off" "$(jq -r '.usable | tostring' "$SFILE" | tr -d '\r')" "false"
 

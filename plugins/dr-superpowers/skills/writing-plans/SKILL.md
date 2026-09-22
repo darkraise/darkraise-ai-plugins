@@ -248,7 +248,7 @@ user's inline or delegation preference on either host.
    - `**Implementer:**` — always; the fully qualified agent, for example
      `dr-superpowers:impl-sonnet-medium`
    - `**Executor:**` — only when the lane gate passed, for example
-     `codex gpt-5.5 / medium`
+     `codex gpt-6-sol / low`
    - `**Evaluation:**` — always, for example
      `files 0 - spec 1 - coupling 1 - risk 0 = 2`
    - `**Approach:**` — only when the task involved an approach decision:
@@ -360,7 +360,7 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
      Read its one status line. `OK` and `FALLBACK` are a review: read the four
      scores and `findings` from the JSON. On `FALLBACK`, or a line naming
-     `gpt-5.6-sol/high` with `status=OK`, say the substitution aloud with the
+     `gpt-6-sol/xhigh` with `status=OK`, say the substitution aloud with the
      runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
      no review: dispatch the printed `fallback` (`dr-superpowers:judge-opus`)
      with the full-plan template, save its reply to

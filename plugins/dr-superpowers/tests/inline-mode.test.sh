@@ -317,7 +317,7 @@ sed 's/^|//' > "$DTMP/offload.md" <<'EOF'
 |### Task 1: offloaded
 |
 |**Implementer:** dr-superpowers:impl-sonnet-medium
-|**Executor:** codex gpt-5.5 / medium
+|**Executor:** codex gpt-6-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 2: plain

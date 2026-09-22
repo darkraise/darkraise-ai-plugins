@@ -79,9 +79,9 @@ check "total 1 fails the floor" "$(field gate "$(unit1)")" "fail:total"
 plan "$(mktask 1 0 1 0 2)"
 out=$(unit1)
 check "total 2 passes" "$(field gate "$out")" "pass"
-check "total 2 takes the medium rung" "$(field rungs "$out")" "codex:gpt-5.5/medium"
+check "total 2 takes the low rung" "$(field rungs "$out")" "codex:gpt-6-sol/low"
 plan "$(mktask 1 1 1 0 3)"
-check "total 3 takes the high rung" "$(field rungs "$(unit1)")" "codex:gpt-5.5/high"
+check "total 3 takes the medium rung" "$(field rungs "$(unit1)")" "codex:gpt-6-sol/medium"
 plan "$(mktask 1 0 1 2 4)"
 check "risk 2 fails the ceiling" "$(field gate "$(unit1)")" "fail:risk"
 # spec 3 alone, with reducible 3, so the case cannot pass by the reducible rule.
@@ -157,7 +157,7 @@ check "the highest total wins" "$(field score "$out")" "3"
 check "the highest risk wins independently" "$(field risk "$out")" "2"
 check "a disqualifying risk on a lower-total line still fails" "$(field gate "$out")" "fail:risk"
 
-EXECLINE='**Executor:** codex gpt-5.5 / medium'
+EXECLINE='**Executor:** codex gpt-6-sol / low'
 plan "$(mktask 1 0 1 0 2)
 $EXECLINE"
 check "an existing Executor line is reported" "$(field executor "$(unit1)")" "codex"

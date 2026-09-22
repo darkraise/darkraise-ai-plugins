@@ -59,12 +59,12 @@ set -- ${hostless[@]+"${hostless[@]}"}
 # The design tier writes specs and plans; the build tier executes them. Claude's
 # pairs are its ladder's top execution rung and the subagent Execution default.
 # The Codex pairs are the tiers this plugin's own policy already names: Astra
-# high is where reference/codex-routing.json floors judges, and Sol high tops
-# the execution policy in reference/ladder.md.
+# high is where reference/codex-routing.json floors judges, and GPT-6 Sol high
+# tops the external execution policy in reference/ladder.md.
 launch_for() { # launch_for design|build
   case $host:$1 in
     codex:design)  printf 'codex -m gpt-6-astra -c model_reasoning_effort=high' ;;
-    codex:*)       printf 'codex -m gpt-5.6-sol -c model_reasoning_effort=high' ;;
+    codex:*)       printf 'codex -m gpt-6-sol -c model_reasoning_effort=high' ;;
     *:design)      printf 'claude --model opus --effort high' ;;
     *)             printf 'claude --model sonnet --effort high' ;;
   esac

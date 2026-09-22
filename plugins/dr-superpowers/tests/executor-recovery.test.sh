@@ -44,7 +44,7 @@ export STUB_FINAL_MESSAGE="$(final_message DONE)" STUB_WRITE_PATH=produced.txt S
 launches() { grep -c '^runAppServerTurn' "$STUB_EVENT_LOG" 2>/dev/null || echo 0; }
 
 run() { bash "$SCRIPT" --cwd "$fixture/work" --task-id task-one --write-set "$fixture/scope.json" \
-  --brief "$fixture/brief.md" --report "$fixture/report.md" --model gpt-5.5 --effort medium "$@" > "$fixture/out" 2> "$fixture/err"; }
+  --brief "$fixture/brief.md" --report "$fixture/report.md" --model gpt-6-sol --effort medium "$@" > "$fixture/out" 2> "$fixture/err"; }
 printf 'unrelated\n' > "$fixture/work/unrelated.txt"
 before="$(git -C "$fixture/work" rev-parse HEAD)"
 run

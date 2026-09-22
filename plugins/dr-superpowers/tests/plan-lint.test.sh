@@ -386,11 +386,11 @@ has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must c
 variant t9.md 's/^\*\*Approach:\*\* .*/**Approach:** gut feeling/'
 lint t9.md
 has "Approach grammar" "$out" "ERROR Task 2: Approach does not match"
-variant t10.md 's/^(\*\*Evaluation:\*\* files 0 - spec 0 - coupling 1 - risk 0 = 1)$/\1\n**Executor:** codex gpt-5.5 \/ medium/'
+variant t10.md 's/^(\*\*Evaluation:\*\* files 0 - spec 0 - coupling 1 - risk 0 = 1)$/\1\n**Executor:** codex gpt-6-sol \/ low/'
 lint t10.md
 has "Executor below the gate" "$out" "ERROR Task 1: total 1 / risk 0 fails the lane gate (min_score 2, max_risk 1)"
 has "Executor without header line" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name codex"
-variant t11.md 's/^(\*\*Approach:\*\* .*)$/\1\n**Override:** kept\n**Executor:** codex gpt-5.6-sol \/ high/'
+variant t11.md 's/^(\*\*Approach:\*\* .*)$/\1\n**Override:** kept\n**Executor:** codex gpt-6-sol \/ high/'
 lint t11.md
 has "Executor on an overridden task" "$out" "ERROR Task 2: an Executor line on an overridden task fails the lane gate"
 variant t13.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 0 - risk 4 = 4/'
@@ -417,7 +417,7 @@ has "promotion warns" "$out" "WARN Task 1: Implementer rank 4 is above routing s
 variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/'
 export PLAN_LINT_ROSTER="$TMP/usable.sh"
 rm -f probe-calls; lint p1.md
-has "usable codex: an eligible task without Executor warns" "$out" "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-5.5 / medium)"
+has "usable codex: an eligible task without Executor warns" "$out" "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6-sol / low)"
 check "usable codex: the warning does not fail the lint" "$status" "0"
 lacks "usable codex: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
 check "usable codex: the probe runs once" "$(calls)" "1"
@@ -439,7 +439,7 @@ rm -f probe-calls; lint p1.md
 lacks "unusable codex: no lane warning" "$out" "lane-eligible"
 check "unusable codex: the probe still ran once" "$(calls)" "1"
 export PLAN_LINT_ROSTER="$TMP/usable.sh"
-variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-5.5 \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
+variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-6-sol \/ low/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
 rm -f probe-calls; lint p2.md
 lacks "an Executor line clears the candidate" "$out" "lane-eligible"
 lacks "the Executor fixture is otherwise clean" "$out" "ERROR Task 1"
@@ -684,7 +684,7 @@ inline_plan() { # inline_plan <file> <execution line>
 |### Task 1: offloaded four band
 |
 |**Implementer:** dr-superpowers:impl-opus-low
-|**Executor:** codex gpt-5.6-sol / high
+|**Executor:** codex gpt-6-sol / high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 2: small

@@ -146,8 +146,8 @@ The following observations were made against the external CLI lane on Windows
 with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy
 evidence, not native Codex capability declarations:
 
-- Only `gpt-5.5` and `gpt-5.6-sol` are available. `luna` and `terra` are rejected
-  with HTTP 400 and Codex holds no metadata for either.
+- Only `gpt-5.5` and `gpt-5.6-sol` were available. `luna` and `terra` were
+  rejected with HTTP 400 and Codex held no metadata for either.
 - Valid reasoning efforts are `low`, `medium`, `high`, `xhigh`, `ultra`.
   `minimal` is rejected. The CLI validates neither model nor effort locally - it
   echoes any string and fails at the API - so `scripts/run-codex-task.sh`
@@ -177,10 +177,15 @@ date. This plugin reads no model catalog at all: the judge seats attempt the pre
 rung and fall back once on a refusal, which is the only evidence of entitlement
 that has ever been reliable.
 
+On 2026-09-23 the lane and the judge fallback moved to `gpt-6-sol`: `gpt-5.5`
+retires from Codex with ChatGPT sign-in on 2026-10-14, and Codex 0.155.1's
+catalog lists `gpt-6-sol` as the upgrade for `gpt-5.6-sol`, with every lane
+effort advertised for a ChatGPT Pro sign-in.
+
 A different machine, account, or Codex version must verify the tables against
 its own account before relying on them. Do not make paid capability probes.
 
-**Cross-family review.** Codex is the default task reviewer: `gpt-5.6-sol` for
+**Cross-family review.** Codex is the default task reviewer: `gpt-6-sol` for
 tasks totalling 0 to 3, `gpt-6-astra` for 4 to 6, and Astra followed by
 `judge-opus` at risk 3. A task the executor lane implemented is always
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
@@ -200,7 +205,7 @@ contains whatever the executor lane produced, which is why no finding is acted
 on unchecked.
 `scripts/review-route` prints the review seat for a task or plan round, and
 every Codex seat runs through `scripts/run-codex-review.sh`, which checks
-availability on each run and falls back once to `gpt-5.6-sol` when Astra
+availability on each run and falls back once to `gpt-6-sol` when Astra
 refuses the run. Selection, the run bound and the four
 outcomes live in those scripts rather than in prose, so a refused model is a
 recorded substitution instead of a silently missing seat.
