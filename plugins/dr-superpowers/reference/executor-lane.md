@@ -358,7 +358,7 @@ ordinary Claude ladder govern from there.
 `scripts/review-route PLAN_FILE --task <N>` names a Codex seat for every task
 without an `**Executor:**` line: `codex:light` for totals 0 to 3 and
 `codex:heavy` for 4 to 6 at any risk up to 2,
-and `codex:heavy+judge-fable` at risk 3. A task carrying
+and `codex:heavy+judge-opus` at risk 3. A task carrying
 an `**Executor:**` line routes to a Claude judge, so these seats never review
 Codex's own work - a property the final-review Codex round does not share.
 Batched tasks never carry one, and route on the batch's highest total and risk.
@@ -381,7 +381,7 @@ bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy
 ```
 
 `codex:light` passes `--tier light`, which runs the `codex-judge` block's last
-row and never falls back. `codex:heavy` and `codex:heavy+judge-fable` pass
+row and never falls back. `codex:heavy` and `codex:heavy+judge-opus` pass
 `--tier heavy`: the runner takes the block's first row, and falls back once to
 the last row on a refusal. There is no catalog to consult first - the codex
 plugin advertises no model list, and reading Codex's own cache would cross the
@@ -413,7 +413,7 @@ distinguished a report that is missing from one that is merely unfavourable.
 [task-reviewer-prompt.md](../skills/subagent-driven-development/references/task-reviewer-prompt.md)
 with its criteria block, with three changes. Send only the `prompt:` body,
 without the `Subagent ([JUDGE]):` and `description:` lines. Leave out the Second
-Pass section: that pass is Fable's. And **replace the Output Format section and
+Pass section: that pass is the Claude judge's. And **replace the Output Format section and
 the criteria block's output-format paragraph with the schema, rather than
 appending to them.** The shipped schema, `criteria/codex-review-schema.json`,
 carries the four criterion names, the 1 to 20 range, and the spec and quality
@@ -428,9 +428,9 @@ schema is a plugin file, outside every worktree, so it can never land in a
 task's commit.
 
 **At risk 3** this review is the first of two steps: the controller then
-dispatches `judge-fable` with the Second Pass section naming this seat's
+dispatches `judge-opus` with the Second Pass section naming this seat's
 `--out` path, per [delegated-task.md](delegated-task.md) §3 Review the task.
-Fable's verdicts and scores are the task's.
+The judge's verdicts and scores are the task's.
 
 ## Final-review Codex round
 
@@ -547,7 +547,7 @@ specific to it:
 
 - **Review seats.** Codex is the only executor with a `review` surface, so the
   seats described above — `codex:light`, `codex:heavy`,
-  `codex:heavy+judge-fable` — and the final-review round are Codex's alone.
+  `codex:heavy+judge-opus` — and the final-review round are Codex's alone.
   `scripts/run-codex-review.sh` is not registry-aware and takes its model from
   the `codex-judge` block directly. An executor whose registry entry does not
   list `review` in `surfaces` staffs no seat.

@@ -357,9 +357,7 @@ number the items concern, or `plan` for a plan-level point, so a recurring
 point never overwrites an earlier file - listing each item: an id, its kind,
 its task, and the paths it needs, with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` and dispatch the
-`primary` it prints (`dr-superpowers:judge-opus` in place of
-`dr-superpowers:judge-fable` when Fable is unavailable or your human partner
-declined it - say the substitution aloud) with
+`primary` it prints with
 [ruling-prompt.md](../subagent-driven-development/references/ruling-prompt.md),
 expanding its placeholders. On any exit 2, dispatch
 `dr-superpowers:judge-opus` and say why, quoting its message - except on a
@@ -380,10 +378,9 @@ verbatim:
   root. On `amended: A<k> …`, write the amendment ledger line; your next
   `task-brief` carries the amendment. On `rejected: …`, make one fresh seat
   dispatch carrying the entry and the rejection output; a second rejection is
-  BLOCKED. A Header amendment from `judge-opus` is confirmed by `judge-fable`
-  before `plan-amend` runs, exactly as
-  dr-superpowers:subagent-driven-development §The Ruling Seat describes,
-  including its ledger line when Fable is unavailable.
+  BLOCKED. A Header amendment is confirmed by a second, independent `judge-opus` dispatch
+  before `plan-amend` runs, exactly as dr-superpowers:subagent-driven-development
+  §The Ruling Seat describes, including its ledger line.
 - **BLOCKED** - log `Task <N>: BLOCKED — ruling seat — <decision>`, name it in
   your final message, and stop.
 

@@ -28,14 +28,13 @@ re-deriving the branch diff with git commands.
    already made. When the
    project has no manifest, say so in one line and go to step 1.
 1. **Claude review.** Run `scripts/review-route PLAN_FILE --final` and dispatch
-   the `primary` it prints: `dr-superpowers:judge-fable` for an intricate plan
-   (a task at risk 3 or totalling 6), `dr-superpowers:judge-opus` otherwise.
-   When Fable is unavailable or your human partner declined it, dispatch the
-   `fallback` instead and say so aloud. Use dr-superpowers:requesting-code-review's
+   the `primary` it prints: `dr-superpowers:judge-opus`, with `reason=intricate`
+   for a plan with a task at risk 3 or totalling 6. Use
+   dr-superpowers:requesting-code-review's
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
    with `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
    spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`. Dispatch the
-   `primary` (or `fallback`) as `subagent_type`; the template's own
+   `primary` as `subagent_type`; the template's own
    "Subagent (general-purpose)" line is not the seat here. The judge
    agents are read-only and carry no shell: the package file means the
    template's git fallback never applies, and neither do its Read-Only
@@ -50,13 +49,12 @@ re-deriving the branch diff with git commands.
    which, and go to step 3 with the Claude review alone. An absent or empty
    report is never a clean round.
 3. **Dedupe and verify, only with two lists.** When the Claude review and the
-   Codex round each produced at least one finding, dispatch
-   `dr-superpowers:judge-fable` once (`dr-superpowers:judge-opus` when Fable is
-   unavailable or your human partner declined it — say the substitution aloud)
-   given both lists. It merges findings that name the same defect in the same
-   place (not merely the same file), tags each `claude`, `codex`, or `both`, and
+   Codex round each produced at least one finding, dispatch a fresh
+   `dr-superpowers:judge-opus` once, given both lists. It merges findings that
+   name the same defect in the same place (not merely the same file), tags each
+   `claude`, `codex`, or `both`, and
    returns `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a
-   third seat, so neither reviewer grades its own work.
+   third seat that wrote neither list, so neither reviewer grades its own work.
 
    **With one list** — Codex off, `TIMEOUT`, `FAILED`, or either reviewer
    returning no findings — there is no step-3 seat. Every finding in the list

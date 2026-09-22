@@ -27,14 +27,12 @@ wrapper instead of an implementer subagent.
 |---|---|---|
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
 | External implementer | The task's `**Executor:**` line, via [executor-lane.md](executor-lane.md) | Set by the wrapper |
-| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; `dr-superpowers:judge-opus` wherever it names `judge-fable` and Fable is unavailable or your human partner declined it — say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
+| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | general-purpose | Explicit, cheap-to-mid |
 
 **Fleet agents take no `model` argument.** The Agent tool's `model` argument
 overrides the agent file's pinned model while `effort` keeps its frontmatter
-value, so passing one runs the agent at a tier the ledger does not record — and,
-for a judge seat, silently bypasses the Fable-unavailable rule, which requires
-you to say the substitution aloud.
+value, so passing one runs the agent at a tier the ledger does not record.
 
 General-purpose seats always take an explicit model:
 [subagent-driven-development](../skills/subagent-driven-development/SKILL.md) §Seats.
@@ -136,6 +134,7 @@ You never answer a requirements question from your own reading of one brief.
 3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
 4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
 
+
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
 
 ## 3. Review the task
@@ -205,7 +204,7 @@ bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy
   --prompt <workspace>/task-<N>-review-codex-prompt.md
 ```
 
-`codex:light` is `--tier light`; `codex:heavy` and `codex:heavy+judge-fable` are
+`codex:light` is `--tier light`; `codex:heavy` and `codex:heavy+judge-opus` are
 `--tier heavy`. Read the runner's status line and take its word: `OK` and
 `FALLBACK` are a seat that reviewed — on `FALLBACK`, or a `--tier heavy` line
 naming `gpt-5.6-sol/high` with `status=OK`, say the substitution aloud — and
@@ -221,16 +220,15 @@ Codex review from its JSON — `spec_verdict` (`compliant` or `issues`),
 `cannot_verify` — and apply the bands, the ⚠️ route and the fix loop to it
 exactly as to a judge's report.
 
-**Risk 3.** On `primary=codex:heavy+judge-fable`, run the Codex seat
-first, then dispatch `dr-superpowers:judge-fable` (`judge-opus` under the
-Fable-unavailable rule) with the task-reviewer prompt and its Second Pass
-section, `[CODEX_REVIEW_FILE]` set to the Codex seat's `--out` path. The task's
-verdicts and scores are Fable's. Fable's findings, plus every Codex finding it
-marks CONFIRMED, drive the fix loop; each CONFIRMED cannot-verify item goes to
-the ruling seat as a `cannot-verify` item. A reply whose `### Codex findings`
+**Risk 3.** On `primary=codex:heavy+judge-opus`, run the Codex seat
+first, then dispatch `dr-superpowers:judge-opus` with the task-reviewer prompt
+and its Second Pass section, `[CODEX_REVIEW_FILE]` set to the Codex seat's
+`--out` path. The task's verdicts and scores are the judge's. Its findings,
+plus every Codex finding it marks CONFIRMED, drive the fix loop; each CONFIRMED
+cannot-verify item goes to the ruling seat as a `cannot-verify` item. A reply whose `### Codex findings`
 section is not its last section formed its own review after reading Codex's:
-re-dispatch it. If the Codex seat produced nothing, dispatch Fable without the
-Second Pass section and say so. This replaces the three-seat average earlier
+re-dispatch it. If the Codex seat produced nothing, dispatch the judge without
+the Second Pass section and say so. This replaces the three-seat average earlier
 versions used for risk 3.
 
 The task reviewer may report "⚠️ Cannot verify from diff" items — requirements
@@ -353,7 +351,7 @@ message as your other bookkeeping:
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked; scores …, seat <seat>) — …; remaining: <parked one-liners>; …` after a tripped breaker
 - end the scores clause with `, seat <seat>`: `codex gpt-5.6-sol/high`,
-  `codex gpt-6-astra/high+judge-fable`, or the judge's short name, followed by
+  `codex gpt-6-astra/high+judge-opus`, or the judge's short name, followed by
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
   ` (codex off — <reason>)` when `review-route` printed `reason=codex-off`
 

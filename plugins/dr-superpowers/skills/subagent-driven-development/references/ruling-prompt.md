@@ -106,10 +106,8 @@ Subagent ([JUDGE]):
 
 **Placeholders:**
 - `[JUDGE]` — the `primary` that `scripts/review-route PLAN_FILE --ruling <kind>
-  [<task> ...]` prints, or `dr-superpowers:judge-fable` for a Header
-  amendment's confirmation; `dr-superpowers:judge-opus` in place of
-  `judge-fable` when Fable is unavailable or declined (say the substitution
-  aloud); no `model` argument. On Codex, a native judge at Astra high or above.
+  [<task> ...]` prints, or `dr-superpowers:judge-opus` for a Header
+  amendment's confirmation; no `model` argument. On Codex, a native judge at Astra high or above.
 - `[N]`, `[POINT]` — the item count and the decision point, for the description.
 - `[SPEC_FILE]`, `[PLAN_FILE]` — REQUIRED: absolute paths.
 - `[AMENDMENTS_FILE]`, `[LEDGER_FILE]` — REQUIRED: `<workspace>/amendments.md`

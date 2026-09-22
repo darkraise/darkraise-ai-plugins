@@ -227,12 +227,9 @@ Subagent ([JUDGE]):
 
 **Placeholders:**
 - `[JUDGE]` — the judge `scripts/review-route` printed, as its `primary` or,
-  after a Codex seat produced nothing, its `fallback`;
-  `dr-superpowers:judge-opus` in place of `dr-superpowers:judge-fable` when
-  Fable is unavailable or declined (say the substitution aloud); no `model`
-  argument
+  after a Codex seat produced nothing, its `fallback`; no `model` argument
 - `[CODEX_REVIEW_FILE]` — only with the Second Pass section: the Codex seat's
-  `--out` JSON path. Pass the path, never the findings pasted inline: Fable
+  `--out` JSON path. Pass the path, never the findings pasted inline: the judge
   cannot anchor on a review it has not opened yet
 - `[PLUGIN_ROOT]` — REQUIRED: the resolved dr-superpowers plugin directory.
   Expand it before sending; a judge handed the literal token cannot open the

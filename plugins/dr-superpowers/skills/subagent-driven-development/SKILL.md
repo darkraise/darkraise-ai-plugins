@@ -243,8 +243,8 @@ Every seat is named, so nothing silently inherits your session's model.
 
 | Seat | Agent | Model argument |
 |---|---|---|
-| Ruling seat | The seat `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` prints (The Ruling Seat); `dr-superpowers:judge-opus` in place of `judge-fable` when Fable is unavailable or your human partner declined it, said aloud | None |
-| Final review | The seat `scripts/review-route PLAN_FILE --final` prints ([final-review.md](../../reference/final-review.md) step 1); its `fallback` when Fable is unavailable or your human partner declined it, said aloud | None |
+| Ruling seat | The seat `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` prints (The Ruling Seat) | None |
+| Final review | The seat `scripts/review-route PLAN_FILE --final` prints ([final-review.md](../../reference/final-review.md) step 1) | None |
 | Final fix wave | The implementer `scripts/review-route PLAN_FILE --final-fix <file> ...` prints ([final-review.md](../../reference/final-review.md) §Fixing what it finds) | None |
 
 The implementer, external implementer, task reviewer and scoped re-review seats,
@@ -347,11 +347,9 @@ kind, its task (or `plan`), and the paths it needs — brief, report, review
 packages — with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` for the point's
 kind and the tasks its items concern, and dispatch the `primary` it prints
-(`judge-opus` in place of `judge-fable` when Fable is unavailable or your human
-partner declined it, said aloud) with
-[ruling-prompt.md](references/ruling-prompt.md), expanding its placeholders.
-Items of different kinds at one point take `judge-fable` if any kind's route
-prints it. On any exit 2, dispatch `dr-superpowers:judge-opus` and say why,
+with [ruling-prompt.md](references/ruling-prompt.md), expanding its
+placeholders. Items of different kinds at one point share one dispatch. On any
+exit 2, dispatch `dr-superpowers:judge-opus` and say why,
 quoting its message. Codex hosts, where `review-route` exits 2, use a native
 judge at Astra high or above ([native-codex.md](../../reference/native-codex.md)).
 
@@ -372,19 +370,17 @@ verbatim:
   `rejected: …`, make one fresh seat dispatch carrying the entry and the
   rejection output; a second rejection is BLOCKED.
 
-  **A Header amendment from `judge-opus` is confirmed first.** Before
-  `plan-amend`, write `<workspace>/rulings-<point>-<task>-confirm.md`: the
-  original item entry unchanged, then the Opus verdict block verbatim. Dispatch
-  `dr-superpowers:judge-fable` directly, not through `review-route`, with the
-  same template and `[CONFIRM_NOTE]` filled. Fable's verdict replaces the Opus
-  verdict and is carried out like any verdict; the one fresh dispatch after a
-  `rejected:` goes to `judge-fable` too. Log `Ruling: header amendment A<k>
-  confirmed by judge-fable — <Fable's verdict> — if wrong, the plan's Global
-  Constraints or Contracts carry a bad rule into every later task`. When Fable
-  is unavailable or declined, skip the confirmation and never hand it to Opus:
-  apply the Opus verdict and log `Ruling: header amendment A<k> unconfirmed —
-  Fable unavailable — if wrong, the plan's Global Constraints or Contracts carry
-  a bad rule into every later task`.
+  **A Header amendment is confirmed first.** Before `plan-amend`, write
+  `<workspace>/rulings-<point>-<task>-confirm.md`: the original item entry
+  unchanged, then the first verdict block verbatim. Confirm it with
+  a second, independent `dr-superpowers:judge-opus` dispatch, made directly
+  rather than through `review-route`, with the same template and
+  `[CONFIRM_NOTE]` filled. The second verdict replaces the first and is carried
+  out like any verdict; the one fresh dispatch after a `rejected:` is a
+  confirming seat too. Log
+  `Ruling: header amendment A<k> confirmed by a second judge-opus — <its
+  verdict> — if wrong, the plan's Global Constraints or Contracts carry a bad
+  rule into every later task`.
 - **BLOCKED** — log `Task <N>: BLOCKED — ruling seat — <decision>`, name it
   in your final message, and stop.
 
@@ -549,7 +545,7 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 
 [After the last task's complete line: context-size says ok — continue to Final Review]
 [final-review.md: package the branch; review-route --final prints judge-opus for this plain plan; Codex round in the background]
-[judge-fable dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
+[a fresh judge-opus dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
 [Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); print Rulings I made; budget ok — continue]

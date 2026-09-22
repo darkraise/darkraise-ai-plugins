@@ -157,7 +157,7 @@ check "an Executor task is reviewed by its band judge, never Codex" "$out" "revi
 route --task 6
 check "an Executor task at risk 2 takes its band" "$out" "review-seat task=6 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 route --task 11
-check "an Executor task at risk 3 goes to Fable alone" "$out" "review-seat task=11 primary=dr-superpowers:judge-fable fallback=- reason=executor"
+check "an Executor task at risk 3 goes to Opus alone" "$out" "review-seat task=11 primary=dr-superpowers:judge-opus fallback=- reason=executor"
 route --task 7A
 check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 route --task 7B
@@ -165,7 +165,7 @@ check "the risk-2 part takes heavy Codex" "$out" "review-seat task=7B primary=co
 route --task 7
 check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 route --task 8
-check "risk 3 goes to Astra then Fable" "$out" "review-seat task=8 primary=codex:heavy+judge-fable fallback=dr-superpowers:judge-fable reason=risk"
+check "risk 3 goes to Astra then Opus" "$out" "review-seat task=8 primary=codex:heavy+judge-opus fallback=dr-superpowers:judge-opus reason=risk"
 route --task 10
 check "total 5 at risk 0: heavy Codex, Opus fallback" "$out" "review-seat task=10 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
 
@@ -177,7 +177,7 @@ route --task 1 5
 check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 
 rround "$TMP/round.md" 1
-check "an intricate plan's round 1 is Codex with a Fable fallback, cap 3" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-fable reason=round cap=3"
+check "an intricate plan's round 1 is Codex with an Opus fallback, cap 3" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-opus reason=round cap=3"
 rround "$TMP/light.md" 1
 check "a plain plan's round 1 falls back to Opus, cap 1" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dr-superpowers:judge-opus reason=round cap=1"
 rround "$TMP/light.md" 2
@@ -198,19 +198,19 @@ rround "$TMP/plan.md" 1
 check "an unparseable Evaluation line fails a plan round" "$rc" "2"
 
 # --- the ruling seat -------------------------------------------------------------
-# Fable rules only where a wrong verdict is expensive: the merge gate, a risk-3
-# task, and an intricate plan's preflight.
+# Every ruling goes to Opus; the reason still marks where a wrong verdict is
+# expensive: the merge gate, a risk-3 task, and an intricate plan's preflight.
 rule() { out=$(bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; }
 rule "$TMP/light.md" --ruling final-residual
-check "final-residual is the merge gate on Fable" "$out" "review-seat ruling=final-residual tasks=plan primary=dr-superpowers:judge-fable fallback=- reason=merge-gate"
+check "final-residual is the merge gate on Opus" "$out" "review-seat ruling=final-residual tasks=plan primary=dr-superpowers:judge-opus fallback=- reason=merge-gate"
 rule "$TMP/round.md" --ruling plan-conflict 8
-check "an item on a risk-3 task goes to Fable" "$out" "review-seat ruling=plan-conflict tasks=8 primary=dr-superpowers:judge-fable fallback=- reason=risk"
+check "an item on a risk-3 task goes to Opus" "$out" "review-seat ruling=plan-conflict tasks=8 primary=dr-superpowers:judge-opus fallback=- reason=risk"
 rule "$TMP/round.md" --ruling breaker 3 8
-check "a batch routes on its heaviest item" "$out" "review-seat ruling=breaker tasks=3,8 primary=dr-superpowers:judge-fable fallback=- reason=risk"
+check "a batch routes on its heaviest item" "$out" "review-seat ruling=breaker tasks=3,8 primary=dr-superpowers:judge-opus fallback=- reason=risk"
 rule "$TMP/round.md" --ruling cannot-verify 4
 check "a routine item goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=4 primary=dr-superpowers:judge-opus fallback=- reason=routine"
 rule "$TMP/round.md" --ruling preflight
-check "preflight on an intricate plan goes to Fable" "$out" "review-seat ruling=preflight tasks=plan primary=dr-superpowers:judge-fable fallback=- reason=intricate"
+check "preflight on an intricate plan goes to Opus" "$out" "review-seat ruling=preflight tasks=plan primary=dr-superpowers:judge-opus fallback=- reason=intricate"
 rule "$TMP/light.md" --ruling preflight
 check "preflight on a plain plan goes to Opus" "$out" "review-seat ruling=preflight tasks=plan primary=dr-superpowers:judge-opus fallback=- reason=routine"
 rule "$TMP/round.md" --ruling blocked-plan 7B
@@ -241,7 +241,7 @@ check "codex off: total 5 goes to Opus alone" "$out" "review-seat task=10 primar
 route --task 4
 check "codex off: risk 2 at total 4 takes its band" "$out" "review-seat task=4 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
 route --task 8
-check "codex off: risk 3 goes to Fable alone" "$out" "review-seat task=8 primary=dr-superpowers:judge-fable fallback=- reason=codex-off"
+check "codex off: risk 3 goes to Opus alone" "$out" "review-seat task=8 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
 route --task 7
 check "codex off: a split task routes on its heaviest part" "$out" "review-seat task=7 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
 route --task 1 2
@@ -251,7 +251,7 @@ check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 prim
 route --task 6
 check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 rround "$TMP/round.md" 1
-check "codex off: an intricate plan's round 1 goes to Fable alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off cap=3"
+check "codex off: an intricate plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-opus fallback=- reason=codex-off cap=3"
 rround "$TMP/light.md" 1
 check "codex off: a plain plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-opus fallback=- reason=codex-off cap=1"
 rround "$TMP/round.md" 2
@@ -260,7 +260,7 @@ review_surface absent
 route --task 3
 check "no session file is off" "$out" "review-seat task=3 primary=dr-superpowers:judge-opus fallback=- reason=codex-off"
 rround "$TMP/round.md" 1
-check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-fable fallback=- reason=codex-off cap=3"
+check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dr-superpowers:judge-opus fallback=- reason=codex-off cap=3"
 review_surface true
 printf 'not json' > "$DR_CODEX_SESSION_DIR/review-route-test.json"
 route --task 1
@@ -311,7 +311,7 @@ present "writing-plans gives a Critical at the cap one more round" "$WP" 'earns 
 present "writing-plans states the heavy-majority rule" "$WP" '`subagent` when more than half the tasks are heavy'
 present "writing-plans raises a delegating inline effort" "$WP" 'raised to `high` when any task is'
 present "writing-plans falls back to Opus on exit 2" "$WP" 'On any other exit 2, review with `dr-superpowers:judge-opus`'
-present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dr-superpowers:judge-fable` for an intricate plan,'
+present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dr-superpowers:judge-opus`)'
 present "using-superpowers states the mixed-mode rule" "$P/skills/using-superpowers/SKILL.md" 'an inline plan delegates those'
 present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
 present "README caps plan review" "$P/README.md" 'capped by the plan'"'"'s highest task total'
@@ -340,10 +340,10 @@ DT="$P/reference/delegated-task.md"
 TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
 present "the Seats table routes the task reviewer" "$DT" '| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints'
 present "the delegated loop runs the light tier for codex:light" "$DT" '`codex:light` is `--tier light`'
-present "the delegated loop has the risk 3 section" "$DT" '**Risk 3.** On `primary=codex:heavy+judge-fable`'
+present "the delegated loop has the risk 3 section" "$DT" '**Risk 3.** On `primary=codex:heavy+judge-opus`'
 absent "the delegated loop drops the risk 2 section" "$DT" '**Risk 2 and above.**'
 present "the delegated loop falls back to Opus on exit 2" "$DT" 'review with `dr-superpowers:judge-opus` and say why, quoting its message.'
-present "the task seats reserve Fable for risk 3" "$P/reference/executor-lane.md" 'and `codex:heavy+judge-fable` at risk 3.'
+present "the task seats pair Codex with Opus at risk 3" "$P/reference/executor-lane.md" 'and `codex:heavy+judge-opus` at risk 3.'
 present "the second pass points at the delegated loop" "$P/reference/executor-lane.md" 'per [delegated-task.md](delegated-task.md) §3 Review the task.'
 absent "README drops risk 2 Fable reviews" "$P/README.md" 'at risk 2 or above'
 present "the second pass runs at risk 3 only" "$P/skills/subagent-driven-development/references/task-reviewer-prompt.md" '[Include this section only on a risk 3 task whose Codex seat'
@@ -360,18 +360,20 @@ present "the delegated loop names a codex-off route" "$DT" 'On `reason=codex-off
 present "the delegated loop records a codex-off seat" "$DT" '` (codex off — <reason>)` when `review-route` printed `reason=codex-off`'
 present "the reviewer prompt has the second pass" "$TRP" '## Second Pass: The Codex Review'
 present "the second pass names the Codex file by path" "$TRP" '[CODEX_REVIEW_FILE]'
-present "the second pass comes after Fable's own review" "$TRP" 'Do this only after your Spec Compliance'
+present "the second pass comes after the judge's own review" "$TRP" 'Do this only after your Spec Compliance'
 present "a Codex finding never raises a score" "$TRP" 'review raises a score, and nothing else you wrote before reading it changes.'
 
 # --- ruling seat prose -----------------------------------------------------------
 RULP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
 present "SDD routes the ruling seat" "$SDD" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
 absent "SDD no longer pins the ruling seat to Fable" "$SDD" '`dr-superpowers:judge-fable` (`judge-opus` under the Fable-unavailable rule,'
-present "SDD confirms an Opus header amendment on Fable" "$SDD" '**A Header amendment from `judge-opus` is confirmed first.**'
-present "SDD never hands the confirmation to Opus" "$SDD" 'never hand it'
+present "SDD confirms a header amendment on a second seat" "$SDD" 'a second, independent `dr-superpowers:judge-opus` dispatch'
+absent "SDD no longer keeps the confirmation off Opus" "$SDD" 'never hand it'
 present "the ruling prompt has the confirmation note" "$RULP" '[CONFIRM_NOTE]'
 present "the ruling prompt routes its judge" "$RULP" 'the `primary` that `scripts/review-route PLAN_FILE --ruling <kind>'
-present "judge-fable serves critical seats only" "$P/agents/judge-fable.md" 'critical seats only'
+present "no route names judge-fable" "$P/agents/judge-fable.md" 'No dr-superpowers route names it'
+present "judge-opus grades by consequence" "$P/agents/judge-opus.md" 'not by how small the fix is'
+absent "review-route never prints judge-fable" "$ROUTE" 'judge-fable'
 present "judge-sonnet-high reviews totals 0 to 3" "$P/agents/judge-sonnet-high.md" 'totals 0 to 3'
 present "judge-opus reviews totals 4 to 6" "$P/agents/judge-opus.md" 'totals 4 to 6'
 
@@ -408,11 +410,11 @@ shape_plan "$TMP/final-risk.md" '**Evaluation:** files 0 - spec 0 - coupling 1 -
   '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4'
 rule "$TMP/final-risk.md" --final
 check "final: risk 3 is intricate" "$out" \
-  "review-seat final primary=dr-superpowers:judge-fable fallback=dr-superpowers:judge-opus reason=intricate"
+  "review-seat final primary=dr-superpowers:judge-opus fallback=- reason=intricate"
 shape_plan "$TMP/final-six.md" '**Evaluation:** files 1 - spec 1 - coupling 2 - risk 2 = 6'
 rule "$TMP/final-six.md" --final
 check "final: total 6 is intricate" "$out" \
-  "review-seat final primary=dr-superpowers:judge-fable fallback=dr-superpowers:judge-opus reason=intricate"
+  "review-seat final primary=dr-superpowers:judge-opus fallback=- reason=intricate"
 review_surface false
 rule "$TMP/final-plain.md" --final
 check "final: the seat does not read the Codex gate" "$out" "review-seat final primary=dr-superpowers:judge-opus fallback=- reason=plain"
@@ -591,8 +593,8 @@ check "the legacy kind prints its own spelling, not the new one" \
   "$out" "review-seat ruling=codex-empty-diff tasks=1 primary=dr-superpowers:judge-opus fallback=- reason=routine"
 
 out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 8 2>/dev/null)
-check "a risk-3 task still routes the neutral kind to Fable" \
-  "$out" "review-seat ruling=executor-empty-diff tasks=8 primary=dr-superpowers:judge-fable fallback=- reason=risk"
+check "a risk-3 task still routes the neutral kind to Opus" \
+  "$out" "review-seat ruling=executor-empty-diff tasks=8 primary=dr-superpowers:judge-opus fallback=- reason=risk"
 
 bash "$ROUTE" "$TMP/round.md" --ruling nonsense-kind 1 >/dev/null 2>&1
 check "an unknown ruling kind is still rejected" "$?" "2"

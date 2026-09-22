@@ -28,7 +28,6 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 SONNET=dr-superpowers:judge-sonnet-high
 OPUS=dr-superpowers:judge-opus
-FABLE=dr-superpowers:judge-fable
 SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
@@ -166,7 +165,6 @@ case "$1" in
     [ $# -eq 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
     plan_shape
     r=$2 claude=$OPUS
-    [ "$intricate" -eq 0 ] || claude=$FABLE
     if [ "$r" -gt $((cap + 1)) ]; then
       die "plan round $r is past the cap ($cap) and its one cap-critical round"
     elif [ "$r" -eq 1 ] && executor_session_on codex review; then
@@ -203,9 +201,9 @@ case "$1" in
       [ "$(cut -f3 <<<"$row")" != 3 ] || risky=1
       ids="${ids:+$ids,}$id"
     done
-    if [ "$kind" = final-residual ]; then primary=$FABLE reason=merge-gate
-    elif [ "$risky" -eq 1 ]; then primary=$FABLE reason=risk
-    elif [ "$kind" = preflight ] && [ "$intricate" -eq 1 ]; then primary=$FABLE reason=intricate
+    if [ "$kind" = final-residual ]; then primary=$OPUS reason=merge-gate
+    elif [ "$risky" -eq 1 ]; then primary=$OPUS reason=risk
+    elif [ "$kind" = preflight ] && [ "$intricate" -eq 1 ]; then primary=$OPUS reason=intricate
     else primary=$OPUS reason=routine
     fi
     printf 'review-seat ruling=%s tasks=%s primary=%s fallback=- reason=%s\n' "$kind" "${ids:-plan}" "$primary" "$reason"
@@ -214,7 +212,7 @@ case "$1" in
     [ $# -eq 1 ] || usage
     plan_shape
     if [ "$intricate" -eq 1 ]; then
-      printf 'review-seat final primary=%s fallback=%s reason=intricate\n' "$FABLE" "$OPUS"
+      printf 'review-seat final primary=%s fallback=- reason=intricate\n' "$OPUS"
     else
       printf 'review-seat final primary=%s fallback=- reason=plain\n' "$OPUS"
     fi
@@ -257,20 +255,20 @@ band() { # band <total> - the Claude judge for a score band
 }
 
 # Executor first: a task Codex implemented is never reviewed by Codex, whatever
-# its risk. Fable is kept for risk 3 (security, data loss, migration,
-# concurrency); every other task takes its band. The lane gate admits risk <= 1,
+# its risk. Risk 3 (security, data loss, migration, concurrency) takes Opus
+# whatever its total; every other task takes its band. The lane gate admits risk <= 1,
 # so the executor risk-3 row is a guard.
 if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 3 ]; then
-  primary=$FABLE fallback=- reason=executor
+  primary=$OPUS fallback=- reason=executor
 elif [ "$executor" -eq 1 ]; then
   primary=$(band "$max_total") fallback=- reason=executor
 elif ! executor_session_on codex review; then
   # Codex is off for this session, so the Codex rows name their Claude seat
-  # directly, and there is nothing left to fall back to. Risk 3 stays with Fable.
-  if [ "$max_risk" -ge 3 ]; then primary=$FABLE; else primary=$(band "$max_total"); fi
+  # directly, and there is nothing left to fall back to. Risk 3 stays with Opus.
+  if [ "$max_risk" -ge 3 ]; then primary=$OPUS; else primary=$(band "$max_total"); fi
   fallback=- reason=codex-off
 elif [ "$max_risk" -ge 3 ]; then
-  primary=codex:heavy+judge-fable fallback=$FABLE reason=risk
+  primary=codex:heavy+judge-opus fallback=$OPUS reason=risk
 elif [ "$max_total" -le 3 ]; then
   primary=codex:light fallback=$(band "$max_total") reason=band
 else

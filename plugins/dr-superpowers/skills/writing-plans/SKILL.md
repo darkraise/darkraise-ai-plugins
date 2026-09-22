@@ -362,18 +362,13 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
      scores and `findings` from the JSON. On `FALLBACK`, or a line naming
      `gpt-5.6-sol/high` with `status=OK`, say the substitution aloud with the
      runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
-     no review: dispatch the printed `fallback` (`dr-superpowers:judge-fable`
-     for an intricate plan, `dr-superpowers:judge-opus` otherwise, and
-     `judge-opus` when Fable is unavailable or declined), with
-     the full-plan template, save its reply to
+     no review: dispatch the printed `fallback` (`dr-superpowers:judge-opus`)
+     with the full-plan template, save its reply to
      `<workspace>/plan-review-round-1.md`, and say why. Never run the Codex seat
      twice in one round.
    - **`reason=codex-off`** (round 1 while the gate has not opened the review
      surface). No Codex seat runs. The `primary` is
-     `dr-superpowers:judge-fable` for an intricate plan (a task at risk 3 or
-     totalling 6) and `dr-superpowers:judge-opus` otherwise. Dispatch it
-     (`dr-superpowers:judge-opus` when Fable is unavailable or
-     declined) with the full-plan template, save its reply to
+     `dr-superpowers:judge-opus`. Dispatch it with the full-plan template, save its reply to
      `<workspace>/plan-review-round-1.md`, and say `codex off — <reason>`,
      quoting the gate line's `reason` (`untrusted` when it printed
      `usable=true`).

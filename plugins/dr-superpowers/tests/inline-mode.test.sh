@@ -106,7 +106,7 @@ present "using-superpowers names total-4 delegation" "$P/skills/using-superpower
 present "README names both reasons for delegation" "$P/README.md" 'while they are a third of the plan or fewer, which then get an independent'
 present "the delegated loop names both reasons" "$P/reference/delegated-task.md" 'or a total-4 task in a plan where those are a third of the tasks or'
 present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
-present "inline confirms a Header amendment" "$INLINE" 'A Header amendment from `judge-opus` is confirmed by `judge-fable`'
+present "inline confirms a Header amendment" "$INLINE" 'A Header amendment is confirmed by a second, independent `judge-opus` dispatch'
 absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-flight scan.'
 absent "inline no longer names judge-fable as the ruling seat" "$INLINE" '`dr-superpowers:judge-fable` (`dr-superpowers:judge-opus` when Fable is'
 present "inline translates a delegated task's agent" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
@@ -152,9 +152,8 @@ absent "subagent mode drops the most capable final reviewer" "$SDD" 'final revie
 present "subagent ledger has the Final fix line" "$SDD" 'Final fix: implementer <agent> (assigned; base <sha7>)'
 present "subagent mode recovers a lost fix wave" "$SDD" 'A `Final fix:` line and no `Final review:` line'
 present "inline mode names the final seat" "$INLINE" '`scripts/review-route PLAN_FILE --final` prints'
-present "judge-fable takes an intricate final review" "$P/agents/judge-fable.md" 'the final whole-branch review of an intricate plan'
-present "judge-opus takes a plain final review" "$P/agents/judge-opus.md" 'the final whole-branch review of a plain plan'
-present "README names the final seats" "$P/README.md" 'The final whole-branch review runs on `judge-fable` for an intricate plan'
+present "judge-opus takes every final review" "$P/agents/judge-opus.md" 'every final whole-branch review'
+present "README names the final seat" "$P/README.md" 'The final whole-branch review runs on `judge-opus`'
 
 # A standing project constraint outranks a spec, so both execution skills read
 # it at Setup. Without this, a plan can be executed against a constraint and

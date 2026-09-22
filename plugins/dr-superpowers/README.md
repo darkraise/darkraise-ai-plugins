@@ -27,7 +27,7 @@ Four findings from real transcripts drove the fork; the numbers are in
   plan is saved.
 - **Judgment in one seat.** Executors and controllers rule only on mechanical
   conflicts and log every ruling. Plan defects, contested findings and
-  cannot-verify items go to a Fable (or Opus) judge whose verdicts —
+  cannot-verify items go to an Opus judge whose verdicts —
   CONFIRMED-GAP, PARK, AMEND, BLOCKED — are carried out verbatim; AMEND edits
   the plan through `scripts/plan-amend` so the plan on disk stays immutable.
 - **Karpathy guidelines baked in.** Think before coding, simplicity first,
@@ -55,8 +55,8 @@ and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything a score can reach. Nine reserve implementers - the `xhigh` and `max`
 efforts, and every Fable 5.1 tier - are reachable only by a human override, or by
 a task that has already been split once and still exhausted `impl-opus-high`.
-Four read-only role agents - the judges `judge-fable`, `judge-opus` and
-`judge-sonnet-high`, and `scout-sonnet` - whose `tools:` frontmatter omits
+Four read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
+`judge-fable` (a human override only), and `scout-sonnet` - whose `tools:` frontmatter omits
 `Edit`, `Write`, and `Agent`,
 so a reviewer that cannot modify the tree or spawn subagents is a fact about the
 registry rather than a request in a prompt.
@@ -88,7 +88,7 @@ high, what scores low, and what to ignore. Task reviews score four criteria -
 spec, scope, verification, quality - 1 to 20 each, alongside the spec and
 quality verdicts and never replacing them, because the fix loop keys on those
 verdicts. Tasks at risk 3 are reviewed by Codex `gpt-6-astra` and then by
-`judge-fable`, which rules CONFIRMED or REJECTED on every Codex finding in the
+`judge-opus`, which rules CONFIRMED or REJECTED on every Codex finding in the
 same pass.
 
 **Best-of-3 approach selection.** `selecting-approaches` gates an open approach
@@ -182,14 +182,18 @@ its own account before relying on them. Do not make paid capability probes.
 
 **Cross-family review.** Codex is the default task reviewer: `gpt-5.6-sol` for
 tasks totalling 0 to 3, `gpt-6-astra` for 4 to 6, and Astra followed by
-`judge-fable` at risk 3. A task the executor lane implemented is always
+`judge-opus` at risk 3. A task the executor lane implemented is always
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
 Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
-`judge-opus` 4 to 6, with `judge-fable` only at risk 3. Plan review takes Astra for round 1 (`judge-fable` for an intricate plan when
-Codex is off, `judge-opus` otherwise) and `judge-opus` for delta rounds,
-capped by the plan's highest task total. The final whole-branch review runs on `judge-fable` for an intricate plan and `judge-opus` otherwise, its one fix subagent on the highest tier among the tasks the findings touch, and gains a Codex round. When both
-reviewers return findings, `judge-fable` - or `judge-opus` when Fable is
-unavailable - dedupes and verifies them. With one list there is no third seat:
+`judge-opus` 4 to 6 and at risk 3. Plan review takes Astra for round 1
+(`judge-opus` when Codex is off) and `judge-opus` for delta rounds,
+capped by the plan's highest task total.
+The final whole-branch review runs on `judge-opus`, its one fix subagent on
+the highest tier among the tasks the findings touch, and gains a Codex round. When both reviewers return findings,
+a fresh `judge-opus` dedupes and verifies them. No route names `judge-fable`:
+on 2026-09-23 Opus 5.5 matched or beat Fable 5.1 on two replayed reviews with
+known defects, at about 40% of the cost, so Fable is dispatched on a judge seat
+only when you ask for it. With one list there is no third seat:
 the fixer triages each finding against the code and the scoped re-review rules
 on every rejection. The Codex round is not self-review-free, because the branch
 contains whatever the executor lane produced, which is why no finding is acted
@@ -385,8 +389,8 @@ differences:
 9. **Small-model planning.** A strong model plans once; small models execute.
    Every task brief carries the header's Global Constraints and Contracts, the
    controller reads only the header and one brief at a time, and judgment
-   calls go to a read-only ruling seat (`judge-opus` for routine items,
-   `judge-fable` for critical ones, as `review-route --ruling` prints). Its plan corrections
+   calls go to a read-only ruling seat (`judge-opus`, with the reason
+   `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
 10. **Two modes, chosen by the plan.** Upstream picks `executing-plans` when

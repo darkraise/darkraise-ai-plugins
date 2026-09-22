@@ -150,6 +150,3 @@ session's model and effort and nothing in the output would reveal it.
   reached Fable precisely by exhausting those Opus rungs; re-dispatching one of
   them would re-run an agent that already failed. Write `Task <N>: BLOCKED`
   with the reason instead.
-
-Fable unavailability for a judge seat is a different case: dispatch
-`judge-opus` and say so.
