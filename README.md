@@ -85,4 +85,11 @@ Validate the Claude marketplace and each Claude plugin separately. Installation
 and upgrade tests use disposable profiles, caches, and Git repositories; they
 must never modify your installed plugins or invoke paid models.
 
+`node scripts/test-all.mjs` runs the full maintained suite. Windows CI splits
+the same suites across four jobs using `--shard 1/4` through `--shard 4/4`.
+Add `--list` to inspect a shard without running it. Shards use approximate
+Windows timings in `scripts/test-shards.mjs` to balance the workload; new suites
+are discovered automatically. Each run prints suite durations so the scheduling
+weights can be refreshed when runtimes change.
+
 [MIT](LICENSE) © 2026 Darkraise
