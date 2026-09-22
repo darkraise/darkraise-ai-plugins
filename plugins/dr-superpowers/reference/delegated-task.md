@@ -112,7 +112,7 @@ these steps directly.
 
 ## 2. Handle the report
 
-Implementer subagents report one of four statuses. Handle each appropriately:
+Implementer subagents report one of four statuses, or none. Handle each appropriately:
 
 **DONE:** Generate the review package and dispatch the task reviewer (step 3).
 Run `date +%s` in the same Bash call as `review-package` and keep the value as
@@ -134,6 +134,19 @@ You never answer a requirements question from your own reading of one brief.
 3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
 4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
 
+**No status line:** the reply carries no `**Status:**` line, usually because
+the implementer ended its turn on a progress note that announces a next step
+instead of taking it. A reply without a status is not DONE, whatever it says
+was finished. If the report file carries a status, act on that one. Otherwise,
+while your harness can send another message to the live agent and its id is
+still in your context, send it one message naming what is still open - the
+brief's unfinished steps and whatever the reply said comes next - telling it to
+continue, or to report BLOCKED with what blocks it; say the continuation aloud.
+If the reply says a command or subagent it started is still running, let that
+finish first. After two continuations with no status, handle the task as
+BLOCKED with the reason `no report after two continuations`. When you cannot
+message the agent, dispatch the same agent fresh with the brief path, the
+report-file path and `git log <base>..HEAD` as what the earlier run committed.
 
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
 

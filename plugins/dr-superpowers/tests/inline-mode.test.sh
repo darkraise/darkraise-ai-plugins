@@ -202,6 +202,10 @@ NC="$P/reference/native-codex.md"
 check "exists: reference/native-codex.md" "$([ -f "$NC" ] && echo yes || echo no)" "yes"
 present "the delegated loop routes a Codex host's exit 2" "$DT"   'the seat is a native judge at Astra high or above'
 present "the delegated loop names the Codex escalation source" "$DT"   'come from the `codex-v2` selector'
+present "the delegated loop handles a reply with no status" "$DT"   '**No status line:**'
+present "a reply with no status is never DONE" "$DT"   'A reply without a status is not DONE'
+present "no-status continuations are bounded" "$DT"   'After two continuations with no status'
+present "a lost agent id means a fresh dispatch" "$DT"   'dispatch the same agent fresh with the brief path'
 present "inline mode routes a Codex host's exit 2" "$INLINE"   'Codex host, where `review-route` exits 2 on every'
 present "native Codex claims the exit 2" "$NC"   '`scripts/review-route` exits 2 on every `Host: codex` plan by design'
 present "native Codex states plans carry no delegated task" "$NC"   'A Codex plan therefore carries no delegated task'
