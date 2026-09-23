@@ -35,7 +35,7 @@ Four findings from real transcripts drove the fork; the numbers are in
   template, the implementer template and TDD.
 
 **Codex host.** Read [native-codex.md](reference/native-codex.md). Its
-`codex-v2` policy routes scores 0–9 through Luna, Terra, Sol and Astra with
+`codex-v3` policy routes scores 0–9 through Luna, Sol and Astra with
 the same four raw axes; scouts start at Sol medium, judges at Astra high; the
 Claude hooks are disabled in the native manifest. Native reviewers have
 independent contexts; enforce read-only restrictions where the host allows and

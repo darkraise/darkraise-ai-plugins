@@ -141,9 +141,9 @@ write_plan "$PLAN" '**Execution:** inline -- claude --model sonnet --effort medi
 run "$REPO" "$PLAN_REL"
 has "inline: prompt names executing-plans" "$out" "with dr-superpowers:executing-plans."
 has "inline: command without backticks" "$out" "claude --model sonnet --effort medium"
-write_plan "$PLAN" '**Execution:** subagent — codex gpt-5.6-sol / high — Codex host' ""
+write_plan "$PLAN" '**Execution:** subagent — codex gpt-6-sol / high — Codex host' ""
 run "$REPO" "$PLAN_REL"
-has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-5.6-sol -c model_reasoning_effort=high"
+has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-6-sol -c model_reasoning_effort=high"
 lacks "codex pair: no claude command" "$out" "claude --model"
 write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
 run "$REPO" "$PLAN_REL"
@@ -467,13 +467,13 @@ CODEX_PLAN="$REPO/$CODEX_PLAN_REL"
 CODEX_LEDGER_DIR="$REPO/.superpowers/sdd/2026-01-01-codex"
 EXEC_CODEX='**Host:** codex
 
-**Routing policy:** codex-v2
+**Routing policy:** codex-v3
 
-**Execution:** inline — `codex gpt-5.6-terra / high` — every task totals 4 or less'
+**Execution:** inline — `codex gpt-6-sol / medium` — every task totals 4 or less'
 write_plan "$CODEX_PLAN" "$EXEC_CODEX" "$PROG_NEXT"
 run "$REPO" "$CODEX_PLAN_REL"
 check "codex plan: exits 0" "$status" "0"
-has "codex plan: launch command from the Execution line" "$out" "codex -m gpt-5.6-terra -c model_reasoning_effort=high"
+has "codex plan: launch command from the Execution line" "$out" "codex -m gpt-6-sol -c model_reasoning_effort=medium"
 lacks "codex plan: no fallback to reading the Execution line" "$out" "Launch: see the"
 
 run "$REPO" --complete "$CODEX_PLAN_REL"

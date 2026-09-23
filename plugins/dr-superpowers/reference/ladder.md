@@ -2,7 +2,7 @@
 
 The raw axis definitions and Rule S are shared across hosts. The unweighted
 totals, agent tables, and external CLI lane here apply to Claude. Native Codex
-uses [native-codex.md](native-codex.md) and its weighted `codex-v2` score.
+uses [native-codex.md](native-codex.md) and its weighted `codex-v3` score.
 The fenced blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
 
 ## Scoring rubric

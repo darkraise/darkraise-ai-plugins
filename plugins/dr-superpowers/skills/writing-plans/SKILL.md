@@ -111,7 +111,7 @@ Task N contains the verifying step.]
 ---
 ```
 
-Codex plans also carry `Host: codex` and `Routing policy: codex-v2` lines
+Codex plans also carry `Host: codex` and `Routing policy: codex-v3` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
 names the native pair: `**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
 
@@ -216,7 +216,7 @@ plugin prefixes with [legacy-names.md](../../reference/legacy-names.md) (a name
 outside that table: ask), score each task, and add the lines.
 
 **Codex host:** follow [native-codex.md](../../reference/native-codex.md) — its
-`codex-v2` selector, plan headers, assignment-source fields, and conversion
+`codex-v3` selector, plan headers, assignment-source fields, and conversion
 rules replace the Claude table, fleet, and external CLI lane below. Honor the
 user's inline or delegation preference on either host.
 

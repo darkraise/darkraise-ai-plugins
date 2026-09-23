@@ -28,7 +28,7 @@ back. Before anything else:
 
 Identify the host through its native tool schemas, never by which executables
 are installed. On Codex, follow [native-codex.md](../../reference/native-codex.md):
-its `codex-v2` protocol replaces every Claude agent and external-CLI
+its `codex-v3` protocol replaces every Claude agent and external-CLI
 invocation below, including the final branch review, and carries its own
 conversion, retry and reserve rules. On Claude, use the seats and loop below.
 

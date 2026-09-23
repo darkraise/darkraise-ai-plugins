@@ -201,7 +201,7 @@ present "subagent mode defers per-task recovery" "$SDD" 'Apply [delegated-task.m
 NC="$P/reference/native-codex.md"
 check "exists: reference/native-codex.md" "$([ -f "$NC" ] && echo yes || echo no)" "yes"
 present "the delegated loop routes a Codex host's exit 2" "$DT"   'the seat is a native judge at Astra high or above'
-present "the delegated loop names the Codex escalation source" "$DT"   'come from the `codex-v2` selector'
+present "the delegated loop names the Codex escalation source" "$DT"   'come from the `codex-v3` selector'
 present "the delegated loop handles a reply with no status" "$DT"   '**No status line:**'
 present "a reply with no status is never DONE" "$DT"   'A reply without a status is not DONE'
 present "no-status continuations are bounded" "$DT"   'After two continuations with no status'

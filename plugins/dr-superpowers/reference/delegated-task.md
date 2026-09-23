@@ -314,7 +314,7 @@ at `impl-opus-xhigh`, said aloud; `impl-fable-max` exhausted is
 `Task <N>: BLOCKED`. Both splits and reserve entries are `Ruling:` lines. The
 details are in [escalation.md](../skills/subagent-driven-development/references/escalation.md).
 On a Codex host the rungs are not these: escalation, the single split and the
-reserve chain all come from the `codex-v2` selector
+reserve chain all come from the `codex-v3` selector
 ([native-codex.md](native-codex.md) §Selector contract), which the caller runs
 through `scripts/select-native-tier.sh`. The five-round cap is the same.
 
