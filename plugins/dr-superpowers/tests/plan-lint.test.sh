@@ -411,6 +411,23 @@ codex_plan | sed 's#gpt-6-sol / low#gpt-6-sol / medium#' > c3.md
 lint c3.md
 check "promotion: exit 0" "$status" "0"
 has "promotion warns" "$out" "WARN Task 1: Implementer rank 4 is above routing score 3 (promotion)"
+codex_plan | sed 's#^Routing policy: codex-v3$#Routing policy: codex-v2#; s#codex gpt-6-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6-sol / low#codex gpt-5.6-terra / medium#' > cv2.md
+lint cv2.md
+check "codex-v2 plan: exit 1" "$status" "1"
+has "codex-v2 plan: conversion error" "$out" "ERROR header: Routing policy is codex-v2, not codex-v3; convert the plan per reference/native-codex.md §Existing plans"
+lacks "codex-v2 plan: no Execution pair error" "$out" "is not in codex-routing.json"
+lacks "codex-v2 plan: no Implementer tier error" "$out" "is not an execution tier"
+has "codex-v2 plan: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
+codex_plan | sed '/^Routing policy:/d; s#codex gpt-6-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6-sol / low#codex gpt-5.6-terra / medium#' > cnone.md
+lint cnone.md
+check "no Routing policy line: exit 1" "$status" "1"
+has "no Routing policy line: conversion error names it missing" "$out" "ERROR header: Routing policy is missing, not codex-v3; convert the plan per reference/native-codex.md §Existing plans"
+lacks "no Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
+lacks "no Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
+has "no Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
+codex_plan | sed '/^Routing policy:/d; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v3\n```#' > cfenced.md
+lint cfenced.md
+has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v3; convert the plan per reference/native-codex.md §Existing plans"
 
 # --- the lazy lane probe ---
 # p1 makes Task 1 lane-eligible: total 2, risk 0, no Executor, no Override.

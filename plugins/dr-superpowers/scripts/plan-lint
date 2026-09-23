@@ -65,6 +65,19 @@ header_line() { first_label "$1" "$header_labels"; }
 codex=0
 grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
 
+# A plan written under another routing policy names pairs this policy does not
+# rank, so one conversion finding replaces a pair or rank finding per task.
+policy_ok=1
+if [ "$codex" -eq 1 ]; then
+  want_policy=$(jq -r '.version' "$ROUTING" 2>/dev/null | tr -d '\r')
+  got_policy=$(awk "$_PLAN_AWK"'in_fence($0) { next } { print }' <<<"$header" \
+    | sed -nE 's/^(\*\*)?Routing policy:(\*\*)?[ \t]+([^ \t]+)[ \t]*$/\3/p' | head -n 1)
+  if [ "$got_policy" != "$want_policy" ]; then
+    policy_ok=0
+    say ERROR header "Routing policy is ${got_policy:-missing}, not $want_policy; convert the plan per reference/native-codex.md §Existing plans"
+  fi
+fi
+
 # --- header labels and sections ---
 for label in Goal Spec Execution; do
   [ -n "$(header_line "$label")" ] || say ERROR header "missing **$label:** line"
@@ -174,7 +187,8 @@ if [ -n "$execution" ]; then
     if [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?$SEP.+ ]]; then
       mode=${BASH_REMATCH[1]}
       m=${BASH_REMATCH[3]} e=${BASH_REMATCH[4]}
-      jq -e --arg m "$m" --arg e "$e" '[.execution[], .reserve[]] | any(.model == $m and .effort == $e)' "$ROUTING" >/dev/null 2>&1 \
+      [ "$policy_ok" -eq 0 ] \
+        || jq -e --arg m "$m" --arg e "$e" '[.execution[], .reserve[]] | any(.model == $m and .effort == $e)' "$ROUTING" >/dev/null 2>&1 \
         || say ERROR header "Execution pair codex $m / $e is not in codex-routing.json"
     else
       say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — codex <model> / <effort> — <reason>'"
@@ -285,7 +299,7 @@ for n in $nums; do
     [ "$s" -eq $((a + b + c + 2 * d)) ] || say ERROR "$where" "weighted routing score $s is not files+spec+coupling+2*risk = $((a + b + c + 2 * d))"
     source=$(line 'Assignment source')
     [[ "$source" =~ ^\*\*Assignment\ source:\*\*\ (rubric|human)[[:space:]]*$ ]] || say ERROR "$where" "missing or invalid **Assignment source:** (rubric|human)"
-    if [[ "$source" == *rubric* ]]; then
+    if [[ "$source" == *rubric* ]] && [ "$policy_ok" -eq 1 ]; then
       if [[ "$impl" =~ ^\*\*Implementer:\*\*\ \`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?[[:space:]]*$ ]]; then
         rank=$(jq -r --arg m "${BASH_REMATCH[1]}" --arg e "${BASH_REMATCH[2]}" \
           '.execution[] | select(.model == $m and .effort == $e) | .rank' "$ROUTING" 2>/dev/null | tr -d '\r')
