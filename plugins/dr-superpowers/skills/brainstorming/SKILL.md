@@ -41,10 +41,10 @@ a chat design; or your human partner asked for a spec.
 - **Bounded** — no trigger holds: a new flag, a small endpoint, a
   one-file fix, or a small feature that adds a new flow. Ask the clarifying
   questions that matter, present a short design IN CHAT (a few
-  sentences to a few short paragraphs), and STOP. Implementation
-  starts only after your human partner says yes to that design — a
-  bounded task's approval is as hard a gate as an architectural
-  one. No spec file, no implementation plan document.
+  sentences to a few short paragraphs), self-review it once, and
+  STOP. Implementation starts only after your human partner says yes
+  to that design — a bounded task's approval is as hard a gate as an
+  architectural one. No spec file, no implementation plan document.
 - **Architectural** — at least one trigger holds; name it. Follow the
   full process: questions, approaches, sectioned
   design, written spec, then the writing-plans skill.
@@ -73,6 +73,8 @@ artifact, never the approval.
 | "The spike works, so I'll keep the code" | A spike's output is an answer. Keeping the code is a new request — classify it. |
 | "It grew, but I'm almost done — no need to re-classify" | Hidden complexity upgrades the path mid-task. Stop and say so. |
 | "They approved the spike, so the follow-up change is approved too" | Each task gets its own classification and its own approval. |
+| "The design reads fine, so I'll skip the self-review" | The round is required on every design and spec. No `Self-review (round 1 of 1):` block before the approval question means it did not happen. |
+| "A reviewer subagent can do the self-review" | The round is yours. Any other review comes after it and does not replace it. |
 
 ## Checklist
 
@@ -90,8 +92,9 @@ your path and complete them in order.
 1. **Explore project context** — check files, docs, recent commits
 2. **Ask clarifying questions** — one at a time, the ones that matter
 3. **Present short design in chat** — approach, files touched, testing
-4. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
-5. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
+4. **Self-review the design** — one round, its block in the same message as the design (see Self-reviewing a bounded design)
+5. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
+6. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
 
 **Architectural:**
 1. **Open the item register** — when the request or a review carries two or
@@ -101,7 +104,7 @@ your path and complete them in order.
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
 6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+7. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
@@ -112,7 +115,7 @@ digraph brainstorming {
     "Classify: spike / bounded / architectural" [shape=diamond];
     "Present question + probe (2-3 sentences)" [shape=box];
     "Ask clarifying questions (bounded)" [shape=box];
-    "Present short design in chat" [shape=box];
+    "Present short design in chat\n+ self-review block" [shape=box];
     "Human approves?" [shape=diamond];
     "Investigate; report recommendation" [shape=doublecircle];
     "Implement via normal workflow (no plan doc)" [shape=doublecircle];
@@ -122,7 +125,7 @@ digraph brainstorming {
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
     "Write design doc" [shape=box];
-    "Spec self-review\n(fix inline)" [shape=box];
+    "Spec self-review\n(one round, shown)" [shape=box];
     "User reviews spec?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
     "Hidden complexity? Upgrade path" [shape=box];
@@ -131,8 +134,8 @@ digraph brainstorming {
     "Classify: spike / bounded / architectural" -> "Ask clarifying questions (bounded)" [label="bounded"];
     "Classify: spike / bounded / architectural" -> "Explore project context" [label="architectural"];
     "Present question + probe (2-3 sentences)" -> "Human approves?";
-    "Ask clarifying questions (bounded)" -> "Present short design in chat";
-    "Present short design in chat" -> "Human approves?";
+    "Ask clarifying questions (bounded)" -> "Present short design in chat\n+ self-review block";
+    "Present short design in chat\n+ self-review block" -> "Human approves?";
     "Human approves?" -> "Investigate; report recommendation" [label="spike: yes"];
     "Human approves?" -> "Implement via normal workflow (no plan doc)" [label="bounded: yes"];
     "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
@@ -142,8 +145,8 @@ digraph brainstorming {
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc" [label="yes"];
-    "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
+    "Write design doc" -> "Spec self-review\n(one round, shown)";
+    "Spec self-review\n(one round, shown)" -> "User reviews spec?";
     "User reviews spec?" -> "Write design doc" [label="changes requested"];
     "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
 }
@@ -162,7 +165,7 @@ The subsections below serve the bounded and architectural paths (a
 spike stops at "present the probe, get a nod"). Sections from
 **Exploring approaches** onward are architectural-path depth — for
 bounded work, context plus a few questions plus a short in-chat design
-is the whole process.
+and its self-review is the whole process.
 
 **Understanding the idea:**
 
@@ -204,6 +207,20 @@ fills it in, and until it is filled no plan-side surface can see the register.
 The register is the authority on whether the work is finished. A list that
 lives only in the conversation is a list that gets shorter every session.
 
+**Self-reviewing a bounded design:**
+
+Before asking for approval, check the design once yourself, never through a
+subagent, and fix what you find inline:
+
+1. **Files:** every file the change touches is named.
+2. **Testing:** the design says how the change will be verified.
+3. **Assumptions:** every assumption you made is stated, so your human partner can correct it.
+4. **Ambiguity:** nothing in it can be read two ways.
+
+Below the design, in the same message, post `Self-review (round 1 of 1):` with
+one line per item: clean, or what you fixed. Do not re-review after fixing.
+A revision your human partner asks for gets one new round.
+
 **Exploring approaches:**
 
 - Propose 2-3 different approaches with trade-offs
@@ -243,21 +260,24 @@ lives only in the conversation is a list that gets shorter every session.
 - Commit the design document to git
 
 **Spec Self-Review:**
-After writing the spec document, look at it with fresh eyes:
+After writing the spec document, look at it with fresh eyes. This round is
+required, and it is yours: run it once, never through a subagent.
 
 1. **Placeholder scan:** Any "TBD", "TODO", incomplete sections, or vague requirements? Fix them.
 2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
 
-Fix any issues inline. No need to re-review — just fix and move on.
+Fix any issues inline, then post `Self-review (round 1 of 1):` with one line
+per item: clean, or what you fixed. Do not re-review after fixing.
+A revision your human partner asks for gets one new round.
 
 **User Review Gate:**
-After the spec review loop passes, ask the user to review the written spec before proceeding:
+After posting the self-review block, ask the user to review the written spec before proceeding:
 
 > "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
 
-Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
+Wait for the user's response. If they request changes, make them and run one new self-review round. Only proceed once the user approves.
 
 **Implementation:**
 

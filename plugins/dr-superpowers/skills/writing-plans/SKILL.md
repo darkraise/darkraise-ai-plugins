@@ -313,7 +313,7 @@ Every step must contain the actual content an engineer needs. These are **plan f
 
 ## Self-Review
 
-After writing the complete plan, look at the spec with fresh eyes and check the plan against it. This is a checklist you run yourself — not a subagent dispatch.
+After writing the complete plan, look at the spec with fresh eyes and check the plan against it. This round is required, and it is yours: run the checklist once, never through a subagent. The plan review under Lint and Review comes after it and does not replace it.
 
 **1. Spec coverage:** Skim each section/requirement in the spec. Can you point to a task that implements it? List any gaps.
 
@@ -323,7 +323,7 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **4. Lint:** Run the checker under Lint and Review.
 
-If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
+If you find issues, fix them inline. If you find a spec requirement with no task, add the task. Once `plan-lint` reports `0 errors`, post `Self-review (round 1 of 1):` with one line per item (clean, or what you fixed) before the first plan-review round. Do not re-review after fixing, and fixes a plan-review round asks for do not start another round. A revision your human partner asks for gets one new round.
 
 ## Lint and Review
 

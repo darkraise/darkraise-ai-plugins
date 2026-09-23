@@ -334,6 +334,19 @@ present "writing-plans runs the gate before each round" "$WP" 'run `scripts/code
 present "writing-plans routes a codex-off round 1 by intricacy" "$WP" '**`reason=codex-off`** (round 1 while the gate has not opened the review'
 present "writing-plans offers the lane only on lane=true" "$WP" 'for every executor whose gate prints `lane=true`'
 
+# --- planning self-review ------------------------------------------------------
+BS="$P/skills/brainstorming/SKILL.md"
+present "brainstorming names the self-review block" "$BS" '`Self-review (round 1 of 1):`'
+present "writing-plans names the self-review block" "$WP" '`Self-review (round 1 of 1):`'
+present "brainstorming self-reviews a bounded design" "$BS" '4. **Self-review the design**'
+present "brainstorming keeps the round with the main agent" "$BS" 'never through a subagent'
+present "writing-plans keeps the round with the main agent" "$WP" 'never through a subagent'
+present "brainstorming gives a revision one new round" "$BS" 'A revision your human partner asks for gets one new round'
+present "writing-plans gives a revision one new round" "$WP" 'A revision your human partner asks for gets one new round'
+present "writing-plans posts the block before plan review" "$WP" 'before the first plan-review round'
+present "brainstorming flags a skipped round" "$BS" 'I'"'"'ll skip the self-review'
+absent "brainstorming no longer re-runs a review loop" "$BS" 're-run the spec review loop'
+
 # --- task review prose -----------------------------------------------------------
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 DT="$P/reference/delegated-task.md"
