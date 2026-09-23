@@ -114,13 +114,13 @@ codex_plan() {
 # Codex Demo Plan
 
 Host: codex
-Routing policy: codex-v2
+Routing policy: codex-v3
 
 **Goal:** Demo.
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — codex gpt-5.6-sol / high — native pair
+**Execution:** subagent — codex gpt-6-sol / high — native pair
 
 **Plan review:** 2026-09-12 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
@@ -145,7 +145,7 @@ None
 **Files:**
 - Create: `b.txt`
 
-**Implementer:** codex gpt-5.6-terra / medium
+**Implementer:** codex gpt-6-sol / low
 **Evaluation:** files=1, spec=1, coupling=1, risk=0; weighted routing score=3
 **Assignment source:** rubric
 EOF
@@ -404,10 +404,10 @@ has "missing Files" "$out" "ERROR Task 2: missing **Files:** block"
 codex_plan | sed 's/weighted routing score=3/weighted routing score=4/' > c1.md
 lint c1.md
 has "weighted score mismatch" "$out" "ERROR Task 1: weighted routing score 4 is not files+spec+coupling+2*risk = 3"
-codex_plan | sed 's#gpt-5.6-terra / medium#gpt-5.6-terra / low#' > c2.md
+codex_plan | sed 's#gpt-6-sol / low#gpt-6-luna / high#' > c2.md
 lint c2.md
 has "rank below score" "$out" "ERROR Task 1: Implementer rank 2 is below routing score 3"
-codex_plan | sed 's#gpt-5.6-terra / medium#gpt-5.6-terra / high#' > c3.md
+codex_plan | sed 's#gpt-6-sol / low#gpt-6-sol / medium#' > c3.md
 lint c3.md
 check "promotion: exit 0" "$status" "0"
 has "promotion warns" "$out" "WARN Task 1: Implementer rank 4 is above routing score 3 (promotion)"

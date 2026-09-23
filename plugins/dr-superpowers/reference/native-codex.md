@@ -19,13 +19,13 @@ at most 6. All scores 0–9 are reachable without weakening Rule S. Claude uses
 the unweighted total in ladder.md; its assignment and external CLI tables do
 not apply to native Codex.
 
-New plans contain `Host: codex` and `Routing policy: codex-v2`. Every task contains
+New plans contain `Host: codex` and `Routing policy: codex-v3`. Every task contains
 `Implementer`, `Evaluation`, and `Assignment source: rubric` or `Assignment source: human`.
 Native assignments use `codex <model> / <effort>`. Evaluation preserves all four
 raw axes and explicitly labels the weighted routing score, for example:
 
 ```text
-**Implementer:** codex gpt-5.6-sol / high
+**Implementer:** codex gpt-6-astra / medium
 **Evaluation:** files=1, spec=1, coupling=1, risk=2; weighted routing score=7
 **Assignment source:** rubric
 ```
@@ -34,14 +34,14 @@ The machine policy is [codex-routing.json](codex-routing.json):
 
 | Score/rank | Model | Reasoning effort |
 | --- | --- | --- |
-| 0 | gpt-5.6-luna | low |
-| 1 | gpt-5.6-luna | medium |
-| 2 | gpt-5.6-terra | low |
-| 3 | gpt-5.6-terra | medium |
-| 4 | gpt-5.6-terra | high |
-| 5 | gpt-5.6-sol | low |
-| 6 | gpt-5.6-sol | medium |
-| 7 | gpt-5.6-sol | high |
+| 0 | gpt-6-luna | low |
+| 1 | gpt-6-luna | medium |
+| 2 | gpt-6-luna | high |
+| 3 | gpt-6-sol | low |
+| 4 | gpt-6-sol | medium |
+| 5 | gpt-6-sol | high |
+| 6 | gpt-6-sol | xhigh |
+| 7 | gpt-6-astra | medium |
 | 8 | gpt-6-astra | high |
 | 9 | gpt-6-astra | xhigh |
 
@@ -117,16 +117,16 @@ the score; an optional `score` must be an integer 0–9 equal to that calculatio
 The result includes the calculated score even when capability filtering promotes
 the returned rank. Missing metadata is an error, not permission to inherit defaults.
 
-This complete example dispatches Sol high when that is the allowed advertised pair:
+This complete example dispatches Astra medium when that is the allowed advertised pair:
 
 ```json
 {
-  "policy": "codex-v2",
+  "policy": "codex-v3",
   "operation": "assign",
   "role": "implementer",
   "assignment_source": "rubric",
   "axes": {"files": 1, "spec": 1, "coupling": 1, "risk": 2},
-  "available_pairs": [{"model": "gpt-5.6-sol", "effort": "high"}],
+  "available_pairs": [{"model": "gpt-6-astra", "effort": "medium"}],
   "attempted_ranks": [],
   "attempted_reserves": [],
   "split_consumed": false,
@@ -159,6 +159,12 @@ pairs. Once reserve has begun, it takes precedence over newly available executio
 tiers. Ultra exhaustion is terminal; neither execution tiers nor max can restart.
 Transport retries reuse their exact recorded pair and do not reset rank history,
 split budget, or the five-round cap.
+
+An ultra implementer may run subagents in parallel inside its own task: OpenAI
+documents ultra as using subagents for separate parts of a complex task. The
+task's approved write set, the before/after snapshot and the review still apply
+to the task as a whole. Only implementers reach the reserve, so the
+no-delegation instruction for scouts and judges is unaffected.
 
 ## Dispatch and review
 
@@ -193,7 +199,7 @@ pair and task state. If resume is unsupported, report the lost context and use
 a fresh isolated implementer with the complete fix package under the recorded
 assignment; do not silently inherit the controller's model.
 
-Scouts start at rank 6 (Sol medium) or above, judges at rank 8 (Astra high) or above.
+Scouts start at rank 4 (Sol medium) or above, judges at rank 8 (Astra high) or above.
 For rubric routing, evaluate the bounded scout or review brief itself. An
 implementer task with spec=3 must first receive approach work; do not submit its
 unresolved implementation axes as the scout assignment or invent passing axes.

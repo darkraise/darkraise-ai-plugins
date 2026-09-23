@@ -1,14 +1,14 @@
 {
-  "version": "codex-v2",
+  "version": "codex-v3",
   "execution": [
-    {"rank":0,"model":"gpt-5.6-luna","effort":"low"},
-    {"rank":1,"model":"gpt-5.6-luna","effort":"medium"},
-    {"rank":2,"model":"gpt-5.6-terra","effort":"low"},
-    {"rank":3,"model":"gpt-5.6-terra","effort":"medium"},
-    {"rank":4,"model":"gpt-5.6-terra","effort":"high"},
-    {"rank":5,"model":"gpt-5.6-sol","effort":"low"},
-    {"rank":6,"model":"gpt-5.6-sol","effort":"medium"},
-    {"rank":7,"model":"gpt-5.6-sol","effort":"high"},
+    {"rank":0,"model":"gpt-6-luna","effort":"low"},
+    {"rank":1,"model":"gpt-6-luna","effort":"medium"},
+    {"rank":2,"model":"gpt-6-luna","effort":"high"},
+    {"rank":3,"model":"gpt-6-sol","effort":"low"},
+    {"rank":4,"model":"gpt-6-sol","effort":"medium"},
+    {"rank":5,"model":"gpt-6-sol","effort":"high"},
+    {"rank":6,"model":"gpt-6-sol","effort":"xhigh"},
+    {"rank":7,"model":"gpt-6-astra","effort":"medium"},
     {"rank":8,"model":"gpt-6-astra","effort":"high"},
     {"rank":9,"model":"gpt-6-astra","effort":"xhigh"}
   ],
@@ -16,6 +16,6 @@
     {"model":"gpt-6-astra","effort":"max"},
     {"model":"gpt-6-astra","effort":"ultra"}
   ],
-  "role_floors": {"implementer":0,"scout":6,"judge":8},
+  "role_floors": {"implementer":0,"scout":4,"judge":8},
   "review_cap": 5
 }
