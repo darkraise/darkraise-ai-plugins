@@ -364,3 +364,38 @@ as the 2026-09-21 run above.
 
 Result: PASS. `trust.smoke` was already `pass`; this run shows the new model
 works through the lane on this account.
+
+## Smoke test — `gpt-6-luna`, 2026-09-23
+
+Run: 2026-09-23, `codex-cli 0.155.1`, `gpt-6-luna / low` through
+`codex exec` (`run-codex-task.sh` admits only the lane's `gpt-6-sol`),
+ChatGPT Pro sign-in, Linux, disposable linked worktree. Same brief and checks
+as the `gpt-6-sol` run above.
+
+Attempt 1 (`-s workspace-write`, no `--add-dir`):
+
+- codex exec exit: 0
+- Commit: none, 0 commits
+- File content correct: yes — `codex lane smoke test`, 22 bytes including the newline
+- Write set honoured: n/a — nothing committed
+- Worktree clean afterwards: no — `smoke.txt` untracked
+
+Result: FAIL — sandbox refusal, not a Luna failure. `codex` reported it could
+not create `.git/worktrees/wt/index.lock` because the linked worktree's Git
+metadata is read-only under `workspace-write` without `--add-dir` naming the
+git common dir.
+
+Attempt 2 (`-s workspace-write --add-dir "$(git rev-parse --git-common-dir)"`):
+
+- codex exec exit: 0
+- Commit: `93bf1f8 test(superpowers): add codex smoke file`, 1 commit
+- File content correct: yes — `codex lane smoke test`, 22 bytes including the newline
+- Write set honoured: yes — `smoke.txt` only
+- Worktree clean afterwards: yes
+
+Result: PASS — attempt 2. This gates the codex-v3 policy commit
+(spec `docs/superpowers/specs/2026-09-23-dr-superpowers-codex-v3-design.md` §7).
+It shows Luna is reachable and follows a write set; it says nothing about
+output quality at ranks 0–2. A linked worktree used for a Codex smoke needs
+`--add-dir` naming the git common dir, or the commit step fails on
+`index.lock` regardless of model.
