@@ -215,6 +215,17 @@ printf '# No tasks\n' > "$REPO/docs/empty.md"
 (cd "$REPO" && bash "$SCRIPT" docs/missing.md >/dev/null 2>&1); check "a missing plan exits 2" "$?" "2"
 (cd "$REPO" && bash "$SCRIPT" >/dev/null 2>&1); check "no argument exits 2" "$?" "2"
 
+# --- a Codex-host plan is not this script's ---
+codex_plan() { # codex_plan <path>
+  printf '# Codex Plan\n\nHost: codex\nRouting policy: codex-v3\n\n**Execution:** subagent — codex gpt-6-sol / high — native\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** codex gpt-6-sol / low\n**Evaluation:** files=1, spec=1, coupling=1, risk=0; weighted routing score=3\n**Assignment source:** rubric\n' > "$1"
+}
+codex_plan "$REPO/docs/codex.md"
+out=$( (cd "$REPO" && bash "$SCRIPT" docs/codex.md) 2>&1 ); rc=$?
+check "a Codex-host plan exits 2" "$rc" "2"
+check "a Codex-host plan is refused by name" "$out" "plan-revise: docs/codex.md is a Codex-host plan; convert it per reference/native-codex.md §Existing plans"
+bare "$(printf '```text\nHost: codex\n```\n\n%s' "$(mktask 1 0 1 0 2)")"
+check "a fenced Host: codex line does not refuse a Claude plan" "$( (cd "$REPO" && bash "$SCRIPT" docs/p.md) >/dev/null 2>&1; echo $?)" "0"
+
 # --- survey mode ---
 SUR="$TMP/sur"
 mkdir -p "$SUR/docs"
@@ -240,6 +251,11 @@ check "the survey counts tasks" "$(field tasks "$(row mixed)")" "2"
 check "the survey counts unparsed units" "$(field unparsed "$(row mixed)")" "1"
 # The survey answers "how much could be delegated", so it ignores selection.
 check "the survey counts eligibility without a ticked executor" "$(field eligible "$(row scored)")" "1"
+
+codex_plan "$SUR/docs/codex.md"
+check "the survey skips a Codex-host plan" "$(row codex)" "plan  codex.md  host=codex  skipped"
+check "the survey still counts it as surveyed" "$(survey | tail -n 1)" "surveyed  plans=4"
+rm -f "$SUR/docs/codex.md"
 
 # --- liveness precedence ---
 check "no ledger and no completed entry is unknown" "$(field live "$(row scored)")" "unknown"
@@ -298,6 +314,7 @@ present() { # present <name> <file> <needle>
   check "$1" "$([ "$n" -ge 1 ] && echo yes || echo no)" "yes"
 }
 check "the skill exists" "$([ -f "$SK" ] && echo yes || echo no)" "yes"
+present "the skill revises Claude plans only" "$SK" "revises Claude plans only"
 present "the skill is named" "$SK" "name: revising-plans"
 present "the skill refuses a live plan" "$SK" "Never edit a plan whose ledger names it"
 present "the skill hard-stops a plan awaiting a merge" "$SK" "completed.md via PR, no ledger"

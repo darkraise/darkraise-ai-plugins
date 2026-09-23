@@ -21,6 +21,18 @@ LADDER="${DR_PLAN_REVISE_LADDER:-$HERE/../reference/ladder.md}"
 die() { printf 'plan-revise: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: plan-revise PLAN_FILE | plan-revise --survey DIR"; }
 
+# A Codex-host plan carries the weighted native Evaluation form, which this
+# script reads as unscored and then answers with a Claude Execution line. Fenced
+# lines are skipped so a plan quoting a Codex header is not mistaken for one.
+# The header is captured before grep -q reads it: under pipefail, grep -q
+# exiting at the first match can SIGPIPE an awk still writing a long header
+# and fail the whole pipeline.
+is_codex_plan() {
+  local header
+  header=$(plan_header "$1" | awk "$_PLAN_AWK"'in_fence($0) { next } { print }')
+  grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"
+}
+
 # block NAME — the body of the ```NAME fenced block in the ladder, blank lines
 # dropped. The ladder is the single source for thresholds and rungs; a constant
 # copied into a script is a constant that drifts.
@@ -201,6 +213,10 @@ survey() {
     tasks=$(plan_tasks "$f" | grep -c .)
     [ "$tasks" -gt 0 ] || continue
     rows=$((rows + 1))
+    if is_codex_plan "$f"; then
+      printf 'plan  %s  host=codex  skipped\n' "$(basename "$f")"
+      continue
+    fi
     scored=0 unparsed=0 eligible=0
     while IFS=$'\t' read -r _id text; do
       [ -n "$_id" ] || continue
@@ -259,6 +275,7 @@ fi
 [ $# -eq 1 ] || usage
 plan=$1
 [ -f "$plan" ] || die "no such plan file: $plan"
+is_codex_plan "$plan" && die "$plan is a Codex-host plan; convert it per reference/native-codex.md §Existing plans"
 
 # --- header ---
 # The mode is the token after the label. A glob over the whole line reads the

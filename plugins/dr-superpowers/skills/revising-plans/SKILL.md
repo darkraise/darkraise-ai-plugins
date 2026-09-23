@@ -15,6 +15,11 @@ revises one named plan into an ordinary current-format plan.
 `bash <plugin-root>/scripts/plan-revise <PLAN_FILE>`, with the working directory
 inside the plan's repository.
 
+This skill revises Claude plans only. `plan-revise` refuses a plan whose header
+carries `Host: codex` with exit 2, and the survey lists one as
+`host=codex  skipped`: convert a Codex plan per
+[native-codex.md](../../reference/native-codex.md) §Existing plans instead.
+
 ## Survey first, when you do not know which plan
 
 `bash <plugin-root>/scripts/plan-revise --survey docs/superpowers/plans` prints
