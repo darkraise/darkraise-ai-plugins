@@ -16,7 +16,7 @@ jq -e -s --slurpfile policy "$HERE/../reference/codex-routing.json" '
   require(length == 1; "exactly one JSON request is required") | .[0] |
   require(type == "object"; "request must be an object") |
   $policy[0] as $p | ($p.execution | map(.rank) | max) as $maximum |
-  require(.policy == $p.version; "unsupported routing policy; conversion required before using codex-v2") |
+  require(.policy == $p.version; "unsupported routing policy; conversion required before using \($p.version)") |
   require(
     (.operation == "assign" or .operation == "escalate") and
     (.role == "implementer" or .role == "scout" or .role == "judge") and

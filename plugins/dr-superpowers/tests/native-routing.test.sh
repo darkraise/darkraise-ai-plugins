@@ -57,6 +57,7 @@ expect_error 'out-of-range supplied total' '.score=10' 'score'
 expect_error 'null supplied total' '.score=null' 'score'
 expect_error 'old policy' '.policy="codex-v1"' 'conversion required'
 expect_error 'previous policy' '.policy="codex-v2"' 'conversion required'
+expect_error 'rejection names the current policy' '.policy="codex-v2"' 'conversion required before using codex-v3'
 expect_error 'unknown policy' '.policy="codex-v99"' 'conversion required'
 expect_error 'missing capability metadata' 'del(.available_pairs)' 'metadata'
 
@@ -100,6 +101,18 @@ cat "$fixture/request.json" "$fixture/request.json" > "$fixture/input.json"
 bash "$selector" --request "$fixture/input.json" > "$fixture/output.json" 2>/dev/null
 check 'multiple JSON requests are rejected' "$?" 2
 check 'invalid request emits no decision' "$(wc -c < "$fixture/output.json" | tr -d ' ')" 0
+existing="$(awk '/^## Existing plans$/ { on = 1; next } /^```/ { fence = !fence } on && !fence && /^## / { exit } on' "$HERE/../reference/native-codex.md")"
+while IFS= read -r needle; do
+  check "Existing plans keeps: $needle" "$(grep -qF -- "$needle" <<< "$existing" && echo yes || echo no)" yes
+done <<'NEEDLES'
+Obtain approval
+human pin stays verbatim
+4     gpt-5.6-terra / high
+## Policy conversion
+Ruling: policy conversion codex-v2 -> codex-v3
+consumed split/review budgets
+caught mid-escalation
+NEEDLES
 awk '/^```json$/ { inside=1; next } inside && /^```$/ { exit } inside { print }' "$HERE/../reference/native-codex.md" > "$fixture/documented.json"
 out="$(bash "$selector" --request "$fixture/documented.json" 2>/dev/null)"
 check 'documented request executes with the stated assignment' "$(jq -c '[.action,.score,.rank,.model,.effort]' <<< "$out")" '["dispatch",7,7,"gpt-6-astra","medium"]'

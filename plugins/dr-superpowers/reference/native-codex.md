@@ -53,8 +53,9 @@ establish access through a native client or the external CLI.
 
 Treat an existing assignment without a source as human-pinned. Keep original
 assignments fixed; actual attempts, promotions, and substitutions go in the
-ledger. The selector rejects codex-v1 and unknown policy versions with a
-conversion-required error. Never reinterpret their scores or ranks as v2.
+ledger. The selector and `scripts/plan-lint` accept only `codex-v3`: they reject
+codex-v1, codex-v2 and unknown policy versions with a conversion-required
+error. Never reinterpret an older plan's scores or ranks as v3.
 
 For an old Codex or Claude plan, preview the preserved raw axes, original policy,
 old total, new weighted score, and old/proposed assignments. Obtain approval
@@ -64,11 +65,67 @@ missing, obtain an explicit evaluation instead of inferring them from the total.
 Keep original evaluations and assignments in the conversion record, preserve
 human pins, and never automatically translate reserve overrides.
 
-Convert active work only at a reconciled task boundary. Preserve policy-tagged
+A codex-v2 plan keeps its scores: v2 and v3 share the weighted formula, so the
+preview states each score as unchanged. A rubric task's proposed pair is the v3
+execution tier at its score. The Execution line's pair maps by rank: a v2
+execution pair becomes the v3 pair at the same rank (v2 `gpt-5.6-sol / high`,
+rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself. A
+human pin stays verbatim even when it names a GPT-5.6 pair, which the selector
+still dispatches while it is advertised; the preview flags each such pin so
+your human partner keeps or re-pins it explicitly.
+
+The codex-v2 ranks, kept here because the policy file no longer carries them:
+
+```text
+rank  codex-v2 pair
+0     gpt-5.6-luna / low
+1     gpt-5.6-luna / medium
+2     gpt-5.6-terra / low
+3     gpt-5.6-terra / medium
+4     gpt-5.6-terra / high
+5     gpt-5.6-sol / low
+6     gpt-5.6-sol / medium
+7     gpt-5.6-sol / high
+8     gpt-6-astra / high
+9     gpt-6-astra / xhigh
+reserve  gpt-6-astra / max, then gpt-6-astra / ultra
+```
+
+An unstarted plan, one with no ledger, is converted in place and committed:
+its `Routing policy:` line becomes `codex-v3` in its existing bold or plain
+form, the Execution line and every `Assignment source: rubric` Implementer line
+take their v3 pairs, Evaluation lines stay untouched, and a conversion record
+goes in the header immediately before `## Task index`, so no task's text
+absorbs it:
+
+```text
+## Policy conversion
+
+codex-v2 → codex-v3, approved <date>. Scores unchanged.
+
+| Task | Axes (f/s/c/r) | Score | codex-v2 | codex-v3 | Source |
+|---|---|---|---|---|---|
+| 1 | 1/1/1/0 | 3 | gpt-5.6-terra / medium | gpt-6-sol / low | rubric |
+| 2 | 0/1/0/1 | 3 | gpt-5.6-sol / high | gpt-5.6-sol / high | human (kept) |
+```
+
+`scripts/plan-lint` must pass on the converted plan.
+
+A plan with a ledger does not change: it is immutable during execution, and
+`scripts/plan-amend` refuses `Routing policy:` lines. Convert active work only
+at a reconciled task boundary, recording the approved preview as one ledger
+line:
+
+```text
+Ruling: policy conversion codex-v2 -> codex-v3 — approved preview; Task 4 gpt-6-sol / low, Task 5 gpt-6-astra / medium — attempts above this line stay codex-v2
+```
+
+Later selector requests carry `"policy": "codex-v3"`. Preserve policy-tagged
 attempt history and consumed split/review budgets; never relabel old attempts,
-fabricate v2 ranks, or reset budgets to make a request pass. If v2 cannot represent
-the active history, stop for an explicit handoff decision. A fresh unstarted v2
-task can have empty local history while retaining the prior task record.
+fabricate v3 ranks, or reset budgets to make a request pass. If v3 cannot
+represent the active history, as for a task caught mid-escalation, stop for an
+explicit handoff decision. A fresh unstarted v3 task can have empty local
+history while retaining the prior task record.
 A Claude `Executor: codex` line never starts recursive CLI offload in a Codex host.
 
 ## Execution modes and session ends
