@@ -39,12 +39,16 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
       throw new TransportError(`${method} ${route}: ${reason}`);
     }
     let data = null;
+    let notJson = false;
     if (text) {
       try {
         data = JSON.parse(text);
       } catch {
-        data = null;
+        notJson = true;
       }
+    }
+    if (notJson && response.ok) {
+      throw new TransportError(`${method} ${route}: answered ${response.status} with a body that is not JSON; is the url a darkmem instance?`);
     }
     if (!response.ok) {
       const detail = typeof data?.detail === "string"
@@ -83,7 +87,9 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
       try {
         return await call("GET", "/api/v1/worklog/resume", { query: { project, workstream } });
       } catch (error) {
-        if (error instanceof HttpError && error.status === 404) return null;
+        // Only darkmem's own "no such workstream" answer: a 404 from a wrong
+        // url or a missing route must not read as an empty ledger.
+        if (error instanceof HttpError && error.status === 404 && /no workstream/i.test(error.detail)) return null;
         throw error;
       }
     },

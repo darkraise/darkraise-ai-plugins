@@ -59,6 +59,15 @@ test("resume on an absent workstream is null; purge removes one", () => withStub
   assert.equal((await client.updateWorkstream(workstream.id, { state: "closed", retain: true })).state, "closed");
   assert.equal(await client.purgeWorkstream(workstream.id), null);
   assert.equal(await client.resume("p", "w"), null);
+  const answering = fetchImpl => createClient({ url: "http://x.invalid", apiKey: "k", runKey: "r", timeoutMs: 1000, fetchImpl });
+  await assert.rejects(
+    answering(async () => new Response("<html>not darkmem</html>", { status: 200 })).manifest("p", "superpowers"),
+    error => error instanceof TransportError && /not JSON/.test(error.message),
+  );
+  await assert.rejects(
+    answering(async () => new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })).resume("p", "w"),
+    error => error instanceof HttpError && error.status === 404,
+  );
 }));
 
 test("a refused connection and a silent server are TransportErrors within the timeout", async () => {
