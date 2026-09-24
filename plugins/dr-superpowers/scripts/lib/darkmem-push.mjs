@@ -79,7 +79,7 @@ async function pushDocuments(context) {
         continue;
       }
       if (current !== local) {
-        report.conflicts.push(`${uri}: changed on darkmem since the last sync; ${RESOLVE}`);
+        report.conflicts.push(`${uri}: changed on darkmem since the last sync (darkmem said: ${error.detail}); ${RESOLVE}`);
         continue;
       }
       answer = { content_hash: current, outcome: "unchanged" };

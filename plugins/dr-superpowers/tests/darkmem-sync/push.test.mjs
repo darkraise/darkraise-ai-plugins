@@ -45,7 +45,7 @@ test("a document moved on darkmem is a conflict and the local file stays", async
   write(path.join(s.docsRoot, "a.md"), "mine\n");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^conflict: superpowers\/a\.md: changed on darkmem since the last sync; pull, reconcile, then push$/m);
+  assert.match(result.stdout, /^conflict: superpowers\/a\.md: changed on darkmem since the last sync \(darkmem said: expected_hash [0-9a-f]{64} does not match[^)]*\); pull, reconcile, then push$/m);
   assert.equal(read(path.join(s.docsRoot, "a.md")), "mine\n");
   assert.equal(s.stub.db.documents.get("proj\u0000superpowers/a.md").content, "theirs\n");
 });
