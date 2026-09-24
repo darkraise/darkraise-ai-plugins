@@ -82,6 +82,10 @@ test("handoff notes go up as documents and are linked from their workstream", as
   assert.equal(result.code, 0, result.stdout);
   assert.equal(s.stub.db.documents.get("proj\u0000superpowers/handoff/p1.md").content, "# Handoff p1\n");
   assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "superpowers/handoff/p1.md");
+  delete s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri;
+  fs.rmSync(path.join(s.mirror, ".sync-state.json"));
+  assert.equal((await s.push()).code, 0);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "superpowers/handoff/p1.md", "an adopted handoff note is linked too");
 });
 
 test("an empty document fails the push and keeps its record; a reserved file is a note", async t => {
@@ -193,6 +197,16 @@ test("a ledger append whose answer was lost is reconciled, never sent twice", as
   fs.appendFileSync(file, "two\n");
   assert.equal((await s.push()).code, 0);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n"]);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "three\n" }] });
+  fs.appendFileSync(file, "three\n");
+  assert.equal((await s.push()).code, 0);
+  assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n", "three\n"]);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "theirs\n" }] });
+  fs.appendFileSync(file, "four\n");
+  const stale = await s.push();
+  assert.equal(stale.code, 1);
+  assert.match(stale.stdout, /^conflict: sdd\/p1\/progress\.md: darkmem's ledger for p1 changed since the last sync/m);
+  assert.equal((await s.ledger("p1")).length, 4);
 });
 
 test("a ledger append refused by darkmem is a failure and nothing is marked sent", async t => {
@@ -234,9 +248,10 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
   write(latest, "# Handoff\n\n## State\n- Draft: `docs/superpowers/specs/d-design.md`\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
   assert.equal((await s.push()).code, 3);
+  await s.seed.append({ project: "proj", workstream: "d-design", entries: [{ kind: "checkpoint", body: "# Handoff from another machine\n" }] });
   assert.equal((await s.push()).code, 0);
   const draft = s.stub.db.workstreams.find(w => w.key === "d-design");
-  assert.equal(draft.entries.length, 1, "a checkpoint whose answer was lost is not filed twice");
+  assert.equal(draft.entries.length, 2, "a checkpoint whose answer was lost is not filed twice, even behind another client's");
   assert.deepEqual(draft.properties, { spec_uri: "superpowers/specs/d-design.md" });
   const bad = await s.push("--workstream", "../x");
   assert.equal(bad.code, 2);

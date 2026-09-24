@@ -52,6 +52,7 @@ async function pushDocuments(context) {
       if (current === local) {
         state.documents[uri] = local;
         persist();
+        await linkHandoff(context, uri);
         continue;
       }
       if (current !== null) {
@@ -116,7 +117,9 @@ async function pushLedgers(context) {
   for (const { slug, file } of ledgerFiles(roots.workRoot)) {
     const buffer = fs.readFileSync(file);
     let record = state.ledgers[slug];
+    let adopted = false;
     if (!record || record.pending) {
+      adopted = true;
       record = await adoptRemoteLedger(context, slug, buffer);
       if (!record) {
         report.conflicts.push(`sdd/${slug}/progress.md: darkmem's ledger for ${slug} is not a prefix of this file; move the local file aside, pull, and re-apply your lines`);
@@ -130,6 +133,21 @@ async function pushLedgers(context) {
       continue;
     }
     if (buffer.length === record.offset) continue;
+    // Another mirror may have appended since the last sync: send only what
+    // darkmem does not already hold, and never lines that would interleave.
+    if (!adopted) {
+      const current = await adoptRemoteLedger(context, slug, buffer);
+      if (!current || current.offset < record.offset) {
+        report.conflicts.push(`sdd/${slug}/progress.md: darkmem's ledger for ${slug} changed since the last sync and no longer matches this file; move the local file aside, pull, and re-apply your lines`);
+        continue;
+      }
+      if (current.offset !== record.offset) {
+        record = current;
+        state.ledgers[slug] = record;
+        persist();
+        if (buffer.length === record.offset) continue;
+      }
+    }
     const appended = decodeUtf8(buffer.subarray(record.offset));
     if (appended === null) {
       report.notes.push(`sdd/${slug}/progress.md: the appended bytes end inside a character; push again once the write finishes`);
@@ -184,12 +202,16 @@ async function pushCheckpoint({ cfg, client, roots, state, persist, report }, na
     report.failures.push(`handoff/latest.md: ${chars} characters, over the ${MAX_ENTRY_CHARS} one checkpoint holds`);
     return;
   }
-  // The same note already filed (an earlier push whose answer was lost) is
+  // The same note already filed since the last synced checkpoint (an earlier
+  // push whose answer was lost, even behind another client's checkpoint) is
   // recorded, not filed twice.
-  const latest = (await client.resume(cfg.project, workstream))?.checkpoint;
-  if (latest && sha256(Buffer.from(latest.body, "utf8")) === hash) {
+  const existing = await client.resume(cfg.project, workstream);
+  const since = state.checkpointAt ? Date.parse(state.checkpointAt) : -Infinity;
+  const filed = existing && (await client.entries(existing.workstream.id, "checkpoint"))
+    .find(entry => Date.parse(entry.created_at) >= since && sha256(Buffer.from(entry.body, "utf8")) === hash);
+  if (filed) {
     state.checkpoint = hash;
-    state.checkpointAt = latest.created_at;
+    state.checkpointAt = filed.created_at;
     persist();
     return;
   }
