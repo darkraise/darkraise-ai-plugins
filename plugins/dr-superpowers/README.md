@@ -239,7 +239,9 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   `~/.dr-superpowers/config.json` —
   `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
   — and export a `dmk_` key in that variable, and the repository syncs a mirror
-  at `~/.dr-superpowers/mirror/<project>/`. `pull` fetches what changed;
+  at `~/.dr-superpowers/mirror/<project>/`. The key needs the `read` and
+  `capture` scopes, and `import --replace` also `admin`. `pull` fetches what
+  changed;
   `push` sends documents under their last synced hash and ledgers as the bytes
   appended since the last push; `status` lists local changes and the last
   run's conflicts; `import` moves an existing `docs/superpowers/` and its
