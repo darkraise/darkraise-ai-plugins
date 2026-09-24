@@ -10,3 +10,4 @@
 | 3 | Run pull at SessionStart and push at the skills' stop points, with a Stop hook as the Claude Code safety net (spec §4) | - | - | open | - |
 | 4 | Skills record durable facts with memory_add at task-complete and handoff (spec §5) | - | - | open | - |
 | 5 | Move a repository into darkmem: mapping, import, round-trip check, delete docs/superpowers in its own commit; darkmem's CLAUDE.md citations first (spec §6) | - | - | open | owner-run, after rows 1-3 land and darkmem increment 1 is deployed |
+| 6 | darkmem-sync on Windows: CI's six Windows shards green at the release commit | - | - | verify | the suite has run on Linux only; a red Windows shard reopens row 1 |
