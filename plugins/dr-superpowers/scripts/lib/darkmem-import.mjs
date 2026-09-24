@@ -67,37 +67,44 @@ const sameBytes = (file, buffer) => fs.existsSync(file) && fs.readFileSync(file)
 
 async function verify(context, roots, snapshot) {
   const { report } = context;
-  const again = readSources(roots);
-  const inventory = source => [...source.documents.map(d => d.uri), ...source.ledgers.map(l => `sdd/${l.slug}`)].sort().join("\n");
-  const changed = inventory(again) !== inventory(snapshot)
-    || again.documents.some((d, i) => !d.buffer.equals(snapshot.documents[i].buffer))
-    || again.ledgers.some((l, i) => !l.buffer.equals(snapshot.ledgers[i].buffer));
-  if (changed || again.problems.length) {
-    report.failures.push("the source files changed during the import; run it again with --replace");
-    return;
-  }
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "darkmem-import-"));
-  const scratchRoots = { docsRoot: path.join(scratch, "superpowers"), workRoot: path.join(scratch, "work") };
-  const scratchContext = {
-    ...context,
-    roots: scratchRoots,
-    state: emptyState(),
-    persist: () => {},
-    report: { conflicts: [], failures: [], notes: [], counts: { documents: 0, ledgers: 0 } },
-  };
-  await pullDocuments(scratchContext);
-  const imported = snapshot.ledgers.filter(l => l.id).map(l => ({ id: l.id, key: l.slug }));
-  await pullLedgers(scratchContext, imported);
-  const differing = [
-    ...snapshot.documents.filter(d => !sameBytes(uriToLocal(scratchRoots, d.uri), d.buffer)).map(d => d.uri),
-    ...snapshot.ledgers.filter(l => !sameBytes(path.join(scratchRoots.workRoot, "sdd", l.slug, "progress.md"), l.buffer)).map(l => `sdd/${l.slug}/progress.md`),
-  ];
-  if (differing.length) {
-    for (const name of differing) report.failures.push(`${name}: a pull of darkmem's copy differs from the source; compare under ${scratch}`);
-    return;
+  // A byte difference keeps the scratch copy for the operator to compare.
+  let keepScratch = false;
+  try {
+    const scratchRoots = { docsRoot: path.join(scratch, "superpowers"), workRoot: path.join(scratch, "work") };
+    const scratchContext = {
+      ...context,
+      roots: scratchRoots,
+      state: emptyState(),
+      persist: () => {},
+      report: { conflicts: [], failures: [], notes: [], counts: { documents: 0, ledgers: 0 } },
+    };
+    await pullDocuments(scratchContext);
+    const imported = snapshot.ledgers.filter(l => l.id).map(l => ({ id: l.id, key: l.slug }));
+    await pullLedgers(scratchContext, imported);
+    // Re-read after the pull, so an edit made while it ran fails the import too.
+    const again = readSources(roots);
+    const inventory = source => [...source.documents.map(d => d.uri), ...source.ledgers.map(l => `sdd/${l.slug}`)].sort().join("\n");
+    const changed = inventory(again) !== inventory(snapshot)
+      || again.documents.some((d, i) => !d.buffer.equals(snapshot.documents[i].buffer))
+      || again.ledgers.some((l, i) => !l.buffer.equals(snapshot.ledgers[i].buffer));
+    if (changed || again.problems.length) {
+      report.failures.push("the source files changed during the import; run it again with --replace");
+      return;
+    }
+    const differing = [
+      ...snapshot.documents.filter(d => !sameBytes(uriToLocal(scratchRoots, d.uri), d.buffer)).map(d => d.uri),
+      ...snapshot.ledgers.filter(l => !sameBytes(path.join(scratchRoots.workRoot, "sdd", l.slug, "progress.md"), l.buffer)).map(l => `sdd/${l.slug}/progress.md`),
+    ];
+    if (differing.length) {
+      keepScratch = true;
+      for (const name of differing) report.failures.push(`${name}: a pull of darkmem's copy differs from the source; compare under ${scratch}`);
+      return;
+    }
+    report.notes.push("verified: a pull of every imported file reads back byte-identical");
+  } finally {
+    if (!keepScratch) fs.rmSync(scratch, { recursive: true, force: true });
   }
-  fs.rmSync(scratch, { recursive: true, force: true });
-  report.notes.push("verified: a pull of every imported file reads back byte-identical");
 }
 
 export async function importRepository(context) {

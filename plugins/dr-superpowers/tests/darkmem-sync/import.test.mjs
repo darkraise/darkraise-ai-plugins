@@ -118,7 +118,7 @@ test("a source file changed during the import fails its verification", async t =
   let repo = null;
   const s = await setup(t, {
     onRequest: request => {
-      if (request.method === "PATCH" && repo) write(path.join(repo, "docs", "superpowers", "specs", "s.md"), "# Spec, edited mid-import\n");
+      if (request.method === "GET" && request.path === "/api/v1/documents/by-uri" && repo) write(path.join(repo, "docs", "superpowers", "specs", "s.md"), "# Spec, edited mid-import\n");
     },
   });
   repo = s.repo;
