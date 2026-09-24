@@ -105,6 +105,7 @@ async function main(argv, {
       err(`darkmem-sync: ${error.message}`);
       code = 2;
     } else {
+      code = 4;
       throw error;
     }
   } finally {
