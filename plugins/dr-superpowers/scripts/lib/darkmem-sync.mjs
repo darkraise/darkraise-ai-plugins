@@ -6,6 +6,7 @@ import path from "node:path";
 import { ConfigError, resolveMode, runKey } from "./darkmem-config.mjs";
 import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
 import { StateError, UsageError, acquireLock, loadState, localChanges, lockOwner, saveState } from "./darkmem-mirror.mjs";
+import { importRepository } from "./darkmem-import.mjs";
 import { pull } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
 
@@ -24,6 +25,7 @@ const COMMANDS = {
   status: { options: {}, needsDarkmem: false, recordsConflicts: false, run: status },
   pull: { options: {}, needsDarkmem: false, recordsConflicts: true, run: pull },
   push: { options: { "--workstream": true }, needsDarkmem: false, recordsConflicts: true, run: push },
+  import: { options: { "--replace": false }, needsDarkmem: true, recordsConflicts: false, run: importRepository },
 };
 
 function parse(argv) {
