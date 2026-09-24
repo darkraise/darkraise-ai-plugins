@@ -7,6 +7,7 @@ import { ConfigError, resolveMode, runKey } from "./darkmem-config.mjs";
 import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
 import { StateError, UsageError, acquireLock, loadState, localChanges, lockOwner, saveState } from "./darkmem-mirror.mjs";
 import { pull } from "./darkmem-pull.mjs";
+import { push } from "./darkmem-push.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace]";
 
@@ -22,6 +23,7 @@ async function status({ cfg, roots, state, report, out }) {
 const COMMANDS = {
   status: { options: {}, needsDarkmem: false, recordsConflicts: false, run: status },
   pull: { options: {}, needsDarkmem: false, recordsConflicts: true, run: pull },
+  push: { options: { "--workstream": true }, needsDarkmem: false, recordsConflicts: true, run: push },
 };
 
 function parse(argv) {
