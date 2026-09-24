@@ -178,28 +178,32 @@ export function lockOwner(dir) {
   return readOwner(path.join(dir, ".sync.lock"));
 }
 
+// One reading of a lock, so the judgment that it is abandoned and the identity
+// later checked against it describe the same lock: two separate reads let a
+// lock created in between be taken for the abandoned one.
+function lockSnapshot(lock) {
+  let mtimeMs = null;
+  try {
+    mtimeMs = fs.statSync(lock).mtimeMs;
+  } catch {
+    // The lock is gone; the snapshot says so.
+  }
+  return { owner: readOwner(lock), mtimeMs };
+}
+
 // A lock is abandoned when the process that took it on this host is gone. A
 // lock with no readable owner (a crash between mkdir and the owner write), or
 // taken on another host, is abandoned once older than staleMs.
-function lockAbandoned(lock, owner, staleMs) {
+function lockAbandoned({ owner, mtimeMs }, staleMs) {
   if (owner?.host === os.hostname() && Number.isSafeInteger(owner.pid)) return !processAlive(owner.pid);
-  try {
-    return Date.now() - fs.statSync(lock).mtimeMs >= staleMs;
-  } catch {
-    return true;
-  }
+  return mtimeMs === null || Date.now() - mtimeMs >= staleMs;
 }
 
 // What makes a lock this lock rather than one taken since: its owner's token,
 // or for a lock with no owner record, its modification time.
-function lockIdentity(lock) {
-  const token = readOwner(lock)?.token;
-  if (typeof token === "string") return `token:${token}`;
-  try {
-    return `mtime:${fs.statSync(lock).mtimeMs}`;
-  } catch {
-    return null;
-  }
+function lockIdentity({ owner, mtimeMs }) {
+  if (typeof owner?.token === "string") return `token:${owner.token}`;
+  return mtimeMs === null ? null : `mtime:${mtimeMs}`;
 }
 
 // One sync per mirror at a time. Returns a release function, or null when a
@@ -218,8 +222,9 @@ export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover } = 
       fs.mkdirSync(lock);
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      if (!lockAbandoned(lock, readOwner(lock), staleMs)) return null;
-      const identity = lockIdentity(lock);
+      const seen = lockSnapshot(lock);
+      if (!lockAbandoned(seen, staleMs)) return null;
+      const identity = lockIdentity(seen);
       beforeTakeover?.();
       const aside = `${lock}.stale-${owner.token}`;
       try {
@@ -227,7 +232,7 @@ export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover } = 
       } catch {
         continue;
       }
-      if (lockIdentity(aside) !== identity) {
+      if (lockIdentity(lockSnapshot(aside)) !== identity) {
         // Another process took the lock over first; give its lock back.
         try {
           fs.renameSync(aside, lock);
