@@ -1,9 +1,9 @@
 # dr-superpowers: darkmem as the store for planning documents and progress
 
 Date: 2026-09-23
-Status: design, owner-approved on 2026-09-23 alongside the server half. Not
-planned. Depends on increment 1 (and, for revisions, increment 3) of the server
-spec.
+Status: design, owner-approved on 2026-09-23 alongside the server half.
+Delivered in two increments (see Delivery). Depends on increment 1 (and, for
+revisions, increment 3) of the server spec.
 Server spec: `darkmem` repository,
 `docs/superpowers/specs/2026-09-23-work-log-lane-design.md` (§2 is the REST
 contract this spec consumes).
@@ -184,6 +184,25 @@ additionally rewrites its `CLAUDE.md` citations first (server spec §4).
   within its timeout.
 - `node scripts/validate-repository.mjs` and `claude plugin validate`, per the
   repository's CLAUDE.md.
+
+## Delivery (amended 2026-09-24)
+
+Two increments, so the sync can be built and tested before any skill depends
+on it:
+
+1. **The sync client** — §1, §3 and the §7 tests: `scripts/darkmem-sync` with
+   `status`, `pull`, `push` and `import`, usable by hand and changing nothing
+   in local mode. Plan: `docs/superpowers/plans/2026-09-24-darkmem-sync-client.md`.
+2. **Wiring** — §2's two roots through every script and skill, §4's triggers
+   and §5's promotion instruction. It needs one decision this design did not
+   make: how a plan that lives in the mirror, outside the repository, is
+   identified, since `plan_require_same_repo`, ledger identity lines, register
+   `Covers` paths and `plans/completed.md` all name plans by
+   repository-relative path.
+
+§6 stays owner-run, after increment 2 and after the server's increment 1 is
+deployed. The register `docs/superpowers/registers/2026-09-24-darkmem-mirror.md`
+tracks all of it.
 
 ## Not in scope
 
