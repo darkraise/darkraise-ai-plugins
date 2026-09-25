@@ -16,8 +16,9 @@ longer matter.
 
 ## 1. Server: an append precondition (darkmem repository)
 
-`POST /api/v1/worklog/entries` gains an optional `expected_last_seq`
-(integer, ≥ 0).
+`POST /api/v1/worklog/entries` and the MCP `worklog_append` tool gain an
+optional `expected_last_seq` (integer, ≥ 0), through the request schema both
+doors already share.
 
 - When present, every entry in the call must share one kind; a mixed-kind call
   with the field set is a 422.
@@ -25,24 +26,30 @@ longer matter.
   compares the field with the seq of the workstream's newest entry of that
   kind; `0` means the workstream holds none (seq starts at 1). A mismatch
   raises inside the append's existing savepoint, so nothing is written — no
-  entry, and no workstream creation or reopen — and the route answers 409
-  with the actual last seq in the detail.
+  entry, and no workstream creation or reopen. The route answers 409 with the
+  actual last seq in the detail; the tool answers a `seq_conflict` result
+  naming the expected and current seq, as `document_put` answers
+  `hash_conflict` where its route answers 409.
 - Absent, the append behaves exactly as today.
-- The response gains `last_seq`: the seq of the last entry the call wrote
-  (the insert returns the seqs it was given).
+- Both doors' answers gain `last_seq`: the seq of the last entry the call
+  wrote (the insert returns the seqs it was given).
 - The check is per kind, so a checkpoint filed into a workstream never
   invalidates a ledger push's expectation.
-- Only the REST door changes; the MCP `worklog_append` tool keeps its current
-  signature (agents do not append ledgers).
+- Both doors change, per darkmem's rule that the doors share one service and
+  its `expected_hash` precedent; `docs/two-door-parity.md` states the
+  409/`seq_conflict` asymmetry on the `worklog.append` row. (Revised
+  2026-09-25 after the spec's first approval, on the owner's ruling.)
 
 Seq is a database-wide identity, not a per-workstream counter, so the
 precondition names the last seq seen rather than the next one expected.
 
-Tests (`test_worklog_service.py`, `test_worklog_rest.py`): a match writes; a
+Tests (`test_worklog_service.py`, `test_worklog_rest.py`,
+`test_worklog_mcp.py`): a match writes; a
 mismatch is a 409 and writes nothing; `0` on a new workstream writes and on a
 workstream holding that kind is a 409; a mixed-kind call with the field is a
 422; two concurrent appends expecting the same seq yield exactly one success;
-`last_seq` equals the seq of the last written entry.
+`last_seq` equals the seq of the last written entry; the tool answers
+`seq_conflict` where the route answers 409.
 
 ## 2. Client push (`scripts/lib/darkmem-push.mjs`)
 
@@ -186,7 +193,6 @@ branch into `main`.
 
 - Path resolution, deletions and `pathToUri` (row 2, sub-project b).
 - Hooks, stop-point pushes and memory promotion (rows 3–4, sub-project c).
-- An MCP-door precondition.
 - `import`: it neither reads nor writes the sync state and appends without the
   precondition, as today; it is owner-run and refuses a workstream that
   already holds entries.
