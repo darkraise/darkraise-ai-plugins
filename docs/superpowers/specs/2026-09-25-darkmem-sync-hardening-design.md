@@ -24,10 +24,12 @@ longer matter.
 - Under the workstream row lock `_lock_or_create` already takes, the service
   compares the field with the seq of the workstream's newest entry of that
   kind; `0` means the workstream holds none (seq starts at 1). A mismatch
-  answers 409 with the actual last seq in the detail and writes nothing,
-  including no workstream creation or reopen.
+  raises inside the append's existing savepoint, so nothing is written — no
+  entry, and no workstream creation or reopen — and the route answers 409
+  with the actual last seq in the detail.
 - Absent, the append behaves exactly as today.
-- The response gains `last_seq`: the seq of the last entry the call wrote.
+- The response gains `last_seq`: the seq of the last entry the call wrote
+  (the insert returns the seqs it was given).
 - The check is per kind, so a checkpoint filed into a workstream never
   invalidates a ledger push's expectation.
 - Only the REST door changes; the MCP `worklog_append` tool keeps its current
@@ -44,18 +46,27 @@ workstream holding that kind is a 409; a mixed-kind call with the field is a
 
 ## 2. Client push (`scripts/lib/darkmem-push.mjs`)
 
-**Per-item errors.** A document put, a ledger append, a checkpoint append or a
-handoff link that darkmem answers with any status other than the handled
-409 and 422 (a 5xx, 403, or an unexpected 404) becomes a failure line naming
-the item — `<uri>: darkmem answered <status>: <detail>` — and push continues
-with the next item and the next phase. A `TransportError` (no answer within
-the timeout, refused connection) and a 401 still abort the run, since every
-later call would fail alike. Exit codes are unchanged: any failure or conflict
-is exit 1.
+**Per-item errors.** Any call made for one item — a document put or its
+conflict read, a ledger's append or reconciling read, the checkpoint's append
+or de-duplication read, a handoff link — that darkmem answers with a status
+other than the ones already handled (409, 422, and resume's "no workstream"
+404), such as a 5xx, a 403 or another 404, becomes a failure line naming the
+item — `<uri>: darkmem answered <status>: <detail>` — and push continues with
+the next item. A call that serves a whole phase (the document manifest) and
+fails that way fails the phase with one line naming it, and the next phase
+runs. A `TransportError` (no answer within the timeout, refused connection)
+and a 401 still abort the run, since every later call would fail alike. Exit
+codes are unchanged: any failure or conflict is exit 1.
 
 **Ledger precondition.** A ledger's state record becomes
 `{ offset, prefix, lastSeq }`. Every append sends `expected_last_seq:
-record.lastSeq` and records the answer's `last_seq`. On a 409, push
+record.lastSeq` and records the answer's `last_seq`; a ledger split into
+several append calls chains each call's `last_seq` into the next. The
+precondition replaces the re-read of darkmem's whole ledger that push does
+today before every append to an already-synced ledger
+(`darkmem-push.mjs:136-150`): another mirror's append now shows up as a 409.
+Pull records `lastSeq` too, from the entries it renders, so a pull followed
+by a push needs no extra read. On a 409, push
 reconciles with the existing `adoptRemoteLedger` path — re-read darkmem's
 ledger; when it is still a prefix of the file, adopt its offset, prefix and
 the seq of its newest ledger entry, and retry the remaining bytes once;
@@ -65,20 +76,30 @@ exists in the field yet, so the state version stays 1 and no migration is
 written. Checkpoint appends do not send the field; their de-duplication stays
 as it is.
 
+**State file.** `loadState` rebuilds the state from a fixed list of fields,
+so both additions are validated and kept there: `lastSeq`, when present, is a
+safe integer ≥ 0; `pendingLinks` is an array of strings, `[]` when absent
+(`emptyState` includes it). A malformed value is a `StateError`, as today.
+
 **Handoff links.** Sync state gains `pendingLinks`, a list of handoff uris.
-Push adds a uri before calling the workstream update, removes it on success,
-and retries every listed uri at the start of each push. A failed link is a
-failure line naming the uri.
+Push adds a uri before calling the workstream update, removes it once the
+workstream carries that `handoff_uri` or has no workstream yet (its first
+append will carry the uri through `propertiesFor`), and retries every listed
+uri at the start of each push. A failed link is a failure line naming the
+uri.
 
 **Invalid UTF-8 in a ledger.** When the appended bytes do not decode, push
-decodes them again without their last 1 to 3 bytes. If that succeeds, the
-file ends inside a character still being written: a note, as today. Otherwise
-the failure names the file and the offset of the first undecodable byte, and
-the run exits 1.
+checks whether the failure is only an unfinished character at the end: the
+last 1 to 3 bytes are a UTF-8 lead byte followed by fewer continuation bytes
+than it announces, and everything before them decodes. Then the file is still
+being written: a note, as today. Anything else — a lone `0xFF` at the end
+included — is a failure naming the file and the file offset of the first
+undecodable byte, and the run exits 1.
 
 **Timestamps.** A helper in `darkmem-mirror.mjs` turns darkmem's ISO
-timestamps into comparable microsecond integers (offset applied, fraction
-padded or truncated to six digits). The checkpoint "filed since the last
+timestamps into comparable microsecond integers (offset applied; fraction
+padded or truncated to six digits, and absent when Python's `isoformat`
+drops a zero fraction). The checkpoint "filed since the last
 synced checkpoint" test uses it instead of `Date.parse`.
 
 ## 3. Client pull, uris and the lock
@@ -91,11 +112,16 @@ reserved Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`,
 failure naming it. Pull also groups the manifest's uris by their lower-case
 form; a group of two or more is a conflict naming every member, and none of
 them is written. Push treats a local file whose uri differs only in case from
-another local file or a manifest uri the same way. The checks run on every
+another local file or a manifest uri the same way. The client has no rename
+or delete route (they are login-only), so a case pair already on darkmem is
+resolved there by hand; the conflict line says so. The checks run on every
 platform, so a Linux mirror never files what a Windows mirror cannot hold.
 
-**Pull errors and timestamps.** A document fetch answered with a 5xx, 403 or
-unexpected 404 is a failure naming the uri; pull continues. Choosing the
+**Pull errors and timestamps.** Pull follows push's per-item rule: a document
+fetch or a workstream's ledger or resume read answered with a 5xx, 403 or
+unexpected 404 is a failure naming the item, and pull continues; a failed
+manifest or workstream list fails its phase. `pull` at session start still
+fails open (mirror spec §3). Choosing the
 newest checkpoint and comparing it with `checkpointAt` use the timestamp
 helper.
 
@@ -104,9 +130,14 @@ is not the lock it judged abandoned, and cannot rename it back (another
 process created a lock meanwhile) now leaves the moved lock in place instead
 of deleting it, and returns busy. Each acquire first removes any
 `.sync.lock.stale-*` directory older than `staleMs`. Two syncs can still end
-up running at once in that three-process race; that is safe because
-documents carry `expected_hash`, ledgers carry `expected_last_seq`,
-checkpoints are de-duplicated, and the state file is written atomically.
+up running at once in that three-process race. darkmem stays correct, because
+documents carry `expected_hash`, ledgers carry `expected_last_seq` and
+checkpoints are de-duplicated. The state file does not: each process saves
+its own copy, and the last save wins. Every record it can lose is rebuilt
+from darkmem by the next push (an unrecorded document is compared with the
+manifest, an unrecorded ledger is adopted), except a `pendingLinks` entry,
+whose link is then lost — accepted for a race that needs a crashed holder and
+three concurrent syncs.
 
 ## 4. Testing (plugin)
 
@@ -119,8 +150,15 @@ The stub server (`tests/darkmem-sync/stub-server.mjs`) implements
 - a ledger 409 that reconciles and appends the remainder, and one that becomes
   a conflict;
 - a failed handoff link listed in `pendingLinks` and linked by the next push;
-- a mid-file invalid byte: failure with its offset, exit 1; a trailing partial
-  character: a note, exit 0;
+  a listed link whose workstream does not exist yet is dropped;
+- a 503 on the document manifest fails the documents phase and the ledgers
+  still push;
+- pull records `lastSeq`, and the next push appends without re-reading the
+  ledger;
+- a state file with a malformed `lastSeq` or `pendingLinks` is a `StateError`;
+  one without `pendingLinks` loads as `[]`;
+- a mid-file invalid byte, and a lone trailing `0xFF`: failure with its
+  offset, exit 1; a trailing partial character: a note, exit 0;
 - two checkpoints 1 µs apart ordered correctly by pull and push;
 - `superpowers/notes/a:b.md` and `superpowers/notes/CON.md` refused by pull
   and push; `A.md` and `a.md` reported as a case conflict, neither written;
@@ -149,3 +187,6 @@ branch into `main`.
 - Path resolution, deletions and `pathToUri` (row 2, sub-project b).
 - Hooks, stop-point pushes and memory promotion (rows 3–4, sub-project c).
 - An MCP-door precondition.
+- `import`: it neither reads nor writes the sync state and appends without the
+  precondition, as today; it is owner-run and refuses a workstream that
+  already holds entries.
