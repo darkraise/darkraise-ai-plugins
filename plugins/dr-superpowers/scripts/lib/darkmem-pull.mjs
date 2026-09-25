@@ -3,7 +3,8 @@
 // as a conflict and left for the agent to resolve.
 import fs from "node:fs";
 import path from "node:path";
-import { DOC_PREFIX, sha256, uriToLocal, validKey, writeFileAtomic } from "./darkmem-mirror.mjs";
+import { failItem } from "./darkmem-client.mjs";
+import { DOC_PREFIX, caseGroups, isoMicros, sha256, uriProblem, uriToLocal, validKey, writeFileAtomic } from "./darkmem-mirror.mjs";
 
 const RESOLVE = "move the local file aside, pull, and re-apply your change";
 
@@ -17,42 +18,72 @@ export async function remoteLedger(client, workstreamId) {
   return { text: entries.map(entry => entry.body).join(""), lastSeq: entries.at(-1)?.seq ?? 0 };
 }
 
-// Every document under superpowers/ whose manifest hash differs from the
-// mirror's copy. The local file is hashed again after the fetch, because an
-// edit can land while the request is out.
-export async function pullDocuments({ cfg, client, roots, state, persist, report }) {
-  for (const item of await client.manifest(cfg.project, DOC_PREFIX)) {
-    if (!item.content_hash) continue;
-    const file = uriToLocal(roots, item.uri);
-    if (!file) {
-      report.notes.push(`${item.uri}: has no place in the mirror, skipped`);
-      continue;
+// One manifest item whose hash differs from the mirror's copy. The local file
+// is hashed again after the fetch, because an edit can land while the request
+// is out.
+async function pullDocument({ cfg, client, roots, state, persist, report }, item) {
+  // Checked before the mapping, which refuses some of these names on its own
+  // (a handoff uri needs a workstream key) and would only note them.
+  const problem = uriProblem(item.uri);
+  if (problem) {
+    report.failures.push(`${item.uri}: ${problem}, so not every mirror can hold it as a file; not pulled — rename it on darkmem by hand`);
+    return;
+  }
+  const file = uriToLocal(roots, item.uri);
+  if (!file) {
+    report.notes.push(`${item.uri}: has no place in the mirror, skipped`);
+    return;
+  }
+  const local = localHash(file);
+  if (local === item.content_hash) {
+    state.documents[item.uri] = local;
+    return;
+  }
+  // darkmem has not moved since the last sync: a local edit is push's to
+  // send, not a conflict.
+  if (local !== null && item.content_hash === state.documents[item.uri]) return;
+  if (local !== null && local !== state.documents[item.uri]) {
+    report.conflicts.push(`${item.uri}: changed locally and on darkmem; ${RESOLVE}`);
+    return;
+  }
+  const doc = await client.getDocument(cfg.project, item.uri);
+  if (typeof doc.content !== "string") {
+    report.notes.push(`${item.uri}: darkmem holds no text for it, skipped`);
+    return;
+  }
+  if (localHash(file) !== local) {
+    report.conflicts.push(`${item.uri}: changed locally during the pull; ${RESOLVE}`);
+    return;
+  }
+  writeFileAtomic(file, doc.content);
+  state.documents[item.uri] = doc.content_hash;
+  persist();
+  report.counts.documents += 1;
+}
+
+// Every document under superpowers/. Uris that differ only in case are one
+// file on a case-insensitive file system, so none of them is written.
+export async function pullDocuments(context) {
+  const { cfg, client, report } = context;
+  let items;
+  try {
+    items = await client.manifest(cfg.project, DOC_PREFIX);
+  } catch (error) {
+    failItem(report, "document manifest", error, "; no document pulled");
+    return;
+  }
+  const twins = caseGroups(items.map(item => item.uri));
+  for (const group of twins) {
+    report.conflicts.push(`${group.join(", ")}: differ only in case, which a case-insensitive file system holds as one file; none of them pulled — rename or delete all but one on darkmem by hand (the sync has no rename or delete route)`);
+  }
+  const held = new Set(twins.flat());
+  for (const item of items) {
+    if (!item.content_hash || held.has(item.uri)) continue;
+    try {
+      await pullDocument(context, item);
+    } catch (error) {
+      failItem(report, item.uri, error);
     }
-    const local = localHash(file);
-    if (local === item.content_hash) {
-      state.documents[item.uri] = local;
-      continue;
-    }
-    // darkmem has not moved since the last sync: a local edit is push's to
-    // send, not a conflict.
-    if (local !== null && item.content_hash === state.documents[item.uri]) continue;
-    if (local !== null && local !== state.documents[item.uri]) {
-      report.conflicts.push(`${item.uri}: changed locally and on darkmem; ${RESOLVE}`);
-      continue;
-    }
-    const doc = await client.getDocument(cfg.project, item.uri);
-    if (typeof doc.content !== "string") {
-      report.notes.push(`${item.uri}: darkmem holds no text for it, skipped`);
-      continue;
-    }
-    if (localHash(file) !== local) {
-      report.conflicts.push(`${item.uri}: changed locally during the pull; ${RESOLVE}`);
-      continue;
-    }
-    writeFileAtomic(file, doc.content);
-    state.documents[item.uri] = doc.content_hash;
-    persist();
-    report.counts.documents += 1;
   }
 }
 
@@ -63,7 +94,14 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
       report.notes.push(`workstream ${JSON.stringify(ws.key)}: not usable as a directory name, skipped`);
       continue;
     }
-    const { text, lastSeq } = await remoteLedger(client, ws.id);
+    let ledger;
+    try {
+      ledger = await remoteLedger(client, ws.id);
+    } catch (error) {
+      failItem(report, `sdd/${ws.key}/progress.md`, error);
+      continue;
+    }
+    const { text, lastSeq } = ledger;
     if (!text) continue;
     const remote = Buffer.from(text, "utf8");
     const synced = { offset: remote.length, prefix: sha256(remote), lastSeq };
@@ -91,12 +129,21 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
 // local edits that have not been pushed.
 async function pullCheckpoint({ cfg, client, roots, state, persist, report }, open) {
   let newest = null;
+  let unread = false;
   for (const ws of open) {
-    const checkpoint = (await client.resume(cfg.project, ws.key))?.checkpoint;
-    if (checkpoint && (!newest || Date.parse(checkpoint.created_at) > Date.parse(newest.created_at))) newest = checkpoint;
+    let checkpoint;
+    try {
+      checkpoint = (await client.resume(cfg.project, ws.key))?.checkpoint;
+    } catch (error) {
+      failItem(report, "handoff/latest.md", error, ` (reading workstream ${ws.key}); not pulled`);
+      unread = true;
+      continue;
+    }
+    if (checkpoint && (!newest || isoMicros(checkpoint.created_at) > isoMicros(newest.created_at))) newest = checkpoint;
   }
-  if (!newest) return;
-  if (state.checkpointAt && Date.parse(newest.created_at) <= Date.parse(state.checkpointAt)) return;
+  // Without every workstream's checkpoint the newest is unknown.
+  if (!newest || unread) return;
+  if (state.checkpointAt && isoMicros(newest.created_at) <= isoMicros(state.checkpointAt)) return;
   const file = path.join(roots.workRoot, "handoff", "latest.md");
   const remote = Buffer.from(newest.body, "utf8");
   const remoteHash = sha256(remote);
@@ -117,7 +164,13 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
 export async function pull(context) {
   Object.assign(context.report.counts, { documents: 0, ledgers: 0, checkpoints: 0 });
   await pullDocuments(context);
-  const open = await context.client.workstreams(context.cfg.project, "open");
+  let open;
+  try {
+    open = await context.client.workstreams(context.cfg.project, "open");
+  } catch (error) {
+    failItem(context.report, "workstream list", error, "; no ledger or checkpoint pulled");
+    return;
+  }
   await pullLedgers(context, open);
   await pullCheckpoint(context, open);
 }

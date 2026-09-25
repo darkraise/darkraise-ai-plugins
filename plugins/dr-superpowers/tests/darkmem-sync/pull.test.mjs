@@ -146,7 +146,7 @@ test("conflicts found before a failure are kept for status", async t => {
   await s.pull();
   write(path.join(s.docsRoot, "a.md"), "local\n");
   await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "remote\n" });
-  s.stub.db.failures.push({ method: "GET", path: "/api/v1/worklog/workstreams", status: 503 });
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/worklog/workstreams", status: 401, detail: "Not authenticated" });
   const result = await s.pull();
   assert.equal(result.code, 3);
   assert.match(result.stdout, /^conflict: superpowers\/a\.md/m);
@@ -188,4 +188,81 @@ test("a pulled ledger records its newest seq, so the next push appends without r
   const [append] = s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries" && r.body.run_key !== "seed");
   assert.equal(append.body.expected_last_seq, s.stub.db.workstreams[0].entries[0].seq);
   assert.deepEqual(s.stub.db.workstreams[0].entries.map(e => e.body), ["one\n", "two\n"]);
+});
+
+test("a failed document fetch names its uri and the pull goes on; a failed manifest or workstream list fails its phase", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "a\n" });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/b.md", content: "b\n" });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/by-uri", status: 503 });
+  const one = await s.pull();
+  assert.equal(one.code, 1);
+  assert.match(one.stdout, /^failed: superpowers\/a\.md: darkmem answered 503: injected failure$/m);
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "a.md")), false);
+  assert.equal(read(path.join(s.docsRoot, "b.md")), "b\n");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "two\n" }] });
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/manifest", status: 503 });
+  const manifest = await s.pull();
+  assert.equal(manifest.code, 1);
+  assert.match(manifest.stdout, /^failed: document manifest: darkmem answered 503: injected failure; no document pulled$/m);
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\ntwo\n", "the ledgers still pull");
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/worklog/workstreams", status: 503 });
+  const list = await s.pull();
+  assert.equal(list.code, 1);
+  assert.match(list.stdout, /^failed: workstream list: darkmem answered 503: injected failure; no ledger or checkpoint pulled$/m);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n", "the documents still pull");
+});
+
+test("a failed ledger or checkpoint read names its item and the rest still pull", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "two\n" }, { kind: "checkpoint", body: "# p2\n" }] });
+  s.stub.db.failures.push({ method: "GET", path: `/api/v1/worklog/workstreams/${s.stub.db.workstreams[1].id}/entries`, status: 503 });
+  const ledger = await s.pull();
+  assert.equal(ledger.code, 1);
+  assert.match(ledger.stdout, /^failed: sdd\/p2\/progress\.md: darkmem answered 503: injected failure$/m);
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
+  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# p2\n");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# p1\n" }] });
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/worklog/resume", status: 503 });
+  const resumes = () => s.stub.db.requests.filter(r => r.path === "/api/v1/worklog/resume").length;
+  const before = resumes();
+  const checkpoint = await s.pull();
+  assert.equal(resumes() - before, 2, "the other workstream's checkpoint is still read");
+  assert.equal(checkpoint.code, 1);
+  assert.match(checkpoint.stdout, /^failed: handoff\/latest\.md: darkmem answered 503: injected failure \(reading workstream p2\); not pulled$/m);
+  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# p2\n", "without every checkpoint the newest is unknown");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p2", "progress.md")), "two\n");
+});
+
+test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounded to the millisecond", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
+  s.stub.db.workstreams[0].entries[0].created_at = "2026-09-25T10:00:00.000001+00:00";
+  assert.equal((await s.pull()).code, 0);
+  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  assert.equal(read(latest), "# A\n");
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
+  s.stub.db.workstreams[1].entries[0].created_at = "2026-09-25T10:00:00.000002+00:00";
+  s.stub.db.workstreams[0].entries[1].created_at = "2026-09-25T10:00:00.000003+00:00";
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(read(latest), "# C\n", "p2 is listed first, and C is newer than B by one microsecond");
+  assert.equal(s.state().checkpointAt, "2026-09-25T10:00:00.000003+00:00");
+});
+
+test("pull refuses uris Windows cannot hold, and writes none of a set that differ only in case", async t => {
+  const s = await setup(t);
+  for (const uri of ["superpowers/notes/a:b.md", "superpowers/notes/CON.md", "superpowers/handoff/a:b.md", "superpowers/A.md", "superpowers/a.md", "superpowers/ok.md"]) {
+    await s.seed.putDocument({ project: "proj", uri, content: `${uri}\n` });
+  }
+  const result = await s.pull();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^failed: superpowers\/notes\/a:b\.md: the name "a:b\.md" holds a character Windows refuses, so not every mirror can hold it as a file; not pulled — rename it on darkmem by hand$/m);
+  assert.match(result.stdout, /^failed: superpowers\/notes\/CON\.md: the name "CON\.md" is a Windows device name/m);
+  assert.match(result.stdout, /^failed: superpowers\/handoff\/a:b\.md: the name "a:b\.md" holds a character Windows refuses/m, "a handoff uri is checked before it is mapped");
+  assert.match(result.stdout, /^conflict: superpowers\/A\.md, superpowers\/a\.md: differ only in case, which a case-insensitive file system holds as one file; none of them pulled — rename or delete all but one on darkmem by hand \(the sync has no rename or delete route\)$/m);
+  assert.deepEqual(fs.readdirSync(s.docsRoot), ["ok.md"]);
 });
