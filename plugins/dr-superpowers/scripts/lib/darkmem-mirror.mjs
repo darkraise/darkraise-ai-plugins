@@ -313,12 +313,13 @@ export function isoMicros(text) {
 // Why a uri cannot be a file name on every platform the mirror runs on, or
 // null. Windows refuses these characters, a trailing dot or space, and its
 // device names whatever their extension; checking everywhere keeps a Linux
-// mirror from filing what a Windows mirror cannot hold.
+// mirror from filing what a Windows mirror cannot hold. Windows reads the
+// superscript digits U+00B9, U+00B2 and U+00B3 as digits in COM and LPT names.
 export function uriProblem(uri) {
   for (const segment of String(uri).split("/")) {
     if (/[<>:"|?*\p{Cc}]/u.test(segment)) return `the name ${JSON.stringify(segment)} holds a character Windows refuses`;
     if (/[. ]$/.test(segment)) return `the name ${JSON.stringify(segment)} ends in a dot or a space`;
-    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(segment)) return `the name ${JSON.stringify(segment)} is a Windows device name`;
+    if (/^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(\..*)?$/i.test(segment)) return `the name ${JSON.stringify(segment)} is a Windows device name`;
   }
   return null;
 }

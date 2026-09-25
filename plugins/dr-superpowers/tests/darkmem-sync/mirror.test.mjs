@@ -263,6 +263,7 @@ test("uriProblem refuses names Windows cannot hold, and caseGroups finds uris th
   for (const bad of [
     "superpowers/notes/a:b.md", "superpowers/notes/a?.md", "superpowers/notes/a\u0001.md", "superpowers/notes/a.",
     "superpowers/notes/a\u007f.md", "superpowers/notes/a\u0085.md", "superpowers/notes/a ", "superpowers/notes/CON.md", "superpowers/con/a.md", "superpowers/notes/lpt9", "superpowers/Aux.tar.gz",
+    "superpowers/notes/COM¹.md", "superpowers/notes/lpt²", "superpowers/LPT³.tar.gz",
   ]) {
     assert.notEqual(uriProblem(bad), null, bad);
   }
