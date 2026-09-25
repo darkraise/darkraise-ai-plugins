@@ -114,6 +114,10 @@ Task N contains the verifying step.]
 Codex plans also carry `Host: codex` and `Routing policy: codex-v3` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
 names the native pair: `**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
+That pair runs the main session for the whole plan. A subagent plan names
+`codex gpt-6-sol / high`; an inline plan names the execution tier at its
+highest weighted routing score. `scripts/plan-lint` warns on any other pair,
+and errors on an inline pair below that score.
 
 **Choosing the Execution line.** The plan decides its execution mode:
 

@@ -187,6 +187,7 @@ if [ -n "$execution" ]; then
     if [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?$SEP.+ ]]; then
       mode=${BASH_REMATCH[1]}
       m=${BASH_REMATCH[3]} e=${BASH_REMATCH[4]}
+      exec_model=$m exec_effort=$e
       [ "$policy_ok" -eq 0 ] \
         || jq -e --arg m "$m" --arg e "$e" '[.execution[], .reserve[]] | any(.model == $m and .effort == $e)' "$ROUTING" >/dev/null 2>&1 \
         || say ERROR header "Execution pair codex $m / $e is not in codex-routing.json"
@@ -260,7 +261,7 @@ while read -r eid; do
   lane_gates="$lane_gates$eid"$'\t'"$gmin"$'\t'"$gmax"$'\n'
 done < <(bash "$HERE/executors" list 2>/dev/null)
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
-r5_bad="" max_total=0 lane=""
+r5_bad="" max_total=0 max_score=0 lane=""
 
 # A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
 # sections, each a unit with its own Files, Implementer and Evaluation lines;
@@ -297,6 +298,7 @@ for n in $nums; do
       say ERROR "$where" "Evaluation does not match 'files=a, spec=b, coupling=c, risk=d; weighted routing score=s'"; continue
     fi
     [ "$s" -eq $((a + b + c + 2 * d)) ] || say ERROR "$where" "weighted routing score $s is not files+spec+coupling+2*risk = $((a + b + c + 2 * d))"
+    [ "$s" -le "$max_score" ] || max_score=$s
     source=$(line 'Assignment source')
     [[ "$source" =~ ^\*\*Assignment\ source:\*\*\ (rubric|human)[[:space:]]*$ ]] || say ERROR "$where" "missing or invalid **Assignment source:** (rubric|human)"
     if [[ "$source" == *rubric* ]] && [ "$policy_ok" -eq 1 ]; then
@@ -417,9 +419,29 @@ fi
 # follow the tasks the session implements itself, and a session that delegates
 # runs the review loop, so its effort is at least high.
 effort_rank() { case $1 in low) echo 0 ;; medium) echo 1 ;; high) echo 2 ;; xhigh) echo 3 ;; *) echo 4 ;; esac; }
+# The Execution pair is the main session's for its whole run, so an
+# over-provisioned pair costs more than any single task: a subagent session
+# only coordinates, and an inline one needs no more than its hardest task.
 if [ "$codex" -eq 1 ]; then
   if [ "$mode" = inline ] && [ -n "$r5_bad" ]; then
     say ERROR header "inline execution needs every task at total <= 4 and risk < 3; fails on Task${r5_bad}"
+  fi
+  if [ "$policy_ok" -eq 0 ]; then
+    :
+  elif [ "$mode" = subagent ]; then
+    { [ "$exec_model" = gpt-6-sol ] && [ "$exec_effort" = high ]; } \
+      || say WARN header "subagent Execution line should be codex gpt-6-sol / high"
+  elif [ "$mode" = inline ]; then
+    exec_rank=$(jq -r --arg m "$exec_model" --arg e "$exec_effort" \
+      '.execution[] | select(.model == $m and .effort == $e) | .rank' "$ROUTING" 2>/dev/null | tr -d '\r')
+    if [ -z "$exec_rank" ]; then
+      jq -e --arg m "$exec_model" --arg e "$exec_effort" '.reserve | any(.model == $m and .effort == $e)' "$ROUTING" >/dev/null 2>&1 \
+        && say WARN header "inline Execution pair codex $exec_model / $exec_effort is a reserve tier; the highest task score is $max_score"
+    elif [ "$exec_rank" -lt "$max_score" ]; then
+      say ERROR header "inline Execution rank $exec_rank is below the highest task score $max_score"
+    elif [ "$exec_rank" -gt "$max_score" ]; then
+      say WARN header "inline Execution rank $exec_rank is above the highest task score $max_score"
+    fi
   fi
 elif [ -n "$mode" ]; then
   delegated=$(plan_delegated "$src")
