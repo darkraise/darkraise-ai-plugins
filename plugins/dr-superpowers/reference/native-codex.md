@@ -139,6 +139,13 @@ delegation Claude plans use has no Codex form, so
 dr-superpowers:executing-plans dispatches nothing here but its ruling seat and
 the final review.
 
+The Execution pair runs the main session, so it is sized to what that session
+does, not to the judge floor. A subagent session coordinates and dispatches, and
+names `gpt-6-sol / high`. An inline session implements every task itself, and
+names the execution tier at its highest weighted routing score. `scripts/plan-lint`
+warns on any other pair and errors on an inline pair below that score. Design
+handoffs from `scripts/next-step` launch Sol high as well.
+
 `scripts/review-route` exits 2 on every `Host: codex` plan by design: seats come
 from this file, not from the Claude roster. The task reviewer, the ruling seat
 and the final-review seat are all native judges at rank 8 (Astra high) or above,

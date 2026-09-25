@@ -240,6 +240,21 @@ codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/ri
 lint codex-inline.md
 has "a Codex-host inline plan keeps the old eligibility error" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 1"
 lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
+has "a Codex inline pair below the highest score errors" "$out" "ERROR header: inline Execution rank 5 is below the highest task score 9"
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** subagent — codex gpt-6-astra / high#' > codex-sub-astra.md
+lint codex-sub-astra.md
+check "Codex subagent on Astra: exit 0" "$status" "0"
+has "Codex subagent on Astra warns" "$out" "WARN header: subagent Execution line should be codex gpt-6-sol / high"
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** inline — codex gpt-6-sol / low#' > codex-inline-fit.md
+lint codex-inline-fit.md
+check "Codex inline at the highest score: clean" "$out" "plan-lint: 0 errors, 0 warnings"
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** inline — codex gpt-6-astra / high#' > codex-inline-over.md
+lint codex-inline-over.md
+check "Codex inline above the highest score: exit 0" "$status" "0"
+has "Codex inline above the highest score warns" "$out" "WARN header: inline Execution rank 8 is above the highest task score 3"
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** inline — codex gpt-6-astra / max#' > codex-inline-reserve.md
+lint codex-inline-reserve.md
+has "Codex inline on a reserve pair warns" "$out" "WARN header: inline Execution pair codex gpt-6-astra / max is a reserve tier; the highest task score is 3"
 
 # --- R5 delegation: heavy tasks, and total-4 tasks while a third or fewer ---
 ev() { # ev <total> — "<agent> <evaluation>" for a lint-clean task at that total
