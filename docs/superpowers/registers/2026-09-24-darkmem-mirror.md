@@ -1,7 +1,7 @@
 # darkmem mirror for dr-superpowers
 
 **Source:** darkmem register `docs/superpowers/registers/2026-09-23-work-log-lane.md` rows #3 ("they usually come with ledger and progress tracking documents") and #5 ("integrate with dr-superpowers to store the documents and progress tracking, reduce the repo pollution"), owner requests 2026-09-23
-**Covers:** docs/superpowers/specs/2026-09-23-darkmem-mirror-design.md
+**Covers:** docs/superpowers/specs/2026-09-23-darkmem-mirror-design.md, docs/superpowers/specs/2026-09-25-darkmem-sync-hardening-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
