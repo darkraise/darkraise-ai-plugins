@@ -575,5 +575,77 @@ rm "$RREPO/docs/superpowers/registers/prog.md"
 OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
 has "next-step: no register means no change" "$OUT" "Nothing — every sub-project"
 
+# --- register routing: the Assigned cell decides the next step ---
+# A row still assigned to the plan that just finished, or to one completed.md
+# records, must not route back to it; an assigned plan is executed, not
+# re-specified; verify rows and other repositories' rows are not work here.
+GREPO="$TMP/routing"
+git init -q -b main "$GREPO"
+mkdir -p "$GREPO/docs/superpowers/plans" "$GREPO/docs/superpowers/specs" "$GREPO/docs/superpowers/registers"
+printf '.superpowers/\n' > "$GREPO/.gitignore"
+: > "$GREPO/docs/superpowers/specs/lane-design.md"
+: > "$GREPO/docs/superpowers/specs/rev-design.md"
+for p in inc1 inc2 inc3; do
+  effort=high
+  [ "$p" = inc3 ] && effort=medium
+  cat > "$GREPO/docs/superpowers/plans/$p.md" <<PLAN
+# $p
+
+**Goal:** $p
+**Spec:** docs/superpowers/specs/lane-design.md
+**Execution:** inline — \`claude --model sonnet --effort $effort\` — small
+
+### Task 1: One
+PLAN
+done
+printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — merged into `main` at abc1234\n' \
+  > "$GREPO/docs/superpowers/plans/completed.md"
+cat > "$GREPO/docs/superpowers/registers/lane.md" <<'REG'
+# Lane — item register
+
+**Source:** owner list 2026-01-01
+**Covers:** docs/superpowers/specs/lane-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Search and UI | docs/superpowers/plans/inc2.md | - | doing | - |
+| 2 | Verbatim bodies | docs/superpowers/plans/inc1.md | - | verify | awaiting deploy |
+| 3 | Sync client | other-repo: docs/superpowers/plans/sync.md | - | planned | - |
+| 4 | Loose end | - | - | open | - |
+| 5 | Revisions | docs/superpowers/plans/inc3.md | - | planned | - |
+| 6 | Leftover | docs/superpowers/plans/inc1.md | - | open | - |
+REG
+git -C "$GREPO" add -A && git -C "$GREPO" commit -qm init
+GREG="$GREPO/docs/superpowers/registers/lane.md"
+
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: still reports every unresolved row" "$OUT" "Register rows still open (6)"
+has "routing: an assigned plan is executed" "$OUT" "Continue \`docs/superpowers/plans/inc3.md\` with dr-superpowers:executing-plans."
+has "routing: launches the assigned plan's Execution pair" "$OUT" "claude --model sonnet --effort medium"
+lacks "routing: never asks for a spec of a plan" "$OUT" "write its spec"
+has "routing: names rows left on finished plans" "$OUT" "Still assigned to a finished plan: #1, #6"
+
+mkdir -p "$GREPO/.superpowers/sdd/inc3"
+printf '# SDD ledger — plan: docs/superpowers/plans/inc3.md\n' > "$GREPO/.superpowers/sdd/inc3/progress.md"
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: an assigned plan with a ledger resumes" "$OUT" "Resume \`docs/superpowers/plans/inc3.md\` with dr-superpowers:resume-execution."
+rm -rf "$GREPO/.superpowers/sdd/inc3"
+
+bash "$HERE/../scripts/register" set "$GREG" 5 planned --assigned docs/superpowers/specs/rev-design.md
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: an assigned spec gets its plan" "$OUT" "\`docs/superpowers/specs/rev-design.md\`: write its plan with dr-superpowers:writing-plans."
+has "routing: planning launches the design pair" "$OUT" "claude --model opus --effort high"
+
+bash "$HERE/../scripts/register" set "$GREG" 5 done
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: an unassigned row outranks rows on finished plans" "$OUT" "Rule on the open rows with dr-superpowers:brainstorming."
+
+bash "$HERE/../scripts/register" set "$GREG" 4 done
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: nothing routable names the stale rows" "$OUT" "Still assigned to a finished plan: #1, #6"
+has "routing: nothing routable names the verify rows" "$OUT" "Awaiting your check (verify): #2."
+has "routing: nothing routable names other repositories' rows" "$OUT" "Assigned outside this repository: #3."
+lacks "routing: nothing routable launches nothing" "$OUT" "Launch in"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

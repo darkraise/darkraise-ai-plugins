@@ -97,7 +97,7 @@ wins, and the report names which one matched.
 | 3 | Final review clean, branch unmerged (`git merge-base --is-ancestor <branch> <base>` exits non-zero) | dr-superpowers:finishing-a-development-branch |
 | 4 | `completed.md` exists and a spec has no plan | dr-superpowers:writing-plans |
 | 5 | `completed.md` exists and a plan is absent from it with no ledger | dr-superpowers:using-git-worktrees, then the plan's execution skill |
-| 6 | A register holds an unresolved row and no rule above matched | The first row's `Assigned` sub-project via dr-superpowers:brainstorming, else dr-superpowers:brainstorming to rule on the open rows; when every unresolved row is at `verify`, no skill — they are awaiting your check |
+| 6 | A register holds an unresolved row and no rule above matched | Route by the `Assigned` cell, as `scripts/next-step --complete` does, not by row order. Set aside `verify` rows (awaiting your check), rows assigned to a finished plan (one `completed.md` records; list them to resolve or reassign) and `.md` paths absent from this repository (another repository's work). Of the rest, the first row assigned to an existing plan goes to that plan's execution skill (dr-superpowers:resume-execution when it has a ledger), else one assigned to an existing spec to dr-superpowers:writing-plans, else any other label to dr-superpowers:brainstorming for its spec, else dr-superpowers:brainstorming to rule on the unassigned rows. Nothing left: no skill — name the set-aside rows |
 | 7 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
 | 8 | None of the above | say the project is between programmes, offer dr-superpowers:brainstorming |
 

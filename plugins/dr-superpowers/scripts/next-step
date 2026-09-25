@@ -69,6 +69,34 @@ launch_for() { # launch_for design|build
   esac
 }
 
+# execution_launch EXECUTION_LINE — the launch command a plan's Execution line
+# names; nothing when it names none.
+execution_launch() {
+  local cmd pair
+  cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$1" | head -n 1 || true)
+  if [ -z "$cmd" ]; then
+    pair=$(grep -oE 'codex [a-z0-9.-]+ / [a-z]+' <<<"$1" | head -n 1 || true)
+    [ -z "$pair" ] || cmd="codex -m $(awk '{ print $2 }' <<<"$pair") -c model_reasoning_effort=$(awk '{ print $4 }' <<<"$pair")"
+  fi
+  printf '%s' "$cmd"
+}
+
+# plan_finished ROOT REL — true when the completed.md beside REL records it.
+# Matched on the backticked repository-relative path, as plan-revise does, so
+# one plan's path that is a substring of another's cannot claim its outcome.
+plan_finished() {
+  local f="$1/$(dirname "$2")/completed.md"
+  [ -f "$f" ] && grep -qF "\`$2\`" "$f"
+}
+
+execution_skill() { # execution_skill EXECUTION_LINE
+  if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$1"; then
+    printf 'executing-plans'
+  else
+    printf 'subagent-driven-development'
+  fi
+}
+
 complete=0 draft=0 adhoc=0 phase="" next_action=""
 case "${1:-}" in
   --complete) complete=1; shift ;;
@@ -86,7 +114,7 @@ case "${1:-}" in
     ;;
 esac
 
-status_line="" next_line="" prompt="" launch=1 launch_cmd="" escalated_at=""
+status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan="" escalated_at=""
 
 if [ "$adhoc" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
@@ -134,13 +162,8 @@ else
   # Execution line; the flag is for the paths with no plan to read.
   if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then host=codex; fi
 
-  launch_cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$execution" | head -n 1 || true)
-  if [ -z "$launch_cmd" ]; then
-    pair=$(grep -oE 'codex [a-z0-9.-]+ / [a-z]+' <<<"$execution" | head -n 1 || true)
-    [ -z "$pair" ] || launch_cmd="codex -m $(awk '{ print $2 }' <<<"$pair") -c model_reasoning_effort=$(awk '{ print $4 }' <<<"$pair")"
-  fi
-  skill=subagent-driven-development
-  if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$execution"; then skill=executing-plans; fi
+  launch_cmd=$(execution_launch "$execution")
+  skill=$(execution_skill "$execution")
 
   ledger_file="$root/.superpowers/sdd/$slug/progress.md"
   ledger_note="no ledger at \`$ledger_file\`"
@@ -206,17 +229,60 @@ else
         NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $1, $2 }
         END { if (NR > 3) printf " +%d more", NR - 3 }
       ' <<<"$open_rows")
-      assigned=$(head -n 1 <<<"$open_rows" | cut -f3)
-      if [ -n "$assigned" ] && [ "$assigned" != "-" ]; then
-        action="\`$assigned\`: write its spec in a fresh session."
-      else
-        action="Rule on the open rows with dr-superpowers:brainstorming."
-      fi
-      status_line="Plan \`$rel\` is complete."
-      next_line="Register rows still open ($open_n) in $reg_list: $row_list. $action"
+      # The Assigned cell decides the route, not the row order. A row still on
+      # a finished plan is the finishing session's to resolve and must never
+      # route back to that plan; a verify row waits on a human check; a .md
+      # path absent here belongs to another repository. Among the rest the
+      # first row of the most concrete kind wins: a plan to execute, a spec to
+      # plan, a label to specify, then a ruling on unassigned rows.
+      stale="" waiting="" elsewhere="" best=9 target="" kind=""
+      while IFS=$'\037' read -r rid _ rassigned _ rstate _; do
+        a=${rassigned#\`}
+        a=${a%\`}
+        if [ "$rstate" = verify ]; then
+          waiting="${waiting:+$waiting, }#$rid"; continue
+        elif [ -z "$a" ] || [ "$a" = "-" ]; then
+          r=4 k=rule
+        elif [ "$a" = "$rel" ] || plan_finished "$root" "$a"; then
+          stale="${stale:+$stale, }#$rid"; continue
+        elif [ -f "$root/$a" ]; then
+          if [ -n "$(plan_tasks "$root/$a")" ]; then r=1 k=plan; else r=2 k=spec; fi
+        elif [[ $a == *.md ]]; then
+          elsewhere="${elsewhere:+$elsewhere, }#$rid"; continue
+        else
+          r=3 k=label
+        fi
+        if [ "$r" -lt "$best" ]; then best=$r target=$a kind=$k; fi
+      done < <(tr '\t' '\037' <<<"$open_rows")
+
+      stale_note=""
+      [ -z "$stale" ] || stale_note="Still assigned to a finished plan: $stale — resolve or reassign them with \`scripts/register set\`."
       launch_cmd=$(launch_for design)
-      prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
-      launch=1
+      case $kind in
+        plan)
+          target_exec=$(plan_header_line "$root/$target" Execution)
+          if [ -n "$(plan_ledger "$root/$target")" ]; then
+            action="Resume \`$target\` with dr-superpowers:resume-execution."
+          else
+            action="Continue \`$target\` with dr-superpowers:$(execution_skill "$target_exec")."
+          fi
+          launch_cmd=$(execution_launch "$target_exec") launch_plan=$target
+          ;;
+        spec)  action="\`$target\`: write its plan with dr-superpowers:writing-plans." ;;
+        label) action="\`$target\`: write its spec in a fresh session." ;;
+        rule)  action="Rule on the open rows with dr-superpowers:brainstorming." ;;
+        *)
+          action=""
+          [ -z "$waiting" ] || action="Awaiting your check (verify): $waiting."
+          [ -z "$elsewhere" ] || action="${action:+$action }Assigned outside this repository: $elsewhere."
+          ;;
+      esac
+      status_line="Plan \`$rel\` is complete."
+      next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
+      if [ -n "$kind" ]; then
+        prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
+        launch=1
+      fi
     elif [ -z "$program" ]; then
       status_line="Plan \`$rel\` is complete."
       next_line="Nothing — the plan records no follow-on work."
@@ -299,7 +365,7 @@ block=$(
     if [ -n "$launch_cmd" ]; then
       printf '\nLaunch in `%s`:\n\n```\n%s\n```\n' "$dir" "$launch_cmd"
     else
-      printf '\nLaunch: see the **Execution:** line in `%s`.\n' "$rel"
+      printf '\nLaunch: see the **Execution:** line in `%s`.\n' "${launch_plan:-$rel}"
     fi
     printf '\nPaste as the first prompt:\n\n```\n%s\n```\n' "$prompt"
   fi
