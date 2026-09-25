@@ -440,19 +440,20 @@ has "blocked: latest.md carries the block" "$(cat "$REPO/.superpowers/handoff/la
 # The session knows its host (native-codex.md identifies it from callable tool
 # schemas, never from an executable), so the adhoc and draft paths take it as a
 # flag. A plan carries `Host: codex` in its header instead.
-CODEX_DESIGN='codex -m gpt-6-astra -c model_reasoning_effort=high'
+CODEX_DESIGN='codex -m gpt-6-sol -c model_reasoning_effort=high'
 CODEX_BUILD='codex -m gpt-6-sol -c model_reasoning_effort=high'
 
 run "$REPO" --adhoc --phase design --host codex --next "Scope item C with dr-superpowers:brainstorming"
 check "adhoc design on codex: exits 0" "$status" "0"
-has "adhoc design on codex: astra launch command" "$out" "$CODEX_DESIGN"
+has "adhoc design on codex: sol launch command" "$out" "$CODEX_DESIGN"
+lacks "adhoc design on codex: no astra launch command" "$out" "gpt-6-astra"
 lacks "adhoc design on codex: no claude launch command" "$out" "claude --model"
 run "$REPO" --adhoc --phase build --host codex --next "Commit items A and B"
 check "adhoc build on codex: exits 0" "$status" "0"
 has "adhoc build on codex: sol launch command" "$out" "$CODEX_BUILD"
 run "$REPO" --draft docs/specs/draft.md --host codex --next "Write the implementation plan with dr-superpowers:writing-plans"
 check "draft on codex: exits 0" "$status" "0"
-has "draft on codex: astra launch command" "$out" "$CODEX_DESIGN"
+has "draft on codex: sol launch command" "$out" "$CODEX_DESIGN"
 run "$REPO" --adhoc --phase build --host claude --next "Commit items A and B"
 has "an explicit --host claude: keeps the claude launch command" "$out" "claude --model sonnet --effort high"
 run "$REPO" --adhoc --phase build --host gemini --next "x"
