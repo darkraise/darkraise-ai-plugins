@@ -214,22 +214,71 @@ function lockIdentity({ owner, mtimeMs }) {
   return mtimeMs === null ? null : `mtime:${mtimeMs}`;
 }
 
-// One sync per mirror at a time. Returns a release function, or null when a
-// live sync holds the lock. Taking over an abandoned lock moves it aside and
-// deletes it only if it is still the lock judged abandoned, so two processes
-// taking over at once cannot delete each other's fresh lock. The release
-// removes the lock only while it still carries this holder's token.
-// beforeTakeover is a test seam: it runs between judging a lock abandoned and
-// moving it aside.
-export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover } = {}) {
-  const lock = path.join(dir, ".sync.lock");
-  const owner = { pid: process.pid, host: os.hostname(), token: crypto.randomUUID() };
-  fs.mkdirSync(dir, { recursive: true });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+// A lock moved aside and left there, because it could not be given back, or
+// one a crash left half built, is removed by a later acquire once it is older
+// than staleMs.
+function removeOldLeftovers(dir, staleMs) {
+  for (const entry of sortedEntries(dir)) {
+    if (!entry.isDirectory() || !/^\.sync\.lock\.(stale|new)-/.test(entry.name)) continue;
+    const aside = path.join(dir, entry.name);
+    try {
+      if (Date.now() - fs.statSync(aside).mtimeMs >= staleMs) fs.rmSync(aside, { recursive: true, force: true });
+    } catch {
+      // Another acquire removed it first.
+    }
+  }
+}
+
+// A lock appears with its owner record already inside: it is built under a
+// temporary name and renamed into place. A rename replaces an empty directory
+// on POSIX, so a lock that were ever empty could be replaced by a restore;
+// one that never is cannot. False when another lock got there first.
+function placeLock(dir, lock, owner) {
+  if (process.platform === "win32") {
+    // A Windows rename never replaces a directory, so an empty lock is safe
+    // there, and mkdir avoids renaming a just-written directory, which
+    // antivirus and indexer handles make fail intermittently.
     try {
       fs.mkdirSync(lock);
     } catch (error) {
-      if (error.code !== "EEXIST") throw error;
+      if (error.code === "EEXIST") return false;
+      throw error;
+    }
+    fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify(owner));
+    return true;
+  }
+  const building = path.join(dir, `.sync.lock.new-${owner.token}`);
+  fs.mkdirSync(building);
+  fs.writeFileSync(path.join(building, "owner.json"), JSON.stringify(owner));
+  try {
+    fs.renameSync(building, lock);
+    return true;
+  } catch (error) {
+    fs.rmSync(building, { recursive: true, force: true });
+    if (fs.existsSync(lock)) return false;
+    throw error;
+  }
+}
+
+// One sync per mirror at a time. Returns a release function, or null when a
+// live sync holds the lock. Taking over an abandoned lock moves it aside and
+// deletes it only if it is still the lock judged abandoned, so two processes
+// taking over at once cannot delete each other's fresh lock; a lock moved
+// aside by mistake is given back, or left aside when a third process has
+// taken the lock meanwhile, and never deleted. The release removes the lock
+// only while it still carries this holder's token. beforeTakeover and
+// beforeRestore are test seams: the first runs between judging a lock
+// abandoned and moving it aside, the second before giving back a lock that was
+// moved aside by mistake.
+export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover, beforeRestore } = {}) {
+  const lock = path.join(dir, ".sync.lock");
+  const owner = { pid: process.pid, host: os.hostname(), token: crypto.randomUUID() };
+  fs.mkdirSync(dir, { recursive: true });
+  removeOldLeftovers(dir, staleMs);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    // An existing lock, even an empty one an older version left, is judged
+    // before placing a new one, so the rename never lands on it.
+    if (fs.existsSync(lock) || !placeLock(dir, lock, owner)) {
       const seen = lockSnapshot(lock);
       if (!lockAbandoned(seen, staleMs)) return null;
       const identity = lockIdentity(seen);
@@ -241,20 +290,39 @@ export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover } = 
         continue;
       }
       if (lockIdentity(lockSnapshot(aside)) !== identity) {
-        // Another process took the lock over first; give its lock back.
+        // Another process took the lock over first; give its lock back. When a
+        // third has taken the lock since, the moved lock stays aside: it may
+        // be a live holder's, and it is not this process's to delete.
+        beforeRestore?.();
         try {
           fs.renameSync(aside, lock);
         } catch {
-          fs.rmSync(aside, { recursive: true, force: true });
+          // Left aside; removeOldLeftovers clears it once it is stale.
         }
         return null;
       }
       fs.rmSync(aside, { recursive: true, force: true });
       continue;
     }
-    fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify(owner));
+    // Moved aside before it is deleted: a recursive delete in place would
+    // leave an empty lock for a moment, which a restore could land on.
     return () => {
-      if (readOwner(lock)?.token === owner.token) fs.rmSync(lock, { recursive: true, force: true });
+      if (readOwner(lock)?.token !== owner.token) return;
+      const gone = `${lock}.stale-${owner.token}`;
+      try {
+        fs.renameSync(lock, gone);
+      } catch {
+        return;
+      }
+      if (readOwner(gone)?.token === owner.token) {
+        fs.rmSync(gone, { recursive: true, force: true });
+        return;
+      }
+      try {
+        fs.renameSync(gone, lock);
+      } catch {
+        // Left aside; removeOldLeftovers clears it once it is stale.
+      }
     };
   }
   return null;
