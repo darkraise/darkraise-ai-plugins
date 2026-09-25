@@ -255,7 +255,9 @@ function placeLock(dir, lock, owner) {
     return true;
   } catch (error) {
     fs.rmSync(building, { recursive: true, force: true });
-    if (fs.existsSync(lock)) return false;
+    // A lock was in the way, or was until a release moved it off since; the
+    // caller judges whatever is there now.
+    if (error.code === "EEXIST" || error.code === "ENOTEMPTY") return false;
     throw error;
   }
 }

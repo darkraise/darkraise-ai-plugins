@@ -320,4 +320,23 @@ test("a half-built lock a crash left is kept while fresh and cleared once stale"
   fs.utimesSync(half, old, old);
   acquireLock(root)();
   assert.deepEqual(fs.readdirSync(root), []);
+  const rename = fs.renameSync;
+  let raced = false;
+  fs.renameSync = (from, to) => {
+    if (!raced && path.basename(String(from)).startsWith(".sync.lock.new-")) {
+      raced = true;
+      throw Object.assign(new Error("ENOTEMPTY: a lock released since"), { code: "ENOTEMPTY" });
+    }
+    return rename(from, to);
+  };
+  let again;
+  try {
+    again = acquireLock(root);
+  } finally {
+    fs.renameSync = rename;
+  }
+  assert.equal(raced, process.platform !== "win32");
+  assert.equal(typeof again, "function", "a lock released during a failed placement is retried, not thrown");
+  again();
+  assert.deepEqual(fs.readdirSync(root), []);
 });
