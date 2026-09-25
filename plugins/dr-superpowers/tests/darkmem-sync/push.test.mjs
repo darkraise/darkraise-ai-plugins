@@ -499,6 +499,24 @@ test("a 409 whose read answers darkmem's own 404 is a deletion; any other 404 is
   assert.doesNotMatch(result.stdout, /deleted on darkmem/);
 });
 
+test("a ledger record written before lastSeq existed is reconciled, then appended under the seq darkmem holds", async t => {
+  const s = await setup(t);
+  const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  write(file, "one\n");
+  assert.equal((await s.push()).code, 0);
+  const stateFile = path.join(s.mirror, ".sync-state.json");
+  const state = JSON.parse(read(stateFile));
+  delete state.ledgers.p1.lastSeq;
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  write(file, "one\ntwo\n");
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout);
+  const [one, two] = await s.ledger("p1");
+  assert.equal(two.body, "two\n");
+  assert.equal(s.posts("/api/v1/worklog/entries").at(-1).body.expected_last_seq, one.seq);
+  assert.equal(JSON.parse(read(stateFile)).ledgers.p1.lastSeq, two.seq);
+});
+
 test("a pending link that names no handoff note is dropped", async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "a.md"), "a\n");
