@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
-import { HttpError, TransportError, createClient } from "../../scripts/lib/darkmem-client.mjs";
+import { HttpError, TransportError, createClient, failItem } from "../../scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, startStub } from "./stub-server.mjs";
 
 async function withStub(options, body) {
@@ -84,4 +84,41 @@ test("a refused connection and a silent server are TransportErrors within the ti
     silent.closeAllConnections();
     await new Promise(resolve => silent.close(resolve));
   }
+});
+
+test("an append with expected_last_seq writes only when it names the newest seq of its kind, and answers last_seq", () => withStub({}, async (stub, client) => {
+  const first = await client.append({ project: "p", workstream: "w", entries: [{ kind: "ledger", body: "a" }, { kind: "ledger", body: "b" }], expectedLastSeq: 0 });
+  assert.equal(stub.db.requests[0].body.expected_last_seq, 0);
+  assert.equal(first.last_seq, stub.db.workstreams[0].entries.at(-1).seq);
+  await client.append({ project: "p", workstream: "w", entries: [{ kind: "checkpoint", body: "c" }] });
+  const second = await client.append({ project: "p", workstream: "w", entries: [{ kind: "ledger", body: "d" }], expectedLastSeq: first.last_seq });
+  assert.equal(second.last_seq, first.last_seq + 2, "a checkpoint between them does not move the ledger's expectation");
+  await assert.rejects(
+    client.append({ project: "p", workstream: "w", entries: [{ kind: "ledger", body: "e" }], expectedLastSeq: first.last_seq }),
+    error => error instanceof HttpError && error.status === 409
+      && error.detail === `expected the newest ledger entry to be seq ${first.last_seq}, but it is ${second.last_seq}`,
+  );
+  await assert.rejects(
+    client.append({ project: "p", workstream: "fresh", entries: [{ kind: "ledger", body: "x" }], expectedLastSeq: 5 }),
+    error => error instanceof HttpError && error.status === 409,
+  );
+  assert.equal(stub.db.workstreams.some(w => w.key === "fresh"), false, "a refused append creates no workstream");
+  await assert.rejects(
+    client.append({ project: "p", workstream: "w", entries: [{ kind: "ledger", body: "x" }, { kind: "note", body: "y" }], expectedLastSeq: second.last_seq }),
+    error => error instanceof HttpError && error.status === 422,
+  );
+  await client.append({ project: "p", workstream: "w", entries: [{ kind: "note", body: "n" }] });
+  assert.equal("expected_last_seq" in stub.db.requests.at(-1).body, false, "left out unless given");
+  assert.equal(stub.db.workstreams[0].entries.length, 5);
+}));
+
+test("failItem records any darkmem answer but a 401 as one item's failure and rethrows everything else", () => {
+  const report = { failures: [] };
+  failItem(report, "superpowers/a.md", new HttpError("GET", "/x", 503, "busy"));
+  failItem(report, "document manifest", new HttpError("GET", "/x", 403, "forbidden"), "; no document pushed");
+  assert.deepEqual(report.failures, ["superpowers/a.md: darkmem answered 503: busy", "document manifest: darkmem answered 403: forbidden; no document pushed"]);
+  for (const error of [new HttpError("GET", "/x", 401, "Not authenticated"), new TransportError("GET /x: no answer within 10 ms"), new Error("bug")]) {
+    assert.throws(() => failItem(report, "x", error), error);
+  }
+  assert.equal(report.failures.length, 2);
 });

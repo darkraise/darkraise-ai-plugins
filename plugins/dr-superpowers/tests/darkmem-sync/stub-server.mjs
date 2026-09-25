@@ -1,8 +1,11 @@
 // An in-memory stand-in for the darkmem routes darkmem-sync calls, faithful to
 // the contract points the sync relies on: content_hash is SHA-256 of the UTF-8
 // content; a stale or absent expected_hash is a 409; an append needs a run key,
-// holds 1-100 entries of 1-65,536 characters, and reopens a closed workstream;
-// every list is keyset-paged. db.failures injects answers: {method, path,
+// holds 1-100 entries of 1-65,536 characters, reopens a closed workstream, and
+// with expected_last_seq writes nothing unless it names the seq of the
+// workstream's newest entry of the call's one kind (0 for none), answering 409
+// otherwise; a by-uri read of a uri nothing is filed at answers darkmem's own
+// 404 text; every list is keyset-paged. db.failures injects answers: {method, path,
 // status, detail, commit}, where commit: true applies the request first and
 // then answers the failure, which is what a lost response looks like.
 import crypto from "node:crypto";
@@ -57,7 +60,7 @@ export async function startStub({ pageSize, transformContent, onRequest } = {}) 
     }
     if (method === "GET" && p === "/api/v1/documents/by-uri") {
       const doc = db.documents.get(docKey(q.get("project"), q.get("uri")));
-      if (!doc) return send(404, { detail: "Document not found" });
+      if (!doc) return send(404, { detail: `no document is filed at uri '${q.get("uri")}' in project '${q.get("project")}'` });
       const answer = { document_id: doc.id, blocks: [], content_hash: doc.content_hash, horizon: true };
       if (q.get("include_content") === "true") answer.content = doc.content;
       return send(200, answer);
@@ -90,8 +93,17 @@ export async function startStub({ pageSize, transformContent, onRequest } = {}) 
         const chars = [...(e.body ?? "")].length;
         if (chars < 1 || chars > 65536) return send(422, { detail: `body must hold 1 to 65536 characters, got ${chars}` });
       }
-      const now = tick();
       let ws = db.workstreams.find(w => w.project === body.project && w.key === body.workstream);
+      if (body.expected_last_seq !== undefined && body.expected_last_seq !== null) {
+        const expected = body.expected_last_seq;
+        if (!Number.isSafeInteger(expected) || expected < 0) return send(422, { detail: "expected_last_seq must be an integer of at least 0" });
+        const kinds = new Set(body.entries.map(e => e.kind));
+        if (kinds.size !== 1) return send(422, { detail: "expected_last_seq needs every entry of the append to share one kind" });
+        const [kind] = kinds;
+        const current = Math.max(0, ...(ws?.entries ?? []).filter(e => e.kind === kind).map(e => e.seq));
+        if (current !== expected) return send(409, { detail: `expected the newest ${kind} entry to be seq ${expected}, but it is ${current}` });
+      }
+      const now = tick();
       if (!ws) {
         ws = {
           id: crypto.randomUUID(), project: body.project, key: body.workstream, title: body.title ?? null,
@@ -102,13 +114,13 @@ export async function startStub({ pageSize, transformContent, onRequest } = {}) 
       }
       if (ws.state === "closed") Object.assign(ws, { state: "open", closed_at: null });
       Object.assign(ws.properties, body.properties ?? {});
-      const ids = body.entries.map(e => {
+      const written = body.entries.map(e => {
         const entry = { id: crypto.randomUUID(), seq: db.nextSeq++, run_key: body.run_key, kind: e.kind, body: e.body, properties: e.properties ?? {}, created_at: now };
         ws.entries.push(entry);
-        return entry.id;
+        return entry;
       });
       Object.assign(ws, { last_entry_at: now, updated_at: now });
-      return send(201, { workstream: wsOut(ws), entry_ids: ids });
+      return send(201, { workstream: wsOut(ws), entry_ids: written.map(e => e.id), last_seq: written.at(-1).seq });
     }
     if (method === "GET" && p === "/api/v1/worklog/resume") {
       const ws = db.workstreams.find(w => w.project === q.get("project") && w.key === q.get("workstream"));

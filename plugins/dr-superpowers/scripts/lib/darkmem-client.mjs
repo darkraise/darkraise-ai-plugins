@@ -14,6 +14,14 @@ export class HttpError extends Error {
 
 const CLIENT = "dr-superpowers";
 
+// Records a darkmem answer that concerns one item as that item's failure line,
+// so the command goes on with the next item; anything else (no answer at all,
+// or a 401, which every later call would get too) is rethrown to stop it.
+export function failItem(report, label, error, suffix = "") {
+  if (!(error instanceof HttpError) || error.status === 401) throw error;
+  report.failures.push(`${label}: darkmem answered ${error.status}: ${error.detail}${suffix}`);
+}
+
 export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl = globalThis.fetch }) {
   async function call(method, route, { query = {}, body } = {}) {
     const target = new URL(`${url}${route}`);
@@ -78,9 +86,10 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
       if (expectedHash) body.expected_hash = expectedHash;
       return call("POST", "/api/v1/documents", { body });
     },
-    append({ project, workstream, entries, properties }) {
+    append({ project, workstream, entries, properties, expectedLastSeq }) {
       const body = { project, workstream, run_key: runKey, client: CLIENT, entries };
       if (properties) body.properties = properties;
+      if (expectedLastSeq !== undefined) body.expected_last_seq = expectedLastSeq;
       return call("POST", "/api/v1/worklog/entries", { body });
     },
     async resume(project, workstream) {
