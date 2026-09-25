@@ -26,7 +26,14 @@ const HANDOFF_URI = new RegExp(`^${DOC_PREFIX}/handoff/([^/]+)\\.md$`);
 // next push rather than only by a later append.
 async function linkHandoff({ cfg, client, state, persist, report }, uri) {
   const slug = HANDOFF_URI.exec(uri)?.[1];
-  if (!slug) return;
+  if (!slug) {
+    // Only a hand-edited state holds one; nothing could ever link it.
+    if (state.pendingLinks.includes(uri)) {
+      state.pendingLinks = state.pendingLinks.filter(item => item !== uri);
+      persist();
+    }
+    return;
+  }
   if (!state.pendingLinks.includes(uri)) {
     state.pendingLinks.push(uri);
     persist();

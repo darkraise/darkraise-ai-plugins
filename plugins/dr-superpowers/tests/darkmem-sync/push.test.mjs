@@ -498,3 +498,16 @@ test("a 409 whose read answers darkmem's own 404 is a deletion; any other 404 is
   assert.match(result.stdout, /^failed: superpowers\/a\.md: darkmem answered 404: Not Found$/m);
   assert.doesNotMatch(result.stdout, /deleted on darkmem/);
 });
+
+test("a pending link that names no handoff note is dropped", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  assert.equal((await s.push()).code, 0);
+  const stateFile = path.join(s.mirror, ".sync-state.json");
+  const state = JSON.parse(read(stateFile));
+  state.pendingLinks = ["superpowers/notes/x.md"];
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout);
+  assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, []);
+});
