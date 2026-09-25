@@ -190,7 +190,8 @@ test("a ledger append whose answer was lost is reconciled, never sent twice", as
   write(file, "one\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
   const lost = await s.push();
-  assert.equal(lost.code, 3);
+  assert.equal(lost.code, 1);
+  assert.match(lost.stdout, /^failed: sdd\/p1\/progress\.md: darkmem answered 502: injected failure$/m);
   assert.equal(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).ledgers.p1.pending, true);
   assert.equal((await s.push()).code, 0);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n"]);
@@ -277,4 +278,87 @@ test("status is clean after a push and names an edit made after it", async t => 
   write(path.join(s.docsRoot, "a.md"), "b\n");
   const dirty = await run(["status"], { cwd: s.repo, env: s.env });
   assert.match(dirty.stdout, /^modified: superpowers\/a\.md$/m);
+});
+
+test("every ledger append names the seq it follows; another mirror's append is a 409 reconciled once", async t => {
+  const s = await setup(t);
+  const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  write(file, "one\n");
+  assert.equal((await s.push()).code, 0);
+  const [first] = s.posts("/api/v1/worklog/entries");
+  assert.equal(first.body.expected_last_seq, 0, "a new ledger expects an empty one");
+  const oneSeq = (await s.ledger("p1"))[0].seq;
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "two\n" }] });
+  fs.appendFileSync(file, "two\nthree\n");
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n", "three\n"]);
+  const appends = s.posts("/api/v1/worklog/entries").filter(r => r.body.run_key !== "seed");
+  assert.equal(appends[1].body.expected_last_seq, oneSeq, "the stale expectation, answered 409");
+  assert.deepEqual(appends[2].body.entries, [{ kind: "ledger", body: "three\n" }], "only the bytes darkmem lacked");
+  const state = JSON.parse(read(path.join(s.mirror, ".sync-state.json")));
+  assert.equal(state.ledgers.p1.lastSeq, (await s.ledger("p1")).at(-1).seq);
+});
+
+test("a second 409 in one push is a conflict and nothing more is sent", async t => {
+  const racing = [];
+  const s = await setup(t, {
+    onRequest: (request, db) => {
+      if (racing.length && request.method === "POST" && request.path === "/api/v1/worklog/entries") {
+        const ws = db.workstreams.find(w => w.key === "p1");
+        ws.entries.push({ id: `race-${db.nextSeq}`, seq: db.nextSeq++, run_key: "other", kind: "ledger", body: racing.shift(), properties: {}, created_at: ws.last_entry_at });
+      }
+    },
+  });
+  const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  write(file, "one\n");
+  await s.push();
+  fs.appendFileSync(file, "two\nthree\n");
+  racing.push("two\n", "three\n");
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^conflict: sdd\/p1\/progress\.md: darkmem's ledger for p1 changed since the last sync/m);
+  assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n", "three\n"], "the other client's lines, none sent twice");
+  assert.equal(s.posts("/api/v1/worklog/entries").length, 3, "the first push, the 409, and the retry's 409");
+});
+
+test("a ledger with a byte that is not UTF-8 fails with its offset; a character still being written is a note", async t => {
+  const s = await setup(t);
+  const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  write(file, "one\n");
+  await s.push();
+  fs.appendFileSync(file, Buffer.from([0x61, 0xff, 0x62, 0x0a]));
+  const middle = await s.push();
+  assert.equal(middle.code, 1);
+  assert.match(middle.stdout, /^failed: sdd\/p1\/progress\.md: byte 5 is not UTF-8 text; not pushed$/m);
+  write(file, "one\n");
+  fs.appendFileSync(file, Buffer.from([0xff]));
+  const lone = await s.push();
+  assert.equal(lone.code, 1);
+  assert.match(lone.stdout, /^failed: sdd\/p1\/progress\.md: byte 4 is not UTF-8 text; not pushed$/m);
+  write(file, "one\n");
+  fs.appendFileSync(file, Buffer.from([0xe2, 0x82]));
+  const partial = await s.push();
+  assert.equal(partial.code, 0, partial.stdout);
+  assert.match(partial.stdout, /^note: sdd\/p1\/progress\.md: the appended bytes end inside a character; push again once the write finishes$/m);
+  fs.appendFileSync(file, Buffer.from([0xac, 0x0a]));
+  assert.equal((await s.push()).code, 0);
+  assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "€\n"]);
+});
+
+test("a ledger longer than one append call chains each call's last_seq into the next", async t => {
+  const s = await setup(t);
+  const file = path.join(s.workRoot, "sdd", "big", "progress.md");
+  const line = `${"x".repeat(65535)}\n`;
+  write(file, line.repeat(101));
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /101 ledger entries/);
+  const appends = s.posts("/api/v1/worklog/entries");
+  assert.deepEqual(appends.map(r => r.body.entries.length), [100, 1]);
+  const entries = await s.ledger("big");
+  assert.equal(appends[0].body.expected_last_seq, 0);
+  assert.equal(appends[1].body.expected_last_seq, entries[99].seq, "the second call expects the first call's last seq");
+  assert.equal(entries.map(e => e.body).join(""), read(file));
+  assert.equal(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).ledgers.big.lastSeq, entries[100].seq);
 });

@@ -9,9 +9,12 @@ const RESOLVE = "move the local file aside, pull, and re-apply your change";
 
 const localHash = file => (fs.existsSync(file) ? sha256(fs.readFileSync(file)) : null);
 
-// A workstream's ledger as a file: its ledger entries' bodies, in order.
-export async function ledgerText(client, workstreamId) {
-  return (await client.entries(workstreamId, "ledger")).map(entry => entry.body).join("");
+// A workstream's ledger as a file: its ledger entries' bodies, in order, and
+// the seq of the newest one (0 when it holds none), which the next append
+// names as its expected_last_seq.
+export async function remoteLedger(client, workstreamId) {
+  const entries = await client.entries(workstreamId, "ledger");
+  return { text: entries.map(entry => entry.body).join(""), lastSeq: entries.at(-1)?.seq ?? 0 };
 }
 
 // Every document under superpowers/ whose manifest hash differs from the
@@ -60,10 +63,10 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
       report.notes.push(`workstream ${JSON.stringify(ws.key)}: not usable as a directory name, skipped`);
       continue;
     }
-    const text = await ledgerText(client, ws.id);
+    const { text, lastSeq } = await remoteLedger(client, ws.id);
     if (!text) continue;
     const remote = Buffer.from(text, "utf8");
-    const synced = { offset: remote.length, prefix: sha256(remote) };
+    const synced = { offset: remote.length, prefix: sha256(remote), lastSeq };
     const file = path.join(roots.workRoot, "sdd", ws.key, "progress.md");
     const local = fs.existsSync(file) ? fs.readFileSync(file) : null;
     const record = state.ledgers[ws.key];

@@ -6,12 +6,13 @@
 // so a retry never sends the same bytes twice.
 import fs from "node:fs";
 import path from "node:path";
-import { HttpError } from "./darkmem-client.mjs";
+import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
   DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, checkpointTarget, decodeUtf8,
-  ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs, validKey,
+  ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs, utf8Fault,
+  validKey,
 } from "./darkmem-mirror.mjs";
-import { ledgerText } from "./darkmem-pull.mjs";
+import { remoteLedger } from "./darkmem-pull.mjs";
 
 const RESOLVE = "pull, reconcile, then push";
 const HANDOFF_URI = new RegExp(`^${DOC_PREFIX}/handoff/([^/]+)\\.md$`);
@@ -97,61 +98,51 @@ async function pushDocuments(context) {
 }
 
 // What darkmem already holds of a ledger, adopted when it is a prefix of the
-// file: used for a ledger this mirror never synced (a lost state file) and for
-// one whose last append may have landed without an answer.
+// file: used for a ledger this mirror never synced (a lost state file), for
+// one whose last append may have landed without an answer, for a record from
+// before lastSeq was kept, and after an append's precondition failed.
 async function adoptRemoteLedger({ cfg, client }, slug, buffer) {
   const existing = await client.resume(cfg.project, slug);
-  if (!existing) return { offset: 0, prefix: EMPTY_SHA };
-  const remote = Buffer.from(await ledgerText(client, existing.workstream.id), "utf8");
+  if (!existing) return { offset: 0, prefix: EMPTY_SHA, lastSeq: 0 };
+  const { text, lastSeq } = await remoteLedger(client, existing.workstream.id);
+  const remote = Buffer.from(text, "utf8");
   if (buffer.length >= remote.length && buffer.subarray(0, remote.length).equals(remote)) {
-    return { offset: remote.length, prefix: sha256(remote) };
+    return { offset: remote.length, prefix: sha256(remote), lastSeq };
   }
   return null;
 }
 
-async function pushLedgers(context) {
+// One ledger's appended bytes. Every append names the seq it expects to
+// follow, so another mirror's append since the last sync is a 409 rather than
+// interleaved lines; the 409 is reconciled once, and the bytes darkmem does
+// not yet hold are sent.
+async function pushLedger(context, slug, file) {
   const { cfg, client, roots, state, persist, report } = context;
-  for (const dir of unsupportedPlanDirs(roots.workRoot)) {
-    report.failures.push(`${dir}: not a usable workstream key; rename the directory to letters, digits, '.', '_' or '-'`);
+  const label = `sdd/${slug}/progress.md`;
+  const buffer = fs.readFileSync(file);
+  let record = state.ledgers[slug];
+  if (!record || record.pending || record.lastSeq === undefined) {
+    record = await adoptRemoteLedger(context, slug, buffer);
+    if (!record) {
+      report.conflicts.push(`${label}: darkmem's ledger for ${slug} is not a prefix of this file; move the local file aside, pull, and re-apply your lines`);
+      return;
+    }
+    state.ledgers[slug] = record;
+    persist();
   }
-  for (const { slug, file } of ledgerFiles(roots.workRoot)) {
-    const buffer = fs.readFileSync(file);
-    let record = state.ledgers[slug];
-    let adopted = false;
-    if (!record || record.pending) {
-      adopted = true;
-      record = await adoptRemoteLedger(context, slug, buffer);
-      if (!record) {
-        report.conflicts.push(`sdd/${slug}/progress.md: darkmem's ledger for ${slug} is not a prefix of this file; move the local file aside, pull, and re-apply your lines`);
-        continue;
-      }
-      state.ledgers[slug] = record;
-      persist();
-    }
-    if (buffer.length < record.offset || sha256(buffer.subarray(0, record.offset)) !== record.prefix) {
-      report.conflicts.push(`sdd/${slug}/progress.md: rewritten rather than appended to; refusing to push it`);
-      continue;
-    }
-    if (buffer.length === record.offset) continue;
-    // Another mirror may have appended since the last sync: send only what
-    // darkmem does not already hold, and never lines that would interleave.
-    if (!adopted) {
-      const current = await adoptRemoteLedger(context, slug, buffer);
-      if (!current || current.offset < record.offset) {
-        report.conflicts.push(`sdd/${slug}/progress.md: darkmem's ledger for ${slug} changed since the last sync and no longer matches this file; move the local file aside, pull, and re-apply your lines`);
-        continue;
-      }
-      if (current.offset !== record.offset) {
-        record = current;
-        state.ledgers[slug] = record;
-        persist();
-        if (buffer.length === record.offset) continue;
-      }
-    }
-    const appended = decodeUtf8(buffer.subarray(record.offset));
+  if (buffer.length < record.offset || sha256(buffer.subarray(0, record.offset)) !== record.prefix) {
+    report.conflicts.push(`${label}: rewritten rather than appended to; refusing to push it`);
+    return;
+  }
+  let reconciled = false;
+  sending: while (buffer.length > record.offset) {
+    const rest = buffer.subarray(record.offset);
+    const appended = decodeUtf8(rest);
     if (appended === null) {
-      report.notes.push(`sdd/${slug}/progress.md: the appended bytes end inside a character; push again once the write finishes`);
-      continue;
+      const fault = utf8Fault(rest);
+      if (fault.partial) report.notes.push(`${label}: the appended bytes end inside a character; push again once the write finishes`);
+      else report.failures.push(`${label}: byte ${record.offset + fault.offset} is not UTF-8 text; not pushed`);
+      return;
     }
     const properties = propertiesFor(roots, slug, ledgerPlanPath(buffer.toString("utf8")));
     const pieces = splitAtLimit(appended);
@@ -162,20 +153,53 @@ async function pushLedgers(context) {
       // re-sending.
       state.ledgers[slug] = { ...record, pending: true };
       persist();
+      let answer;
       try {
-        await client.append({ project: cfg.project, workstream: slug, properties, entries: group.map(body => ({ kind: "ledger", body })) });
+        answer = await client.append({
+          project: cfg.project, workstream: slug, properties, expectedLastSeq: record.lastSeq,
+          entries: group.map(body => ({ kind: "ledger", body })),
+        });
       } catch (error) {
-        if (!(error instanceof HttpError && error.status === 422)) throw error;
+        if (!(error instanceof HttpError && (error.status === 409 || error.status === 422))) throw error;
+        // Both answers wrote nothing, so the record stands as it was.
         state.ledgers[slug] = record;
         persist();
-        report.failures.push(`sdd/${slug}/progress.md: darkmem refused an entry: ${error.detail}`);
-        break;
+        if (error.status === 422) {
+          report.failures.push(`${label}: darkmem refused an entry: ${error.detail}`);
+          return;
+        }
+        const current = reconciled ? null : await adoptRemoteLedger(context, slug, buffer);
+        if (!current || current.offset < record.offset) {
+          report.conflicts.push(`${label}: darkmem's ledger for ${slug} changed since the last sync and no longer matches this file; move the local file aside, pull, and re-apply your lines`);
+          return;
+        }
+        reconciled = true;
+        record = current;
+        state.ledgers[slug] = record;
+        persist();
+        continue sending;
       }
       const offset = record.offset + Buffer.byteLength(group.join(""), "utf8");
-      record = { offset, prefix: sha256(buffer.subarray(0, offset)) };
+      record = { offset, prefix: sha256(buffer.subarray(0, offset)), lastSeq: answer.last_seq };
       state.ledgers[slug] = record;
       persist();
       report.counts["ledger entries"] += group.length;
+    }
+  }
+}
+
+async function pushLedgers(context) {
+  const { roots, report } = context;
+  for (const dir of unsupportedPlanDirs(roots.workRoot)) {
+    report.failures.push(`${dir}: not a usable workstream key; rename the directory to letters, digits, '.', '_' or '-'`);
+  }
+  for (const { slug, file } of ledgerFiles(roots.workRoot)) {
+    try {
+      await pushLedger(context, slug, file);
+    } catch (error) {
+      // A pending mark set before a failed append stays: its answer may have
+      // been lost, so the next push reconciles before sending.
+      failItem(report, `sdd/${slug}/progress.md`, error);
     }
   }
 }

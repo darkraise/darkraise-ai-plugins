@@ -74,7 +74,8 @@ test("open workstreams render their ledgers; closed ones do not", async t => {
   const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
   assert.equal(read(file), "# SDD ledger — plan: x\nTask 1: a\n\n| t |\nTask 2: b\n");
   assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "done")), false);
-  assert.deepEqual(s.state().ledgers.p1, { offset: fs.statSync(file).size, prefix: sha(read(file)) });
+  const newest = s.stub.db.workstreams.find(w => w.key === "p1").entries.filter(e => e.kind === "ledger").at(-1);
+  assert.deepEqual(s.state().ledgers.p1, { offset: fs.statSync(file).size, prefix: sha(read(file)), lastSeq: newest.seq });
 });
 
 test("a ledger ahead locally is kept; a diverged one is a conflict", async t => {
@@ -171,4 +172,20 @@ test("pull in local mode does nothing and succeeds", async () => {
   const result = await run(["pull"], { cwd: repo, env });
   assert.equal(result.code, 0);
   assert.match(result.stdout, /^darkmem-sync: local mode/);
+});
+
+test("a pulled ledger records its newest seq, so the next push appends without re-reading it", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  assert.equal((await s.pull()).code, 0);
+  const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  fs.appendFileSync(file, "two\n");
+  const reads = () => s.stub.db.requests.filter(r => r.method === "GET" && r.path.endsWith("/entries")).length;
+  const before = reads();
+  const pushed = await run(["push"], { cwd: s.repo, env: s.env });
+  assert.equal(pushed.code, 0, pushed.stdout + pushed.stderr);
+  assert.equal(reads(), before, "push trusts the pulled seq instead of reading the ledger again");
+  const [append] = s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries" && r.body.run_key !== "seed");
+  assert.equal(append.body.expected_last_seq, s.stub.db.workstreams[0].entries[0].seq);
+  assert.deepEqual(s.stub.db.workstreams[0].entries.map(e => e.body), ["one\n", "two\n"]);
 });
