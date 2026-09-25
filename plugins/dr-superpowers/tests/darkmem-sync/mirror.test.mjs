@@ -340,3 +340,30 @@ test("a half-built lock a crash left is kept while fresh and cleared once stale"
   again();
   assert.deepEqual(fs.readdirSync(root), []);
 });
+
+test("a takeover whose moved-aside lock another acquire's cleanup removed tries again rather than reporting busy", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  fs.mkdirSync(lock);
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "old" }));
+  const rename = fs.renameSync;
+  let cleaned = false;
+  fs.renameSync = (from, to) => {
+    rename(from, to);
+    if (!cleaned && path.basename(String(to)).startsWith(".sync.lock.stale-")) {
+      cleaned = true;
+      fs.rmSync(to, { recursive: true, force: true });
+    }
+  };
+  let release;
+  try {
+    release = acquireLock(root);
+  } finally {
+    fs.renameSync = rename;
+  }
+  assert.equal(cleaned, true);
+  assert.equal(typeof release, "function", "the slot is empty, so the lock is taken");
+  release();
+  assert.deepEqual(fs.readdirSync(root), []);
+});

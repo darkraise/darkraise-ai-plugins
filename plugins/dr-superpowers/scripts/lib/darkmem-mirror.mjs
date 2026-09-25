@@ -291,7 +291,11 @@ export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover, bef
       } catch {
         continue;
       }
-      if (lockIdentity(lockSnapshot(aside)) !== identity) {
+      const moved = lockSnapshot(aside);
+      // Another acquire's cleanup removed the old lock once it was moved here
+      // (a rename keeps its old mtime), so the slot is empty: try again.
+      if (moved.owner === null && moved.mtimeMs === null) continue;
+      if (lockIdentity(moved) !== identity) {
         // Another process took the lock over first; give its lock back. When a
         // third has taken the lock since, the moved lock stays aside: it may
         // be a live holder's, and it is not this process's to delete.
