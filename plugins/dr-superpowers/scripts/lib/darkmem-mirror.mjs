@@ -105,7 +105,10 @@ export function ledgerFiles(workRoot) {
 // documents and ledgers are keyed by uri and slug, which may be any valid key
 // ("constructor", "__proto__"), so both are prototype-free dictionaries.
 export function emptyState() {
-  return { version: 1, documents: Object.create(null), ledgers: Object.create(null), checkpoint: null, checkpointAt: null, conflicts: [] };
+  return {
+    version: 1, documents: Object.create(null), ledgers: Object.create(null), checkpoint: null, checkpointAt: null,
+    conflicts: [], pendingLinks: [],
+  };
 }
 
 function dictOf(value, check) {
@@ -121,7 +124,8 @@ function dictOf(value, check) {
 const isHash = value => typeof value === "string" && HASH.test(value);
 const isLedgerRecord = (slug, record) => validKey(slug) && record !== null && typeof record === "object"
   && Number.isSafeInteger(record.offset) && record.offset >= 0 && isHash(record.prefix)
-  && (record.pending === undefined || typeof record.pending === "boolean");
+  && (record.pending === undefined || typeof record.pending === "boolean")
+  && (record.lastSeq === undefined || (Number.isSafeInteger(record.lastSeq) && record.lastSeq >= 0));
 
 // A missing state file is a fresh mirror. An unreadable or malformed one is an
 // error, not a fresh start: forgetting a ledger's offset would re-send lines.
@@ -138,9 +142,13 @@ export function loadState(file) {
   const valid = raw?.version === 1 && documents && ledgers
     && (raw.checkpoint === null || isHash(raw.checkpoint))
     && (raw.checkpointAt === null || (typeof raw.checkpointAt === "string" && !Number.isNaN(Date.parse(raw.checkpointAt))))
-    && Array.isArray(raw.conflicts) && raw.conflicts.every(line => typeof line === "string");
+    && Array.isArray(raw.conflicts) && raw.conflicts.every(line => typeof line === "string")
+    && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")));
   if (!valid) throw new StateError(`${file} does not hold a valid sync state; ${REBUILD}`);
-  return { version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt: raw.checkpointAt, conflicts: raw.conflicts };
+  return {
+    version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt: raw.checkpointAt, conflicts: raw.conflicts,
+    pendingLinks: raw.pendingLinks ?? [],
+  };
 }
 
 // The temporary file is a dotfile, so a crash between write and rename never
@@ -250,6 +258,80 @@ export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover } = 
     };
   }
   return null;
+}
+
+// Where strict UTF-8 decoding of `buffer` first fails, or null when it does
+// not: {offset, partial}, where partial means the only fault is a character
+// cut short by the end of the buffer, which is what a file still being written
+// looks like. The byte ranges are the WHATWG decoder's, so this agrees with
+// decodeUtf8 on every input.
+export function utf8Fault(buffer) {
+  let i = 0;
+  while (i < buffer.length) {
+    const lead = buffer[i];
+    if (lead < 0x80) {
+      i += 1;
+      continue;
+    }
+    let need = 0;
+    if (lead >= 0xc2 && lead <= 0xdf) need = 1;
+    else if (lead >= 0xe0 && lead <= 0xef) need = 2;
+    else if (lead >= 0xf0 && lead <= 0xf4) need = 3;
+    else return { offset: i, partial: false };
+    const low = lead === 0xe0 ? 0xa0 : lead === 0xf0 ? 0x90 : 0x80;
+    const high = lead === 0xed ? 0x9f : lead === 0xf4 ? 0x8f : 0xbf;
+    for (let k = 1; k <= need; k += 1) {
+      if (i + k >= buffer.length) return { offset: i, partial: true };
+      const byte = buffer[i + k];
+      if (byte < (k === 1 ? low : 0x80) || byte > (k === 1 ? high : 0xbf)) return { offset: i, partial: false };
+    }
+    i += need + 1;
+  }
+  return null;
+}
+
+// darkmem's ISO timestamps as microseconds since the epoch, or null. Python's
+// isoformat writes six fraction digits and drops a zero fraction; Date.parse
+// keeps three, so two entries filed in one millisecond would compare equal.
+// Years 1970-2200 keep the result a safe integer.
+export function isoMicros(text) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):(\d{2}))$/.exec(String(text));
+  if (!m) return null;
+  const [year, month, day, hour, minute, second] = m.slice(1, 7).map(Number);
+  const [fraction = "", zone, zoneHours, zoneMinutes] = m.slice(7);
+  if (year < 1970 || year > 2200 || (zone !== "Z" && (Number(zoneHours) > 23 || Number(zoneMinutes) > 59))) return null;
+  const ms = Date.UTC(year, month - 1, day, hour, minute, second);
+  // Date.UTC rolls an impossible field over (February 30 becomes March 2,
+  // minute 60 the next hour); a round trip refuses it.
+  const date = new Date(ms);
+  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day || date.getUTCHours() !== hour
+    || date.getUTCMinutes() !== minute || date.getUTCSeconds() !== second) return null;
+  const offsetMinutes = zone === "Z" ? 0 : (zone[0] === "-" ? -1 : 1) * (Number(zoneHours) * 60 + Number(zoneMinutes));
+  return (ms - offsetMinutes * 60000) * 1000 + Number(fraction.padEnd(6, "0").slice(0, 6));
+}
+
+// Why a uri cannot be a file name on every platform the mirror runs on, or
+// null. Windows refuses these characters, a trailing dot or space, and its
+// device names whatever their extension; checking everywhere keeps a Linux
+// mirror from filing what a Windows mirror cannot hold.
+export function uriProblem(uri) {
+  for (const segment of String(uri).split("/")) {
+    if (/[<>:"|?*\p{Cc}]/u.test(segment)) return `the name ${JSON.stringify(segment)} holds a character Windows refuses`;
+    if (/[. ]$/.test(segment)) return `the name ${JSON.stringify(segment)} ends in a dot or a space`;
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(segment)) return `the name ${JSON.stringify(segment)} is a Windows device name`;
+  }
+  return null;
+}
+
+// Groups of two or more uris that differ only in case, which a
+// case-insensitive file system holds as one file.
+export function caseGroups(uris) {
+  const byFold = new Map();
+  for (const uri of new Set(uris)) {
+    const fold = uri.toLowerCase();
+    byFold.set(fold, [...(byFold.get(fold) ?? []), uri]);
+  }
+  return [...byFold.values()].filter(group => group.length > 1).map(group => group.sort());
 }
 
 // Strict UTF-8, BOM kept, or null: the server stores text, and a lossy decode

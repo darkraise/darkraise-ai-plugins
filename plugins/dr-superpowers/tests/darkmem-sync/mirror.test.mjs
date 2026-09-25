@@ -5,9 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  EMPTY_SHA, StateError, acquireLock, checkpointTarget, lockOwner, decodeUtf8, emptyState, ledgerFiles, ledgerPlanPath,
-  listDocumentFiles, loadState, localChanges, pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines,
-  splitAtLimit, unsupportedPlanDirs, uriToLocal,
+  EMPTY_SHA, StateError, acquireLock, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, isoMicros,
+  ledgerFiles, ledgerPlanPath, listDocumentFiles, loadState, localChanges, pathToUri, propertiesFor, saveState, sha256,
+  splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriProblem, uriToLocal, utf8Fault,
 } from "../../scripts/lib/darkmem-mirror.mjs";
 import { scratch, write } from "./helpers.mjs";
 
@@ -125,6 +125,11 @@ test("an unreadable or malformed state file is an error rather than a fresh star
     JSON.stringify({ ...good, ledgers: { "../x": { offset: 0, prefix: EMPTY_SHA } } }),
     JSON.stringify({ ...good, checkpoint: "x" }),
     JSON.stringify({ ...good, conflicts: [1] }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: -1 } } }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: "3" } } }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: 1.5 } } }),
+    JSON.stringify({ ...good, pendingLinks: "superpowers/handoff/p1.md" }),
+    JSON.stringify({ ...good, pendingLinks: [1] }),
   ]) {
     fs.writeFileSync(file, bad);
     assert.throws(() => loadState(file), StateError, bad);
@@ -201,4 +206,70 @@ test("a lock with no owner record is taken over only once it is stale", () => {
   const release = acquireLock(root);
   assert.equal(typeof release, "function");
   release();
+});
+
+test("a ledger's lastSeq and the pending handoff links survive a save, and an older state loads with no links", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  const state = emptyState();
+  assert.deepEqual(state.pendingLinks, []);
+  state.ledgers.p1 = { offset: 3, prefix: sha256("abc"), lastSeq: 7 };
+  state.pendingLinks.push("superpowers/handoff/p1.md");
+  saveState(file, state);
+  const loaded = loadState(file);
+  assert.deepEqual(loaded.ledgers.p1, { offset: 3, prefix: sha256("abc"), lastSeq: 7 });
+  assert.deepEqual(loaded.pendingLinks, ["superpowers/handoff/p1.md"]);
+  fs.writeFileSync(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [] }));
+  assert.deepEqual(loadState(file).pendingLinks, []);
+});
+
+test("utf8Fault finds the first undecodable byte and tells a character cut short at the end apart", () => {
+  assert.equal(utf8Fault(Buffer.from("héllo ✓ 😀\n")), null);
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xe2, 0x82])), { offset: 1, partial: true });
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xf0, 0x9f, 0x98])), { offset: 1, partial: true });
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xff])), { offset: 1, partial: false }, "a lone 0xFF is never a partial character");
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xc3, 0x28, 0x62])), { offset: 1, partial: false });
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0x62, 0x80])), { offset: 2, partial: false });
+  assert.deepEqual(utf8Fault(Buffer.from([0xe0, 0x80])), { offset: 0, partial: false }, "an overlong lead is refused at once");
+  const pool = [0x00, 0x41, 0x7f, 0x80, 0x9f, 0xa0, 0xbf, 0xc1, 0xc2, 0xdf, 0xe0, 0xed, 0xef, 0xf0, 0xf4, 0xf5, 0xff];
+  let seed = 7;
+  // Math.imul keeps the 32-bit product exact, and the low bits of a
+  // power-of-two generator repeat quickly, so only the high 16 are used.
+  const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 16;
+  for (let n = 0; n < 20000; n += 1) {
+    const buffer = Buffer.from(Array.from({ length: 1 + (next() % 6) }, () => pool[next() % pool.length]));
+    assert.equal(utf8Fault(buffer) === null, decodeUtf8(buffer) !== null, buffer.toString("hex"));
+  }
+});
+
+test("isoMicros orders darkmem's timestamps to the microsecond, offsets applied", () => {
+  assert.equal(isoMicros("2026-09-25T10:00:00.000002+00:00") - isoMicros("2026-09-25T10:00:00.000001+00:00"), 1);
+  assert.equal(isoMicros("2026-09-25T10:00:00+00:00"), isoMicros("2026-09-25T10:00:00.000000Z"), "a dropped zero fraction");
+  assert.equal(isoMicros("2026-09-25T12:00:00.5+02:00"), isoMicros("2026-09-25T10:00:00.500000Z"));
+  assert.equal(isoMicros("2026-09-25T10:00:00.1234567Z"), isoMicros("2026-09-25T10:00:00.123456Z"), "digits past six are dropped");
+  assert.equal(isoMicros("2026-09-24T10:00:00.123Z"), Date.parse("2026-09-24T10:00:00.123Z") * 1000);
+  assert.equal(isoMicros("2200-12-31T23:59:59.999999Z"), Date.UTC(2200, 11, 31, 23, 59, 59) * 1000 + 999999);
+  assert.ok(Number.isSafeInteger(isoMicros("2200-12-31T23:59:59.999999Z")));
+  for (const bad of [
+    "yesterday", "2026-02-30T10:00:00Z", "0099-01-01T00:00:00Z", "1969-12-31T23:59:59Z", "2201-01-01T00:00:00Z",
+    "2026-09-25T24:00:00Z", "2026-09-25T10:60:00Z", "2026-09-25T10:00:60Z", "2026-09-25T10:00:00+24:00",
+    "2026-09-25T10:00:00+05:60", "2026-09-25T10:00:00",
+  ]) {
+    assert.equal(isoMicros(bad), null, bad);
+  }
+});
+
+test("uriProblem refuses names Windows cannot hold, and caseGroups finds uris that differ only in case", () => {
+  for (const bad of [
+    "superpowers/notes/a:b.md", "superpowers/notes/a?.md", "superpowers/notes/a\u0001.md", "superpowers/notes/a.",
+    "superpowers/notes/a\u007f.md", "superpowers/notes/a\u0085.md", "superpowers/notes/a ", "superpowers/notes/CON.md", "superpowers/con/a.md", "superpowers/notes/lpt9", "superpowers/Aux.tar.gz",
+  ]) {
+    assert.notEqual(uriProblem(bad), null, bad);
+  }
+  for (const good of ["superpowers/notes/a.md", "superpowers/notes/console.md", "superpowers/notes/com10.md", "superpowers/handoff/p1.md"]) {
+    assert.equal(uriProblem(good), null, good);
+  }
+  assert.match(uriProblem("superpowers/notes/CON.md"), /"CON\.md" is a Windows device name/);
+  assert.deepEqual(caseGroups(["superpowers/A.md", "superpowers/b.md", "superpowers/a.md", "superpowers/A.md"]), [["superpowers/A.md", "superpowers/a.md"]]);
+  assert.deepEqual(caseGroups(["superpowers/a.md", "superpowers/b.md"]), []);
 });
