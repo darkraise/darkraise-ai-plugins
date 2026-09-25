@@ -324,6 +324,10 @@ test("a second 409 in one push is a conflict and nothing more is sent", async t 
   assert.match(result.stdout, /^conflict: sdd\/p1\/progress\.md: darkmem's ledger for p1 changed since the last sync/m);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n", "three\n"], "the other client's lines, none sent twice");
   assert.equal(s.posts("/api/v1/worklog/entries").length, 3, "the first push, the 409, and the retry's 409");
+  assert.match(result.stdout, /^conflict: sdd\/p1\/progress\.md: darkmem's ledger for p1 changed since the last sync and again during this push; push again$/m);
+  const again = await s.push();
+  assert.equal(again.code, 0, again.stdout);
+  assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n", "three\n"], "pushing again sends nothing twice");
 });
 
 test("a ledger with a byte that is not UTF-8 fails with its offset; a character still being written is a note", async t => {

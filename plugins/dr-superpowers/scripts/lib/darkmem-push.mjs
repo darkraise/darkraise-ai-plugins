@@ -224,7 +224,13 @@ async function pushLedger(context, slug, file) {
           report.failures.push(`${label}: darkmem refused an entry: ${error.detail}`);
           return;
         }
-        const current = reconciled ? null : await adoptRemoteLedger(context, slug, buffer);
+        // A second 409 means another append landed during this push; the next
+        // push reconciles once more, or reports a real divergence.
+        if (reconciled) {
+          report.conflicts.push(`${label}: darkmem's ledger for ${slug} changed since the last sync and again during this push; push again`);
+          return;
+        }
+        const current = await adoptRemoteLedger(context, slug, buffer);
         if (!current || current.offset < record.offset) {
           report.conflicts.push(`${label}: darkmem's ledger for ${slug} changed since the last sync and no longer matches this file; move the local file aside, pull, and re-apply your lines`);
           return;
