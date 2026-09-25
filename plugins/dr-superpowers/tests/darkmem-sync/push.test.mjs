@@ -122,7 +122,9 @@ test("a document put whose answer was lost is recorded on the next push, not rep
   await s.push();
   write(path.join(s.docsRoot, "a.md"), "two\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 502, commit: true });
-  assert.equal((await s.push()).code, 3);
+  const lost = await s.push();
+  assert.equal(lost.code, 1);
+  assert.match(lost.stdout, /^failed: superpowers\/a\.md: darkmem answered 502: injected failure$/m);
   const retry = await s.push();
   assert.equal(retry.code, 0, retry.stdout);
   assert.equal(s.stub.db.documents.get("proj\u0000superpowers/a.md").content, "two\n");
@@ -248,7 +250,9 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
   assert.equal(s.stub.db.workstreams.find(w => w.key === "adhoc").entries[0].kind, "checkpoint");
   write(latest, "# Handoff\n\n## State\n- Draft: `docs/superpowers/specs/d-design.md`\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
-  assert.equal((await s.push()).code, 3);
+  const lost = await s.push();
+  assert.equal(lost.code, 1);
+  assert.match(lost.stdout, /^failed: handoff\/latest\.md: darkmem answered 502: injected failure$/m);
   await s.seed.append({ project: "proj", workstream: "d-design", entries: [{ kind: "checkpoint", body: "# Handoff from another machine\n" }] });
   assert.equal((await s.push()).code, 0);
   const draft = s.stub.db.workstreams.find(w => w.key === "d-design");
@@ -361,4 +365,132 @@ test("a ledger longer than one append call chains each call's last_seq into the 
   assert.equal(appends[1].body.expected_last_seq, entries[99].seq, "the second call expects the first call's last seq");
   assert.equal(entries.map(e => e.body).join(""), read(file));
   assert.equal(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).ledgers.big.lastSeq, entries[100].seq);
+});
+
+test("a 503 on one document names its uri, and the other documents, the ledger and the checkpoint still land", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  write(path.join(s.docsRoot, "b.md"), "b\n");
+  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
+  write(path.join(s.workRoot, "handoff", "latest.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`\n");
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 503 });
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^failed: superpowers\/a\.md: darkmem answered 503: injected failure$/m);
+  assert.equal(s.stub.db.documents.has("proj\u0000superpowers/a.md"), false);
+  assert.equal(s.stub.db.documents.get("proj\u0000superpowers/b.md").content, "b\n");
+  assert.deepEqual(s.stub.db.workstreams.find(w => w.key === "p1").entries.map(e => e.kind), ["ledger", "checkpoint"]);
+  assert.equal((await s.push()).code, 0);
+  assert.equal(s.stub.db.documents.get("proj\u0000superpowers/a.md").content, "a\n");
+});
+
+test("a 401 on a document stops the push before the ledgers", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 401, detail: "Not authenticated" });
+  const result = await s.push();
+  assert.equal(result.code, 3);
+  assert.match(result.stderr, /^darkmem-sync: push failed: POST \/api\/v1\/documents answered 401: Not authenticated$/m);
+  assert.equal(s.stub.db.workstreams.length, 0);
+});
+
+test("a failed document manifest fails the documents phase and the ledgers still push", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/manifest", status: 503 });
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^failed: document manifest: darkmem answered 503: injected failure; no document pushed$/m);
+  assert.equal(s.posts("/api/v1/documents").length, 0);
+  assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n"]);
+});
+
+test("a failed handoff link stays pending and the next push links it; a pending link with no workstream is dropped", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  write(path.join(s.workRoot, "sdd", "p1", "handoff.md"), "# Handoff p1\n");
+  s.stub.db.failures.push({ method: "PATCH", path: "/api/v1/worklog/workstreams/", status: 503 });
+  const failed = await s.push();
+  assert.equal(failed.code, 1);
+  assert.match(failed.stdout, /^failed: superpowers\/handoff\/p1\.md: linking it from workstream p1: darkmem answered 503: injected failure$/m);
+  const stateFile = path.join(s.mirror, ".sync-state.json");
+  assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, ["superpowers/handoff/p1.md"]);
+  const retried = await s.push();
+  assert.equal(retried.code, 0, retried.stdout);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "superpowers/handoff/p1.md");
+  assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, []);
+  const state = JSON.parse(read(stateFile));
+  state.pendingLinks = ["superpowers/handoff/ghost.md"];
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  const dropped = await s.push();
+  assert.equal(dropped.code, 0, dropped.stdout);
+  assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, []);
+  assert.equal(s.stub.db.workstreams.some(w => w.key === "ghost"), false);
+});
+
+test("a checkpoint filed a microsecond before the last synced one is not taken for this note", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# X\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# Y\n" }] });
+  const [x, y] = s.stub.db.workstreams[0].entries;
+  x.created_at = "2026-09-25T10:00:00.000001+00:00";
+  y.created_at = "2026-09-25T10:00:00.000002+00:00";
+  assert.equal((await run(["pull"], { cwd: s.repo, env: s.env })).code, 0);
+  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# Y\n");
+  write(path.join(s.workRoot, "handoff", "latest.md"), "# X\n");
+  const result = await s.push("--workstream", "p1");
+  assert.equal(result.code, 0, result.stdout);
+  assert.match(result.stdout, /1 checkpoints/);
+  assert.deepEqual(s.stub.db.workstreams[0].entries.map(e => e.body), ["# X\n", "# Y\n", "# X\n"]);
+});
+
+test("push refuses a uri Windows cannot hold", { skip: process.platform === "win32" && "Windows cannot create these files" }, async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "notes", "a:b.md"), "x\n");
+  write(path.join(s.docsRoot, "notes", "CON.md"), "y\n");
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^failed: superpowers\/notes\/a:b\.md: the name "a:b\.md" holds a character Windows refuses, so not every mirror can hold it as a file; not pushed$/m);
+  assert.match(result.stdout, /^failed: superpowers\/notes\/CON\.md: the name "CON\.md" is a Windows device name/m);
+  assert.equal(s.posts("/api/v1/documents").length, 0);
+});
+
+test("push refuses a uri that differs only in case from one darkmem holds", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/notes/A.md", content: "theirs\n" });
+  write(path.join(s.docsRoot, "notes", "a.md"), "mine\n");
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^conflict: superpowers\/notes\/a\.md: darkmem holds superpowers\/notes\/A\.md, which differ only in case from it; not pushed — rename the local file, or rename or delete the others on darkmem by hand \(the sync has no rename or delete route\)$/m);
+  assert.equal(s.posts("/api/v1/documents").length, 1, "only the seeding put");
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/notes/a.md", content: "also theirs\n" });
+  const pair = await s.push();
+  assert.equal(pair.code, 1);
+  assert.match(pair.stdout, /^conflict: superpowers\/notes\/a\.md: darkmem holds superpowers\/notes\/A\.md, which differ only in case/m, "a local file matching one of a remote pair still collides with the other");
+  assert.equal(s.posts("/api/v1/documents").length, 2, "only the two seeding puts");
+});
+
+test("push refuses local files that differ only in case", { skip: process.platform !== "linux" && "needs a case-sensitive file system" }, async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "A.md"), "one\n");
+  write(path.join(s.docsRoot, "a.md"), "two\n");
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^conflict: superpowers\/A\.md, superpowers\/a\.md: differ only in case, which a case-insensitive file system holds as one file; none of them pushed — rename all but one$/m);
+  assert.equal(s.posts("/api/v1/documents").length, 0);
+});
+
+test("a 409 whose read answers darkmem's own 404 is a deletion; any other 404 is a failure", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "one\n");
+  await s.push();
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "theirs\n" });
+  write(path.join(s.docsRoot, "a.md"), "two\n");
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/by-uri", status: 404, detail: "Not Found" });
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^failed: superpowers\/a\.md: darkmem answered 404: Not Found$/m);
+  assert.doesNotMatch(result.stdout, /deleted on darkmem/);
 });

@@ -8,92 +8,148 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, checkpointTarget, decodeUtf8,
-  ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs, utf8Fault,
-  validKey,
+  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, caseGroups, checkpointTarget, decodeUtf8,
+  isoMicros, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs,
+  uriProblem, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
 
 const RESOLVE = "pull, reconcile, then push";
+// darkmem's own answer for a uri nothing is filed at; any other 404 (a wrong
+// url, a missing route) is not evidence that the document was deleted.
+const NOT_FILED = /^no document is filed at uri /;
 const HANDOFF_URI = new RegExp(`^${DOC_PREFIX}/handoff/([^/]+)\\.md$`);
 
 // A handoff note filed after its workstream began: point the workstream at it.
-async function linkHandoff({ cfg, client }, uri) {
+// The uri stays in pendingLinks until the workstream carries it, or has none
+// yet (its first append carries the uri), so a failed link is retried by the
+// next push rather than only by a later append.
+async function linkHandoff({ cfg, client, state, persist, report }, uri) {
   const slug = HANDOFF_URI.exec(uri)?.[1];
   if (!slug) return;
-  const existing = await client.resume(cfg.project, slug);
-  if (existing && existing.workstream.properties?.handoff_uri !== uri) {
-    await client.updateWorkstream(existing.workstream.id, { properties: { handoff_uri: uri } });
+  if (!state.pendingLinks.includes(uri)) {
+    state.pendingLinks.push(uri);
+    persist();
   }
+  try {
+    const existing = await client.resume(cfg.project, slug);
+    if (existing && existing.workstream.properties?.handoff_uri !== uri) {
+      await client.updateWorkstream(existing.workstream.id, { properties: { handoff_uri: uri } });
+    }
+  } catch (error) {
+    failItem(report, `${uri}: linking it from workstream ${slug}`, error);
+    return;
+  }
+  state.pendingLinks = state.pendingLinks.filter(item => item !== uri);
+  persist();
+}
+
+// One changed document, sent under its recorded hash. `remote` is the
+// manifest's uri -> content_hash map.
+async function pushDocument(context, { uri, buffer, local, recorded }, remote) {
+  const { cfg, client, state, persist, report } = context;
+  const content = decodeUtf8(buffer);
+  if (!content) {
+    report.failures.push(`${uri}: empty or not UTF-8 text, which darkmem cannot store; not pushed`);
+    return;
+  }
+  if (recorded === undefined) {
+    const current = remote.get(uri) ?? null;
+    if (current === local) {
+      state.documents[uri] = local;
+      persist();
+      await linkHandoff(context, uri);
+      return;
+    }
+    if (current !== null) {
+      report.conflicts.push(`${uri}: darkmem already holds different content; ${RESOLVE}`);
+      return;
+    }
+  }
+  let answer;
+  try {
+    answer = await client.putDocument({ project: cfg.project, uri, content, expectedHash: recorded });
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 422) {
+      report.failures.push(`${uri}: darkmem refused it: ${error.detail}`);
+      return;
+    }
+    if (!(error instanceof HttpError && error.status === 409)) throw error;
+    // A 409 may be this mirror's own earlier put whose answer was lost.
+    let current = null;
+    try {
+      current = (await client.getDocument(cfg.project, uri)).content_hash;
+    } catch (readError) {
+      if (!(readError instanceof HttpError && readError.status === 404 && NOT_FILED.test(readError.detail))) throw readError;
+      report.conflicts.push(`${uri}: deleted on darkmem since the last sync; ${RESOLVE}`);
+      return;
+    }
+    if (current !== local) {
+      report.conflicts.push(`${uri}: changed on darkmem since the last sync (darkmem said: ${error.detail}); ${RESOLVE}`);
+      return;
+    }
+    answer = { content_hash: current, outcome: "unchanged" };
+  }
+  state.documents[uri] = answer.content_hash;
+  persist();
+  report.counts.documents += 1;
+  if (recorded === undefined && answer.outcome === "updated") {
+    // darkmem has no create-only put: another client filed this uri between
+    // the manifest read and this put, and its content was replaced.
+    report.failures.push(`${uri}: another client filed it during this push, and this push replaced its content`);
+  }
+  await linkHandoff(context, uri);
 }
 
 async function pushDocuments(context) {
-  const { cfg, client, roots, state, persist, report } = context;
-  let remote = null;
-  const remoteHash = async uri => {
-    remote ??= new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
-    return remote.get(uri) ?? null;
-  };
-  for (const { file, uri } of listDocumentFiles(roots)) {
+  const { cfg, client, roots, state, report } = context;
+  const files = listDocumentFiles(roots);
+  const twins = caseGroups(files.map(({ uri }) => uri).filter(Boolean));
+  for (const group of twins) {
+    report.conflicts.push(`${group.join(", ")}: differ only in case, which a case-insensitive file system holds as one file; none of them pushed — rename all but one`);
+  }
+  const held = new Set(twins.flat());
+  const changed = [];
+  for (const { file, uri } of files) {
     if (!uri) {
       report.notes.push(`${path.relative(roots.docsRoot, file).split(path.sep).join("/")}: the docs root's handoff/ directory is reserved, not pushed`);
       continue;
     }
+    if (held.has(uri)) continue;
     const buffer = fs.readFileSync(file);
     const local = sha256(buffer);
     const recorded = state.documents[uri];
     if (local === recorded) continue;
-    const content = decodeUtf8(buffer);
-    if (!content) {
-      report.failures.push(`${uri}: empty or not UTF-8 text, which darkmem cannot store; not pushed`);
+    const problem = uriProblem(uri);
+    if (problem) {
+      report.failures.push(`${uri}: ${problem}, so not every mirror can hold it as a file; not pushed`);
       continue;
     }
-    if (recorded === undefined) {
-      const current = await remoteHash(uri);
-      if (current === local) {
-        state.documents[uri] = local;
-        persist();
-        await linkHandoff(context, uri);
-        continue;
-      }
-      if (current !== null) {
-        report.conflicts.push(`${uri}: darkmem already holds different content; ${RESOLVE}`);
-        continue;
-      }
+    changed.push({ uri, buffer, local, recorded });
+  }
+  if (!changed.length) return;
+  let remote;
+  try {
+    remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+  } catch (error) {
+    failItem(report, "document manifest", error, "; no document pushed");
+    return;
+  }
+  // Every spelling darkmem holds under each lower-case form: when it holds
+  // A.md and a.md, a local a.md collides with A.md although a.md matches.
+  const spellings = new Map();
+  for (const uri of remote.keys()) spellings.set(uri.toLowerCase(), [...(spellings.get(uri.toLowerCase()) ?? []), uri]);
+  for (const item of changed) {
+    const twins = (spellings.get(item.uri.toLowerCase()) ?? []).filter(uri => uri !== item.uri).sort();
+    if (twins.length) {
+      report.conflicts.push(`${item.uri}: darkmem holds ${twins.join(", ")}, which differ only in case from it; not pushed — rename the local file, or rename or delete the others on darkmem by hand (the sync has no rename or delete route)`);
+      continue;
     }
-    let answer;
     try {
-      answer = await client.putDocument({ project: cfg.project, uri, content, expectedHash: recorded });
+      await pushDocument(context, item, remote);
     } catch (error) {
-      if (error instanceof HttpError && error.status === 422) {
-        report.failures.push(`${uri}: darkmem refused it: ${error.detail}`);
-        continue;
-      }
-      if (!(error instanceof HttpError && error.status === 409)) throw error;
-      // A 409 may be this mirror's own earlier put whose answer was lost.
-      let current = null;
-      try {
-        current = (await client.getDocument(cfg.project, uri)).content_hash;
-      } catch (readError) {
-        if (!(readError instanceof HttpError && readError.status === 404)) throw readError;
-        report.conflicts.push(`${uri}: deleted on darkmem since the last sync; ${RESOLVE}`);
-        continue;
-      }
-      if (current !== local) {
-        report.conflicts.push(`${uri}: changed on darkmem since the last sync (darkmem said: ${error.detail}); ${RESOLVE}`);
-        continue;
-      }
-      answer = { content_hash: current, outcome: "unchanged" };
+      failItem(report, item.uri, error);
     }
-    state.documents[uri] = answer.content_hash;
-    persist();
-    report.counts.documents += 1;
-    if (recorded === undefined && answer.outcome === "updated") {
-      // darkmem has no create-only put: another client filed this uri between
-      // the manifest read and this put, and its content was replaced.
-      report.failures.push(`${uri}: another client filed it during this push, and this push replaced its content`);
-    }
-    await linkHandoff(context, uri);
   }
 }
 
@@ -204,7 +260,15 @@ async function pushLedgers(context) {
   }
 }
 
-async function pushCheckpoint({ cfg, client, roots, state, persist, report }, named) {
+async function pushCheckpoint(context, named) {
+  try {
+    await sendCheckpoint(context, named);
+  } catch (error) {
+    failItem(context.report, "handoff/latest.md", error);
+  }
+}
+
+async function sendCheckpoint({ cfg, client, roots, state, persist, report }, named) {
   const file = path.join(roots.workRoot, "handoff", "latest.md");
   if (!fs.existsSync(file)) return;
   const buffer = fs.readFileSync(file);
@@ -230,9 +294,9 @@ async function pushCheckpoint({ cfg, client, roots, state, persist, report }, na
   // push whose answer was lost, even behind another client's checkpoint) is
   // recorded, not filed twice.
   const existing = await client.resume(cfg.project, workstream);
-  const since = state.checkpointAt ? Date.parse(state.checkpointAt) : -Infinity;
+  const since = (state.checkpointAt && isoMicros(state.checkpointAt)) ?? -Infinity;
   const filed = existing && (await client.entries(existing.workstream.id, "checkpoint"))
-    .find(entry => Date.parse(entry.created_at) >= since && sha256(Buffer.from(entry.body, "utf8")) === hash);
+    .find(entry => isoMicros(entry.created_at) >= since && sha256(Buffer.from(entry.body, "utf8")) === hash);
   if (filed) {
     state.checkpoint = hash;
     state.checkpointAt = filed.created_at;
@@ -258,6 +322,7 @@ export async function push(context) {
   const named = context.options["--workstream"];
   if (named !== undefined && !validKey(named)) throw new UsageError(`--workstream ${JSON.stringify(named)} is not a workstream key`);
   Object.assign(context.report.counts, { documents: 0, "ledger entries": 0, checkpoints: 0 });
+  for (const uri of [...context.state.pendingLinks]) await linkHandoff(context, uri);
   await pushDocuments(context);
   await pushLedgers(context);
   await pushCheckpoint(context, named);
