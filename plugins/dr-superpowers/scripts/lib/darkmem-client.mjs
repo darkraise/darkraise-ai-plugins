@@ -15,11 +15,13 @@ export class HttpError extends Error {
 const CLIENT = "dr-superpowers";
 
 // Records a darkmem answer that concerns one item as that item's failure line,
-// so the command goes on with the next item; anything else (no answer at all,
-// or a 401, which every later call would get too) is rethrown to stop it.
+// so the command goes on with the next item, and marks the run partial, since
+// the item was not re-checked; anything else (no answer at all, or a 401,
+// which every later call would get too) is rethrown to stop it.
 export function failItem(report, label, error, suffix = "") {
   if (!(error instanceof HttpError) || error.status === 401) throw error;
   report.failures.push(`${label}: darkmem answered ${error.status}: ${error.detail}${suffix}`);
+  report.partial = true;
 }
 
 export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl = globalThis.fetch }) {

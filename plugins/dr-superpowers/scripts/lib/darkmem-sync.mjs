@@ -83,7 +83,7 @@ async function main(argv, {
     err(`darkmem-sync: another darkmem-sync (${holder}) holds ${path.join(cfg.mirror, ".sync.lock")}; if that process is gone, remove the directory`);
     return 1;
   }
-  const report = { conflicts: [], failures: [], notes: [], counts: {} };
+  const report = { conflicts: [], failures: [], notes: [], counts: {}, partial: false };
   let state = null;
   let code = 0;
   try {
@@ -112,9 +112,10 @@ async function main(argv, {
     try {
       if (state) {
         // A completed run replaces the recorded conflicts; a run that stopped
-        // part-way adds what it found, since it never re-checked the rest.
+        // part-way, or failed an item or phase darkmem answered with an error,
+        // adds what it found, since it never re-checked the rest.
         if (parsed.command.recordsConflicts) {
-          state.conflicts = code === 0 ? report.conflicts : [...new Set([...state.conflicts, ...report.conflicts])];
+          state.conflicts = code === 0 && !report.partial ? report.conflicts : [...new Set([...state.conflicts, ...report.conflicts])];
         }
         saveState(cfg.statePath, state);
       }

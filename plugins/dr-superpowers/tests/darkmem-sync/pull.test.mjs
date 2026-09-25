@@ -266,3 +266,19 @@ test("pull refuses uris Windows cannot hold, and writes none of a set that diffe
   assert.match(result.stdout, /^conflict: superpowers\/A\.md, superpowers\/a\.md: differ only in case, which a case-insensitive file system holds as one file; none of them pulled — rename or delete all but one on darkmem by hand \(the sync has no rename or delete route\)$/m);
   assert.deepEqual(fs.readdirSync(s.docsRoot), ["ok.md"]);
 });
+
+test("a pull whose manifest read fails keeps the conflicts it never re-checked", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "one\n" });
+  await s.pull();
+  write(path.join(s.docsRoot, "a.md"), "local\n");
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "remote\n" });
+  assert.equal((await s.pull()).code, 1);
+  s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/manifest", status: 503 });
+  const failed = await s.pull();
+  assert.equal(failed.code, 1);
+  assert.match(failed.stdout, /^failed: document manifest: darkmem answered 503: .*; no document pulled$/m);
+  const status = await run(["status"], { cwd: s.repo, env: s.env });
+  assert.equal(status.code, 1);
+  assert.match(status.stdout, /^conflict: superpowers\/a\.md: changed locally and on darkmem/m);
+});
