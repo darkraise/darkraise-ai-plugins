@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Keep this repository's dr-superpowers documents and progress in darkmem.
+#
+# A repository mapped in ~/.dr-superpowers/config.json, with the API key in the
+# environment variable that file names, syncs a mirror at
+# ~/.dr-superpowers/mirror/<project>/: superpowers/ (specs, plans, registers,
+# notes), work/sdd/<plan>/{progress.md,handoff.md}, work/handoff/latest.md.
+# Anything else is local mode: every command except import prints one line
+# and does nothing.
+#
+# Usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace]
+# Exit: 0 done; 1 conflicts, refused or failed items, or another sync holds the
+#       mirror; 2 usage, a malformed config or state file, or import in local
+#       mode; 3 darkmem unreachable, or an answer that stopped the command;
+#       4 an unexpected error (a bug)
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+command -v node >/dev/null 2>&1 || { echo "darkmem-sync: node is required but not on PATH" >&2; exit 2; }
+exec node "$HERE/lib/darkmem-sync.mjs" "$@"

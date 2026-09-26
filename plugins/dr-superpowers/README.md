@@ -233,6 +233,23 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   confirmed every enumerated fact was carried. Every one of these files is
   optional; a project without them behaves exactly as before.
 
+**darkmem mirror (optional).** `scripts/darkmem-sync` keeps a repository's
+  planning documents and progress in a darkmem instance over its keyed REST
+  routes. Map the repository's primary checkout in
+  `~/.dr-superpowers/config.json` —
+  `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
+  — and export a `dmk_` key in that variable, and the repository syncs a mirror
+  at `~/.dr-superpowers/mirror/<project>/`. The key needs the `read` and
+  `capture` scopes, and `import --replace` also `admin`. `pull` fetches what
+  changed;
+  `push` sends documents under their last synced hash and ledgers as the bytes
+  appended since the last push; `status` lists local changes and the last
+  run's conflicts; `import` moves an existing `docs/superpowers/` and its
+  ledgers in once, verified byte for byte. A conflict is reported, never
+  merged. Without a mapping every command but `import` prints one line and
+  does nothing. The skills do not call it yet: they still read and write the
+  repository's own paths.
+
 ## Requirements
 
 **The superpowers workflow ships in-plugin.** The fork carries the full skill
@@ -431,6 +448,9 @@ skills the same way — structurally, against the documents themselves.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
+`darkmem-sync.test.sh` runs the `node:test` suites under
+`tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
+darkmem instance is needed.
 
 ## Reference
 

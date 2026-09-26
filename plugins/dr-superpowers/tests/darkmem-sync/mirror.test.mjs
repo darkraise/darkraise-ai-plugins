@@ -1,0 +1,369 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import {
+  EMPTY_SHA, StateError, acquireLock, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, isoMicros,
+  ledgerFiles, ledgerPlanPath, listDocumentFiles, loadState, localChanges, pathToUri, propertiesFor, saveState, sha256,
+  splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriProblem, uriToLocal, utf8Fault,
+} from "../../scripts/lib/darkmem-mirror.mjs";
+import { scratch, write } from "./helpers.mjs";
+
+function mirror() {
+  const root = scratch("dms-mirror-");
+  return { root, roots: { docsRoot: path.join(root, "superpowers"), workRoot: path.join(root, "work") } };
+}
+
+test("uris map to the docs root, handoff uris to the plan's directory, and nothing climbs out or names a dotfile", () => {
+  const { roots } = mirror();
+  assert.equal(uriToLocal(roots, "superpowers/specs/a.md"), path.join(roots.docsRoot, "specs", "a.md"));
+  assert.equal(uriToLocal(roots, "superpowers/handoff/p1.md"), path.join(roots.workRoot, "sdd", "p1", "handoff.md"));
+  for (const bad of [
+    "superpowers/../x.md", "superpowers//a.md", "other/a.md", "superpowers", "superpowers/handoff/a/b.md",
+    "superpowers/handoff/x.txt", "superpowers/.hidden.md", "superpowers/notes/.x/a.md",
+  ]) {
+    assert.equal(uriToLocal(roots, bad), null, bad);
+  }
+});
+
+test("document files list docs and handoff notes, skip dotfiles, and reserve docs/handoff", () => {
+  const { roots } = mirror();
+  write(path.join(roots.docsRoot, "specs", "a.md"), "a");
+  write(path.join(roots.docsRoot, ".hidden"), "h");
+  write(path.join(roots.docsRoot, "handoff", "x.md"), "x");
+  write(path.join(roots.workRoot, "sdd", "p1", "handoff.md"), "h");
+  write(path.join(roots.workRoot, "sdd", "p1", "progress.md"), "l");
+  write(path.join(roots.workRoot, "sdd", "bad name", "progress.md"), "l");
+  assert.deepEqual(listDocumentFiles(roots).map(f => f.uri), [null, "superpowers/specs/a.md", "superpowers/handoff/p1.md"]);
+  assert.deepEqual(ledgerFiles(roots.workRoot).map(f => f.slug), ["p1"]);
+  assert.deepEqual(unsupportedPlanDirs(roots.workRoot), [path.join(roots.workRoot, "sdd", "bad name")]);
+});
+
+test("a directory that cannot be read is an error, not an empty listing", () => {
+  const { roots } = mirror();
+  write(roots.docsRoot, "a file where the docs root should be");
+  assert.throws(() => listDocumentFiles(roots), { code: "ENOTDIR" });
+  assert.deepEqual(listDocumentFiles({ docsRoot: path.join(roots.docsRoot, "..", "absent"), workRoot: roots.workRoot }), []);
+});
+
+test("splitAtLimit cuts after newlines, never splits a surrogate pair, and concatenates back", () => {
+  const text = `${"a".repeat(7)}\n${"b".repeat(3)}\n${"c".repeat(12)}`;
+  const pieces = splitAtLimit(text, 10);
+  assert.equal(pieces.join(""), text);
+  assert.ok(pieces.every(p => p.length <= 10));
+  assert.equal(pieces[0], `${"a".repeat(7)}\n`);
+  const emoji = `${"x".repeat(9)}😀tail`;
+  const split = splitAtLimit(emoji, 10);
+  assert.equal(split.join(""), emoji);
+  assert.equal(split[0], "x".repeat(9));
+});
+
+test("splitAtBlankLines keeps each blank line at the end of its piece", () => {
+  const text = "# L\n\nTask 1: a\nmore\n\n\nTask 2: b\r\n\r\ntail";
+  const pieces = splitAtBlankLines(text);
+  assert.equal(pieces.join(""), text);
+  assert.deepEqual(pieces, ["# L\n\n", "Task 1: a\nmore\n\n", "\n", "Task 2: b\r\n\r\n", "tail"]);
+});
+
+test("decodeUtf8 refuses invalid bytes and keeps a byte order mark", () => {
+  assert.equal(decodeUtf8(Buffer.from([0xff, 0xfe, 0x41])), null);
+  assert.equal(decodeUtf8(Buffer.from([0xef, 0xbb, 0xbf, 0x41])), "﻿A");
+});
+
+test("paths name their uris; plans and drafts name their properties; a handoff note names its target", () => {
+  const { roots } = mirror();
+  assert.equal(pathToUri("docs/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
+  assert.equal(pathToUri("/home/u/.dr-superpowers/mirror/p/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
+  assert.equal(pathToUri("/repo/.superpowers/sdd/p1/progress.md"), null);
+  assert.equal(ledgerPlanPath("# SDD ledger — plan: docs/superpowers/plans/p1.md\nTask 1: x\n"), "docs/superpowers/plans/p1.md");
+  assert.equal(ledgerPlanPath("Task 1: x\n"), null);
+  write(path.join(roots.docsRoot, "plans", "p1.md"), "# P\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
+  write(path.join(roots.workRoot, "sdd", "p1", "handoff.md"), "h");
+  assert.deepEqual(propertiesFor(roots, "p1", "docs/superpowers/plans/p1.md"), {
+    plan_uri: "superpowers/plans/p1.md", spec_uri: "superpowers/specs/s.md", handoff_uri: "superpowers/handoff/p1.md",
+  });
+  assert.deepEqual(propertiesFor(roots, "d-design", "docs/superpowers/specs/d-design.md"), { spec_uri: "superpowers/specs/d-design.md" });
+  assert.deepEqual(propertiesFor(roots, "adhoc", null), {});
+  assert.deepEqual(
+    checkpointTarget("# Handoff\n\n## State\n- Worktree: `/r`\n- Plan: `docs/superpowers/plans/p1.md`; ledger: `x`\n\n## Gotchas\n- Plan: `other.md`\n"),
+    { slug: "p1", path: "docs/superpowers/plans/p1.md" },
+  );
+  assert.deepEqual(checkpointTarget("## State\n- Draft: `docs/superpowers/specs/d-design.md`\n"), { slug: "d-design", path: "docs/superpowers/specs/d-design.md" });
+  assert.equal(checkpointTarget("## State\n- a punch list\n## Gotchas\n- Plan: `x.md`\n"), null);
+});
+
+test("state round-trips, including keys an ordinary object would inherit", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  assert.deepEqual(loadState(file), emptyState());
+  const state = emptyState();
+  state.documents["superpowers/a.md"] = sha256("a");
+  for (const slug of ["constructor", "toString", "__proto__"]) state.ledgers[slug] = { offset: 3, prefix: sha256("abc") };
+  state.checkpoint = sha256("c");
+  state.checkpointAt = "2026-09-24T10:00:00.000Z";
+  saveState(file, state);
+  const loaded = loadState(file);
+  assert.deepEqual(Object.keys(loaded.ledgers).sort(), ["__proto__", "constructor", "toString"]);
+  assert.deepEqual(loaded.ledgers.constructor, { offset: 3, prefix: sha256("abc") });
+  assert.equal(loaded.documents["superpowers/a.md"], sha256("a"));
+  assert.equal(loaded.checkpointAt, "2026-09-24T10:00:00.000Z");
+});
+
+test("an unreadable or malformed state file is an error rather than a fresh start", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  const good = { version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [] };
+  for (const bad of [
+    "{broken",
+    JSON.stringify({ ...good, version: 2 }),
+    JSON.stringify({ ...good, documents: null }),
+    JSON.stringify({ ...good, documents: { "superpowers/a.md": "not-a-hash" } }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: -1, prefix: EMPTY_SHA } } }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: "3", prefix: EMPTY_SHA } } }),
+    JSON.stringify({ ...good, ledgers: { "../x": { offset: 0, prefix: EMPTY_SHA } } }),
+    JSON.stringify({ ...good, checkpoint: "x" }),
+    JSON.stringify({ ...good, conflicts: [1] }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: -1 } } }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: "3" } } }),
+    JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: 1.5 } } }),
+    JSON.stringify({ ...good, pendingLinks: "superpowers/handoff/p1.md" }),
+    JSON.stringify({ ...good, pendingLinks: [1] }),
+  ]) {
+    fs.writeFileSync(file, bad);
+    assert.throws(() => loadState(file), StateError, bad);
+  }
+});
+
+test("localChanges names new, modified, unpushed, rewritten, unsupported and checkpoint changes", () => {
+  const { roots } = mirror();
+  const state = emptyState();
+  write(path.join(roots.docsRoot, "a.md"), "a");
+  write(path.join(roots.docsRoot, "b.md"), "b");
+  state.documents["superpowers/b.md"] = sha256("old");
+  write(path.join(roots.workRoot, "sdd", "p1", "progress.md"), "one\ntwo\n");
+  state.ledgers.p1 = { offset: 4, prefix: sha256("one\n") };
+  write(path.join(roots.workRoot, "sdd", "p2", "progress.md"), "changed\n");
+  state.ledgers.p2 = { offset: 4, prefix: sha256("orig") };
+  write(path.join(roots.workRoot, "sdd", "bad name", "handoff.md"), "h");
+  write(path.join(roots.workRoot, "handoff", "latest.md"), "# H\n");
+  assert.deepEqual(localChanges(roots, state), [
+    "new: superpowers/a.md",
+    "modified: superpowers/b.md",
+    "unpushed: sdd/p1/progress.md (4 bytes)",
+    "rewritten: sdd/p2/progress.md",
+    `unsupported: ${path.join(roots.workRoot, "sdd", "bad name")} (not a usable workstream key)`,
+    "modified: handoff/latest.md",
+  ]);
+  assert.equal(EMPTY_SHA, sha256(""));
+});
+
+test("the lock admits one holder, waits on a live one however old, and takes over a dead one", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  const release = acquireLock(root);
+  assert.equal(typeof release, "function");
+  assert.equal(lockOwner(root).pid, process.pid);
+  assert.equal(acquireLock(root), null);
+  const old = new Date(Date.now() - 60 * 60 * 1000);
+  fs.utimesSync(lock, old, old);
+  assert.equal(acquireLock(root), null, "this process is alive, so its lock is not stale");
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "t" }));
+  const successor = acquireLock(root);
+  assert.equal(typeof successor, "function");
+  release();
+  assert.equal(fs.existsSync(lock), true, "a displaced holder's release leaves its successor's lock");
+  successor();
+  assert.equal(fs.existsSync(lock), false);
+  assert.deepEqual(fs.readdirSync(root), [], "no side directory is left behind");
+});
+
+test("two takeovers of one abandoned lock leave exactly one holder", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  fs.mkdirSync(lock);
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "stale" }));
+  let first = null;
+  const second = acquireLock(root, { beforeTakeover: () => { first ??= acquireLock(root); } });
+  assert.equal(typeof first, "function", "the takeover that ran first holds the lock");
+  assert.equal(second, null, "the later takeover finds a live lock and backs off");
+  assert.equal(fs.existsSync(lock), true);
+  first();
+  assert.equal(fs.existsSync(lock), false);
+  assert.deepEqual(fs.readdirSync(root), []);
+});
+
+test("a lock with no owner record is taken over only once it is stale", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  fs.mkdirSync(lock);
+  assert.equal(acquireLock(root), null);
+  const old = new Date(Date.now() - 20 * 60 * 1000);
+  fs.utimesSync(lock, old, old);
+  const release = acquireLock(root);
+  assert.equal(typeof release, "function");
+  release();
+});
+
+test("a ledger's lastSeq and the pending handoff links survive a save, and an older state loads with no links", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  const state = emptyState();
+  assert.deepEqual(state.pendingLinks, []);
+  state.ledgers.p1 = { offset: 3, prefix: sha256("abc"), lastSeq: 7 };
+  state.pendingLinks.push("superpowers/handoff/p1.md");
+  saveState(file, state);
+  const loaded = loadState(file);
+  assert.deepEqual(loaded.ledgers.p1, { offset: 3, prefix: sha256("abc"), lastSeq: 7 });
+  assert.deepEqual(loaded.pendingLinks, ["superpowers/handoff/p1.md"]);
+  fs.writeFileSync(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [] }));
+  assert.deepEqual(loadState(file).pendingLinks, []);
+});
+
+test("utf8Fault finds the first undecodable byte and tells a character cut short at the end apart", () => {
+  assert.equal(utf8Fault(Buffer.from("héllo ✓ 😀\n")), null);
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xe2, 0x82])), { offset: 1, partial: true });
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xf0, 0x9f, 0x98])), { offset: 1, partial: true });
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xff])), { offset: 1, partial: false }, "a lone 0xFF is never a partial character");
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0xc3, 0x28, 0x62])), { offset: 1, partial: false });
+  assert.deepEqual(utf8Fault(Buffer.from([0x61, 0x62, 0x80])), { offset: 2, partial: false });
+  assert.deepEqual(utf8Fault(Buffer.from([0xe0, 0x80])), { offset: 0, partial: false }, "an overlong lead is refused at once");
+  const pool = [0x00, 0x41, 0x7f, 0x80, 0x9f, 0xa0, 0xbf, 0xc1, 0xc2, 0xdf, 0xe0, 0xed, 0xef, 0xf0, 0xf4, 0xf5, 0xff];
+  let seed = 7;
+  // Math.imul keeps the 32-bit product exact, and the low bits of a
+  // power-of-two generator repeat quickly, so only the high 16 are used.
+  const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 16;
+  for (let n = 0; n < 20000; n += 1) {
+    const buffer = Buffer.from(Array.from({ length: 1 + (next() % 6) }, () => pool[next() % pool.length]));
+    assert.equal(utf8Fault(buffer) === null, decodeUtf8(buffer) !== null, buffer.toString("hex"));
+  }
+});
+
+test("isoMicros orders darkmem's timestamps to the microsecond, offsets applied", () => {
+  assert.equal(isoMicros("2026-09-25T10:00:00.000002+00:00") - isoMicros("2026-09-25T10:00:00.000001+00:00"), 1);
+  assert.equal(isoMicros("2026-09-25T10:00:00+00:00"), isoMicros("2026-09-25T10:00:00.000000Z"), "a dropped zero fraction");
+  assert.equal(isoMicros("2026-09-25T12:00:00.5+02:00"), isoMicros("2026-09-25T10:00:00.500000Z"));
+  assert.equal(isoMicros("2026-09-25T10:00:00.1234567Z"), isoMicros("2026-09-25T10:00:00.123456Z"), "digits past six are dropped");
+  assert.equal(isoMicros("2026-09-24T10:00:00.123Z"), Date.parse("2026-09-24T10:00:00.123Z") * 1000);
+  assert.equal(isoMicros("2200-12-31T23:59:59.999999Z"), Date.UTC(2200, 11, 31, 23, 59, 59) * 1000 + 999999);
+  assert.ok(Number.isSafeInteger(isoMicros("2200-12-31T23:59:59.999999Z")));
+  for (const bad of [
+    "yesterday", "2026-02-30T10:00:00Z", "0099-01-01T00:00:00Z", "1969-12-31T23:59:59Z", "2201-01-01T00:00:00Z",
+    "2026-09-25T24:00:00Z", "2026-09-25T10:60:00Z", "2026-09-25T10:00:60Z", "2026-09-25T10:00:00+24:00",
+    "2026-09-25T10:00:00+05:60", "2026-09-25T10:00:00",
+  ]) {
+    assert.equal(isoMicros(bad), null, bad);
+  }
+});
+
+test("uriProblem refuses names Windows cannot hold, and caseGroups finds uris that differ only in case", () => {
+  for (const bad of [
+    "superpowers/notes/a:b.md", "superpowers/notes/a?.md", "superpowers/notes/a\u0001.md", "superpowers/notes/a.",
+    "superpowers/notes/a\u007f.md", "superpowers/notes/a\u0085.md", "superpowers/notes/a ", "superpowers/notes/CON.md", "superpowers/con/a.md", "superpowers/notes/lpt9", "superpowers/Aux.tar.gz",
+    "superpowers/notes/COM¹.md", "superpowers/notes/lpt²", "superpowers/LPT³.tar.gz",
+  ]) {
+    assert.notEqual(uriProblem(bad), null, bad);
+  }
+  for (const good of ["superpowers/notes/a.md", "superpowers/notes/console.md", "superpowers/notes/com10.md", "superpowers/handoff/p1.md"]) {
+    assert.equal(uriProblem(good), null, good);
+  }
+  assert.match(uriProblem("superpowers/notes/CON.md"), /"CON\.md" is a Windows device name/);
+  assert.deepEqual(caseGroups(["superpowers/A.md", "superpowers/b.md", "superpowers/a.md", "superpowers/A.md"]), [["superpowers/A.md", "superpowers/a.md"]]);
+  assert.deepEqual(caseGroups(["superpowers/a.md", "superpowers/b.md"]), []);
+});
+
+test("a takeover that moved a live lock aside and cannot give it back leaves it there, and a later acquire clears it once stale", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  fs.mkdirSync(lock);
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "stale" }));
+  let first = null;
+  let third = null;
+  const second = acquireLock(root, {
+    beforeTakeover: () => { first ??= acquireLock(root); },
+    beforeRestore: () => { third ??= acquireLock(root); },
+  });
+  assert.equal(typeof first, "function", "the first takeover holds a lock");
+  assert.equal(typeof third, "function", "a third process took the lock the second one moved aside");
+  assert.equal(second, null);
+  const asides = fs.readdirSync(root).filter(name => name.startsWith(".sync.lock.stale-"));
+  assert.equal(asides.length, 1, "the first holder's lock was moved aside, not deleted");
+  const aside = path.join(root, asides[0]);
+  const firstToken = JSON.parse(fs.readFileSync(path.join(aside, "owner.json"), "utf8")).token;
+  assert.notEqual(firstToken, lockOwner(root).token);
+  first();
+  assert.equal(fs.existsSync(lock), true, "the displaced first holder leaves the third's lock alone");
+  third();
+  assert.equal(fs.existsSync(lock), false);
+  const release = acquireLock(root);
+  assert.equal(fs.existsSync(aside), true, "a fresh aside is kept");
+  release();
+  const old = new Date(Date.now() - 60 * 60 * 1000);
+  fs.utimesSync(aside, old, old);
+  acquireLock(root)();
+  assert.deepEqual(fs.readdirSync(root), [], "a stale aside is removed by the next acquire");
+});
+
+test("a half-built lock a crash left is kept while fresh and cleared once stale", () => {
+  const { root } = mirror();
+  const half = path.join(root, ".sync.lock.new-crashed");
+  fs.mkdirSync(half);
+  const release = acquireLock(root);
+  assert.equal(lockOwner(root).pid, process.pid);
+  assert.deepEqual(fs.readdirSync(root).sort(), [".sync.lock", ".sync.lock.new-crashed"], "a fresh half-built lock is kept");
+  release();
+  const old = new Date(Date.now() - 60 * 60 * 1000);
+  fs.utimesSync(half, old, old);
+  acquireLock(root)();
+  assert.deepEqual(fs.readdirSync(root), []);
+  const rename = fs.renameSync;
+  let raced = false;
+  fs.renameSync = (from, to) => {
+    if (!raced && path.basename(String(from)).startsWith(".sync.lock.new-")) {
+      raced = true;
+      throw Object.assign(new Error("ENOTEMPTY: a lock released since"), { code: "ENOTEMPTY" });
+    }
+    return rename(from, to);
+  };
+  let again;
+  try {
+    again = acquireLock(root);
+  } finally {
+    fs.renameSync = rename;
+  }
+  assert.equal(raced, process.platform !== "win32");
+  assert.equal(typeof again, "function", "a lock released during a failed placement is retried, not thrown");
+  again();
+  assert.deepEqual(fs.readdirSync(root), []);
+});
+
+test("a takeover whose moved-aside lock another acquire's cleanup removed tries again rather than reporting busy", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  fs.mkdirSync(lock);
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "old" }));
+  const rename = fs.renameSync;
+  let cleaned = false;
+  fs.renameSync = (from, to) => {
+    rename(from, to);
+    if (!cleaned && path.basename(String(to)).startsWith(".sync.lock.stale-")) {
+      cleaned = true;
+      fs.rmSync(to, { recursive: true, force: true });
+    }
+  };
+  let release;
+  try {
+    release = acquireLock(root);
+  } finally {
+    fs.renameSync = rename;
+  }
+  assert.equal(cleaned, true);
+  assert.equal(typeof release, "function", "the slot is empty, so the lock is taken");
+  release();
+  assert.deepEqual(fs.readdirSync(root), []);
+});

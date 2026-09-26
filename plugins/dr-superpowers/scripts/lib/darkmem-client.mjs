@@ -1,0 +1,134 @@
+// The keyed REST surface darkmem serves a mirror (work-log lane spec §2): the
+// work-log routes, POST /documents, GET /documents/by-uri and the manifest.
+// Every call carries the API key, names this client, and gives up after a
+// bounded timeout.
+export class TransportError extends Error {}
+
+export class HttpError extends Error {
+  constructor(method, route, status, detail) {
+    super(`${method} ${route} answered ${status}: ${detail}`);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+const CLIENT = "dr-superpowers";
+
+// Records a darkmem answer that concerns one item as that item's failure line,
+// so the command goes on with the next item, and marks the run partial, since
+// the item was not re-checked; anything else (no answer at all, or a 401,
+// which every later call would get too) is rethrown to stop it.
+export function failItem(report, label, error, suffix = "") {
+  if (!(error instanceof HttpError) || error.status === 401) throw error;
+  report.failures.push(`${label}: darkmem answered ${error.status}: ${error.detail}${suffix}`);
+  report.partial = true;
+}
+
+export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl = globalThis.fetch }) {
+  async function call(method, route, { query = {}, body } = {}) {
+    const target = new URL(`${url}${route}`);
+    for (const [name, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null) target.searchParams.set(name, String(value));
+    }
+    const headers = { Authorization: `Bearer ${apiKey}`, "X-Darkmem-Client": CLIENT, Accept: "application/json" };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    let response;
+    let text;
+    try {
+      response = await fetchImpl(target, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      text = await response.text();
+    } catch (error) {
+      const reason = error?.name === "TimeoutError"
+        ? `no answer within ${timeoutMs} ms`
+        : (error?.cause?.message ?? error?.message ?? String(error));
+      throw new TransportError(`${method} ${route}: ${reason}`);
+    }
+    let data = null;
+    let notJson = false;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        notJson = true;
+      }
+    }
+    if (notJson && response.ok) {
+      throw new TransportError(`${method} ${route}: answered ${response.status} with a body that is not JSON; is the url a darkmem instance?`);
+    }
+    if (!response.ok) {
+      const detail = typeof data?.detail === "string"
+        ? data.detail
+        : data?.detail !== undefined ? JSON.stringify(data.detail) : text.slice(0, 300);
+      throw new HttpError(method, route, response.status, detail);
+    }
+    return data;
+  }
+
+  return {
+    async manifest(project, uriPrefix) {
+      const items = [];
+      let after;
+      do {
+        const page = await call("GET", "/api/v1/documents/manifest", { query: { project, uri_prefix: uriPrefix, after, limit: 1000 } });
+        items.push(...page.items);
+        after = page.next_after;
+      } while (after);
+      return items;
+    },
+    getDocument(project, uri) {
+      return call("GET", "/api/v1/documents/by-uri", { query: { project, uri, include_content: "true" } });
+    },
+    putDocument({ project, uri, content, expectedHash }) {
+      const body = { project, uri, content };
+      if (expectedHash) body.expected_hash = expectedHash;
+      return call("POST", "/api/v1/documents", { body });
+    },
+    append({ project, workstream, entries, properties, expectedLastSeq }) {
+      const body = { project, workstream, run_key: runKey, client: CLIENT, entries };
+      if (properties) body.properties = properties;
+      if (expectedLastSeq !== undefined) body.expected_last_seq = expectedLastSeq;
+      return call("POST", "/api/v1/worklog/entries", { body });
+    },
+    async resume(project, workstream) {
+      try {
+        return await call("GET", "/api/v1/worklog/resume", { query: { project, workstream } });
+      } catch (error) {
+        // Only darkmem's own "no such workstream" answer: a 404 from a wrong
+        // url or a missing route must not read as an empty ledger.
+        if (error instanceof HttpError && error.status === 404 && /no workstream/i.test(error.detail)) return null;
+        throw error;
+      }
+    },
+    async workstreams(project, state) {
+      const items = [];
+      let before;
+      do {
+        const page = await call("GET", "/api/v1/worklog/workstreams", { query: { project, state, before, limit: 200 } });
+        items.push(...page.items);
+        before = page.next_before;
+      } while (before);
+      return items;
+    },
+    async entries(workstreamId, kind) {
+      const items = [];
+      let after;
+      do {
+        const page = await call("GET", `/api/v1/worklog/workstreams/${encodeURIComponent(workstreamId)}/entries`, { query: { kind, after, limit: 500 } });
+        items.push(...page.items);
+        after = page.next_after;
+      } while (after !== null && after !== undefined);
+      return items;
+    },
+    updateWorkstream(id, patch) {
+      return call("PATCH", `/api/v1/worklog/workstreams/${encodeURIComponent(id)}`, { body: patch });
+    },
+    purgeWorkstream(id) {
+      return call("DELETE", `/api/v1/worklog/workstreams/${encodeURIComponent(id)}`);
+    },
+  };
+}
