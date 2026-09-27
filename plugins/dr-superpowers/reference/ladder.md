@@ -245,6 +245,8 @@ This is a single-successor column consulted at most once per task, not a
 walkable chain. Only a failed *initial run* consults it: the fix loop resumes the
 same session on rounds 1 to 3 and hands back on round 4, so no fix round ever
 reads it. It is named `successor` rather than `escalation` for that reason.
+A refused initial run never reads it either: the account refused the model, and
+every row names that same model, so a refusal goes straight to `HANDBACK`.
 
 A fix round whose resume fails to run at all is the case that looks closest to a
 run failure, and it is still excluded. Changing rung mid-loop would discard the

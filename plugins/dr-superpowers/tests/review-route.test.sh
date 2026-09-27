@@ -411,6 +411,8 @@ present "the ladder names the light tier" "$LAD" '`--tier light` runs the last r
 present "planning runs the gate before the roster" "$EXEC" 'Unless it prints `lane=true`, stop here:'
 present "dispatch runs the gate before guarding the roster" "$EXEC" '1. **Gate, then guard the roster.**'
 present "a failed run refreshes the gate" "$EXEC" 'bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh'
+present "a refused model hands back at once" "$EXEC" '| Refusal - `refusal=true` in the report'"'"'s `## Codex error` section | `HANDBACK` now'
+present "a refusal never takes the successor" "$LAD" 'A refused initial run never reads it'
 present "the final Codex round needs the review surface" "$EXEC" 'Unless it prints `review=true`, skip the round'
 present "the task seats name the runner's gate" "$EXEC" 'codex is off for this session (<reason>)'
 
