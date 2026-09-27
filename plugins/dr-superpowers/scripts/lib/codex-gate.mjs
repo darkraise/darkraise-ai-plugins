@@ -3,10 +3,10 @@
 // Usage: node codex-gate.mjs <plugin-root> <cwd> <timeout-ms>
 // Prints one JSON object: {"usable": bool, "reason": string, "resets_at_epoch": seconds|null}.
 //
-// Two requests, neither of which runs a model: account/read for the login, and
-// account/rateLimits/read for the quota. The plugin's `setup` command reports
-// ready with the quota exhausted, so the rate-limit read is the only signal that
-// catches it. Direct mode (disableBroker) is deliberate: the broker is a detached
+// Two requests, neither of which runs a model: account/read for the login and
+// the ChatGPT plan, and account/rateLimits/read for the quota. The plugin's
+// `setup` command reports ready with the quota exhausted, so the rate-limit read
+// is the only signal that catches it. Direct mode (disableBroker) is deliberate: the broker is a detached
 // daemon the plugin's own SessionEnd hook owns, and it would outlive this probe.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -59,6 +59,12 @@ async function probe() {
   const type = account?.account?.type;
   if (!(type === "chatgpt" || type === "apiKey" || account?.requiresOpenaiAuth === false)) {
     return finish(false, "logged-out");
+  }
+  // A free ChatGPT plan passes the login and the limits read, then refuses the
+  // lane's models at the first turn ("not supported when using Codex with a
+  // ChatGPT account"), so it is off here rather than failing every task.
+  if (type === "chatgpt" && account.account.planType === "free") {
+    return finish(false, "free-plan");
   }
 
   let limits;

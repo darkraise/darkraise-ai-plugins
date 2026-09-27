@@ -106,6 +106,7 @@ export class CodexAppServerClient {
     log(`request ${method}`);
     if (method === "account/read") {
       if (mode === "logged-out") return { account: null, requiresOpenaiAuth: true };
+      if (mode === "free") return { account: { type: "chatgpt", email: "a@b.c", planType: "free" }, requiresOpenaiAuth: true };
       return { account: { type: "chatgpt", email: "a@b.c" }, requiresOpenaiAuth: true };
     }
     if (method === "account/rateLimits/read") {
@@ -185,6 +186,14 @@ check "usage at 100 percent is quota even when ordinary usage is allowed" "$out"
 fresh; gate logged-out
 check "a logged-out plugin is off" "$out" \
   "codex-gate usable=false reason=logged-out review=false lane=false resets_at=- source=probe"
+fresh; gate free
+check "a free ChatGPT plan is off" "$out" \
+  "codex-gate usable=false reason=free-plan review=false lane=false resets_at=- source=probe"
+check "a free plan is decided before the limits read" \
+  "$(grep '^request' "$TMP/log" | tr '\n' ' ')" "request account/read "
+gate free
+check "a free plan stays off from the cache" "$out" \
+  "codex-gate usable=false reason=free-plan review=false lane=false resets_at=- source=cache"
 fresh; gate method-missing
 check "an app-server without the limits method is off" "$out" \
   "codex-gate usable=false reason=method-missing review=false lane=false resets_at=- source=probe"

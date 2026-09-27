@@ -211,9 +211,9 @@ outcomes live in those scripts rather than in prose, so a refused model is a
 recorded substitution instead of a silently missing seat.
 
 **The Codex session gate.** Before any Codex use, `scripts/codex-gate` checks the official codex plugin
-once per session - enabled, installed at an allowed version, logged in, and
-within quota - through the plugin's own client, and caches the answer per
-session. When Codex is unusable, every Codex seat, the final-review Codex round,
+once per session - enabled, installed at an allowed version, logged in, not on
+a free ChatGPT plan, and within quota - through the plugin's own client, and
+caches the answer per session. When Codex is unusable, every Codex seat, the final-review Codex round,
 the executor lane and `plan-lint`'s lane probe are skipped for the session and
 Claude seats take over; a quota error mid-run turns Codex off the same way. A
 usable Codex is still used only on a surface whose shipping gate passed,

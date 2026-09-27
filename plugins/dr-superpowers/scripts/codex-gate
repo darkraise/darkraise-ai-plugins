@@ -2,9 +2,10 @@
 # Decide, once per session, whether this session may use Codex at all.
 #
 # Codex is usable only when the codex plugin is enabled, installed at an allowed
-# version, logged in and within quota. A usable Codex is then used only on a
-# surface whose shipping gate has passed (reference/codex-plugin.json `trust`):
-# calibration opens the review seats, the smoke test opens the executor lane.
+# version, logged in on a plan other than free ChatGPT, and within quota. A
+# usable Codex is then used only on a surface whose shipping gate has passed
+# (reference/codex-plugin.json `trust`): calibration opens the review seats, the
+# smoke test opens the executor lane.
 # Anything else turns that surface off for the session, so a Codex outage
 # degrades the process instead of failing a task. The probe's answer is cached
 # per session; a quota answer is probed again once its reset time has passed.

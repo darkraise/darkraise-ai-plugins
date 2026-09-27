@@ -553,9 +553,11 @@ specific to it:
   list `review` in `surfaces` staffs no seat.
 - **The locator and the gate.** Codex is reached only through the official
   `codex@openai-codex` plugin, which owns the binary. `scripts/codex-plugin`
-  locates it and `scripts/codex-gate` reads login and quota through the
-  plugin's own client. Another executor's gate answers whatever question its
-  own authentication poses.
+  locates it and `scripts/codex-gate` reads login, plan and quota through the
+  plugin's own client. A free ChatGPT plan is off (`reason=free-plan`): it
+  logs in and reports quota, but refuses the lane's models at the first turn.
+  Another executor's gate answers whatever question its own authentication
+  poses.
 - **Quota.** Codex reports a reset time, which the gate caches, so a quota
   answer is re-probed once that time has passed. An executor whose provider
   publishes no reset time marks itself off for the session instead.
