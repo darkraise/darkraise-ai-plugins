@@ -30,43 +30,77 @@ document and `.superpowers/<rest>` for working files. Ledger identity lines
 citations all hold names and keep their current spelling. A cross-repository
 `Assigned` cell (`darkmem: docs/superpowers/...`) is unchanged.
 
-`scripts/lib/context.sh` gains four helpers beside the repository root it
-already derives:
+**Where files live today (inventory, 2026-09-28).** Local mode is not one
+root. A plan's workspace, `.superpowers/sdd/<plan>/`, is in the *worktree*
+executing it (`sdd-workspace`, `next-step` and `repo-audit` take the working
+directory's top level), and it mixes files that sync (`progress.md`,
+`handoff.md`) with files that are machine-local by nature (task briefs,
+reports, review packages, `amendments.md`). `handoff/latest.md` and
+`sdd/budget-log.tsv` are in the *primary* checkout. Documents are in each
+worktree's own `docs/superpowers`. Nine scripts find a root by running `git`
+in the plan's own directory (`plan_repo_canon`, `plan_ledger`,
+`plan_amendments_file`, `plan_require_same_repo`, `plan-lint`, `plan-revise`,
+`plan-amend`, `register check`, `repo-audit`'s ledger names), which fails for
+a file outside any repository.
 
-| Helper | Local mode | darkmem mode |
+A new `scripts/lib/roots.sh`, sourced by `scripts/lib/plan.sh` (so by every
+script that sources it), defines one helper per location:
+
+| Helper | Local mode (today's paths) | darkmem mode |
 |---|---|---|
-| `sp_docs_root` | `<repo>/docs/superpowers` | `~/.dr-superpowers/mirror/<project>/superpowers` |
-| `sp_work_root` | `<repo>/.superpowers` | `~/.dr-superpowers/mirror/<project>/work` |
-| `sp_resolve NAME` | `<repo>/NAME` | `docs/superpowers/<rest>` → `<sp_docs_root>/<rest>`; `.superpowers/<rest>` → `<sp_work_root>/<rest>` |
-| `sp_name FILE` | FILE relative to `<repo>` | FILE relative to whichever root contains it, re-prefixed |
+| `sp_docs_root` | `<worktree>/docs/superpowers` | `<mirror>/superpowers` |
+| `sp_ledger_dir SLUG` | `<worktree>/.superpowers/sdd/SLUG` | `<mirror>/work/sdd/SLUG` |
+| `sp_latest_file` | `<primary>/.superpowers/handoff/latest.md` | `<mirror>/work/handoff/latest.md` |
+| `sp_workspace SLUG` | `<worktree>/.superpowers/sdd/SLUG` | `<worktree>/.superpowers/sdd/SLUG` |
+| `sp_resolve NAME` | `<worktree>/NAME` | `docs/superpowers/<rest>` → `<sp_docs_root>/<rest>`; any other name → `<worktree>/NAME` |
+| `sp_name FILE` | FILE relative to `<worktree>` | under `sp_docs_root` → `docs/superpowers/<rel>`; else relative to `<worktree>` |
+
+`<worktree>` is the working directory's `git rev-parse --show-toplevel`,
+`<primary>` the primary checkout, `<mirror>` is
+`~/.dr-superpowers/mirror/<project>`. The ledger and `handoff.md` live in
+`sp_ledger_dir`, the synced place; briefs, reports, review packages and
+`amendments.md` stay in `sp_workspace`, which is local in both modes (in local
+mode the two are one directory, as today). `budget-log.tsv` keeps its primary
+checkout path. So the parent's §2 table is refined, not reversed: its
+`sp_work_root` is `sp_ledger_dir` plus `sp_latest_file`.
 
 `sp_name` is computed from the roots, never by searching the path for a
 `superpowers/` segment. `darkmem-mirror.mjs`'s `pathToUri` takes the roots and
 does the same, which fixes the doubled uri the current regex produces when a
 checkout or project directory is itself named `superpowers` (it matches the
-leftmost segment). `budget-log.tsv` and review packages stay under
-`<repo>/.superpowers` in both modes (parent §2); `sp_work_root` never names
-them.
+leftmost segment).
 
 **Mode** comes from `darkmem-config.mjs`'s `resolveMode`. A `--mode` entry
-point on that module prints `local` or `darkmem <project>`; `context.sh` calls
-it once per script run and caches the answer in a shell variable. No mapping or no key is local mode,
-in which `sp_resolve` and `sp_name` are the identity on today's paths.
+point on that module prints `local`, or `darkmem` and the mirror directory
+separated by a tab; a `ConfigError` exits 2 with its message, and a missing
+`node` is local mode. `roots.sh` calls it once per script run and caches the
+answer in a shell variable. In local mode every helper returns today's path.
 
-**Rewiring.** Every one of the 102 references to `docs/superpowers` or
-`.superpowers` in 35 plugin files (skills, scripts, hooks, reference; counted
-2026-09-28 excluding `tests/`) goes through these helpers. Skill prose writes
-`<docs root>/specs/…` and `<work root>/sdd/…`; `using-superpowers` states the
-local expansion once. A script that receives a plan argument accepts a name or
-a path and converts it with `sp_name` before recording it.
+**Rewiring.** Every script that builds one of these paths, or derives a root
+from a plan's directory, calls the helpers instead (the inventory's list: the
+four `plan.sh` functions, `register.sh`'s `register_files`, `snapshot.sh`,
+`next-step`, `plan-lint`, `plan-revise`, `plan-amend`, `register`,
+`repo-audit`, `sdd-workspace`, and the scripts that call it). A script that
+receives a plan argument accepts a name or a path and converts it with
+`sp_name` before recording or comparing it. Skill and reference prose (63
+lines) writes `<docs root>/…`, `<ledger dir>` and `<latest.md>`, and
+`using-superpowers` states both expansions once.
+
+**Git in the skills.** Skill text tells an agent to `git commit` a spec, plan
+or `completed.md` line, and distilling-docs and project-status run `git log`,
+`git show`, `git ls-files` and `git rm` on documents. In darkmem mode the
+document is not in the repository: every "commit the spec/plan" step becomes
+"push" (`darkmem-sync push`), `project-status` dates a document by its newest
+revision, and distilling-docs follows §2. The code a plan changes is still
+committed as today.
 
 **`plan_require_same_repo` becomes `plan_require_same_project`.** Local mode
 keeps today's check (plan and working directory share a git top level).
-darkmem mode accepts a plan whose file lies under this project's
-`sp_docs_root`; the mirror is one per project, shared by every worktree, so a
-worktree session reaching the mirror's plan is correct rather than a split.
-`plan_ledger` and `plan_amendments_file` resolve under `sp_work_root` instead
-of from the plan file's directory.
+darkmem mode accepts a plan whose file lies under `sp_docs_root`; the mirror
+is one per project, shared by every worktree, so a worktree session reaching
+the mirror's plan is correct rather than a split. `plan_ledger` resolves
+through `sp_ledger_dir` and `plan_amendments_file` through `sp_workspace`,
+never from the plan file's directory.
 
 ## 2. Deletion archives
 
@@ -132,6 +166,10 @@ is deployed before the plugin half is tested against a live instance.
 ## 5. Testing
 
 - Local mode: every existing suite passes unchanged with no config file.
+- Layout: every `roots.sh` helper in local mode returns today's path from a
+  linked worktree (documents and workspace in the worktree, `latest.md` in the
+  primary checkout), and the mirror paths in darkmem mode; a `ConfigError`
+  stops the script rather than falling back to local.
 - Names: `sp_resolve`/`sp_name` round-trip in both modes, including a checkout
   and a project both named `superpowers`; `pathToUri` regression for the
   doubled uri.
