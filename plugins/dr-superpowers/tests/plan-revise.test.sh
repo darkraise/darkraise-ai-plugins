@@ -206,6 +206,7 @@ three "$E4" "$E4" "$E2"
 out=$(run | grep '^recommend')
 check "total-4 tasks are self-implemented" "$(field delegated "$out")" "0/3"
 check "a self-implemented total 4 stays on sonnet" "$(field model "$out")" "sonnet"
+check "a self-implemented total 4 needs effort high" "$(field effort "$out")" "high"
 
 # --- exits ---
 plan "$(mktask 1 0 1 0 2)"
