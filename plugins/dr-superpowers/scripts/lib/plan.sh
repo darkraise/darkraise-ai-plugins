@@ -222,8 +222,8 @@ plan_heavy() {
 }
 
 # plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>heavy"
-# or "N<TAB>executor" line each, ascending: heavy tasks always, then the tasks
-# an Executor line marks for an external executor.
+# or "N<TAB>executor" line each, ascending: heavy tasks always, and otherwise
+# the tasks an Executor line marks for an external executor.
 plan_delegated() {
   local execs
   execs=$(plan_executors "$1" | cut -f1 | tr '\n' ' ')

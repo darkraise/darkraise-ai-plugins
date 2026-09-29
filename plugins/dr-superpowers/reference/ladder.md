@@ -62,7 +62,8 @@ Until 1.23.0 the assignment table sent total 4 to `impl-opus-low`. A plan
 written then names that agent for a total-4 task, and `plan-lint` reports the
 line as a table mismatch. Change it to `impl-sonnet-high`, or keep Opus with a
 human `**Override:**` line below the Evaluation line, which turns the finding
-into a warning.
+into a warning. An inline Execution line on `opus low` must also rise to
+`--effort high`, which the effort check requires for a total-4 task.
 
 ## Assignment table
 
