@@ -205,7 +205,7 @@ check "a heavy majority recommends subagent" "$(field execution "$(run | grep '^
 three "$E4" "$E4" "$E2"
 out=$(run | grep '^recommend')
 check "four-band past the third is self-implemented" "$(field delegated "$out")" "0/3"
-check "a self-implemented four-band needs opus" "$(field model "$out")" "opus"
+check "a self-implemented total 4 stays on sonnet" "$(field model "$out")" "sonnet"
 
 # --- exits ---
 plan "$(mktask 1 0 1 0 2)"

@@ -469,8 +469,6 @@ elif [ -n "$mode" ]; then
     [ -z "$delegated" ] || need=high
     if [ "$family" != sonnet ] && [ "$family" != opus ]; then
       say ERROR header "inline execution needs --model sonnet or opus (model $exec_model)"
-    elif [ "$self_max" -eq 4 ] && [ "$family" != opus ]; then
-      say ERROR header "inline execution with a self-implemented task at total 4 needs --model opus"
     fi
     [ "$(effort_rank "$exec_effort")" -ge "$(effort_rank "$need")" ] \
       || say ERROR header "inline execution needs --effort $need or above (effort $exec_effort)"

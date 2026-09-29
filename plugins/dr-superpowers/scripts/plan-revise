@@ -368,20 +368,18 @@ done <<<"$units"
 heavy=$(plan_heavy "$plan" | grep -c . || true)
 deleg_ids=$(plan_delegated "$plan" | cut -f1 | tr '\n' ' ')
 delegated=$(printf '%s' "$deleg_ids" | wc -w | tr -d ' ')
-any_four_self=0 max_self=-1
+max_self=-1
 while IFS=$'\t' read -r tn total trisk; do
   [ -n "$tn" ] || continue
   case "$total" in '-'|'?') continue ;; esac
   case " $deleg_ids " in *" $tn "*) continue ;; esac
-  [ "$total" -eq 4 ] && any_four_self=1
   [ "$total" -gt "$max_self" ] && max_self=$total
 done <<<"$(plan_scores "$plan")"
 
 if [ $((heavy * 2)) -gt "$tasks" ]; then
   rec_mode=subagent rec_model=sonnet rec_effort=high
 else
-  rec_mode=inline
-  if [ "$any_four_self" -eq 1 ]; then rec_model=opus; else rec_model=sonnet; fi
+  rec_mode=inline rec_model=sonnet
   if [ "$delegated" -gt 0 ] || [ "$max_self" -lt 0 ]; then
     rec_effort=high
   else

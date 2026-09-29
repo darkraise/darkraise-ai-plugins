@@ -206,7 +206,8 @@ lint v8.md
 has "Execution grammar" "$out" "ERROR header: Execution line does not match"
 variant v9.md 's/^\*\*Execution:\*\* .*/**Execution:** inline -- claude --model sonnet --effort medium -- all small/'
 lint v9.md
-has "inline at total 4 needs opus" "$out" "ERROR header: inline execution with a self-implemented task at total 4 needs --model opus"
+lacks "inline at total 4 needs no opus" "$out" "needs --model opus"
+has "inline at total 4 needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
 lacks "inline at total 4 passes R5" "$out" "inline execution needs every task"
 lacks "double-hyphen separators and bare command parse" "$out" "Execution line does not match"
 variant v9b.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — Task 2 scores 4/'
@@ -295,7 +296,7 @@ has "two total-4 tasks in six are delegated" "$out" "NOTE header: delegated: Tas
 tplan r3.md inline sonnet high 4 4 4 1 1 1
 lint r3.md
 lacks "three total-4 tasks in six are not delegated" "$out" "NOTE header"
-has "a self-implemented total 4 needs Opus" "$out" "ERROR header: inline execution with a self-implemented task at total 4 needs --model opus"
+check "three self-implemented total-4 tasks on sonnet high: exit 0" "$status" "0"
 tplan r4.md inline opus high 4 4 4 1 1 1
 lint r4.md
 check "three total-4 tasks in six on opus high: exit 0" "$status" "0"
