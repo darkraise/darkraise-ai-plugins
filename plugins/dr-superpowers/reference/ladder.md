@@ -56,6 +56,14 @@ skipped, not that a higher tier is needed.
 applies only when a human overrides Rule S and keeps an undecided-approach task
 as written. It raises; it never lowers.
 
+### Plans written before 1.23.0
+
+Until 1.23.0 the assignment table sent total 4 to `impl-opus-low`. A plan
+written then names that agent for a total-4 task, and `plan-lint` reports the
+line as a table mismatch. Change it to `impl-sonnet-high`, or keep Opus with a
+human `**Override:**` line below the Evaluation line, which turns the finding
+into a warning.
+
 ## Assignment table
 
 The total indexes this table directly. Two planners scoring a task identically
@@ -66,7 +74,7 @@ always reach the same agent.
 1 impl-sonnet-low
 2 impl-sonnet-medium
 3 impl-sonnet-high
-4 impl-opus-low
+4 impl-sonnet-high
 5 impl-opus-medium
 6 impl-opus-high
 ```
@@ -113,7 +121,8 @@ never an escalation source or target.
 
 ## Reserve table
 
-Nine implementers exist that no score can reach: the `xhigh` and `max` efforts,
+Nine implementers exist that neither the assignment table nor the escalation
+table reaches: the `xhigh` and `max` efforts,
 and every Fable tier. They are the reserve. No row of the assignment table names
 one, and no row of the escalation table points at one.
 
@@ -173,9 +182,11 @@ ledger beyond the reserve tier itself.
 A plan written to dr-superpowers:writing-plans bans placeholders and requires the
 real code in every code step, so a compliant task scores 0 or 1 on spec
 completeness almost by construction. Combined with Rule S, initial assignments
-cluster in the 0 to 3 band - Haiku and Sonnet. Scores of 4 to 6 are reached
-almost entirely through the Risk axis, which is the one axis splitting cannot
-reduce.
+cluster in the 0 to 3 band. Scores of 4 to 6 are reached almost entirely
+through the Risk axis, which is the one axis splitting cannot reduce. Haiku and
+Sonnet take totals 0 to 4; Opus is assigned from 5 up, and otherwise reached by
+escalation. Total 4 went to Opus until Sonnet 5.5, whose agentic-coding results
+sit close to Opus 5.5's at half the price.
 
 That is the intended outcome. Do not inflate an axis to land on a tier that feels
 right; if a task feels harder than its score, the plan text is probably hiding

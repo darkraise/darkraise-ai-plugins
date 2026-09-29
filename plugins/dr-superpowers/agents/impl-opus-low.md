@@ -1,6 +1,6 @@
 ---
 name: impl-opus-low
-description: "Task implementer running Opus 5.5 at low effort. Dispatched by dr-superpowers for score 4: work whose reducible axes are exhausted and whose risk is real."
+description: "Task implementer running Opus 5.5 at low effort. Escalation rung for impl-sonnet-low in dr-superpowers: no score assigns it."
 model: opus
 effort: low
 skills:

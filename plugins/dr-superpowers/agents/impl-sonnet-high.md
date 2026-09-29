@@ -1,6 +1,6 @@
 ---
 name: impl-sonnet-high
-description: "Task implementer running Sonnet 5.5 at high effort. Dispatched by dr-superpowers for score 3: ordinary multi-file work with exact signatures supplied."
+description: "Task implementer running Sonnet 5.5 at high effort. Dispatched by dr-superpowers for scores 3 and 4: ordinary multi-file work with exact signatures supplied, and work whose reducible axes are exhausted and whose risk is real."
 model: sonnet
 effort: high
 skills:
