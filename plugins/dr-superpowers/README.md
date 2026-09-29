@@ -50,7 +50,7 @@ read time per [legacy-names.md](reference/legacy-names.md).
 
 ## What you get
 
-**Twenty agents in three classes.** Seven execution implementers - Sonnet 5
+**Twenty agents in three classes.** Seven execution implementers - Sonnet 5.5
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything a score can reach. Nine reserve implementers - the `xhigh` and `max`
 efforts, and every Fable 5.1 tier - are reachable only by a human override, or by
