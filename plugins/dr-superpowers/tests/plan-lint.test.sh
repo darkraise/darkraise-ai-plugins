@@ -257,7 +257,7 @@ codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#*
 lint codex-inline-reserve.md
 has "Codex inline on a reserve pair warns" "$out" "WARN header: inline Execution pair codex gpt-6-astra / max is a reserve tier; the highest task score is 3"
 
-# --- R5 delegation: heavy tasks, and total-4 tasks while a third or fewer ---
+# --- R5 delegation: heavy tasks; a total-4 task stays in session ----------
 ev() { # ev <total> — "<agent> <evaluation>" for a lint-clean task at that total
   case $1 in
     0) echo 'impl-haiku files 0 - spec 0 - coupling 0 - risk 0 = 0' ;;
@@ -287,15 +287,11 @@ tplan() { # tplan <file> <mode> <model> <effort> <total ...> — one clean task 
 tplan r1.md inline sonnet high 1 4 1 1 1 1
 lint r1.md
 check "one total-4 task in six on sonnet high: exit 0" "$status" "0"
-has "one total-4 task in six is delegated" "$out" "NOTE header: delegated: Task 2 (total 4)"
-lacks "a delegated total-4 task needs no Opus session" "$out" "needs --model opus"
-tplan r2.md inline sonnet high 4 1 4 1 1 1
-lint r2.md
-check "two total-4 tasks in six on sonnet high: exit 0" "$status" "0"
-has "two total-4 tasks in six are delegated" "$out" "NOTE header: delegated: Task 1 (total 4), Task 3 (total 4)"
+lacks "one total-4 task in six is not delegated" "$out" "NOTE header"
+lacks "a self-implemented total-4 task needs no Opus session" "$out" "needs --model opus"
 tplan r3.md inline sonnet high 4 4 4 1 1 1
 lint r3.md
-lacks "three total-4 tasks in six are not delegated" "$out" "NOTE header"
+lacks "three total-4 tasks in six are not delegated either" "$out" "NOTE header"
 check "three self-implemented total-4 tasks on sonnet high: exit 0" "$status" "0"
 tplan r4.md inline opus high 4 4 4 1 1 1
 lint r4.md
@@ -303,10 +299,11 @@ check "three total-4 tasks in six on opus high: exit 0" "$status" "0"
 tplan r5.md inline sonnet high 5 4 1 1 1 1
 lint r5.md
 check "a heavy and a total-4 task on sonnet high: exit 0" "$status" "0"
-has "heavy and total-4 reasons together" "$out" "NOTE header: delegated: Task 1 (heavy), Task 2 (total 4)"
+has "only the heavy task is delegated" "$out" "NOTE header: delegated: Task 1 (heavy)"
+lacks "total 4 is no delegation reason" "$out" "(total 4)"
 tplan r6.md inline sonnet medium 1 4 1 1 1 1
 lint r6.md
-has "delegating a total-4 task raises the effort to high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
+has "a self-implemented total 4 needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
 tplan r7.md inline sonnet max 1 4 1 1 1 1
 lint r7.md
 check "an effort above the required one: exit 0" "$status" "0"
@@ -679,9 +676,8 @@ lane_surface true
 unset PLAN_LINT_ROSTER DR_STUB_SESSION_DIR DR_OPENCODE_SESSION_DIR
 
 # --- an inline plan that offloads ------------------------------------------
-# Two consequences, both intended: an offloaded task leaves self_max, so a
-# total-4 offload no longer forces opus; and any delegation raises the
-# required effort to high.
+# An offloaded task leaves self_max, and any delegation raises the required
+# effort to high.
 # The Execution line is substituted with the suite's own `sed 's/^|//'` idiom
 # rather than perl: it is the only text-editing tool this suite uses, and the
 # line contains no character the shell or sed would reinterpret here.

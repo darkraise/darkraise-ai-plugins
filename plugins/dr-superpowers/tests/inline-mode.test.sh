@@ -269,7 +269,7 @@ brief --header "$DTMP/plan.md" "$DTMP/h.md"
 check "the header lists the delegated tasks with reasons" "$(tail -n 1 "$DTMP/h.md")" "**Dispatch:** delegated — Task 2 (heavy), Task 3 (heavy)"
 sed 's/^\*\*Evaluation:\*\* files 1 - spec 1 - coupling 1 - risk 2 = 5$/**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4/; s/risk 3 = 4$/risk 0 = 1/' "$DTMP/plan.md" > "$DTMP/light.md"
 brief --header "$DTMP/light.md" "$DTMP/hl.md"
-check "a lone total-4 task in three is delegated" "$(tail -n 1 "$DTMP/hl.md")" "**Dispatch:** delegated — Task 2 (total 4)"
+check "a lone total-4 task in three is not delegated" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/hl.md")" "0"
 sed 's/inline — `claude --model opus --effort high`/subagent — `claude --model sonnet --effort high`/' "$DTMP/plan.md" > "$DTMP/sub.md"
 brief "$DTMP/sub.md" 2 "$DTMP/s2.md"
 check "a subagent plan has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/s2.md")" "0"
@@ -290,16 +290,9 @@ four_plan() { # four_plan <file> <total ...> — an inline plan, one task per to
 }
 four_plan "$DTMP/one4.md" 1 4 1 1 1 1
 brief "$DTMP/one4.md" 2 "$DTMP/f2.md"
-check "a delegated total-4 task's second line is the Dispatch line" "$(sed -n 2p "$DTMP/f2.md")" "**Dispatch:** delegated — total 4, risk 2"
-brief "$DTMP/one4.md" 1 "$DTMP/f1.md"
-check "a light task beside a delegated total-4 task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/f1.md")" "0"
+check "a total-4 task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/f2.md")" "0"
 brief --header "$DTMP/one4.md" "$DTMP/fh.md"
-check "the header names the total-4 reason" "$(tail -n 1 "$DTMP/fh.md")" "**Dispatch:** delegated — Task 2 (total 4)"
-four_plan "$DTMP/three4.md" 4 4 4 1 1 1
-brief "$DTMP/three4.md" 1 "$DTMP/t1.md"
-check "total-4 tasks past a third get no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/t1.md")" "0"
-brief --header "$DTMP/three4.md" "$DTMP/th.md"
-check "total-4 tasks past a third leave no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/th.md")" "0"
+check "a total-4 task leaves no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/fh.md")" "0"
 
 # --- the executor marker in the Dispatch line -------------------------------
 sed 's/^|//' > "$DTMP/offload.md" <<'EOF'

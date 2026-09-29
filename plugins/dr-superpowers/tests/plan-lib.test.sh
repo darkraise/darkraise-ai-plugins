@@ -162,7 +162,7 @@ check "plan_heavy: total 5 or risk 3 on any part" "$(plan_heavy "$TMP/scores.md"
 sed 's/$/\r/' "$TMP/scores.md" > "$TMP/scores-crlf.md"
 check "plan_scores: CRLF" "$(plan_scores "$TMP/scores-crlf.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
 
-# --- plan_delegated: heavy tasks, and total-4 tasks while a third or fewer ---
+# --- plan_delegated: heavy tasks and Executor tasks, never a total-4 task ---
 deleg_plan() { # deleg_plan <file> <total/risk ...> — one task per argument
   local f=$1 i=0 tr; shift
   printf '# Delegation\n' > "$f"
@@ -174,15 +174,9 @@ deleg_plan() { # deleg_plan <file> <total/risk ...> — one task per argument
 }
 deleg() { plan_delegated "$1" | tr '\t\n' ' |'; }
 deleg_plan "$TMP/d1.md" 1/0 4/2 1/0 1/0 1/0 1/0
-check "plan_delegated: one total-4 task in six" "$(deleg "$TMP/d1.md")" "2 total 4|"
-deleg_plan "$TMP/d2.md" 4/2 1/0 4/2 1/0 1/0 1/0
-check "plan_delegated: two total-4 tasks in six" "$(deleg "$TMP/d2.md")" "1 total 4|3 total 4|"
-deleg_plan "$TMP/d3.md" 4/2 4/2 4/2 1/0 1/0 1/0
-check "plan_delegated: three total-4 tasks in six are none" "$(deleg "$TMP/d3.md")" ""
+check "plan_delegated: a lone total-4 task stays in session" "$(deleg "$TMP/d1.md")" ""
 deleg_plan "$TMP/d4.md" 5/2 4/2 1/0 4/3 1/0 1/0
-check "plan_delegated: heavy and total-4 tasks together" "$(deleg "$TMP/d4.md")" "1 heavy|2 total 4|4 heavy|"
-deleg_plan "$TMP/d5.md" 5/2 4/2 4/2 1/0
-check "plan_delegated: heavy tasks stay when total-4 tasks pass a third" "$(deleg "$TMP/d5.md")" "1 heavy|"
+check "plan_delegated: heavy tasks beside a total-4 task" "$(deleg "$TMP/d4.md")" "1 heavy|4 heavy|"
 sed 's/^|//' > "$TMP/d6.md" <<'EOF'
 |# Split
 |
@@ -202,7 +196,7 @@ sed 's/^|//' > "$TMP/d6.md" <<'EOF'
 |
 |### Task 3: unscored
 EOF
-check "plan_delegated: a split task with a total-4 part" "$(deleg "$TMP/d6.md")" "2 total 4|"
+check "plan_delegated: a split task with a total-4 part stays in session" "$(deleg "$TMP/d6.md")" ""
 check "plan_delegated: the scores fixture" "$(deleg "$TMP/scores.md")" "2 heavy|3 heavy|"
 
 # --- plan_ledger and ledger_left_inline ---
@@ -284,13 +278,11 @@ check "a plain task is not delegated" \
 check "heavy wins over executor on a split task" \
   "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "heavy"
 
-# --- the four-band threshold counts the original population ----------------
-# Six tasks, three at total 4, one of them offloaded. 3 x 3 > 6, so no
-# four-band task delegates. If the offloaded one left the numerator, 3 x 2 <= 6
-# would newly delegate the other two - tasks nobody marked for offload.
+# --- only an Executor line delegates a total-4 task ------------------------
+# Six tasks, three at total 4, one of them offloaded.
 { printf '# Threshold Fixture\n\n'
   for i in 1 2 3; do
-    printf '### Task %s: four band\n\n**Implementer:** dr-superpowers:impl-opus-low\n' "$i"
+    printf '### Task %s: four band\n\n**Implementer:** dr-superpowers:impl-sonnet-high\n' "$i"
     [ "$i" = 1 ] && printf '**Executor:** codex gpt-6-sol / high\n'
     printf '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4\n\n'
   done
@@ -299,9 +291,9 @@ check "heavy wins over executor on a split task" \
   done
 } > "$TMP/threshold.md"
 
-check "the offloaded four-band task delegates as executor" \
+check "the offloaded total-4 task delegates as executor" \
   "$(plan_delegated "$TMP/threshold.md" | awk -F'\t' '$1 == 1 { print $2 }')" "executor"
-check "the other four-band tasks stay in session" \
+check "the other total-4 tasks stay in session" \
   "$(plan_delegated "$TMP/threshold.md" | awk -F'\t' '$1 == 2 || $1 == 3 { print $2 }' | tr '\n' ',')" ""
 check "the delegated set is the offloaded task alone" \
   "$(plan_delegated "$TMP/threshold.md" | wc -l | tr -d ' ')" "1"
@@ -351,16 +343,15 @@ printf '# P\n\n### Task 1: Executor\n\n**Executor:** codex gpt-6-sol / medium\n\
 check "plan_lines: a fenced label line is not a line" \
   "$(plan_task_text "$TMP/exec.md" 1 | plan_lines Executor | grep -c .)" "1"
 
-# The four-band threshold moves in both directions, so both are pinned. With the
-# stale line the plan delegates two of three tasks; without it, two of three are
-# four-band, 3 x 2 > 3, and nothing is delegated.
+# A split task routes on its parts. With the stale parent line Task 1 would be
+# heavy and delegated; its parts top out at 4, so nothing is delegated.
 printf '# P\n\n### Task 1: One\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 0 = 5\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n### Task 2: Two\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n### Task 3: Three\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/fourband.md"
-check "plan_delegated: the corrected score drops the plan below the four-band third" \
+check "plan_delegated: the corrected score leaves the split task in session" \
   "$(plan_delegated "$TMP/fourband.md" | tr '\t\n' ' |')" ""
 
 printf '# P\n\n### Task 1: One\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 0 = 5\n\n### Task 2: Two\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n### Task 3: Three\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/unsplit.md"
 check "plan_delegated: an unsplit plan is unchanged by the fix" \
-  "$(plan_delegated "$TMP/unsplit.md" | tr '\t\n' ' |')" "1 heavy|2 total 4|"
+  "$(plan_delegated "$TMP/unsplit.md" | tr '\t\n' ' |')" "1 heavy|"
 
 check "plan_executors: unchanged by the fix" \
   "$(plan_executors "$TMP/exec.md" | tr '\t\n' ' |')" "1 codex|"

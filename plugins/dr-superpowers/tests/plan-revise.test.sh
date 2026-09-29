@@ -197,14 +197,14 @@ E2='**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2'
 three "$E5" "$E4" "$E2"
 out=$(run | grep '^recommend')
 check "one heavy of three stays inline" "$(field execution "$out")" "inline"
-check "a four-band within the third is delegated" "$(field delegated "$out")" "2/3"
+check "a total-4 task beside a heavy one is not delegated" "$(field delegated "$out")" "1/3"
 
 three "$E5" "$E5" "$E2"
 check "a heavy majority recommends subagent" "$(field execution "$(run | grep '^recommend')")" "subagent"
 
 three "$E4" "$E4" "$E2"
 out=$(run | grep '^recommend')
-check "four-band past the third is self-implemented" "$(field delegated "$out")" "0/3"
+check "total-4 tasks are self-implemented" "$(field delegated "$out")" "0/3"
 check "a self-implemented total 4 stays on sonnet" "$(field model "$out")" "sonnet"
 
 # --- exits ---

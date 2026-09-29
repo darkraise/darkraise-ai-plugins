@@ -221,30 +221,18 @@ plan_heavy() {
   plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
 }
 
-# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>heavy",
-# "N<TAB>executor" or "N<TAB>total 4" line each, ascending. Heavy tasks always,
-# then the tasks an Executor line marks for an external executor. Tasks whose
-# highest total is exactly 4 only while they are a third of the plan or fewer:
-# past that, one Opus session costs less than a seat for each of them.
+# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>heavy"
+# or "N<TAB>executor" line each, ascending: heavy tasks always, then the tasks
+# an Executor line marks for an external executor.
 plan_delegated() {
-  local tasks execs
-  tasks=$(plan_tasks "$1" | grep -c . || true)
+  local execs
   execs=$(plan_executors "$1" | cut -f1 | tr '\n' ' ')
-  plan_scores "$1" | awk -F'\t' -v n="$tasks" -v execs=" $execs" '
+  plan_scores "$1" | awk -F'\t' -v execs=" $execs" '
     $2 == "-" || $2 == "?" { next }
     # Heavy first: a heavy task is delegated whatever else it is, and the
     # (heavy) label is what the preflight ruling keys on.
-    $2 + 0 >= 5 || $3 + 0 == 3 { row[++k] = $1 "\theavy"; next }
-    # A total-4 task counts toward the four-band population whether or not it
-    # is offloaded. Removing it from the numerator could flip the threshold
-    # and newly delegate other four-band tasks nobody marked.
-    $2 + 0 == 4 { four++ }
-    index(execs, " " $1 " ") > 0 { row[++k] = $1 "\texecutor"; next }
-    $2 + 0 == 4 { row[++k] = $1 "\ttotal 4" }
-    END {
-      for (i = 1; i <= k; i++)
-        if (row[i] !~ /\ttotal 4$/ || 3 * four <= n + 0) print row[i]
-    }
+    $2 + 0 >= 5 || $3 + 0 == 3 { print $1 "\theavy"; next }
+    index(execs, " " $1 " ") > 0 { print $1 "\texecutor" }
   '
 }
 

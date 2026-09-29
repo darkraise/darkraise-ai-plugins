@@ -363,8 +363,8 @@ done <<<"$units"
 
 # --- the recommendation ---
 # It counts tasks, not units. plan_delegated already reduces a split task to its
-# highest band and applies the four-band third threshold, so reading it here is
-# what keeps this report and the execution skills agreeing.
+# highest band, so reading it here is what keeps this report and the execution
+# skills agreeing.
 heavy=$(plan_heavy "$plan" | grep -c . || true)
 deleg_ids=$(plan_delegated "$plan" | cut -f1 | tr '\n' ' ')
 delegated=$(printf '%s' "$deleg_ids" | wc -w | tr -d ' ')
