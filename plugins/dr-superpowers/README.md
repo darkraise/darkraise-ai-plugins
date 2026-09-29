@@ -52,7 +52,8 @@ read time per [legacy-names.md](reference/legacy-names.md).
 
 **Twenty agents in three classes.** Seven execution implementers - Sonnet 5.5
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
-everything a score can reach. Nine reserve implementers - the `xhigh` and `max`
+everything the assignment table and the escalation ladder can reach; no score
+assigns `impl-opus-low`, which is reached only by escalation. Nine reserve implementers - the `xhigh` and `max`
 efforts, and every Fable 5.1 tier - are reachable only by a human override, or by
 a task that has already been split once and still exhausted `impl-opus-high`.
 Four read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
@@ -70,8 +71,7 @@ the reserve is only entered when that split has already been spent.
 and risk, each scored 0 to 3. Three of those four measure how the task was
 drawn, not how hard the change is, so Rule S sends a task scoring 4 or more
 across them back to be split rather than to a larger model. That cap is what
-makes the assignment table stop at 6, which is exactly the seven execution
-implementers.
+makes the assignment table stop at 6.
 
 **An escalation ladder.** Every execution implementer has exactly one successor,
 changing model before effort except at the two Opus effort rows, where Opus is
@@ -103,17 +103,15 @@ whether a plan runs under subagent-driven-development, a dispatch and a scored
 review per task, or under executing-plans, where one session implements every
 task itself. Inline mode is the default unless more than half the tasks are
 heavy (total 5 or more, or risk 3). An inline plan delegates its heavy tasks,
-which are too large or risky to implement in the session, its total-4 tasks
-while they are a third of the plan or fewer, which then get an independent
-review without putting the whole session on Opus,
+which are too large or risky to implement in the session,
 and every task carrying an `**Executor:**` line, which runs on that executor
 rather than in the session. Each delegated task runs
 through an implementer subagent — or, for an Executor line, that executor's
 wrapper — with the full per-task review loop, shared with
 subagent mode in `reference/delegated-task.md`; the session implements the rest
 itself, trading their per-task review for one whole-branch review at the end,
-which both modes share. `plan-lint` requires `--model opus` once a task it
-implements scores 4, and `--effort high` once it delegates. A task that will
+which both modes share. `plan-lint` requires the session's effort to cover
+the highest score it implements, and `--effort high` once it delegates. A task that will
 not converge after three fix rounds escalates to
 subagent mode at the next task boundary, recorded in the ledger both modes
 write.

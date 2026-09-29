@@ -122,30 +122,20 @@ and errors on an inline pair below that score.
 **Choosing the Execution line.** The plan decides its execution mode:
 
 A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
-A task is **four-band** when it is not heavy and its highest total is exactly 4.
-An inline plan delegates its heavy tasks, its four-band tasks while they
-are a third of the plan or fewer (`3 x four-band <= N`),
+An inline plan delegates its heavy tasks
 and every task carrying an `**Executor:**` line: each runs through
 [delegated-task.md](../../reference/delegated-task.md) with an implementer
 subagent — or, for an Executor line, that executor's wrapper — and the full
-per-task review. Past that third, one Opus session costs less than a seat per
-task, and no four-band task is delegated.
-A total-4 task counts toward that third whether or not it is offloaded:
-dropping it from the count could flip the threshold and newly delegate
-four-band tasks nobody marked. The tasks not delegated are the
-**self-implemented** tasks.
+per-task review. The tasks not delegated are the **self-implemented** tasks.
 
 - `subagent` when more than half the tasks are heavy:
   `claude --model sonnet --effort high`. The controller owns no judgment calls
-  — the ruling seat does — so it needs no stronger model. Four-band tasks never
-  count toward this majority.
-- Otherwise `inline`, the default. The model is `opus` when a self-implemented
-  task totals 4 — so only when four-band tasks exceed a third of the plan and
-  at least one of them carries no `**Executor:**` line — and `sonnet`
-  otherwise. `<e>` is the assignment-table effort of the highest
-  self-implemented total (`impl-haiku` counts as `low`),
-  raised to `high` when any task is delegated:
-  `claude --model <sonnet|opus> --effort <e>`. When every task is heavy
+  — the ruling seat does — so it needs no stronger model.
+- Otherwise `inline`, the default, on `sonnet`: the assignment table sends
+  every total below 5 to Haiku or Sonnet, and heavy tasks are delegated. `<e>`
+  is the assignment-table effort of the highest self-implemented total
+  (`impl-haiku` counts as `low`), raised to `high` when any task is delegated:
+  `claude --model sonnet --effort <e>`. When every task is heavy
   and your human partner overrides the line to inline, use
   `claude --model opus --effort high`.
 - Your human partner may override the line; `plan-lint` checks its grammar,

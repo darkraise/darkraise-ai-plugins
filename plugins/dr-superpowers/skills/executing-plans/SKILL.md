@@ -41,21 +41,19 @@ the gate.
 **Why this mode.** The plan's `**Execution:**` line chose it because at most
 half the tasks are heavy (total 5 or more, or risk 3). The rest are small
 changes whose text carries the code, and a subagent per task would cost more in
-context rebuild than the task itself. The line's model follows the highest
-score among the tasks you implement: Sonnet when every one is 3 or less, Opus
-when one scores 4; its effort is at least high when the plan delegates.
+context rebuild than the task itself. The line's model is Sonnet, and its
+effort follows the highest score among the tasks you implement, at least high
+when the plan delegates.
 Subagent availability has nothing to do with it - the line decides, and only
 your human partner overrides it.
 
 **Delegated tasks.** A delegated task is not yours to implement: every heavy
-task, each total-4 task while those are a third of the plan or fewer,
-and every task carrying an `**Executor:**` line, so it gets an independent
-review without putting the whole session on Opus. An offloaded task is
+task, and every task carrying an `**Executor:**` line. An offloaded task is
 delegated for the same reason the others are — the session does not implement
 it — and it runs on its executor's wrapper rather than an implementer
 subagent. Its brief's second line is
 `**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` ends with
-`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4), Task <c> (executor)`. Run
+`**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`. Run
 [delegated-task.md](../../reference/delegated-task.md) for it: an implementer
 subagent, the review seat `scripts/review-route` prints, fix rounds up to 5 and
 a reviewed complete line. Read that file the first time a delegated task comes
@@ -173,7 +171,7 @@ you implement; translate a delegated task's `**Implementer:**` agent before disp
 **Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated`
 line naming at least one `(heavy)` task, send one `preflight` item to the
 ruling seat before Task 1 and carry out its verdicts. A plan with no heavy task
-has no pre-flight scan, even when it delegates total-4 tasks: it is one
+has no pre-flight scan, even when it offloads tasks: it is one
 whole-plan judge dispatch, and a plan of small tasks is low-coupling by
 construction. A plan defect that surfaces while you work goes to the seat as a
 `blocked-plan` item.

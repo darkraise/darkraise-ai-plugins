@@ -99,12 +99,12 @@ present "a delegating plan gets a preflight" "$INLINE" 'send one `preflight` ite
 present "the preflight keys on a heavy task" "$INLINE" 'naming at least one `(heavy)` task'
 absent "the kinds table no longer keys the preflight on any delegation" "$INLINE" 'when the plan delegates any task'
 present "the preflight arises only for a heavy task" "$INLINE" '`preflight` arises only for a plan with a heavy task'
-present "inline mode names all three delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (total 4), Task <c> (executor)`'
-present "writing-plans defines four-band tasks" "$P/skills/writing-plans/SKILL.md" 'A task is **four-band**'
-present "writing-plans delegates total-4 tasks up to a third" "$P/skills/writing-plans/SKILL.md" 'are a third of the plan or fewer (`3 x four-band <= N`)'
-present "using-superpowers names total-4 delegation" "$P/skills/using-superpowers/SKILL.md" 'total-4 tasks while they are a third of the plan or fewer'
-present "README names both reasons for delegation" "$P/README.md" 'while they are a third of the plan or fewer, which then get an independent'
-present "the delegated loop names both reasons" "$P/reference/delegated-task.md" 'or a total-4 task in a plan where those are a third of the tasks or'
+present "inline mode names both delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`'
+absent "writing-plans no longer defines four-band tasks" "$P/skills/writing-plans/SKILL.md" 'four-band'
+absent "inline mode no longer delegates total-4 tasks" "$INLINE" 'total-4'
+absent "using-superpowers no longer delegates total-4 tasks" "$P/skills/using-superpowers/SKILL.md" 'total-4'
+absent "README no longer delegates total-4 tasks" "$P/README.md" 'total-4'
+absent "the delegated loop no longer delegates total-4 tasks" "$P/reference/delegated-task.md" 'total-4'
 present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
 present "inline confirms a Header amendment" "$INLINE" 'A Header amendment is confirmed by a second, independent `judge-opus` dispatch'
 absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-flight scan.'
@@ -342,7 +342,6 @@ present "writing-plans delegates every Executor line" "$P/skills/writing-plans/S
 present "using-superpowers delegates every Executor line" "$P/skills/using-superpowers/SKILL.md" "$EXEC_REASON"
 present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
 present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" "$EXEC_REASON"
-present "the four-band population still counts an offloaded task" "$P/skills/writing-plans/SKILL.md" 'A total-4 task counts toward that third whether or not it is offloaded'
 present "writing-plans gates the roster per executor" "$P/skills/writing-plans/SKILL.md" 'for every executor whose gate prints `lane=true`'
 present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/SKILL.md" 'A task carries at most one `**Executor:**` line'
 absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
