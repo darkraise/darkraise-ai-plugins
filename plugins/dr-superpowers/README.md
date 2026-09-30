@@ -53,14 +53,14 @@ read time per [legacy-names.md](reference/legacy-names.md).
 **Twenty agents in three classes.** Seven execution implementers - Sonnet 5.5
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything the assignment table and the escalation ladder can reach; no score
-assigns `impl-opus-low`, which is reached only by escalation. Nine reserve implementers - the `xhigh` and `max`
-efforts, and every Fable 5.1 tier - are reachable only by a human override, or by
-a task that has already been split once and still exhausted `impl-opus-high`.
-Four read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
-`judge-fable` (a human override only), and `scout-sonnet` - whose `tools:` frontmatter omits
-`Edit`, `Write`, and `Agent`,
-so a reviewer that cannot modify the tree or spawn subagents is a fact about the
-registry rather than a request in a prompt.
+assigns `impl-opus-low`, which is reached only by escalation. Nine reserve
+implementers - the `xhigh` and `max` efforts, and every Fable 5.1 tier - are
+reachable only by a human override, or by a task that has already been split
+once and still exhausted `impl-opus-high`. Four read-only role agents - the
+judges `judge-opus`, `judge-sonnet-high` and `judge-fable` (a human override
+only), and `scout-sonnet` - whose `tools:` frontmatter omits `Edit`, `Write`,
+and `Agent`, so a reviewer that cannot modify the tree or spawn subagents is a
+fact about the registry rather than a request in a prompt.
 
 The reserve exists so that a human ruling, and a task that genuinely cannot be
 split any further, both have somewhere to go. It is not a way around the gate:
@@ -102,19 +102,18 @@ guesses into a confident pick.
 whether a plan runs under subagent-driven-development, a dispatch and a scored
 review per task, or under executing-plans, where one session implements every
 task itself. Inline mode is the default unless more than half the tasks are
-heavy (total 5 or more, or risk 3). An inline plan delegates its heavy tasks,
-which are too large or risky to implement in the session,
+heavy (total 5 or more, or risk 3). An inline plan delegates its heavy
+tasks, which are too large or risky to implement in the session,
 and every task carrying an `**Executor:**` line, which runs on that executor
-rather than in the session. Each delegated task runs
-through an implementer subagent — or, for an Executor line, that executor's
-wrapper — with the full per-task review loop, shared with
-subagent mode in `reference/delegated-task.md`; the session implements the rest
-itself, trading their per-task review for one whole-branch review at the end,
-which both modes share. `plan-lint` requires the session's effort to cover
-the highest score it implements, and `--effort high` once it delegates. A task that will
-not converge after three fix rounds escalates to
-subagent mode at the next task boundary, recorded in the ledger both modes
-write.
+rather than in the session. Each delegated task runs through an implementer
+subagent — or, for an Executor line, that executor's wrapper — with the full
+per-task review loop, shared with subagent mode in
+`reference/delegated-task.md`; the session implements the rest itself, trading
+their per-task review for one whole-branch review at the end, which both modes
+share. `plan-lint` requires the session's effort to cover the highest score it
+implements, and `--effort high` once it delegates. A task that will not
+converge after three fix rounds escalates to subagent mode at the next task
+boundary, recorded in the ledger both modes write.
 
 **An external executor lane.** A task scoring 2 to 4 with `risk <= 1` can run on
 the Codex CLI instead of a Claude implementer, for quota offload onto a separate

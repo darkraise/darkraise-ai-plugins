@@ -123,9 +123,9 @@ never an escalation source or target.
 ## Reserve table
 
 Nine implementers exist that neither the assignment table nor the escalation
-table reaches: the `xhigh` and `max` efforts,
-and every Fable tier. They are the reserve. No row of the assignment table names
-one, and no row of the escalation table points at one.
+table reaches: the `xhigh` and `max` efforts, and every Fable tier. They are the
+reserve. No row of the assignment table names one, and no row of the escalation
+table points at one.
 
 Two things reach them:
 

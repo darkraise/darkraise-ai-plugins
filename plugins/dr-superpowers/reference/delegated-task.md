@@ -4,8 +4,8 @@ One task's dispatch, review, fix loop and complete line.
 dr-superpowers:subagent-driven-development runs it for every task, and
 dr-superpowers:executing-plans runs it for each task whose brief carries
 `**Dispatch:** delegated`: a heavy task, too large or risky to implement in the
-session, and every task carrying an `**Executor:**` line, which runs on that executor's
-wrapper instead of an implementer subagent.
+session, and every task carrying an `**Executor:**` line, which runs on that
+executor's wrapper instead of an implementer subagent.
 
 ## Contract
 
