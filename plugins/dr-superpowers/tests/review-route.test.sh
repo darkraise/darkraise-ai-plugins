@@ -70,12 +70,12 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |
 |### Task 3: heavy
 |
-|**Implementer:** dr-superpowers:impl-opus-low
+|**Implementer:** dr-superpowers:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 4: risky
 |
-|**Implementer:** dr-superpowers:impl-opus-low
+|**Implementer:** dr-superpowers:impl-sonnet-high
 |**Evaluation:** files 1 - spec 0 - coupling 1 - risk 2 = 4
 |
 |### Task 5: executor
@@ -119,7 +119,7 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |
 |### Task 11: executor risk three
 |
-|**Implementer:** dr-superpowers:impl-opus-low
+|**Implementer:** dr-superpowers:impl-sonnet-high
 |**Executor:** codex gpt-6-sol / high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
 EOF

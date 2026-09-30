@@ -424,7 +424,7 @@ mkdir -p "$BLK_LEDGER"
   echo "# SDD ledger — plan: docs/plans/2026-01-01-blocked.md"
   echo "Task 1: implementer impl-sonnet-low (assigned; base aaaaaaa)"
   echo "Task 1: complete (commits aaaaaaa..bbbbbbb, review clean) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
-  echo "Task 2: implementer impl-opus-low (assigned; base bbbbbbb)"
+  echo "Task 2: implementer impl-sonnet-high (assigned; base bbbbbbb)"
   echo "Task 2: BLOCKED — ruling seat — whether the export keeps the legacy field"
 } > "$BLK_LEDGER/progress.md"
 
