@@ -186,8 +186,9 @@ completeness almost by construction. Combined with Rule S, initial assignments
 cluster in the 0 to 3 band. Scores of 4 to 6 are reached almost entirely
 through the Risk axis, which is the one axis splitting cannot reduce. Haiku and
 Sonnet take totals 0 to 4; Opus is assigned from 5 up, and otherwise reached by
-escalation. Total 4 went to Opus until Sonnet 5.5, whose agentic-coding results
-sit close to Opus 5.5's at half the price.
+escalation. Total 4 went to Opus until Sonnet 5.5, which matches Opus 5.5 on
+well-scoped agentic coding (Terminal-Bench, CursorBench) at half the price and
+trails it on FrontierCode's open-ended work.
 
 That is the intended outcome. Do not inflate an axis to land on a tier that feels
 right; if a task feels harder than its score, the plan text is probably hiding
