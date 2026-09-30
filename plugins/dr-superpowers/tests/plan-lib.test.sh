@@ -279,34 +279,35 @@ check "heavy wins over executor on a split task" \
   "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "heavy"
 
 # --- only an Executor line delegates a total-4 task ------------------------
-# Six tasks, three at total 4, one of them offloaded.
-{ printf '# Threshold Fixture\n\n'
-  for i in 1 2 3; do
+# Six tasks, two at total 4, one of them offloaded. Two in six is within the
+# removed one-third rule, which would also have delegated Task 2 as total 4.
+{ printf '# Offload Fixture\n\n'
+  for i in 1 2; do
     printf '### Task %s: four band\n\n**Implementer:** dr-superpowers:impl-sonnet-high\n' "$i"
     [ "$i" = 1 ] && printf '**Executor:** codex gpt-6-sol / high\n'
     printf '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4\n\n'
   done
-  for i in 4 5 6; do
+  for i in 3 4 5 6; do
     printf '### Task %s: small\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n' "$i"
   done
-} > "$TMP/threshold.md"
+} > "$TMP/offload4.md"
 
 check "the offloaded total-4 task delegates as executor" \
-  "$(plan_delegated "$TMP/threshold.md" | awk -F'\t' '$1 == 1 { print $2 }')" "executor"
-check "the other total-4 tasks stay in session" \
-  "$(plan_delegated "$TMP/threshold.md" | awk -F'\t' '$1 == 2 || $1 == 3 { print $2 }' | tr '\n' ',')" ""
+  "$(plan_delegated "$TMP/offload4.md" | awk -F'\t' '$1 == 1 { print $2 }')" "executor"
+check "the other total-4 task stays in session" \
+  "$(plan_delegated "$TMP/offload4.md" | awk -F'\t' '$1 == 2 { print $2 }')" ""
 check "the delegated set is the offloaded task alone" \
-  "$(plan_delegated "$TMP/threshold.md" | wc -l | tr -d ' ')" "1"
+  "$(plan_delegated "$TMP/offload4.md" | wc -l | tr -d ' ')" "1"
 
 # --- absence is not failure -------------------------------------------------
-# threshold.md's last task carries no Executor line, which is the case that
+# offload4.md's last task carries no Executor line, which is the case that
 # leaks a non-zero status out of the loop. The second assertion is the one that
 # matters: it calls plan_delegated directly under errexit, the caller shape that
 # would silently emit no rows.
 check "plan_executors exits 0 when the final task has no Executor line" \
-  "$(plan_executors "$TMP/threshold.md" >/dev/null; echo $?)" "0"
+  "$(plan_executors "$TMP/offload4.md" >/dev/null; echo $?)" "0"
 check "plan_delegated emits its rows under set -euo pipefail" \
-  "$(bash -c 'set -euo pipefail; . "$1"; plan_delegated "$2" | wc -l | tr -d " "' _ "$HERE/../scripts/lib/plan.sh" "$TMP/threshold.md")" "1"
+  "$(bash -c 'set -euo pipefail; . "$1"; plan_delegated "$2" | wc -l | tr -d " "' _ "$HERE/../scripts/lib/plan.sh" "$TMP/offload4.md")" "1"
 
 # --- the shared Evaluation reader ---
 # Two shipped defects motivate these. A line left above `#### Part A` scores the
