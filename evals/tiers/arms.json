@@ -1,0 +1,12 @@
+{
+  "rows": {
+    "1": ["impl-sonnet-low", "impl-haiku"],
+    "2": ["impl-sonnet-medium", "impl-sonnet-low"],
+    "3": ["impl-sonnet-high", "impl-sonnet-medium"],
+    "4": ["impl-sonnet-high", "impl-sonnet-medium"],
+    "5": ["impl-opus-medium", "impl-opus-low", "impl-sonnet-high"],
+    "6": ["impl-opus-high", "impl-opus-medium"]
+  },
+  "review": ["judge-opus@high", "judge-opus@medium", "judge-sonnet-high"],
+  "grader": { "model": "opus", "effort": "low" }
+}
