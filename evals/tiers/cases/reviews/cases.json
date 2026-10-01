@@ -1,0 +1,97 @@
+[
+  {
+    "id": "r-code-judge-seats",
+    "kind": "code",
+    "base": "01f5a2ae278656643a85eaa090af6c4e6484e94f",
+    "head": "f88429bfbdf876595946f99d71b26849bda60fd7",
+    "fix": [
+      "fb05b23f21546bbb8430e65dbe70e841a22cc3e2",
+      "6d54b1e268c893649436a6cba3613483fcddcdcf"
+    ],
+    "plan": "docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md",
+    "description": "Move both Claude-hosted Codex review seats to `gpt-6-astra / high` with a declared fallback, and make selection, the run bound and the outcome policy executable in one script instead of prose."
+  },
+  {
+    "id": "r-code-executor-interface",
+    "kind": "code",
+    "base": "b41a726d780dc52bb4e7e719f611439283c84b82",
+    "head": "1f13cc8584ef788731bd701c7b2c6a7a86f5a349",
+    "fix": [
+      "58885f995a79ed594548d771d05f186c424d8bd7"
+    ],
+    "plan": "docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md",
+    "description": "Separate \"external executor\" from \"Codex\" inside dr-superpowers, so a second executor becomes a registry entry, a wrapper and a ladder block rather than a rewrite of eight files."
+  },
+  {
+    "id": "r-code-executor-interface-residual",
+    "kind": "code",
+    "base": "b41a726d780dc52bb4e7e719f611439283c84b82",
+    "head": "58885f995a79ed594548d771d05f186c424d8bd7",
+    "fix": [
+      "16752f6d91ebe77f435f353da27ba63afb9178a2"
+    ],
+    "plan": "docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md",
+    "description": "Separate \"external executor\" from \"Codex\" inside dr-superpowers, so a second executor becomes a registry entry, a wrapper and a ladder block rather than a rewrite of eight files."
+  },
+  {
+    "id": "r-code-item-registers",
+    "kind": "code",
+    "base": "58de434ffbc06e91850c9fa333f2378cfc6e4b16",
+    "head": "800e834f5cb44304e42f297d292231d272f47f82",
+    "fix": [
+      "ddb5ed44325453ae14d203e953233ab19b515277"
+    ],
+    "plan": "docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md",
+    "description": "Give dr-superpowers a first-class item register, so no surface can claim a body of work complete while a source item is unresolved."
+  },
+  {
+    "id": "r-code-execution-cost",
+    "kind": "code",
+    "base": "71dacfa17a0e1d599987e512b477b40ede4fe0cd",
+    "head": "be03aeb13e8aaba1c1a0209737c300430438b784",
+    "fix": [
+      "d17b1f0100a0eb94049e6cf2dde756b1d0081e41"
+    ],
+    "plan": "docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md",
+    "description": "Cut dr-superpowers' weekly-limit spend with mixed-mode inline execution, Fable reserved for critical seats, capped plan-review rounds and a 350k controller budget."
+  },
+  {
+    "id": "r-code-review-fixes",
+    "kind": "code",
+    "base": "93fb70295892c871da58020b9354b3ff0a8bf862",
+    "head": "3955c8055aa916f01e127427a2e7bb89582e82ae",
+    "fix": [
+      "dea77c5b986dac3add237e16efc2a3532cbd83fd"
+    ],
+    "plan": "docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md",
+    "description": "Ship dr-superpowers 1.12.0: a working-directory contract with a same-repository check, delegation of total-4 tasks up to a third of a plan, named final-review seats, and escalation out of inline mode above both rungs."
+  },
+  {
+    "id": "r-plan-project-state",
+    "kind": "plan",
+    "commit": "d6c288c2279f2dbabf2dd05d64e2454ca1e4a22c",
+    "plan": "docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md",
+    "spec": "docs/superpowers/specs/2026-09-14-dr-superpowers-project-state-design.md"
+  },
+  {
+    "id": "r-plan-judge-seats",
+    "kind": "plan",
+    "commit": "01f5a2ae278656643a85eaa090af6c4e6484e94f",
+    "plan": "docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md",
+    "spec": "docs/superpowers/specs/2026-09-14-dr-superpowers-judge-seats-design.md"
+  },
+  {
+    "id": "r-plan-inline-mode",
+    "kind": "plan",
+    "commit": "69c6b485813f44f27f5b940ad75ab6d370d4ff1f",
+    "plan": "docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md",
+    "spec": "docs/superpowers/specs/2026-09-12-dr-superpowers-inline-mode-design.md"
+  },
+  {
+    "id": "r-plan-small-model",
+    "kind": "plan",
+    "commit": "5e96f14f5f8188af155a65c3abfdf6f5cb290f04",
+    "plan": "docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md",
+    "spec": "docs/superpowers/specs/2026-09-12-dr-superpowers-small-model-planning-design.md"
+  }
+]
