@@ -1,0 +1,162 @@
+plan	task	pool	reason
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	5	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	6	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	7	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	8	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	9	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	10	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	11	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	2	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	3	-	plugins/dr-superpowers/tests/budget-line.test.sh fails on the result commit
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	6	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	7	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	8	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	9	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	10	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	11	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	12	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	1	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	2	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	3	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	4	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	5	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	6	-	the result commit changes plugins/dr-superpowers/scripts/tier-nudge.sh, outside the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	9	-	no test file in the Files block
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	10	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md	1	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md	2	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md	3	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md	4	-	2 commit messages in the task
+docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md	5	-	the tests already pass on the base commit
+docs/superpowers/plans/2026-09-12-dr-superpowers-inline-mode.md	6	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	1	-	the result commit changes plugins/dr-superpowers/scripts/lib/plan.sh, outside the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	2	-	the result commit changes plugins/dr-superpowers/scripts/task-brief, outside the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	3	-	the result commit changes plugins/dr-superpowers/scripts/plan-lint, outside the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	4	-	the result commit changes plugins/dr-superpowers/scripts/plan-amend, outside the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	5	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	6	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	7	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	8	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	9	-	2 commit messages in the task
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	10	-	the result commit changes plugins/dr-superpowers/skills/brainstorming/SKILL.md, outside the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	11	-	no test file in the Files block
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	12	-	no test file in the Files block
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	3	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	4	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	5	-	no test file in the Files block
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	6	-	no test file in the Files block
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	7	-	no test file in the Files block
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	8	-	no test file in the Files block
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	3	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	4	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	5	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	6	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	7	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	8	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	9	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	10	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	12	-	no test file in the Files block
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	3	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	4	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	5	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	6	-	2 commits match the commit message
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	7	-	not exactly one Evaluation line
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	8	-	2 commit messages in the task
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	9	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	10	-	2 commits match the commit message
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	11	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	13	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	14	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	15	-	2 commits match the commit message
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	16	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	1	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	4	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	6	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	7	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	8	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	9	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	10	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	11	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	12	-	the tests already pass on the base commit
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	13	-	the tests already pass on the base commit
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	14	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	15	-	no test file in the Files block
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	16	-	no test file in the Files block
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	2	-	the tests already pass on the base commit
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	3	-	plugins/dr-superpowers/tests/budget-line.test.sh fails on the result commit
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	4	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	5	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	6	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	8	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	9	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	10	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	11	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	12	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	13	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	14	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	1	-	plugins/dr-superpowers/tests/working-directory.test.sh fails on the result commit
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	3	-	plugins/dr-superpowers/tests/working-directory.test.sh fails on the result commit
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	5	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	7	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	9	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	10	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	11	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	2	-	the result commit changes plugins/dr-superpowers/tests/inline-mode.test.sh, outside the Files block
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	4	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	6	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	1	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	2	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	3	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	4	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	6	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	7	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	8	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	9	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	10	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	11	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	12	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	1	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	2	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	3	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	4	-	the result commit changes plugins/dr-superpowers/scripts/lib/codex-session.sh, outside the Files block
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	5	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	6	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	7	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	8	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	9	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	10	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	11	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	12	-	no test file in the Files block
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	13	-	no test file in the Files block
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	14	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	15	-	the result commit changes plugins/dr-superpowers/tests/review-route.test.sh, outside the Files block
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	16	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	17	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md	1	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md	2	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md	3	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md	4	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md	5	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md	6	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md	7	-	0 commit messages in the task
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	1	-	no test file in the Files block
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	3	-	a Test file has no runner
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	4	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	5	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	6	written	not selected: row 2 already has 8 cases
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	1	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	2	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	3	-	0 commits match the commit message
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	4	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	6	written	not selected: row 5 already has 8 cases
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	7	written	not selected: row 5 already has 8 cases
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	8	-	codex-review.test.sh fails on the result commit
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	2	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	3	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	5	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	6	written	not selected: row 4 already has 8 cases
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	1	-	the result commit changes plugins/dr-superpowers/agents/impl-sonnet-high.md, outside the Files block
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	2	written	not selected: row 5 already has 8 cases
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	3	written	not selected: row 3 already has 8 cases
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	4	written	not selected: row 5 already has 8 cases
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	5	written	not selected: row 3 already has 8 cases
