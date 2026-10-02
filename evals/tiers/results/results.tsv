@@ -179,3 +179,6 @@ rep	stage	case	pool	row	arm	outcome	model	cost	seconds	turns	detail
 1	grade	r-code-executor-interface	review		grade2:judge-opus@high	GRADED	claude-opus-5-5	0.0731	7	1	found=3/6
 1	grade	r-code-executor-interface	review		grade2:judge-opus@medium	GRADED	claude-opus-5-5	0.0086	6	1	found=4/6
 1	grade	r-code-executor-interface	review		grade2:judge-sonnet-high	GRADED	claude-opus-5-5	0.0062	5	1	found=1/6
+1	manual	s-review-routing-t17	stripped	3	impl-sonnet-high	EXCLUDED		0.0000	0	0	case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
+1	manual	s-review-fixes-t8	stripped	3	impl-sonnet-high	EXCLUDED		0.0000	0	0	case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
+1	manual	s-execution-cost-t15	stripped	4	impl-sonnet-high	EXCLUDED		0.0000	0	0	case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02

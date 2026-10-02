@@ -35,3 +35,9 @@
 - Review cells cut short (BLOCKED): None.
 - The 38.42 above covers the review cells only. The gradings ran under the `grade` stage and cost 1.83; by stage the repetition is smoke 1.79, written 14.88, stripped 6.37, review 38.42 and grade 1.83, which sum to 63.29.
 - Fixes or re-runs: none; the stage finished in one slice with exit 0.
+
+## Owner rulings
+
+- Date: 2026-10-02
+- Excluded from repetition 1 by owner ruling: `s-review-routing-t17`, `s-review-fixes-t8` and `s-execution-cost-t15`, three `EXCLUDED` rows recorded with `run-case.mjs --exclude` (no model call). A stripped snapshot deletes `docs/superpowers`, which their tests or Files block need. `report.mjs` re-run: no verdict changed; row 3's second-repetition flag is gone.
+- No second repetition. The moves taken are in the results note, section Owner rulings.
