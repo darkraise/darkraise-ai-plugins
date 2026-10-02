@@ -1,0 +1,6 @@
+rep	case	arm	pass	defect	found	severity	quote
+1	r-code-judge-seats	judge-opus@medium	1	D1	1	Important	**2. The refusal pattern can match ordinary run output, causing spurious fallbacks** (`run-codex-review.sh:569-572`)
+1	r-code-judge-seats	judge-opus@medium	1	D2	1	Important	**1. The ledger will likely quote Codex's startup banner instead of the refusal reason** (`run-codex-review.sh:574-576`)
+1	r-code-judge-seats	judge-opus@medium	1	D3	0		
+1	r-code-judge-seats	judge-opus@medium	1	D4	0		
+1	r-code-judge-seats	judge-opus@medium	1	D5	1	Important	Add a stub case: "transcript mentions 'unknown model', exits 1 with a quota error" → `FAILED`, calls=1.

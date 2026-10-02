@@ -1,0 +1,7 @@
+rep	stage	case	pool	row	arm	outcome	model	cost	seconds	turns	detail
+1	smoke	w-fold-companions-t3	written	3	impl-sonnet-medium	PASS	claude-sonnet-5-5	0.1181	66	6	status=DONE
+1	smoke	w-session-budget-t5	written	1	impl-haiku	PASS	claude-haiku-4-5-20251001	0.1576	104	15	status=DONE
+1	smoke	w-fold-companions-t2	written	5	impl-opus-low	PASS	claude-opus-5-5	0.2267	56	6	status=DONE
+1	smoke	r-code-judge-seats	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.4503	67	10	
+1	smoke	r-code-judge-seats	review		judge-opus@medium	REVIEWED	claude-opus-5-5	0.8367	90	10	
+1	grade	r-code-judge-seats	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0667	6	1	found=3/5
