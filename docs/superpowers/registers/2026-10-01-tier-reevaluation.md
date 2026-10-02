@@ -5,5 +5,5 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | Let re-evaluate them (opus and sonnet) with a measured pilot: implementer rows 3-5, review seats, low rows 0-2, row 6 and escalation targets | docs/superpowers/plans/2026-10-01-dr-superpowers-tier-eval.md | spec §Acceptance | doing | - |
+| 1 | Let re-evaluate them (opus and sonnet) with a measured pilot: implementer rows 3-5, review seats, low rows 0-2, row 6 and escalation targets | docs/superpowers/plans/2026-10-01-dr-superpowers-tier-eval.md | spec §Acceptance | verify | results note committed; the owner rules on the moves |
 | 2 | update the agents mapping table | - | - | deferred | needs the eval results: gets its own spec from the results note of plan Task 21 |
