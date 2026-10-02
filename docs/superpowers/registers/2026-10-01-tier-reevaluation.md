@@ -7,3 +7,15 @@
 |---|---|---|---|---|---|
 | 1 | Let re-evaluate them (opus and sonnet) with a measured pilot: implementer rows 3-5, review seats, low rows 0-2, row 6 and escalation targets | docs/superpowers/plans/2026-10-01-dr-superpowers-tier-eval.md | spec §Acceptance | verify | results note committed; the owner rules on the moves |
 | 2 | update the agents mapping table | - | - | deferred | needs the eval results: gets its own spec from the results note of plan Task 21 |
+| 3 | Owner ruling: exclude or keep the three unwinnable stripped cases (s-review-routing-t17, s-review-fixes-t8, s-execution-cost-t15), then re-run report.mjs | - | ruling recorded | open | - |
+| 4 | Make strippedRow and the golden check reject cases whose files or tests need docs/superpowers (evals/tiers/lib/cases.mjs), with a fixture test; decide manifest handling first | - | - | open | - |
+| 5 | Before repetition 2, sandbox the runs and keep stream-json transcripts so an answer leak can be checked | - | - | open | - |
+| 6 | classify records a timed-out run at cost 0, so the spend cap and cost per PASS undercount (evals/tiers/lib/claude.mjs) | - | - | open | - |
+| 7 | An overloaded error after the run spent money is classed as a usage limit, against the spec's BLOCKED rule (evals/tiers/lib/claude.mjs LIMIT) | - | - | open | - |
+| 8 | statusWord takes the first status word anywhere in the reply; anchor on Status: (evals/tiers/lib/grade.mjs) | - | - | open | - |
+| 9 | The drift guard does not see untracked files under plugins/dr-superpowers (evals/tiers/run-grid.mjs) | - | - | open | - |
+| 10 | Repeat gradings are the first six reviews by name, both code reviews, so no plan review is graded twice (evals/tiers/run-grid.mjs) | - | - | open | - |
+| 11 | Grades are written before the results row, so a crash between the two duplicates grades (evals/tiers/grade-review.mjs) | - | - | open | - |
+| 12 | A harness test fixture directory under /tmp leaks when a test throws at top level | - | - | deferred | cosmetic; leaks on a top-level throw, not on a late import as first recorded |
+| 13 | w-darkmem-sync-client-t5 fails one pull.test.mjs assertion on every arm including the current one | - | - | deferred | kept in the pool as a real result; the case may be at fault |
+| 14 | tests/ui-discovery.test.mjs fails on this host because no rg binary is on PATH | - | - | deferred | environmental, fails before and after this plan |
