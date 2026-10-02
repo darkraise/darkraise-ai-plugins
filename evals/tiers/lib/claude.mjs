@@ -33,7 +33,9 @@ export async function invoke({ model, effort, body, prompt, cwd, tools, seconds,
   args.push('--output-format', 'json', '--no-session-persistence', '--max-budget-usd', BUDGET_USD);
   writeFileSync(join(dir, 'prompt.txt'), prompt);
   const started = Date.now();
-  const r = await run(process.env.TIER_EVAL_CLAUDE ?? 'claude', args, { cwd, seconds, input: prompt });
+  // --setting-sources does not stop the user's global CLAUDE.md from loading.
+  const env = { ...process.env, CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1' };
+  const r = await run(process.env.TIER_EVAL_CLAUDE ?? 'claude', args, { cwd, seconds, input: prompt, env });
   writeFileSync(join(dir, 'output.json'), r.out);
   writeFileSync(join(dir, 'stderr.txt'), r.err);
   return classify(r, (Date.now() - started) / 1000);

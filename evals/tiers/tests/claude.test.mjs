@@ -18,6 +18,12 @@ test('agent reads the model, the effort and the body, and an arm can override th
   assert.deepEqual([agent('impl-haiku').model, agent('impl-haiku').effort], ['haiku', null]);
 });
 
+test('invoke keeps the global CLAUDE.md out of the run', async () => {
+  modes(fx.stub, 'pass');
+  await invoke({ model: 'opus', effort: null, body: '', prompt: 'p', cwd: fx.top, tools: [], seconds: 30, dir: join(fx.top, 'iso') });
+  assert.equal(lastCall().claudeMds, '1');
+});
+
 test('classify tells a limit, a budget stop, an error and a timeout apart', () => {
   const run = (out, extra = {}) => classify({ out, err: '', code: 0, timedOut: false, ...extra }, 2);
   assert.equal(run(JSON.stringify({ result: 'hi', total_cost_usd: 0.25, num_turns: 2, modelUsage: { m: {} } })).kind, 'ok');
