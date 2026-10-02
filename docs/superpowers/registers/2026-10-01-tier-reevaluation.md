@@ -6,7 +6,7 @@
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
 | 1 | Let re-evaluate them (opus and sonnet) with a measured pilot: implementer rows 3-5, review seats, low rows 0-2, row 6 and escalation targets | docs/superpowers/plans/2026-10-01-dr-superpowers-tier-eval.md | spec §Acceptance | done | owner ruled 2026-10-02: rows 2-5 and judge-opus effort move, row 6 stays; see docs/superpowers/notes/2026-10-02-tier-eval-results.md, Owner rulings |
-| 2 | update the agents mapping table | - | spec 2026-10-02 ladder-update §Acceptance | open | the moves the owner took on 2026-10-02 (docs/superpowers/notes/2026-10-02-tier-eval-results.md, Owner rulings); escalation table unchanged |
+| 2 | update the agents mapping table | docs/superpowers/plans/2026-10-02-dr-superpowers-ladder-update.md | spec 2026-10-02 ladder-update §Acceptance | planned | the moves the owner took on 2026-10-02 (docs/superpowers/notes/2026-10-02-tier-eval-results.md, Owner rulings); escalation table unchanged |
 | 3 | Owner ruling: exclude or keep the three unwinnable stripped cases (s-review-routing-t17, s-review-fixes-t8, s-execution-cost-t15), then re-run report.mjs | - | ruling recorded | done | excluded 2026-10-02; report re-run, no verdict changed |
 | 4 | Make strippedRow and the golden check reject cases whose files or tests need docs/superpowers (evals/tiers/lib/cases.mjs), with a fixture test; decide manifest handling first | - | - | deferred | fix before any repetition 2; the repetition 1 manifest stays pinned, the fix lands with its rebuild |
 | 5 | Before repetition 2, sandbox the runs and keep stream-json transcripts so an answer leak can be checked | - | - | deferred | fix before any repetition 2; no repetition 2 scheduled |
