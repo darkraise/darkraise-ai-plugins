@@ -33,4 +33,5 @@
 - Outcomes (rep 1, stage `review`): REVIEWED 28, plus the 2 review cells scored in the smoke stage, so all 30; cost 38.42 notional dollars. Repetition total 63.29 against the 250 cap.
 - Grader consistency: 1 disagreement on 30 repeated gradings - usable. The results note reads pass 1.
 - Review cells cut short (BLOCKED): None.
+- The 38.42 above covers the review cells only. The gradings ran under the `grade` stage and cost 1.83; by stage the repetition is smoke 1.79, written 14.88, stripped 6.37, review 38.42 and grade 1.83, which sum to 63.29.
 - Fixes or re-runs: none; the stage finished in one slice with exit 0.

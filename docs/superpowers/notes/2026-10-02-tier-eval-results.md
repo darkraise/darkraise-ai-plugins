@@ -15,20 +15,26 @@ Spec: `docs/superpowers/specs/2026-10-01-dr-superpowers-tier-eval-design.md`. Ha
 | Review seat | `judge-opus@high` | move: judge-opus effort high to medium | 18 of 40 defects, 0 Critical missed (current arm: 18 of 40) |
 | Review seat | `judge-sonnet-high` | unchanged | 10 of 40 defects, 0 Critical missed |
 
+## Case defect found in review
+
+Three of the stripped cases cannot pass for any agent: `s-review-routing-t17`, `s-review-fixes-t8` and `s-execution-cost-t15`. A stripped snapshot has `docs/superpowers` deleted, but `plugins/dr-superpowers/tests/review-route.test.sh` checks files under `docs/superpowers/specs/` (for example lines 585 to 593), so that test fails on any stripped snapshot; `s-review-routing-t17` also lists a `docs/superpowers` file in its Files block, which both arms answered with `NEEDS_CONTEXT`. Re-running the test in the `s-review-fixes-t8` snapshot shows the `the program design ...` checks failing on the missing file. The golden check ran the tests on the full result tree, so it did not catch this. These cases account for every non-PASS row of the stripped stage (4 FAIL, 2 BLOCKED), and none of them is a regression. Rows 3 and 4 therefore have fewer usable stripped cases than the report counts: row 3 has 1 of its 3, and row 4 has 5 of its 6. The cases were not excluded and the manifest was not rebuilt, so every verdict above is the rules' output on the data as recorded. Whether to exclude these three cases and re-run `report.mjs` is the owner's ruling.
+
 ## Rulings left to the owner
 
+- The three unwinnable stripped cases above: exclude them, or keep them as recorded.
 - Row 2: the move to `impl-sonnet-low` rests on 8 as-written cases and no stripped case.
 - Row 3: the move to `impl-sonnet-medium` rests on 3 stripped cases, fewer than the 4 the rules need.
 - Row 5: the move to `impl-sonnet-high` rests on 2 stripped cases.
 - Row 6: rests on two cases, one of them stripped.
 - Row 0 has no case. On row 1 `impl-haiku` passed 7 of 7 with no regression, at $0.18 per PASS against $0.12 for the current `impl-sonnet-low`, so the rules leave row 1 unchanged because it saves nothing.
+- If every move is taken, `impl-opus-high` leaves the assignment table, which changes the escalation table (spec section 4); that table is the owner's to rule on.
 - Whether `judge-sonnet-high` may review above total 3 rests on whole-branch and plan reviews, not on task reviews. It found 10 of 40 defects against 18 for each Opus arm.
 
 No row is INCONCLUSIVE.
 
 ## Proposed second repetition
 
-- Row 3, with the next agent up from `impl-sonnet-high`: the report flags that `impl-sonnet-high` does not pass 2 cases.
+- Row 3, with the next agent up from `impl-sonnet-high`: the report flags that `impl-sonnet-high` does not pass 2 cases. Those two cases are among the three unwinnable stripped cases above, so this proposal rests on a case defect and is withdrawn unless the owner rules otherwise.
 - `impl-sonnet-xhigh` on row 5 is not proposed: `impl-sonnet-high` had no regression there.
 
 ## The report
@@ -109,7 +115,7 @@ Notional spend: $63.29 over 180 runs.
 
 ## Every regression
 
-None: every row has 0 regressions, meaning no case where the current arm passed and a cheaper arm did not. These rows were not PASS, and in each case the current arm failed too:
+None: every row has 0 regressions, meaning no case where the current arm passed and a cheaper arm did not. These rows were not PASS, and in each case the current arm failed too. The six stripped ones are explained by the case defect above:
 
 - `w-darkmem-sync-client-t5`, `impl-opus-medium`, FAIL: status=DONE failed=plugins/dr-superpowers/tests/darkmem-sync/pull.test.mjs
 - `w-darkmem-sync-client-t5`, `impl-opus-low`, FAIL: status=DONE failed=plugins/dr-superpowers/tests/darkmem-sync/pull.test.mjs
@@ -121,7 +127,7 @@ None: every row has 0 regressions, meaning no case where the current arm passed 
 - `s-execution-cost-t15`, `impl-sonnet-high`, FAIL: status=DONE_WITH_CONCERNS failed=plugins/dr-superpowers/tests/review-route.test.sh
 - `s-execution-cost-t15`, `impl-sonnet-medium`, FAIL: status=DONE_WITH_CONCERNS failed=plugins/dr-superpowers/tests/review-route.test.sh
 
-The three `w-darkmem-sync-client-t5` rows fail one assertion of `pull.test.mjs` (`an edit darkmem has not moved past is push's to send`), and the other ten tests in that file pass.
+The six stripped rows fail because of the case defect above. The three `w-darkmem-sync-client-t5` rows fail one assertion of `pull.test.mjs` (`an edit darkmem has not moved past is push's to send`), and the other ten tests in that file pass. The case itself may be at fault; it was not investigated further, and it stayed in the pool.
 
 ## Limits of this evidence
 

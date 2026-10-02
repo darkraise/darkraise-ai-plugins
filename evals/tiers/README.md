@@ -9,6 +9,9 @@ Only `run-grid.mjs`, `run-case.mjs` and `grade-review.mjs` call a model. They
 run `claude -p`, which draws on the Claude subscription's usage limits.
 Everything else, including the tests, is free. POSIX only.
 
+Each run passes `--setting-sources project` and sets `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`: the
+flag alone leaves the user's global CLAUDE.md loaded.
+
 ## Commands
 
 Run them from the repository root.
