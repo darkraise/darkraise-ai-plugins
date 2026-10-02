@@ -19,3 +19,10 @@
 - Outcomes (rep 1, stage `written`): PASS 82, FAIL 3; cost 14.88 notional dollars. Repetition total so far 16.73 (smoke included), against the 250 cap.
 - The three FAIL rows are one case, `w-darkmem-sync-client-t5`, failing `plugins/dr-superpowers/tests/darkmem-sync/pull.test.mjs` on `impl-opus-medium` (the row's current arm), `impl-opus-low` and `impl-sonnet-high`. A failure on the current arm suggests the case itself may be at fault; not yet investigated.
 - Fixes or re-runs: none; the stage finished in one slice with exit 0.
+
+## Stripped stage
+
+- Date: 2026-10-02
+- Outcomes (rep 1, stage `stripped`): PASS 20, FAIL 4, BLOCKED 2; cost 6.37 notional dollars. Repetition total so far 23.10 against the 250 cap.
+- Non-PASS rows are all `impl-sonnet-high` and `impl-sonnet-medium` on three cases, each failing `plugins/dr-superpowers/tests/review-route.test.sh`: `s-review-routing-t17` BLOCKED with `NEEDS_CONTEXT` on both arms; `s-review-fixes-t8` and `s-execution-cost-t15` FAIL with `DONE_WITH_CONCERNS` on both arms.
+- Fixes or re-runs: none; the stage finished in one slice with exit 0.

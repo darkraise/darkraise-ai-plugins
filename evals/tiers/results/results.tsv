@@ -90,3 +90,29 @@ rep	stage	case	pool	row	arm	outcome	model	cost	seconds	turns	detail
 1	written	w-darkmem-sync-hardening-t1	written	5	impl-sonnet-high	PASS	claude-sonnet-5-5	0.2715	87	11	status=DONE
 1	written	w-darkmem-sync-hardening-t4	written	6	impl-opus-high	PASS	claude-opus-5-5	0.4101	78	10	status=DONE
 1	written	w-darkmem-sync-hardening-t4	written	6	impl-opus-medium	PASS	claude-opus-5-5	0.3278	62	8	status=DONE
+1	stripped	s-session-budget-t5	stripped	3	impl-sonnet-medium	PASS	claude-sonnet-5-5	0.2009	57	7	status=DONE
+1	stripped	s-review-routing-t17	stripped	3	impl-sonnet-high	BLOCKED	claude-sonnet-5-5	0.2861	70	12	status=NEEDS_CONTEXT failed=plugins/dr-superpowers/tests/review-route.test.sh
+1	stripped	s-session-budget-t5	stripped	3	impl-sonnet-high	PASS	claude-sonnet-5-5	0.3385	134	11	status=DONE
+1	stripped	s-review-routing-t17	stripped	3	impl-sonnet-medium	BLOCKED	claude-sonnet-5-5	0.1228	19	6	status=NEEDS_CONTEXT failed=plugins/dr-superpowers/tests/review-route.test.sh
+1	stripped	s-review-fixes-t8	stripped	3	impl-sonnet-high	FAIL	claude-sonnet-5-5	0.1461	35	7	status=DONE_WITH_CONCERNS failed=plugins/dr-superpowers/tests/review-route.test.sh
+1	stripped	s-review-fixes-t8	stripped	3	impl-sonnet-medium	FAIL	claude-sonnet-5-5	0.1301	32	7	status=DONE_WITH_CONCERNS failed=plugins/dr-superpowers/tests/review-route.test.sh
+1	stripped	s-fold-companions-t4	stripped	4	impl-sonnet-high	PASS	claude-sonnet-5-5	0.1662	35	12	status=DONE
+1	stripped	s-fold-companions-t4	stripped	4	impl-sonnet-medium	PASS	claude-sonnet-5-5	0.1063	27	7	status=DONE
+1	stripped	s-review-routing-t12	stripped	4	impl-sonnet-medium	PASS	claude-sonnet-5-5	0.1119	21	5	status=DONE
+1	stripped	s-review-routing-t12	stripped	4	impl-sonnet-high	PASS	claude-sonnet-5-5	0.1550	66	8	status=DONE
+1	stripped	s-execution-cost-t15	stripped	4	impl-sonnet-high	FAIL	claude-sonnet-5-5	0.2523	175	12	status=DONE_WITH_CONCERNS failed=plugins/dr-superpowers/tests/review-route.test.sh
+1	stripped	s-review-fixes-t2	stripped	4	impl-sonnet-high	PASS	claude-sonnet-5-5	0.0979	23	5	status=DONE
+1	stripped	s-execution-cost-t15	stripped	4	impl-sonnet-medium	FAIL	claude-sonnet-5-5	0.1883	164	8	status=DONE_WITH_CONCERNS failed=plugins/dr-superpowers/tests/review-route.test.sh
+1	stripped	s-review-fixes-t2	stripped	4	impl-sonnet-medium	PASS	claude-sonnet-5-5	0.0881	20	5	status=DONE
+1	stripped	s-codex-v3-t6	stripped	4	impl-sonnet-medium	PASS	claude-sonnet-5-5	0.1222	34	7	status=DONE
+1	stripped	s-codex-v3-t6	stripped	4	impl-sonnet-high	PASS	claude-sonnet-5-5	0.1615	52	8	status=DONE
+1	stripped	s-review-fixes-t11	stripped	4	impl-sonnet-medium	PASS	claude-sonnet-5-5	0.1254	25	6	status=DONE_WITH_CONCERNS
+1	stripped	s-review-fixes-t11	stripped	4	impl-sonnet-high	PASS	claude-sonnet-5-5	0.2454	68	13	status=DONE_WITH_CONCERNS
+1	stripped	s-execution-cost-t5	stripped	5	impl-opus-low	PASS	claude-opus-5-5	0.3504	114	8	status=DONE_WITH_CONCERNS
+1	stripped	s-execution-cost-t5	stripped	5	impl-opus-medium	PASS	claude-opus-5-5	0.5731	160	13	status=DONE
+1	stripped	s-execution-cost-t14	stripped	5	impl-opus-medium	PASS	claude-opus-5-5	0.3777	65	11	status=DONE_WITH_CONCERNS
+1	stripped	s-execution-cost-t5	stripped	5	impl-sonnet-high	PASS	claude-sonnet-5-5	0.2689	85	11	status=DONE
+1	stripped	s-execution-cost-t14	stripped	5	impl-opus-low	PASS	claude-opus-5-5	0.2788	57	7	status=DONE_WITH_CONCERNS
+1	stripped	s-execution-cost-t14	stripped	5	impl-sonnet-high	PASS	claude-sonnet-5-5	0.1908	50	11	status=DONE_WITH_CONCERNS
+1	stripped	s-darkmem-sync-hardening-t2	stripped	6	impl-opus-medium	PASS	claude-opus-5-5	0.6135	143	16	status=DONE_WITH_CONCERNS
+1	stripped	s-darkmem-sync-hardening-t2	stripped	6	impl-opus-high	PASS	claude-opus-5-5	0.6720	174	12	status=DONE
