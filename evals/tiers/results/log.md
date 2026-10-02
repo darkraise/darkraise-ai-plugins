@@ -26,3 +26,11 @@
 - Outcomes (rep 1, stage `stripped`): PASS 20, FAIL 4, BLOCKED 2; cost 6.37 notional dollars. Repetition total so far 23.10 against the 250 cap.
 - Non-PASS rows are all `impl-sonnet-high` and `impl-sonnet-medium` on three cases, each failing `plugins/dr-superpowers/tests/review-route.test.sh`: `s-review-routing-t17` BLOCKED with `NEEDS_CONTEXT` on both arms; `s-review-fixes-t8` and `s-execution-cost-t15` FAIL with `DONE_WITH_CONCERNS` on both arms.
 - Fixes or re-runs: none; the stage finished in one slice with exit 0.
+
+## Review stage
+
+- Date: 2026-10-02
+- Outcomes (rep 1, stage `review`): REVIEWED 28, plus the 2 review cells scored in the smoke stage, so all 30; cost 38.42 notional dollars. Repetition total 63.29 against the 250 cap.
+- Grader consistency: 1 disagreement on 30 repeated gradings - usable. The results note reads pass 1.
+- Review cells cut short (BLOCKED): None.
+- Fixes or re-runs: none; the stage finished in one slice with exit 0.

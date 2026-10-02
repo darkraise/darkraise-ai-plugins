@@ -116,3 +116,66 @@ rep	stage	case	pool	row	arm	outcome	model	cost	seconds	turns	detail
 1	stripped	s-execution-cost-t14	stripped	5	impl-sonnet-high	PASS	claude-sonnet-5-5	0.1908	50	11	status=DONE_WITH_CONCERNS
 1	stripped	s-darkmem-sync-hardening-t2	stripped	6	impl-opus-medium	PASS	claude-opus-5-5	0.6135	143	16	status=DONE_WITH_CONCERNS
 1	stripped	s-darkmem-sync-hardening-t2	stripped	6	impl-opus-high	PASS	claude-opus-5-5	0.6720	174	12	status=DONE
+1	review	r-code-judge-seats	review		judge-opus@high	REVIEWED	claude-opus-5-5	0.9491	114	12	
+1	review	r-code-executor-interface	review		judge-opus@high	REVIEWED	claude-opus-5-5	1.7827	145	21	
+1	review	r-code-executor-interface	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.6947	72	12	
+1	review	r-code-executor-interface	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.7607	118	15	
+1	review	r-code-executor-interface-residual	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.3661	96	14	
+1	review	r-code-executor-interface-residual	review		judge-opus@high	REVIEWED	claude-opus-5-5	1.8947	146	15	
+1	review	r-code-executor-interface-residual	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	1.0186	115	23	
+1	review	r-code-item-registers	review		judge-opus@high	REVIEWED	claude-opus-5-5	1.3985	151	18	
+1	review	r-code-item-registers	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.0780	91	12	
+1	review	r-code-item-registers	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.4858	53	10	
+1	review	r-code-execution-cost	review		judge-opus@high	REVIEWED	claude-opus-5-5	2.2524	187	28	
+1	review	r-code-execution-cost	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.7019	179	16	
+1	review	r-code-execution-cost	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.9334	136	20	
+1	review	r-code-review-fixes	review		judge-opus@high	REVIEWED	claude-opus-5-5	2.2836	239	30	
+1	review	r-code-review-fixes	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.9768	188	27	
+1	review	r-code-review-fixes	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.7944	122	17	
+1	review	r-plan-project-state	review		judge-opus@high	REVIEWED	claude-opus-5-5	1.5565	246	32	
+1	review	r-plan-project-state	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.3317	188	25	
+1	review	r-plan-project-state	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.4804	142	6	
+1	review	r-plan-judge-seats	review		judge-opus@high	REVIEWED	claude-opus-5-5	1.6065	281	30	
+1	review	r-plan-judge-seats	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.0596	147	20	
+1	review	r-plan-judge-seats	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.3909	135	6	
+1	review	r-plan-inline-mode	review		judge-opus@high	REVIEWED	claude-opus-5-5	1.4623	200	31	
+1	review	r-plan-inline-mode	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.0148	138	17	
+1	review	r-plan-inline-mode	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	0.3695	116	6	
+1	review	r-plan-small-model	review		judge-opus@medium	REVIEWED	claude-opus-5-5	1.9594	240	29	
+1	review	r-plan-small-model	review		judge-opus@high	REVIEWED	claude-opus-5-5	2.8720	422	48	
+1	review	r-plan-small-model	review		judge-sonnet-high	REVIEWED	claude-sonnet-5-5	1.9476	439	63	
+1	grade	r-code-execution-cost	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0593	5	1	found=1/4
+1	grade	r-code-execution-cost	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0611	7	1	found=1/4
+1	grade	r-code-execution-cost	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0560	6	1	found=2/4
+1	grade	r-code-executor-interface	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0634	8	1	found=3/6
+1	grade	r-code-executor-interface	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0712	6	1	found=3/6
+1	grade	r-code-executor-interface	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0640	5	1	found=1/6
+1	grade	r-code-executor-interface-residual	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0606	6	1	found=1/2
+1	grade	r-code-executor-interface-residual	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0572	8	1	found=1/2
+1	grade	r-code-executor-interface-residual	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0545	5	1	found=1/2
+1	grade	r-code-item-registers	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0722	6	1	found=3/8
+1	grade	r-code-item-registers	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0661	8	1	found=3/8
+1	grade	r-code-item-registers	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0601	5	1	found=1/8
+1	grade	r-code-judge-seats	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0591	7	1	found=3/5
+1	grade	r-code-judge-seats	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0610	6	1	found=3/5
+1	grade	r-code-review-fixes	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0474	4	1	found=0/2
+1	grade	r-code-review-fixes	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0438	4	1	found=0/2
+1	grade	r-code-review-fixes	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0492	5	1	found=0/2
+1	grade	r-plan-inline-mode	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0480	5	1	found=0/2
+1	grade	r-plan-inline-mode	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0367	4	1	found=0/2
+1	grade	r-plan-inline-mode	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0522	6	1	found=0/2
+1	grade	r-plan-judge-seats	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0740	7	1	found=5/6
+1	grade	r-plan-judge-seats	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0629	6	1	found=5/6
+1	grade	r-plan-judge-seats	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0680	6	1	found=1/6
+1	grade	r-plan-project-state	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0497	5	1	found=2/3
+1	grade	r-plan-project-state	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0608	7	1	found=2/3
+1	grade	r-plan-project-state	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0589	7	1	found=1/3
+1	grade	r-plan-small-model	review		grade1:judge-opus@high	GRADED	claude-opus-5-5	0.0486	5	1	found=0/2
+1	grade	r-plan-small-model	review		grade1:judge-opus@medium	GRADED	claude-opus-5-5	0.0448	5	1	found=0/2
+1	grade	r-plan-small-model	review		grade1:judge-sonnet-high	GRADED	claude-opus-5-5	0.0416	4	1	found=0/2
+1	grade	r-code-execution-cost	review		grade2:judge-opus@medium	GRADED	claude-opus-5-5	0.0050	5	1	found=1/4
+1	grade	r-code-execution-cost	review		grade2:judge-opus@high	GRADED	claude-opus-5-5	0.0098	10	1	found=1/4
+1	grade	r-code-execution-cost	review		grade2:judge-sonnet-high	GRADED	claude-opus-5-5	0.0064	5	1	found=2/4
+1	grade	r-code-executor-interface	review		grade2:judge-opus@high	GRADED	claude-opus-5-5	0.0731	7	1	found=3/6
+1	grade	r-code-executor-interface	review		grade2:judge-opus@medium	GRADED	claude-opus-5-5	0.0086	6	1	found=4/6
+1	grade	r-code-executor-interface	review		grade2:judge-sonnet-high	GRADED	claude-opus-5-5	0.0062	5	1	found=1/6

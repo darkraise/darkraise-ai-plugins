@@ -4,3 +4,148 @@ rep	case	arm	pass	defect	found	severity	quote
 1	r-code-judge-seats	judge-opus@medium	1	D3	0		
 1	r-code-judge-seats	judge-opus@medium	1	D4	0		
 1	r-code-judge-seats	judge-opus@medium	1	D5	1	Important	Add a stub case: "transcript mentions 'unknown model', exits 1 with a quota error" → `FAILED`, calls=1.
+1	r-code-execution-cost	judge-opus@medium	1	D1	0		
+1	r-code-execution-cost	judge-opus@medium	1	D2	1	Minor	**Inline mode treats Executor lines as inert, but the delegated loop runs them.**
+1	r-code-execution-cost	judge-opus@medium	1	D3	0		
+1	r-code-execution-cost	judge-opus@medium	1	D4	0		
+1	r-code-execution-cost	judge-opus@high	1	D1	0		
+1	r-code-execution-cost	judge-opus@high	1	D2	0		
+1	r-code-execution-cost	judge-opus@high	1	D3	0		
+1	r-code-execution-cost	judge-opus@high	1	D4	1	Minor	The example `budget: 312k of 475k` remains in `skills/subagent-driven-development/SKILL.md:394`, `README.md:266` and `reference/session-budget.md:26-28`.
+1	r-code-execution-cost	judge-sonnet-high	1	D1	1	Minor	`README.md:378` says judgment calls go to "a read-only ruling seat (`judge-fable`)".
+1	r-code-execution-cost	judge-sonnet-high	1	D2	0		
+1	r-code-execution-cost	judge-sonnet-high	1	D3	1	Minor	The worked examples in `skills/subagent-driven-development/SKILL.md:510` and `:521` show `dispatch judge-fable` for an ordinary task review, which no longer matches the risk-3-only rule.
+1	r-code-execution-cost	judge-sonnet-high	1	D4	0		
+1	r-code-executor-interface	judge-opus@high	1	D1	1	Important	`${emin:-0}` and `${emax:-3}` default to fully permissive whenever `executor_gate` returns nothing, for example when `blocks.gate` names a block missing from `ladder.md`.
+1	r-code-executor-interface	judge-opus@high	1	D2	1	Minor	`detect-executors.sh:982-992` emits `reason: ""` with `usable:false`.
+1	r-code-executor-interface	judge-opus@high	1	D3	0		
+1	r-code-executor-interface	judge-opus@high	1	D4	0		
+1	r-code-executor-interface	judge-opus@high	1	D5	0		
+1	r-code-executor-interface	judge-opus@high	1	D6	1	Minor	Start it with "For an offloaded task, …" so a controller doesn't run `executors path "" wrapper` for a Claude-implemented task.
+1	r-code-executor-interface	judge-opus@medium	1	D1	1	Important	**2. Plan-lint's lane gate fails open when an executor's gate block is missing.**
+1	r-code-executor-interface	judge-opus@medium	1	D2	0		
+1	r-code-executor-interface	judge-opus@medium	1	D3	0		
+1	r-code-executor-interface	judge-opus@medium	1	D4	0		
+1	r-code-executor-interface	judge-opus@medium	1	D5	1	Important	**3. The "executor-neutral" lane reference still routes a non-Codex task through Codex.**
+1	r-code-executor-interface	judge-opus@medium	1	D6	1	Minor	**The release instruction reads as applying to every delegated task.**
+1	r-code-executor-interface	judge-sonnet-high	1	D1	1	Important	The defaults then admit every task (min 0, max 3), both for validating an Executor line and for the lane-eligible warning.
+1	r-code-executor-interface	judge-sonnet-high	1	D2	0		
+1	r-code-executor-interface	judge-sonnet-high	1	D3	0		
+1	r-code-executor-interface	judge-sonnet-high	1	D4	0		
+1	r-code-executor-interface	judge-sonnet-high	1	D5	0		
+1	r-code-executor-interface	judge-sonnet-high	1	D6	0		
+1	r-code-executor-interface-residual	judge-opus@high	1	D1	0		
+1	r-code-executor-interface-residual	judge-opus@high	1	D2	1	Important	`:317` and `:509` refer to `codex-successor`.
+1	r-code-executor-interface-residual	judge-opus@medium	1	D1	0		
+1	r-code-executor-interface-residual	judge-opus@medium	1	D2	1	Important	line 317 and line 509 still say `codex-successor`;
+1	r-code-executor-interface-residual	judge-sonnet-high	1	D1	0		
+1	r-code-executor-interface-residual	judge-sonnet-high	1	D2	1	Minor	Line 505 is a failure-table row that applies to every executor. For a second executor it points at the wrong block.
+1	r-code-item-registers	judge-opus@high	1	D1	0		
+1	r-code-item-registers	judge-opus@high	1	D2	1	Important	No skill tells anyone to replace `-` with the spec path once the spec is written.
+1	r-code-item-registers	judge-opus@high	1	D3	0		
+1	r-code-item-registers	judge-opus@high	1	D4	0		
+1	r-code-item-registers	judge-opus@high	1	D5	1	Important	`finishing` checks only the first.
+1	r-code-item-registers	judge-opus@high	1	D6	0		
+1	r-code-item-registers	judge-opus@high	1	D7	1	Minor	Rule 7 says "the project is between programmes" while open register rows exist, which contradicts the new step 7 ("Never report work complete…").
+1	r-code-item-registers	judge-opus@high	1	D8	0		
+1	r-code-item-registers	judge-opus@medium	1	D1	0		
+1	r-code-item-registers	judge-opus@medium	1	D2	1	Important	No skill step and no `scripts/register` verb ever changes `Covers` to the spec path.
+1	r-code-item-registers	judge-opus@medium	1	D3	0		
+1	r-code-item-registers	judge-opus@medium	1	D4	0		
+1	r-code-item-registers	judge-opus@medium	1	D5	1	Important	The finishing skill only checks `--spec <the plan's Spec path>` (`SKILL.md:94`), and `cmd_open` only takes one `--spec` (a second one overwrites the first, `scripts/register:506`).
+1	r-code-item-registers	judge-opus@medium	1	D6	1	Important	So every registered plan shows "After integration: N register rows are still open — #<its own row>", which is false once the work is integrated.
+1	r-code-item-registers	judge-opus@medium	1	D7	0		
+1	r-code-item-registers	judge-opus@medium	1	D8	0		
+1	r-code-item-registers	judge-sonnet-high	1	D1	0		
+1	r-code-item-registers	judge-sonnet-high	1	D2	0		
+1	r-code-item-registers	judge-sonnet-high	1	D3	0		
+1	r-code-item-registers	judge-sonnet-high	1	D4	0		
+1	r-code-item-registers	judge-sonnet-high	1	D5	0		
+1	r-code-item-registers	judge-sonnet-high	1	D6	1	Important	Those rows are still `doing`, so the line will usually read "N register rows are still open" for the plan's own work.
+1	r-code-item-registers	judge-sonnet-high	1	D7	0		
+1	r-code-item-registers	judge-sonnet-high	1	D8	0		
+1	r-code-judge-seats	judge-opus@high	1	D1	1	Important	So any reviewed code or reasoning line like `die "unknown model"` or `invalid effort` matches.
+1	r-code-judge-seats	judge-opus@high	1	D2	1	Important	With the real CLI, the first stderr line is the banner or a "Reading prompt from stdin…" line, not the error.
+1	r-code-judge-seats	judge-opus@high	1	D3	0		
+1	r-code-judge-seats	judge-opus@high	1	D4	0		
+1	r-code-judge-seats	judge-opus@high	1	D5	1	Important	No test catches this, because every stub prints only the refusal line.
+1	r-code-judge-seats	judge-sonnet-high	1	D1	1	Important	On a `codex exec` run, stderr carries the agent's activity log, including file contents it read.
+1	r-code-judge-seats	judge-sonnet-high	1	D2	1	Important	It prints the first non-empty line of stderr followed by stdout, not the line that matched.
+1	r-code-judge-seats	judge-sonnet-high	1	D3	1	Minor	When Astra isn't advertised, Sol runs and the status is `OK`, not `FALLBACK`, so the "say it aloud" rule never fires.
+1	r-code-judge-seats	judge-sonnet-high	1	D4	0		
+1	r-code-judge-seats	judge-sonnet-high	1	D5	0		
+1	r-code-review-fixes	judge-opus@high	1	D1	0		
+1	r-code-review-fixes	judge-opus@high	1	D2	0		
+1	r-code-review-fixes	judge-opus@medium	1	D1	0		
+1	r-code-review-fixes	judge-opus@medium	1	D2	0		
+1	r-code-review-fixes	judge-sonnet-high	1	D1	0		
+1	r-code-review-fixes	judge-sonnet-high	1	D2	0		
+1	r-plan-inline-mode	judge-opus@high	1	D1	0		
+1	r-plan-inline-mode	judge-opus@high	1	D2	0		
+1	r-plan-inline-mode	judge-opus@medium	1	D1	0		
+1	r-plan-inline-mode	judge-opus@medium	1	D2	0		
+1	r-plan-inline-mode	judge-sonnet-high	1	D1	0		
+1	r-plan-inline-mode	judge-sonnet-high	1	D2	0		
+1	r-plan-judge-seats	judge-opus@high	1	D1	1	Important	**[Important] Task 4: `is_refusal` searches the whole Codex transcript, and it runs even when Codex exits 0.**
+1	r-plan-judge-seats	judge-opus@high	1	D2	1	Important	**[Important] Task 4: `refusal_line` quotes the first non-empty line of stderr, then stdout.**
+1	r-plan-judge-seats	judge-opus@high	1	D3	1	Important	No test catches it. Every stub writes only the error line, and Step 5's probe checks only that the pattern matches a real refusal (true positive), never that it stays silent on a real transcript (false positive).
+1	r-plan-judge-seats	judge-opus@high	1	D4	1	Minor	**[Minor] Task 3: no test asserts the `-m` token in the argv.**
+1	r-plan-judge-seats	judge-opus@high	1	D5	1	Important	**[Important] Task 4 / Contracts: risk-3 "valid output" is far weaker than the spec.**
+1	r-plan-judge-seats	judge-opus@high	1	D6	0		
+1	r-plan-judge-seats	judge-opus@medium	1	D1	1	Important	`http 400|status 400` is matched against the echoed prompt and the review text.
+1	r-plan-judge-seats	judge-opus@medium	1	D2	1	Important	That is likely the banner, so the ledger substitution would quote a banner instead of the refusal, which defeats spec §8/[S13].
+1	r-plan-judge-seats	judge-opus@medium	1	D3	1	Important	The stubs only write the refusal line, so every test passes against output that real Codex does not produce.
+1	r-plan-judge-seats	judge-opus@medium	1	D4	1	Minor	An argv with `-m` hardcoded would pass Task 3, though Task 4's `refuse-then-ok` case catches it later.
+1	r-plan-judge-seats	judge-opus@medium	1	D5	1	Important	The risk3 validity rule only checks that the keys `spec_verdict`, `task_quality` and `cannot_verify` exist.
+1	r-plan-judge-seats	judge-opus@medium	1	D6	0		
+1	r-plan-judge-seats	judge-sonnet-high	1	D1	1	Important	Final-review stdout is review prose that can legitimately mention "unknown model" or "http 400".
+1	r-plan-judge-seats	judge-sonnet-high	1	D2	0		
+1	r-plan-judge-seats	judge-sonnet-high	1	D3	0		
+1	r-plan-judge-seats	judge-sonnet-high	1	D4	0		
+1	r-plan-judge-seats	judge-sonnet-high	1	D5	0		
+1	r-plan-judge-seats	judge-sonnet-high	1	D6	0		
+1	r-plan-project-state	judge-opus@high	1	D1	1	Minor	Task 3 writes `gates-manifest.test.sh` with an `absent` helper that only Task 11 calls.
+1	r-plan-project-state	judge-opus@high	1	D2	1	Important	The no-squash rule is pinned only by the needle `'squash'`, which also matches "squash merges are fine".
+1	r-plan-project-state	judge-opus@high	1	D3	0		
+1	r-plan-project-state	judge-opus@medium	1	D1	1	Minor	Task 3 (with Global Constraints): Task 3's new suite defines `absent()` but never calls it.
+1	r-plan-project-state	judge-opus@medium	1	D2	1	Minor	Tasks 1, 5, 6: several test needles are generic words that would also match a careless rewrite.
+1	r-plan-project-state	judge-opus@medium	1	D3	0		
+1	r-plan-project-state	judge-sonnet-high	1	D1	0		
+1	r-plan-project-state	judge-sonnet-high	1	D2	1	Minor	Several needles are trivially satisfied by unrelated text, such as `seven`, `exit 0`, `Source:`, `squash`, `ancestor` and `Markdown`.
+1	r-plan-project-state	judge-sonnet-high	1	D3	0		
+1	r-plan-small-model	judge-opus@high	1	D1	0		
+1	r-plan-small-model	judge-opus@high	1	D2	0		
+1	r-plan-small-model	judge-opus@medium	1	D1	0		
+1	r-plan-small-model	judge-opus@medium	1	D2	0		
+1	r-plan-small-model	judge-sonnet-high	1	D1	0		
+1	r-plan-small-model	judge-sonnet-high	1	D2	0		
+1	r-code-execution-cost	judge-opus@medium	2	D1	0		
+1	r-code-execution-cost	judge-opus@medium	2	D2	1	Minor	**Inline mode treats Executor lines as inert, but the delegated loop runs them.**
+1	r-code-execution-cost	judge-opus@medium	2	D3	0		
+1	r-code-execution-cost	judge-opus@medium	2	D4	0		
+1	r-code-execution-cost	judge-opus@high	2	D1	0		
+1	r-code-execution-cost	judge-opus@high	2	D2	0		
+1	r-code-execution-cost	judge-opus@high	2	D3	0		
+1	r-code-execution-cost	judge-opus@high	2	D4	1	Minor	The example `budget: 312k of 475k` remains in `skills/subagent-driven-development/SKILL.md:394`, `README.md:266` and `reference/session-budget.md:26-28`.
+1	r-code-execution-cost	judge-sonnet-high	2	D1	1	Minor	`README.md:378` says judgment calls go to "a read-only ruling seat (`judge-fable`)".
+1	r-code-execution-cost	judge-sonnet-high	2	D2	0		
+1	r-code-execution-cost	judge-sonnet-high	2	D3	1	Minor	The worked examples in `skills/subagent-driven-development/SKILL.md:510` and `:521` show `dispatch judge-fable` for an ordinary task review, which no longer matches the risk-3-only rule.
+1	r-code-execution-cost	judge-sonnet-high	2	D4	0		
+1	r-code-executor-interface	judge-opus@high	2	D1	1	Important	`${emin:-0}` and `${emax:-3}` default to fully permissive whenever `executor_gate` returns nothing, for example when `blocks.gate` names a block missing from `ladder.md`.
+1	r-code-executor-interface	judge-opus@high	2	D2	1	Minor	`detect-executors.sh:982-992` emits `reason: ""` with `usable:false`.
+1	r-code-executor-interface	judge-opus@high	2	D3	0		
+1	r-code-executor-interface	judge-opus@high	2	D4	0		
+1	r-code-executor-interface	judge-opus@high	2	D5	0		
+1	r-code-executor-interface	judge-opus@high	2	D6	1	Minor	Start it with "For an offloaded task, …" so a controller doesn't run `executors path "" wrapper` for a Claude-implemented task.
+1	r-code-executor-interface	judge-opus@medium	2	D1	1	Important	**2. Plan-lint's lane gate fails open when an executor's gate block is missing.**
+1	r-code-executor-interface	judge-opus@medium	2	D2	1	Minor	`reasons.*` is optional in the schema, so a registered executor without them gets `reason: ""` (for example, the `opencode` fixture when the locator is off).
+1	r-code-executor-interface	judge-opus@medium	2	D3	0		
+1	r-code-executor-interface	judge-opus@medium	2	D4	0		
+1	r-code-executor-interface	judge-opus@medium	2	D5	1	Important	**3. The "executor-neutral" lane reference still routes a non-Codex task through Codex.**
+1	r-code-executor-interface	judge-opus@medium	2	D6	1	Minor	**The release instruction reads as applying to every delegated task.**
+1	r-code-executor-interface	judge-sonnet-high	2	D1	1	Important	The defaults then admit every task (min 0, max 3), both for validating an Executor line and for the lane-eligible warning.
+1	r-code-executor-interface	judge-sonnet-high	2	D2	0		
+1	r-code-executor-interface	judge-sonnet-high	2	D3	0		
+1	r-code-executor-interface	judge-sonnet-high	2	D4	0		
+1	r-code-executor-interface	judge-sonnet-high	2	D5	0		
+1	r-code-executor-interface	judge-sonnet-high	2	D6	0		
