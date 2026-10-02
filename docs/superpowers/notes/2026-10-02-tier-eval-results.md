@@ -8,8 +8,8 @@ Spec: `docs/superpowers/specs/2026-10-01-dr-superpowers-tier-eval-design.md`. Ha
 |---|---|---|---|
 | Row 1 | `impl-sonnet-low` | UNCHANGED | 7 trials, 0 regressions |
 | Row 2 | `impl-sonnet-medium` | move: `impl-sonnet-low` (owner ruling, 0 stripped cases) | 8 trials, 0 regressions |
-| Row 3 | `impl-sonnet-high` | move: `impl-sonnet-medium` (owner ruling, 3 stripped cases) | 11 trials, 0 regressions |
-| Row 4 | `impl-sonnet-high` | move: `impl-sonnet-medium` | 14 trials, 0 regressions |
+| Row 3 | `impl-sonnet-high` | move: `impl-sonnet-medium` (owner ruling, 1 stripped case) | 9 trials, 0 regressions |
+| Row 4 | `impl-sonnet-high` | move: `impl-sonnet-medium` | 13 trials, 0 regressions |
 | Row 5 | `impl-opus-medium` | move: `impl-sonnet-high` (owner ruling, 2 stripped cases) | 10 trials, 0 regressions |
 | Row 6 | `impl-opus-high` | move: `impl-opus-medium` (owner ruling, 1 stripped case) | 2 trials, 0 regressions |
 | Review seat | `judge-opus@high` | move: judge-opus effort high to medium | 18 of 40 defects, 0 Critical missed (current arm: 18 of 40) |
@@ -17,25 +17,17 @@ Spec: `docs/superpowers/specs/2026-10-01-dr-superpowers-tier-eval-design.md`. Ha
 
 ## Case defect found in review
 
-Three of the stripped cases cannot pass for any agent: `s-review-routing-t17`, `s-review-fixes-t8` and `s-execution-cost-t15`. A stripped snapshot has `docs/superpowers` deleted, but `plugins/dr-superpowers/tests/review-route.test.sh` checks files under `docs/superpowers/specs/` (for example lines 585 to 593), so that test fails on any stripped snapshot; `s-review-routing-t17` also lists a `docs/superpowers` file in its Files block, which both arms answered with `NEEDS_CONTEXT`. Re-running the test in the `s-review-fixes-t8` snapshot shows the `the program design ...` checks failing on the missing file. The golden check ran the tests on the full result tree, so it did not catch this. These cases account for every non-PASS row of the stripped stage (4 FAIL, 2 BLOCKED), and none of them is a regression. Rows 3 and 4 therefore have fewer usable stripped cases than the report counts: row 3 has 1 of its 3, and row 4 has 5 of its 6. The cases were not excluded and the manifest was not rebuilt, so every verdict above is the rules' output on the data as recorded. Whether to exclude these three cases and re-run `report.mjs` is the owner's ruling.
+Three of the stripped cases cannot pass for any agent: `s-review-routing-t17`, `s-review-fixes-t8` and `s-execution-cost-t15`. A stripped snapshot has `docs/superpowers` deleted, but `plugins/dr-superpowers/tests/review-route.test.sh` checks files under `docs/superpowers/specs/` (for example lines 585 to 593), so that test fails on any stripped snapshot; `s-review-routing-t17` also lists a `docs/superpowers` file in its Files block, which both arms answered with `NEEDS_CONTEXT`. Re-running the test in the `s-review-fixes-t8` snapshot shows the `the program design ...` checks failing on the missing file. The golden check ran the tests on the full result tree, so it did not catch this. These cases account for every non-PASS row of the stripped stage (4 FAIL, 2 BLOCKED), and none of them is a regression. Rows 3 and 4 therefore have fewer usable stripped cases than the report counts: row 3 has 1 of its 3, and row 4 has 5 of its 6. The manifest was not rebuilt. By owner ruling the three cases are excluded from repetition 1 (three `EXCLUDED` rows in `results.tsv`), a departure from spec §1, which allows exclusion only for a run that cannot start. The verdicts above and the report below are the rules' output after the exclusion; no verdict changed, and row 3's flag for a second repetition, which rested on these cases, is gone.
 
-## Rulings left to the owner
+## Owner rulings (2026-10-02)
 
-- The three unwinnable stripped cases above: exclude them, or keep them as recorded.
-- Row 2: the move to `impl-sonnet-low` rests on 8 as-written cases and no stripped case.
-- Row 3: the move to `impl-sonnet-medium` rests on 3 stripped cases, fewer than the 4 the rules need.
-- Row 5: the move to `impl-sonnet-high` rests on 2 stripped cases.
-- Row 6: rests on two cases, one of them stripped.
-- Row 0 has no case. On row 1 `impl-haiku` passed 7 of 7 with no regression, at $0.18 per PASS against $0.12 for the current `impl-sonnet-low`, so the rules leave row 1 unchanged because it saves nothing.
-- If every move is taken, `impl-opus-high` leaves the assignment table, which changes the escalation table (spec section 4); that table is the owner's to rule on.
-- Whether `judge-sonnet-high` may review above total 3 rests on whole-branch and plan reviews, not on task reviews. It found 10 of 40 defects against 18 for each Opus arm.
+- **Taken:** row 2 to `impl-sonnet-low`, rows 3 and 4 to `impl-sonnet-medium`, row 5 to `impl-sonnet-high`, and `judge-opus` effort high to medium.
+- **Declined:** row 6 stays `impl-opus-high`. Two trials leave a true regression rate up to 100% possible, and no agent rung sits above it to absorb a wrong move.
+- **Unchanged:** row 0 stays `impl-haiku` (no case), row 1 stays `impl-sonnet-low`, and `judge-sonnet-high` stays on totals 0 to 3 (10 of 40 defects against 18 for each Opus arm).
+- **Escalation table:** unchanged. `impl-opus-medium` leaves the assignment table but stays an escalation rung, as `impl-opus-low` already is, and every agent keeps a successor.
+- **No second repetition.** No row is INCONCLUSIVE and none is flagged after the exclusion. The harness defects found in review are deferred until a second repetition is scheduled; none of them changed a repetition 1 result (no timeout or NOT_RUN row, every implementation reply's first status word matches its `Status:` line, no duplicated grade). The repeat gradings covered the two code-review cases only, so grader consistency is unmeasured on plan reviews.
 
-No row is INCONCLUSIVE.
-
-## Proposed second repetition
-
-- Row 3, with the next agent up from `impl-sonnet-high`: the report flags that `impl-sonnet-high` does not pass 2 cases. Those two cases are among the three unwinnable stripped cases above, so this proposal rests on a case defect and is withdrawn unless the owner rules otherwise.
-- `impl-sonnet-xhigh` on row 5 is not proposed: `impl-sonnet-high` had no regression there.
+The taken moves go to the ladder update, register row 2, which gets its own spec.
 
 ## The report
 
@@ -63,24 +55,26 @@ Start commit: `a271bda8f1b419f6e563daa2ea5ede82af95a05f`
 
 - 8 paired trials (0 stripped); zero regressions is consistent with a true regression rate up to 38%
 
-### Row 3: MOVE to impl-sonnet-medium - owner ruling, only 3 stripped cases
+### Row 3: MOVE to impl-sonnet-medium - owner ruling, only 1 stripped cases
 
 | Arm | PASS | Of | Cost per PASS | Regressions |
 |---|---|---|---|---|
-| `impl-sonnet-high` | 9 | 11 | $0.21 | 0 |
-| `impl-sonnet-medium` | 9 | 11 | $0.16 | 0 |
+| `impl-sonnet-high` | 9 | 9 | $0.16 | 0 |
+| `impl-sonnet-medium` | 9 | 9 | $0.13 | 0 |
 
-- 11 paired trials (3 stripped); zero regressions is consistent with a true regression rate up to 27%
-- impl-sonnet-high does not pass 2 cases: second repetition with the next agent up
+- 9 paired trials (1 stripped); zero regressions is consistent with a true regression rate up to 33%
+- excluded s-review-routing-t17: case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
+- excluded s-review-fixes-t8: case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
 
 ### Row 4: MOVE to impl-sonnet-medium
 
 | Arm | PASS | Of | Cost per PASS | Regressions |
 |---|---|---|---|---|
-| `impl-sonnet-high` | 13 | 14 | $0.19 | 0 |
-| `impl-sonnet-medium` | 13 | 14 | $0.14 | 0 |
+| `impl-sonnet-high` | 13 | 13 | $0.17 | 0 |
+| `impl-sonnet-medium` | 13 | 13 | $0.12 | 0 |
 
-- 14 paired trials (6 stripped); zero regressions is consistent with a true regression rate up to 21%
+- 13 paired trials (5 stripped); zero regressions is consistent with a true regression rate up to 23%
+- excluded s-execution-cost-t15: case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
 
 ### Row 5: MOVE to impl-sonnet-high - owner ruling, only 2 stripped cases
 
@@ -111,11 +105,11 @@ Start commit: `a271bda8f1b419f6e563daa2ea5ede82af95a05f`
 
 Grader consistency: 1 disagreements on 30 repeated gradings - usable.
 
-Notional spend: $63.29 over 180 runs.
+Notional spend: $63.29 over 183 runs.
 
 ## Every regression
 
-None: every row has 0 regressions, meaning no case where the current arm passed and a cheaper arm did not. These rows were not PASS, and in each case the current arm failed too. The six stripped ones are explained by the case defect above:
+None: every row has 0 regressions, meaning no case where the current arm passed and a cheaper arm did not. These rows were not PASS, and in each case the current arm failed too. The six stripped ones are explained by the case defect above, and their cases are now excluded:
 
 - `w-darkmem-sync-client-t5`, `impl-opus-medium`, FAIL: status=DONE failed=plugins/dr-superpowers/tests/darkmem-sync/pull.test.mjs
 - `w-darkmem-sync-client-t5`, `impl-opus-low`, FAIL: status=DONE failed=plugins/dr-superpowers/tests/darkmem-sync/pull.test.mjs
