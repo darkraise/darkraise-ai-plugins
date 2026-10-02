@@ -156,6 +156,33 @@ check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
 run extra
 check "usage: exit 2" "$status" "2"
 
+# --- the final-phase limit: 85% of the compaction window ---
+asst 500000 > "$T"
+record s-1 "$T"
+run --final
+check "final: past the task budget, below the final limit: exit 0" "$status" "0"
+check "final: line" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
+asst 560000 > "$T"
+run --final
+check "final: over: exit 5" "$status" "5"
+check "final: over: line" "$out" "budget (final): 560k of 553k (101%) — handoff — source: record"
+asst 500000 > "$T"
+DR_SUPERPOWERS_BUDGET=300000 run --final
+check "final: the task override does not move it" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
+settings 800000
+DR_SUPERPOWERS_BUDGET=465000 run
+check "800k window, pinned task budget: tasks still hand off at 465k" "$out" "budget: 500k of 465k (107%) — handoff — source: record"
+DR_SUPERPOWERS_BUDGET=465000 run --final
+check "800k window, pinned task budget: the final phase continues" "$out" "budget (final): 500k of 680k (73%) — ok — source: record"
+settings 650000
+asst 30000 false claude-haiku-4-5-20251001 > "$T"
+run --final
+check "final: haiku's 200k window" "$out" "budget (final): 30k of 170k (17%) — ok — source: record"
+DR_SUPERPOWERS_JQ=no-such-jq run --final
+check "final: no jq: line" "$out" "budget (final): unknown of 553k — unknown — no jq"
+run --final extra
+check "final: arguments: exit 2" "$status" "2"
+
 # --- Codex rollout measurement ---
 # The context size is the last token_count event's last_token_usage.input_tokens.
 # A compaction is already reflected in it, so no boundary arithmetic applies,

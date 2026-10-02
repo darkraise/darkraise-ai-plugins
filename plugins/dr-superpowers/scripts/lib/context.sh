@@ -8,8 +8,11 @@
 
 # Auto-compaction fires at about 93% of the effective window; the budget sits
 # one worst-case task's growth below that, so a task in flight always lands.
+# The final phase (final review, its one fix wave, finishing) grows far less
+# than a task's fix loop, so it gets its own, higher limit.
 CTX_COMPACT_PCT=93
 CTX_TASK_MARGIN=140000
+CTX_FINAL_PCT=85
 
 ctx_jq() { "${DR_SUPERPOWERS_JQ:-jq}" "$@"; }
 ctx_have_jq() { command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; }
@@ -201,14 +204,25 @@ ctx_auto_compact_window() {
     | head -n 1 | grep -oE '[0-9]+$' || true
 }
 
-# ctx_budget MODEL — the handoff budget for a session on MODEL (may be empty).
-ctx_budget() {
-  local window acw point
+# ctx_window MODEL — the window compaction is measured against: the model's
+# window, or autoCompactWindow when that is smaller.
+ctx_window() {
+  local window acw
   window=$(ctx_model_window "$1")
   acw=$(ctx_auto_compact_window)
-  point=$window
-  if [ -n "$acw" ] && [ "$acw" -gt 0 ] && [ "$acw" -lt "$window" ]; then point=$acw; fi
-  echo $(( point * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
+  if [ -n "$acw" ] && [ "$acw" -gt 0 ] && [ "$acw" -lt "$window" ]; then window=$acw; fi
+  echo "$window"
+}
+
+# ctx_budget MODEL — the handoff budget for a session on MODEL (may be empty).
+ctx_budget() {
+  echo $(( $(ctx_window "$1") * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
+}
+
+# ctx_final_budget MODEL — the final phase's limit. DR_SUPERPOWERS_BUDGET pins
+# the task budget only, so it never moves this one.
+ctx_final_budget() {
+  echo $(( $(ctx_window "$1") * CTX_FINAL_PCT / 100 ))
 }
 
 # The primary checkout's root: a worktree's .superpowers lives with the
@@ -240,9 +254,12 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
-# Print the budget line; return 0 ok, 5 handoff, 3 unknown.
+# ctx_line [final] — print the budget line; return 0 ok, 5 handoff, 3 unknown.
+# With final, measure against the final-phase limit instead of the task budget.
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
+  local label=budget
+  [ "${1:-}" = final ] && label="budget (final)"
   if ctx_have_jq; then
     if ctx_find_transcript; then claude=$CTX_TRANSCRIPT; fi
     if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
@@ -253,7 +270,7 @@ ctx_line() {
   if [ -n "$rollout" ] && { [ -z "$claude" ] || [ "$rollout" -nt "$claude" ]; }; then
     CTX_TRANSCRIPT=$rollout CTX_SOURCE=rollout
     if ! tokens=$(ctx_measure_rollout "$rollout"); then
-      echo "budget: unknown — unknown — no usage entry in $rollout"
+      echo "$label: unknown — unknown — no usage entry in $rollout"
       return 3
     fi
     ctx_log_observation "$tokens"
@@ -261,7 +278,7 @@ ctx_line() {
     # No denominator: no Codex budget has been set yet, and the verdict stays
     # unknown so reference/session-budget.md's count rule keeps the session.
     # DR_SUPERPOWERS_BUDGET stays a Claude override for the same reason.
-    echo "budget: ${tk}k measured — unknown — source: rollout"
+    echo "$label: ${tk}k measured — unknown — source: rollout"
     return 3
   fi
   if [ -n "$claude" ]; then
@@ -269,24 +286,28 @@ ctx_line() {
     CTX_TRANSCRIPT=$claude
     model=$(ctx_model "$CTX_TRANSCRIPT")
   fi
-  case ${DR_SUPERPOWERS_BUDGET:-} in
-    ''|*[!0-9]*) ;;
-    *) [ "$DR_SUPERPOWERS_BUDGET" -gt 0 ] && budget=$DR_SUPERPOWERS_BUDGET ;;
-  esac
-  [ -n "$budget" ] || budget=$(ctx_budget "$model")
+  if [ "${1:-}" = final ]; then
+    budget=$(ctx_final_budget "$model")
+  else
+    case ${DR_SUPERPOWERS_BUDGET:-} in
+      ''|*[!0-9]*) ;;
+      *) [ "$DR_SUPERPOWERS_BUDGET" -gt 0 ] && budget=$DR_SUPERPOWERS_BUDGET ;;
+    esac
+    [ -n "$budget" ] || budget=$(ctx_budget "$model")
+  fi
   bk=$(( (budget + 500) / 1000 ))
-  if ! ctx_have_jq; then echo "budget: unknown of ${bk}k — unknown — no jq"; return 3; fi
-  if [ "$found" -eq 0 ]; then echo "budget: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
+  if ! ctx_have_jq; then echo "$label: unknown of ${bk}k — unknown — no jq"; return 3; fi
+  if [ "$found" -eq 0 ]; then echo "$label: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
   if ! tokens=$(ctx_measure "$CTX_TRANSCRIPT"); then
-    echo "budget: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
+    echo "$label: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
   fi
   tk=$(( (tokens + 500) / 1000 ))
   pct=$(( tokens * 100 / budget ))
   if [ "$tokens" -ge "$budget" ]; then
-    echo "budget: ${tk}k of ${bk}k (${pct}%) — handoff — source: $CTX_SOURCE"
+    echo "$label: ${tk}k of ${bk}k (${pct}%) — handoff — source: $CTX_SOURCE"
     return 5
   fi
-  echo "budget: ${tk}k of ${bk}k (${pct}%) — ok — source: $CTX_SOURCE"
+  echo "$label: ${tk}k of ${bk}k (${pct}%) — ok — source: $CTX_SOURCE"
 }
 
 # Pair consecutive task-brief rows within one session: task-brief runs once per

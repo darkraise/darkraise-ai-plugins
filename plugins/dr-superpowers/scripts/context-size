@@ -2,8 +2,10 @@
 # Print the running session's context size against the handoff budget as one
 # budget line (see reference/session-budget.md).
 #
-# Usage: context-size [--observations]
+# Usage: context-size [--final | --observations]
 # Exit: 0 ok; 5 handoff due; 3 unknown; 2 usage.
+#   --final         measure against the final-phase limit, the check after the
+#                   last task's complete line and before finishing.
 #   --observations  print the per-task growth recorded on Codex hosts
 #                   (reference/session-budget.md) and exit 0.
 set -uo pipefail
@@ -13,13 +15,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 if [ "${1:-}" = --observations ]; then
   shift
-  [ $# -eq 0 ] || { echo "usage: context-size [--observations]" >&2; exit 2; }
+  [ $# -eq 0 ] || { echo "usage: context-size [--final | --observations]" >&2; exit 2; }
   ctx_observations
   exit 0
 fi
-[ $# -eq 0 ] || { echo "usage: context-size [--observations]" >&2; exit 2; }
+mode=
+if [ "${1:-}" = --final ]; then mode=final; shift; fi
+[ $# -eq 0 ] || { echo "usage: context-size [--final | --observations]" >&2; exit 2; }
 
-ctx_line
+ctx_line $mode
 status=$?
 if [ "${CTX_SOURCE:-}" = guessed ]; then
   echo "context-size: no usable session record; measured the newest transcript for this directory — a guess" >&2
