@@ -1,6 +1,6 @@
 ---
 name: impl-sonnet-low
-description: "Task implementer running Sonnet 5.5 at low effort. Dispatched by dr-superpowers for score 1: two or three files with near-complete code supplied."
+description: "Task implementer running Sonnet 5.5 at low effort. Dispatched by dr-superpowers for scores 1 and 2: small, well-specified changes with near-complete code supplied."
 model: sonnet
 effort: low
 skills:

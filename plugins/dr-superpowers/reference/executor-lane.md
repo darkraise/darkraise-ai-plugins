@@ -70,7 +70,7 @@ and gains nothing.
 executor is an override on a second line, never a replacement on the first:
 
 ```markdown
-**Implementer:** dr-superpowers:impl-sonnet-medium
+**Implementer:** dr-superpowers:impl-sonnet-low
 **Executor:** <id> <model> / <effort>
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 ```
@@ -130,7 +130,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    entry's `reason` field:
 
    ```
-   Task <N>: implementer impl-sonnet-medium (assigned; base <sha7>; executor <id> unavailable - <reason>)
+   Task <N>: implementer impl-sonnet-low (assigned; base <sha7>; executor <id> unavailable - <reason>)
    ```
 
    Never fall back silently. A silent fallback makes the whole lane invisible.
@@ -164,7 +164,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    thread id from its `thread=` field:
 
    ```
-   Task <N>: implementer impl-sonnet-medium (assigned; base <sha7>; executor <id> <model>/<effort>, thread 01a0...)
+   Task <N>: implementer impl-sonnet-low (assigned; base <sha7>; executor <id> <model>/<effort>, thread 01a0...)
    ```
 
    The thread id must reach the ledger. It also lands in the report file. If it
@@ -348,7 +348,7 @@ Record any of this inside the fix-round line the loop is already writing, never
 as a line of its own:
 
 ```
-Task <N>: fix round 2/5 (0 addressed, 2 open - codex quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-medium)
+Task <N>: fix round 2/5 (0 addressed, 2 open - codex quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-low)
 ```
 
 A handback from a failed resume is still a handback: say it aloud, and let the

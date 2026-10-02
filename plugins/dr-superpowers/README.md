@@ -53,7 +53,8 @@ read time per [legacy-names.md](reference/legacy-names.md).
 **Twenty agents in three classes.** Seven execution implementers - Sonnet 5.5
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything the assignment table and the escalation ladder can reach; no score
-assigns `impl-opus-low`, which is reached only by escalation. Nine reserve
+assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
+escalation. Nine reserve
 implementers - the `xhigh` and `max` efforts, and every Fable 5.1 tier - are
 reachable only by a human override, or by a task that has already been split
 once and still exhausted `impl-opus-high`. Four read-only role agents - the
@@ -356,7 +357,7 @@ your explicit instruction overrides it. Each task then reads:
 - Consumes: `formatRow(row: Row): string` from Task 2
 - Produces: `runExport(cfg: Config): Promise<Report>`
 
-**Implementer:** dr-superpowers:impl-opus-medium
+**Implementer:** dr-superpowers:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 2 - risk 2 = 5
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```

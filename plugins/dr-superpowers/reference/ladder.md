@@ -56,14 +56,17 @@ skipped, not that a higher tier is needed.
 applies only when a human overrides Rule S and keeps an undecided-approach task
 as written. It raises; it never lowers.
 
-### Plans written before 1.23.0
+### Plans written before 1.24.0
 
-Until 1.23.0 the assignment table sent total 4 to `impl-opus-low`. A plan
-written then names that agent for a total-4 task, and `plan-lint` reports the
-line as a table mismatch. Change it to `impl-sonnet-high`, or keep Opus with a
-human `**Override:**` line below the Evaluation line, which turns the finding
-into a warning. An inline Execution line on `opus low` must also rise to
-`--effort high`, which the effort check requires for a total-4 task.
+The assignment table has changed twice. Until 1.23.0 it sent total 4 to
+`impl-opus-low`. Until 1.24.0 it sent total 2 to `impl-sonnet-medium`, totals 3
+and 4 to `impl-sonnet-high`, and total 5 to `impl-opus-medium`. A plan written
+before either change names the old agent, and `plan-lint` reports the line as a
+table mismatch. Change it to the agent the table below names, or keep the old
+agent with a human `**Override:**` line below the Evaluation line, which turns
+the finding into a warning. An inline Execution line must still meet the effort
+check, which reads the current table: an `opus low` line with a self-implemented
+total 4 task must rise to `--effort medium`.
 
 ## Assignment table
 
@@ -184,11 +187,16 @@ A plan written to dr-superpowers:writing-plans bans placeholders and requires th
 real code in every code step, so a compliant task scores 0 or 1 on spec
 completeness almost by construction. Combined with Rule S, initial assignments
 cluster in the 0 to 3 band. Scores of 4 to 6 are reached almost entirely
-through the Risk axis, which is the one axis splitting cannot reduce. Haiku and
-Sonnet take totals 0 to 4; Opus is assigned from 5 up, and otherwise reached by
-escalation. Total 4 went to Opus until Sonnet 5.5, which matches Opus 5.5 on
-well-scoped agentic coding (Terminal-Bench, CursorBench) at half the price and
-trails it on FrontierCode's open-ended work.
+through the Risk axis, which is the one axis splitting cannot reduce. Haiku
+takes total 0 and Sonnet totals 1 to 5; Opus is assigned only at 6, and
+otherwise reached by escalation. Total 4 went to Opus until Sonnet 5.5, which
+matches Opus 5.5 on well-scoped agentic coding (Terminal-Bench, CursorBench) at
+half the price and trails it on FrontierCode's open-ended work. Totals 2 to 5
+moved one rung cheaper in 1.24.0 on a replay of this plugin's own plan history
+(the 2026-10-02 tier evaluation, `evals/tiers/` in the plugin's repository):
+the cheaper agent passed every case the old one passed, at a lower cost per
+pass. That was one repetition, mostly of tasks whose plan supplied the code, so
+the escalation table stays the backstop.
 
 That is the intended outcome. Do not inflate an axis to land on a tier that feels
 right; if a task feels harder than its score, the plan text is probably hiding

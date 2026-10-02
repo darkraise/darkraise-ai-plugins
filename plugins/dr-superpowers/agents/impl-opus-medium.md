@@ -1,6 +1,6 @@
 ---
 name: impl-opus-medium
-description: "Task implementer running Opus 5.5 at medium effort. Dispatched by dr-superpowers for score 5: coupled work carrying a shared-path or data-shape risk."
+description: "Task implementer running Opus 5.5 at medium effort. Escalation rung for impl-sonnet-medium and impl-opus-low in dr-superpowers: no score assigns it."
 model: opus
 effort: medium
 skills:

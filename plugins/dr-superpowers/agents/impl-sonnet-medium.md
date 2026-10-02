@@ -1,6 +1,6 @@
 ---
 name: impl-sonnet-medium
-description: "Task implementer running Sonnet 5.5 at medium effort. Dispatched by dr-superpowers for score 2: small well-specified changes with light coupling."
+description: "Task implementer running Sonnet 5.5 at medium effort. Dispatched by dr-superpowers for scores 3 and 4: ordinary multi-file work with exact signatures supplied, and work whose reducible axes are exhausted and whose risk is real."
 model: sonnet
 effort: medium
 skills:
