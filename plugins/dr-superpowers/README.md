@@ -54,14 +54,14 @@ read time per [legacy-names.md](reference/legacy-names.md).
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything the assignment table and the escalation ladder can reach; no score
 assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
-escalation. Nine reserve
-implementers - the `xhigh` and `max` efforts, and every Fable 5.1 tier - are
-reachable only by a human override, or by a task that has already been split
-once and still exhausted `impl-opus-high`. Four read-only role agents - the
-judges `judge-opus`, `judge-sonnet-high` and `judge-fable` (a human override
-only), and `scout-sonnet` - whose `tools:` frontmatter omits `Edit`, `Write`,
-and `Agent`, so a reviewer that cannot modify the tree or spawn subagents is a
-fact about the registry rather than a request in a prompt.
+escalation. Nine reserve implementers - the `xhigh` and `max` efforts, and
+every Fable 5.1 tier - are reachable only by a human override, or by a task
+that has already been split once and still exhausted `impl-opus-high`. Four
+read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
+`judge-fable` (a human override only), and `scout-sonnet` - whose `tools:`
+frontmatter omits `Edit`, `Write`, and `Agent`, so a reviewer that cannot
+modify the tree or spawn subagents is a fact about the registry rather than a
+request in a prompt.
 
 The reserve exists so that a human ruling, and a task that genuinely cannot be
 split any further, both have somewhere to go. It is not a way around the gate:

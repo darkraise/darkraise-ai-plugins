@@ -192,11 +192,11 @@ takes total 0 and Sonnet totals 1 to 5; Opus is assigned only at 6, and
 otherwise reached by escalation. Total 4 went to Opus until Sonnet 5.5, which
 matches Opus 5.5 on well-scoped agentic coding (Terminal-Bench, CursorBench) at
 half the price and trails it on FrontierCode's open-ended work. Totals 2 to 5
-moved one rung cheaper in 1.24.0 on a replay of this plugin's own plan history
-(the 2026-10-02 tier evaluation, `evals/tiers/` in the plugin's repository):
-the cheaper agent passed every case the old one passed, at a lower cost per
-pass. That was one repetition, mostly of tasks whose plan supplied the code, so
-the escalation table stays the backstop.
+each moved to a cheaper agent in 1.24.0 on a replay of this plugin's own plan
+history (the 2026-10-02 tier evaluation, `evals/tiers/` in the plugin's
+repository): the cheaper agent passed every case the old one passed, at a lower
+cost per pass. That was one repetition, mostly of tasks whose plan supplied the
+code, so the escalation table stays the backstop.
 
 That is the intended outcome. Do not inflate an axis to land on a tier that feels
 right; if a task feels harder than its score, the plan text is probably hiding

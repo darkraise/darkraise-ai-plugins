@@ -241,7 +241,7 @@ user's inline or delegation preference on either host.
    `**Interfaces:**` block when there is no Items line, in
    this order:
    - `**Implementer:**` — always; the fully qualified agent, for example
-     `dr-superpowers:impl-sonnet-medium`
+     `dr-superpowers:impl-sonnet-low`
    - `**Executor:**` — only when the lane gate passed, for example
      `codex gpt-6-sol / low`
    - `**Evaluation:**` — always, for example
