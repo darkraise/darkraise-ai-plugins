@@ -194,7 +194,7 @@ capped by the plan's highest task total.
 The final whole-branch review runs on `judge-opus`, its one fix subagent on
 the highest tier among the tasks the findings touch, and gains a Codex round. When both reviewers return findings,
 a fresh `judge-opus` dedupes and verifies them. No route names `judge-fable`:
-on 2026-09-23 Opus 5.5 matched or beat Fable 5.1 on two replayed reviews with
+on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
 known defects, at about 40% of the cost, so Fable is dispatched on a judge seat
 only when you ask for it. With one list there is no third seat:
 the fixer triages each finding against the code and the scoped re-review rules
