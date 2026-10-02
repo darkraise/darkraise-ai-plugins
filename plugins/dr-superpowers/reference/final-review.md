@@ -7,8 +7,11 @@ of the work being done.
 ## Who runs it, and when
 
 - **Either execution mode:** the session that completed the last task, unless
-  its last budget line said `handoff`; then dr-superpowers:resume-execution
-  brought the next session here.
+  `scripts/context-size --final` said `handoff` after it; then
+  dr-superpowers:resume-execution brought the next session here. The final
+  phase - this review, its one fix wave and finishing - is measured against
+  that final-phase limit, not the task budget, so a `review-package` budget
+  line saying `handoff` here does not stop it.
 - **Either mode:** point the reviewer at the ledger's deferred-minor and parked
   lines, the complete lines' `discovered:` fields, every borderline (9-13) score,
   and every `(unseated)` ruling, so it can triage what must be fixed before

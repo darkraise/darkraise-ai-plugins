@@ -13,8 +13,9 @@ never earlier.
 | Item | Value | Source |
 |------|-------|--------|
 | Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-19 |
+| Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DR_SUPERPOWERS_BUDGET` does not move it | Owner ruling, 2026-10-02 |
 | Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
-| `autoCompactWindow` | 650,000, in `~/.claude/settings.json` | Set 2026-09-11 |
+| `autoCompactWindow` | 800,000 with `DR_SUPERPOWERS_BUDGET` pinned at 465,000, in `~/.claude/settings.json` (650,000 before) | Set 2026-09-11; raised 2026-10-02 |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
 | Hook output cap | 10,000 characters; longer output becomes a file reference | Claude Code hooks reference |
 | Skill bodies after compaction | First 5,000 tokens per skill, 25,000 in total, oldest dropped | Claude Code context-window docs |
@@ -74,10 +75,12 @@ under `ok` is not a reason to stop.
 
 ## Checkpoints
 
-- **subagent-driven-development:** every `task-brief` and `review-package`, and
-  `context-size` after the last `Task N: complete` line.
-- **executing-plans:** the budget line on every `task-brief`, and
-  `context-size` after the last `Task N: complete` line.
+- **subagent-driven-development:** every `task-brief` and `review-package`
+  until the last task completes; then `context-size --final` after the last
+  `Task N: complete` line and again before finishing.
+- **executing-plans:** the budget line on every `task-brief`; then
+  `context-size --final` after the last `Task N: complete` line and again
+  before finishing.
 - **Acting on `handoff`:** finish the task in flight through its
   `Task N: complete` line, then hand off. Start no new task.
 - **brainstorming:** `context-size` once, after the spec is committed.
@@ -89,12 +92,30 @@ under `ok` is not a reason to stop.
   Both launch the execution model the Execution line names. writing-plans runs
   dr-superpowers:handoff once the plan is reviewed.
 - **Soft:** the last task is complete, in either mode; the final review is
-  clean. The final review and finishing follow in the same session unless the
-  budget line says `handoff`.
+  clean. The final review and finishing follow in the same session unless
+  `context-size --final` says `handoff`. The final phase - the final review,
+  its one fix wave, the scoped re-review and finishing - grows far less than a
+  task's fix loop, so it is measured against the final-phase limit, and a task
+  budget line saying `handoff` inside it does not stop it.
 - **Budget:** a `handoff` verdict at any checkpoint.
 - **Codex:** the count rule above.
 
 Every stop runs dr-superpowers:handoff.
+
+## A larger compaction window with the same task budget
+
+To give the final phase more room without lengthening task sessions, raise
+`autoCompactWindow` and pin the task budget, in the active `settings.json`:
+
+```json
+{
+  "autoCompactWindow": 800000,
+  "env": { "DR_SUPERPOWERS_BUDGET": "465000" }
+}
+```
+
+Tasks then still hand off at 465k, the final phase continues below 680k, and
+compaction fires at about 744k.
 
 ## Idle
 

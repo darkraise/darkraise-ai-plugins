@@ -269,13 +269,16 @@ budget before every task at no extra request:
   then invoke dr-superpowers:handoff. Never hand off in the middle of a task,
   delegated ones included. The budget holds one task's worst growth.
 
-Run `scripts/context-size` after the last task's
-`Task <N>: complete` line and act on its exit 5 the same way; after every
-earlier task, the next brief's budget line is that check.
+Run `scripts/context-size --final` after the last task's
+`Task <N>: complete` line, and again before finishing, and act on its exit 5
+the same way; after every earlier task, the next brief's budget line is the
+check.
 
-The last task completing is a soft stop: the final review runs in this session
-unless the budget line says `handoff`. A switch to subagent mode is always a
-handoff.
+The last task completing is a soft stop: the final review, its fix wave and
+finishing run in this session unless `context-size --final` says `handoff`. The
+final phase is measured against its own limit, 85% of the compaction window,
+so a `review-package` budget line saying `handoff` does not stop it. A switch
+to subagent mode is always a handoff.
 
 ## The Task Loop
 
@@ -309,7 +312,7 @@ For each task, in order:
 7. **Close the task.** Append the complete line with its checkpoint, in the
    same message as your other bookkeeping, and mark the todo complete.
 8. **Check the budget after the last task.** Run
-   `scripts/context-size`. After any other task, go to the
+   `scripts/context-size --final`. After any other task, go to the
    next task's step 1: its brief prints the same budget line.
 
 **When a verification will not pass.** Fix, re-run, then append
@@ -433,9 +436,10 @@ Every task is complete, so the branch gets one broad review: follow
 [final-review.md](../../reference/final-review.md), the procedure both
 execution skills share; its reviewer is the seat
 `scripts/review-route PLAN_FILE --final` prints, and its fix wave is your own
-pass. In this mode it runs in this session, unless the last
-budget line said `handoff` - then invoke dr-superpowers:handoff, and
-dr-superpowers:resume-execution brings the next session here. List any
+pass. In this mode it runs in this session, unless
+`scripts/context-size --final` said `handoff` - then invoke
+dr-superpowers:handoff, and dr-superpowers:resume-execution brings the next
+session here. List any
 `(unseated)` rulings for the reviewer alongside the ledger's parked and
 deferred-minor lines.
 

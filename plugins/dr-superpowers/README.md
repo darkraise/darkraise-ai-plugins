@@ -303,8 +303,10 @@ needs. dr-superpowers hands off instead.
   resume guide from `scripts/next-step`.
 - **Stops.** A saved plan and a switch from inline to subagent mode are hard
   stops; a finished task list is a soft stop in both modes, so the final
-  whole-branch review runs in the same session unless the budget says
-  otherwise. A `handoff` verdict waits for the task in flight to complete. The
+  whole-branch review and finishing run in the same session unless
+  `scripts/context-size --final` says otherwise: the final phase has its own
+  limit, 85% of the compaction window. A `handoff` verdict waits for the task
+  in flight to complete. The
   budget is the compaction point minus one task's worst growth, derived from
   `autoCompactWindow` and the model's window; see
   [session-budget.md](reference/session-budget.md) for the numbers and the

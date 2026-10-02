@@ -403,8 +403,12 @@ request:
   `Task N: complete` line — then invoke dr-superpowers:handoff. Start no new
   task. The budget holds one task's worst growth, so the task lands before
   compaction.
-- After the last task's `Task N: complete` line, run `scripts/context-size`.
-  On `ok` or `unknown`, continue to Final Review in this session; on exit 5,
+- After the last task's `Task N: complete` line, run
+  `scripts/context-size --final`, which measures against the final-phase limit
+  (85% of the compaction window) instead of the task budget. On `ok` or
+  `unknown`, continue to Final Review in this session and on to finishing: a
+  `review-package` budget line saying `handoff` does not stop the final phase.
+  On exit 5,
   invoke dr-superpowers:handoff, and dr-superpowers:resume-execution brings
   the next session to Final Review.
 - On Codex the budget line carries a measured number but no verdict: hand off
@@ -445,9 +449,9 @@ the complete line. Its contract names what the loop needs from you.
 
 ## Final Review
 
-This runs in the session that completed the last task, unless the budget
-line said `handoff` there; then dr-superpowers:resume-execution brought the
-next session here.
+This runs in the session that completed the last task, unless
+`scripts/context-size --final` said `handoff` there; then
+dr-superpowers:resume-execution brought the next session here.
 
 Follow [final-review.md](../../reference/final-review.md), the procedure both
 execution skills share. Point the reviewer at the ledger's deferred-minor and
@@ -475,8 +479,9 @@ append `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to
 the ledger in the same message as printing the rulings. Do not delete the
 workspace: dr-superpowers:finishing-a-development-branch removes it with the
 worktree once the work is merged or discarded, and until then it is what a
-later session resumes from. Then continue to finishing — unless the last
-budget line said `handoff`, in which case invoke dr-superpowers:handoff.
+later session resumes from. Then run `scripts/context-size --final` and
+continue to finishing — unless it says `handoff`, in which case invoke
+dr-superpowers:handoff.
 
 Use dr-superpowers:finishing-a-development-branch.
 
@@ -543,12 +548,12 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 
 ...
 
-[After the last task's complete line: context-size says ok — continue to Final Review]
+[After the last task's complete line: context-size --final says ok — continue to Final Review]
 [final-review.md: package the branch; review-route --final prints judge-opus for this plain plan; Codex round in the background]
 [a fresh judge-opus dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
-[Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); print Rulings I made; budget ok — continue]
+[Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); print Rulings I made; context-size --final ok — continue]
 
 Done! Using dr-superpowers:finishing-a-development-branch.
 ```

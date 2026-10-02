@@ -21,8 +21,9 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   budget leaves room for one task to finish.
 - A hard stop: the plan is saved, or a plan has just switched from inline to
   subagent mode. The last task completing is a soft stop in both execution
-  modes: the final review runs in the same session unless the budget line says
-  `handoff`.
+  modes: the final review and finishing run in the same session unless
+  `scripts/context-size --final` says `handoff`. A task budget line printed
+  during that final phase does not stop it.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.
