@@ -101,7 +101,7 @@ echo hi
 **Files:**
 - Modify: `a.txt`
 
-**Implementer:** dr-superpowers:impl-sonnet-high
+**Implementer:** dr-superpowers:impl-sonnet-medium
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 
@@ -207,18 +207,18 @@ has "Execution grammar" "$out" "ERROR header: Execution line does not match"
 variant v9.md 's/^\*\*Execution:\*\* .*/**Execution:** inline -- claude --model sonnet --effort medium -- all small/'
 lint v9.md
 lacks "inline at total 4 needs no opus" "$out" "needs --model opus"
-has "inline at total 4 needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
+lacks "inline at total 4 runs at effort medium" "$out" "inline execution needs --effort"
 lacks "inline at total 4 passes R5" "$out" "inline execution needs every task"
 lacks "double-hyphen separators and bare command parse" "$out" "Execution line does not match"
 variant v9b.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — Task 2 scores 4/'
 lint v9b.md
 lacks "inline at total 4 on opus is clean" "$out" "ERROR header: inline"
-variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-high$/impl-opus-medium/'
+variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c.md
 has "inline that delegates needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 lacks "a heavy minority no longer breaks inline" "$out" "inline execution needs every task"
 has "inline names the delegated task" "$out" "NOTE header: delegated: Task 2 (heavy)"
-variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-high$/impl-opus-medium/'
+variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c2.md
 check "a heavy minority inline at effort high: exit 0" "$status" "0"
 lacks "the model follows the tasks the session implements" "$out" "needs --model opus"
@@ -227,14 +227,14 @@ variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --mod
 lint v9d.md
 has "risk 3 is delegated" "$out" "NOTE header: delegated: Task 2 (heavy)"
 has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
-variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dr-superpowers:impl-sonnet-high$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-opus-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dr-superpowers:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
 has "a split task is heavy when one part is" "$out" "NOTE header: delegated: Task 2 (heavy)"
 check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
-variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-opus-medium/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-high$/impl-opus-medium/'
+variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9h.md
 has "a heavy majority on inline warns" "$out" "WARN header: Execution line is inline but 2 of 2 tasks are heavy"
-variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-opus-medium/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-high$/impl-opus-medium/'
+variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9i.md
 lacks "a heavy majority on subagent does not warn" "$out" "Execution line is subagent but"
 codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
@@ -262,10 +262,10 @@ ev() { # ev <total> — "<agent> <evaluation>" for a lint-clean task at that tot
   case $1 in
     0) echo 'impl-haiku files 0 - spec 0 - coupling 0 - risk 0 = 0' ;;
     1) echo 'impl-sonnet-low files 0 - spec 0 - coupling 1 - risk 0 = 1' ;;
-    2) echo 'impl-sonnet-medium files 0 - spec 1 - coupling 1 - risk 0 = 2' ;;
-    3) echo 'impl-sonnet-high files 1 - spec 1 - coupling 1 - risk 0 = 3' ;;
-    4) echo 'impl-sonnet-high files 0 - spec 1 - coupling 1 - risk 2 = 4' ;;
-    5) echo 'impl-opus-medium files 1 - spec 1 - coupling 1 - risk 2 = 5' ;;
+    2) echo 'impl-sonnet-low files 0 - spec 1 - coupling 1 - risk 0 = 2' ;;
+    3) echo 'impl-sonnet-medium files 1 - spec 1 - coupling 1 - risk 0 = 3' ;;
+    4) echo 'impl-sonnet-medium files 0 - spec 1 - coupling 1 - risk 2 = 4' ;;
+    5) echo 'impl-sonnet-high files 1 - spec 1 - coupling 1 - risk 2 = 5' ;;
   esac
 }
 tplan() { # tplan <file> <mode> <model> <effort> <total ...> — one clean task per total
@@ -303,16 +303,22 @@ has "only the heavy task is delegated" "$out" "NOTE header: delegated: Task 1 (h
 lacks "total 4 is no delegation reason" "$out" "(total 4)"
 tplan r6.md inline sonnet medium 1 4 1 1 1 1
 lint r6.md
-has "a self-implemented total 4 needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
+check "a self-implemented total 4 runs at effort medium: exit 0" "$status" "0"
+tplan r6b.md inline sonnet low 1 4 1 1 1 1
+lint r6b.md
+has "a self-implemented total 4 needs effort medium" "$out" "ERROR header: inline execution needs --effort medium or above (effort low)"
 tplan r7.md inline sonnet max 1 4 1 1 1 1
 lint r7.md
 check "an effort above the required one: exit 0" "$status" "0"
 tplan r8.md inline sonnet medium 3 1 1 1 1 1
 lint r8.md
-has "a self-implemented total 3 needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
+check "a self-implemented total 3 runs at effort medium: exit 0" "$status" "0"
+tplan r8b.md inline sonnet low 3 1 1 1 1 1
+lint r8b.md
+has "a self-implemented total 3 needs effort medium" "$out" "ERROR header: inline execution needs --effort medium or above (effort low)"
 tplan r9.md inline sonnet low 2 1 1 1 1 1
 lint r9.md
-has "a self-implemented total 2 needs effort medium" "$out" "ERROR header: inline execution needs --effort medium or above (effort low)"
+check "a self-implemented total 2 runs at effort low: exit 0" "$status" "0"
 tplan r10.md inline sonnet low 0 0 0 0 0 0
 lint r10.md
 check "impl-haiku counts as low: exit 0" "$status" "0"
@@ -348,7 +354,7 @@ lacks "leading punctuation in a title survives the index check" "$out" "Task ind
 variant v9f.md '/^## Contracts$/{N;N;s/.*/```text\n## Contracts\n```/}'
 lint v9f.md
 has "a fenced section heading does not count" "$out" "ERROR header: missing '## Contracts' section"
-variant v9g.md 's/^\*\*Implementer:\*\* dr-superpowers:impl-sonnet-high$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-high/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9g.md 's/^\*\*Implementer:\*\* dr-superpowers:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9g.md
 has "split parts: part B is missing its Evaluation" "$out" "ERROR Task 2 part B: missing **Evaluation:** line"
 lacks "split parts: part A is clean" "$out" "Task 2 part A"
@@ -376,17 +382,24 @@ has "sum mismatch" "$out" "ERROR Task 2: scores sum to 4, not 5"
 variant t2.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 1 - coupling 1 - risk 0 = 4/'
 lint t2.md
 has "Rule S" "$out" "ERROR Task 2: Rule S: files+spec+coupling must be below 4 and spec below 3"
-variant t3.md 's/impl-sonnet-high$/impl-opus-medium/'
+variant t3.md 's/impl-sonnet-medium$/impl-sonnet-high/'
 lint t3.md
-has "wrong agent" "$out" "ERROR Task 2: Implementer impl-opus-medium does not match the assignment table's impl-sonnet-high for total 4"
-variant t4.md 's/impl-sonnet-high$/impl-fable-high/'
+has "wrong agent" "$out" "ERROR Task 2: Implementer impl-sonnet-high does not match the assignment table's impl-sonnet-medium for total 4"
+variant t3b.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-opus-medium/'
+lint t3b.md
+has "a 1.23.0 total-5 agent is an error" "$out" "ERROR Task 2: Implementer impl-opus-medium does not match the assignment table's impl-sonnet-high for total 5"
+variant t3c.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-opus-medium/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** owner kept Opus here/'
+lint t3c.md
+check "an Override keeps a 1.23.0 agent: exit 0" "$status" "0"
+has "an Override keeps a 1.23.0 agent as a warning" "$out" "WARN Task 2: Implementer impl-opus-medium does not match the assignment table's impl-sonnet-high for total 5"
+variant t4.md 's/impl-sonnet-medium$/impl-fable-high/'
 lint t4.md
 has "reserve name" "$out" "ERROR Task 2: impl-fable-high is a reserve tier; it needs a human **Override:**"
-variant t5.md 's/impl-sonnet-high$/impl-fable-high/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** owner wants Fable here/'
+variant t5.md 's/impl-sonnet-medium$/impl-fable-high/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** owner wants Fable here/'
 lint t5.md
 check "Override downgrades: exit 0" "$status" "0"
 has "Override downgrades to WARN" "$out" "WARN Task 2: impl-fable-high is a reserve tier"
-variant t6.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 3 = 6/; s/impl-sonnet-high$/impl-opus-high/'
+variant t6.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 3 = 6/; s/impl-sonnet-medium$/impl-opus-high/'
 lint t6.md
 lacks "impl-opus-high at total 6 is not a reserve finding" "$out" "reserve tier"
 lacks "impl-opus-high at total 6 matches" "$out" "does not match the assignment"
@@ -444,7 +457,7 @@ has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing 
 
 # --- the lazy lane probe ---
 # p1 makes Task 1 lane-eligible: total 2, risk 0, no Executor, no Override.
-variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/'
+variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
 export PLAN_LINT_ROSTER="$TMP/usable.sh"
 rm -f probe-calls; lint p1.md
 has "usable codex: an eligible task without Executor warns" "$out" "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6-sol / low)"
@@ -469,7 +482,7 @@ rm -f probe-calls; lint p1.md
 lacks "unusable codex: no lane warning" "$out" "lane-eligible"
 check "unusable codex: the probe still ran once" "$(calls)" "1"
 export PLAN_LINT_ROSTER="$TMP/usable.sh"
-variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-6-sol \/ low/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
+variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-6-sol \/ low/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
 rm -f probe-calls; lint p2.md
 lacks "an Executor line clears the candidate" "$out" "lane-eligible"
 lacks "the Executor fixture is otherwise clean" "$out" "ERROR Task 1"
@@ -477,7 +490,7 @@ check "a plan whose only candidate has an Executor never probes" "$(calls)" "0"
 variant p3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-high/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Override:** owner kept the Sonnet-high tier/'
 rm -f probe-calls; lint p3.md
 lacks "an overridden task is not a candidate" "$out" "lane-eligible"
-variant p4.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/'
+variant p4.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/'
 rm -f probe-calls; lint p4.md
 lacks "an inline plan gets no lane warning" "$out" "lane-eligible"
 check "an inline plan never probes" "$(calls)" "0"
@@ -492,7 +505,7 @@ Reason: the plan picked the wrong tier
 Cost if wrong: one re-dispatch
 ### Old
 ````text
-**Implementer:** dr-superpowers:impl-sonnet-high
+**Implementer:** dr-superpowers:impl-sonnet-medium
 ````
 ### New
 ````text
@@ -501,7 +514,7 @@ Cost if wrong: one re-dispatch
 EOF
 lint clean.md --amendments am.md
 has "amendments applied before checks" "$out" "ERROR Task 2: Implementer impl-opus-medium does not match"
-sed 's/impl-sonnet-high$/impl-haiku/' am.md > am-bad.md
+sed 's/impl-sonnet-medium$/impl-haiku/' am.md > am-bad.md
 lint clean.md --amendments am-bad.md
 has "non-applying amendment" "$out" "ERROR header: amendment A1 does not apply"
 
@@ -616,7 +629,7 @@ cat "$HERE/../reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DR_LADDER
 
 # A stub Executor line validates against the stub's own blocks. The fixture
 # ladder supplies them, so the shipped ladder is untouched.
-variant s1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** stub/'
+variant s1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** stub/'
 lint s1.md
 lacks "a stub Executor line is accepted" "$out" "ERROR Task 1"
 
@@ -632,12 +645,12 @@ has "a missing gate block is an error, not an open gate" "$out" \
 DR_LADDER="$TMP/stub-ladder.md"
 
 # An id with no registry entry is rejected, naming the registry.
-variant s2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** nosuch m \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** nosuch/'
+variant s2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** nosuch m \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** nosuch/'
 lint s2.md
 has "an unregistered Executor id is an error" "$out" "ERROR Task 1: Executor names no registered executor: nosuch (run 'executors list')"
 
 # The header must name the line's own id, not merely some executor.
-variant s3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-medium/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
+variant s3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
 lint s3.md
 has "the header must name the line's executor" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name stub"
 
@@ -712,7 +725,7 @@ inline_plan() { # inline_plan <file> <execution line>
 |
 |### Task 1: offloaded four band
 |
-|**Implementer:** dr-superpowers:impl-sonnet-high
+|**Implementer:** dr-superpowers:impl-sonnet-medium
 |**Executor:** codex gpt-6-sol / high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
@@ -774,27 +787,27 @@ HDR
   } > "$1"
 }
 
-lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
+lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
 lint fenced-only.md
 has "a fenced-only score is a missing Evaluation line" "$out" "ERROR Task 1: missing **Evaluation:** line"
 
-lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent.md
 has "a stale parent score is a NOTE" "$out" \
   "NOTE Task 1: an **Evaluation:** line above the first part does not score the task"
 lacks "a stale parent score is not an error" "$out" "ERROR Task 1"
 check "the stale-parent fixture is otherwise clean" "$status" "0"
 
-lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint clean-split.md
 lacks "a clean split earns no NOTE" "$out" "above the first part"
 check "the clean-split fixture lints clean" "$status" "0"
 
-lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
+lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
 lint fenced-part.md
 lacks "a fenced part heading does not create a part" "$out" "Task 1 part A"
 
-lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
+lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dr-superpowers:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
 lint fenced-files.md
 has "a fenced-only Files block is a missing Files block" "$out" "ERROR Task 1: missing **Files:** block"
 

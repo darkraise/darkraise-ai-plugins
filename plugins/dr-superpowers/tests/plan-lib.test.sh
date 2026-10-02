@@ -234,7 +234,7 @@ sed 's/^|//' > "$TMP/exec.md" <<'EOF'
 |
 |### Task 2: offloaded
 |
-|**Implementer:** dr-superpowers:impl-sonnet-medium
+|**Implementer:** dr-superpowers:impl-sonnet-low
 |**Executor:** codex gpt-6-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
@@ -251,7 +251,7 @@ sed 's/^|//' > "$TMP/exec.md" <<'EOF'
 |
 |#### Part A: cheap
 |
-|**Implementer:** dr-superpowers:impl-sonnet-medium
+|**Implementer:** dr-superpowers:impl-sonnet-low
 |**Executor:** codex gpt-6-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
@@ -283,7 +283,7 @@ check "heavy wins over executor on a split task" \
 # removed one-third rule, which would also have delegated Task 2 as total 4.
 { printf '# Offload Fixture\n\n'
   for i in 1 2; do
-    printf '### Task %s: four band\n\n**Implementer:** dr-superpowers:impl-sonnet-high\n' "$i"
+    printf '### Task %s: four band\n\n**Implementer:** dr-superpowers:impl-sonnet-medium\n' "$i"
     [ "$i" = 1 ] && printf '**Executor:** codex gpt-6-sol / high\n'
     printf '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4\n\n'
   done

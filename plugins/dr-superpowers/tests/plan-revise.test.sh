@@ -185,7 +185,7 @@ out=$(run | grep '^recommend')
 check "one light task recommends inline" "$(field execution "$out")" "inline"
 check "one light task recommends sonnet" "$(field model "$out")" "sonnet"
 check "one light task delegates nothing" "$(field delegated "$out")" "0/1"
-check "one light task takes the table's effort" "$(field effort "$out")" "medium"
+check "one light task takes the table's effort" "$(field effort "$out")" "low"
 
 three() { # three <eval 1> <eval 2> <eval 3>
   plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n%s\n\n### Task 2: Two\n\n**Files:**\n- Create: `y`\n\n%s\n\n### Task 3: Three\n\n**Files:**\n- Create: `z`\n\n%s\n' "$1" "$2" "$3")"
@@ -206,7 +206,7 @@ three "$E4" "$E4" "$E2"
 out=$(run | grep '^recommend')
 check "total-4 tasks are self-implemented" "$(field delegated "$out")" "0/3"
 check "a self-implemented total 4 stays on sonnet" "$(field model "$out")" "sonnet"
-check "a self-implemented total 4 needs effort high" "$(field effort "$out")" "high"
+check "a self-implemented total 4 needs effort medium" "$(field effort "$out")" "medium"
 
 # --- exits ---
 plan "$(mktask 1 0 1 0 2)"

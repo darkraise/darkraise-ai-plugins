@@ -67,7 +67,7 @@ Print `hello NAME`.
 **Files:**
 - Modify: `a.sh`
 
-**Implementer:** dr-superpowers:impl-sonnet-high
+**Implementer:** dr-superpowers:impl-sonnet-medium
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 
 Print `hello NAME` twice.
@@ -111,7 +111,7 @@ entry b6.md '## Header' '**Execution:** subagent — `claude --model sonnet --ef
 run docs/plan.md b6.md
 has "protected line" "$out" "rejected: Old text touches a line that cannot be amended"
 
-entry b7.md '## Task 2' '**Implementer:** dr-superpowers:impl-sonnet-high' '**Implementer:** dr-superpowers:impl-opus-high'
+entry b7.md '## Task 2' '**Implementer:** dr-superpowers:impl-sonnet-medium' '**Implementer:** dr-superpowers:impl-opus-high'
 run docs/plan.md b7.md
 check "new lint error: exit 1" "$status" "1"
 has "new lint error: reason" "$out" "rejected: the amendment introduces lint errors:"

@@ -73,10 +73,10 @@ always reach the same agent.
 ```assignment
 0 impl-haiku
 1 impl-sonnet-low
-2 impl-sonnet-medium
-3 impl-sonnet-high
-4 impl-sonnet-high
-5 impl-opus-medium
+2 impl-sonnet-low
+3 impl-sonnet-medium
+4 impl-sonnet-medium
+5 impl-sonnet-high
 6 impl-opus-high
 ```
 
