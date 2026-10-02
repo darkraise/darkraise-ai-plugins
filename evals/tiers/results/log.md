@@ -12,3 +12,10 @@
 - Effort: not named in the output (the effort grep matched one review transcript, as text). Costs of the two review rows on `r-code-judge-seats`: `judge-sonnet-high` $0.4503, `judge-opus@medium` $0.8367.
 - Outcomes: three implementation rows `PASS` with `status=DONE` (6, 15 and 6 turns); two review rows `REVIEWED`; grading `GRADED`, `judge-opus@medium` found 3/5. The `impl-sonnet-medium` snapshot holds a commit changing `run-codex-task.sh` and its test, so tools and permissions worked. Stage spend `1.86` notional dollars.
 - Fixes made: `c4a321a` sets `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` for every run, because `--setting-sources project` left the user CLAUDE.md loaded. The snapshot's own CLAUDE.md is skipped as well, and connector instructions still reach every arm.
+
+## As-written stage
+
+- Date: 2026-10-02
+- Outcomes (rep 1, stage `written`): PASS 82, FAIL 3; cost 14.88 notional dollars. Repetition total so far 16.73 (smoke included), against the 250 cap.
+- The three FAIL rows are one case, `w-darkmem-sync-client-t5`, failing `plugins/dr-superpowers/tests/darkmem-sync/pull.test.mjs` on `impl-opus-medium` (the row's current arm), `impl-opus-low` and `impl-sonnet-high`. A failure on the current arm suggests the case itself may be at fault; not yet investigated.
+- Fixes or re-runs: none; the stage finished in one slice with exit 0.
