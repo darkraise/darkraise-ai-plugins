@@ -42,12 +42,33 @@ that executor `usable`, tick it without asking and say so in one line; the
 question below then covers only the other executors. An absent file is not an
 error.
 
-Render the roster as a multi-select question: one tickable option per executor
-whose `usable` is `true`, and a prose line naming every other detected executor
-with its `reason`. **If no executor is usable, ask nothing** and write the plan
-Claude-only - an empty checkbox is a worse answer than no checkbox.
+Offer every executor whose `usable` is `true` through the timed question below,
+naming every other detected executor with its `reason` in prose. **If no
+executor is usable, ask nothing** and write the plan Claude-only - an empty
+offer is a worse answer than no question.
 
-Record the tick as one appended blockquote line in the plan header:
+### Timed lane question
+
+The question waits at most 15 minutes, then defaults to Claude-only, so an
+unattended or pre-queued session keeps moving. A blocking question tool has no
+timeout, so never ask this one through it:
+
+1. Start the timer as a background Bash call and keep its task id:
+   `sleep 900; echo lane-question-timeout`. A background call re-invokes the
+   session when it exits.
+2. Ask in plain text: the offerable ids, one prose line for the rest, and
+   `Reply with the ids to use, or "none". No answer in 15 minutes means
+   Claude-only.` Then end the turn.
+3. **A reply arrives first:** stop the timer. The ids it names from the offer
+   are ticked. Any other reply - `none`, `Claude only`, or a message unrelated
+   to the question, such as a prompt queued in advance - means Claude-only:
+   finish the plan, then act on that message as its own instruction.
+4. **The timer fires first:** say `<ids> not selected - no answer in 15
+   minutes; Claude-only` in one line and continue the plan without waiting.
+   A timer that fires after the question was answered is ignored.
+
+Claude-only writes no header line. Record a tick as one appended blockquote
+line in the plan header:
 
 ```markdown
 > **External executors:** <id>

@@ -89,10 +89,12 @@ the scores, so scoring cannot follow the executor question.
    `usable`. A constraint that declares an executor's lane on ticks it without
    asking, on the same two conditions: a constraint cannot tick an executor that
    is not there.
-6. **Offer the rest.** Render the remaining offerable executors as a
-   multi-select question, and name every other detected executor with its reason
-   in prose. If none is offerable, ask nothing and say so in one line. Record
-   the tick as one appended blockquote line in the header:
+6. **Offer the rest.** Offer the remaining offerable executors through the timed
+   question in [executor-lane.md](../../reference/executor-lane.md) §Timed lane
+   question, which defaults to Claude-only after 15 minutes, and name every
+   other detected executor with its reason in prose. If none is offerable, ask
+   nothing and say so in one line. Record a tick as one appended blockquote line
+   in the header:
 
    ```markdown
    > **External executors:** <id>
