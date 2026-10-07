@@ -170,5 +170,14 @@ run docs/inject-plan.md "$TMP/inject.md"
 check "injected Execution line: rejected" "$status" "1"
 has "injected Execution line: names the rule" "$out" "New text adds a line that cannot be amended"
 
+# A linked worktree session must not amend the primary checkout's plan: the
+# worktree's task-brief would never see the amendment.
+git add -A && git commit -qm 'test: seed' && git worktree add -q "$TMP/wt"
+amendments="$REPO/.superpowers/sdd/plan/amendments.md"
+before_amend=$(cat "$amendments" 2>/dev/null)
+(cd "$TMP/wt" && bash "$AMEND" "$REPO/docs/plan.md" "$REPO/b1.md") >/dev/null 2>&1
+check "primary plan from a linked worktree: refused" "$?" "2"
+check "primary plan from a linked worktree: amendments untouched" "$(cat "$amendments" 2>/dev/null)" "$before_amend"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
