@@ -4,26 +4,13 @@ dr_state_error() { printf 'task-state: %s\n' "$1" >&2; return 2; }
 dr_canonical() { (cd -- "$1" && pwd -P); }
 
 dr_snapshot() {
-  local root output="$2" index files path hash mode kind temp indexfile filesfile filemode
+  local root output="$2" index files temp indexfile filesfile filemode
   root="$(dr_canonical "$1")" || return 2
   temp="$(mktemp "${output}.XXXXXX")" || return 2
   index="$(git -C "$root" ls-files --stage -z | base64 | tr -d '\r\n')" || { rm -f "$temp"; return 2; }
   filemode=$(git -C "$root" config --bool core.filemode) || filemode=false
-  files="$({ git -C "$root" ls-tree -r --name-only -z HEAD; git -C "$root" ls-files -c -o --exclude-standard -z; } | sort -zu | while IFS= read -r -d '' path; do
-    if [ -L "$root/$path" ]; then
-      kind=symlink; mode=120000
-      hash="$(readlink -- "$root/$path" | git -C "$root" hash-object --stdin)" || exit 2
-    elif [ -f "$root/$path" ]; then
-      kind=file; mode=100644
-      if [ "$filemode" = true ] && [ -x "$root/$path" ]; then mode=100755; fi
-      hash="$(git -C "$root" hash-object --no-filters -- "$path")" || exit 2
-    elif [ ! -e "$root/$path" ]; then kind=deleted; mode=0; hash=''
-    else exit 2
-    fi
-    # NUL delimiters preserve tabs/newlines and other JSON-special filename
-    # characters. Serialize once for the whole tree, not once per file.
-    printf '%s\0%s\0%s\0%s\0' "$path" "$hash" "$mode" "$kind" || exit 2
-  done | jq -Rs 'split("\u0000") | . as $f |
+  files="$({ git -C "$root" ls-tree -r --name-only -z HEAD; git -C "$root" ls-files -c -o --exclude-standard -z; } | sort -zu |
+    _dr_snapshot_entries "$root" "$filemode" | jq -Rs 'split("\u0000") | . as $f |
     [range(0; length - 1; 4) as $i |
       {path:$f[$i], hash:$f[$i+1], mode:$f[$i+2], kind:$f[$i+3]}] |
     sort_by(.path)')" || { rm -f "$temp"; return 2; }
@@ -45,6 +32,50 @@ dr_snapshot() {
     '{root:$root,gitdir:$gitdir,head:$head,index:$index,files:$files[0]}' > "$temp" &&
     mv -f -- "$temp" "$output" || { rm -f "$temp" "$indexfile" "$filesfile"; return 2; }
   rm -f "$indexfile" "$filesfile"
+}
+
+# _dr_snapshot_entries ROOT FILEMODE: NUL-separated paths on stdin become
+# path, hash, mode, kind records. Regular files are hashed in one
+# `hash-object --stdin-paths` call: a process per file made a snapshot of a
+# 2,000-file repository take seconds, and a task takes several snapshots.
+# Symlinks, and names --stdin-paths cannot carry verbatim (a newline or
+# carriage return, or a leading quote, which it unquotes C-style), are still
+# hashed one at a time.
+_dr_snapshot_entries() {
+  local root="$1" filemode="$2" path hash mode n=0 i=0
+  local paths=() hashes=() modes=() kinds=() batch=()
+  while IFS= read -r -d '' path; do
+    paths+=("$path")
+    if [ -L "$root/$path" ]; then
+      hash="$(readlink -- "$root/$path" | git -C "$root" hash-object --stdin)" || return 2
+      hashes+=("$hash"); modes+=(120000); kinds+=(symlink)
+    elif [ -f "$root/$path" ]; then
+      mode=100644
+      if [ "$filemode" = true ] && [ -x "$root/$path" ]; then mode=100755; fi
+      case "$path" in
+        *$'\n'*|*$'\r'*|\"*) hash="$(git -C "$root" hash-object --no-filters -- "$path")" || return 2 ;;
+        *) hash=''; batch+=("$n") ;;
+      esac
+      hashes+=("$hash"); modes+=("$mode"); kinds+=(file)
+    elif [ ! -e "$root/$path" ]; then hashes+=(''); modes+=(0); kinds+=(deleted)
+    else return 2
+    fi
+    n=$((n + 1))
+  done
+  if [ "${#batch[@]}" -gt 0 ]; then
+    while IFS= read -r hash; do
+      hashes[${batch[i]}]="${hash%$'\r'}"; i=$((i + 1))
+    done < <(for n in "${batch[@]}"; do printf '%s\n' "${paths[n]}"; done |
+      git -C "$root" hash-object --no-filters --stdin-paths)
+    # The process substitution hides git's status, so a short answer is the
+    # failure signal.
+    [ "$i" -eq "${#batch[@]}" ] || return 2
+  fi
+  # NUL delimiters preserve tabs/newlines and other JSON-special filename
+  # characters. Serialize once for the whole tree, not once per file.
+  for ((i = 0; i < ${#paths[@]}; i++)); do
+    printf '%s\0%s\0%s\0%s\0' "${paths[i]}" "${hashes[i]}" "${modes[i]}" "${kinds[i]}" || return 2
+  done
 }
 
 dr_task_assert_snapshot() {
@@ -170,9 +201,9 @@ dr_task_validate_scope() {
   jq -e --slurpfile after "$actual" --argjson scope "$scope" '
     . as $before | $after[0] as $after |
     .head == $after.head and .root == $after.root and .gitdir == $after.gitdir and .index == $after.index and
-    all(([$before.files[].path,$after.files[].path] | unique)[];
-      . as $path | ([$before.files[] | select(.path == $path)] == [$after.files[] | select(.path == $path)]) or
-      ($scope | index($path)) != null)' "$before" >/dev/null
+    # Keyed lookups: nested selects made this quadratic in the file count.
+    INDEX($before.files[]; .path) as $b | INDEX($after.files[]; .path) as $a | INDEX($scope[]; .) as $s |
+    all(($b + $a | keys_unsorted[]); . as $path | $b[$path] == $a[$path] or $s[$path] != null)' "$before" >/dev/null
   result=$?
   rm -f "$actual"
   return "$result"
