@@ -52,9 +52,8 @@ dr_task_stage() {
   # attempt's: a resumed task starts from a pending snapshot that still holds
   # an earlier attempt's uncommitted, already scope-checked work.
   while IFS= read -r -d '' path; do paths+=("$path"); done < <({
-    jq -j --slurpfile after "$after" '. as $before | $after[0] as $after |
-      ([$before.files[].path,$after.files[].path] | unique)[] | . as $path |
-      select([$before.files[] | select(.path == $path)] != [$after.files[] | select(.path == $path)]) | . + "\u0000"' "$before"
+    jq -j --slurpfile after "$after" 'INDEX(.files[]; .path) as $b | INDEX($after[0].files[]; .path) as $a |
+      ($b + $a | keys_unsorted[]) | select($b[.] != $a[.]) | . + "\u0000"' "$before"
     git -C "$DR_WORKTREE" diff --no-renames --name-only -z "$parent" --
     git -C "$DR_WORKTREE" ls-files -o --exclude-standard -z
   } | sort -zu)
