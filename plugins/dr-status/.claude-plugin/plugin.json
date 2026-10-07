@@ -2,12 +2,12 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dr-status",
   "description": "A Claude Code status line: git detail, model and session state, plus context, prompt-cache and rate-limit meters colored by usage level, framed in the color of the Claude account the session belongs to.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "author": {
     "name": "Darkraise"
   },
-  "homepage": "https://github.com/darkraise/darkraise-plugins/tree/main/plugins/dr-status",
-  "repository": "https://github.com/darkraise/darkraise-plugins",
+  "homepage": "https://github.com/darkraise/darkraise-ai-plugins/tree/main/plugins/dr-status",
+  "repository": "https://github.com/darkraise/darkraise-ai-plugins",
   "license": "MIT",
   "keywords": [
     "statusline",

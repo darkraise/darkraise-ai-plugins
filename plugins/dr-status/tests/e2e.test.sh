@@ -353,4 +353,11 @@ render_twice() { # -> the git call count across two identical renders
 check "two identical renders share one git collect" "$(render_twice)" "2"
 rm -rf "$cachetmp"
 
+# Payload strings reach the terminal verbatim, so control characters in a
+# directory or agent name must be dropped rather than replayed as escapes.
+evil="$(jq -c '.workspace.current_dir = "/tmp/a\u001b]0;PWNED\u0007b" | .cwd = .workspace.current_dir | .agent.name = "x\u001b[2Jy"' "$F/full.json")"
+raw="$(printf '%s' "$evil" | bash "$SCRIPT" 2>/dev/null)"
+check "control characters in payload strings are not rendered" \
+  "$(printf '%s' "$raw" | grep -c -e $'\033]' -e $'\033\[2J' -e $'\a')" "0"
+
 finish

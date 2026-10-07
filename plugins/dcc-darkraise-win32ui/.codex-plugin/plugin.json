@@ -1,6 +1,6 @@
 {
   "name": "dcc-darkraise-win32ui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Teaches coding agents to write idiomatic Darkraise.Win32UI code: token-resolved visuals, the raise ladder and overlay-hover rule, the fluent View builder, convention-based MVVM and draml markup, plus the framework limits it must never promise past.",
   "author": {
     "name": "Darkraise"

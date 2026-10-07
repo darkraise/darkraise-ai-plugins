@@ -133,5 +133,31 @@ P_SESSION="sess-1"
 dcc_cache_event
 check "the first session is undisturbed by the second" "$DCC_CACHE_FORCE" "0"
 
+# --- an untrusted cache directory is never used ------------------------------
+# A shared temp root lets another account create the directory first. A
+# symlinked directory or a symlinked entry must not redirect the writes.
+# Windows temp roots are per-user, and MSYS can neither set the mode nor, by
+# default, create a real symlink, so the directory checks are POSIX-only.
+case "${OSTYPE:-}" in
+  msys*|cygwin*) ;;
+  *)
+    check "a created cache directory is private" "$(stat -c %a "$DCC_CACHE_HOME/dcc-statusline-$UID" 2>/dev/null || stat -f %Lp "$DCC_CACHE_HOME/dcc-statusline-$UID")" "700"
+    mkdir -p "$tmp/evil" "$tmp/elsewhere"
+    ln -s "$tmp/elsewhere" "$tmp/evil/dcc-statusline-$UID"
+    DCC_CACHE_HOME="$tmp/evil" dcc_cache_dir
+    check "a symlinked cache directory is refused" "$DCC_CACHE_DIR" "" ;;
+esac
+printf 'keep\n' > "$tmp/victim"
+dcc_cache_dir
+dcc_cache_key "sess-victim"
+ln -s "$tmp/victim" "$DCC_CACHE_DIR/fp-$DCC_CACHE_KEY"
+P_SESSION="sess-victim" P_CTX_TOK="9" dcc_cache_event
+check "a symlinked fingerprint entry is not written through" "$(cat "$tmp/victim")" "keep"
+dcc_cache_key "$tmp/repo"
+rm -f "$DCC_CACHE_DIR/git-$DCC_CACHE_KEY"
+ln -s "$tmp/victim" "$DCC_CACHE_DIR/git-$DCC_CACHE_KEY"
+DCC_CACHE_FORCE=1 dcc_git_cached "$tmp/repo"
+check "a symlinked git entry is not written through" "$(cat "$tmp/victim")" "keep"
+
 rm -rf "$tmp"
 finish

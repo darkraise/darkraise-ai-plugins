@@ -2,12 +2,12 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dr-cockpit",
   "description": "A Claude Code mod for long sessions: a band that warns as the main session nears its handoff budget, a pane of subagent seats and their token use, and a guard that keeps AI attribution out of commits and pull requests.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "Darkraise"
   },
-  "homepage": "https://github.com/darkraise/darkraise-plugins/tree/main/plugins/dr-cockpit",
-  "repository": "https://github.com/darkraise/darkraise-plugins",
+  "homepage": "https://github.com/darkraise/darkraise-ai-plugins/tree/main/plugins/dr-cockpit",
+  "repository": "https://github.com/darkraise/darkraise-ai-plugins",
   "license": "MIT",
   "keywords": [
     "mod",

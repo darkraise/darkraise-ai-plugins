@@ -125,6 +125,22 @@ git -C "$fixture/staged" reset -q HEAD -- base.txt
 run --cwd "$fixture/staged"
 check 'initial unstaged changes are rejected' "$?" 2
 
+# A resumed attempt that reaches DONE must commit every change since the last
+# commit, including files an earlier incomplete attempt left uncommitted.
+git -C "$fixture/primary" worktree add -qb carry-case "$fixture/carry"
+STUB_FINAL_MESSAGE="$(final_message BLOCKED)" run --cwd "$fixture/carry"
+check 'carry fixture leaves pending work' "$?" 1
+STUB_WRITE_PATH='new file.txt' run --cwd "$fixture/carry" --resume stub-thread
+check 'resumed DONE touching other files succeeds' "$?" 0
+check 'resumed DONE commits the earlier attempt file' "$(git -C "$fixture/carry" show HEAD:produced.txt 2>/dev/null)" produced
+check 'resumed DONE commits its own file' "$(git -C "$fixture/carry" show 'HEAD:new file.txt' 2>/dev/null)" produced
+check 'resumed DONE leaves a clean worktree' "$(git -C "$fixture/carry" status --porcelain)" ''
+git -C "$fixture/primary" worktree add -qb carry-empty "$fixture/carry-empty"
+STUB_FINAL_MESSAGE="$(final_message BLOCKED)" run --cwd "$fixture/carry-empty"
+STUB_WRITE_PATH= run --cwd "$fixture/carry-empty" --resume stub-thread
+check 'resumed DONE with no new writes succeeds' "$?" 0
+check 'resumed DONE with no new writes commits carried work' "$(git -C "$fixture/carry-empty" show HEAD:produced.txt 2>/dev/null)" produced
+
 git -C "$fixture/primary" worktree add -qb paths-case "$fixture/paths"
 STUB_WRITE_PATH='new file.txt' STUB_DELETE_PATH=base.txt run --cwd "$fixture/paths"
 check 'deletion and path with spaces commit' "$?" 0

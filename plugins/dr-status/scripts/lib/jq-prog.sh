@@ -121,7 +121,9 @@ DCC_JQ_PROG='
 | def num($v; $dflt): if ($v|type) == "number" then ($v|floor) else $dflt end;
   def n0($v): if ($v|type) == "number" then $v else 0 end;
   def flt($v): if ($v|type) == "number" then $v else "" end;
-  def str($v): if ($v|type) == "string" then $v else "" end;
+  # Control characters are dropped so a directory or agent name cannot carry
+  # terminal escape sequences into the rendered line.
+  def str($v): if ($v|type) == "string" then $v | gsub("[[:cntrl:]]"; "") else "" end;
   @sh "DCC_LINE1=\($c.lines[0] // [] | join(" "))",
   @sh "DCC_LINE2=\($c.lines[1] // [] | join(" "))",
   @sh "DCC_SEP1=\(if ($c.separator|type) == "array"

@@ -18,7 +18,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 plan=$1 block=$2
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 [ -f "$block" ] || { echo "no such block file: $block" >&2; exit 2; }
-dir=$(cd "$(dirname "$plan")" && bash "$HERE/sdd-workspace" "$(basename "$plan")") \
+# Resolved from the working directory, like task-brief and review-route, so a
+# worktree session cannot amend the primary checkout's copy of the plan.
+plan_require_same_repo "$plan"
+dir=$(bash "$HERE/sdd-workspace" "$plan") \
   || { echo "plan-amend needs the plan inside a git repository" >&2; exit 2; }
 amend="$dir/amendments.md"
 reject() { echo "rejected: $1"; exit 1; }
