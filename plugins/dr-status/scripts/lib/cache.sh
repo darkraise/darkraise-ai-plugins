@@ -26,7 +26,13 @@ dcc_cache_dir() { # -> DCC_CACHE_DIR, empty when the directory cannot be used
   # world-readable, attacker-controllable contents.
   DCC_CACHE_DIR="$root/dcc-statusline-$UID"
   # Guarded so the fork happens once per machine, not once per render.
-  [ -d "$DCC_CACHE_DIR" ] || mkdir -p "$DCC_CACHE_DIR" 2>/dev/null || DCC_CACHE_DIR=""
+  [ -d "$DCC_CACHE_DIR" ] || mkdir -m 700 -p "$DCC_CACHE_DIR" 2>/dev/null || { DCC_CACHE_DIR=""; return 0; }
+  # A shared /tmp lets another account create this directory first and plant
+  # symlinks or escape sequences in it, so only a real directory this account
+  # owns is used; anything else renders uncached. Windows temp roots are
+  # per-user already, and MSYS can report admin-created files as group-owned.
+  [ ! -L "$DCC_CACHE_DIR" ] || { DCC_CACHE_DIR=""; return 0; }
+  case "${OSTYPE:-}" in msys*|cygwin*) ;; *) [ -O "$DCC_CACHE_DIR" ] || DCC_CACHE_DIR="" ;; esac
 }
 
 dcc_cache_key() { # dcc_cache_key <string> -> DCC_CACHE_KEY
@@ -77,7 +83,7 @@ _dcc_cache_write() { # _dcc_cache_write <file> <repo-flag>
   # One redirect rather than write-then-mv: mv is a fork. A few hundred bytes go
   # out in a single write, and the sentinel above makes any interleaving that
   # does slip through self-healing rather than visible.
-  printf '%s' "$out" > "$file" 2>/dev/null || true
+  [ -L "$file" ] || printf '%s' "$out" > "$file" 2>/dev/null || true
 }
 
 dcc_git_cached() { # dcc_git_cached <dir> -> git globals; non-zero outside a repository
@@ -119,6 +125,6 @@ dcc_cache_event() { # -> DCC_CACHE_FORCE=1 when the payload advanced since the l
   [ -r "$file" ] && read -r prev < "$file"
   [ "$fp" = "$prev" ] && return 0
   DCC_CACHE_FORCE=1
-  printf '%s\n' "$fp" > "$file" 2>/dev/null || true
+  [ -L "$file" ] || printf '%s\n' "$fp" > "$file" 2>/dev/null || true
   return 0
 }

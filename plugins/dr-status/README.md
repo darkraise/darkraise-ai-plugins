@@ -172,7 +172,9 @@ To keep that rate affordable, git state is cached under
 `$TMPDIR/dcc-statusline-$UID/` for ten seconds, and refreshed immediately whenever
 the payload's context-token count or cost differs from the previous run --
 a proxy for the session having advanced, rather than an idle timer tick
-repeating the same state. Deleting that directory is safe and forces a fresh
+repeating the same state. The directory is created private (mode 700); one
+that is a symlink or owned by another account is ignored, and the status line
+then renders uncached. Deleting that directory is safe and forces a fresh
 collect.
 
 ## Configuration
@@ -249,7 +251,7 @@ detected.
 ## Design notes
 
 Everything shown comes from the payload Claude Code already sends, so there is no
-network call, no credential access, and no cache. Rate limits arrive as
+network call and no credential access; the only cache is the git one above. Rate limits arrive as
 `rate_limits.five_hour` and `rate_limits.seven_day` and are absent until the
 first API response of a session, which is why the usage meters can be missing
 briefly after `/clear`.
