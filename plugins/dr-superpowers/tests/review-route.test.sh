@@ -81,13 +81,13 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |### Task 5: executor
 |
 |**Implementer:** dr-superpowers:impl-sonnet-high
-|**Executor:** codex gpt-6-sol / high
+|**Executor:** codex gpt-6.1-sol / high
 |**Evaluation:** files 1 - spec 0 - coupling 1 - risk 1 = 3
 |
 |### Task 6: executor risky
 |
 |**Implementer:** dr-superpowers:impl-sonnet-high
-|**Executor:** codex gpt-6-sol / high
+|**Executor:** codex gpt-6.1-sol / high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3
 |
 |### Task 7: split
@@ -120,7 +120,7 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |### Task 11: executor risk three
 |
 |**Implementer:** dr-superpowers:impl-sonnet-high
-|**Executor:** codex gpt-6-sol / high
+|**Executor:** codex gpt-6.1-sol / high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
 EOF
 
@@ -149,9 +149,9 @@ check "a routed task exits 0" "$rc" "0"
 route --task 2
 check "total 3 with em dashes: light Codex, Sonnet fallback" "$out" "review-seat task=2 primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 route --task 3
-check "total 4 at risk 1: heavy Codex, Opus fallback" "$out" "review-seat task=3 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+check "total 4 at risk 1: light Codex, Opus fallback" "$out" "review-seat task=3 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
 route --task 4
-check "risk 2 takes its band: heavy Codex, Opus fallback" "$out" "review-seat task=4 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+check "risk 2 takes its band: light Codex, Opus fallback" "$out" "review-seat task=4 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
 route --task 5
 check "an Executor task is reviewed by its band judge, never Codex" "$out" "review-seat task=5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 route --task 6
@@ -161,18 +161,18 @@ check "an Executor task at risk 3 goes to Opus alone" "$out" "review-seat task=1
 route --task 7A
 check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 route --task 7B
-check "the risk-2 part takes heavy Codex" "$out" "review-seat task=7B primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+check "the risk-2 part takes light Codex, Opus fallback" "$out" "review-seat task=7B primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
 route --task 7
-check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
 route --task 8
 check "risk 3 goes to Astra then Opus" "$out" "review-seat task=8 primary=codex:heavy+judge-opus fallback=dr-superpowers:judge-opus reason=risk"
 route --task 10
-check "total 5 at risk 0: heavy Codex, Opus fallback" "$out" "review-seat task=10 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+check "total 5 at risk 0: light Codex, Opus fallback" "$out" "review-seat task=10 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
 
 route --task 1 2
 check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=codex:light fallback=dr-superpowers:judge-sonnet-high reason=band"
 route --task 1 3
-check "a batch crossing into the heavy band" "$out" "review-seat task=1,3 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+check "a batch crossing into the Opus fallback band" "$out" "review-seat task=1,3 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
 route --task 1 5
 check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"
 
@@ -296,7 +296,7 @@ present "a Codex-host plan names native-codex.md" "$TMP/err" "native-codex.md"
 
 sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)
-check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:heavy fallback=dr-superpowers:judge-opus reason=band"
+check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:light fallback=dr-superpowers:judge-opus reason=band"
 
 # --- plan review prose ---------------------------------------------------------
 WP="$P/skills/writing-plans/SKILL.md"
@@ -580,8 +580,8 @@ present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**
 absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
 present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
 present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'
-present "the Claude manifest is 1.27.0" "$P/.claude-plugin/plugin.json" '"version": "1.27.0"'
-present "the Codex manifest is 1.27.0" "$P/.codex-plugin/plugin.json" '"version": "1.27.0"'
+present "the Claude manifest is 1.28.0" "$P/.claude-plugin/plugin.json" '"version": "1.28.0"'
+present "the Codex manifest is 1.28.0" "$P/.codex-plugin/plugin.json" '"version": "1.28.0"'
 present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
 present "approach ranking runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'Dispatch one `dr-superpowers:judge-opus` to run the ring'
 present "the budget reference derives the budget" "$P/reference/session-budget.md" 'min(`autoCompactWindow`, model window) × 93% − 140,000'
@@ -618,10 +618,10 @@ check "an unknown ruling kind is still rejected" "$?" "2"
 # The spec's §12 asks for this row. Routing decides who *reviews* a task, and
 # that has never depended on which executor produced the diff, so a stub
 # Executor line must route exactly as the codex line it replaces does.
-# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-6-sol /
+# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-6.1-sol /
 # high` (lines 84 and 90), so this rewrites both; only Task 5 is asserted on.
 # Swapping the executor and nothing else is the sharpest possible test.
-sed 's|\*\*Executor:\*\* codex gpt-6-sol / high|**Executor:** stub stub-model / high|' \
+sed 's|\*\*Executor:\*\* codex gpt-6.1-sol / high|**Executor:** stub stub-model / high|' \
   "$TMP/plan.md" > "$TMP/stub-plan.md"
 codex_seat=$(bash "$ROUTE" "$TMP/plan.md" --task 5 2>/dev/null)
 stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
@@ -699,11 +699,11 @@ check "a fenced example inside a part does not escalate it" "$out" "review-seat 
 seat "$TMP/ev-partfence.md" 1
 check "a fenced example inside a part does not escalate the whole task" "$out" "review-seat task=1 $LIGHT"
 
-printf '# P\n\n### Task 1: Fenced executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Executor:** codex gpt-6-sol / medium\n```\n' > "$TMP/ev-fexec.md"
+printf '# P\n\n### Task 1: Fenced executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Executor:** codex gpt-6.1-sol / medium\n```\n' > "$TMP/ev-fexec.md"
 seat "$TMP/ev-fexec.md" 1
 check "a fenced Executor line does not claim the task is offloaded" "$out" "review-seat task=1 $LIGHT"
 
-printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-6-sol / medium\n' > "$TMP/ev-rexec.md"
+printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-6.1-sol / medium\n' > "$TMP/ev-rexec.md"
 seat "$TMP/ev-rexec.md" 1
 check "a real Executor line still routes to a Claude judge" "$out" \
   "review-seat task=1 primary=dr-superpowers:judge-sonnet-high fallback=- reason=executor"

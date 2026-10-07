@@ -37,7 +37,7 @@ Four findings from real transcripts drove the fork; the numbers are in
   template, the implementer template and TDD.
 
 **Codex host.** Read [native-codex.md](reference/native-codex.md). Its
-`codex-v3` policy routes scores 0–9 through Luna, Sol and Astra with
+`codex-v4` policy routes scores 0–9 through Luna, Sol and Astra with
 the same four raw axes; scouts start at Sol medium, judges at Astra high; the
 Claude hooks are disabled in the native manifest. Native reviewers have
 independent contexts; enforce read-only restrictions where the host allows and
@@ -184,12 +184,18 @@ retires from Codex with ChatGPT sign-in on 2026-10-14, and Codex 0.155.1's
 catalog lists `gpt-6-sol` as the upgrade for `gpt-5.6-sol`, with every lane
 effort advertised for a ChatGPT Pro sign-in.
 
+On 2026-10-07 they moved again, to `gpt-6.1-sol`, Codex's default since
+0.159.1, and the review seat for totals 4 to 6 moved from Astra to it. The move
+rests on OpenAI's description of 6.1 Sol as near-Astra on software work, at
+about a fifth of Astra's price; no calibration replay was run, because no Codex
+client was available to run one. Native Codex plans moved to `codex-v4`, which
+puts `gpt-6.1-sol` at ranks 3 to 6.
+
 A different machine, account, or Codex version must verify the tables against
 its own account before relying on them. Do not make paid capability probes.
 
-**Cross-family review.** Codex is the default task reviewer: `gpt-6-sol` for
-tasks totalling 0 to 3, `gpt-6-astra` for 4 to 6, and Astra followed by
-`judge-opus` at risk 3. A task the executor lane implemented is always
+**Cross-family review.** Codex is the default task reviewer: `gpt-6.1-sol` for
+tasks totalling 0 to 6, and `gpt-6-astra` followed by `judge-opus` at risk 3. A task the executor lane implemented is always
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
 Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
 `judge-opus` 4 to 6 and at risk 3. Plan review takes Astra for round 1
@@ -207,7 +213,7 @@ contains whatever the executor lane produced, which is why no finding is acted
 on unchecked.
 `scripts/review-route` prints the review seat for a task or plan round, and
 every Codex seat runs through `scripts/run-codex-review.sh`, which checks
-availability on each run and falls back once to `gpt-6-sol` when Astra
+availability on each run and falls back once to `gpt-6.1-sol` when Astra
 refuses the run. Selection, the run bound and the four
 outcomes live in those scripts rather than in prose, so a refused model is a
 recorded substitution instead of a silently missing seat.

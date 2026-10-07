@@ -11,7 +11,7 @@ LADDER="$HERE/../reference/ladder.md"
 # Probed on 2026-08-31 against Codex 0.151.0 with ChatGPT-subscription auth:
 # GPT-5.6 Luna and Terra were rejected with HTTP 400, and minimal was rejected
 # as an effort. gpt-5.5 retires from Codex with ChatGPT sign-in on 2026-10-14.
-VALID_MODELS="gpt-6-sol"
+VALID_MODELS="gpt-6.1-sol"
 VALID_EFFORTS="low medium high xhigh ultra"
 
 pass=0 fail=0
@@ -33,7 +33,7 @@ in_list() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # rank orders a rung for the termination proof: model major, effort minor.
 rank() {
   local m="${1%%/*}" e="${1##*/}" mr er
-  case "$m" in gpt-6-sol) mr=0 ;; *) echo -1; return ;; esac
+  case "$m" in gpt-6.1-sol) mr=0 ;; *) echo -1; return ;; esac
   case "$e" in low) er=0 ;; medium) er=1 ;; high) er=2 ;; xhigh) er=3 ;; ultra) er=4 ;; *) echo -1; return ;; esac
   echo $((mr * 10 + er))
 }
@@ -129,7 +129,7 @@ check "every rung named anywhere has a numeric timeout" "$bad_timeout" "NONE"
 # execution ladder: run-codex-task.sh:93 validates --model against
 # codex-assignment, so a judge model there would widen execution admission.
 # Its allowlist is therefore separate from VALID_MODELS on purpose.
-JUDGE_MODELS="gpt-6-astra gpt-6-sol"
+JUDGE_MODELS="gpt-6-astra gpt-6.1-sol"
 
 judge=$(block codex-judge)
 check "codex-judge block is present" "$([ -n "$judge" ] && echo yes || echo no)" "yes"
@@ -141,7 +141,7 @@ check "codex-judge has exactly two rows" "$rows" "2"
 # distinctness admits a fallback the owner never approved, and admits a row
 # that does not run at high.
 check "codex-judge preferred row" "$(printf '%s\n' "$judge" | sed -n 1p)" "gpt-6-astra xhigh 5400"
-check "codex-judge fallback row" "$(printf '%s\n' "$judge" | sed -n 2p)" "gpt-6-sol xhigh 2400"
+check "codex-judge fallback row" "$(printf '%s\n' "$judge" | sed -n 2p)" "gpt-6.1-sol xhigh 2400"
 
 bad_judge=NONE
 while read -r model effort secs extra; do

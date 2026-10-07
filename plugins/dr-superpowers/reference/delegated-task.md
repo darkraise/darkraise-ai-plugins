@@ -216,10 +216,9 @@ bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy
   --prompt <workspace>/task-<N>-review-codex-prompt.md
 ```
 
-`codex:light` is `--tier light`; `codex:heavy` and `codex:heavy+judge-opus` are
-`--tier heavy`. Read the runner's status line and take its word: `OK` and
+`codex:light` is `--tier light`; `codex:heavy+judge-opus` is `--tier heavy`. Read the runner's status line and take its word: `OK` and
 `FALLBACK` are a seat that reviewed — on `FALLBACK`, or a `--tier heavy` line
-naming `gpt-6-sol/xhigh` with `status=OK`, say the substitution aloud — and
+naming `gpt-6.1-sol/xhigh` with `status=OK`, say the substitution aloud — and
 `TIMEOUT or FAILED` is a seat that did not: dispatch the route's `fallback`
 seat with the ordinary prompt, say so with the runner's reason, and
 never re-dispatch the Codex seat. The runner has already applied its own one-shot
@@ -313,7 +312,7 @@ at `impl-opus-xhigh`, said aloud; `impl-fable-max` exhausted is
 `Task <N>: BLOCKED`. Both splits and reserve entries are `Ruling:` lines. The
 details are in [escalation.md](../skills/subagent-driven-development/references/escalation.md).
 On a Codex host the rungs are not these: escalation, the single split and the
-reserve chain all come from the `codex-v3` selector
+reserve chain all come from the `codex-v4` selector
 ([native-codex.md](native-codex.md) §Selector contract), which the caller runs
 through `scripts/select-native-tier.sh`. The five-round cap is the same.
 
@@ -362,7 +361,7 @@ message as your other bookkeeping:
 
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked; scores …, seat <seat>) — …; remaining: <parked one-liners>; …` after a tripped breaker
-- end the scores clause with `, seat <seat>`: `codex gpt-6-sol/xhigh`,
+- end the scores clause with `, seat <seat>`: `codex gpt-6.1-sol/xhigh`,
   `codex gpt-6-astra/xhigh+judge-opus`, or the judge's short name, followed by
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
   ` (codex off — <reason>)` when `review-route` printed `reason=codex-off`

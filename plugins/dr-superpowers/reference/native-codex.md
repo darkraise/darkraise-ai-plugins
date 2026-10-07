@@ -19,7 +19,7 @@ at most 6. All scores 0–9 are reachable without weakening Rule S. Claude uses
 the unweighted total in ladder.md; its assignment and external CLI tables do
 not apply to native Codex.
 
-New plans contain `Host: codex` and `Routing policy: codex-v3`. Every task contains
+New plans contain `Host: codex` and `Routing policy: codex-v4`. Every task contains
 `Implementer`, `Evaluation`, and `Assignment source: rubric` or `Assignment source: human`.
 Native assignments use `codex <model> / <effort>`. Evaluation preserves all four
 raw axes and explicitly labels the weighted routing score, for example:
@@ -37,15 +37,18 @@ The machine policy is [codex-routing.json](codex-routing.json):
 | 0 | gpt-6-luna | low |
 | 1 | gpt-6-luna | medium |
 | 2 | gpt-6-luna | high |
-| 3 | gpt-6-sol | low |
-| 4 | gpt-6-sol | medium |
-| 5 | gpt-6-sol | high |
-| 6 | gpt-6-sol | xhigh |
+| 3 | gpt-6.1-sol | low |
+| 4 | gpt-6.1-sol | medium |
+| 5 | gpt-6.1-sol | high |
+| 6 | gpt-6.1-sol | xhigh |
 | 7 | gpt-6-astra | medium |
 | 8 | gpt-6-astra | high |
 | 9 | gpt-6-astra | xhigh |
 
-These tiers are policy choices, not benchmark results. Only currently advertised
+These tiers are policy choices, not benchmark results. codex-v4 (2026-10-07)
+moved ranks 3 to 6 from `gpt-6-sol` to `gpt-6.1-sol`, Codex's default model
+since 0.159.1, on OpenAI's description of it as near-Astra on software work;
+no calibration replay was run for the move. Only currently advertised
 and user-allowed model/effort pairs can run; API model availability does not
 establish access through a native client or the external CLI.
 
@@ -53,9 +56,10 @@ establish access through a native client or the external CLI.
 
 Treat an existing assignment without a source as human-pinned. Keep original
 assignments fixed; actual attempts, promotions, and substitutions go in the
-ledger. The selector and `scripts/plan-lint` accept only `codex-v3`: they reject
-codex-v1, codex-v2 and unknown policy versions with a conversion-required
-error. Never reinterpret an older plan's scores or ranks as v3.
+ledger. The selector and `scripts/plan-lint` accept only `codex-v4`: they reject
+codex-v1, codex-v2, codex-v3 and unknown policy versions with a
+conversion-required error. Never reinterpret an older plan's scores or ranks as
+v4.
 
 For an old Codex or Claude plan, preview the preserved raw axes, original policy,
 old total, new weighted score, and old/proposed assignments. Obtain approval
@@ -65,16 +69,26 @@ missing, obtain an explicit evaluation instead of inferring them from the total.
 Keep original evaluations and assignments in the conversion record, preserve
 human pins, and never automatically translate reserve overrides.
 
-A codex-v2 plan keeps its scores: v2 and v3 share the weighted formula, so the
-preview states each score as unchanged. A rubric task's proposed pair is the v3
-execution tier at its score. The Execution line's pair maps by rank: a v2
-execution pair becomes the v3 pair at the same rank (v2 `gpt-5.6-sol / high`,
-rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself. A
-human pin stays verbatim even when it names a GPT-5.6 pair, which the selector
+A codex-v2 or codex-v3 plan keeps its scores: v2, v3 and v4 share the weighted
+formula, so the preview states each score as unchanged. A rubric task's proposed
+pair is the v4 execution tier at its score. The Execution line's pair maps by
+rank: an older execution pair becomes the v4 pair at the same rank (v3
+`gpt-6-sol / high`, rank 5, becomes `gpt-6.1-sol / high`; v2 `gpt-5.6-sol /
+high`, rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself.
+A human pin stays verbatim even when it names an older pair, which the selector
 still dispatches while it is advertised; the preview flags each such pin so
 your human partner keeps or re-pins it explicitly.
 
-The codex-v2 ranks, kept here because the policy file no longer carries them:
+The older ranks, kept here because the policy file no longer carries them.
+codex-v3 differs from v4 only at ranks 3 to 6:
+
+```text
+rank  codex-v3 pair
+3     gpt-6-sol / low
+4     gpt-6-sol / medium
+5     gpt-6-sol / high
+6     gpt-6-sol / xhigh
+```
 
 ```text
 rank  codex-v2 pair
@@ -92,21 +106,21 @@ reserve  gpt-6-astra / max, then gpt-6-astra / ultra
 ```
 
 An unstarted plan, one with no ledger, is converted in place and committed:
-its `Routing policy:` line becomes `codex-v3` in its existing bold or plain
+its `Routing policy:` line becomes `codex-v4` in its existing bold or plain
 form, the Execution line and every `Assignment source: rubric` Implementer line
-take their v3 pairs, Evaluation lines stay untouched, and a conversion record
+take their v4 pairs, Evaluation lines stay untouched, and a conversion record
 goes in the header immediately before `## Task index`, so no task's text
 absorbs it:
 
 ```text
 ## Policy conversion
 
-codex-v2 → codex-v3, approved <date>. Scores unchanged.
+codex-v3 → codex-v4, approved <date>. Scores unchanged.
 
-| Task | Axes (f/s/c/r) | Score | codex-v2 | codex-v3 | Source |
+| Task | Axes (f/s/c/r) | Score | codex-v3 | codex-v4 | Source |
 |---|---|---|---|---|---|
-| 1 | 1/1/1/0 | 3 | gpt-5.6-terra / medium | gpt-6-sol / low | rubric |
-| 2 | 0/1/0/1 | 3 | gpt-5.6-sol / high | gpt-5.6-sol / high | human (kept) |
+| 1 | 1/1/1/0 | 3 | gpt-6-sol / low | gpt-6.1-sol / low | rubric |
+| 2 | 0/1/0/1 | 3 | gpt-6-sol / high | gpt-6-sol / high | human (kept) |
 ```
 
 `scripts/plan-lint` must pass on the converted plan.
@@ -117,14 +131,14 @@ at a reconciled task boundary, recording the approved preview as one ledger
 line:
 
 ```text
-Ruling: policy conversion codex-v2 -> codex-v3 — approved preview; Task 4 gpt-6-sol / low, Task 5 gpt-6-astra / medium — attempts above this line stay codex-v2
+Ruling: policy conversion codex-v3 -> codex-v4 — approved preview; Task 4 gpt-6.1-sol / low, Task 5 gpt-6-astra / medium — attempts above this line stay codex-v3
 ```
 
-Later selector requests carry `"policy": "codex-v3"`. Preserve policy-tagged
+Later selector requests carry `"policy": "codex-v4"`. Preserve policy-tagged
 attempt history and consumed split/review budgets; never relabel old attempts,
-fabricate v3 ranks, or reset budgets to make a request pass. If v3 cannot
+fabricate v4 ranks, or reset budgets to make a request pass. If v4 cannot
 represent the active history, as for a task caught mid-escalation, stop for an
-explicit handoff decision. A fresh unstarted v3 task can have empty local
+explicit handoff decision. A fresh unstarted v4 task can have empty local
 history while retaining the prior task record.
 A Claude `Executor: codex` line never starts recursive CLI offload in a Codex host.
 
@@ -141,7 +155,7 @@ the final review.
 
 The Execution pair runs the main session, so it is sized to what that session
 does, not to the judge floor. A subagent session coordinates and dispatches, and
-names `gpt-6-sol / high`. An inline session implements every task itself, and
+names `gpt-6.1-sol / high`. An inline session implements every task itself, and
 names the execution tier at its highest weighted routing score. `scripts/plan-lint`
 warns on any other pair and errors on an inline pair below that score. Design
 handoffs from `scripts/next-step` launch Sol high as well.
@@ -185,7 +199,7 @@ This complete example dispatches Astra medium when that is the allowed advertise
 
 ```json
 {
-  "policy": "codex-v3",
+  "policy": "codex-v4",
   "operation": "assign",
   "role": "implementer",
   "assignment_source": "rubric",

@@ -111,11 +111,11 @@ Task N contains the verifying step.]
 ---
 ```
 
-Codex plans also carry `Host: codex` and `Routing policy: codex-v3` lines
+Codex plans also carry `Host: codex` and `Routing policy: codex-v4` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
 names the native pair: `**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
 That pair runs the main session for the whole plan. A subagent plan names
-`codex gpt-6-sol / high`; an inline plan names the execution tier at its
+`codex gpt-6.1-sol / high`; an inline plan names the execution tier at its
 highest weighted routing score. `scripts/plan-lint` warns on any other pair,
 and errors on an inline pair below that score.
 
@@ -211,7 +211,7 @@ plugin prefixes with [legacy-names.md](../../reference/legacy-names.md) (a name
 outside that table: ask), score each task, and add the lines.
 
 **Codex host:** follow [native-codex.md](../../reference/native-codex.md) — its
-`codex-v3` selector, plan headers, assignment-source fields, and conversion
+`codex-v4` selector, plan headers, assignment-source fields, and conversion
 rules replace the Claude table, fleet, and external CLI lane below. Honor the
 user's inline or delegation preference on either host.
 
@@ -243,7 +243,7 @@ user's inline or delegation preference on either host.
    - `**Implementer:**` — always; the fully qualified agent, for example
      `dr-superpowers:impl-sonnet-low`
    - `**Executor:**` — only when the lane gate passed, for example
-     `codex gpt-6-sol / low`
+     `codex gpt-6.1-sol / low`
    - `**Evaluation:**` — always, for example
      `files 0 - spec 1 - coupling 1 - risk 0 = 2`
    - `**Approach:**` — only when the task involved an approach decision:
@@ -355,7 +355,7 @@ If you find issues, fix them inline. If you find a spec requirement with no task
 
      Read its one status line. `OK` and `FALLBACK` are a review: read the four
      scores and `findings` from the JSON. On `FALLBACK`, or a line naming
-     `gpt-6-sol/xhigh` with `status=OK`, say the substitution aloud with the
+     `gpt-6.1-sol/xhigh` with `status=OK`, say the substitution aloud with the
      runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
      no review: dispatch the printed `fallback` (`dr-superpowers:judge-opus`)
      with the full-plan template, save its reply to

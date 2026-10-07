@@ -269,10 +269,10 @@ elif ! executor_session_on codex review; then
   fallback=- reason=codex-off
 elif [ "$max_risk" -ge 3 ]; then
   primary=codex:heavy+judge-opus fallback=$OPUS reason=risk
-elif [ "$max_total" -le 3 ]; then
-  primary=codex:light fallback=$(band "$max_total") reason=band
 else
-  primary=codex:heavy fallback=$(band "$max_total") reason=band
+  # Below risk 3 every total takes the light row, gpt-6.1-sol; Astra is kept
+  # for risk 3, plan review and the final round.
+  primary=codex:light fallback=$(band "$max_total") reason=band
 fi
 
 printf 'review-seat task=%s primary=%s fallback=%s reason=%s\n' \
