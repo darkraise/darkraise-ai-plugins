@@ -1,7 +1,7 @@
 # Darkraise plugins
 
-Plugins for Claude Code and Codex, distributed through the `darkraise` marketplace.
-The repository is being renamed to `darkraise/darkraise-plugins`.
+Plugins for Claude Code and Codex, distributed through the `darkraise` marketplace
+from `darkraise/darkraise-ai-plugins`.
 
 | Plugin | Claude Code | Codex |
 | --- | --- | --- |
@@ -13,17 +13,18 @@ The repository is being renamed to `darkraise/darkraise-plugins`.
 
 ## Installation
 
-Register the repository root, using its current Git URL or a local checkout.
-After the GitHub rename, the root URL is
-`https://github.com/darkraise/darkraise-plugins.git`.
+Register the repository root, using its Git URL
+(`https://github.com/darkraise/darkraise-ai-plugins.git`) or a local checkout.
 
 Claude Code:
 
 ```text
-/plugin marketplace add darkraise/darkraise-plugins
+/plugin marketplace add darkraise/darkraise-ai-plugins
 /plugin install dr-superpowers@darkraise
 /plugin install dr-status@darkraise
 /plugin install dr-cockpit@darkraise
+/plugin install dcc-darkraise-ui@darkraise
+/plugin install dcc-darkraise-win32ui@darkraise
 ```
 
 For statusline registration, run `/dr-status install`, or `/dr-status install
@@ -35,10 +36,10 @@ Codex uses `.agents/plugins/marketplace.json`; Claude uses
 three supported plugins. Directly registering the Claude catalog file bypasses
 root discovery and is outside the supported Codex installation route.
 
-After the repository rename, install through Codex with:
+Install through Codex with:
 
 ```text
-codex plugin marketplace add https://github.com/darkraise/darkraise-plugins.git
+codex plugin marketplace add https://github.com/darkraise/darkraise-ai-plugins.git
 codex plugin list --marketplace darkraise --available
 codex plugin add dr-superpowers@darkraise
 ```
@@ -47,10 +48,8 @@ A local checkout's absolute root path can replace the URL. Codex 0.153.4's CLI
 rejects direct catalog-file registration; supported root discovery selects the
 dedicated Codex catalog.
 
-`dr-superpowers` requires Superpowers. Claude declares the dependency on
-`superpowers` from `claude-plugins-official`; register that marketplace if it is
-not already available. Codex requires the relevant installed Superpowers skills
-and native agent tools. Native model/effort availability is checked against the
+`dr-superpowers` is a standalone fork of Superpowers and needs no other plugin;
+on Codex it uses the client's native agent tools. Native model/effort availability is checked against the
 active client before dispatch; installation alone does not establish model parity.
 
 ## Migration

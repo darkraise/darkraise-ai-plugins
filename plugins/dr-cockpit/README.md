@@ -53,7 +53,7 @@ Set these in `/config` under the plugin's rows, or in `settings.json` under
 ## Install
 
 ```text
-/plugin marketplace add darkraise/darkraise-plugins
+/plugin marketplace add darkraise/darkraise-ai-plugins
 /plugin install dr-cockpit@darkraise
 ```
 

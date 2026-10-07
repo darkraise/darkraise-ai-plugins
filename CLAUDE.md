@@ -1,4 +1,4 @@
-# darkraise-plugins
+# darkraise-ai-plugins
 
 A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise`.
 

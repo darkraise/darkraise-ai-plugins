@@ -1,6 +1,6 @@
 {
   "name": "dcc-darkraise-ui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Teaches coding agents to write idiomatic darkraise-ui code: the 17-axis theme system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",
   "author": {
     "name": "Darkraise"
