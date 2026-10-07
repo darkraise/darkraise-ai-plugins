@@ -36,7 +36,9 @@ dr_task_commit() {
   [ "$(git -C "$DR_WORKTREE" show -s --format=%T HEAD)" = "$tree" ] &&
     [ "$(git -C "$DR_WORKTREE" show -s --format=%P HEAD)" = "$parent" ] &&
     [ "$(git -C "$DR_WORKTREE" show -s --format=%s HEAD)" = "$subject" ] || { dr_task_block 'commit hooks changed the candidate'; return 2; }
-  dr_task_complete
+  # A tree left dirty after a real commit is blocked, never parked in
+  # "committing", where recover-commit would retry the same check forever.
+  dr_task_complete || { dr_task_block 'worktree not clean after commit'; return 2; }
 }
 
 dr_task_stage() {
@@ -45,14 +47,20 @@ dr_task_stage() {
   dr_task_validate_scope "$before" || { dr_task_block 'worktree/index/HEAD changed outside task scope'; return 2; }
   jq .write_set "$DR_TASK_DIR/state.json" > "$DR_TASK_DIR/scope.json" && dr_task_scope_valid "$DR_TASK_DIR/scope.json" || { dr_task_block 'write-set path escapes worktree'; return 2; }
   dr_snapshot "$DR_WORKTREE" "$after" || return 2
-  while IFS= read -r -d '' path; do paths+=("$path"); done < <(
+  parent="$(jq -r .expected_head "$DR_TASK_DIR/state.json")" || return 2
+  # The commit covers every change since the last commit, not only this
+  # attempt's: a resumed task starts from a pending snapshot that still holds
+  # an earlier attempt's uncommitted, already scope-checked work.
+  while IFS= read -r -d '' path; do paths+=("$path"); done < <({
     jq -j --slurpfile after "$after" '. as $before | $after[0] as $after |
       ([$before.files[].path,$after.files[].path] | unique)[] | . as $path |
-      select([$before.files[] | select(.path == $path)] != [$after.files[] | select(.path == $path)]) | . + "\u0000"' "$before")
+      select([$before.files[] | select(.path == $path)] != [$after.files[] | select(.path == $path)]) | . + "\u0000"' "$before"
+    git -C "$DR_WORKTREE" diff --no-renames --name-only -z "$parent" --
+    git -C "$DR_WORKTREE" ls-files -o --exclude-standard -z
+  } | sort -zu)
   if [ "${#paths[@]}" -eq 0 ]; then dr_task_complete; return; fi
   [[ "$subject" =~ ^(feat|fix|docs|style|refactor|test|chore|perf)(\([^\)]+\))?:\ .+ ]] &&
     [ "${#subject}" -le 50 ] && [[ "$subject" != *$'\n'* && "$subject" != *. ]] || { dr_task_block 'invalid commit subject'; return 2; }
-  parent="$(jq -r .expected_head "$DR_TASK_DIR/state.json")" || return 2
   rm -f -- "$expected_index"
   GIT_INDEX_FILE="$expected_index" git -C "$DR_WORKTREE" read-tree "$parent" || return 2
   for path in "${paths[@]}"; do
