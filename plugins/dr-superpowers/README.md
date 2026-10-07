@@ -20,8 +20,10 @@ Four findings from real transcripts drove the fork; the numbers are in
   window), keeps the execution
   controller on Sonnet, and reads the plan one task at a time instead of whole.
 - **Small models executing literally.** Upstream advises picking a model per
-  task but has no field for the choice, and the Agent tool cannot pass
-  reasoning effort. Here every task records an implementer from a model ×
+  task but has no field for the choice, and the Agent tool could not pass
+  reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
+  dispatch still passes neither model nor effort, so the pinned pair is what
+  runs). Here every task records an implementer from a model ×
   effort grid, the plan's `**Execution:**` line decides inline or subagent
   mode, and `plan-lint` checks the header, the scores and the mode before a
   plan is saved.
@@ -54,7 +56,9 @@ read time per [legacy-names.md](reference/legacy-names.md).
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything the assignment table and the escalation ladder can reach; no score
 assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
-escalation. Nine reserve implementers - the `xhigh` and `max` efforts, and
+escalation. Since 1.27.0 no score assigns `impl-haiku` either: total 0 runs on
+`impl-sonnet-low`, which cost less per pass in the tier evaluation, and Haiku
+is reached only by a human `**Implementer:**` override. Nine reserve implementers - the `xhigh` and `max` efforts, and
 every Fable 5.1 tier - are reachable only by a human override, or by a task
 that has already been split once and still exhausted `impl-opus-high`. Four
 read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
@@ -127,8 +131,8 @@ so its termination proof is untouched.
 The gate floors at score 2 on purpose. Rule S caps `reducible` at 3, so under
 `risk <= 1` the eligible totals are exactly 2, 3, and 4; without the floor the
 gate would reduce to `risk <= 1` and capture nearly every task by count, and it
-would offload score-0 work where the displaced agent is `impl-haiku` and the
-wrapper costs more to orchestrate than it saves.
+would offload score-0 work where the displaced agent is `impl-sonnet-low` and
+the wrapper costs more to orchestrate than it saves.
 
 `**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
 an override on a second line, which is what makes a machine without Codex, a cold

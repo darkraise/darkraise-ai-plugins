@@ -61,4 +61,5 @@ Prefer an indexed code tool (for example darkmem `code_search`) over Explore sub
 ## Platform and Precedence
 
 - Codex: read `references/codex-tools.md`.
+- No todo tool offered (Claude 5.x default)? The ledger, or a checklist in your reply, stands in for each todo.
 - User instructions (CLAUDE.md, AGENTS.md, direct requests) take precedence over skills, which override default behaviour.

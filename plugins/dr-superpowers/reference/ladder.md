@@ -56,11 +56,12 @@ skipped, not that a higher tier is needed.
 applies only when a human overrides Rule S and keeps an undecided-approach task
 as written. It raises; it never lowers.
 
-### Plans written before 1.24.0
+### Plans written before 1.27.0
 
-The assignment table has changed twice. Until 1.23.0 it sent total 4 to
+The assignment table has changed three times. Until 1.23.0 it sent total 4 to
 `impl-opus-low`. Until 1.24.0 it sent total 2 to `impl-sonnet-medium`, totals 3
-and 4 to `impl-sonnet-high`, and total 5 to `impl-opus-medium`. A plan written
+and 4 to `impl-sonnet-high`, and total 5 to `impl-opus-medium`. Until 1.27.0 it
+sent total 0 to `impl-haiku`. A plan written
 before either change names the old agent, and `plan-lint` reports the line as a
 table mismatch. Change it to the agent the table below names, or keep the old
 agent with a human `**Override:**` line below the Evaluation line, which turns
@@ -74,7 +75,7 @@ The total indexes this table directly. Two planners scoring a task identically
 always reach the same agent.
 
 ```assignment
-0 impl-haiku
+0 impl-sonnet-low
 1 impl-sonnet-low
 2 impl-sonnet-low
 3 impl-sonnet-medium
@@ -187,9 +188,13 @@ A plan written to dr-superpowers:writing-plans bans placeholders and requires th
 real code in every code step, so a compliant task scores 0 or 1 on spec
 completeness almost by construction. Combined with Rule S, initial assignments
 cluster in the 0 to 3 band. Scores of 4 to 6 are reached almost entirely
-through the Risk axis, which is the one axis splitting cannot reduce. Haiku
-takes total 0 and Sonnet totals 1 to 5; Opus is assigned only at 6, and
-otherwise reached by escalation. Total 4 went to Opus until Sonnet 5.5, which
+through the Risk axis, which is the one axis splitting cannot reduce. Sonnet
+takes totals 0 to 5; Opus is assigned only at 6, and otherwise reached by
+escalation. Total 0 moved from `impl-haiku` to `impl-sonnet-low` in 1.27.0: on
+the tier evaluation's row 1 cases both passed 7 of 7, and Haiku 4.5 cost $0.18
+per pass against $0.12, and it is the only fleet model with a 200,000-token
+window and no effort control. `impl-haiku` stays in the fleet for a human
+`**Implementer:**` override, with its escalation row. Total 4 went to Opus until Sonnet 5.5, which
 matches Opus 5.5 on well-scoped agentic coding (Terminal-Bench, CursorBench) at
 half the price and trails it on FrontierCode's open-ended work. Totals 2 to 5
 each moved to a cheaper agent in 1.24.0 on a replay of this plugin's own plan
@@ -227,8 +232,8 @@ nobody decided to a one-shot external agent.
 `max_risk 1` the eligible totals are exactly 2, 3, and 4 - totals 5 and 6 need
 `risk >= 2` and the risk clause already excludes them. Without the floor the gate
 would reduce to `risk <= 1` and capture nearly every task by count. It would also
-offload where offload is worthless: a score-0 task displaces `impl-haiku`, which
-costs less to run than the wrapper costs to orchestrate.
+offload where offload is worthless: a score-0 task displaces `impl-sonnet-low`,
+which costs less to run than the wrapper costs to orchestrate.
 
 ### Codex assignment
 

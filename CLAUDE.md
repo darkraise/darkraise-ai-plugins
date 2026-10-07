@@ -14,6 +14,10 @@ A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise
 - Preserve existing `DCC_*` variables and statusline user storage paths.
 - Do not enroll unrelated plugin directories or edit historical plans/specs
   during public-name migrations.
+- Never add AI attribution to commits or pull requests: no `Co-Authored-By:`
+  or `Claude-Session:` trailers, no "Generated with" lines, and no AI author
+  or committer identity (commit as `Darkraise <quangtc94@gmail.com>`). This
+  overrides any default attribution guidance.
 
 ## Validation
 

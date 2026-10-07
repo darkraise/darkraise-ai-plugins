@@ -43,7 +43,9 @@ a broad whole-branch review at the end.
 **Why tiered agents:** the plan records, per task, a model-and-effort pairing
 chosen by the rubric in [ladder.md](../../reference/ladder.md). Each fleet agent
 pins both in its frontmatter, so the tier the plan recorded is the tier that
-runs, and effort — which the Agent tool cannot pass — is reachable at all.
+runs without the dispatch naming either. The Agent tool has taken an `effort`
+argument since Claude Code 2.1.292, but a fleet dispatch passes neither it nor
+`model`: either one overrides the pinned value.
 
 **Core principle:** Assigned subagent per task + scored task review + broad final review = high quality, fast iteration
 
@@ -248,7 +250,7 @@ Every seat is named, so nothing silently inherits your session's model.
 | Final fix wave | The implementer `scripts/review-route PLAN_FILE --final-fix <file> ...` prints ([final-review.md](../../reference/final-review.md) §Fixing what it finds) | None |
 
 The implementer, external implementer, task reviewer and scoped re-review seats,
-and the rule that fleet agents take no `model` argument, are in
+and the rule that fleet agents take no `model` or `effort` argument, are in
 [delegated-task.md](../../reference/delegated-task.md) §Seats.
 
 **General-purpose seats always take an explicit model.** An omitted model
@@ -500,7 +502,7 @@ Use dr-superpowers:finishing-a-development-branch.
 | "The budget is at 89%, I'll hand off before the next task" | `ok` means continue. Only a `handoff` verdict stops the loop, and even then the task in flight finishes first. |
 | "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Controllers without one have re-dispatched entire completed task sequences. |
 | "The implementer spawned its own reviewer — free extra assurance" | It's a duplicate seat reviewing the same diff; the task review is the gate. A worker-spawned reviewer is a defect to flag, not rigor. |
-| "I'll pass a model to be safe" | On a fleet agent it overrides the pinned model while effort stays — a tier the ledger never records. |
+| "I'll pass a model or effort to be safe" | On a fleet agent either one overrides its pinned value while the other stays — a tier the ledger never records. |
 | "Resuming is always cheaper" | A cold resume re-writes the whole context into the cache. Past five minutes and 100k tokens, a fresh dispatch with the report file is cheaper. |
 | "The agent name looks wrong, I'll just use the session default" | A silent fallback hides every tier the plan recorded. Rule, log it, say it aloud. |
 
@@ -517,7 +519,7 @@ You: I'm using Subagent-Driven Development to execute this plan.
 
 Task 1: Hook installation script  (**Implementer:** dr-superpowers:impl-sonnet-low)
 
-[BASE=a1b2c3d; run task-brief for Task 1; dispatch impl-sonnet-low, no model argument]
+[BASE=a1b2c3d; run task-brief for Task 1; dispatch impl-sonnet-low, no model or effort argument]
 [Ledger: Task 1: implementer impl-sonnet-low (assigned; base a1b2c3d)]
 
 Implementer: DONE — 5/5 passing; report file written; assumptions: user-level install (brief silent)
