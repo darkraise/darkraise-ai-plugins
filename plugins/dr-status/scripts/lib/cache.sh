@@ -25,14 +25,20 @@ dcc_cache_dir() { # -> DCC_CACHE_DIR, empty when the directory cannot be used
   # against the first user's mode-755 directory and their reads see its
   # world-readable, attacker-controllable contents.
   DCC_CACHE_DIR="$root/dcc-statusline-$UID"
-  # Guarded so the fork happens once per machine, not once per render.
-  [ -d "$DCC_CACHE_DIR" ] || mkdir -m 700 -p "$DCC_CACHE_DIR" 2>/dev/null || { DCC_CACHE_DIR=""; return 0; }
   # A shared /tmp lets another account create this directory first and plant
-  # symlinks or escape sequences in it, so only a real directory this account
-  # owns is used; anything else renders uncached. Windows temp roots are
-  # per-user already, and MSYS can report admin-created files as group-owned.
-  [ ! -L "$DCC_CACHE_DIR" ] || { DCC_CACHE_DIR=""; return 0; }
-  case "${OSTYPE:-}" in msys*|cygwin*) ;; *) [ -O "$DCC_CACHE_DIR" ] || DCC_CACHE_DIR="" ;; esac
+  # symlinks or escape sequences in it, so only a private, real directory this
+  # account owns is used; anything else renders uncached. Windows temp roots
+  # are per-user already, so MSYS and Cygwin keep the plain directory: their
+  # permission emulation cannot express the mode, and can report an admin's
+  # files as group-owned.
+  case "${OSTYPE:-}" in
+    msys*|cygwin*)
+      # Guarded so the fork happens once per machine, not once per render.
+      [ -d "$DCC_CACHE_DIR" ] || mkdir -p "$DCC_CACHE_DIR" 2>/dev/null || DCC_CACHE_DIR="" ;;
+    *)
+      [ -d "$DCC_CACHE_DIR" ] || mkdir -m 700 -p "$DCC_CACHE_DIR" 2>/dev/null || { DCC_CACHE_DIR=""; return 0; }
+      [ ! -L "$DCC_CACHE_DIR" ] && [ -O "$DCC_CACHE_DIR" ] || DCC_CACHE_DIR="" ;;
+  esac
 }
 
 dcc_cache_key() { # dcc_cache_key <string> -> DCC_CACHE_KEY
