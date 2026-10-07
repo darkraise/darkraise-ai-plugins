@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "darkraise",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Darkraise plugins for Claude Code and Codex.",
   "owner": {
     "name": "Darkraise",
@@ -23,6 +23,20 @@
         "code-review",
         "codex",
         "external-executors"
+      ]
+    },
+    {
+      "name": "dr-cockpit",
+      "source": "./plugins/dr-cockpit",
+      "description": "A Claude Code mod for long sessions: a band that warns as the main session nears its handoff budget, a pane of subagent seats and their token use, and a guard that keeps AI attribution out of commits and pull requests.",
+      "category": "productivity",
+      "keywords": [
+        "mod",
+        "context-window",
+        "handoff",
+        "subagents",
+        "token-usage",
+        "attribution"
       ]
     },
     {

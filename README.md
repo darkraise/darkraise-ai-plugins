@@ -5,6 +5,7 @@ The repository is being renamed to `darkraise/darkraise-plugins`.
 
 | Plugin | Claude Code | Codex |
 | --- | --- | --- |
+| [dr-cockpit](plugins/dr-cockpit/README.md) | Available | Not listed |
 | [dr-status](plugins/dr-status/README.md) | Available | Not listed |
 | [dr-superpowers](plugins/dr-superpowers/README.md) | Available | Available |
 | [dcc-darkraise-ui](plugins/dcc-darkraise-ui/README.md) | Available | Available |
@@ -22,6 +23,7 @@ Claude Code:
 /plugin marketplace add darkraise/darkraise-plugins
 /plugin install dr-superpowers@darkraise
 /plugin install dr-status@darkraise
+/plugin install dr-cockpit@darkraise
 ```
 
 For statusline registration, run `/dr-status install`, or `/dr-status install

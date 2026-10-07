@@ -2,7 +2,8 @@ import { readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const names = ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-status', 'dr-superpowers'];
+const names = ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-cockpit', 'dr-status', 'dr-superpowers'];
+const claudeOnly = ['dr-cockpit', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 
 export function validateRepository(root) {
@@ -15,7 +16,7 @@ export function validateRepository(root) {
   const manifests = new Map();
   for (const [client, catalogPath, expected] of [
     ['claude', '.claude-plugin/marketplace.json', names],
-    ['codex', '.agents/plugins/marketplace.json', names.filter(name => name !== 'dr-status')],
+    ['codex', '.agents/plugins/marketplace.json', names.filter(name => !claudeOnly.includes(name))],
   ]) {
     const catalog = read(resolve(root, catalogPath));
     if (!catalog) continue;
@@ -52,7 +53,9 @@ export function validateRepository(root) {
   }
   const versionPath = resolve(root, 'plugins/dr-status/scripts/VERSION');
   if (!existsSync(versionPath) || readFileSync(versionPath, 'utf8').trim() !== manifests.get('dr-status')?.version) errors.push('dr-status: script version mismatch');
-  if (existsSync(resolve(root, 'plugins/dr-status/.codex-plugin/plugin.json'))) errors.push('dr-status: Claude-only plugin has a Codex manifest');
+  for (const name of claudeOnly) {
+    if (existsSync(resolve(root, `plugins/${name}/.codex-plugin/plugin.json`))) errors.push(`${name}: Claude-only plugin has a Codex manifest`);
+  }
   for (const name of names) {
     const skillRoot = resolve(root, 'plugins', name, 'skills');
     if (!existsSync(skillRoot)) continue;
