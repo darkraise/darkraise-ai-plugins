@@ -260,7 +260,7 @@ has "Codex inline on a reserve pair warns" "$out" "WARN header: inline Execution
 # --- R5 delegation: heavy tasks; a total-4 task stays in session ----------
 ev() { # ev <total> — "<agent> <evaluation>" for a lint-clean task at that total
   case $1 in
-    0) echo 'impl-haiku files 0 - spec 0 - coupling 0 - risk 0 = 0' ;;
+    0) echo 'impl-sonnet-low files 0 - spec 0 - coupling 0 - risk 0 = 0' ;;
     1) echo 'impl-sonnet-low files 0 - spec 0 - coupling 1 - risk 0 = 1' ;;
     2) echo 'impl-sonnet-low files 0 - spec 1 - coupling 1 - risk 0 = 2' ;;
     3) echo 'impl-sonnet-medium files 1 - spec 1 - coupling 1 - risk 0 = 3' ;;
@@ -321,7 +321,7 @@ lint r9.md
 check "a self-implemented total 2 runs at effort low: exit 0" "$status" "0"
 tplan r10.md inline sonnet low 0 0 0 0 0 0
 lint r10.md
-check "impl-haiku counts as low: exit 0" "$status" "0"
+check "a total-0 plan runs at effort low: exit 0" "$status" "0"
 tplan r11.md inline haiku low 1 1
 lint r11.md
 has "inline on haiku is a model error" "$out" "ERROR header: inline execution needs --model sonnet or opus (model haiku)"
@@ -579,7 +579,7 @@ None.
 - Consumes: nothing
 - Produces: nothing
 $2
-**Implementer:** dr-superpowers:impl-haiku
+**Implementer:** dr-superpowers:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 
 - [ ] **Step 1: Do it**
