@@ -200,9 +200,10 @@ dr_task_validate_scope() {
   scope="$(jq -c .write_set "$DR_TASK_DIR/state.json")" || { rm -f "$actual"; return 2; }
   jq -e --slurpfile after "$actual" --argjson scope "$scope" '
     . as $before | $after[0] as $after |
-    .head == $after.head and .root == $after.root and .gitdir == $after.gitdir and .index == $after.index and
     # Keyed lookups: nested selects made this quadratic in the file count.
+    # Bound before the test: jq 1.8 parses `x and E as $v | ...` differently.
     INDEX($before.files[]; .path) as $b | INDEX($after.files[]; .path) as $a | INDEX($scope[]; .) as $s |
+    .head == $after.head and .root == $after.root and .gitdir == $after.gitdir and .index == $after.index and
     all(($b + $a | keys_unsorted[]); . as $path | $b[$path] == $a[$path] or $s[$path] != null)' "$before" >/dev/null
   result=$?
   rm -f "$actual"
