@@ -127,10 +127,10 @@ check "session-start.sh parses" \
 check "entry point is at most 4,800 bytes" \
   "$([ "$(wc -c < "$HERE/../skills/using-superpowers/SKILL.md")" -le 4800 ] && echo yes || echo no)" "yes"
 
-# The three project-state skills must be reachable from the entry point, which
+# The project-state skills and test-simplifier must be reachable from the entry point, which
 # is the only skill list a cold session sees.
 ENTRY="$HERE/../skills/using-superpowers/SKILL.md"
-for s in project-status running-gates distilling-docs; do
+for s in project-status running-gates distilling-docs test-simplifier; do
   if grep -qF -- "dr-superpowers:$s" "$ENTRY"; then
     printf 'ok   - routing names dr-superpowers:%s\n' "$s"; pass=$((pass + 1))
   else
