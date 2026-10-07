@@ -1,13 +1,13 @@
 {
-  "version": "codex-v3",
+  "version": "codex-v4",
   "execution": [
     {"rank":0,"model":"gpt-6-luna","effort":"low"},
     {"rank":1,"model":"gpt-6-luna","effort":"medium"},
     {"rank":2,"model":"gpt-6-luna","effort":"high"},
-    {"rank":3,"model":"gpt-6-sol","effort":"low"},
-    {"rank":4,"model":"gpt-6-sol","effort":"medium"},
-    {"rank":5,"model":"gpt-6-sol","effort":"high"},
-    {"rank":6,"model":"gpt-6-sol","effort":"xhigh"},
+    {"rank":3,"model":"gpt-6.1-sol","effort":"low"},
+    {"rank":4,"model":"gpt-6.1-sol","effort":"medium"},
+    {"rank":5,"model":"gpt-6.1-sol","effort":"high"},
+    {"rank":6,"model":"gpt-6.1-sol","effort":"xhigh"},
     {"rank":7,"model":"gpt-6-astra","effort":"medium"},
     {"rank":8,"model":"gpt-6-astra","effort":"high"},
     {"rank":9,"model":"gpt-6-astra","effort":"xhigh"}

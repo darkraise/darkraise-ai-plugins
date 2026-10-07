@@ -141,9 +141,9 @@ write_plan "$PLAN" '**Execution:** inline -- claude --model sonnet --effort medi
 run "$REPO" "$PLAN_REL"
 has "inline: prompt names executing-plans" "$out" "with dr-superpowers:executing-plans."
 has "inline: command without backticks" "$out" "claude --model sonnet --effort medium"
-write_plan "$PLAN" '**Execution:** subagent — codex gpt-6-sol / high — Codex host' ""
+write_plan "$PLAN" '**Execution:** subagent — codex gpt-6.1-sol / high — Codex host' ""
 run "$REPO" "$PLAN_REL"
-has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-6-sol -c model_reasoning_effort=high"
+has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-6.1-sol -c model_reasoning_effort=high"
 lacks "codex pair: no claude command" "$out" "claude --model"
 write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
 run "$REPO" "$PLAN_REL"
@@ -440,8 +440,8 @@ has "blocked: latest.md carries the block" "$(cat "$REPO/.superpowers/handoff/la
 # The session knows its host (native-codex.md identifies it from callable tool
 # schemas, never from an executable), so the adhoc and draft paths take it as a
 # flag. A plan carries `Host: codex` in its header instead.
-CODEX_DESIGN='codex -m gpt-6-sol -c model_reasoning_effort=high'
-CODEX_BUILD='codex -m gpt-6-sol -c model_reasoning_effort=high'
+CODEX_DESIGN='codex -m gpt-6.1-sol -c model_reasoning_effort=high'
+CODEX_BUILD='codex -m gpt-6.1-sol -c model_reasoning_effort=high'
 
 run "$REPO" --adhoc --phase design --host codex --next "Scope item C with dr-superpowers:brainstorming"
 check "adhoc design on codex: exits 0" "$status" "0"
@@ -468,13 +468,13 @@ CODEX_PLAN="$REPO/$CODEX_PLAN_REL"
 CODEX_LEDGER_DIR="$REPO/.superpowers/sdd/2026-01-01-codex"
 EXEC_CODEX='**Host:** codex
 
-**Routing policy:** codex-v3
+**Routing policy:** codex-v4
 
-**Execution:** inline — `codex gpt-6-sol / medium` — every task totals 4 or less'
+**Execution:** inline — `codex gpt-6.1-sol / medium` — every task totals 4 or less'
 write_plan "$CODEX_PLAN" "$EXEC_CODEX" "$PROG_NEXT"
 run "$REPO" "$CODEX_PLAN_REL"
 check "codex plan: exits 0" "$status" "0"
-has "codex plan: launch command from the Execution line" "$out" "codex -m gpt-6-sol -c model_reasoning_effort=medium"
+has "codex plan: launch command from the Execution line" "$out" "codex -m gpt-6.1-sol -c model_reasoning_effort=medium"
 lacks "codex plan: no fallback to reading the Execution line" "$out" "Launch: see the"
 
 run "$REPO" --complete "$CODEX_PLAN_REL"

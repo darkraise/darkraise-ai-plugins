@@ -114,13 +114,13 @@ codex_plan() {
 # Codex Demo Plan
 
 Host: codex
-Routing policy: codex-v3
+Routing policy: codex-v4
 
 **Goal:** Demo.
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — codex gpt-6-sol / high — native pair
+**Execution:** subagent — codex gpt-6.1-sol / high — native pair
 
 **Plan review:** 2026-09-12 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
@@ -145,7 +145,7 @@ None
 **Files:**
 - Create: `b.txt`
 
-**Implementer:** codex gpt-6-sol / low
+**Implementer:** codex gpt-6.1-sol / low
 **Evaluation:** files=1, spec=1, coupling=1, risk=0; weighted routing score=3
 **Assignment source:** rubric
 EOF
@@ -242,18 +242,18 @@ lint codex-inline.md
 has "a Codex-host inline plan keeps the old eligibility error" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 1"
 lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
 has "a Codex inline pair below the highest score errors" "$out" "ERROR header: inline Execution rank 5 is below the highest task score 9"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** subagent — codex gpt-6-astra / high#' > codex-sub-astra.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** subagent — codex gpt-6-astra / high#' > codex-sub-astra.md
 lint codex-sub-astra.md
 check "Codex subagent on Astra: exit 0" "$status" "0"
-has "Codex subagent on Astra warns" "$out" "WARN header: subagent Execution line should be codex gpt-6-sol / high"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** inline — codex gpt-6-sol / low#' > codex-inline-fit.md
+has "Codex subagent on Astra warns" "$out" "WARN header: subagent Execution line should be codex gpt-6.1-sol / high"
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6.1-sol / low#' > codex-inline-fit.md
 lint codex-inline-fit.md
 check "Codex inline at the highest score: clean" "$out" "plan-lint: 0 errors, 0 warnings"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** inline — codex gpt-6-astra / high#' > codex-inline-over.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / high#' > codex-inline-over.md
 lint codex-inline-over.md
 check "Codex inline above the highest score: exit 0" "$status" "0"
 has "Codex inline above the highest score warns" "$out" "WARN header: inline Execution rank 8 is above the highest task score 3"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6-sol / high#**Execution:** inline — codex gpt-6-astra / max#' > codex-inline-reserve.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / max#' > codex-inline-reserve.md
 lint codex-inline-reserve.md
 has "Codex inline on a reserve pair warns" "$out" "WARN header: inline Execution pair codex gpt-6-astra / max is a reserve tier; the highest task score is 3"
 
@@ -412,11 +412,11 @@ has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must c
 variant t9.md 's/^\*\*Approach:\*\* .*/**Approach:** gut feeling/'
 lint t9.md
 has "Approach grammar" "$out" "ERROR Task 2: Approach does not match"
-variant t10.md 's/^(\*\*Evaluation:\*\* files 0 - spec 0 - coupling 1 - risk 0 = 1)$/\1\n**Executor:** codex gpt-6-sol \/ low/'
+variant t10.md 's/^(\*\*Evaluation:\*\* files 0 - spec 0 - coupling 1 - risk 0 = 1)$/\1\n**Executor:** codex gpt-6.1-sol \/ low/'
 lint t10.md
 has "Executor below the gate" "$out" "ERROR Task 1: total 1 / risk 0 fails the lane gate (min_score 2, max_risk 1)"
 has "Executor without header line" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name codex"
-variant t11.md 's/^(\*\*Approach:\*\* .*)$/\1\n**Override:** kept\n**Executor:** codex gpt-6-sol \/ high/'
+variant t11.md 's/^(\*\*Approach:\*\* .*)$/\1\n**Override:** kept\n**Executor:** codex gpt-6.1-sol \/ high/'
 lint t11.md
 has "Executor on an overridden task" "$out" "ERROR Task 2: an Executor line on an overridden task fails the lane gate"
 variant t13.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 0 - risk 4 = 4/'
@@ -430,37 +430,37 @@ has "missing Files" "$out" "ERROR Task 2: missing **Files:** block"
 codex_plan | sed 's/weighted routing score=3/weighted routing score=4/' > c1.md
 lint c1.md
 has "weighted score mismatch" "$out" "ERROR Task 1: weighted routing score 4 is not files+spec+coupling+2*risk = 3"
-codex_plan | sed 's#gpt-6-sol / low#gpt-6-luna / high#' > c2.md
+codex_plan | sed 's#gpt-6.1-sol / low#gpt-6-luna / high#' > c2.md
 lint c2.md
 has "rank below score" "$out" "ERROR Task 1: Implementer rank 2 is below routing score 3"
-codex_plan | sed 's#gpt-6-sol / low#gpt-6-sol / medium#' > c3.md
+codex_plan | sed 's#gpt-6.1-sol / low#gpt-6.1-sol / medium#' > c3.md
 lint c3.md
 check "promotion: exit 0" "$status" "0"
 has "promotion warns" "$out" "WARN Task 1: Implementer rank 4 is above routing score 3 (promotion)"
-codex_plan | sed 's#^Routing policy: codex-v3$#Routing policy: codex-v2#; s#codex gpt-6-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6-sol / low#codex gpt-5.6-terra / medium#' > cv2.md
+codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: codex-v2#; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cv2.md
 lint cv2.md
 check "codex-v2 plan: exit 1" "$status" "1"
-has "codex-v2 plan: conversion error" "$out" "ERROR header: Routing policy is codex-v2, not codex-v3; convert the plan per reference/native-codex.md §Existing plans"
+has "codex-v2 plan: conversion error" "$out" "ERROR header: Routing policy is codex-v2, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "codex-v2 plan: no Execution pair error" "$out" "is not in codex-routing.json"
 lacks "codex-v2 plan: no Implementer tier error" "$out" "is not an execution tier"
 has "codex-v2 plan: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
-codex_plan | sed '/^Routing policy:/d; s#codex gpt-6-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6-sol / low#codex gpt-5.6-terra / medium#' > cnone.md
+codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cnone.md
 lint cnone.md
 check "no Routing policy line: exit 1" "$status" "1"
-has "no Routing policy line: conversion error names it missing" "$out" "ERROR header: Routing policy is missing, not codex-v3; convert the plan per reference/native-codex.md §Existing plans"
+has "no Routing policy line: conversion error names it missing" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "no Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
 lacks "no Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
 has "no Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
-codex_plan | sed '/^Routing policy:/d; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v3\n```#' > cfenced.md
+codex_plan | sed '/^Routing policy:/d; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v4\n```#' > cfenced.md
 lint cfenced.md
-has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v3; convert the plan per reference/native-codex.md §Existing plans"
+has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 
 # --- the lazy lane probe ---
 # p1 makes Task 1 lane-eligible: total 2, risk 0, no Executor, no Override.
 variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
 export PLAN_LINT_ROSTER="$TMP/usable.sh"
 rm -f probe-calls; lint p1.md
-has "usable codex: an eligible task without Executor warns" "$out" "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6-sol / low)"
+has "usable codex: an eligible task without Executor warns" "$out" "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
 check "usable codex: the warning does not fail the lint" "$status" "0"
 lacks "usable codex: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
 check "usable codex: the probe runs once" "$(calls)" "1"
@@ -482,7 +482,7 @@ rm -f probe-calls; lint p1.md
 lacks "unusable codex: no lane warning" "$out" "lane-eligible"
 check "unusable codex: the probe still ran once" "$(calls)" "1"
 export PLAN_LINT_ROSTER="$TMP/usable.sh"
-variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-6-sol \/ low/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
+variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-6.1-sol \/ low/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
 rm -f probe-calls; lint p2.md
 lacks "an Executor line clears the candidate" "$out" "lane-eligible"
 lacks "the Executor fixture is otherwise clean" "$out" "ERROR Task 1"
@@ -726,7 +726,7 @@ inline_plan() { # inline_plan <file> <execution line>
 |### Task 1: offloaded four band
 |
 |**Implementer:** dr-superpowers:impl-sonnet-medium
-|**Executor:** codex gpt-6-sol / high
+|**Executor:** codex gpt-6.1-sol / high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 2: small

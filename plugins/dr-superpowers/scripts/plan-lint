@@ -429,8 +429,8 @@ if [ "$codex" -eq 1 ]; then
   if [ "$policy_ok" -eq 0 ]; then
     :
   elif [ "$mode" = subagent ]; then
-    { [ "$exec_model" = gpt-6-sol ] && [ "$exec_effort" = high ]; } \
-      || say WARN header "subagent Execution line should be codex gpt-6-sol / high"
+    { [ "$exec_model" = gpt-6.1-sol ] && [ "$exec_effort" = high ]; } \
+      || say WARN header "subagent Execution line should be codex gpt-6.1-sol / high"
   elif [ "$mode" = inline ]; then
     exec_rank=$(jq -r --arg m "$exec_model" --arg e "$exec_effort" \
       '.execution[] | select(.model == $m and .effort == $e) | .rank' "$ROUTING" 2>/dev/null | tr -d '\r')

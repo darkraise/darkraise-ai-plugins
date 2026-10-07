@@ -2,7 +2,7 @@
 
 The raw axis definitions and Rule S are shared across hosts. The unweighted
 totals, agent tables, and external CLI lane here apply to Claude. Native Codex
-uses [native-codex.md](native-codex.md) and its weighted `codex-v3` score.
+uses [native-codex.md](native-codex.md) and its weighted `codex-v4` score.
 The fenced blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
 
 ## Scoring rubric
@@ -238,16 +238,19 @@ which costs less to run than the wrapper costs to orchestrate.
 ### Codex assignment
 
 ```codex-assignment
-2 gpt-6-sol low
-3 gpt-6-sol medium
-4 gpt-6-sol high
+2 gpt-6.1-sol low
+3 gpt-6.1-sol medium
+4 gpt-6.1-sol high
 ```
 
-Only `gpt-6-sol` appears in this external CLI *execution* policy; the review
-seats take `gpt-6-astra` from the `codex-judge` block below. It replaced
+Only `gpt-6.1-sol` appears in this external CLI *execution* policy; the review
+seats take their rows from the `codex-judge` block below. `gpt-6-sol` replaced
 `gpt-5.5` and `gpt-5.6-sol` on 2026-09-23: `gpt-5.5` retires from Codex with
-ChatGPT sign-in on 2026-10-14, and Codex's own catalog lists `gpt-6-sol` as the
-upgrade for `gpt-5.6-sol`. On 2026-08-31, Codex 0.151.0 on Windows with
+ChatGPT sign-in on 2026-10-14, and Codex's own catalog listed `gpt-6-sol` as the
+upgrade for `gpt-5.6-sol`. `gpt-6.1-sol` replaced `gpt-6-sol` on 2026-10-07: it
+has been Codex's default model since 0.159.1, OpenAI describes it as near-Astra
+on software work, and the move rests on that description; no calibration
+replay was run. On 2026-08-31, Codex 0.151.0 on Windows with
 ChatGPT-subscription authentication rejected GPT-5.6 Luna and Terra with HTTP
 400 and provided no metadata for them; GPT-6 Luna has not run through this lane
 yet. Those historical
@@ -261,10 +264,10 @@ do not infer them from the native model list or make paid capability probes.
 ### Codex successor
 
 ```codex-successor
-gpt-6-sol/low gpt-6-sol/medium
-gpt-6-sol/medium gpt-6-sol/high
-gpt-6-sol/high gpt-6-sol/xhigh
-gpt-6-sol/xhigh HANDBACK
+gpt-6.1-sol/low gpt-6.1-sol/medium
+gpt-6.1-sol/medium gpt-6.1-sol/high
+gpt-6.1-sol/high gpt-6.1-sol/xhigh
+gpt-6.1-sol/xhigh HANDBACK
 ```
 
 This is a single-successor column consulted at most once per task, not a
@@ -283,7 +286,7 @@ by `HANDBACK` instead - the exit it was already heading for at round 4.
 of the escalation table. It resolves to the Claude assignment-table row for the
 task's score, after which the ordinary ladder governs.
 
-Ranking a rung as `model_rank * 10 + effort_rank`, where `gpt-6-sol` ranks 0,
+Ranking a rung as `model_rank * 10 + effort_rank`, where `gpt-6.1-sol` ranks 0,
 gives every successor a strictly higher rank than its source, so the column is
 acyclic and every walk reaches `HANDBACK`. With one model the rank is the
 effort's alone; the formula stays so a second model can join the column.
@@ -291,10 +294,10 @@ effort's alone; the formula stays so a second model can join the column.
 ### Codex timeout
 
 ```codex-timeout
-gpt-6-sol/low 900
-gpt-6-sol/medium 1200
-gpt-6-sol/high 1800
-gpt-6-sol/xhigh 2400
+gpt-6.1-sol/low 900
+gpt-6.1-sol/medium 1200
+gpt-6.1-sol/high 1800
+gpt-6.1-sol/xhigh 2400
 ```
 
 Seconds. One constant cannot serve both a `medium` and an `xhigh` run.
@@ -304,12 +307,15 @@ Seconds. One constant cannot serve both a `medium` and an `xhigh` run.
 Every Claude-hosted Codex review seat — the task seats, plan-review round 1,
 and the final-review round — takes its model from this block, not from
 `codex-assignment`. The first row is preferred; the last row is the fallback.
-`--tier light` runs the last row directly, for tasks totalling 0 to 3; every
-other seat uses the first row with its fallback.
+`--tier light` runs the last row directly, for tasks totalling 0 to 6 below
+risk 3; every other seat (risk 3, plan review, the final round) uses the first
+row with its fallback. Totals 4 to 6 moved from Astra to the light row on
+2026-10-07, when `gpt-6.1-sol` replaced `gpt-6-sol` there, at about a fifth of
+Astra's price.
 
 ```codex-judge
 gpt-6-astra xhigh 5400
-gpt-6-sol xhigh 2400
+gpt-6.1-sol xhigh 2400
 ```
 
 The effort and the bound move together. At `high` with 1800 seconds the
@@ -320,7 +326,7 @@ would only buy more `TIMEOUT` rows, because more thinking takes more wall
 clock on exactly the plans that already ran out of it.
 
 The two rows carry different bounds on purpose. `gpt-6-astra/xhigh` appears
-only here, so its 5400 is free to be set for review work. `gpt-6-sol/xhigh`
+only here, so its 5400 is free to be set for review work. `gpt-6.1-sol/xhigh`
 also appears in `codex-timeout`, where 2400 bounds *task execution*, and
 `tests/lanes.test.sh` requires the two blocks to agree on any pair they share
 — a constant in two places drifts otherwise. Widening the judge row would mean

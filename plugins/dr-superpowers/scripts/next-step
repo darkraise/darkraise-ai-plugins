@@ -63,7 +63,7 @@ set -- ${hostless[@]+"${hostless[@]}"}
 # need Astra go to native judges at the rank-8 floor, not to the session.
 launch_for() { # launch_for design|build
   case $host:$1 in
-    codex:*)       printf 'codex -m gpt-6-sol -c model_reasoning_effort=high' ;;
+    codex:*)       printf 'codex -m gpt-6.1-sol -c model_reasoning_effort=high' ;;
     *:design)      printf 'claude --model opus --effort high' ;;
     *)             printf 'claude --model sonnet --effort high' ;;
   esac

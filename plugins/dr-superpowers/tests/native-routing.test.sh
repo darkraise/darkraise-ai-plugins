@@ -7,10 +7,10 @@ trap 'rm -rf "$fixture"' EXIT
 pass=0 fail=0
 check() { if [ "$2" = "$3" ]; then printf 'ok - %s\n' "$1"; pass=$((pass+1)); else printf 'FAIL - %s: got [%s], want [%s]\n' "$1" "$2" "$3"; fail=$((fail+1)); fi; }
 cat > "$fixture/request.json" <<'JSON'
-{"policy":"codex-v3","operation":"assign","role":"implementer","assignment_source":"rubric",
+{"policy":"codex-v4","operation":"assign","role":"implementer","assignment_source":"rubric",
  "axes":{"files":0,"spec":0,"coupling":0,"risk":0},
  "available_pairs":[{"model":"gpt-6-luna","effort":"low"},{"model":"gpt-6-luna","effort":"medium"},{"model":"gpt-6-luna","effort":"high"},
- {"model":"gpt-6-sol","effort":"low"},{"model":"gpt-6-sol","effort":"medium"},{"model":"gpt-6-sol","effort":"high"},{"model":"gpt-6-sol","effort":"xhigh"},
+ {"model":"gpt-6.1-sol","effort":"low"},{"model":"gpt-6.1-sol","effort":"medium"},{"model":"gpt-6.1-sol","effort":"high"},{"model":"gpt-6.1-sol","effort":"xhigh"},
  {"model":"gpt-6-astra","effort":"medium"},{"model":"gpt-6-astra","effort":"high"},{"model":"gpt-6-astra","effort":"xhigh"},
  {"model":"gpt-6-astra","effort":"max"},{"model":"gpt-6-astra","effort":"ultra"}],
  "attempted_ranks":[],"attempted_reserves":[],"split_consumed":false,"review_rounds":0}
@@ -33,10 +33,10 @@ done <<'CASES'
 0 0 0 0 0 gpt-6-luna low
 1 1 0 0 0 gpt-6-luna medium
 2 1 1 0 0 gpt-6-luna high
-3 1 1 1 0 gpt-6-sol low
-4 1 1 0 1 gpt-6-sol medium
-5 1 1 1 1 gpt-6-sol high
-6 1 1 0 2 gpt-6-sol xhigh
+3 1 1 1 0 gpt-6.1-sol low
+4 1 1 0 1 gpt-6.1-sol medium
+5 1 1 1 1 gpt-6.1-sol high
+6 1 1 0 2 gpt-6.1-sol xhigh
 7 1 1 1 2 gpt-6-astra medium
 8 1 1 0 3 gpt-6-astra high
 9 1 1 1 3 gpt-6-astra xhigh
@@ -56,18 +56,19 @@ expect_error 'fractional supplied total' '.score=0.5' 'score'
 expect_error 'out-of-range supplied total' '.score=10' 'score'
 expect_error 'null supplied total' '.score=null' 'score'
 expect_error 'old policy' '.policy="codex-v1"' 'conversion required'
-expect_error 'previous policy' '.policy="codex-v2"' 'conversion required'
-expect_error 'rejection names the current policy' '.policy="codex-v2"' 'conversion required before using codex-v3'
+expect_error 'older policy' '.policy="codex-v2"' 'conversion required'
+expect_error 'previous policy' '.policy="codex-v3"' 'conversion required'
+expect_error 'rejection names the current policy' '.policy="codex-v2"' 'conversion required before using codex-v4'
 expect_error 'unknown policy' '.policy="codex-v99"' 'conversion required'
 expect_error 'missing capability metadata' 'del(.available_pairs)' 'metadata'
 
 decision 'missing Luna effort promotes within Luna' '.axes={files:1,spec:0,coupling:0,risk:0} | .available_pairs=[{model:"gpt-6-luna",effort:"high"}]' '[.score,.rank,.model,.effort]' '[1,2,"gpt-6-luna","high"]'
-decision 'missing Luna promotes to Sol low' '.axes={files:1,spec:1,coupling:0,risk:0} | .available_pairs |= map(select(.model != "gpt-6-luna"))' '[.score,.rank,.model,.effort]' '[2,3,"gpt-6-sol","low"]'
-decision 'initial assignment neither demotes nor enters reserve' '.axes={files:1,spec:1,coupling:1,risk:3} | .available_pairs=[{model:"gpt-6-sol",effort:"xhigh"},{model:"gpt-6-astra",effort:"max"}]' '.action' '"blocked"'
+decision 'missing Luna promotes to Sol low' '.axes={files:1,spec:1,coupling:0,risk:0} | .available_pairs |= map(select(.model != "gpt-6-luna"))' '[.score,.rank,.model,.effort]' '[2,3,"gpt-6.1-sol","low"]'
+decision 'initial assignment neither demotes nor enters reserve' '.axes={files:1,spec:1,coupling:1,risk:3} | .available_pairs=[{model:"gpt-6.1-sol",effort:"xhigh"},{model:"gpt-6-astra",effort:"max"}]' '.action' '"blocked"'
 decision 'empty capabilities block initial assignment' '.available_pairs=[]' '.action' '"blocked"'
-decision 'scout retains Sol medium floor' '.role="scout"' '[.rank,.model,.effort]' '[4,"gpt-6-sol","medium"]'
+decision 'scout retains Sol medium floor' '.role="scout"' '[.rank,.model,.effort]' '[4,"gpt-6.1-sol","medium"]'
 decision 'judge retains Astra high floor' '.role="judge"' '[.rank,.model,.effort]' '[8,"gpt-6-astra","high"]'
-decision 'judge never drops below its floor' '.role="judge" | .available_pairs=[{model:"gpt-6-sol",effort:"xhigh"}]' '.action' '"blocked"'
+decision 'judge never drops below its floor' '.role="judge" | .available_pairs=[{model:"gpt-6.1-sol",effort:"xhigh"}]' '.action' '"blocked"'
 decision 'judge exhaustion never enters implementer reserve' '.role="judge" | .operation="escalate" | .attempted_ranks=[8,9] | .split_consumed=true' '.action' '"blocked"'
 
 decision 'human reserve pin needs neither axes nor split' 'del(.axes) | .assignment_source="human" | .pinned_pair={model:"gpt-6-astra",effort:"ultra"}' '[.action,.model,.effort]' '["dispatch","gpt-6-astra","ultra"]'
@@ -108,8 +109,9 @@ done <<'NEEDLES'
 Obtain approval
 human pin stays verbatim
 4     gpt-5.6-terra / high
+3     gpt-6-sol / low
 ## Policy conversion
-Ruling: policy conversion codex-v2 -> codex-v3
+Ruling: policy conversion codex-v3 -> codex-v4
 consumed split/review budgets
 caught mid-escalation
 NEEDLES
