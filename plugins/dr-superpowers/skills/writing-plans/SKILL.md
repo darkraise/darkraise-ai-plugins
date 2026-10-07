@@ -80,7 +80,9 @@ Constraints and Contracts.
 **Program:** [only when the spec is one sub-project of a program design:
 `<program spec path>` — sub-project <k> of <n> — next: <title of sub-project
 k+1, copied from the program's decomposition>. On the final sub-project,
-end with `— last` instead of `— next: …`. Omit the line otherwise.]
+end with `— last` instead of `— next: …`. Omit the line otherwise, and
+always when the spec is an epic on `docs/superpowers/roadmap.md`: the roadmap
+computes what comes next.]
 
 ## Global Constraints
 

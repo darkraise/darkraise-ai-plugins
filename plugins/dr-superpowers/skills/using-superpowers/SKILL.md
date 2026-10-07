@@ -21,6 +21,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 
 | When | Skill |
 |---|---|
+| A new product from scratch | dr-superpowers:planning-a-product |
 | Building or changing behaviour | dr-superpowers:brainstorming |
 | A bug, failing test or surprise | dr-superpowers:systematic-debugging |
 | An approach decision is open | dr-superpowers:selecting-approaches |
@@ -35,6 +36,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | Stopping mid-work, or picking it up | dr-superpowers:handoff, dr-superpowers:resume-execution |
 | Writing a skill | dr-superpowers:writing-skills |
 | Where the work stands, what to do next | dr-superpowers:project-status |
+| A phase or milestone done | dr-superpowers:closing-a-milestone |
 | Before the final review or merge, when `gates.md` exists | dr-superpowers:running-gates |
 | Session notes have accumulated | dr-superpowers:distilling-docs |
 | Slow or heavy tests | dr-superpowers:test-simplifier |
@@ -48,9 +50,9 @@ If a skill might apply to what you are doing, invoke it before any response or a
 
 ## Process Depth
 
-Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>` (the mode is your expectation; the plan's Execution line, checked by `plan-lint`, decides), and still get approval. Execute inline by default when the plan allows it (at most half the tasks are heavy: total 5 or more, or risk 3; an inline plan delegates those and every task carrying an `**Executor:**` line). Bugs go to systematic-debugging first.
+Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>` (the plan's Execution line decides the mode), and still get approval. Execute inline by default when the plan allows it (at most half the tasks heavy: total 5+ or risk 3; an inline plan delegates those and every task carrying an `**Executor:**` line).
 
-Prefer an indexed code tool (e.g. darkmem `code_search`) over Explore subagents when available.
+Prefer an indexed code tool (e.g. darkmem `code_search`) over Explore subagents.
 
 ## Session Budget
 
@@ -62,5 +64,5 @@ Prefer an indexed code tool (e.g. darkmem `code_search`) over Explore subagents 
 ## Platform and Precedence
 
 - Codex: read `references/codex-tools.md`.
-- No todo tool (Claude 5.x default)? The ledger or a checklist in your reply stands in.
+- No todo tool? The ledger or a checklist in your reply stands in.
 - User instructions (CLAUDE.md, AGENTS.md, direct requests) take precedence over skills, which override default behaviour.

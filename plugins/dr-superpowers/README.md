@@ -468,7 +468,8 @@ Requires `jq` and `git`. No model calls: the executor suites run against a stub
 `gates-manifest.test.sh` and `distilling-docs.test.sh` check the project-state
 skills the same way — structurally, against the documents themselves.
 `test-simplifier.test.sh` does the same for that skill and runs
-`scripts/test-profile` against fixture reports.
+`scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
+`scripts/roadmap` verb against a temporary repository.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
@@ -556,3 +557,30 @@ No surface may claim a body of work complete while a row is unresolved:
 `plan-lint` rejects a `last` Program line that a register contradicts,
 `repo-audit` counts the open rows, and `project-status` lists them. When no register covers a spec, every
 surface behaves exactly as it did before.
+
+### Greenfield roadmap
+
+A project built from scratch spans many specs and many sessions, and what goes
+missing there is whole epics: decided once in prose, then forgotten when a later
+session calls the phase done. `planning-a-product` runs discovery first and
+writes `docs/superpowers/roadmap.md`, the milestones in order (by default M0
+Discovery, M1 Foundations, the feature milestones, Hardening, Release), each
+with exit criteria and one item register whose rows are its epics. Each epic's
+spec then gets its own register of requirements, which `plan-lint` already ties
+to plan tasks through `**Items:**`.
+
+`scripts/roadmap` computes a milestone's progress from those registers rather
+than storing it: `status` reports it, `open` lists every unresolved row below a
+milestone, including the requirements under an epic someone marked done too
+early, and `settle` moves an integrated epic to `verify`, never to `done`.
+`close` is the only writer of `closed`; it refuses while anything below the
+milestone is unresolved or an earlier milestone is open, and
+`closing-a-milestone` runs it only after a fresh `judge-opus` has ruled every
+row `MET` on evidence and your human partner has signed off.
+
+`next-step` takes the next epic from the current milestone instead of a copied
+Program line, `repo-audit` and `project-status` show the milestones, and the
+SessionStart hook injects one line, such as
+`Roadmap: M2 Beta, 3 of 5 epics resolved, open: #4 Billing, #5 Search`, so a
+fresh or compacted session starts knowing where the project stands. Without a
+roadmap every surface behaves exactly as before.

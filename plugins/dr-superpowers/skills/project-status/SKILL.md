@@ -61,14 +61,19 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
    open work whatever the plans say, and a register whose `**Covers:**` is `-`
    is a list that arrived before anything was designed, which is open work too.
    Never report work complete while a covering register has an unresolved row.
-8. **Report** the shape below, then stop. There is no memory-store step: every
+8. **Read the roadmap.** When `docs/superpowers/roadmap.md` exists, run
+   `scripts/roadmap status`. It is read-only. A milestone is finished only when
+   it reads `closed`; never infer it from merged plans.
+9. **Report** the shape below, then stop. There is no memory-store step: every
    line comes from the audit or the tree.
 
 ## Output
 
-Six sections, in this order, nothing else:
+Seven sections, in this order, nothing else:
 
 - **Repos** — the audit's branch, HEAD and worktree lines.
+- **Milestones** — omit without a roadmap. Otherwise `roadmap status`'s lines,
+  verbatim.
 - **In flight** — one bullet per plan with an active ledger, tasks complete of
   total, and its last ledger line; plus each unmerged branch from step 5.
 - **Not started** — one bullet per un-started plan and unplanned spec, with paths.
@@ -98,8 +103,9 @@ wins, and the report names which one matched.
 | 4 | `completed.md` exists and a spec has no plan | dr-superpowers:writing-plans |
 | 5 | `completed.md` exists and a plan is absent from it with no ledger | dr-superpowers:using-git-worktrees, then the plan's execution skill |
 | 6 | A register holds an unresolved row and no rule above matched | Route by the `Assigned` cell, as `scripts/next-step --complete` does, not by row order. Set aside `verify` rows (awaiting your check), rows assigned to a finished plan (one `completed.md` records; list them to resolve or reassign) and `.md` paths absent from this repository (another repository's work). Of the rest, the first row assigned to an existing plan goes to that plan's execution skill (dr-superpowers:resume-execution when it has a ledger), else one assigned to an existing spec to dr-superpowers:writing-plans, else any other label to dr-superpowers:brainstorming for its spec, else dr-superpowers:brainstorming to rule on the unassigned rows. Nothing left: no skill — name the set-aside rows |
-| 7 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
-| 8 | None of the above | say the project is between programmes, offer dr-superpowers:brainstorming |
+| 7 | The current roadmap milestone has nothing open (`scripts/roadmap open` exits 0) and is not closed | dr-superpowers:closing-a-milestone |
+| 8 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
+| 9 | None of the above | say the project is between programmes, offer dr-superpowers:brainstorming |
 
 `BLOCKED` outranks everything: `scripts/next-step` already treats it as terminal
 and hands the decision to your human partner. Rule 0 reads each task's **last**
@@ -119,5 +125,6 @@ worktree, report each and recommend the one whose branch has the newest commit.
 | "I'll list every plan so nothing is missed" | A list of forty is a list of none. Unfinished, plus seven days. |
 | "Three things look important" | Pick one by the table and say which rule matched. |
 | "I know roughly where this stands" | Every line comes from the audit or the tree. Nothing from memory. |
+| "Every plan in the phase merged, so the phase is done" | Only `closed` in `roadmap status` means done. Report what `roadmap open` lists. |
 | "No ledger, so nobody ever ran it" | The workspace is deleted on merge. Check `completed.md` first. |
 | "I should write the handoff while I'm here" | This skill writes nothing. `latest.md` belongs to dr-superpowers:handoff. |

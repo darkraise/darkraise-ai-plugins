@@ -1,0 +1,312 @@
+#!/usr/bin/env bash
+# Read and write a greenfield project's roadmap: the milestones in order, each
+# with exit criteria and one item register whose rows are its epics.
+#
+# A milestone's progress is computed from its registers, never stored, so
+# "this phase is done" is the output of this script rather than a sentence a
+# session remembers. The only stored state is `closed`, and `close` is its only
+# writer: it refuses while any row below the milestone is unresolved or an
+# earlier milestone is still open.
+#
+# Usage: roadmap check  [--root DIR]
+#        roadmap status [--root DIR] [--line]
+#        roadmap open   [--root DIR] [M<n>]
+#        roadmap add    [--root DIR] NAME --exit TEXT --register PATH
+#        roadmap close  [--root DIR] M<n> --note TEXT
+#        roadmap reopen [--root DIR] M<n> --note TEXT
+#        roadmap settle [--root DIR] --spec SPEC
+# Exit: check  0 clean, 1 errors, 2 usage or no roadmap
+#       status 0 ok, 2 usage or no roadmap (--line: 0 and nothing printed)
+#       open   0 the milestone is ready to close, 1 rows are open, 2 usage
+#       add    0 written, 2 usage
+#       close  0 written, 1 refused (rows open or an earlier milestone open),
+#              2 usage, unknown milestone or a missing note
+#       reopen 0 written, 2 usage, unknown milestone or a missing note
+#       settle 0 done (whether or not a row changed), 2 usage
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/roadmap.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: roadmap check  [--root DIR]
+       roadmap status [--root DIR] [--line]
+       roadmap open   [--root DIR] [M<n>]
+       roadmap add    [--root DIR] NAME --exit TEXT --register PATH
+       roadmap close  [--root DIR] M<n> --note TEXT
+       roadmap reopen [--root DIR] M<n> --note TEXT
+       roadmap settle [--root DIR] --spec SPEC
+USAGE
+  exit 2
+}
+
+verb=${1:-}
+[ -n "$verb" ] || usage
+shift
+
+# --root is pulled out wherever it sits so each verb keeps a strict contract.
+root=""
+args=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --root) [ $# -ge 2 ] || usage; root=$2; shift 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+set -- ${args[@]+"${args[@]}"}
+[ -n "$root" ] || root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+root=$(cd "$root" 2>/dev/null && pwd) || { echo "no such directory: $root" >&2; exit 2; }
+FILE="$root/docs/superpowers/roadmap.md"
+
+need_roadmap() {
+  [ -f "$FILE" ] || { echo "no roadmap at $FILE" >&2; exit 2; }
+}
+
+blank() { [ -z "$1" ] || [ "$1" = "-" ]; }
+
+# rewrite_row M STATE NOTE — replace one milestone's State and Note cells.
+# Free text reaches awk through the environment, not -v, which would process
+# backslash escapes in a note.
+rewrite_row() {
+  local tmp
+  tmp=$(mktemp)
+  tr -d '\r' < "$FILE" | RM_STATE="$2" RM_NOTE="$3" awk -v want="$1" "$_PLAN_AWK$_REGISTER_AWK"'
+    function esc(s) { gsub(/\|/, "\\|", s); return s }
+    { if (in_fence($0)) { print; next } }
+    {
+      n = reg_cells($0, c)
+      if (n != 8 || c[2] != want) { print; next }
+      printf "| %s | %s | %s | %s | %s | %s |\n", c[2], esc(c[3]), esc(c[4]), esc(c[5]), ENVIRON["RM_STATE"], esc(ENVIRON["RM_NOTE"])
+    }
+  ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $FILE" >&2; exit 2; }
+  mv "$tmp" "$FILE"
+}
+
+cmd_check() {
+  [ $# -eq 0 ] || usage
+  need_roadmap
+  local errors=0 line n m name exit_c reg state note prev=-1 num seen="" open_seen="" out
+  if [ -z "$(register_field "$FILE" Product)" ]; then
+    echo "ERROR 1: missing **Product:** line"; errors=$((errors + 1))
+  fi
+  local spec
+  spec=$(register_field "$FILE" Spec)
+  spec=${spec#\`}; spec=${spec%\`}
+  if [ -z "$spec" ]; then
+    echo "ERROR 1: missing **Spec:** line"; errors=$((errors + 1))
+  elif [ ! -f "$root/$spec" ]; then
+    echo "ERROR 1: Spec path does not exist: $spec"; errors=$((errors + 1))
+  fi
+
+  while IFS=$'\t' read -r line n m name exit_c reg state note; do
+    if [ "$n" -ne 8 ]; then
+      echo "ERROR $line: a milestone needs six cells, found $((n - 2)); write a literal pipe as \\|"
+      errors=$((errors + 1)); continue
+    fi
+    if ! [[ $m =~ ^M([0-9]+)$ ]]; then
+      echo "ERROR $line: milestone identifier must be M followed by a number: $m"
+      errors=$((errors + 1)); continue
+    fi
+    num=$((10#${BASH_REMATCH[1]}))
+    case " $seen " in *" $m "*) echo "ERROR $line: duplicate milestone: $m"; errors=$((errors + 1)) ;; esac
+    seen="$seen $m"
+    if [ "$num" -le "$prev" ]; then
+      echo "ERROR $line: milestones must ascend: $m follows M$prev"; errors=$((errors + 1))
+    fi
+    prev=$num
+    [ -n "$name" ] || { echo "ERROR $line: $m has no name"; errors=$((errors + 1)); }
+    blank "$exit_c" && { echo "ERROR $line: $m has no exit criteria"; errors=$((errors + 1)); }
+    reg=${reg#\`}; reg=${reg%\`}
+    if blank "$reg"; then
+      echo "ERROR $line: $m names no register"; errors=$((errors + 1))
+    elif [ ! -f "$root/$reg" ]; then
+      echo "ERROR $line: $m register does not exist: $reg"; errors=$((errors + 1))
+    elif ! out=$(bash "$HERE/register" check "$root/$reg" 2>&1); then
+      echo "ERROR $line: $m register fails register check: $reg"
+      grep '^ERROR' <<<"$out" | sed 's/^/    /'
+      errors=$((errors + 1))
+    fi
+    case " $ROADMAP_STATES " in
+      *" $state "*) ;;
+      *) echo "ERROR $line: unknown state: ${state:-(empty)}; one of $ROADMAP_STATES"; errors=$((errors + 1)); continue ;;
+    esac
+    if [ "$state" = closed ]; then
+      blank "$note" && { echo "ERROR $line: closed $m needs a note (the audit summary)"; errors=$((errors + 1)); }
+      [ -z "$open_seen" ] || { echo "ERROR $line: $m is closed while earlier $open_seen is open"; errors=$((errors + 1)); }
+      if [ -f "$root/$reg" ] && [ -n "$(roadmap_unresolved "$root" "$reg")" ]; then
+        echo "ERROR $line: $m is closed but rows below it are unresolved (roadmap open $m)"; errors=$((errors + 1))
+      fi
+    elif [ -z "$open_seen" ]; then
+      open_seen=$m
+    fi
+  done < <(roadmap_scan "$FILE")
+
+  [ -n "$seen" ] || { echo "ERROR 1: the roadmap has no milestones"; errors=$((errors + 1)); }
+  echo "roadmap: $errors errors"
+  [ "$errors" -eq 0 ]
+}
+
+cmd_status() {
+  local line=0
+  while [ $# -gt 0 ]; do
+    case $1 in --line) line=1; shift ;; *) usage ;; esac
+  done
+  if [ "$line" -eq 1 ]; then
+    roadmap_line "$root"
+    return 0
+  fi
+  need_roadmap
+  local m name exit_c reg state note resolved total open_list cur extra
+  while IFS=$'\t' read -r m name exit_c reg state note; do
+    read -r resolved total < <(roadmap_epic_counts "$root" "$reg")
+    if [ "$state" = closed ]; then
+      printf '%s %s — closed — %s\n' "$m" "$name" "$note"
+      continue
+    fi
+    open_list=$(register_open "$root/$reg" 2>/dev/null | awk -F'\t' '
+      { printf "%s#%s %s (%s)", (NR > 1 ? ", " : ""), $1, $2, $5 }')
+    extra=$(roadmap_unresolved "$root" "$reg" | awk -F'\t' -v r="$reg" '$1 != r' | grep -c . || true)
+    printf '%s %s — open — %s of %s epics resolved' "$m" "$name" "$resolved" "$total"
+    [ -z "$open_list" ] || printf '; open: %s' "$open_list"
+    [ "$extra" -eq 0 ] || printf '; %s requirement rows open below its epics' "$extra"
+    printf '\n'
+  done < <(roadmap_rows "$FILE")
+  cur=$(roadmap_current "$FILE")
+  if [ -n "$cur" ]; then
+    IFS=$'\t' read -r m name _ reg _ _ <<<"$cur"
+    if [ -z "$(roadmap_unresolved "$root" "$reg")" ]; then
+      printf 'Current: %s %s — ready to close with dr-superpowers:closing-a-milestone\n' "$m" "$name"
+    else
+      printf 'Current: %s %s\n' "$m" "$name"
+    fi
+  else
+    printf 'Current: none — every milestone is closed\n'
+  fi
+}
+
+cmd_open() {
+  [ $# -le 1 ] || usage
+  need_roadmap
+  local row m reg found=0 rel id item state assigned
+  if [ $# -eq 1 ]; then
+    row=$(roadmap_row "$FILE" "$1")
+    [ -n "$row" ] || { echo "no milestone $1 in $FILE" >&2; exit 2; }
+  else
+    row=$(roadmap_current "$FILE")
+    [ -n "$row" ] || { echo "every milestone is closed"; return 0; }
+  fi
+  IFS=$'\t' read -r m _ _ reg _ _ <<<"$row"
+  while IFS=$'\t' read -r rel id item state assigned; do
+    found=1
+    printf '%s: %s #%s %s — %s, assigned %s\n' "$m" "$rel" "$id" "$item" "$state" "$assigned"
+  done < <(roadmap_unresolved "$root" "$reg")
+  [ "$found" -eq 0 ] && echo "$m: nothing open — ready to close"
+  [ "$found" -eq 0 ]
+}
+
+cmd_add() {
+  [ $# -ge 1 ] || usage
+  local name=$1 exit_c="" reg="" max at tmp
+  shift
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --exit) [ $# -ge 2 ] || usage; exit_c=$2; shift 2 ;;
+      --register) [ $# -ge 2 ] || usage; reg=$2; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  need_roadmap
+  { [ -n "$name" ] && ! blank "$exit_c" && ! blank "$reg"; } || usage
+  max=$(roadmap_rows "$FILE" | awk -F'\t' '{ n = substr($1, 2) + 0; if (!seen || n > m) m = n; seen = 1 } END { print seen ? m : -1 }')
+  at=$(tr -d '\r' < "$FILE" | awk "$_PLAN_AWK"'
+    { if (in_fence($0)) next }
+    /^[ \t]*\|/ { n = NR }
+    END { print n + 0 }')
+  [ "$at" -gt 0 ] || { echo "no table in $FILE" >&2; exit 2; }
+  tmp=$(mktemp)
+  tr -d '\r' < "$FILE" | RM_NAME="$name" RM_EXIT="$exit_c" RM_REG="$reg" awk -v at="$at" -v id="M$((max + 1))" '
+    function esc(s) { gsub(/\|/, "\\|", s); return s }
+    { print }
+    NR == at { printf "| %s | %s | %s | %s | open | - |\n", id, esc(ENVIRON["RM_NAME"]), esc(ENVIRON["RM_EXIT"]), esc(ENVIRON["RM_REG"]) }
+  ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $FILE" >&2; exit 2; }
+  mv "$tmp" "$FILE"
+  echo "added M$((max + 1)) $name"
+}
+
+# parse_m_note M --note TEXT — sets want and note.
+parse_m_note() {
+  [ $# -ge 1 ] || usage
+  want=$1; shift; note=""
+  while [ $# -gt 0 ]; do
+    case $1 in --note) [ $# -ge 2 ] || usage; note=$2; shift 2 ;; *) usage ;; esac
+  done
+  need_roadmap
+  [ -n "$(roadmap_row "$FILE" "$want")" ] || { echo "no milestone $want in $FILE" >&2; exit 2; }
+  ! blank "$note" || { echo "--note is required" >&2; exit 2; }
+}
+
+cmd_close() {
+  local want note m reg state earlier
+  parse_m_note "$@"
+  IFS=$'\t' read -r m _ _ reg state _ <<<"$(roadmap_row "$FILE" "$want")"
+  [ "$state" != closed ] || { echo "$want is already closed"; return 0; }
+  earlier=$(roadmap_rows "$FILE" | awk -F'\t' -v w="$want" '$1 == w { exit } $5 != "closed" { print $1 }' | tr '\n' ' ')
+  if [ -n "$earlier" ]; then
+    echo "refused: close ${earlier% } first — milestones close in order"
+    exit 1
+  fi
+  if [ -n "$(roadmap_unresolved "$root" "$reg")" ]; then
+    echo "refused: rows below $want are unresolved:"
+    roadmap_unresolved "$root" "$reg" | awk -F'\t' '{ printf "  %s #%s %s — %s\n", $1, $2, $3, $4 }'
+    exit 1
+  fi
+  rewrite_row "$want" closed "$note"
+  echo "closed $want"
+}
+
+cmd_reopen() {
+  local want note
+  parse_m_note "$@"
+  rewrite_row "$want" open "$note"
+  echo "reopened $want"
+}
+
+cmd_settle() {
+  local spec="" m reg rid ritem rassigned racc rstate rnote a changed=0
+  while [ $# -gt 0 ]; do
+    case $1 in --spec) [ $# -ge 2 ] || usage; spec=$2; shift 2 ;; *) usage ;; esac
+  done
+  [ -n "$spec" ] || usage
+  [ -f "$FILE" ] || { echo "no roadmap; nothing to settle"; return 0; }
+  spec=${spec#./}
+  if [ -n "$(register_for_spec "$root" "$spec" | while IFS= read -r f; do register_open "$f"; done)" ]; then
+    echo "not settled: registers covering $spec still have unresolved rows"
+    return 0
+  fi
+  while IFS=$'\t' read -r m _ _ reg _ _; do
+    [ -f "$root/$reg" ] || continue
+    while IFS=$'\t' read -r rid ritem rassigned racc rstate rnote; do
+      a=${rassigned#\`}; a=${a%\`}
+      [ "$a" = "$spec" ] || continue
+      case " $REGISTER_UNRESOLVED " in *" $rstate "*) ;; *) continue ;; esac
+      [ "$rstate" != verify ] || continue
+      bash "$HERE/register" set "$root/$reg" "$rid" verify --note "built; owner confirms at the milestone audit" || exit 2
+      echo "$m: #$rid $ritem — verify"
+      changed=1
+    done < <(register_rows "$root/$reg")
+  done < <(roadmap_rows "$FILE")
+  [ "$changed" -eq 1 ] || echo "no open epic row is assigned to $spec"
+  return 0
+}
+
+case $verb in
+  check) cmd_check "$@" ;;
+  status) cmd_status "$@" ;;
+  open) cmd_open "$@" ;;
+  add) cmd_add "$@" ;;
+  close) cmd_close "$@" ;;
+  reopen) cmd_reopen "$@" ;;
+  settle) cmd_settle "$@" ;;
+  *) usage ;;
+esac

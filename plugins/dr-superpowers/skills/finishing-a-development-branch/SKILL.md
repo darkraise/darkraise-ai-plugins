@@ -256,6 +256,14 @@ prose note is not written. In the same commit as the index line:
   `scripts/register add <register> "<item>"` — `--state deferred --note <the
   ruling>` when it is not work anyone will do, plain `open` when it is.
 
+When `docs/superpowers/roadmap.md` exists, run
+`scripts/roadmap settle --spec <the plan's Spec path>` after resolving those
+rows and commit its changes with them. It moves the epic row assigned to that
+spec to `verify` once every register covering the spec is resolved, and never
+to `done`: an epic is done only when dr-superpowers:closing-a-milestone has
+audited it. Settle before Step 7, so `next-step` routes to the next epic rather
+than back to this one.
+
 When no register covers the plan, write
 `docs/superpowers/notes/<slug>-followups.md` instead, listing those same
 findings one bullet each with its task number. Write nothing when all of them
@@ -331,8 +339,10 @@ If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`
 (see using-superpowers §Session Budget), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
-the next program sub-project with its launch command and first prompt, or
-that the program is complete, or that the plan records no follow-on work. It
+the next program sub-project or roadmap epic with its launch command and
+first prompt, the milestone audit when the current milestone has nothing open,
+or that the program or roadmap is complete, or that the plan records no
+follow-on work. It
 also rewrites the primary checkout's `.superpowers/handoff/latest.md` to
 match, so a fresh session finds the same answer. If it exits 4, say the
 handoff file could not be written.
