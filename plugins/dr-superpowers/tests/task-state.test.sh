@@ -95,6 +95,21 @@ check 'the large snapshot lists every file' \
   "$(jq -r '.files | length' "$fixture/big.json" 2>/dev/null)" 701
 dr_task_assert_snapshot "$fixture/big.json" >/dev/null 2>&1
 check 'a large snapshot round-trips against its own worktree' "$?" 0
+check 'batched hashes match per-file hashing' \
+  "$(jq -r '.files[] | select(.path == "file-with-a-longish-name-7.txt") | .hash' "$fixture/big.json")" \
+  "$(git -C "$fixture/big" hash-object --no-filters -- file-with-a-longish-name-7.txt)"
+# hash-object --stdin-paths unquotes a line that starts with a double quote, so
+# such a name must still hash as itself.
+case "${OSTYPE:-}" in
+  msys*|cygwin*) ;;
+  *)
+    printf 'lead quote\n' > "$fixture/big/\"lead.txt"
+    dr_snapshot "$fixture/big" "$fixture/big-quote.json"
+    check 'a leading-quote filename hashes as itself' \
+      "$(jq -r '.files[] | select(.path == "\"lead.txt") | .hash' "$fixture/big-quote.json")" \
+      "$(git -C "$fixture/big" hash-object --no-filters -- '"lead.txt')"
+    rm -f "$fixture/big/\"lead.txt" ;;
+esac
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

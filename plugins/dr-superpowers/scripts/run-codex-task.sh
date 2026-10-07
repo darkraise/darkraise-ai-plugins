@@ -11,6 +11,7 @@ LADDER="$HERE/../reference/ladder.md"
 SCHEMA="$HERE/codex-report-schema.json"
 source "$HERE/lib/task-state.sh"
 source "$HERE/lib/task-execution.sh"
+source "$HERE/lib/executor-session.sh"
 
 VALID_EFFORTS="low medium high xhigh ultra"
 
@@ -278,8 +279,13 @@ rc=0
 thread_id=$(jq -r 'select(type=="object")
   | (.thread_id // .threadId // .session_id // .sessionId // empty)' \
   "$jsonl" 2>/dev/null | head -1)
-[ -n "$thread_id" ] || thread_id="${thread:-unknown}"
-dr_task_update '.thread = $thread' --arg thread "$thread_id" || die 'cannot persist task thread'
+# A run that never reached Codex discovers no thread. The recorded one is kept
+# then, or the next --resume would be refused for a thread named "unknown".
+if [ -n "$thread_id" ]; then
+  dr_task_update '.thread = $thread' --arg thread "$thread_id" || die 'cannot persist task thread'
+else
+  thread_id="${thread:-$(jq -r '.thread // "unknown"' "$record")}"
+fi
 
 # The client classifies the failure, so this is where the controller reads it.
 # `reason` separates quota from refusal from timeout from a plugin fault, and
@@ -293,6 +299,11 @@ codex_error=$(jq -r '
     (if .timedOut == true then "timedOut=true" else empty end),
     (.stderr // "" | select(. != "")) ]
   | join("\n")' <<<"$result" 2>/dev/null || true)
+# A quota is account-wide, so it turns Codex off for the session exactly as the
+# review runner does; otherwise every later task pays for the same answer.
+if [ "$(jq -r '.quota' <<<"$result" 2>/dev/null)" = true ]; then
+  executor_session_mark_off codex quota
+fi
 
 status=BLOCKED
 summary=""

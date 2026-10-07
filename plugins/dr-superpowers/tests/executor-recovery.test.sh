@@ -125,6 +125,22 @@ git -C "$fixture/staged" reset -q HEAD -- base.txt
 run --cwd "$fixture/staged"
 check 'initial unstaged changes are rejected' "$?" 2
 
+# A run that never reaches Codex must keep the recorded thread, so the task
+# stays resumable; and a quota error turns Codex off for the session.
+git -C "$fixture/primary" worktree add -qb thread-case "$fixture/thread"
+run --cwd "$fixture/thread"
+thread_state="$(git -C "$fixture/thread" rev-parse --absolute-git-dir)/dr-superpowers/tasks/$task_key/state.json"
+STUB_MODE=throw run --cwd "$fixture/thread"
+check 'a transport failure keeps the recorded thread' "$(jq -r .thread "$thread_state")" stub-thread
+STUB_WRITE_CONTENT=after-throw run --cwd "$fixture/thread" --resume stub-thread
+check 'the task resumes after a transport failure' "$?" 0
+mkdir -p "$DR_CODEX_SESSION_DIR"
+printf '{"session_id":"executor-recovery-test","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$DR_CODEX_SESSION_DIR/executor-recovery-test.json"
+STUB_MODE=quota run --cwd "$fixture/thread" --resume stub-thread
+check 'a quota error is not DONE' "$?" 1
+check 'a quota error turns Codex off for the session' \
+  "$(jq -r '[.usable, .lane, .reason] | map(tostring) | join("/")' "$DR_CODEX_SESSION_DIR/executor-recovery-test.json" | tr -d '\r')" "false/false/quota"
+
 # A resumed attempt that reaches DONE must commit every change since the last
 # commit, including files an earlier incomplete attempt left uncommitted.
 git -C "$fixture/primary" worktree add -qb carry-case "$fixture/carry"
