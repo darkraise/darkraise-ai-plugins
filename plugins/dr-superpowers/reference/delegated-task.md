@@ -27,9 +27,11 @@ executor's wrapper instead of an implementer subagent.
 | Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | general-purpose | Explicit, cheap-to-mid |
 
-**Fleet agents take no `model` argument.** The Agent tool's `model` argument
-overrides the agent file's pinned model while `effort` keeps its frontmatter
-value, so passing one runs the agent at a tier the ledger does not record.
+**Fleet agents take no `model` or `effort` argument.** The Agent tool's `model`
+argument overrides the agent file's pinned model while `effort` keeps its
+frontmatter value, and its `effort` argument (Claude Code 2.1.292 and later)
+overrides the pinned effort while the model stays; either runs the agent at a
+tier the ledger does not record.
 
 General-purpose seats always take an explicit model:
 [subagent-driven-development](../skills/subagent-driven-development/SKILL.md) §Seats.
@@ -88,7 +90,7 @@ these steps directly.
   report.
 - If an earlier task parked a finding in the area this task touches, carry
   a pointer to that ledger entry in the dispatch.
-- Dispatch with the agent as `subagent_type` and no `model` argument, using
+- Dispatch with the agent as `subagent_type` and no `model` or `effort` argument, using
   [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md). Never dispatch a
   `fork` implementer: it would inherit your whole context.
 - Record the implementer's agent identity from the dispatch result — fix
