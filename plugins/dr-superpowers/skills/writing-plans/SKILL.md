@@ -132,7 +132,7 @@ per-task review. The tasks not delegated are the **self-implemented** tasks.
   `claude --model sonnet --effort high`. The controller owns no judgment calls
   — the ruling seat does — so it needs no stronger model.
 - Otherwise `inline`, the default, on `sonnet`: every self-implemented task
-  (total 4 or less, risk below 3) is assigned to Haiku or Sonnet, and heavy
+  (total 4 or less, risk below 3) is assigned to Sonnet, and heavy
   tasks are delegated. `<e>`
   is the assignment-table effort of the highest self-implemented total
   (`impl-haiku` counts as `low`), raised to `high` when any task is delegated:

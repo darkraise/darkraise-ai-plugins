@@ -60,7 +60,7 @@ check "assignment has no row above score 6" "${above:-NONE}" "NONE"
 
 # The rows the 2026-10-02 tier evaluation set, in order.
 check "assignment rows are the tier-eval table" "$(printf '%s\n' "$assignment" | tr '\n' ',')" \
-  "0 impl-haiku,1 impl-sonnet-low,2 impl-sonnet-low,3 impl-sonnet-medium,4 impl-sonnet-medium,5 impl-sonnet-high,6 impl-opus-high,"
+  "0 impl-sonnet-low,1 impl-sonnet-low,2 impl-sonnet-low,3 impl-sonnet-medium,4 impl-sonnet-medium,5 impl-sonnet-high,6 impl-opus-high,"
 
 not_impl=NONE
 while read -r _ agent; do
