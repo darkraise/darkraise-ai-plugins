@@ -114,5 +114,21 @@ has "audit: counts rows awaiting the owner" "$OUT" "1 awaiting your check"
 has "audit: counts the whole register" "$OUT" "of 3 rows"
 has "audit: names the register" "$OUT" "docs/superpowers/registers/r.md"
 
+# --- roadmap ---
+OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
+SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
+has "audit: the roadmap section exists" "$OUT" "## Roadmap"
+has "audit: no roadmap says so" "$SECTION" "- none"
+mkdir -p "$REPO/docs/superpowers/specs" "$REPO/docs/superpowers/registers"
+: > "$REPO/docs/superpowers/specs/shop-design.md"
+printf '# M1 — item register\n\n**Source:** roadmap\n**Covers:** docs/superpowers/specs/shop-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Search | - | - | open | - |\n' \
+  > "$REPO/docs/superpowers/registers/m1.md"
+printf '# Shop — roadmap\n\n**Product:** a shop\n**Spec:** docs/superpowers/specs/shop-design.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |\n' \
+  > "$REPO/docs/superpowers/roadmap.md"
+OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
+SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
+has "audit: lists the milestone" "$SECTION" "- M1 MVP — open — 0 of 1 epics resolved; open: #1 Search (open)"
+has "audit: names the current milestone" "$SECTION" "- Current: M1 MVP"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

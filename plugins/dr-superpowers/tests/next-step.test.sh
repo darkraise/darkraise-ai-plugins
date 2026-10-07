@@ -647,5 +647,65 @@ has "routing: nothing routable names the verify rows" "$OUT" "Awaiting your chec
 has "routing: nothing routable names other repositories' rows" "$OUT" "Assigned outside this repository: #3."
 lacks "routing: nothing routable launches nothing" "$OUT" "Launch in"
 
+# --- a roadmap outranks the Program line ---
+# On a greenfield project the next epic comes from the current milestone's
+# register, never from a copied `next:`; with nothing open the milestone goes
+# to its audit, and only when every milestone is closed is there nothing to do.
+MREPO="$TMP/roadmap"
+git init -q -b main "$MREPO"
+MD="$MREPO/docs/superpowers"
+mkdir -p "$MD/plans" "$MD/specs" "$MD/registers"
+printf '.superpowers/\n' > "$MREPO/.gitignore"
+: > "$MD/specs/shop-design.md"
+: > "$MD/specs/billing-design.md"
+cat > "$MD/plans/billing.md" <<'PLAN'
+# Billing
+
+**Goal:** Billing
+**Spec:** docs/superpowers/specs/billing-design.md
+**Execution:** inline — `claude --model sonnet --effort high` — small
+**Program:** `docs/superpowers/specs/shop-design.md` — sub-project 1 of 2 — last
+
+### Task 1: One
+PLAN
+cat > "$MD/registers/m1.md" <<'REG'
+# M1 — item register
+
+**Source:** roadmap
+**Covers:** docs/superpowers/specs/shop-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Billing | docs/superpowers/specs/billing-design.md | - | verify | built; owner confirms at the milestone audit |
+| 2 | Search | Search | - | open | - |
+REG
+cat > "$MD/roadmap.md" <<'RM'
+# Shop — roadmap
+
+**Product:** a shop
+**Spec:** docs/superpowers/specs/shop-design.md
+
+| M | Name | Exit criteria | Register | State | Note |
+|---|---|---|---|---|---|
+| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |
+RM
+git -C "$MREPO" add -A && git -C "$MREPO" commit -qm init
+
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: the forgotten epic is the next step" "$OUT" "\`Search\`: write its spec in a fresh session."
+has "roadmap: the built epic waits on the owner" "$OUT" "#1 Billing"
+lacks "roadmap: the Program line's 'last' is not believed" "$OUT" "Nothing — every sub-project"
+
+bash "$HERE/../scripts/register" set "$MD/registers/m1.md" 2 n/a --note "owner dropped search" >/dev/null
+bash "$HERE/../scripts/register" set "$MD/registers/m1.md" 1 done >/dev/null
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: nothing open goes to the audit" "$OUT" "Milestone M1 (MVP) has nothing open: audit and close it with dr-superpowers:closing-a-milestone."
+has "roadmap: the audit gets a launch prompt" "$OUT" "Close milestone M1 (MVP)"
+
+bash "$HERE/../scripts/roadmap" close --root "$MREPO" M1 --note "audit: 1 MET" >/dev/null
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`docs/superpowers/roadmap.md\` is closed."
+lacks "roadmap: closed launches nothing" "$OUT" "Launch in"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

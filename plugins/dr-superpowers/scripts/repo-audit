@@ -10,7 +10,7 @@ set -uo pipefail
 [ $# -eq 0 ] || { echo "usage: repo-audit" >&2; exit 2; }
 here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/lib/plan.sh"
-. "$here/lib/register.sh"
+. "$here/lib/roadmap.sh"
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) \
   || { echo "repo-audit: not inside a git repository" >&2; exit 2; }
@@ -83,6 +83,14 @@ while IFS= read -r reg_file; do
   echo "- \`$reg_rel\` — $reg_open open ($reg_verify awaiting your check) of $reg_total rows"
 done < <(register_files "$root")
 [ "$reg_found" -eq 1 ] || echo "- none"
+
+echo
+echo "## Roadmap"
+if [ -n "$(roadmap_file "$root")" ]; then
+  bash "$here/roadmap" status --root "$root" 2>/dev/null | sed 's/^/- /'
+else
+  echo "- none"
+fi
 
 echo
 echo "## Handoff"

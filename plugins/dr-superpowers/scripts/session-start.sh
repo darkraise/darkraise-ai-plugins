@@ -54,13 +54,26 @@ plugin_root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then plugin_root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 context="<EXTREMELY_IMPORTANT>\nYou have dr-superpowers.\n\n**Below is the full content of your 'dr-superpowers:using-superpowers' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n\nPlugin root: $(escape_for_json "$plugin_root_shown") — call scripts by this path, with the working directory inside the project\n</EXTREMELY_IMPORTANT>"
 
+# A greenfield project's position: one line computed from its roadmap, so a
+# fresh or compacted session never has to remember which milestone it is in or
+# which epic is still open. Anything that fails here injects nothing extra.
+roadmap_line=""
+roadmap_root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "$roadmap_root" ] && [ -f "$roadmap_root/docs/superpowers/roadmap.md" ]; then
+  roadmap_line=$(bash "${SCRIPT_DIR}/roadmap" status --root "$roadmap_root" --line 2>/dev/null \
+    | head -n 1 | tr -d '\001-\010\013\014\016-\037' || true)
+  if [ -n "$roadmap_line" ]; then
+    context="${context}\n\n$(escape_for_json "$roadmap_line")"
+  fi
+fi
+
 # The compact source is detected without jq, so a machine without jq still
 # gets the handoff and ledger sections. Hook output over 10,000 characters is
 # replaced by a file reference, so the snapshot gets only the room the entry
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with

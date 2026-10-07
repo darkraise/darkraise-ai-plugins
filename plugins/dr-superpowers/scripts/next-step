@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Print the one next action — for a plan: start, resume, final review,
-# finishing, next program sub-project, or nothing; for a design draft: its
+# finishing, next program sub-project or roadmap epic, a milestone audit, or
+# nothing; for a design draft: its
 # next step — as a "## Next session" block, and write the same block into the
 # primary checkout's .superpowers/handoff/latest.md.
 #
@@ -38,7 +39,7 @@ fail() { # fail EXIT MESSAGE
 
 usage() { fail 2 "usage: next-step [--host claude|codex] [--complete] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
-. "$(cd "$(dirname "$0")" && pwd)/lib/register.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 
 # --host is pulled out wherever it sits so the remaining arguments keep their
 # strict positional contract.
@@ -208,19 +209,29 @@ else
     plan_spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$(plan_header_line "$plan" Spec)")
     [ -z "$plan_spec" ] || reg_specs+=("$plan_spec")
     [ -z "$spec" ] || [ "$spec" = "$plan_spec" ] || reg_specs+=("$spec")
+    # On a roadmap project the current milestone's register (its epics) and
+    # the registers under its epics join them, so the next epic is computed
+    # from the roadmap rather than copied into a Program line.
+    roadmap=$(roadmap_file "$root")
+    current_ms=""
+    [ -z "$roadmap" ] || current_ms=$(roadmap_current "$roadmap")
     open_rows="" reg_list=""
-    if [ ${#reg_specs[@]} -gt 0 ]; then
-      while IFS= read -r reg_file; do
-        [ -n "$reg_file" ] || continue
-        rows=$(register_open "$reg_file")
-        [ -n "$rows" ] || continue
-        # Several registers may cover one spec; every one that has open rows is
-        # named, so the count is never attributed to the wrong file.
-        reg_list="${reg_list:+$reg_list, }\`${reg_file#"$root"/}\`"
-        open_rows="${open_rows}${rows}
+    while IFS= read -r reg_file; do
+      [ -n "$reg_file" ] || continue
+      rows=$(register_open "$reg_file")
+      [ -n "$rows" ] || continue
+      # Several registers may cover one spec; every one that has open rows is
+      # named, so the count is never attributed to the wrong file.
+      reg_list="${reg_list:+$reg_list, }\`${reg_file#"$root"/}\`"
+      open_rows="${open_rows}${rows}
 "
-      done < <(register_for_spec "$root" "${reg_specs[@]}")
-    fi
+    done < <(
+      { [ ${#reg_specs[@]} -eq 0 ] || register_for_spec "$root" "${reg_specs[@]}"
+        if [ -n "$current_ms" ]; then
+          roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | sed "s|^|$root/|"
+        fi
+      } | awk '!seen[$0]++'
+    )
     open_rows=$(grep . <<<"$open_rows" || true)
 
     if [ -n "$open_rows" ]; then
@@ -282,6 +293,19 @@ else
       if [ -n "$kind" ]; then
         prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
         launch=1
+      fi
+    elif [ -n "$roadmap" ]; then
+      # The roadmap outranks the Program line. Nothing is open in the current
+      # milestone, so it is ready for its audit; closing it is the only way on.
+      status_line="Plan \`$rel\` is complete."
+      if [ -n "$current_ms" ]; then
+        ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
+        next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dr-superpowers:closing-a-milestone."
+        launch_cmd=$(launch_for design)
+        prompt="Close milestone $ms_id ($ms_name) of \`docs/superpowers/roadmap.md\` with dr-superpowers:closing-a-milestone."
+        launch=1
+      else
+        next_line="Nothing — every milestone in \`docs/superpowers/roadmap.md\` is closed."
       fi
     elif [ -z "$program" ]; then
       status_line="Plan \`$rel\` is complete."

@@ -63,15 +63,15 @@ present "status gates rules 4 and 5 on the index" "$SKILL" 'Rules 4 and 5 requir
 
 # The recommendation table must stay ordered: two sessions on one repo reach
 # the same step only if the rules are read in a fixed order.
-rules=$(grep -oE '^\| [0-8] \|' "$SKILL" | grep -oE '[0-8]' | tr '\n' ' ')
-check "status rules run 0 to 8 in order" "$rules" "0 1 2 3 4 5 6 7 8 "
+rules=$(grep -oE '^\| [0-9] \|' "$SKILL" | grep -oE '[0-9]' | tr '\n' ' ')
+check "status rules run 0 to 9 in order" "$rules" "0 1 2 3 4 5 6 7 8 9 "
 present "status rule 0 reads the last line per task" "$SKILL" "A task's **last** ledger line is"
 present "status routes to resume-execution" "$SKILL" 'dr-superpowers:resume-execution'
 
-# The six output sections, in order.
-sections=$(grep -oE '^- \*\*(Repos|In flight|Not started|Owner-only items|Open items|Next step)\*\*' "$SKILL" \
+# The seven output sections, in order.
+sections=$(grep -oE '^- \*\*(Repos|Milestones|In flight|Not started|Owner-only items|Open items|Next step)\*\*' "$SKILL" \
   | sed 's/^- \*\*//; s/\*\*$//' | tr '\n' '|')
-check "status output sections in order" "$sections" "Repos|In flight|Not started|Owner-only items|Open items|Next step|"
+check "status output sections in order" "$sections" "Repos|Milestones|In flight|Not started|Owner-only items|Open items|Next step|"
 
 present "status links project-state" "$SKILL" 'project-state.md'
 
@@ -109,8 +109,30 @@ present "status: a register can veto done" "$SKILL" \
   "Never report work complete while a covering register has an unresolved row"
 present "status: the report has an open-items section" "$SKILL" "**Open items**"
 present "status: verify rows are the owner's" "$SKILL" "awaiting your check"
-present "status: six sections now" "$SKILL" "Six sections, in this order"
+present "status: seven sections now" "$SKILL" "Seven sections, in this order"
 present "state: registers are listed" "$STATE" "docs/superpowers/registers/"
+
+# --- the roadmap ---
+# A milestone is done only when the roadmap says closed, and every surface that
+# could claim otherwise must defer to it.
+CLOSE="$P/skills/closing-a-milestone/SKILL.md"
+PRODUCT="$P/skills/planning-a-product/SKILL.md"
+present "state: the roadmap is listed" "$STATE" "docs/superpowers/roadmap.md"
+present "status: reads the roadmap" "$SKILL" "scripts/roadmap status"
+present "status: a milestone is done only when closed" "$SKILL" "Only \`closed\` in \`roadmap status\` means done"
+present "status: routes a finished milestone to its audit" "$SKILL" "| dr-superpowers:closing-a-milestone |"
+present "closing: the only path to close" "$CLOSE" "scripts/roadmap close M<n>"
+present "closing: a fresh judge audits" "$CLOSE" "dr-superpowers:judge-opus"
+present "closing: never claim done without closed" "$CLOSE" "unless \`scripts/roadmap status\` shows it \`closed\`"
+present "closing: a GAP reopens the row" "$CLOSE" "open --note \"audit:"
+present "closing: the judge brief exists" "$P/skills/closing-a-milestone/references/milestone-judge.md" "Verdict: CLOSE | KEEP OPEN"
+present "planning: every epic is a register row" "$PRODUCT" "scripts/register add <file> \"<epic title>\""
+present "planning: the roadmap is checked" "$PRODUCT" "scripts/roadmap check"
+present "planning: the template has Foundations" "$P/skills/planning-a-product/references/roadmap.md" "| M1 | Foundations |"
+present "brainstorming: routes a new product" "$BRAIN" "dr-superpowers:planning-a-product"
+present "brainstorming: an epic opens its register" "$BRAIN" "open the spec's requirement register below even when the request was one sentence"
+present "writing-plans: no Program line for an epic" "$P/skills/writing-plans/SKILL.md" "always when the spec is an epic on"
+present "finishing: settles the epic" "$P/skills/finishing-a-development-branch/SKILL.md" "scripts/roadmap settle --spec"
 if grep -qF "is the only completion signal" "$SKILL"; then
   printf 'FAIL - status: the old single-source rule is gone\n'; fail=$((fail + 1))
 else

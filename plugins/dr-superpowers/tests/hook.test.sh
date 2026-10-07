@@ -108,6 +108,26 @@ check "compact: control bytes keep the output valid JSON" \
 check "compact: control bytes stripped from the context" \
   "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$esc_out" 2>/dev/null | grep -c $'\033')" "0"
 
+# --- a roadmap project: its position rides in every session ---
+mkdir -p "$REPO/docs/superpowers/registers" "$REPO/docs/superpowers/specs"
+: > "$REPO/docs/superpowers/specs/shop-design.md"
+printf '# M1 — item register\n\n**Source:** roadmap\n**Covers:** docs/superpowers/specs/shop-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Billing | - | - | done | - |\n| 2 | Search | - | - | open | - |\n' \
+  > "$REPO/docs/superpowers/registers/m1.md"
+printf '# Shop — roadmap\n\n**Product:** a shop\n**Spec:** docs/superpowers/specs/shop-design.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |\n' \
+  > "$REPO/docs/superpowers/roadmap.md"
+startup_payload() {
+  MSYS_NO_PATHCONV=1 jq -n --arg tp "$TR" --arg cwd "$REPO" \
+    '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:$tp,cwd:$cwd,source:"startup"}'
+}
+rm_out=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
+check "roadmap: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$rm_out" && echo yes || echo no)" "yes"
+check "roadmap: the position is injected" \
+  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$rm_out" | grep -c '^Roadmap: M1 MVP, 1 of 2 epics resolved, open: #2 Search\.')" "1"
+rm_ctx=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "roadmap: survives compaction alongside the snapshot" "$(grep -c '^Roadmap: M1 MVP' <<<"$rm_ctx")" "1"
+check "roadmap: still under the 10,000-character hook cap" "$([ "${#rm_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
+check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" "0"
+
 # --- hooks.json wiring ---
 check "hooks.json is valid JSON" \
   "$(jq -e . "$HOOKS" >/dev/null 2>&1 && echo yes || echo no)" "yes"
@@ -130,7 +150,7 @@ check "entry point is at most 4,800 bytes" \
 # The project-state skills and test-simplifier must be reachable from the entry point, which
 # is the only skill list a cold session sees.
 ENTRY="$HERE/../skills/using-superpowers/SKILL.md"
-for s in project-status running-gates distilling-docs test-simplifier; do
+for s in project-status running-gates distilling-docs test-simplifier planning-a-product closing-a-milestone; do
   if grep -qF -- "dr-superpowers:$s" "$ENTRY"; then
     printf 'ok   - routing names dr-superpowers:%s\n' "$s"; pass=$((pass + 1))
   else
