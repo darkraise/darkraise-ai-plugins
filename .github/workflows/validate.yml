@@ -30,6 +30,13 @@ jobs:
             timeout 30s npx --yes @anthropic-ai/claude-code@2.1.263 plugin validate "plugins/$plugin"
           done
 
+      # Mods (hooks modules) need a newer CLI than the pinned validator above.
+      - name: Validate and test the dr-cockpit mod
+        timeout-minutes: 3
+        run: |
+          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.292 plugin validate plugins/dr-cockpit
+          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.292 plugin test plugins/dr-cockpit
+
       - name: Run maintained regression suites
         timeout-minutes: 12
         run: timeout --kill-after=10s 690s node scripts/test-all.mjs

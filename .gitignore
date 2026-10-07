@@ -14,3 +14,6 @@ npm-debug.log*
 # Superpowers agent scratch (ledgers, briefs, review packages)
 .superpowers/
 .worktrees/
+
+# Type declarations Claude Code lays beside a mod it loads from a folder
+plugins/*/.claude-plugin/types/
