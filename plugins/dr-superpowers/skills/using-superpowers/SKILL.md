@@ -37,19 +37,20 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | Where the work stands, what to do next | dr-superpowers:project-status |
 | Before the final review or merge, when `gates.md` exists | dr-superpowers:running-gates |
 | Session notes have accumulated | dr-superpowers:distilling-docs |
+| Slow or heavy tests | dr-superpowers:test-simplifier |
 
 ## Principles
 
 - **Think before coding.** State assumptions. Ask only in design phases; during execution, rule and log the ruling.
 - **Simplicity first.** The least code that meets the goal; no speculative abstraction.
 - **Surgical changes.** Touch only what the task needs; report adjacent problems instead of fixing them.
-- **Goal-driven.** Define a verifiable success check before you start, and run it before you claim done.
+- **Goal-driven.** Define a verifiable success check up front, and run it before you claim done.
 
 ## Process Depth
 
 Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>` (the mode is your expectation; the plan's Execution line, checked by `plan-lint`, decides), and still get approval. Execute inline by default when the plan allows it (at most half the tasks are heavy: total 5 or more, or risk 3; an inline plan delegates those and every task carrying an `**Executor:**` line). Bugs go to systematic-debugging first.
 
-Prefer an indexed code tool (for example darkmem `code_search`) over Explore subagents when one is available.
+Prefer an indexed code tool (e.g. darkmem `code_search`) over Explore subagents when available.
 
 ## Session Budget
 
@@ -61,5 +62,5 @@ Prefer an indexed code tool (for example darkmem `code_search`) over Explore sub
 ## Platform and Precedence
 
 - Codex: read `references/codex-tools.md`.
-- No todo tool offered (Claude 5.x default)? The ledger, or a checklist in your reply, stands in for each todo.
+- No todo tool (Claude 5.x default)? The ledger or a checklist in your reply stands in.
 - User instructions (CLAUDE.md, AGENTS.md, direct requests) take precedence over skills, which override default behaviour.

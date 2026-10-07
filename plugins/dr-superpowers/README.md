@@ -241,6 +241,18 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   confirmed every enumerated fact was carried. Every one of these files is
   optional; a project without them behaves exactly as before.
 
+**Test simplification.** `test-simplifier` shrinks a suite that TDD has grown
+  slow, in the order that risks the least. `scripts/test-profile` reads the
+  JUnit XML reports a runner already emits and prints a short table of where
+  the time goes. Then the skill speeds tests up without deleting any, tiers the
+  run into an inner loop, a branch gate and a full sweep, and only then merges
+  or removes tests, one module per wave. A wave changes test files only, and
+  stands only when every mutant the old tests killed is still killed (or, with
+  no mutation tool, every fault a judge named still turns the suite red) and
+  `judge-opus` returns `KEPT`. Coverage alone never proves a test redundant.
+  `test-driven-development` and `writing-plans` now place each test at the
+  lowest layer that can fail for its change, so the suite stops regrowing.
+
 **darkmem mirror (optional).** `scripts/darkmem-sync` keeps a repository's
   planning documents and progress in a darkmem instance over its keyed REST
   routes. Map the repository's primary checkout in
@@ -455,6 +467,8 @@ Requires `jq` and `git`. No model calls: the executor suites run against a stub
 `codex` on `PATH` and a synthetic roster, never the real CLI. `project-status.test.sh`,
 `gates-manifest.test.sh` and `distilling-docs.test.sh` check the project-state
 skills the same way — structurally, against the documents themselves.
+`test-simplifier.test.sh` does the same for that skill and runs
+`scripts/test-profile` against fixture reports.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.

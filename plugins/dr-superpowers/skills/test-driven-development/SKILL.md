@@ -193,6 +193,7 @@ After green only:
 - Remove duplication
 - Improve names
 - Extract helpers
+- Fold a new test that varies a sibling into the sibling's table as a row
 
 Keep tests green. Don't add behavior.
 
@@ -207,6 +208,7 @@ Next failing test for next feature.
 | **Minimal** | One thing. "and" in name? Split it. | `test('validates email and domain and whitespace')` |
 | **Clear** | Name describes behavior | `test('test1')` |
 | **Shows intent** | Demonstrates desired API | Obscures what code should do |
+| **Lowest layer** | The cheapest layer that fails for the change; e2e only for a user journey | An edge case driven through the browser |
 
 When writing or changing any test, read [writing-good-tests.md](references/writing-good-tests.md) for the rules that keep tests honest:
 - Name the production change that would make the test fail — before writing it

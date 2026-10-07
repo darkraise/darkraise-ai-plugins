@@ -188,6 +188,12 @@ Step 3 carries the whole implementation. A body that returns a constant to
 satisfy the test is a plan failure: `plan-review.md` scores it LOW, and the
 implementer will transcribe it literally.
 
+Step 1's test sits at the lowest layer that can fail for the task's change. Plan
+an end-to-end test only for a new user journey, never for an edge case a unit or
+integration test reaches, and add a variant of an existing test as a row in its
+table, not as a new test. Suites grown one task at a time otherwise end up
+dr-superpowers:test-simplifier's job.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/path/test.py::test_name -v`
