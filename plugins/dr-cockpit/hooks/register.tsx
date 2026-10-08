@@ -63,7 +63,7 @@ type Options = {
   guardAttribution: boolean
   showHint: boolean
   warnAt: number
-  layout: 'auto' | 'full' | 'compact'
+  layout: string
   sections: string
   breakdownRows: number
   openAtStart: boolean
@@ -80,12 +80,15 @@ export const register: Register = (on, options) => {
     guardAttribution = true,
     showHint = true,
     warnAt: warnPercent = 80,
-    layout = 'auto',
+    layout: layoutSetting = 'auto',
     sections: sectionList = '',
     breakdownRows = 6,
     openAtStart = false,
     limitAlertAt = 90,
   } = options as Partial<Options>
+  // A plain string in the manifest (older validators refuse a picker), so
+  // anything but the three words reads as auto.
+  const layout = layoutSetting === 'full' || layoutSetting === 'compact' ? layoutSetting : 'auto'
   const tuning: Tuning = { handoffTokens, nudgeModel, warnAt: warnShare(warnPercent) }
   const shown = sectionsFrom(sectionList)
   const paneArgs = { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, ...(layout === 'full' ? {} : { rows: COMPACT_ROWS }) }

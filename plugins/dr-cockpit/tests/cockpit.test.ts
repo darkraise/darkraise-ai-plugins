@@ -473,4 +473,14 @@ describe('compact layout', () => {
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
   })
+
+  test('an unknown layout reads as auto', { options: { layout: 'tiles' } }, async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const docked = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await docked.find({ type: 'Text', text: 'Context' })).toBeDefined()
+    await docked.unmount()
+    const inline = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await inline.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+  })
 })

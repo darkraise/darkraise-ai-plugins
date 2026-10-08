@@ -54,12 +54,7 @@
     "layout": {
       "type": "string",
       "title": "Pane layout",
-      "description": "auto: the full layout docked beside the transcript, a compact strip when the pane sits above the prompt. full or compact: always that one.",
-      "options": [
-        "auto",
-        "full",
-        "compact"
-      ],
+      "description": "auto, full or compact. auto: the full layout docked beside the transcript, a compact strip when the pane sits above the prompt. full or compact: always that one. Anything else counts as auto.",
       "default": "auto"
     },
     "sections": {
