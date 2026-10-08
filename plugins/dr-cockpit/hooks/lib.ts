@@ -5,21 +5,47 @@ export const WARN_AT = 0.8
 
 /**
  * The handoff budget: the configured tokens, else DR_SUPERPOWERS_BUDGET, else
- * dr-superpowers' own rule (reference/session-budget.md): 93% of the window
- * minus 140,000, floored at half the window for small windows.
+ * dr-superpowers' own rule (reference/session-budget.md): the compaction point
+ * minus one task's worst growth, min(autoCompactWindow, window) × 93% − 140,000.
+ * Small windows, where that comes out near zero, hold a fifth of the window.
  */
-export function budgetFor(configured: number, env: string | undefined, window: number): number {
+export function budgetFor(configured: number, env: string | undefined, window: number, compactWindow?: number): number {
   if (configured > 0) return Math.round(configured)
   const pinned = Number(env)
   if (Number.isFinite(pinned) && pinned > 0) return Math.round(pinned)
-  return Math.max(Math.floor(window * 0.93) - 140_000, Math.floor(window / 2))
+  const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
+  return Math.max(Math.floor(room * 0.93) - 140_000, Math.floor(room / 5))
+}
+
+/** A positive whole number from a settings value, else undefined. */
+export function positive(value: unknown): number | undefined {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined
 }
 
 export type Level = 'quiet' | 'warn' | 'handoff'
 
-export function levelOf(tokens: number, limit: number): Level {
+export function levelOf(tokens: number, limit: number, warnAt: number = WARN_AT): Level {
   if (tokens >= limit) return 'handoff'
-  return tokens >= limit * WARN_AT ? 'warn' : 'quiet'
+  return tokens >= limit * warnAt ? 'warn' : 'quiet'
+}
+
+/** The warnAt setting, a percentage, as a share: 80 → 0.8, held to 1-99. */
+export function warnShare(percent: number): number {
+  return Number.isFinite(percent) && percent > 0 ? Math.min(Math.max(Math.round(percent), 1), 99) / 100 : WARN_AT
+}
+
+export const SECTIONS = ['context', 'usage', 'agents', 'plan', 'repo', 'guard'] as const
+export type Section = (typeof SECTIONS)[number]
+
+/** The sections setting, "plan, context" → ['plan', 'context']: known names in the order given, each once. */
+export function sectionsFrom(text: string): Section[] {
+  const names = text
+    .split(/[\s,]+/)
+    .map(name => name.trim().toLowerCase())
+    .filter((name): name is Section => (SECTIONS as readonly string[]).includes(name))
+  const once = [...new Set(names)]
+  return once.length === 0 ? [...SECTIONS] : once
 }
 
 /** 465000 → "465k"; 1234567 → "1.2M". */
@@ -35,11 +61,17 @@ const ATTRIBUTION = [
   /claude\.ai\/code\/session_/i,
 ]
 
-/** The first AI attribution line in a text, if any. */
+/**
+ * The first AI attribution line in a text, if any, without the quoting around
+ * it: a shell command's closing quote, or a JSON string's escapes.
+ */
 export function attributionIn(text: string): string | undefined {
   for (const pattern of ATTRIBUTION) {
     const match = pattern.exec(text)
-    if (match) return text.slice(match.index).split('\n')[0]?.trim()
+    if (match) {
+      const line = text.slice(match.index).split(/\n|\\n/)[0] ?? ''
+      return line.replace(/[\\"'`}\],\s]+$/, '').trim()
+    }
   }
   return undefined
 }
@@ -57,4 +89,80 @@ export function isGitWriteTool(tool: string): boolean {
 /** Whether a subagent type or skill name belongs to dr-superpowers. */
 export function isSuperpowers(name: string): boolean {
   return name.startsWith('dr-superpowers:')
+}
+
+/** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
+export function bar(share: number, width: number): string {
+  const clamped = Math.min(Math.max(share, 0), 1)
+  let on = Math.round(clamped * width)
+  if (on === width && clamped < 1) on = width - 1
+  return '▰'.repeat(on) + '▱'.repeat(width - on)
+}
+
+/** The usage ramp dr-status uses: green, yellow, orange, then red. */
+export function rampColor(percent: number): string {
+  if (percent >= 90) return 'error'
+  if (percent >= 75) return '#ff8700'
+  return percent >= 50 ? 'warning' : 'success'
+}
+
+/** Milliseconds → "3h40m", "2d4h", "12m"; nothing at or below zero. */
+export function duration(ms: number): string {
+  if (!(ms > 0)) return ''
+  const minutes = Math.floor(ms / 60_000)
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  if (days > 0) return `${days}d${hours}h`
+  return hours > 0 ? `${hours}h${minutes % 60}m` : `${minutes}m`
+}
+
+/** five_hour → "5h", seven_day → "7d", spend_limit → "spend". */
+export function limitLabel(kind: string): string {
+  if (kind === 'five_hour') return '5h'
+  if (kind === 'seven_day') return '7d'
+  return kind.replace(/_limit$/, '').replace(/_/g, ' ')
+}
+
+export type PlanStatus = 'pending' | 'in_progress' | 'completed'
+export type PlanItem = { id: string; text: string; status: PlanStatus }
+
+/** A TodoWrite call replaces the whole list. */
+export function planFromTodos(todos: readonly { content: string; status: PlanStatus }[]): PlanItem[] {
+  return todos.map((todo, index) => ({ id: `todo-${index}`, text: todo.content, status: todo.status }))
+}
+
+/** A TaskUpdate call moves or retitles one task; `deleted` drops it. */
+export function planWithUpdate(
+  items: readonly PlanItem[],
+  id: string,
+  change: { subject?: string; status?: PlanStatus | 'deleted' },
+): PlanItem[] {
+  const { subject, status } = change
+  if (status === 'deleted') return items.filter(item => item.id !== id)
+  return items.map(item =>
+    item.id === id ? { ...item, text: subject ?? item.text, status: status ?? item.status } : item,
+  )
+}
+
+export type RepoState = { branch: string; ahead: number; behind: number; changed: number; untracked: number }
+
+/** Reads `git status --porcelain=v2 --branch`. */
+export function repoFromPorcelain(text: string): RepoState | null {
+  const state: RepoState = { branch: '', ahead: 0, behind: 0, changed: 0, untracked: 0 }
+  let oid = ''
+  for (const line of text.split('\n')) {
+    if (line.startsWith('# branch.oid ')) oid = line.slice(13).trim()
+    else if (line.startsWith('# branch.head ')) state.branch = line.slice(14).trim()
+    else if (line.startsWith('# branch.ab ')) {
+      const match = /\+(\d+) -(\d+)/.exec(line)
+      if (match) {
+        state.ahead = Number(match[1])
+        state.behind = Number(match[2])
+      }
+    } else if (line.startsWith('? ')) state.untracked += 1
+    else if (/^[12u] /.test(line)) state.changed += 1
+  }
+  if (state.branch === '') return null
+  if (state.branch === '(detached)') state.branch = oid === '' ? 'detached' : `@${oid.slice(0, 7)}`
+  return state
 }
