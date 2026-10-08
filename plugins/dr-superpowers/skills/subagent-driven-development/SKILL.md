@@ -462,30 +462,29 @@ parked lines, the complete lines' `discovered:` fields, and every borderline
 
 ## Finish
 
-Before you leave this skill, collect every ledger line containing `Ruling:` —
-preflight rulings, dispatch rulings, translations, parked findings, ruling-seat
-verdicts, all of them — into your final message under "Rulings I made",
-in the order you made them, each with what it costs if wrong. The list is
-exhaustive: if the ledger holds a ruling, the list holds it. That list is the
-only place the decisions you took on your human partner's behalf reach them —
-they read it and rework whatever you got wrong. A ruling that dies with the
-workspace was a decision made in secret. Name every `BLOCKED` task there too.
-
-Then, under "Amendments made", print every entry of `<workspace>/amendments.md`
-in full, if the file exists. The workspace is deleted after a merge, so this
-printed list is the only lasting record of how the plan changed during
-execution.
-
 When the final whole-branch review is clean and its fixes are committed,
 append `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to
-the ledger in the same message as printing the rulings. Do not delete the
-workspace: dr-superpowers:finishing-a-development-branch removes it with the
-worktree once the work is merged or discarded, and until then it is what a
-later session resumes from. Then run `scripts/context-size --final` and
-continue to finishing — unless it says `handoff`, in which case invoke
-dr-superpowers:handoff.
+the ledger. Do not delete the workspace:
+dr-superpowers:finishing-a-development-branch removes it with the worktree once
+the work is merged or discarded, and until then it is what a later session
+resumes from. Then run `scripts/context-size --final`: on `handoff`, invoke
+dr-superpowers:handoff; otherwise go on to finishing.
 
-Use dr-superpowers:finishing-a-development-branch.
+**Finishing is a Skill tool call in this same turn.** Call the Skill tool
+with `dr-superpowers:finishing-a-development-branch` right after the ledger
+line. Writing its name in a message is not invoking it, and a turn that ends
+on a summary of the run leaves your human partner with no integration menu
+and no next step. Write no wrap-up message of your own: finishing's message is
+the final one.
+
+**Your rulings ride in that message.** Finishing's Step 3 prints every ledger
+line containing `Ruling:` — preflight rulings, dispatch rulings, translations,
+parked findings, ruling-seat verdicts, all of them — under "Rulings I made",
+in the order you made them, each with what it costs if wrong, then every
+`BLOCKED` task, then every entry of `<workspace>/amendments.md` in full under
+"Amendments made". The lists are exhaustive: they are the only place the
+decisions you took on your human partner's behalf reach them, and the only
+lasting record of how the plan changed once the workspace is deleted.
 
 ## Common Rationalizations
 
@@ -500,6 +499,7 @@ Use dr-superpowers:finishing-a-development-branch.
 | "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. Every round ends with a scoped re-review. |
 | "Reviews slow the loop down" | The loop without reviews is just unverified churn. Reviews are the loop's brakes and steering. |
 | "The budget is at 89%, I'll hand off before the next task" | `ok` means continue. Only a `handoff` verdict stops the loop, and even then the task in flight finishes first. |
+| "The final review is clean — I'll summarize the run and stop" | A summary is not a finish. Call the Skill tool for finishing in this turn; its menu and next step are what your human partner acts on. |
 | "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Controllers without one have re-dispatched entire completed task sequences. |
 | "The implementer spawned its own reviewer — free extra assurance" | It's a duplicate seat reviewing the same diff; the task review is the gate. A worker-spawned reviewer is a defect to flag, not rigor. |
 | "I'll pass a model or effort to be safe" | On a fleet agent either one overrides its pinned value while the other stays — a tier the ledger never records. |
@@ -555,7 +555,6 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 [a fresh judge-opus dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
-[Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); print Rulings I made; context-size --final ok — continue]
-
-Done! Using dr-superpowers:finishing-a-development-branch.
+[Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); context-size --final ok — continue]
+[Skill tool: dr-superpowers:finishing-a-development-branch, in this turn — gates, Rulings I made, the three-option menu last]
 ```

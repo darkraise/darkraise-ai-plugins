@@ -311,6 +311,16 @@ writer wins per directory), which `scripts/context-size` reads. On the
 Malformed stdin skips persistence but never blocks the injection, and the
 hook always exits 0.
 
+A run must end on its next step: the finishing menu once the final review is
+clean, otherwise the `## Next session` block from `next-step`. Controllers,
+Sonnet especially, tend to summarize the run and stop instead. A
+`UserPromptSubmit` hook stamps the start of each turn under
+`~/.claude/dr-superpowers/sessions/turns/`, and a `Stop` hook checks whether
+that turn wrote a plan ledger (`.superpowers/sdd/*/progress.md`). If it did and
+the last message carries neither ending, the hook blocks the stop once and
+tells Claude which one is missing. The retry always passes, and without `jq`,
+a stamp or a ledger written this turn, the hook does nothing.
+
 ## Session budget
 
 Long sessions cost more than they look: every request re-reads the whole
@@ -469,7 +479,8 @@ Requires `jq` and `git`. No model calls: the executor suites run against a stub
 skills the same way — structurally, against the documents themselves.
 `test-simplifier.test.sh` does the same for that skill and runs
 `scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
-`scripts/roadmap` verb against a temporary repository.
+`scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
+drives the turn-stamp and Stop hooks against a temporary repository and ledger.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.

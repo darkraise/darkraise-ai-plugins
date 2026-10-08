@@ -445,28 +445,28 @@ deferred-minor lines.
 
 ## Finish
 
-Before you leave this skill, collect every ledger line containing `Ruling:` -
-translations, parked findings, unseated rulings, ruling-seat verdicts, the
-mode-switch ruling if you made one - into your final message under "Rulings I
-made", in the order you made them, each with what it costs if wrong. The list
-is exhaustive: if the ledger holds a ruling, the list holds it. That list is
-the only place the decisions you took on your human partner's behalf reach
-them - they read it and rework whatever you got wrong. Name every `BLOCKED`
-task there too.
-
-Then, under "Amendments made", print every entry of `<workspace>/amendments.md`
-in full, if the file exists. The workspace is deleted after a merge, so this
-printed list is the only lasting record of how the plan changed during
-execution.
-
 When the final review is clean and its fixes are committed, append
 `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to the
-ledger in the same message as printing the rulings. Do not delete the
-workspace: dr-superpowers:finishing-a-development-branch removes it with the
-worktree once the work is merged or discarded, and until then it is what a
-later session resumes from.
+ledger. Do not delete the workspace:
+dr-superpowers:finishing-a-development-branch removes it with the worktree once
+the work is merged or discarded, and until then it is what a later session
+resumes from.
 
-Use dr-superpowers:finishing-a-development-branch.
+**Finishing is a Skill tool call in this same turn.** Call the Skill tool
+with `dr-superpowers:finishing-a-development-branch` right after the ledger
+line. Writing its name in a message is not invoking it, and a turn that ends
+on a summary of the run leaves your human partner with no integration menu
+and no next step. Write no wrap-up message of your own: finishing's message is
+the final one.
+
+**Your rulings ride in that message.** Finishing's Step 3 prints every ledger
+line containing `Ruling:` - translations, parked findings, unseated rulings,
+ruling-seat verdicts, the mode-switch ruling if you made one - under "Rulings I
+made", in the order you made them, each with what it costs if wrong, then
+every `BLOCKED` task, then every entry of `<workspace>/amendments.md` in full
+under "Amendments made". The lists are exhaustive: they are the only place the
+decisions you took on your human partner's behalf reach them, and the only
+lasting record of how the plan changed once the workspace is deleted.
 
 ## Common Rationalizations
 
@@ -479,6 +479,7 @@ Use dr-superpowers:finishing-a-development-branch.
 | "The plan is wrong here, I'll fix it as I go" | You read one brief; the seat reads the plan and the spec. Send a blocked-plan item. |
 | "No reviewer is watching, so the self-review is optional" | It is the only per-task gate this mode has. Skipping it makes the final review the first time anyone reads the diff. |
 | "I'll mention the ruling in my final message instead of the ledger" | Your message dies with the session; the ledger survives compaction. |
+| "The final review is clean - I'll summarize the run and stop" | A summary is not a finish. Call the Skill tool for finishing in this turn; its menu and next step are what your human partner acts on. |
 | "I'll batch the commits at the end" | The ledger names commit ranges per task. A task without its own commits cannot be recovered or reviewed. |
 | "The adjacent bug is a two-line fix" | It is a deferred minor. The final review triages it with the rest. |
 | "The budget is at 89%, I'll hand off before the next task" | `ok` means continue. Only a `handoff` verdict stops the loop, and even then the task in flight finishes first. |

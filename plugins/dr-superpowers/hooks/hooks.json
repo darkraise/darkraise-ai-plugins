@@ -1,5 +1,5 @@
 {
-  "description": "Injects the dr-superpowers entry point at session start, persists the session's transcript path for budget tooling, and appends a compaction snapshot after compaction.",
+  "description": "Injects the dr-superpowers entry point at session start, persists the session's transcript path for budget tooling, appends a compaction snapshot after compaction, and holds a stop once when a turn that advanced a plan ends without the finishing menu or the next step.",
   "hooks": {
     "SessionStart": [
       {
@@ -8,6 +8,30 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh\"",
+            "shell": "bash",
+            "async": false
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/turn-start.sh\"",
+            "shell": "bash",
+            "async": false
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/turn-end.sh\"",
             "shell": "bash",
             "async": false
           }
