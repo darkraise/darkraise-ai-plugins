@@ -4,14 +4,61 @@ A Claude Code mod for long sessions, and for `dr-superpowers` plans in
 particular. It is a hooks module, not a set of skills, so it costs the model no
 context: it draws in the interface and acts on the engine's events.
 
-Claude Code only. Built and tested against Claude Code 2.1.292; the mod API is
-early access and may change between releases.
+Claude Code only. Built and tested against Claude Code 2.1.292 and 2.1.294; the
+mod API is early access and may change between releases.
 
 ## What it does
 
+**Cockpit pane.** `/cockpit` opens a pane with the session at a glance. In
+fullscreen at 110 columns or more it docks beside the transcript; otherwise it
+sits above the prompt.
+
+```
+Context
+ctx ▰▰▰▰▰▰▱▱▱▱ 61% · 284k of 465k handoff
+    window 650k · compacts at 604k
+    Messages            180k
+    System tools         38k
+[ Hand off ] [ Compact ]
+Usage
+5h  ▰▰▱▱▱▱▱▱▱▱ 23% · resets in 3h40m
+7d  ▰▱▱▱▱▱▱▱▱▱ 9% · resets in 4d2h
+$1.20 this session · $0.80/h
+Agents
+▸ impl-sonnet-low: Task 3 · 4m
+✓ reviewer-opus: Review task 2
+impl-sonnet-low ×3 · in 120k (75% cached) · out 9k
+Plan · 2 of 5 done
+✓ Read the plan
+▸ Write the pane
+○ Open the PR
+Repo
+feat/pane ↑2 · 1 changed · 1 untracked
+```
+
+- **Context** is the main session against its handoff budget, the window and
+  where auto-compaction runs, and the largest `/context` categories, estimated
+  locally with no API calls. **Hand off** appears in `dr-superpowers` sessions.
+- **Usage** is the account's 5-hour and 7-day limits with their resets, and the
+  session's cost and cost per hour.
+- **Agents** lists the subagents running and recently finished, then each
+  subagent type (seat) with its runs, input tokens, the share served from the
+  prompt cache and output tokens. Use it to see where a plan's tokens go.
+- **Plan** follows the main session's todo list or task list, centred on the
+  item in progress.
+- **Repo** is the working tree's branch, ahead and behind counts and changes.
+- **Guard** lists commits and pull requests the attribution guard refused.
+
+The breakdown and the repo are read after each turn while the pane is open, and
+when it opens; nothing in the pane costs the model context.
+
+**Handoff reading.** The hint line under the prompt ends with the main
+session's context against its budget, `284k/465k handoff`, in the terminal.
+
 **Handoff band.** A row above the prompt appears once the main session's
 context reaches 80% of its handoff budget, yellow while it nears it and red past
-it. **Hide** quiets the warning; past the budget the band always shows.
+it. **Hide** quiets the warning until the context falls back under 80%; past the
+budget the band always shows.
 
 ```
 Nearing handoff: 400k of 465k (86%)  [ Hide ]
@@ -24,13 +71,8 @@ runs past its budget pays for it on each turn after. In a session running
 agents), **Hand off** queues a prompt asking the controller to finish the task
 in flight and hand off with the `handoff` skill. Past the budget the mod also
 adds one note to the conversation saying the same, so a controller deep in a
-long turn sees it before its next task; a compaction or `/clear` that brings the
-context back under re-arms it.
-
-**Cockpit pane.** `/cockpit` opens a pane listing each subagent type (seat)
-the session used, with its runs, input tokens, the share served from the prompt
-cache and output tokens, beside the main session's context and cost and the last
-eight subagents started. Use it to see where a plan's tokens go.
+long turn sees it before its next task. A compaction clears the reading until
+the next response, and re-arms the note and **Hide**.
 
 **Attribution guard.** Claude Code asks the model to add a `Co-Authored-By`
 trailer to commits and a "Generated with Claude Code" footer to pull requests.
@@ -46,9 +88,10 @@ Set these in `/config` under the plugin's rows, or in `settings.json` under
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `handoffTokens` | `0` | The handoff budget in tokens. `0` follows `DR_SUPERPOWERS_BUDGET`, else `dr-superpowers`' own rule: 93% of the model's window minus 140,000 (465k at 650k). |
+| `handoffTokens` | `0` | The handoff budget in tokens. `0` follows `DR_SUPERPOWERS_BUDGET`, else `dr-superpowers`' own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000 (465k at 650k, 604k on a 1M model with `autoCompactWindow` at 800k). Windows too small for that rule get a fifth of the window. |
 | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-superpowers` sessions. |
 | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
+| `showHint` | `true` | Add the handoff reading to the hint line under the prompt. |
 
 ## Install
 

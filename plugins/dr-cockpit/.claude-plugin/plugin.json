@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dr-cockpit",
-  "description": "A Claude Code mod for long sessions: a band that warns as the main session nears its handoff budget, a pane of subagent seats and their token use, and a guard that keeps AI attribution out of commits and pull requests.",
-  "version": "0.1.1",
+  "description": "A Claude Code mod for long sessions: a cockpit pane of context, usage limits, subagents, the plan and the repo; a handoff reading under the prompt and a band near the budget; and a guard that keeps AI attribution out of commits and pull requests.",
+  "version": "0.2.0",
   "author": {
     "name": "Darkraise"
   },
@@ -15,14 +15,16 @@
     "handoff",
     "subagents",
     "token-usage",
-    "attribution"
+    "attribution",
+    "rate-limits",
+    "git"
   ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "handoffTokens": {
       "type": "number",
       "title": "Handoff budget (tokens)",
-      "description": "Context size at which the band says hand off. 0 follows DR_SUPERPOWERS_BUDGET, else dr-superpowers' rule: 93% of the window minus 140,000.",
+      "description": "Context size at which the band says hand off. 0 follows DR_SUPERPOWERS_BUDGET, else dr-superpowers' rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000.",
       "default": 0
     },
     "nudgeModel": {
@@ -35,6 +37,12 @@
       "type": "boolean",
       "title": "Keep AI attribution out of git",
       "description": "Drop the commit trailer and pull request footer Claude Code asks for, and refuse commits and pull requests that still carry AI attribution.",
+      "default": true
+    },
+    "showHint": {
+      "type": "boolean",
+      "title": "Show the handoff reading under the prompt",
+      "description": "Add the main session's context against its handoff budget to the hint line under the prompt (terminal only).",
       "default": true
     }
   }
