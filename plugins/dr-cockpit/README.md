@@ -11,29 +11,31 @@ mod API is early access and may change between releases.
 
 **Cockpit pane.** `/cockpit` opens a pane with the session at a glance. In
 fullscreen at 110 columns or more it docks beside the transcript; otherwise it
-sits above the prompt.
+sits above the prompt. Each section's rows sit two cells in under its title, and
+their details two cells further.
 
 ```
 Context
-ctx ▰▰▰▰▰▰▱▱▱▱ 61% · 284k of 465k handoff
+  ctx ▰▰▰▰▰▰▱▱▱▱ 61% · 284k of 465k handoff
     window 650k · compacts at 604k
     Messages            180k
     System tools         38k
-[ Hand off ] [ Compact ]
+  [ Hand off ] [ Compact ]
 Usage
-5h  ▰▰▱▱▱▱▱▱▱▱ 23% · resets in 3h40m
-7d  ▰▱▱▱▱▱▱▱▱▱ 9% · resets in 4d2h
-$1.20 this session · $0.80/h
+  5h  ▰▰▱▱▱▱▱▱▱▱ 23% · resets in 3h40m
+  7d  ▰▱▱▱▱▱▱▱▱▱ 9% · resets in 4d2h
+  $1.20 this session · $0.80/h
 Agents
-▸ impl-sonnet-low: Task 3 · 4m
-✓ reviewer-opus: Review task 2
-impl-sonnet-low ×3 · in 120k (75% cached) · out 9k
+  ▸ impl-sonnet-low: Task 4 · 4m
+  ✓ reviewer-opus: Review task 2
+  Seats
+    impl-sonnet-low ×3 · in 120k (75% cached) · out 9k
 Plan · 2 of 5 done
-✓ Read the plan
-▸ Write the pane
-○ Open the PR
+  ✓ Read the plan
+  ▸ Write the pane
+  ○ Open the PR
 Repo
-feat/pane ↑2 · 1 changed · 1 untracked
+  feat/pane ↑2 · 1 changed · 1 untracked
 ```
 
 - **Context** is the main session against its handoff budget, the window and

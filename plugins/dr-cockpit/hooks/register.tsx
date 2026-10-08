@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, TurnUsage } from 'claude-code'
+import type { EngineInterface, Register, RenderChildren, TurnUsage } from 'claude-code'
 
 import type {
   CockpitBreakdown,
@@ -30,6 +30,7 @@ import {
 
 const PANE = 'dr-cockpit'
 const PANE_COLUMNS = 56
+const INDENT = 2
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
@@ -220,7 +221,8 @@ export const register: Register = (on, options) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const now = await $.clock.now()
     const room = e.props.bodyColumns
-    const meterWidth = Math.max(6, Math.min(20, room - 30))
+    // Room for the label, percentage and suffix beside the bar, inside the indent.
+    const meterWidth = Math.max(6, Math.min(20, room - INDENT - 30))
     const head = await read($, budget)
     const spend = await read($, usage)
     const rows = await read($, breakdown)
@@ -242,126 +244,161 @@ export const register: Register = (on, options) => {
         {suffix !== '' && <Text dimColor> · {suffix}</Text>}
       </Text>
     )
-    const header = (key: string, label: string) => (
-      <Text key={key} bold>
-        {label}
-      </Text>
+    // Three levels: a section's title, its rows two cells in, and a row's
+    // details two cells further.
+    const section = (key: string, title: string, ...body: RenderChildren[]) => (
+      <Box key={key} flexDirection="column">
+        <Text bold>{title}</Text>
+        <Box flexDirection="column" paddingLeft={INDENT}>
+          {body}
+        </Box>
+      </Box>
+    )
+    const details = (key: string, ...body: RenderChildren[]) => (
+      <Box key={key} flexDirection="column" paddingLeft={INDENT}>
+        {body}
+      </Box>
     )
 
     const running = all.filter(one => !one.isDone)
     const finished = all.filter(one => one.isDone).slice(-Math.max(0, 6 - running.length))
     const doneCount = items.filter(item => item.status === 'completed').length
     const shownItems = planWindow(items, 8)
+    const sortedSeats = [...list].sort((a, b) => totalIn(b) - totalIn(a))
 
     return (
       <Box flexDirection="column">
-        {header('h-context', 'Context')}
-        {head === null ? (
-          <Text key="ctx-none" dimColor>
-            No reading yet.
-          </Text>
-        ) : (
-          meter(
-            'ctx',
-            'ctx',
-            (head.tokens / head.limit) * 100,
-            `${kTokens(head.tokens)} of ${kTokens(head.limit)} handoff`,
-          )
-        )}
-        {head !== null && (
-          <Text key="ctx-window" dimColor>
-            {'    '}window {kTokens(head.window)}
-            {rows?.compactAt != null ? ` · compacts at ${kTokens(rows.compactAt)}` : ''}
-            {head.compactWindow !== null && rows?.compactAt == null ? ` · compact window ${kTokens(head.compactWindow)}` : ''}
-          </Text>
-        )}
-        {(rows?.rows ?? []).map(row => (
-          <Text key={`ctx-row-${row.name}`} dimColor>
-            {'    '}
-            {row.name.padEnd(Math.min(22, Math.max(8, room - 12)))} {kTokens(row.tokens).padStart(5)}
-          </Text>
-        ))}
-        <Box key="ctx-actions">
-          {canHandOff && (
-            <Button
-              key="pane-handoff"
-              label="Hand off"
-              onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true })}
-            />
-          )}
-          <Button key="pane-compact" label="Compact" onPress={() => $.session.compact()} />
-        </Box>
-
-        {header('h-usage', 'Usage')}
-        {(spend?.limits ?? []).map(limit =>
-          meter(
-            `limit-${limit.kind}`,
-            limitLabel(limit.kind),
-            limit.percent,
-            limit.resetsAt === null ? '' : `resets in ${duration(limit.resetsAt - now) || 'now'}`,
+        {section(
+          'context',
+          'Context',
+          head === null ? (
+            <Text key="ctx-none" dimColor>
+              No reading yet.
+            </Text>
+          ) : (
+            meter('ctx', 'ctx', (head.tokens / head.limit) * 100, `${kTokens(head.tokens)} of ${kTokens(head.limit)} handoff`)
           ),
-        )}
-        <Text key="cost" dimColor={head?.usd == null}>
-          {head?.usd == null
-            ? 'No cost reading.'
-            : `$${head.usd.toFixed(2)} this session` + costRate(head.usd, spend?.startedAt, now)}
-        </Text>
-
-        {header('h-agents', 'Agents')}
-        {all.length === 0 && (
-          <Text key="agents-none" dimColor>
-            No subagents yet.
-          </Text>
-        )}
-        {[...running, ...finished].map(spawn => (
-          <Text key={`spawn-${spawn.agentId}`} dimColor={spawn.isDone} wrap="truncate-end">
-            {spawn.isDone ? '✓' : '▸'} {shortSeat(spawn.seat)}: {spawn.description}
-            {spawn.isDone ? '' : ` · ${duration(now - spawn.startedAt) || '<1m'}`}
-          </Text>
-        ))}
-        {[...list]
-          .sort((a, b) => totalIn(b) - totalIn(a))
-          .map(seat => (
-            <Text key={`seat-${seat.seat}`} wrap="truncate-end">
-              {shortSeat(seat.seat)} ×{seat.runs} · in {kTokens(totalIn(seat))} ({cacheShare(seat)}% cached) · out{' '}
-              {kTokens(seat.output)}
-            </Text>
-          ))}
-
-        {items.length > 0 && header('h-plan', `Plan · ${doneCount} of ${items.length} done`)}
-        {shownItems.map(item => (
-          <Text
-            key={`plan-${item.id}`}
-            dimColor={item.status === 'completed'}
-            bold={item.status === 'in_progress'}
-            wrap="truncate-end"
-          >
-            {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '▸' : '○'} {item.text}
-          </Text>
-        ))}
-
-        {git !== null && header('h-repo', 'Repo')}
-        {git !== null && (
-          <Text key="repo" wrap="truncate-end">
-            <Text color="magenta" bold>
-              {git.branch}
-            </Text>
-            {git.ahead > 0 ? ` ↑${git.ahead}` : ''}
-            {git.behind > 0 ? ` ↓${git.behind}` : ''}
-            <Text dimColor>
-              {git.changed + git.untracked === 0
-                ? ' · clean'
-                : ` · ${git.changed} changed` + (git.untracked > 0 ? ` · ${git.untracked} untracked` : '')}
-            </Text>
-          </Text>
+          head !== null &&
+            details(
+              'ctx-details',
+              <Text key="ctx-window" dimColor>
+                window {kTokens(head.window)}
+                {rows?.compactAt != null ? ` · compacts at ${kTokens(rows.compactAt)}` : ''}
+                {head.compactWindow !== null && rows?.compactAt == null
+                  ? ` · compact window ${kTokens(head.compactWindow)}`
+                  : ''}
+              </Text>,
+              (rows?.rows ?? []).map(row => (
+                <Text key={`ctx-row-${row.name}`} dimColor>
+                  {row.name.padEnd(Math.min(22, Math.max(8, room - 16)))} {kTokens(row.tokens).padStart(5)}
+                </Text>
+              )),
+            ),
+          <Box key="ctx-actions">
+            {canHandOff && (
+              <Button
+                key="pane-handoff"
+                label="Hand off"
+                onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true })}
+              />
+            )}
+            <Button key="pane-compact" label="Compact" onPress={() => $.session.compact()} />
+          </Box>,
         )}
 
-        {refused.length > 0 && header('h-guard', 'Guard')}
-        {refused.slice(-3).map(refusal => (
-          <Text key={`guard-${refusal.at}`} color="yellow" wrap="truncate-end">
-            refused {refusal.tool}: {refusal.line}
-          </Text>
-        ))}
+        {section(
+          'usage',
+          'Usage',
+          (spend?.limits ?? []).map(limit =>
+            meter(
+              `limit-${limit.kind}`,
+              limitLabel(limit.kind),
+              limit.percent,
+              limit.resetsAt === null ? '' : `resets in ${duration(limit.resetsAt - now) || 'now'}`,
+            ),
+          ),
+          <Text key="cost" dimColor={head?.usd == null}>
+            {head?.usd == null
+              ? 'No cost reading.'
+              : `$${head.usd.toFixed(2)} this session` + costRate(head.usd, spend?.startedAt, now)}
+          </Text>,
+        )}
+
+        {section(
+          'agents',
+          'Agents',
+          all.length === 0 && (
+            <Text key="agents-none" dimColor>
+              No subagents yet.
+            </Text>
+          ),
+          [...running, ...finished].map(spawn => (
+            <Text key={`spawn-${spawn.agentId}`} dimColor={spawn.isDone} wrap="truncate-end">
+              {spawn.isDone ? '✓' : '▸'} {shortSeat(spawn.seat)}: {spawn.description}
+              {spawn.isDone ? '' : ` · ${duration(now - spawn.startedAt) || '<1m'}`}
+            </Text>
+          )),
+          sortedSeats.length > 0 && (
+            <Text key="seats" dimColor>
+              Seats
+            </Text>
+          ),
+          sortedSeats.length > 0 &&
+            details(
+              'seat-rows',
+              sortedSeats.map(seat => (
+                <Text key={`seat-${seat.seat}`} wrap="truncate-end">
+                  {shortSeat(seat.seat)} ×{seat.runs} · in {kTokens(totalIn(seat))} ({cacheShare(seat)}% cached) · out{' '}
+                  {kTokens(seat.output)}
+                </Text>
+              )),
+            ),
+        )}
+
+        {items.length > 0 &&
+          section(
+            'plan',
+            `Plan · ${doneCount} of ${items.length} done`,
+            shownItems.map(item => (
+              <Text
+                key={`plan-${item.id}`}
+                dimColor={item.status === 'completed'}
+                bold={item.status === 'in_progress'}
+                wrap="truncate-end"
+              >
+                {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '▸' : '○'} {item.text}
+              </Text>
+            )),
+          )}
+
+        {git !== null &&
+          section(
+            'repo',
+            'Repo',
+            <Text key="repo" wrap="truncate-end">
+              <Text color="magenta" bold>
+                {git.branch}
+              </Text>
+              {git.ahead > 0 ? ` ↑${git.ahead}` : ''}
+              {git.behind > 0 ? ` ↓${git.behind}` : ''}
+              <Text dimColor>
+                {git.changed + git.untracked === 0
+                  ? ' · clean'
+                  : ` · ${git.changed} changed` + (git.untracked > 0 ? ` · ${git.untracked} untracked` : '')}
+              </Text>
+            </Text>,
+          )}
+
+        {refused.length > 0 &&
+          section(
+            'guard',
+            'Guard',
+            refused.slice(-3).map(refusal => (
+              <Text key={`guard-${refusal.at}`} color="yellow" wrap="truncate-end">
+                refused {refusal.tool}: {refusal.line}
+              </Text>
+            )),
+          )}
       </Box>
     )
   })

@@ -319,6 +319,8 @@ describe('cockpit pane', () => {
       expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /1 changed · 1 untracked/ })).toBeDefined()
       expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+      // Rows sit two cells in under their section, details two more.
+      expect(JSON.stringify(await ui.drawn())).toContain('"paddingLeft":2')
       await ui.unmount()
     }
   })
