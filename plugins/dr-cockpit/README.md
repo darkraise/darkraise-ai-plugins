@@ -51,16 +51,34 @@ Repo
 - **Repo** is the working tree's branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
+When the pane sits above the prompt (`layout` `auto`, the default), it switches to
+a compact strip of about seven rows, one per section:
+
+```
+ctx ▰▰▰▰▰▱▱▱ 68% · 412k/604k · 5h ▰▱▱▱ 23% · 7d ▰▰▱▱ 61% · $4.85
+▸ impl-sonnet-low: Task 4 · 4m  +2 done
+Plan 3/6 ▸ Task 4: Draw usage and agents
+feat/cockpit-pane-overhaul ↑3 · 2 changed · 1 untracked
+guard refused 1 git write
+[ Hand off ] [ Compact ]
+```
+
+Under 90 columns the usage meters take a line of their own. While the pane has
+the keyboard, `h` presses **Hand off** and `c` presses **Compact**.
+
 The breakdown and the repo are read after each turn while the pane is open, and
 when it opens; nothing in the pane costs the model context.
+
+**Limit alerts.** When the 5-hour or 7-day limit crosses 90%, a toast says so
+once, with when it resets; it can say so again after the window resets.
 
 **Handoff reading.** The hint line under the prompt ends with the main
 session's context against its budget, `284k/465k handoff`, in the terminal.
 
 **Handoff band.** A row above the prompt appears once the main session's
-context reaches 80% of its handoff budget, yellow while it nears it and red past
-it. **Hide** quiets the warning until the context falls back under 80%; past the
-budget the band always shows.
+context reaches 80% of its handoff budget (`warnAt`), yellow while it nears it
+and red past it. **Hide** quiets the warning until the context falls back under
+that line; past the budget the band always shows.
 
 ```
 Nearing handoff: 400k of 465k (86%)  [ Hide ]
@@ -94,6 +112,12 @@ Set these in `/config` under the plugin's rows, or in `settings.json` under
 | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-superpowers` sessions. |
 | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | `showHint` | `true` | Add the handoff reading to the hint line under the prompt. |
+| `warnAt` | `80` | Where the yellow band appears, as a percentage of the handoff budget (1-99). |
+| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip above the prompt. `full` or `compact`: always that one. |
+| `sections` | empty | The pane's sections and their order, comma-separated: `context`, `usage`, `agents`, `plan`, `repo`, `guard`. Empty shows all six. |
+| `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
+| `openAtStart` | `false` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before). |
+| `limitAlertAt` | `90` | The usage-limit alert's line, in percent. `0` turns the alert off. |
 
 ## Install
 

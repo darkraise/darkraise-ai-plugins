@@ -98,6 +98,8 @@ declare module 'claude-code' {
       plan: CockpitPlanItem[]
       repo: CockpitRepo | null
       refusals: CockpitRefusal[]
+      /** Rate-limit windows already alerted, as `<kind>@<resetsAt>`. */
+      alerted: string[]
       isBandHidden: boolean
       isNudged: boolean
       isPlanSession: boolean

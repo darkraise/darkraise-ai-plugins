@@ -44,6 +44,47 @@
       "title": "Show the handoff reading under the prompt",
       "description": "Add the main session's context against its handoff budget to the hint line under the prompt (terminal only).",
       "default": true
+    },
+    "warnAt": {
+      "type": "number",
+      "title": "Warn at (% of the handoff budget)",
+      "description": "Where the yellow band appears, as a share of the handoff budget, 1 to 99.",
+      "default": 80
+    },
+    "layout": {
+      "type": "string",
+      "title": "Pane layout",
+      "description": "auto: the full layout docked beside the transcript, a compact strip when the pane sits above the prompt. full or compact: always that one.",
+      "options": [
+        "auto",
+        "full",
+        "compact"
+      ],
+      "default": "auto"
+    },
+    "sections": {
+      "type": "string",
+      "title": "Pane sections",
+      "description": "Which sections the pane shows, in order, comma-separated: context, usage, agents, plan, repo, guard. Empty shows all six.",
+      "default": ""
+    },
+    "breakdownRows": {
+      "type": "number",
+      "title": "Context breakdown rows",
+      "description": "How many /context categories the Context section lists, largest first, up to 12. 0 hides the breakdown.",
+      "default": 6
+    },
+    "openAtStart": {
+      "type": "boolean",
+      "title": "Open the pane at session start",
+      "description": "Open the cockpit when a session starts. Claude Code shows it once the terminal is 144 columns wide, 110 once you have opened it before.",
+      "default": false
+    },
+    "limitAlertAt": {
+      "type": "number",
+      "title": "Usage limit alert (%)",
+      "description": "Show a toast once when the 5-hour or 7-day limit crosses this share, again after it resets. 0 turns it off.",
+      "default": 90
     }
   }
 }

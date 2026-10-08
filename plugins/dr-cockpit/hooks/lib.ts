@@ -25,9 +25,27 @@ export function positive(value: unknown): number | undefined {
 
 export type Level = 'quiet' | 'warn' | 'handoff'
 
-export function levelOf(tokens: number, limit: number): Level {
+export function levelOf(tokens: number, limit: number, warnAt: number = WARN_AT): Level {
   if (tokens >= limit) return 'handoff'
-  return tokens >= limit * WARN_AT ? 'warn' : 'quiet'
+  return tokens >= limit * warnAt ? 'warn' : 'quiet'
+}
+
+/** The warnAt setting, a percentage, as a share: 80 → 0.8, held to 1-99. */
+export function warnShare(percent: number): number {
+  return Number.isFinite(percent) && percent > 0 ? Math.min(Math.max(Math.round(percent), 1), 99) / 100 : WARN_AT
+}
+
+export const SECTIONS = ['context', 'usage', 'agents', 'plan', 'repo', 'guard'] as const
+export type Section = (typeof SECTIONS)[number]
+
+/** The sections setting, "plan, context" → ['plan', 'context']: known names in the order given, each once. */
+export function sectionsFrom(text: string): Section[] {
+  const names = text
+    .split(/[\s,]+/)
+    .map(name => name.trim().toLowerCase())
+    .filter((name): name is Section => (SECTIONS as readonly string[]).includes(name))
+  const once = [...new Set(names)]
+  return once.length === 0 ? [...SECTIONS] : once
 }
 
 /** 465000 → "465k"; 1234567 → "1.2M". */
@@ -43,11 +61,17 @@ const ATTRIBUTION = [
   /claude\.ai\/code\/session_/i,
 ]
 
-/** The first AI attribution line in a text, if any. */
+/**
+ * The first AI attribution line in a text, if any, without the quoting around
+ * it: a shell command's closing quote, or a JSON string's escapes.
+ */
 export function attributionIn(text: string): string | undefined {
   for (const pattern of ATTRIBUTION) {
     const match = pattern.exec(text)
-    if (match) return text.slice(match.index).split('\n')[0]?.trim()
+    if (match) {
+      const line = text.slice(match.index).split(/\n|\\n/)[0] ?? ''
+      return line.replace(/[\\"'`}\],\s]+$/, '').trim()
+    }
   }
   return undefined
 }

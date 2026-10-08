@@ -25,12 +25,21 @@ import {
   positive,
   rampColor,
   repoFromPorcelain,
+  sectionsFrom,
+  warnShare,
   writesGitText,
 } from './lib'
+import type { Section } from './lib'
 
 const PANE = 'dr-cockpit'
 const PANE_COLUMNS = 56
 const INDENT = 2
+// The rows the compact layout asks for above the prompt.
+const COMPACT_ROWS = 8
+// The most /context categories the pane lists (breakdownRows caps it lower).
+const MAX_BREAKDOWN_ROWS = 12
+// Room the compact layout needs to keep context and usage on one line.
+const ONE_LINE_COLUMNS = 90
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
@@ -46,8 +55,23 @@ const refusals = atom({ plugin: 'dr-cockpit', key: 'refusals' } as const, [])
 const isBandHidden = atom({ plugin: 'dr-cockpit', key: 'isBandHidden' } as const, false)
 const isNudged = atom({ plugin: 'dr-cockpit', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dr-cockpit', key: 'isPlanSession' } as const, false)
+const alerted = atom({ plugin: 'dr-cockpit', key: 'alerted' } as const, [])
 
-type Options = { handoffTokens: number; nudgeModel: boolean; guardAttribution: boolean; showHint: boolean }
+type Options = {
+  handoffTokens: number
+  nudgeModel: boolean
+  guardAttribution: boolean
+  showHint: boolean
+  warnAt: number
+  layout: 'auto' | 'full' | 'compact'
+  sections: string
+  breakdownRows: number
+  openAtStart: boolean
+  limitAlertAt: number
+}
+
+/** What the budget reading is judged by. */
+type Tuning = { handoffTokens: number; nudgeModel: boolean; warnAt: number }
 
 export const register: Register = (on, options) => {
   const {
@@ -55,7 +79,16 @@ export const register: Register = (on, options) => {
     nudgeModel = true,
     guardAttribution = true,
     showHint = true,
+    warnAt: warnPercent = 80,
+    layout = 'auto',
+    sections: sectionList = '',
+    breakdownRows = 6,
+    openAtStart = false,
+    limitAlertAt = 90,
   } = options as Partial<Options>
+  const tuning: Tuning = { handoffTokens, nudgeModel, warnAt: warnShare(warnPercent) }
+  const shown = sectionsFrom(sectionList)
+  const paneArgs = { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, ...(layout === 'full' ? {} : { rows: COMPACT_ROWS }) }
   // The settings' autoCompactWindow, read at the start and after each main
   // turn rather than on every tool call.
   let compactWindow: number | undefined
@@ -66,13 +99,15 @@ export const register: Register = (on, options) => {
       description: 'Show context, usage, subagents, the plan and the repo in a pane',
     })
     compactWindow = await readCompactWindow($)
-    await refresh($, handoffTokens, nudgeModel, compactWindow)
+    await refresh($, tuning, compactWindow)
+    // Unasked, the engine seats the pane from 144 columns and holds it below.
+    if (openAtStart) void $.ui.open(paneArgs)
 
     return next(e)
   })
 
   on('command.run', { command: 'cockpit' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Cockpit', columns: PANE_COLUMNS })
+    await $.ui.open(paneArgs)
     await refreshDetail($)
 
     return { text: 'Cockpit pane opened.' }
@@ -92,6 +127,7 @@ export const register: Register = (on, options) => {
       })),
     }
     await update($, usage, () => reading)
+    if (limitAlertAt > 0) await alertLimits($, reading, limitAlertAt)
     if (await isPaneUp($)) await refreshDetail($)
 
     return done
@@ -131,7 +167,7 @@ export const register: Register = (on, options) => {
     const done = await next(e)
     if (e.agentId === undefined) {
       compactWindow = await readCompactWindow($)
-      await refresh($, handoffTokens, nudgeModel, compactWindow)
+      await refresh($, tuning, compactWindow)
       return done
     }
     const agentId = e.agentId
@@ -166,7 +202,7 @@ export const register: Register = (on, options) => {
     }
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
-      await refresh($, handoffTokens, nudgeModel, compactWindow)
+      await refresh($, tuning, compactWindow)
     }
 
     return ran
@@ -177,7 +213,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const now = await read($, budget)
     if (e.props.hasSurvey || now === null) return next(e)
-    const level = levelOf(now.tokens, now.limit)
+    const level = levelOf(now.tokens, now.limit, tuning.warnAt)
     // Hide quiets the warning only; past the budget the band always shows.
     if (level === 'quiet' || (level === 'warn' && (await read($, isBandHidden)))) return next(e)
 
@@ -221,8 +257,9 @@ export const register: Register = (on, options) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const now = await $.clock.now()
     const room = e.props.bodyColumns
+    const isCompact = layout === 'compact' || (layout === 'auto' && e.props.placement === 'inline')
     // Room for the label, percentage and suffix beside the bar, inside the indent.
-    const meterWidth = Math.max(6, Math.min(20, room - INDENT - 30))
+    const meterWidth = isCompact ? 8 : Math.max(6, Math.min(20, room - INDENT - 30))
     const head = await read($, budget)
     const spend = await read($, usage)
     const rows = await read($, breakdown)
@@ -233,10 +270,10 @@ export const register: Register = (on, options) => {
     const refused = await read($, refusals)
     const canHandOff = await read($, isPlanSession)
 
-    const meter = (key: string, label: string, percent: number, suffix: string) => (
+    const meter = (key: string, label: string, percent: number, suffix: string, width = meterWidth) => (
       <Text key={key}>
-        <Text dimColor>{label.padEnd(4)}</Text>
-        <Text color={rampColor(percent)}>{bar(percent / 100, meterWidth)}</Text>
+        <Text dimColor>{label.padEnd(isCompact ? label.length + 1 : 4)}</Text>
+        <Text color={rampColor(percent)}>{bar(percent / 100, width)}</Text>
         <Text color={rampColor(percent)} bold>
           {' '}
           {Math.round(percent)}%
@@ -244,6 +281,101 @@ export const register: Register = (on, options) => {
         {suffix !== '' && <Text dimColor> · {suffix}</Text>}
       </Text>
     )
+    const actions = (
+      <Box key="actions">
+        {canHandOff && (
+          <Button
+            key="pane-handoff"
+            label="Hand off"
+            hotkey="h"
+            onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true })}
+          />
+        )}
+        <Button key="pane-compact" label="Compact" hotkey="c" onPress={() => $.session.compact()} />
+      </Box>
+    )
+    const running = all.filter(one => !one.isDone)
+    const finished = all.filter(one => one.isDone)
+    const doneCount = items.filter(item => item.status === 'completed').length
+    const current = items.find(item => item.status === 'in_progress') ?? items.find(item => item.status === 'pending')
+    const limits = spend?.limits ?? []
+    const cost = head?.usd == null ? null : `$${head.usd.toFixed(2)}`
+
+    if (isCompact) {
+      // One row per section, for the strip above the prompt.
+      const contextMeter =
+        head === null
+          ? null
+          : meter('ctx', 'ctx', (head.tokens / head.limit) * 100, `${kTokens(head.tokens)}/${kTokens(head.limit)}`)
+      const isOneLine = room >= ONE_LINE_COLUMNS
+      // Beside the context meter the limits keep short bars; on a line of
+      // their own they get the full compact width.
+      const limitMeters = limits.map(limit =>
+        meter(`limit-${limit.kind}`, limitLabel(limit.kind), limit.percent, '', isOneLine ? 4 : meterWidth),
+      )
+      const joined = (key: string, parts: RenderChildren[]) => (
+        <Text key={key} wrap="truncate-end">
+          {parts.filter(part => part !== null && part !== false).flatMap((part, index) =>
+            index === 0 ? [part] : [<Text dimColor>{' · '}</Text>, part],
+          )}
+        </Text>
+      )
+      const wantsUsage = shown.includes('usage')
+      const byName: Record<Section, RenderChildren> = {
+        context: joined('c-context', [
+          contextMeter,
+          ...(wantsUsage && isOneLine ? limitMeters : []),
+          wantsUsage && cost !== null ? <Text>{cost}</Text> : null,
+        ]),
+        usage: isOneLine || limitMeters.length === 0 ? null : joined('c-usage', limitMeters),
+        agents:
+          running.length + finished.length === 0 ? null : (
+            <Text key="c-agents" wrap="truncate-end">
+              {running[0] === undefined
+                ? `✓ ${finished.length} done`
+                : `▸ ${shortSeat(running[0].seat)}: ${running[0].description} · ${duration(now - running[0].startedAt) || '<1m'}`}
+              <Text dimColor>
+                {running.length > 1 ? `  +${running.length - 1} running` : ''}
+                {running[0] !== undefined && finished.length > 0 ? `  +${finished.length} done` : ''}
+              </Text>
+            </Text>
+          ),
+        plan:
+          items.length === 0 ? null : (
+            <Text key="c-plan" wrap="truncate-end">
+              <Text bold>
+                Plan {doneCount}/{items.length}
+              </Text>
+              {current === undefined ? '' : ` ▸ ${current.text}`}
+            </Text>
+          ),
+        repo:
+          git === null ? null : (
+            <Text key="c-repo" wrap="truncate-end">
+              <Text color="magenta" bold>
+                {git.branch}
+              </Text>
+              {git.ahead > 0 ? ` ↑${git.ahead}` : ''}
+              {git.behind > 0 ? ` ↓${git.behind}` : ''}
+              <Text dimColor>{repoChanges(git)}</Text>
+            </Text>
+          ),
+        guard:
+          refused.length === 0 ? null : (
+            <Text key="c-guard" color="yellow" wrap="truncate-end">
+              guard refused {refused.length === 1 ? '1 git write' : `${refused.length} git writes`}
+            </Text>
+          ),
+      }
+
+      return (
+        <Box flexDirection="column">
+          {shown.map(name => byName[name])}
+          {actions}
+        </Box>
+      )
+    }
+
     // Three levels: a section's title, its rows two cells in, and a row's
     // details two cells further.
     const section = (key: string, title: string, ...body: RenderChildren[]) => (
@@ -259,146 +391,134 @@ export const register: Register = (on, options) => {
         {body}
       </Box>
     )
-
-    const running = all.filter(one => !one.isDone)
-    const finished = all.filter(one => one.isDone).slice(-Math.max(0, 6 - running.length))
-    const doneCount = items.filter(item => item.status === 'completed').length
+    const recent = [...running, ...finished.slice(-Math.max(0, 6 - running.length))]
     const shownItems = planWindow(items, 8)
     const sortedSeats = [...list].sort((a, b) => totalIn(b) - totalIn(a))
+    const breakdownShown = (rows?.rows ?? []).slice(0, Math.max(0, Math.min(MAX_BREAKDOWN_ROWS, breakdownRows)))
+
+    const byName: Record<Section, RenderChildren> = {
+      context: section(
+        'context',
+        'Context',
+        head === null ? (
+          <Text key="ctx-none" dimColor>
+            No reading yet.
+          </Text>
+        ) : (
+          meter('ctx', 'ctx', (head.tokens / head.limit) * 100, `${kTokens(head.tokens)} of ${kTokens(head.limit)} handoff`)
+        ),
+        head !== null &&
+          details(
+            'ctx-details',
+            <Text key="ctx-window" dimColor>
+              window {kTokens(head.window)}
+              {rows?.compactAt != null ? ` · compacts at ${kTokens(rows.compactAt)}` : ''}
+              {head.compactWindow !== null && rows?.compactAt == null
+                ? ` · compact window ${kTokens(head.compactWindow)}`
+                : ''}
+            </Text>,
+            breakdownShown.map(row => (
+              <Text key={`ctx-row-${row.name}`} dimColor>
+                {row.name.padEnd(Math.min(22, Math.max(8, room - 16)))} {kTokens(row.tokens).padStart(5)}
+              </Text>
+            )),
+          ),
+        actions,
+      ),
+      usage: section(
+        'usage',
+        'Usage',
+        limits.map(limit =>
+          meter(
+            `limit-${limit.kind}`,
+            limitLabel(limit.kind),
+            limit.percent,
+            limit.resetsAt === null ? '' : `resets in ${duration(limit.resetsAt - now) || 'now'}`,
+          ),
+        ),
+        <Text key="cost" dimColor={cost === null}>
+          {head?.usd == null
+            ? 'No cost reading.'
+            : `${cost} this session` + costRate(head.usd, spend?.startedAt, now)}
+        </Text>,
+      ),
+      agents: section(
+        'agents',
+        'Agents',
+        all.length === 0 && (
+          <Text key="agents-none" dimColor>
+            No subagents yet.
+          </Text>
+        ),
+        recent.map(spawn => (
+          <Text key={`spawn-${spawn.agentId}`} dimColor={spawn.isDone} wrap="truncate-end">
+            {spawn.isDone ? '✓' : '▸'} {shortSeat(spawn.seat)}: {spawn.description}
+            {spawn.isDone ? '' : ` · ${duration(now - spawn.startedAt) || '<1m'}`}
+          </Text>
+        )),
+        sortedSeats.length > 0 && (
+          <Text key="seats" dimColor>
+            Seats
+          </Text>
+        ),
+        sortedSeats.length > 0 &&
+          details(
+            'seat-rows',
+            sortedSeats.map(seat => (
+              <Text key={`seat-${seat.seat}`} wrap="truncate-end">
+                {shortSeat(seat.seat)} ×{seat.runs} · in {kTokens(totalIn(seat))} ({cacheShare(seat)}% cached) · out{' '}
+                {kTokens(seat.output)}
+              </Text>
+            )),
+          ),
+      ),
+      plan:
+        items.length > 0 &&
+        section(
+          'plan',
+          `Plan · ${doneCount} of ${items.length} done`,
+          shownItems.map(item => (
+            <Text
+              key={`plan-${item.id}`}
+              dimColor={item.status === 'completed'}
+              bold={item.status === 'in_progress'}
+              wrap="truncate-end"
+            >
+              {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '▸' : '○'} {item.text}
+            </Text>
+          )),
+        ),
+      repo:
+        git !== null &&
+        section(
+          'repo',
+          'Repo',
+          <Text key="repo" wrap="truncate-end">
+            <Text color="magenta" bold>
+              {git.branch}
+            </Text>
+            {git.ahead > 0 ? ` ↑${git.ahead}` : ''}
+            {git.behind > 0 ? ` ↓${git.behind}` : ''}
+            <Text dimColor>{repoChanges(git)}</Text>
+          </Text>,
+        ),
+      guard:
+        refused.length > 0 &&
+        section(
+          'guard',
+          'Guard',
+          refused.slice(-3).map(refusal => (
+            <Text key={`guard-${refusal.at}`} color="yellow" wrap="truncate-end">
+              refused {refusal.tool}: {refusal.line}
+            </Text>
+          )),
+        ),
+    }
 
     return (
       <Box flexDirection="column">
-        {section(
-          'context',
-          'Context',
-          head === null ? (
-            <Text key="ctx-none" dimColor>
-              No reading yet.
-            </Text>
-          ) : (
-            meter('ctx', 'ctx', (head.tokens / head.limit) * 100, `${kTokens(head.tokens)} of ${kTokens(head.limit)} handoff`)
-          ),
-          head !== null &&
-            details(
-              'ctx-details',
-              <Text key="ctx-window" dimColor>
-                window {kTokens(head.window)}
-                {rows?.compactAt != null ? ` · compacts at ${kTokens(rows.compactAt)}` : ''}
-                {head.compactWindow !== null && rows?.compactAt == null
-                  ? ` · compact window ${kTokens(head.compactWindow)}`
-                  : ''}
-              </Text>,
-              (rows?.rows ?? []).map(row => (
-                <Text key={`ctx-row-${row.name}`} dimColor>
-                  {row.name.padEnd(Math.min(22, Math.max(8, room - 16)))} {kTokens(row.tokens).padStart(5)}
-                </Text>
-              )),
-            ),
-          <Box key="ctx-actions">
-            {canHandOff && (
-              <Button
-                key="pane-handoff"
-                label="Hand off"
-                onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true })}
-              />
-            )}
-            <Button key="pane-compact" label="Compact" onPress={() => $.session.compact()} />
-          </Box>,
-        )}
-
-        {section(
-          'usage',
-          'Usage',
-          (spend?.limits ?? []).map(limit =>
-            meter(
-              `limit-${limit.kind}`,
-              limitLabel(limit.kind),
-              limit.percent,
-              limit.resetsAt === null ? '' : `resets in ${duration(limit.resetsAt - now) || 'now'}`,
-            ),
-          ),
-          <Text key="cost" dimColor={head?.usd == null}>
-            {head?.usd == null
-              ? 'No cost reading.'
-              : `$${head.usd.toFixed(2)} this session` + costRate(head.usd, spend?.startedAt, now)}
-          </Text>,
-        )}
-
-        {section(
-          'agents',
-          'Agents',
-          all.length === 0 && (
-            <Text key="agents-none" dimColor>
-              No subagents yet.
-            </Text>
-          ),
-          [...running, ...finished].map(spawn => (
-            <Text key={`spawn-${spawn.agentId}`} dimColor={spawn.isDone} wrap="truncate-end">
-              {spawn.isDone ? '✓' : '▸'} {shortSeat(spawn.seat)}: {spawn.description}
-              {spawn.isDone ? '' : ` · ${duration(now - spawn.startedAt) || '<1m'}`}
-            </Text>
-          )),
-          sortedSeats.length > 0 && (
-            <Text key="seats" dimColor>
-              Seats
-            </Text>
-          ),
-          sortedSeats.length > 0 &&
-            details(
-              'seat-rows',
-              sortedSeats.map(seat => (
-                <Text key={`seat-${seat.seat}`} wrap="truncate-end">
-                  {shortSeat(seat.seat)} ×{seat.runs} · in {kTokens(totalIn(seat))} ({cacheShare(seat)}% cached) · out{' '}
-                  {kTokens(seat.output)}
-                </Text>
-              )),
-            ),
-        )}
-
-        {items.length > 0 &&
-          section(
-            'plan',
-            `Plan · ${doneCount} of ${items.length} done`,
-            shownItems.map(item => (
-              <Text
-                key={`plan-${item.id}`}
-                dimColor={item.status === 'completed'}
-                bold={item.status === 'in_progress'}
-                wrap="truncate-end"
-              >
-                {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '▸' : '○'} {item.text}
-              </Text>
-            )),
-          )}
-
-        {git !== null &&
-          section(
-            'repo',
-            'Repo',
-            <Text key="repo" wrap="truncate-end">
-              <Text color="magenta" bold>
-                {git.branch}
-              </Text>
-              {git.ahead > 0 ? ` ↑${git.ahead}` : ''}
-              {git.behind > 0 ? ` ↓${git.behind}` : ''}
-              <Text dimColor>
-                {git.changed + git.untracked === 0
-                  ? ' · clean'
-                  : ` · ${git.changed} changed` + (git.untracked > 0 ? ` · ${git.untracked} untracked` : '')}
-              </Text>
-            </Text>,
-          )}
-
-        {refused.length > 0 &&
-          section(
-            'guard',
-            'Guard',
-            refused.slice(-3).map(refusal => (
-              <Text key={`guard-${refusal.at}`} color="yellow" wrap="truncate-end">
-                refused {refusal.tool}: {refusal.line}
-              </Text>
-            )),
-          )}
+        {shown.map(name => byName[name])}
+        {!shown.includes('context') && actions}
       </Box>
     )
   })
@@ -406,12 +526,8 @@ export const register: Register = (on, options) => {
 
 // Reads the status line's figures (free without a breakdown) and, past the
 // budget in a dr-superpowers session, tells the model once.
-async function refresh(
-  $: EngineInterface,
-  handoffTokens: number,
-  nudgeModel: boolean,
-  compactWindow: number | undefined,
-) {
+async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number | undefined) {
+  const { handoffTokens, nudgeModel } = tuning
   const figures = await $.session.usage()
   const tokens = figures.context.tokens
   if (tokens === undefined) return
@@ -430,7 +546,7 @@ async function refresh(
     await update($, budget, () => now)
   }
 
-  const level = levelOf(tokens, limit)
+  const level = levelOf(tokens, limit, tuning.warnAt)
   if (level === 'quiet') {
     // Back under (a compaction, /clear): show the warning again next time.
     if (await read($, isBandHidden)) await update($, isBandHidden, () => false)
@@ -461,7 +577,7 @@ async function refreshDetail($: EngineInterface) {
         rows: detail.categories
           .filter(row => row.kind === 'used' && row.tokens > 0)
           .sort((a, b) => b.tokens - a.tokens)
-          .slice(0, 6)
+          .slice(0, MAX_BREAKDOWN_ROWS)
           .map(row => ({ name: row.name, tokens: row.tokens })),
         compactAt: detail.isAutoCompactEnabled ? (detail.autoCompactThreshold ?? null) : null,
       }
@@ -484,6 +600,18 @@ async function readCompactWindow($: EngineInterface): Promise<number | undefined
     return positive(((await $.settings.read()) as { autoCompactWindow?: unknown }).autoCompactWindow)
   } catch {
     return undefined
+  }
+}
+
+// Says once per window and reset when a rate limit crosses the alert line.
+async function alertLimits($: EngineInterface, reading: CockpitUsage, at: number) {
+  const said = await read($, alerted)
+  for (const limit of reading.limits) {
+    const key = `${limit.kind}@${limit.resetsAt ?? ''}`
+    if (limit.percent < at || said.includes(key)) continue
+    await update($, alerted, list => [...list, key].slice(-20))
+    const reset = limit.resetsAt === null ? '' : ` · resets in ${duration(limit.resetsAt - reading.readAt) || 'now'}`
+    $.ui.toast(`dr-cockpit: ${limitLabel(limit.kind)} limit at ${Math.round(limit.percent)}%${reset}`)
   }
 }
 
@@ -556,6 +684,11 @@ function addRun(all: CockpitSeat[], seat: string, usage: TurnUsage): CockpitSeat
   }
 
   return found ? all.map(one => (one.seat === seat ? next : one)) : [...all, next]
+}
+
+function repoChanges(git: { changed: number; untracked: number }): string {
+  if (git.changed + git.untracked === 0) return ' · clean'
+  return ` · ${git.changed} changed` + (git.untracked > 0 ? ` · ${git.untracked} untracked` : '')
 }
 
 function shortSeat(seat: string): string {

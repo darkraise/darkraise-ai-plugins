@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
-import type { On, RenderElement, SessionMessage } from 'claude-code'
+import type { On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
 
 import {
   attributionIn,
@@ -31,6 +31,27 @@ const PANE = {
 } as const
 const PORCELAIN = '# branch.oid abc1234def\n# branch.head feat/pane\n# branch.ab +2 -1\n1 .M N... 100644 100644 100644 a b src/a.ts\n? notes.md\n'
 
+// The /context breakdown, as a summary estimate answers it.
+const BREAKDOWN = {
+  categories: [
+    { name: 'Messages', tokens: 180_000, kind: 'used', color: '', isDeferred: false },
+    { name: 'System tools', tokens: 38_000, kind: 'used', color: '', isDeferred: false },
+    { name: 'Free space', tokens: 300_000, kind: 'free', color: '', isDeferred: false },
+  ],
+  isAutoCompactEnabled: true,
+  autoCompactThreshold: 604_000,
+} as never
+const INLINE = { ...PANE, props: { ...PANE.props, placement: 'inline', bodyColumns: 100 } } as const
+const MEASURE: SessionMeasureInput = {
+  context: { tokens: 284_000, window: 650_000 },
+  rateLimits: [
+    { kind: 'five_hour', percentUsed: 23 },
+    { kind: 'seven_day', percentUsed: 61 },
+  ],
+  cost: { usd: 1.5 },
+  changed: ['context', 'rateLimits'],
+}
+
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
 
@@ -48,10 +69,14 @@ type World = {
 function world(on: On, w: World) {
   mock.env(on, {})
   mock.clock(on, { now: 1_000_000 })
-  on('session.usage', () => ({
+  on('session.usage', (_$, e) => ({
     value: {
       startedAt: 0,
-      context: { tokens: w.tokens, window: w.window ?? 650_000 },
+      context: {
+        tokens: w.tokens,
+        window: w.window ?? 650_000,
+        ...(e.breakdown === undefined ? {} : { breakdown: BREAKDOWN }),
+      },
       rateLimits: [],
       cost: { usd: 1.5 },
     },
@@ -139,6 +164,13 @@ describe('attribution guard', () => {
     expect(attributionIn('fix\n\nCo-Authored-By: Jane <jane@example.com>')).toBeUndefined()
     expect(writesGitText('git -C repo commit -m "x"')).toBe(true)
     expect(writesGitText('git log --oneline')).toBe(false)
+  })
+
+  test('names the line without the quoting around it', () => {
+    expect(attributionIn('git commit -m "fix" -m "Claude-Session: https://x/1"')).toBe('Claude-Session: https://x/1')
+    expect(attributionIn(JSON.stringify({ body: 'Fix\n\nGenerated with Claude Code\nmore' }))).toBe(
+      'Generated with Claude Code',
+    )
   })
 
   test('blanks the commit trailer and PR footer the engine composes', async ($, on) => {
@@ -346,5 +378,99 @@ describe('cockpit pane', () => {
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Plan · 2 of 4 done/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /✓ Ship it/ })).toBeDefined()
+  })
+})
+
+describe('settings', () => {
+  test('warnAt moves the band', { options: { warnAt: 70 } }, async ($, on) => {
+    world(on, { tokens: 340_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Nearing handoff: 340k of 465k \(73%\)/ })).toBeDefined()
+  })
+
+  test('sections picks and orders the pane', { options: { sections: 'plan, repo' } }, async ($, on) => {
+    world(on, { tokens: 50_000 })
+    await $.tool.call({
+      tool: 'TodoWrite',
+      todos: [{ content: 'Write the pane', status: 'in_progress', activeForm: 'Writing' }],
+    })
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: 'Usage' })).toBeUndefined()
+    const drawn = JSON.stringify(await ui.drawn())
+    expect(drawn.indexOf('Plan · 0 of 1 done')).toBeGreaterThan(-1)
+    expect(drawn.indexOf('Plan · 0 of 1 done')).toBeLessThan(drawn.indexOf('feat/pane'))
+    // Without the Context section the buttons still show, at the end.
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+  })
+
+  test('breakdownRows limits the context rows', { options: { breakdownRows: 1 } }, async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Messages/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /System tools/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /compacts at 604k/ })).toBeDefined()
+  })
+
+  test('limitAlertAt toasts once per window', async ($, on) => {
+    const toasts: string[] = []
+    world(on, { tokens: 50_000, toasts })
+    const high = { ...MEASURE, rateLimits: [{ kind: 'five_hour', percentUsed: 92, resetsAt: '2026-10-08T12:00:00Z' }] }
+    await $.session.measure(high)
+    await $.session.measure(high)
+    expect(toasts.filter(text => /5h limit at 92%/.test(text))).toHaveLength(1)
+    await $.session.measure({ ...high, rateLimits: [{ kind: 'five_hour', percentUsed: 95, resetsAt: '2026-10-08T17:00:00Z' }] })
+    expect(toasts.filter(text => /5h limit at/.test(text))).toHaveLength(2)
+  })
+
+  test('limitAlertAt 0 stays quiet', { options: { limitAlertAt: 0 } }, async ($, on) => {
+    const toasts: string[] = []
+    world(on, { tokens: 50_000, toasts })
+    await $.session.measure({ ...MEASURE, rateLimits: [{ kind: 'five_hour', percentUsed: 99 }] })
+    expect(toasts).toEqual([])
+  })
+})
+
+describe('compact layout', () => {
+  test('fits the strip above the prompt', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.tool.call({
+      tool: 'TodoWrite',
+      todos: [
+        { content: 'Read the plan', status: 'completed', activeForm: 'Reading' },
+        { content: 'Write the pane', status: 'in_progress', activeForm: 'Writing' },
+      ],
+    })
+    await $.session.measure(MEASURE)
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({ ...INLINE, surface })
+      expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+      expect(await ui.find({ type: 'Text', text: /284k\/465k/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /Plan 1\/2/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /▸ Write the pane/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
+      expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+      await ui.unmount()
+    }
+  })
+
+  test('is used docked too when asked', { options: { layout: 'compact' } }, async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /284k\/465k/ })).toBeDefined()
+  })
+
+  test('full keeps the sections above the prompt', { options: { layout: 'full' } }, async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
   })
 })
