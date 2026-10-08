@@ -68,7 +68,10 @@ re-deriving the branch diff with git commands.
    raised and the judge confirmed is the strongest signal available in this
    loop, so say so. With one list: the findings ranked most severe first, then,
    after the fix wave, which were fixed and which the fixer rejected, with the
-   re-review's verdict on each rejection.
+   re-review's verdict on each rejection. The report is not where the turn
+   ends: after the fix wave, the execution skill's Finish section goes
+   straight on to dr-superpowers:finishing-a-development-branch, and the report
+   sits above its menu.
 
 ## Fixing what it finds
 

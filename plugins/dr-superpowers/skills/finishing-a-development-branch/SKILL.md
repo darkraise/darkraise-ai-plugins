@@ -61,9 +61,12 @@ Confirm before merging: merging into the wrong base is expensive to undo.
 **Rulings first.** If this work came from a plan with a ledger (`progress.md`
 in the directory `scripts/sdd-workspace PLAN_FILE` prints) and this session
 has not yet printed its "Rulings I made" and "Amendments made" lists, print
-them now: every ledger line containing `Ruling:`, in order, then every entry
-of `amendments.md` in the same directory, in full. Your human partner chooses
-how to integrate with those decisions in view.
+them now: under "Rulings I made", every ledger line containing `Ruling:`, in
+order, each with what it costs if wrong, then every `BLOCKED` task; under
+"Amendments made", every entry of `amendments.md` in the same directory, in
+full. The execution skills leave these lists to this step, so they are
+exhaustive here. Your human partner chooses how to integrate with those
+decisions in view.
 
 ## Step 4: Present Options
 
@@ -375,4 +378,5 @@ plan file, end with: "No plan file — no follow-on work recorded."
 | "The merged-result failure is probably flaky" | A failing merged result stops everything. Branch and worktree stay put while you investigate. |
 | "The base branch is obviously main" | Confirm the fork point or ask. Merging into the wrong base is expensive to undo. |
 | "The push was rejected — force-push will fix it" | A rejected push means the remote moved. Investigate; force-push only on your human partner's explicit request. |
+| "I printed the rulings and the review — that wraps up the run" | Without the menu nothing integrates. The three options close the message, every time. |
 | "I summarized the outcome — the next step is obvious" | Not to a fresh session or a partner who stepped away. End with the `next-step` block, verbatim. |
