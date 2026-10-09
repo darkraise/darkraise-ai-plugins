@@ -13,32 +13,48 @@ mod API is early access and may change between releases.
 a session starts, once the terminal is 144 columns wide; `/cockpit` opens it at
 any width, and says why if Claude Code holds it back. In fullscreen at 110
 columns or more it docks beside the transcript; otherwise it sits above the
-prompt. Each section's rows sit two cells in under its title, and
-their details two cells further.
+prompt. In the full layout each section is a framed card in its own color, its
+headline on the title line:
 
 ```
-Context
-  ctx ▰▰▰▰▰▰▱▱▱▱ 61% · 284k of 465k handoff
-    window 650k · compacts at 604k
-    Messages            180k
-    System tools         38k
-  [ Hand off ] [ Compact ]
-Usage
-  5h  ▰▰▱▱▱▱▱▱▱▱ 23% · resets in 3h40m
-  7d  ▰▱▱▱▱▱▱▱▱▱ 9% · resets in 4d2h
-  $1.20 this session · $0.80/h
-Agents
-  ▸ impl-sonnet-low: Task 4 · 4m
-  ✓ reviewer-opus: Review task 2
-  Seats
-    impl-sonnet-low ×3 · in 120k (75% cached) · out 9k
-Plan · 2 of 5 done
-  ✓ Read the plan
-  ▸ Write the pane
-  ○ Open the PR
-Repo
-  feat/pane ↑2 · 1 changed · 1 untracked
+╭ Context ─────────────────────────── 68% of handoff ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱┃▱▱▱▱▱┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
+│ 412k of 1.0M ┃ handoff 604k ┊ compacts 744k      │
+│ trend ▁▂▃▃▄▄▅▆▆▇▇█ +23k                           │
+│ ██████████████████████████████████████▓▓▓▓▒▒▒░░  │
+│   ■ Messages              318k  78%               │
+│   ■ System tools           41k  10%               │
+│ [ Hand off ] [ Compact ] [ Settings ]             │
+╰───────────────────────────────────────────────────╯
+╭ Usage ──────────────────────────── $4.85 · $2.35/h ╮
+│ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
+│     resets in 3h40m · 27% of the window gone      │
+╰───────────────────────────────────────────────────╯
+╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
+│ ● impl-sonnet-low Task 4 4m                       │
+│ ✓ reviewer-opus Review task 3                     │
+│ Seats by input                                    │
+│   impl-sonnet-low ×1                              │
+│   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
+╰───────────────────────────────────────────────────╯
+╭ Plan ─────────────────────────────────────── 3/6 ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
+│ ✓ Task 3: Draw the context section                │
+│ ▸ Task 4: Draw usage and agents                   │
+│ ○ Task 5: Track the plan and repo                 │
+╰───────────────────────────────────────────────────╯
+╭ Repo ─────────────────────────────────── ● dirty ╮
+│ ⎇ feat/cockpit-pane-overhaul ↑3                   │
+│ ~2 changed ?1 untracked                           │
+╰───────────────────────────────────────────────────╯
 ```
+
+The context track runs over the whole window: the fill is the reading, `┃` the
+handoff budget and `┊` where auto-compaction runs. The trend line is the
+session's recent readings. The colored bar splits the context by `/context`
+category, each color matching its row. On a usage-limit meter `┊` marks how far
+through its window the limit is, so a fill past it is spending faster than the
+window refills.
 
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated

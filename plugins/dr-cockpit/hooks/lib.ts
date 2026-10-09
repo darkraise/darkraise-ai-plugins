@@ -186,3 +186,75 @@ export function repoFromPorcelain(text: string): RepoState | null {
   if (state.branch === '(detached)') state.branch = oid === '' ? 'detached' : `@${oid.slice(0, 7)}`
   return state
 }
+
+const SPARKS = '▁▂▃▄▅▆▇█'
+
+/** Readings → "▁▃▅█" scaled between their least and most; flat readings sit mid-height. */
+export function sparkline(values: readonly number[]): string {
+  if (values.length === 0) return ''
+  const low = Math.min(...values)
+  const span = Math.max(...values) - low
+  return values
+    .map(value => SPARKS[span === 0 ? 3 : Math.round(((value - low) / span) * (SPARKS.length - 1))])
+    .join('')
+}
+
+/** One run of a meter: filled, empty, or a mark standing at a share of the width. */
+export type TrackPart = { text: string; kind: 'fill' | 'empty' | 'mark'; mark?: string }
+
+/**
+ * A meter `width` cells wide filled to `share`, with each mark's glyph in the
+ * cell its share lands on (a later mark wins a shared cell). Never full below 100%.
+ */
+export function track(share: number, width: number, marks: readonly { at: number; glyph: string; name: string }[]): TrackPart[] {
+  const filled = bar(share, width)
+  const cells: TrackPart[] = [...filled].map(cell => ({ text: cell, kind: cell === '▰' ? 'fill' : 'empty' }))
+  for (const mark of marks) {
+    if (!(mark.at >= 0 && mark.at <= 1)) continue
+    const index = Math.min(width - 1, Math.floor(mark.at * width))
+    cells[index] = { text: mark.glyph, kind: 'mark', mark: mark.name }
+  }
+  // Neighbouring cells of one kind join into one run.
+  return cells.reduce<TrackPart[]>((runs, cell) => {
+    const last = runs[runs.length - 1]
+    if (last !== undefined && last.kind === cell.kind && cell.kind !== 'mark') last.text += cell.text
+    else runs.push({ ...cell })
+    return runs
+  }, [])
+}
+
+/**
+ * Splits `width` cells among values in proportion, largest remainders first,
+ * every nonzero value at least one cell while the width lasts.
+ */
+export function stackedRuns(values: readonly number[], width: number): number[] {
+  const total = values.reduce((sum, value) => sum + Math.max(0, value), 0)
+  if (total === 0) return values.map(() => 0)
+  const exact = values.map(value => (Math.max(0, value) / total) * width)
+  const runs = exact.map(Math.floor)
+  let left = width - runs.reduce((sum, run) => sum + run, 0)
+  const order = exact.map((value, index) => ({ index, rest: value - Math.floor(value) })).sort((a, b) => b.rest - a.rest)
+  for (const { index } of order) {
+    if (left === 0) break
+    runs[index] = (runs[index] ?? 0) + 1
+    left--
+  }
+  for (const [index, run] of runs.entries()) {
+    if (run > 0 || (values[index] ?? 0) <= 0) continue
+    const donor = runs.indexOf(Math.max(...runs))
+    if ((runs[donor] ?? 0) > 1) {
+      runs[donor] = (runs[donor] ?? 0) - 1
+      runs[index] = 1
+    }
+  }
+  return runs
+}
+
+const WINDOW_MS: Record<string, number> = { five_hour: 5 * 3_600_000, seven_day: 7 * 86_400_000 }
+
+/** How far through its window a rate limit is, 0 to 1, or null for a window of unknown length. */
+export function windowElapsed(kind: string, resetsAt: number | null, now: number): number | null {
+  const length = WINDOW_MS[kind]
+  if (length === undefined || resetsAt === null) return null
+  return Math.min(1, Math.max(0, 1 - (resetsAt - now) / length))
+}

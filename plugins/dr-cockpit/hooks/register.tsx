@@ -28,11 +28,15 @@ import {
   SECTIONS,
   sectionsFrom,
   sectionsToggled,
+  sparkline,
+  stackedRuns,
   stepped,
+  track,
+  windowElapsed,
   warnShare,
   writesGitText,
 } from './lib'
-import type { Section } from './lib'
+import type { Section, TrackPart } from './lib'
 
 const PANE = 'dr-cockpit'
 const PANE_COLUMNS = 56
@@ -45,6 +49,10 @@ const MAX_BREAKDOWN_ROWS = 12
 const ONE_LINE_COLUMNS = 90
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
+// How many context readings the trend line keeps.
+const TREND_LENGTH = 40
+// The colors the context breakdown cycles through, largest category first.
+const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] as const
 // The handoff budget's step and ceiling in the settings view.
 const HANDOFF_STEP = 50_000
 const MAX_HANDOFF = 2_000_000
@@ -62,6 +70,7 @@ const isBandHidden = atom({ plugin: 'dr-cockpit', key: 'isBandHidden' } as const
 const isNudged = atom({ plugin: 'dr-cockpit', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dr-cockpit', key: 'isPlanSession' } as const, false)
 const alerted = atom({ plugin: 'dr-cockpit', key: 'alerted' } as const, [])
+const trend = atom({ plugin: 'dr-cockpit', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dr-cockpit', key: 'view' } as const, 'cockpit')
 
 type Options = {
@@ -493,14 +502,19 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // Three levels: a section's title, its rows two cells in, and a row's
-    // details two cells further.
-    const section = (key: string, title: string, ...body: RenderChildren[]) => (
-      <Box key={key} flexDirection="column">
-        <Text bold>{title}</Text>
-        <Box flexDirection="column" paddingLeft={INDENT}>
-          {body}
+    // Each section is a card: a rounded frame in its own color, its title and
+    // headline on the first line, its rows below, and a row's details two cells in.
+    const inner = Math.max(20, room - 4)
+    const wide = Math.max(10, inner - 2 * INDENT)
+    const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) => (
+      <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
+        <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
+          <Text color={color} bold>
+            {title}
+          </Text>
+          {headline}
         </Box>
+        {body}
       </Box>
     )
     const details = (key: string, ...body: RenderChildren[]) => (
@@ -508,84 +522,202 @@ export const register: Register = (on, options) => {
         {body}
       </Box>
     )
+    // A meter with marks on it, its filled cells in the ramp color.
+    const drawTrack = (key: string, percent: number, parts: TrackPart[], marks: Record<string, string>) => (
+      <Text key={key}>
+        {parts.map((part, index) =>
+          part.kind === 'mark' ? (
+            <Text key={`${key}-${index}`} color={marks[part.mark ?? ''] ?? 'white'} bold>
+              {part.text}
+            </Text>
+          ) : (
+            <Text key={`${key}-${index}`} color={part.kind === 'fill' ? rampColor(percent) : undefined} dimColor={part.kind === 'empty'}>
+              {part.text}
+            </Text>
+          ),
+        )}
+      </Text>
+    )
     const recent = [...running, ...finished.slice(-Math.max(0, 6 - running.length))]
     const shownItems = planWindow(items, 8)
     const sortedSeats = [...list].sort((a, b) => totalIn(b) - totalIn(a))
+    const mostIn = Math.max(1, ...sortedSeats.map(totalIn))
     const breakdownShown = (rows?.rows ?? []).slice(0, Math.max(0, Math.min(MAX_BREAKDOWN_ROWS, breakdownRows)))
+    const readings = await read($, trend)
+
+    // The context track runs over the whole window: filled to the reading,
+    // with the handoff line and the compaction point marked on it.
+    const contextBody: RenderChildren[] = []
+    if (head !== null) {
+      const percent = (head.tokens / head.limit) * 100
+      const compactAt = rows?.compactAt ?? null
+      contextBody.push(
+        drawTrack(
+          'ctx-track',
+          percent,
+          track(head.tokens / head.window, inner, [
+            ...(compactAt === null ? [] : [{ at: compactAt / head.window, glyph: '┊', name: 'compact' }]),
+            { at: head.limit / head.window, glyph: '┃', name: 'handoff' },
+          ]),
+          { handoff: rampColor(percent), compact: 'gray' },
+        ),
+        <Text key="ctx-legend" wrap="truncate-end">
+          <Text bold>{kTokens(head.tokens)}</Text>
+          <Text dimColor> of {kTokens(head.window)}</Text>
+          <Text color={rampColor(percent)}> ┃ handoff {kTokens(head.limit)}</Text>
+          {compactAt !== null && <Text dimColor> ┊ compacts {kTokens(compactAt)}</Text>}
+        </Text>,
+      )
+      if (readings.length > 1) {
+        const change = (readings[readings.length - 1] ?? 0) - (readings[readings.length - 2] ?? 0)
+        contextBody.push(
+          <Text key="ctx-trend" wrap="truncate-end">
+            <Text dimColor>trend </Text>
+            <Text color="cyan">{sparkline(readings.slice(-Math.max(4, inner - 16)))}</Text>
+            <Text dimColor>
+              {' '}
+              {change >= 0 ? '+' : '−'}
+              {kTokens(Math.abs(change))}
+            </Text>
+          </Text>,
+        )
+      }
+      if (breakdownShown.length > 0) {
+        const runs = stackedRuns(
+          breakdownShown.map(row => row.tokens),
+          inner,
+        )
+        const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]
+        const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
+        contextBody.push(
+          <Text key="ctx-stack">
+            {breakdownShown.map((row, index) => (
+              <Text key={`ctx-stack-${row.name}`} color={colorOf(index)}>
+                {'█'.repeat(runs[index] ?? 0)}
+              </Text>
+            ))}
+          </Text>,
+          details(
+            'ctx-rows',
+            breakdownShown.map((row, index) => (
+              <Text key={`ctx-row-${row.name}`} wrap="truncate-end">
+                <Text color={colorOf(index)}>■ </Text>
+                {row.name.padEnd(Math.min(20, Math.max(8, wide - 14)))}
+                <Text bold> {kTokens(row.tokens).padStart(5)}</Text>
+                <Text dimColor> {String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(3)}%</Text>
+              </Text>
+            )),
+          ),
+        )
+      }
+    }
 
     const byName: Record<Section, RenderChildren> = {
       context: section(
         'context',
         'Context',
+        'cyan',
         head === null ? (
-          <Text key="ctx-none" dimColor>
-            No reading yet.
+          <Text key="ctx-head" dimColor>
+            no reading yet
           </Text>
         ) : (
-          meter('ctx', 'ctx', (head.tokens / head.limit) * 100, `${kTokens(head.tokens)} of ${kTokens(head.limit)} handoff`)
+          <Text key="ctx-head" color={rampColor((head.tokens / head.limit) * 100)} bold>
+            {Math.round((head.tokens / head.limit) * 100)}% of handoff
+          </Text>
         ),
-        head !== null &&
-          details(
-            'ctx-details',
-            <Text key="ctx-window" dimColor>
-              window {kTokens(head.window)}
-              {rows?.compactAt != null ? ` · compacts at ${kTokens(rows.compactAt)}` : ''}
-              {head.compactWindow !== null && rows?.compactAt == null
-                ? ` · compact window ${kTokens(head.compactWindow)}`
-                : ''}
-            </Text>,
-            breakdownShown.map(row => (
-              <Text key={`ctx-row-${row.name}`} dimColor>
-                {row.name.padEnd(Math.min(22, Math.max(8, room - 16)))} {kTokens(row.tokens).padStart(5)}
-              </Text>
-            )),
-          ),
+        ...contextBody,
         actions,
       ),
       usage: section(
         'usage',
         'Usage',
-        limits.map(limit =>
-          meter(
-            `limit-${limit.kind}`,
-            limitLabel(limit.kind),
-            limit.percent,
-            limit.resetsAt === null ? '' : `resets in ${duration(limit.resetsAt - now) || 'now'}`,
-          ),
-        ),
-        <Text key="cost" dimColor={cost === null}>
-          {head?.usd == null
-            ? 'No cost reading.'
-            : `${cost} this session` + costRate(head.usd, spend?.startedAt, now)}
+        'blue',
+        <Text key="usage-head" bold>
+          {cost ?? ''}
+          <Text dimColor>{head?.usd == null ? '' : costRate(head.usd, spend?.startedAt, now)}</Text>
         </Text>,
+        limits.length === 0 && (
+          <Text key="limits-none" dimColor>
+            No limit reading yet.
+          </Text>
+        ),
+        limits.map(limit => {
+          // The pace mark: how far through its window the limit is, so a fill
+          // past the mark is spending faster than the window refills.
+          const elapsed = windowElapsed(limit.kind, limit.resetsAt, now)
+          const width = Math.max(6, inner - 14)
+          return (
+            <Box key={`limit-${limit.kind}`} flexDirection="column">
+              <Text>
+                <Text dimColor>{limitLabel(limit.kind).padEnd(4)}</Text>
+                {drawTrack(
+                  `limit-${limit.kind}-track`,
+                  limit.percent,
+                  track(limit.percent / 100, width, elapsed === null ? [] : [{ at: elapsed, glyph: '┊', name: 'pace' }]),
+                  { pace: 'white' },
+                )}
+                <Text color={rampColor(limit.percent)} bold>
+                  {' '}
+                  {String(Math.round(limit.percent)).padStart(3)}%
+                </Text>
+              </Text>
+              {limit.resetsAt !== null && (
+                <Text dimColor>
+                  {'    '}resets in {duration(limit.resetsAt - now) || 'now'}
+                  {elapsed === null ? '' : ` · ${Math.round(elapsed * 100)}% of the window gone`}
+                </Text>
+              )}
+            </Box>
+          )
+        }),
       ),
       agents: section(
         'agents',
         'Agents',
+        'magenta',
+        <Text key="agents-head">
+          {running.length > 0 && <Text color="cyan">● {running.length} running </Text>}
+          {finished.length > 0 && <Text color="green">✓ {finished.length}</Text>}
+        </Text>,
         all.length === 0 && (
           <Text key="agents-none" dimColor>
             No subagents yet.
           </Text>
         ),
         recent.map(spawn => (
-          <Text key={`spawn-${spawn.agentId}`} dimColor={spawn.isDone} wrap="truncate-end">
-            {spawn.isDone ? '✓' : '▸'} {shortSeat(spawn.seat)}: {spawn.description}
-            {spawn.isDone ? '' : ` · ${duration(now - spawn.startedAt) || '<1m'}`}
+          <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
+            <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'} </Text>
+            <Text bold={!spawn.isDone} dimColor={spawn.isDone}>
+              {shortSeat(spawn.seat)}
+            </Text>
+            <Text dimColor={spawn.isDone}> {spawn.description}</Text>
+            {!spawn.isDone && <Text color="cyan"> {duration(now - spawn.startedAt) || '<1m'}</Text>}
           </Text>
         )),
         sortedSeats.length > 0 && (
           <Text key="seats" dimColor>
-            Seats
+            Seats by input
           </Text>
         ),
         sortedSeats.length > 0 &&
           details(
             'seat-rows',
             sortedSeats.map(seat => (
-              <Text key={`seat-${seat.seat}`} wrap="truncate-end">
-                {shortSeat(seat.seat)} ×{seat.runs} · in {kTokens(totalIn(seat))} ({cacheShare(seat)}% cached) · out{' '}
-                {kTokens(seat.output)}
-              </Text>
+              <Box key={`seat-${seat.seat}`} flexDirection="column">
+                <Text wrap="truncate-end">
+                  {shortSeat(seat.seat)}
+                  <Text dimColor> ×{seat.runs}</Text>
+                </Text>
+                <Text wrap="truncate-end">
+                  <Text color="magenta">{bar(totalIn(seat) / mostIn, Math.max(6, wide - 26)).replace(/▱+$/, rest => ' '.repeat(rest.length))}</Text>
+                  <Text bold> {kTokens(totalIn(seat))}</Text>
+                  <Text dimColor>
+                    {' '}
+                    in · {cacheShare(seat)}% cached · {kTokens(seat.output)} out
+                  </Text>
+                </Text>
+              </Box>
             )),
           ),
       ),
@@ -593,15 +725,22 @@ export const register: Register = (on, options) => {
         items.length > 0 &&
         section(
           'plan',
-          `Plan · ${doneCount} of ${items.length} done`,
+          'Plan',
+          'yellow',
+          <Text key="plan-head" bold>
+            {doneCount}/{items.length}
+          </Text>,
+          <Text key="plan-progress" color="yellow">
+            {bar(doneCount / items.length, inner)}
+          </Text>,
           shownItems.map(item => (
-            <Text
-              key={`plan-${item.id}`}
-              dimColor={item.status === 'completed'}
-              bold={item.status === 'in_progress'}
-              wrap="truncate-end"
-            >
-              {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '▸' : '○'} {item.text}
+            <Text key={`plan-${item.id}`} wrap="truncate-end">
+              <Text color={item.status === 'completed' ? 'green' : item.status === 'in_progress' ? 'yellow' : undefined} dimColor={item.status === 'pending'}>
+                {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '▸' : '○'}{' '}
+              </Text>
+              <Text dimColor={item.status === 'completed'} bold={item.status === 'in_progress'}>
+                {item.text}
+              </Text>
             </Text>
           )),
         ),
@@ -610,23 +749,38 @@ export const register: Register = (on, options) => {
         section(
           'repo',
           'Repo',
+          'green',
+          <Text key="repo-head" color={git.changed + git.untracked === 0 ? 'green' : 'yellow'}>
+            {git.changed + git.untracked === 0 ? '● clean' : '● dirty'}
+          </Text>,
           <Text key="repo" wrap="truncate-end">
             <Text color="magenta" bold>
-              {git.branch}
+              ⎇ {git.branch}
             </Text>
-            {git.ahead > 0 ? ` ↑${git.ahead}` : ''}
-            {git.behind > 0 ? ` ↓${git.behind}` : ''}
-            <Text dimColor>{repoChanges(git)}</Text>
+            {git.ahead > 0 && <Text color="green"> ↑{git.ahead}</Text>}
+            {git.behind > 0 && <Text color="red"> ↓{git.behind}</Text>}
           </Text>,
+          git.changed + git.untracked > 0 && (
+            <Text key="repo-changes" wrap="truncate-end">
+              {git.changed > 0 && <Text color="yellow">~{git.changed} changed </Text>}
+              {git.untracked > 0 && <Text dimColor>?{git.untracked} untracked</Text>}
+            </Text>
+          ),
         ),
       guard:
         refused.length > 0 &&
         section(
           'guard',
           'Guard',
+          'red',
+          <Text key="guard-head" color="red" bold>
+            {refused.length} refused
+          </Text>,
           refused.slice(-3).map(refusal => (
-            <Text key={`guard-${refusal.at}`} color="yellow" wrap="truncate-end">
-              refused {refusal.tool}: {refusal.line}
+            <Text key={`guard-${refusal.at}`} wrap="truncate-end">
+              <Text color="red">✗ </Text>
+              {refusal.tool}
+              <Text dimColor>: {refusal.line}</Text>
             </Text>
           )),
         ),
@@ -661,6 +815,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   ) {
     const now: CockpitBudget = { tokens, limit, window, compactWindow: compactWindow ?? null, usd }
     await update($, budget, () => now)
+    if (before?.tokens !== tokens) await update($, trend, readings => [...readings, tokens].slice(-TREND_LENGTH))
   }
 
   const level = levelOf(tokens, limit, tuning.warnAt)

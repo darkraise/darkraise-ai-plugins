@@ -10,7 +10,11 @@ import {
   planWithUpdate,
   repoFromPorcelain,
   sectionsToggled,
+  sparkline,
+  stackedRuns,
   stepped,
+  track,
+  windowElapsed,
   writesGitText,
 } from '../hooks/lib'
 
@@ -199,7 +203,7 @@ describe('attribution guard', () => {
     const clean = await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix: tidy"' })
     expect(clean.deny).toBeUndefined()
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /refused Bash: Claude-Session/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /✗ Bash: Claude-Session/ })).toBeDefined()
   })
 
   test('is off when configured off', { options: { guardAttribution: false } }, async ($, on) => {
@@ -317,7 +321,7 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      expect(await ui.find({ type: 'Text', text: /▸ impl-sonnet-low: Task 3/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /● impl-sonnet-low Task 3/ })).toBeDefined()
       await ui.unmount()
     }
     await $.turn.complete({
@@ -337,8 +341,8 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      expect(await ui.find({ type: 'Text', text: /impl-sonnet-low ×1 · in 40k \(75% cached\) · out 3k/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low: Task 3/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /40k in · 75% cached · 3k out/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low Task 3/ })).toBeDefined()
       await ui.unmount()
     }
   })
@@ -355,11 +359,11 @@ describe('cockpit pane', () => {
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
       expect(await ui.find({ type: 'Text', text: /61%/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /284k of 465k handoff/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /\$1\.50 this session/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /\$1\.50/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /1 changed · 1 untracked/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /~1 changed \?1 untracked/ })).toBeDefined()
       expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
       // Rows sit two cells in under their section, details two more.
       expect(JSON.stringify(await ui.drawn())).toContain('"paddingLeft":2')
@@ -379,14 +383,14 @@ describe('cockpit pane', () => {
       ],
     })
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Plan · 1 of 3 done/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^1\/3$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /▸ Write the pane/ })).toBeDefined()
     await ui.unmount()
 
     await $.tool.call({ tool: 'TaskCreate', subject: 'Ship it', description: 'Ship the pane' })
     await $.tool.call({ tool: 'TaskUpdate', taskId: '7', status: 'completed' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Plan · 2 of 4 done/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^2\/4$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /✓ Ship it/ })).toBeDefined()
   })
 })
@@ -410,8 +414,8 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: 'Usage' })).toBeUndefined()
     const drawn = JSON.stringify(await ui.drawn())
-    expect(drawn.indexOf('Plan · 0 of 1 done')).toBeGreaterThan(-1)
-    expect(drawn.indexOf('Plan · 0 of 1 done')).toBeLessThan(drawn.indexOf('feat/pane'))
+    expect(drawn.indexOf('"Plan"')).toBeGreaterThan(-1)
+    expect(drawn.indexOf('"Plan"')).toBeLessThan(drawn.indexOf('feat/pane'))
     // Without the Context section the buttons still show, at the end.
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
@@ -423,7 +427,7 @@ describe('settings', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Messages/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /System tools/ })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /compacts at 604k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /compacts 604k/ })).toBeDefined()
   })
 
   test('limitAlertAt toasts once per window', async ($, on) => {
@@ -565,5 +569,33 @@ describe('settings view', () => {
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'set-showHint-toggle' })
     expect(toasts).toContain('dr-cockpit: showHint not saved: managed settings own it')
+  })
+})
+
+describe('pane graphics', () => {
+  test('draw sparklines, marked tracks, stacked bars and window pace', () => {
+    expect(sparkline([0, 50, 100])).toBe('▁▅█')
+    expect(sparkline([7, 7])).toBe('▄▄')
+    expect(track(0.5, 10, [{ at: 0.8, glyph: '┃', name: 'handoff' }])).toEqual([
+      { text: '▰▰▰▰▰', kind: 'fill' },
+      { text: '▱▱▱', kind: 'empty' },
+      { text: '┃', kind: 'mark', mark: 'handoff' },
+      { text: '▱', kind: 'empty' },
+    ])
+    expect(stackedRuns([180, 38, 1], 20)).toEqual([15, 4, 1])
+    expect(stackedRuns([0, 0], 10)).toEqual([0, 0])
+    expect(windowElapsed('five_hour', 1_000_000 + 3_600_000, 1_000_000)).toBe(0.8)
+    expect(windowElapsed('spend_limit', 5, 1)).toBeNull()
+  })
+
+  test('keeps a trend of the context readings', async ($, on) => {
+    const w: World = { tokens: 100_000 }
+    world(on, w)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
+    w.tokens = 160_000
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: '▁█' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /\+60k/ })).toBeDefined()
   })
 })

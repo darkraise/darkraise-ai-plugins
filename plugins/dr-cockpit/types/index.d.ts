@@ -100,6 +100,8 @@ declare module 'claude-code' {
       refusals: CockpitRefusal[]
       /** Rate-limit windows already alerted, as `<kind>@<resetsAt>`. */
       alerted: string[]
+      /** The main session's context readings, oldest first, for the trend line. */
+      trend: number[]
       /** Whether the pane shows the cockpit or its settings. */
       view: 'cockpit' | 'settings'
       isBandHidden: boolean
