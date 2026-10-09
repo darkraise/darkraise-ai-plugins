@@ -492,11 +492,7 @@ export const register: Register = (on, options) => {
     // the one that matters (`isMain`), dim when it reads as off.
     const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) => (
       <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
-        <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress}>
-          <Text color={look.isMain ? BUTTON_MAIN : undefined} bold={look.isMain}>
-            {label}
-          </Text>
-        </Button>
+        <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
       </Box>
     )
     const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, tuning.warnAt) !== 'quiet'
