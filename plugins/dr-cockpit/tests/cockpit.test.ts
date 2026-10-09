@@ -1,14 +1,27 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
-import type { On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
+import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
 
 import {
+  accountKey,
   attributionIn,
   bar,
+  billingLabel,
   budgetFor,
   duration,
+  fitStatus,
   levelOf,
+  modelName,
   planWithUpdate,
   repoFromPorcelain,
+  runsWidth,
+  sectionsToggled,
+  sparkline,
+  stackedRuns,
+  statusLines,
+  stepped,
+  termColor,
+  track,
+  windowElapsed,
   writesGitText,
 } from '../hooks/lib'
 
@@ -52,6 +65,17 @@ const MEASURE: SessionMeasureInput = {
   changed: ['context', 'rateLimits'],
 }
 
+// The person typing /cockpit at a wide fullscreen terminal.
+const COCKPIT: CommandRunInput = {
+  command: 'cockpit',
+  args: '',
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: true, columns: 160 },
+}
+
+// A terminal session starting in the repository.
+const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractive: true } as never
+
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
 
@@ -61,14 +85,17 @@ type World = {
   settings?: Record<string, unknown>
   toasts?: string[]
   notes?: string[]
+  env?: Record<string, string>
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
 // so a test moves it) in a 650k window, every tool call answered, every toast
 // and every row the plugin appends recorded in `w.notes`.
 function world(on: On, w: World) {
-  mock.env(on, {})
+  mock.env(on, w.env ?? {})
   mock.clock(on, { now: 1_000_000 })
+  on('command.register', () => ({ value: undefined }) as never)
+  on('session.start', (_$, e) => e as never)
   on('session.usage', (_$, e) => ({
     value: {
       startedAt: 0,
@@ -107,6 +134,33 @@ function world(on: On, w: World) {
     if (e.component === 'PromptHint') return h(Text, {}, e.props.tail ?? '') as RenderElement
     return h(Box, { key: 'engine' }) as RenderElement
   })
+}
+
+// A signed-in account with a frame color in dr-status' config, working in a
+// repository under home.
+const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
+function signedIn(on: On) {
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('fs.read', (_$, e) => {
+    if (e.path === '/home/me/.claude.json') {
+      return {
+        value: JSON.stringify({
+          oauthAccount: {
+            emailAddress: 'me@example.com',
+            displayName: 'Me',
+            organizationName: 'Acme',
+            organizationRole: 'admin',
+            billingType: 'stripe_subscription',
+          },
+        }),
+      }
+    }
+    if (e.path === '/home/me/.claude/dcc-statusline.json') return { value: JSON.stringify({ accounts: { '~/.claude': { color: '141' } } }) }
+    throw new Error('ENOENT')
+  })
+  on('session.cwd', () => ({ value: '/home/me/code/shop/web' }))
+  on('session.repo', () => ({ value: { root: '/home/me/code/shop', remote: null, internal: false, name: null } }))
+  on('session.model', () => ({ value: 'claude-opus-5-5[1m]' }))
 }
 
 describe('budget rule', () => {
@@ -189,7 +243,7 @@ describe('attribution guard', () => {
     const clean = await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix: tidy"' })
     expect(clean.deny).toBeUndefined()
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /refused Bash: Claude-Session/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /✗ Bash: Claude-Session/ })).toBeDefined()
   })
 
   test('is off when configured off', { options: { guardAttribution: false } }, async ($, on) => {
@@ -307,7 +361,7 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      expect(await ui.find({ type: 'Text', text: /▸ impl-sonnet-low: Task 3/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /● impl-sonnet-low Task 3/ })).toBeDefined()
       await ui.unmount()
     }
     await $.turn.complete({
@@ -327,8 +381,8 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      expect(await ui.find({ type: 'Text', text: /impl-sonnet-low ×1 · in 40k \(75% cached\) · out 3k/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low: Task 3/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /40k in · 75% cached · 3k out/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low Task 3/ })).toBeDefined()
       await ui.unmount()
     }
   })
@@ -345,11 +399,11 @@ describe('cockpit pane', () => {
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
       expect(await ui.find({ type: 'Text', text: /61%/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /284k of 465k handoff/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /\$1\.50 this session/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /\$1\.50/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /1 changed · 1 untracked/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /~1 changed \?1 untracked/ })).toBeDefined()
       expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
       // Rows sit two cells in under their section, details two more.
       expect(JSON.stringify(await ui.drawn())).toContain('"paddingLeft":2')
@@ -369,14 +423,14 @@ describe('cockpit pane', () => {
       ],
     })
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Plan · 1 of 3 done/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^1\/3$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /▸ Write the pane/ })).toBeDefined()
     await ui.unmount()
 
     await $.tool.call({ tool: 'TaskCreate', subject: 'Ship it', description: 'Ship the pane' })
     await $.tool.call({ tool: 'TaskUpdate', taskId: '7', status: 'completed' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Plan · 2 of 4 done/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^2\/4$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /✓ Ship it/ })).toBeDefined()
   })
 })
@@ -400,8 +454,8 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: 'Usage' })).toBeUndefined()
     const drawn = JSON.stringify(await ui.drawn())
-    expect(drawn.indexOf('Plan · 0 of 1 done')).toBeGreaterThan(-1)
-    expect(drawn.indexOf('Plan · 0 of 1 done')).toBeLessThan(drawn.indexOf('feat/pane'))
+    expect(drawn.indexOf('"Plan"')).toBeGreaterThan(-1)
+    expect(drawn.indexOf('"Plan"')).toBeLessThan(drawn.indexOf('feat/pane'))
     // Without the Context section the buttons still show, at the end.
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
@@ -413,7 +467,7 @@ describe('settings', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Messages/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /System tools/ })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /compacts at 604k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /compacts 604k/ })).toBeDefined()
   })
 
   test('limitAlertAt toasts once per window', async ($, on) => {
@@ -436,27 +490,39 @@ describe('settings', () => {
 })
 
 describe('compact layout', () => {
-  test('fits the strip above the prompt', async ($, on) => {
-    world(on, { tokens: 284_000 })
+  test('draws dr-status\' two lines in the account\'s frame, with the buttons', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on)
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     await $.tool.call({
       tool: 'TodoWrite',
-      todos: [
-        { content: 'Read the plan', status: 'completed', activeForm: 'Reading' },
-        { content: 'Write the pane', status: 'in_progress', activeForm: 'Writing' },
-      ],
+      todos: [{ content: 'Write the pane', status: 'in_progress', activeForm: 'Writing' }],
     })
     await $.session.measure(MEASURE)
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...INLINE, surface })
       expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
-      expect(await ui.find({ type: 'Text', text: /284k\/465k/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Plan 1\/2/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /▸ Write the pane/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com ─{81}╮$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /~\/code\/shop\/web.*feat\/pane\* ↑2 ↓1 \?1.*Opus 5\.5.*xhigh/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /ctx ▰+▱+ 44% · 284k.*\$1\.50.*5h ▰+▱+ 23%.*7d ▰+▱+ 61%/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /Plan/ })).toBeUndefined()
       expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
       await ui.unmount()
     }
+  })
+
+  test('drops the frame below 48 columns, the email on a line of its own', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...INLINE, props: { ...INLINE.props, bodyColumns: 40 }, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /╭/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: 'me@example.com' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^shop\/web · feat\/pane\* · Opus · xhigh$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ctx 44% · \$1\.50 · 5h 23% · 7d 61%$/ })).toBeDefined()
   })
 
   test('is used docked too when asked', { options: { layout: 'compact' } }, async ($, on) => {
@@ -464,7 +530,7 @@ describe('compact layout', () => {
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /284k\/465k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱+ 44% · 284k/ })).toBeDefined()
   })
 
   test('full keeps the sections above the prompt', { options: { layout: 'full' } }, async ($, on) => {
@@ -482,5 +548,182 @@ describe('compact layout', () => {
     await docked.unmount()
     const inline = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await inline.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+  })
+})
+
+describe('/cockpit', () => {
+  test('says the pane opened when Claude Code draws it', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    const answer = await $.command.run(COCKPIT)
+    expect(answer.text).toBe('Cockpit pane opened.')
+  })
+
+  test('says why when Claude Code holds the pane back', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    on('ui.open', () => ({ value: { isPlaced: false, reason: 'this desktop app places no panes' } }))
+    const answer = await $.command.run(COCKPIT)
+    expect(answer.text).toBe('Cockpit pane is waiting: this desktop app places no panes')
+  })
+})
+
+describe('settings view', () => {
+  test('toggles sections without losing the order or the last one', () => {
+    expect(sectionsToggled(['account', 'context', 'usage', 'agents', 'plan', 'repo', 'guard'], 'repo')).toBe('account,context,usage,agents,plan,guard')
+    expect(sectionsToggled(['plan', 'context'], 'usage')).toBe('plan,context,usage')
+    expect(sectionsToggled(['account', 'context', 'usage', 'agents', 'plan', 'repo'], 'guard')).toBe('')
+    expect(sectionsToggled(['plan'], 'plan')).toBe('plan')
+    expect(stepped(90, 5, 0, 100)).toBe(95)
+    expect(stepped(100, 5, 0, 100)).toBe(100)
+    expect(stepped(0, -5, 0, 100)).toBe(0)
+  })
+
+  test('/cockpit settings opens the settings', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    await $.command.run({ ...COCKPIT, args: 'settings' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Settings' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'set-openAtStart-toggle' })).toBeDefined()
+  })
+
+  for (const surface of SURFACES) {
+    test(`writes each press through /config on ${surface}`, { options: { openAtStart: false, warnAt: 80 } }, async ($, on) => {
+      const writes: [string, unknown][] = []
+      world(on, { tokens: 284_000 })
+      on('config.set', (_$, e) => {
+        writes.push([e.key, e.value])
+        return { value: e.value }
+      })
+      await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
+      const ui = await $.ui.mount({ ...PANE, surface })
+      await ui.press({ key: 'pane-settings' })
+      await ui.press({ key: 'set-openAtStart-toggle' })
+      await ui.press({ key: 'set-warnAt-more' })
+      await ui.press({ key: 'set-layout-compact' })
+      await ui.press({ key: 'set-section-guard' })
+      expect(writes).toEqual([
+        ['dr-cockpit.openAtStart', true],
+        ['dr-cockpit.warnAt', 85],
+        ['dr-cockpit.layout', 'compact'],
+        ['dr-cockpit.sections', 'account,context,usage,agents,plan,repo'],
+      ])
+      await ui.press({ key: 'settings-back' })
+      expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
+    })
+  }
+
+  test('says when a setting is refused', async ($, on) => {
+    const toasts: string[] = []
+    world(on, { tokens: 284_000, toasts })
+    on('config.set', () => ({ deny: 'managed settings own it' }))
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'set-showHint-toggle' })
+    expect(toasts).toContain('dr-cockpit: showHint not saved: managed settings own it')
+  })
+})
+
+describe('pane graphics', () => {
+  test('draw sparklines, marked tracks, stacked bars and window pace', () => {
+    expect(sparkline([0, 50, 100])).toBe('▁▅█')
+    expect(sparkline([7, 7])).toBe('▄▄')
+    expect(track(0.5, 10, [{ at: 0.8, glyph: '┃', name: 'handoff' }])).toEqual([
+      { text: '▰▰▰▰▰', kind: 'fill' },
+      { text: '▱▱▱', kind: 'empty' },
+      { text: '┃', kind: 'mark', mark: 'handoff' },
+      { text: '▱', kind: 'empty' },
+    ])
+    expect(stackedRuns([180, 38, 1], 20)).toEqual([15, 4, 1])
+    expect(stackedRuns([0, 0], 10)).toEqual([0, 0])
+    expect(windowElapsed('five_hour', 1_000_000 + 3_600_000, 1_000_000)).toBe(0.8)
+    expect(windowElapsed('spend_limit', 5, 1)).toBeNull()
+  })
+
+  test('keeps a trend of the context readings', async ($, on) => {
+    const w: World = { tokens: 100_000 }
+    world(on, w)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
+    w.tokens = 160_000
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: '▁█' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /\+60k/ })).toBeDefined()
+  })
+})
+
+describe('account', () => {
+  test('keys, colors, names and billing read as dr-status reads them', () => {
+    expect(accountKey('/home/me/.claude', '/home/me')).toBe('~/.claude')
+    expect(accountKey('C:\\Users\\me\\.claude-work', 'C:\\Users\\me')).toBe('~/.claude-work')
+    expect(accountKey('/srv/claude', '/home/me')).toBe('/srv/claude')
+    expect(termColor('141')).toBe('#af87ff')
+    expect(termColor('orange')).toBe('#ff8700')
+    expect(termColor('cyan')).toBe('cyan')
+    expect(termColor('')).toBeUndefined()
+    expect(modelName('claude-opus-5-5[1m]')).toBe('Opus 5.5')
+    expect(modelName('claude-sonnet-4-5-20250929', true)).toBe('Sonnet')
+    expect(billingLabel('stripe_subscription')).toBe('subscription')
+  })
+
+  test('shows a card with the email, organization, model and config directory', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Account' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /● me@example\.com/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Me · Acme \(admin\)/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Opus 5\.5 · xhigh effort/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'config ~/.claude' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'subscription' })).toBeDefined()
+  })
+
+  test('leaves the card out when no account is found', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Account' })).toBeUndefined()
+  })
+})
+
+describe('status strip', () => {
+  const input = {
+    cwd: '/home/me/code/shop/web/src',
+    root: '/home/me/code/shop',
+    home: '/home/me',
+    repo: { branch: 'feat/a-rather-long-branch-name', ahead: 2, behind: 0, changed: 1, untracked: 2 },
+    model: 'claude-opus-5-5',
+    effort: 'high',
+    context: { tokens: 94_000, window: 200_000 },
+    cache: 0.93,
+    usd: 1.2,
+    limits: [{ kind: 'five_hour', percent: 23, resetsAt: 1_000_000 + 13_200_000 }],
+    now: 1_000_000,
+    email: null,
+  }
+  const text = (runs: { text: string }[]) => runs.map(run => run.text).join('')
+
+  test('draws the fullest tier the way dr-status does', () => {
+    const [one, two] = statusLines(input, 0)
+    expect(text(one)).toBe('~/code/shop/web/src  ·  feat/a-rather-long-branch-name* ↑2 ?2  ·  Opus 5.5  ·  high')
+    expect(text(two)).toBe('ctx ▰▰▰▰▰▱▱▱▱▱ 47% · 94k  ·  cache ▰▰▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱▱▱▱▱ 23% · 3h40m')
+  })
+
+  test('steps down a tier at a time until both lines fit', () => {
+    const fits = (width: number) => fitStatus(input, width)
+    expect(fits(200).tiers).toEqual([0, 0])
+    expect(fits(76).tiers).toEqual([1, 1])
+    expect(text(fits(76).lines[0])).toBe('shop/web/src  ·  feat/a-rather-long-branch-name* ↑2 ?2  ·  Opus 5.5  ·  high')
+    expect(fits(75).tiers).toEqual([2, 2])
+    expect(text(fits(60).lines[0])).toBe('shop/…/src · feat/a-rather-long-branch-name* · Opus · high')
+    expect(text(fits(60).lines[1])).toBe('ctx ▰▰▱▱ 47% · cache ▰▰▰▱ 93% · $1.20 · 5h ▰▱▱ 23%')
+    // Each line steps down on its own: the meters keep their bars beside a long first line.
+    expect(fits(57).tiers).toEqual([3, 2])
+    const last = fits(30)
+    expect(last.tiers).toEqual([3, 3])
+    expect(last.lines.every(line => runsWidth(line) <= 30)).toBe(true)
+    expect(text(last.lines[0]).endsWith('…')).toBe(true)
   })
 })

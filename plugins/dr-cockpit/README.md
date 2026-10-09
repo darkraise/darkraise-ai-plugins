@@ -9,35 +9,64 @@ mod API is early access and may change between releases.
 
 ## What it does
 
-**Cockpit pane.** `/cockpit` opens a pane with the session at a glance. In
-fullscreen at 110 columns or more it docks beside the transcript; otherwise it
-sits above the prompt. Each section's rows sit two cells in under its title, and
-their details two cells further.
+**Cockpit pane.** A pane with the session at a glance. It opens by itself when
+a session starts, once the terminal is 144 columns wide; `/cockpit` opens it at
+any width, and says why if Claude Code holds it back. In fullscreen at 110
+columns or more it docks beside the transcript; otherwise it sits above the
+prompt. In the full layout each section is a framed card in its own color, its
+headline on the title line:
 
 ```
-Context
-  ctx ▰▰▰▰▰▰▱▱▱▱ 61% · 284k of 465k handoff
-    window 650k · compacts at 604k
-    Messages            180k
-    System tools         38k
-  [ Hand off ] [ Compact ]
-Usage
-  5h  ▰▰▱▱▱▱▱▱▱▱ 23% · resets in 3h40m
-  7d  ▰▱▱▱▱▱▱▱▱▱ 9% · resets in 4d2h
-  $1.20 this session · $0.80/h
-Agents
-  ▸ impl-sonnet-low: Task 4 · 4m
-  ✓ reviewer-opus: Review task 2
-  Seats
-    impl-sonnet-low ×3 · in 120k (75% cached) · out 9k
-Plan · 2 of 5 done
-  ✓ Read the plan
-  ▸ Write the pane
-  ○ Open the PR
-Repo
-  feat/pane ↑2 · 1 changed · 1 untracked
+╭ Account ──────────────────────────── subscription ╮
+│ ● you@example.com                                 │
+│   You · Acme (admin)                              │
+│   Opus 5.5 · xhigh effort                         │
+│   config ~/.claude                                │
+╰───────────────────────────────────────────────────╯
+╭ Context ─────────────────────────── 68% of handoff ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱┃▱▱▱▱▱┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
+│ 412k of 1.0M ┃ handoff 604k ┊ compacts 744k      │
+│ trend ▁▂▃▃▄▄▅▆▆▇▇█ +23k                           │
+│ ██████████████████████████████████████▓▓▓▓▒▒▒░░  │
+│   ■ Messages              318k  78%               │
+│   ■ System tools           41k  10%               │
+│ [ Hand off ] [ Compact ] [ Settings ]             │
+╰───────────────────────────────────────────────────╯
+╭ Usage ──────────────────────────── $4.85 · $2.35/h ╮
+│ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
+│     resets in 3h40m · 27% of the window gone      │
+╰───────────────────────────────────────────────────╯
+╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
+│ ● impl-sonnet-low Task 4 4m                       │
+│ ✓ reviewer-opus Review task 3                     │
+│ Seats by input                                    │
+│   impl-sonnet-low ×1                              │
+│   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
+╰───────────────────────────────────────────────────╯
+╭ Plan ─────────────────────────────────────── 3/6 ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
+│ ✓ Task 3: Draw the context section                │
+│ ▸ Task 4: Draw usage and agents                   │
+│ ○ Task 5: Track the plan and repo                 │
+╰───────────────────────────────────────────────────╯
+╭ Repo ─────────────────────────────────── ● dirty ╮
+│ ⎇ feat/cockpit-pane-overhaul ↑3                   │
+│ ~2 changed ?1 untracked                           │
+╰───────────────────────────────────────────────────╯
 ```
 
+The context track runs over the whole window: the fill is the reading, `┃` the
+handoff budget and `┊` where auto-compaction runs. The trend line is the
+session's recent readings. The colored bar splits the context by `/context`
+category, each color matching its row. On a usage-limit meter `┊` marks how far
+through its window the limit is, so a fill past it is spending faster than the
+window refills.
+
+- **Account** is who the session runs as: the email, name, organization and
+  role from the account's `.claude.json` (under `CLAUDE_CONFIG_DIR` when set),
+  the billing type, the model and effort the last request used, and the config
+  directory. Its frame takes the color `dr-status` assigns the account in
+  `~/.claude/dcc-statusline.json` (`DCC_STATUSLINE_CONFIG` when set).
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated
   locally with no API calls. **Hand off** appears in `dr-superpowers` sessions.
@@ -51,20 +80,37 @@ Repo
 - **Repo** is the working tree's branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
-When the pane sits above the prompt (`layout` `auto`, the default), it switches to
-a compact strip of about seven rows, one per section:
+When the pane sits above the prompt (`layout` `auto`, the default), it draws
+what `dr-status` draws, with the cockpit's buttons under it: the frame in the
+account's color with its email on the top rule, the path, branch, model and
+effort, then the context, cache, cost and limit meters:
 
 ```
-ctx ▰▰▰▰▰▱▱▱ 68% · 412k/604k · 5h ▰▱▱▱ 23% · 7d ▰▰▱▱ 61% · $4.85
-▸ impl-sonnet-low: Task 4 · 4m  +2 done
-Plan 3/6 ▸ Task 4: Draw usage and agents
-feat/cockpit-pane-overhaul ↑3 · 2 changed · 1 untracked
-guard refused 1 git write
-[ Hand off ] [ Compact ]
+╭─ you@example.com ────────────────────────────────────────────────────────────────────────────────╮
+│ darkraise-ai-plugins/…/dr-cockpit · feat/cockpit-pane-overhaul* · Opus · xhigh                   │
+│ ctx ▰▰▱▱ 41% · cache ▰▰▰▱ 93% · $4.85 · 5h ▰▱▱ 23% · 7d ▰▰▱ 61%                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+[ Hand off ] [ Compact ] [ Settings ]
 ```
 
-Under 90 columns the usage meters take a line of their own. While the pane has
-the keyboard, `h` presses **Hand off** and `c` presses **Compact**.
+Each line shrinks the way `dr-status`' do, a step at a time until it fits: the
+path drops what leads to the repository, then its middle, then all but the
+leaf; the branch drops its counters, then shortens; the model drops its
+version; the meters narrow, drop the token count and reset times, and at last
+show the percentage alone. Below 48 columns the frame goes and the email takes
+a line of its own above them. The pane draws no Nerd Font icons. The context
+meter is the share of the model's window, as `dr-status` shows it; the hint
+line under the prompt keeps the handoff reading. While the pane has the
+keyboard, `h` presses **Hand off**, `c` presses **Compact** and `s` opens the
+settings.
+
+**Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
+mod's settings: whether it shows at session start, the layout, which sections
+show, the handoff budget, where the band and the limit alert appear, how many
+context rows to list, and the hint, note and guard switches. Each press saves
+the setting the way `/config` does, and the pane redraws with it. **Back** (`b`)
+returns to the cockpit.
+
 
 The breakdown and the repo are read after each turn while the pane is open, and
 when it opens; nothing in the pane costs the model context.
@@ -103,8 +149,20 @@ Code" or a Claude session link). Human co-authors pass.
 
 ## Settings
 
-Set these in `/config` under the plugin's rows, or in `settings.json` under
-`pluginConfigs["dr-cockpit"].options`.
+Set these in the pane's settings view, in `/config` under the plugin's rows, or
+in your user settings
+(`~/.claude/settings.json`; project settings are not read) under
+`pluginConfigs["dr-cockpit@darkraise"].options`, then start a new session:
+
+```json
+{
+  "pluginConfigs": {
+    "dr-cockpit@darkraise": {
+      "options": { "layout": "compact", "sections": "context,usage,plan", "warnAt": 70 }
+    }
+  }
+}
+```
 
 | Option | Default | Effect |
 | --- | --- | --- |
@@ -113,10 +171,10 @@ Set these in `/config` under the plugin's rows, or in `settings.json` under
 | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | `showHint` | `true` | Add the handoff reading to the hint line under the prompt. |
 | `warnAt` | `80` | Where the yellow band appears, as a percentage of the handoff budget (1-99). |
-| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip above the prompt. `full` or `compact`: always that one. |
-| `sections` | empty | The pane's sections and their order, comma-separated: `context`, `usage`, `agents`, `plan`, `repo`, `guard`. Empty shows all six. |
+| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip (the `dr-status` lines and the buttons) above the prompt. `full` or `compact`: always that one. |
+| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `agents`, `plan`, `repo`, `guard`. Empty shows all seven. The compact strip always draws the `dr-status` lines. |
 | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
-| `openAtStart` | `false` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before). |
+| `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
 | `limitAlertAt` | `90` | The usage-limit alert's line, in percent. `0` turns the alert off. |
 
 ## Install
@@ -125,6 +183,10 @@ Set these in `/config` under the plugin's rows, or in `settings.json` under
 /plugin marketplace add darkraise/darkraise-ai-plugins
 /plugin install dr-cockpit@darkraise
 ```
+
+An installed copy stays at the version it was installed at. To take a new
+release, run `claude plugin update dr-cockpit@darkraise` and start a new session
+(or run `/reload-plugins`).
 
 ## Development
 

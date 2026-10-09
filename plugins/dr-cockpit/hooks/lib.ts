@@ -35,7 +35,7 @@ export function warnShare(percent: number): number {
   return Number.isFinite(percent) && percent > 0 ? Math.min(Math.max(Math.round(percent), 1), 99) / 100 : WARN_AT
 }
 
-export const SECTIONS = ['context', 'usage', 'agents', 'plan', 'repo', 'guard'] as const
+export const SECTIONS = ['account', 'context', 'usage', 'agents', 'plan', 'repo', 'guard'] as const
 export type Section = (typeof SECTIONS)[number]
 
 /** The sections setting, "plan, context" → ['plan', 'context']: known names in the order given, each once. */
@@ -46,6 +46,26 @@ export function sectionsFrom(text: string): Section[] {
     .filter((name): name is Section => (SECTIONS as readonly string[]).includes(name))
   const once = [...new Set(names)]
   return once.length === 0 ? [...SECTIONS] : once
+}
+
+/**
+ * The sections setting after turning one section on or off: the shown order
+ * kept, a section turned on added last, and the last one left never turned
+ * off. All of them in their own order is the empty setting.
+ */
+export function sectionsToggled(shown: readonly Section[], name: Section): string {
+  const next = shown.includes(name)
+    ? shown.length === 1
+      ? [...shown]
+      : shown.filter(one => one !== name)
+    : [...shown, name]
+  const isDefault = next.length === SECTIONS.length && next.every((one, index) => one === SECTIONS[index])
+  return isDefault ? '' : next.join(',')
+}
+
+/** A number setting one step up or down, kept within its range. */
+export function stepped(value: number, step: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value + step))
 }
 
 /** 465000 → "465k"; 1234567 → "1.2M". */
@@ -165,4 +185,281 @@ export function repoFromPorcelain(text: string): RepoState | null {
   if (state.branch === '') return null
   if (state.branch === '(detached)') state.branch = oid === '' ? 'detached' : `@${oid.slice(0, 7)}`
   return state
+}
+
+const SPARKS = '▁▂▃▄▅▆▇█'
+
+/** Readings → "▁▃▅█" scaled between their least and most; flat readings sit mid-height. */
+export function sparkline(values: readonly number[]): string {
+  if (values.length === 0) return ''
+  const low = Math.min(...values)
+  const span = Math.max(...values) - low
+  return values
+    .map(value => SPARKS[span === 0 ? 3 : Math.round(((value - low) / span) * (SPARKS.length - 1))])
+    .join('')
+}
+
+/** One run of a meter: filled, empty, or a mark standing at a share of the width. */
+export type TrackPart = { text: string; kind: 'fill' | 'empty' | 'mark'; mark?: string }
+
+/**
+ * A meter `width` cells wide filled to `share`, with each mark's glyph in the
+ * cell its share lands on (a later mark wins a shared cell). Never full below 100%.
+ */
+export function track(share: number, width: number, marks: readonly { at: number; glyph: string; name: string }[]): TrackPart[] {
+  const filled = bar(share, width)
+  const cells: TrackPart[] = [...filled].map(cell => ({ text: cell, kind: cell === '▰' ? 'fill' : 'empty' }))
+  for (const mark of marks) {
+    if (!(mark.at >= 0 && mark.at <= 1)) continue
+    const index = Math.min(width - 1, Math.floor(mark.at * width))
+    cells[index] = { text: mark.glyph, kind: 'mark', mark: mark.name }
+  }
+  // Neighbouring cells of one kind join into one run.
+  return cells.reduce<TrackPart[]>((runs, cell) => {
+    const last = runs[runs.length - 1]
+    if (last !== undefined && last.kind === cell.kind && cell.kind !== 'mark') last.text += cell.text
+    else runs.push({ ...cell })
+    return runs
+  }, [])
+}
+
+/**
+ * Splits `width` cells among values in proportion, largest remainders first,
+ * every nonzero value at least one cell while the width lasts.
+ */
+export function stackedRuns(values: readonly number[], width: number): number[] {
+  const total = values.reduce((sum, value) => sum + Math.max(0, value), 0)
+  if (total === 0) return values.map(() => 0)
+  const exact = values.map(value => (Math.max(0, value) / total) * width)
+  const runs = exact.map(Math.floor)
+  let left = width - runs.reduce((sum, run) => sum + run, 0)
+  const order = exact.map((value, index) => ({ index, rest: value - Math.floor(value) })).sort((a, b) => b.rest - a.rest)
+  for (const { index } of order) {
+    if (left === 0) break
+    runs[index] = (runs[index] ?? 0) + 1
+    left--
+  }
+  for (const [index, run] of runs.entries()) {
+    if (run > 0 || (values[index] ?? 0) <= 0) continue
+    const donor = runs.indexOf(Math.max(...runs))
+    if ((runs[donor] ?? 0) > 1) {
+      runs[donor] = (runs[donor] ?? 0) - 1
+      runs[index] = 1
+    }
+  }
+  return runs
+}
+
+const WINDOW_MS: Record<string, number> = { five_hour: 5 * 3_600_000, seven_day: 7 * 86_400_000 }
+
+/** How far through its window a rate limit is, 0 to 1, or null for a window of unknown length. */
+export function windowElapsed(kind: string, resetsAt: number | null, now: number): number | null {
+  const length = WINDOW_MS[kind]
+  if (length === undefined || resetsAt === null) return null
+  return Math.min(1, Math.max(0, 1 - (resetsAt - now) / length))
+}
+
+/** One stretch of text in the status strip, with how it is painted. */
+export type Run = { text: string; color?: string; bold?: boolean; dim?: boolean }
+
+/** What the status strip draws, read from the session as dr-status reads its payload. */
+export type StatusInput = {
+  cwd: string | null
+  /** The repository's root, when the working directory is in one. */
+  root: string | null
+  home: string | null
+  repo: RepoState | null
+  model: string | null
+  effort: string | null
+  context: { tokens: number; window: number } | null
+  /** The share of the last main request served from the prompt cache, 0 to 1. */
+  cache: number | null
+  usd: number | null
+  limits: readonly { kind: string; percent: number; resetsAt: number | null }[]
+  now: number
+}
+
+// dr-status' default palette.
+const DIR = 'blue'
+const GIT = 'magenta'
+const MODEL = 'cyan'
+const COST = '#af87ff'
+const EFFORT: Record<string, string> = { low: 'gray', medium: 'blue', high: 'cyan', xhigh: '#af87ff', max: 'magenta' }
+// Bar widths per tier, as dr-status narrows them; under 2 draws no bar.
+const METER_WIDTHS = [
+  { ctx: 10, cache: 10, limit: 8 },
+  { ctx: 6, cache: 6, limit: 5 },
+  { ctx: 4, cache: 4, limit: 3 },
+  { ctx: 0, cache: 0, limit: 0 },
+] as const
+export const STATUS_TIERS = METER_WIDTHS.length
+
+/** The cells a row of runs takes. */
+export function runsWidth(runs: readonly Run[]): number {
+  return runs.reduce((sum, run) => sum + [...run.text].length, 0)
+}
+
+/** A row cut to `width` cells, ending in an ellipsis when anything was cut. */
+export function runsCut(runs: readonly Run[], width: number): Run[] {
+  if (runsWidth(runs) <= width) return [...runs]
+  const out: Run[] = []
+  let left = Math.max(0, width - 1)
+  for (const run of runs) {
+    const chars = [...run.text]
+    if (chars.length <= left) {
+      out.push(run)
+      left -= chars.length
+      continue
+    }
+    if (left > 0) out.push({ ...run, text: chars.slice(0, left).join('') })
+    break
+  }
+  if (width > 0) out.push({ text: '…', dim: true })
+  return out
+}
+
+/** A color from dr-status' config: a 256-color number becomes hex, orange its own hex, a name stays. */
+export function termColor(name: string | null | undefined): string | undefined {
+  if (name === null || name === undefined || name === '' || name === 'default') return undefined
+  if (name === 'orange') return '#ff8700'
+  if (!/^\d{1,3}$/.test(name)) return name
+  const n = Number(name)
+  if (n > 255) return undefined
+  const base = ['#000000', '#800000', '#008000', '#808000', '#000080', '#800080', '#008080', '#c0c0c0',
+    '#808080', '#ff0000', '#00ff00', '#ffff00', '#0000ff', '#ff00ff', '#00ffff', '#ffffff']
+  if (n < 16) return base[n]
+  const hex = (v: number) => v.toString(16).padStart(2, '0')
+  if (n >= 232) {
+    const v = 8 + (n - 232) * 10
+    return `#${hex(v)}${hex(v)}${hex(v)}`
+  }
+  const steps = [0, 95, 135, 175, 215, 255]
+  const i = n - 16
+  return `#${hex(steps[Math.floor(i / 36)] ?? 0)}${hex(steps[Math.floor(i / 6) % 6] ?? 0)}${hex(steps[i % 6] ?? 0)}`
+}
+
+/** "claude-opus-5-5[1m]" → "Opus 5.5", or "Opus" when short. */
+export function modelName(id: string, isShort = false): string {
+  const bare = id.replace(/\[.*?\]$/, '').replace(/^claude-/, '').replace(/-\d{8}$/, '')
+  const [family = bare, ...rest] = bare.split('-')
+  const name = family.charAt(0).toUpperCase() + family.slice(1)
+  const version = rest.filter(part => /^\d+$/.test(part)).join('.')
+  return isShort || version === '' ? name : `${name} ${version}`
+}
+
+/** The accounts key dr-status colors by: the config directory, "~"-relative under home. */
+export function accountKey(configDir: string, home: string): string {
+  const dir = slashes(configDir)
+  const base = slashes(home)
+  if (dir === base) return '~'
+  return base !== '' && dir.startsWith(`${base}/`) ? `~${dir.slice(base.length)}` : dir
+}
+
+/** Claude's billing type, "stripe_subscription" → "subscription". */
+export function billingLabel(billing: string | null): string | null {
+  if (billing === null || billing === '') return null
+  return billing.replace(/^(stripe|apple|google)_/, '').replace(/_/g, ' ')
+}
+
+function slashes(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+/**
+ * The working directory in dr-status' three tones: what leads to the
+ * repository, the repository's name, and the path inside it.
+ */
+export function pathParts(cwd: string, root: string | null, home: string | null): { lead: string; anchor: string; inner: string } {
+  const tilde = (path: string) => {
+    const h = home === null ? '' : slashes(home)
+    return h !== '' && (path === h || path.startsWith(`${h}/`)) ? `~${path.slice(h.length)}` : path
+  }
+  const at = slashes(cwd)
+  const top = root === null ? null : slashes(root)
+  const anchorPath = top !== null && (at === top || at.startsWith(`${top}/`)) ? top : at
+  const cut = anchorPath.lastIndexOf('/')
+  const lead = cut <= 0 ? '' : tilde(anchorPath.slice(0, cut + 1))
+  return { lead, anchor: anchorPath.slice(cut + 1) || anchorPath, inner: at.slice(anchorPath.length) }
+}
+
+/** dr-status' two lines at one tier: 0 is the fullest, 3 the most compact. */
+export function statusLines(input: StatusInput, tier: number): [Run[], Run[]] {
+  const sep: Run = { text: tier < 2 ? '  ·  ' : ' · ', dim: true }
+  const join = (segments: (Run[] | null)[]) =>
+    segments.filter((one): one is Run[] => one !== null && one.length > 0).flatMap((one, index) => (index === 0 ? one : [sep, ...one]))
+  const widths = METER_WIDTHS[Math.min(tier, METER_WIDTHS.length - 1)] ?? METER_WIDTHS[0]
+  const extras = tier < 2
+
+  let dir: Run[] | null = null
+  if (input.cwd !== null) {
+    const { lead, anchor, inner } = pathParts(input.cwd, input.root, input.home)
+    const parts = inner.split('/').filter(Boolean)
+    const leaf = parts[parts.length - 1] ?? anchor
+    dir =
+      tier === 0
+        ? [{ text: lead, color: DIR, dim: true }, { text: anchor, color: DIR, bold: true }, { text: inner, color: DIR }]
+        : tier === 1
+          ? [{ text: anchor, color: DIR, bold: true }, { text: inner, color: DIR }]
+          : tier === 2
+            ? [{ text: anchor, color: DIR, bold: true }, { text: parts.length > 1 ? `/…/${leaf}` : inner, color: DIR }]
+            : [{ text: leaf, color: DIR, bold: true }]
+    dir = dir.filter(run => run.text !== '')
+  }
+
+  let git: Run[] | null = null
+  if (input.repo !== null) {
+    const r = input.repo
+    const branch = tier === 3 && r.branch.length > 16 ? `${r.branch.slice(0, 15)}…` : r.branch
+    const counters = [r.ahead > 0 ? `↑${r.ahead}` : '', r.behind > 0 ? `↓${r.behind}` : '', r.untracked > 0 ? `?${r.untracked}` : '']
+      .filter(Boolean)
+      .join(' ')
+    git = [
+      { text: branch, color: GIT, bold: true },
+      ...(r.changed > 0 ? [{ text: '*', color: GIT }] : []),
+      ...(tier < 2 && counters !== '' ? [{ text: ` ${counters}`, color: GIT }] : []),
+    ]
+  }
+
+  const model = input.model === null ? null : [{ text: modelName(input.model, tier >= 2), color: MODEL, bold: true }]
+  const effort = input.effort === null ? null : [{ text: input.effort, color: EFFORT[input.effort] ?? 'gray' }]
+
+  const meter = (label: string, share: number, colorShare: number, width: number, extra: string): Run[] => {
+    const percent = Math.round(share * 100)
+    const color = rampColor(colorShare * 100)
+    return [
+      { text: `${label} ` },
+      ...(width >= 2 ? [{ text: `${bar(share, width)} `, color }] : []),
+      { text: `${percent}%`, color, bold: true },
+      ...(extras && extra !== '' ? [{ text: ` · ${extra}`, dim: true }] : []),
+    ]
+  }
+  const ctx =
+    input.context === null
+      ? null
+      : meter('ctx', input.context.tokens / input.context.window, input.context.tokens / input.context.window, widths.ctx, kTokens(input.context.tokens))
+  // A high hit rate is good news: the bar fills with the hits, the color reads the misses.
+  const cache = input.cache === null ? null : meter('cache', input.cache, 1 - input.cache, widths.cache, '')
+  const cost = input.usd === null ? null : [{ text: `$${input.usd.toFixed(2)}`, color: COST, bold: true }]
+  const limits = input.limits.map(limit =>
+    meter(limitLabel(limit.kind), limit.percent / 100, limit.percent / 100, widths.limit, limit.resetsAt === null ? '' : duration(limit.resetsAt - input.now)),
+  )
+
+  return [join([dir, git, model, effort]), join([ctx, cache, cost, ...limits])]
+}
+
+/**
+ * Each line at the fullest tier that fits `width`, stepping down on its own;
+ * a line too wide even at the last tier is cut.
+ */
+export function fitStatus(input: StatusInput, width: number): { tiers: [number, number]; lines: [Run[], Run[]] } {
+  const fit = (which: 0 | 1): [number, Run[]] => {
+    for (let tier = 0; tier < STATUS_TIERS; tier++) {
+      const line = statusLines(input, tier)[which]
+      if (runsWidth(line) <= width) return [tier, line]
+    }
+    return [STATUS_TIERS - 1, runsCut(statusLines(input, STATUS_TIERS - 1)[which], width)]
+  }
+  const [oneTier, one] = fit(0)
+  const [twoTier, two] = fit(1)
+  return { tiers: [oneTier, twoTier], lines: [one, two] }
 }

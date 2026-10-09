@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dr-cockpit",
   "description": "A Claude Code mod for long sessions: a cockpit pane of context, usage limits, subagents, the plan and the repo; a handoff reading under the prompt and a band near the budget; and a guard that keeps AI attribution out of commits and pull requests.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "Darkraise"
   },
@@ -54,13 +54,13 @@
     "layout": {
       "type": "string",
       "title": "Pane layout",
-      "description": "auto, full or compact. auto: the full layout docked beside the transcript, a compact strip when the pane sits above the prompt. full or compact: always that one. Anything else counts as auto.",
+      "description": "auto, full or compact. auto: the full layout docked beside the transcript, the compact strip (dr-status' two framed lines and the buttons) when the pane sits above the prompt. full or compact: always that one. Anything else counts as auto.",
       "default": "auto"
     },
     "sections": {
       "type": "string",
       "title": "Pane sections",
-      "description": "Which sections the pane shows, in order, comma-separated: context, usage, agents, plan, repo, guard. Empty shows all six.",
+      "description": "Which sections the full pane shows, in order, comma-separated: account, context, usage, agents, plan, repo, guard. Empty shows all seven.",
       "default": ""
     },
     "breakdownRows": {
@@ -72,8 +72,8 @@
     "openAtStart": {
       "type": "boolean",
       "title": "Open the pane at session start",
-      "description": "Open the cockpit when a session starts. Claude Code shows it once the terminal is 144 columns wide, 110 once you have opened it before.",
-      "default": false
+      "description": "Open the cockpit when a session starts. Claude Code shows it once the terminal is 144 columns wide, 110 once you have opened it before; /cockpit opens it at any width.",
+      "default": true
     },
     "limitAlertAt": {
       "type": "number",
