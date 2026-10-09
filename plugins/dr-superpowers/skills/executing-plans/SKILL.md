@@ -89,8 +89,11 @@ ruling-seat `BLOCKED` verdict. For those, stop and ask.
 
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished - one of those four stops, a context-budget handoff, a
-switch to subagent mode, or your human partner asking you to stop - run
-`scripts/next-step PLAN_FILE` (see using-superpowers §Session Budget) as your last action. The
+switch to subagent mode, or your human partner asking you to stop - first
+reconcile live children exactly as dr-superpowers:handoff step 0 says: wait
+for them, or `TaskStop` them and record a Ruling. Tell your partner which you
+did. Then run `scripts/next-step PLAN_FILE` (see using-superpowers §Session
+Budget) as your last action. The
 last thing in your final message is the block it prints, verbatim. It also
 rewrites the `## Next session` section of the primary checkout's
 `.superpowers/handoff/latest.md`; if it exits 4, say the handoff file could not

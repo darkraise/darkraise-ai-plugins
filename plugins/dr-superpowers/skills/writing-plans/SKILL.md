@@ -353,8 +353,9 @@ If you find issues, fix them inline. If you find a spec requirement with no task
    and say why, quoting its message.
    - **`primary=codex:plan`** (round 1). Write the prompt its Round 1 on Codex
      section describes to `<workspace>/plan-review-prompt.md`, then run, as a
-     background Bash call with no timeout (the rung's bound is longer than the
-     Bash tool's ten-minute cap, and a background call is not bound by it):
+     background Bash call with `timeout` = (row bound + 120) × 1000 ms, 5520000
+     today (the rung's bound is longer than a foreground call's ten-minute cap,
+     and a background call's limit defaults to 30 minutes):
 
      ```bash
      bash scripts/run-codex-review.sh --kind plan --cwd <repository-root> \

@@ -142,7 +142,9 @@ still in your context, send it one message naming what is still open - the
 brief's unfinished steps and whatever the reply said comes next - telling it to
 continue, or to report BLOCKED with what blocks it; say the continuation aloud.
 If the reply says a command or subagent it started is still running, let that
-finish first. After two continuations with no status, handle the task as
+finish first: wait in bounded stretches (subagent-driven-development, Waiting
+on dispatched subagents), and stop it with `TaskStop` if it outlives the
+rung's bound. After two continuations with no status, handle the task as
 BLOCKED with the reason `no report after two continuations`. When you cannot
 message the agent, dispatch the same agent fresh with the brief path, the
 report-file path and `git log <base>..HEAD` as what the earlier run committed.
@@ -208,7 +210,8 @@ review — re-dispatch it.
 **Codex seats.** Write the task-reviewer prompt for Codex as
 [executor-lane.md](executor-lane.md) §Codex task review
 seats describes, to `<workspace>/task-<N>-review-codex-prompt.md`, and run it
-as a background Bash call with no timeout:
+as a background Bash call with `timeout` = (row bound + 120) × 1000 ms: 2520000
+for `--tier light`, 5520000 for `--tier heavy`:
 
 ```bash
 bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy> \

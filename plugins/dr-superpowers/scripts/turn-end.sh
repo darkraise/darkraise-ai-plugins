@@ -72,22 +72,34 @@ if has_pending_background; then
   exit 0
 fi
 
-ledger=$(find "$root/.superpowers/sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | head -n 1)
+# Every ledger written this turn must have its ending, since two plans can be
+# active in one checkout. A plan whose final review is clean ends on the
+# finishing menu, one of finishing's own stops (failing tests, a discard or
+# worktree prompt) or the next-step block, which names finishing; any other
+# plan ends on the next-step block. The first ledger without its ending names
+# the reason.
+ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
+ledger="" clean=0
+while IFS= read -r candidate; do
+  [ -n "$candidate" ] || continue
+  if grep -q '^Final review: clean' "$candidate"; then
+    ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
+              'Must fix before completing' 'Worktree removal refused' && continue
+    ledger=$candidate clean=1
+  else
+    ends_with '## Next session' && continue
+    ledger=$candidate clean=0
+  fi
+  break
+done < <(find "$root/.superpowers/sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
 [ -n "$ledger" ] || exit 0
-
-# The endings the skills prescribe: the next-step block, the finishing menu,
-# and finishing's own stops (failing tests, a discard or worktree prompt).
-for ending in '## Next session' 'Which option?' "Type 'discard' to confirm" \
-              'Must fix before completing' 'Worktree removal refused'; do
-  case "$last" in *"$ending"*) exit 0 ;; esac
-done
 
 plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r')
 [ -n "$plan" ] || plan="PLAN_FILE"
 root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 
-if grep -q '^Final review: clean' "$ledger"; then
+if [ "$clean" = 1 ]; then
   reason="This turn advanced plan ${plan} and its final review is clean, but your message ends without the finishing menu. Invoke dr-superpowers:finishing-a-development-branch with the Skill tool now and follow it: tests, the rulings and amendments, then the integration menu as the last thing in your message."
 else
   reason="This turn advanced plan ${plan}, but your message ends without the next step. If work remains for this session, continue it. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If you are stopping, run \`bash ${root_shown}/scripts/next-step ${plan}\` and end your message with the block it prints, verbatim."

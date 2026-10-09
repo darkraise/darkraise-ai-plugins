@@ -66,6 +66,17 @@ check "clean final review summary: names finishing" \
 check "finishing menu: passes" "$(stop s-1 $'1. Merge back to main locally\n2. Push and create a Pull Request\n3. Keep the branch as-is\n\nWhich option?')" ""
 check "finishing test failure: passes" "$(stop s-1 'Tests failing (2 failures). Must fix before completing:')" ""
 
+# --- two ledgers written this turn: each needs its own ending ---
+WS2="$REPO/.superpowers/sdd/2026-10-09-other"
+mkdir -p "$WS2"
+printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-09-other.md\nTask 2: complete (commits c..d, review clean)\n' > "$WS2/progress.md"
+out=$(stop s-1 $'1. Merge back to main locally\n\nWhich option?')
+check "two ledgers, menu only: blocks" "$(decision "$out")" "block"
+check "two ledgers, menu only: names the mid-plan ledger's next-step" \
+  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/superpowers/plans/2026-10-09-other.md')" "1"
+check "two ledgers, next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
+rm -rf "$WS2"
+
 # --- the transcript stands in when the message field is absent ---
 TP="$TMP/transcript.jsonl"
 jq -nc '{type:"user",message:{role:"user",content:"go"}}' > "$TP"

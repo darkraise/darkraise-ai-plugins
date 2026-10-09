@@ -17,7 +17,9 @@ back. Before anything else:
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides: `complete` is done; `fix round R/5` resumes at round
    R+1 with a fresh dispatch; an assigned line with commits after its base
-   goes to review.
+   goes to review. An assigned line ending `thread pending` is an executor
+   wrapper that may still be running: find it in the snapshot's background
+   list and wait for its notification, or stop it and record a Ruling.
 3. Run `scripts/context-size`. On exit 5, finish the task in flight, then
    invoke dr-superpowers:handoff.
 4. Re-read this skill in full before the next dispatch, and
@@ -73,9 +75,11 @@ path forward is a guess. For those, stop and ask.
 
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished — one of those four stops, a context-budget handoff, or
-your human partner asking you to stop — run `scripts/next-step PLAN_FILE`
-(see using-superpowers §Session Budget) as your last
-action. The last thing in your final message is the block it prints,
+your human partner asking you to stop — first reconcile live children
+exactly as dr-superpowers:handoff step 0 says: wait for them, or `TaskStop`
+them and record a Ruling. Tell your partner which you did. Then run
+`scripts/next-step PLAN_FILE` (see using-superpowers §Session Budget) as your
+last action. The last thing in your final message is the block it prints,
 verbatim. It also rewrites the `## Next session` section of the primary
 checkout's `.superpowers/handoff/latest.md`; if it exits 4, say the handoff
 file could not be written. When the plan finishes,
@@ -444,6 +448,10 @@ line of status and reconcile your live children: list them, and chase
 any that finished without reporting. A bounded stretch keeps nearly
 all of a long wait's efficiency while guaranteeing a stuck or lost
 child is noticed within minutes, not at the end of the session.
+On Claude Code a bounded stretch is a `Monitor` with an until-loop, never a
+background `sleep`: a sleep is one more launch that has not reported back.
+Stop the monitor with `TaskStop` once the stretch has served, and always
+before dr-superpowers:handoff.
 
 For each task, or batch, run [delegated-task.md](../../reference/delegated-task.md):
 dispatch the implementer, handle the report, review the task, the fix loop and

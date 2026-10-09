@@ -61,8 +61,10 @@ session (`<session>  span  40k -> 31k`) — the data a later phase needs to set 
 budget. A negative delta is a compaction, reported as `compacted` rather than a
 number.
 
-`source` is `record` (the SessionStart hook's session record), `record?` (a
-newer transcript exists in the same directory: two sessions may share it) or
+`source` is `record` (the SessionStart hook's session record, this session's
+own when `CLAUDE_CODE_SESSION_ID` is set, else the directory's), `record?` (the
+directory's record, and a newer transcript exists in the same directory or the
+record names another session: two sessions may share it) or
 `guessed` (no record; the newest transcript for the directory) or, on a Codex
 host, `rollout` (the session's own rollout file). `unknown` means
 apply the count rule on Codex and the phase stops everywhere.
@@ -128,9 +130,10 @@ session from `latest.md` rather than continuing (Claude Code also offers
 
 The SessionStart hook appends a compaction snapshot (`scripts/lib/snapshot.sh`):
 the handoff's next step, ledger tails and rulings, the files the session
-edited, the owner's last three prompts and background agent ids. Trust it, the
-ledger and `git log` over the summary. The long execution skills open with an
-"After compaction" block because only their first 5,000 tokens come back.
+edited, the owner's last three prompts and background agent and command ids.
+Trust it, the ledger and `git log` over the summary. The long execution skills
+open with an "After compaction" block because only their first 5,000 tokens
+come back.
 
 ## Compact Instructions for CLAUDE.md
 

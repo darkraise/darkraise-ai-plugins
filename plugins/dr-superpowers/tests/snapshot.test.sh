@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The compaction snapshot must carry what compaction summaries drop — the
 # handoff's next step, ledger tails and rulings, files the session edited, the
-# owner's last prompts, background agent ids — and stay under its cap by
+# owner's last prompts, background agent and command ids — and stay under its cap by
 # dropping the least important sections first.
 set -uo pipefail
 
@@ -59,6 +59,13 @@ tool() { # tool <name> <path> [isSidechain]
 }
 agent_use() { jq -cn '{type:"assistant",isSidechain:false,message:{model:"m",content:[{type:"tool_use",id:"toolu_1",name:"Agent",input:{description:"Fable review"}}]}}'; }
 agent_result() { jq -cn '{type:"user",isSidechain:false,message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_1",content:[{type:"text",text:"Async agent launched.\nagentId: abc123 (internal)"}]}]}}'; }
+bash_use() { # bash_use <tool_use_id> <description> [run_in_background]
+  jq -cn --arg id "$1" --arg d "$2" --argjson bg "${3:-true}" \
+    '{type:"assistant",isSidechain:false,message:{model:"m",content:[{type:"tool_use",id:$id,name:"Bash",input:{command:"x",description:$d,run_in_background:$bg}}]}}'
+}
+bash_result() { # bash_result <tool_use_id> <text>
+  jq -cn --arg id "$1" --arg t "$2" '{type:"user",isSidechain:false,message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t}]}}'
+}
 meta() { jq -cn '{type:"user",isSidechain:false,isMeta:true,message:{role:"user",content:"<command-name>/clear</command-name>"}}'; }
 summary() { jq -cn '{type:"user",isSidechain:false,isCompactSummary:true,message:{role:"user",content:"This session is being continued"}}'; }
 
@@ -75,6 +82,10 @@ T="$TMP/t.jsonl"
   tool Edit /repo/a.sh
   agent_use
   agent_result
+  bash_use toolu_b1 'Codex wrapper for Task 3'
+  bash_result toolu_b1 'Command running in background with ID: bx7k2. Output is being written to: /tmp/bx7k2.output'
+  bash_use toolu_b2 'Foreground test run' false
+  bash_result toolu_b2 'all tests passed'
   prompt 'second prompt'
   prompt 'third prompt'
   prompt 'fourth prompt'
@@ -98,6 +109,9 @@ lacks "prompts: only the last three" "$out" "please keep the API stable"
 lacks "prompts: meta entries excluded" "$out" "<command-name>"
 lacks "prompts: the summary excluded" "$out" "This session is being continued"
 has "agents: id and description" "$out" "- abc123 — Fable review"
+has "commands: background Bash id and description" "$out" "- bx7k2 — Codex wrapper for Task 3 (command)"
+lacks "commands: a foreground Bash call excluded" "$out" "Foreground test run"
+has "agents and commands share one heading" "$out" "### Background agents and commands"
 
 # --- no jq: transcript sections skipped, the rest kept ---
 out=$(DR_SUPERPOWERS_JQ=no-such-jq snapshot_build "$T" "$REPO")

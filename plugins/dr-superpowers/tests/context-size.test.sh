@@ -28,7 +28,7 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
-unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME
+unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -182,6 +182,29 @@ DR_SUPERPOWERS_JQ=no-such-jq run --final
 check "final: no jq: line" "$out" "budget (final): unknown of 553k — unknown — no jq"
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
+
+# --- two sessions in one checkout: each measures its own transcript ---
+# The cwd record is last writer wins; the by-id record is the session's own.
+TA="$PROJ/s-a.jsonl" TB="$PROJ/s-b.jsonl"
+asst 300000 > "$TA"
+asst 50000 > "$TB"
+mkdir -p "$SESS/by-id"
+jq -n --arg tp "$TA" '{session_id:"s-a",transcript_path:$tp}' > "$SESS/by-id/s-a.json"
+jq -n --arg tp "$TB" '{session_id:"s-b",transcript_path:$tp}' > "$SESS/by-id/s-b.json"
+record s-b "$TB"
+src() { sed 's/.*source: //' <<<"$out"; }
+CLAUDE_CODE_SESSION_ID=s-a run
+has "two sessions: the first measures its own transcript" "$out" "budget: 300k of"
+check "two sessions: the first's source is its own record" "$(src)" "record"
+CLAUDE_CODE_SESSION_ID=s-b run
+has "two sessions: the second measures its own transcript" "$out" "budget: 50k of"
+check "two sessions: the second's source is its own record" "$(src)" "record"
+rm -f "$SESS/by-id/s-a.json"
+CLAUDE_CODE_SESSION_ID=s-a run
+has "no own record: falls back to the cwd record" "$out" "budget: 50k of"
+check "no own record: the cwd record of another session is flagged" "$(src)" "record?"
+rm -rf "$SESS/by-id" "$TA" "$TB"
+record s-1 "$T"
 
 # --- Codex rollout measurement ---
 # The context size is the last token_count event's last_token_usage.input_tokens.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The SessionStart hook must inject the using-superpowers entry point in the
-# Claude Code JSON shape, persist the session record keyed by sanitized cwd,
-# tolerate malformed stdin (inject anyway, persist nothing), and always exit 0.
+# Claude Code JSON shape, persist the session record keyed by sanitized cwd and
+# by session id, tolerate malformed stdin (inject anyway, persist nothing), and
+# always exit 0.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,6 +52,18 @@ check "record: transcript_path" \
 check "record: session_id" "$(jq -r '.session_id // "MISSING"' "$RECORD" 2>/dev/null)" "s-123"
 check "record: source" "$(jq -r '.source // "MISSING"' "$RECORD" 2>/dev/null)" "startup"
 check "record: cwd" "$(jq -r '.cwd // "MISSING"' "$RECORD" 2>/dev/null)" 'D:\repo\example'
+
+# --- a second session in the same cwd ---
+# The cwd record is last writer wins; each session keeps a record of its own.
+MSYS_NO_PATHCONV=1 jq -n --arg tp '/tmp/second-transcript.jsonl' --arg cwd 'D:\repo\example' \
+  '{hook_event_name:"SessionStart",session_id:"s-456",transcript_path:$tp,cwd:$cwd,source:"startup"}' \
+  | HOME="$HOME_A" bash "$SCRIPT" >/dev/null 2>&1
+BYID="$HOME_A/.claude/dr-superpowers/sessions/by-id"
+check "shared cwd: the cwd record names the later session" "$(jq -r '.session_id' "$RECORD" 2>/dev/null)" "s-456"
+check "shared cwd: the first session keeps its own record" \
+  "$(jq -r '.transcript_path' "$BYID/s-123.json" 2>/dev/null)" "/tmp/fake-transcript.jsonl"
+check "shared cwd: the second session has its own record" \
+  "$(jq -r '.transcript_path' "$BYID/s-456.json" 2>/dev/null)" "/tmp/second-transcript.jsonl"
 
 # --- malformed stdin ---
 HOME_B="$TMP/b"; mkdir -p "$HOME_B"

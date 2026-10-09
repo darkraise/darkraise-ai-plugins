@@ -305,8 +305,11 @@ session starts with the skill-routing rules — including the pointers to
 `selecting-approaches`, implementer assignment in `writing-plans`, and tiered
 dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same
 script persists the session's `transcript_path`, `session_id`, `cwd`, and
-`source` to `~/.claude/dr-superpowers/sessions/<sanitized-cwd>.json` (last
-writer wins per directory), which `scripts/context-size` reads. On the
+`source` to `~/.claude/dr-superpowers/sessions/by-id/<sanitized-session-id>.json`
+and to `~/.claude/dr-superpowers/sessions/<sanitized-cwd>.json` (last writer
+wins per directory). `scripts/context-size` reads the session's own record by
+`CLAUDE_CODE_SESSION_ID`, so two sessions in one checkout each measure their
+own transcript, and falls back to the directory's record. On the
 `compact` source it also appends a compaction snapshot (see Session budget).
 Malformed stdin skips persistence but never blocks the injection, and the
 hook always exits 0.
@@ -324,7 +327,12 @@ command the session started in the background has not reported back, a plain
 stop passes (the controller is waiting on it), and a message that ends the
 session over it, with the next-step block or the finishing menu, is held once
 in any turn: a handoff there would invite ending a session whose work is still
-in flight.
+in flight. When the turn wrote more than one ledger, each one must have its
+ending.
+
+Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
+catches a summarize-and-stop there. On Codex you must run `next-step` yourself
+on every early stop.
 
 ## Session budget
 
