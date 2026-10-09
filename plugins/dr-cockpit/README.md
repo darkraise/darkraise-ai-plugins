@@ -105,8 +105,19 @@ Code" or a Claude session link). Human co-authors pass.
 
 ## Settings
 
-Set these in `/config` under the plugin's rows, or in `settings.json` under
-`pluginConfigs["dr-cockpit"].options`.
+Set these in `/config` under the plugin's rows, or in your user settings
+(`~/.claude/settings.json`; project settings are not read) under
+`pluginConfigs["dr-cockpit@darkraise"].options`, then start a new session:
+
+```json
+{
+  "pluginConfigs": {
+    "dr-cockpit@darkraise": {
+      "options": { "layout": "compact", "sections": "context,usage,plan", "warnAt": 70 }
+    }
+  }
+}
+```
 
 | Option | Default | Effect |
 | --- | --- | --- |
