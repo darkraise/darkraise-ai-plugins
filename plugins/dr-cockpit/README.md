@@ -108,7 +108,8 @@ window refills.
   item in progress. In a `dr-superpowers` run it becomes **Run**, read from the
   run's ledger (`.superpowers/sdd/<run>/progress.md`) and its plan: the review
   round in flight, the tasks done, which were reviewed clean, and a blocked
-  task in red with its reason.
+  task in red with its reason. A run whose tasks were all done before the
+  session started is left out, so a new session starts without it.
 - **Repo** is the working tree's branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
