@@ -35,7 +35,7 @@ export function warnShare(percent: number): number {
   return Number.isFinite(percent) && percent > 0 ? Math.min(Math.max(Math.round(percent), 1), 99) / 100 : WARN_AT
 }
 
-export const SECTIONS = ['account', 'context', 'usage', 'agents', 'plan', 'repo', 'guard'] as const
+export const SECTIONS = ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'] as const
 export type Section = (typeof SECTIONS)[number]
 
 /** The sections setting, "plan, context" → ['plan', 'context']: known names in the order given, each once. */

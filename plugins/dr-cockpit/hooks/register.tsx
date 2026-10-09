@@ -305,6 +305,7 @@ export const register: Register = (on, options) => {
       startedAt: await $.clock.now(),
     }
     await update($, spawns, list => [...list, spawn].slice(-50))
+    await syncTicker($)
 
     return started
   })
@@ -326,7 +327,10 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     if (e.origin.kind === 'task-notification') {
       const ended = new Set(tasksEnded(e.text).map(one => one.id))
-      if (ended.size > 0) await update($, shells, list => list.filter(one => !ended.has(one.id)))
+      if (ended.size > 0) {
+        await update($, shells, list => list.filter(one => !ended.has(one.id)))
+        await syncTicker($)
+      }
     }
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -432,6 +436,7 @@ export const register: Register = (on, options) => {
     const spawn = list.find(one => one.agentId === agentId)
     if (spawn === undefined) return done
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true } : one)))
+    await syncTicker($)
     if (e.usage !== undefined) await update($, seats, all => addRun(all, spawn.seat, e.usage as TurnUsage))
     await notify($, {
       kind: 'agent',
@@ -1158,29 +1163,40 @@ export const register: Register = (on, options) => {
           )
         }),
       ),
+      // The background shells still running, each with its command and age;
+      // the card is left out while there are none.
+      shells:
+        background.length > 0 &&
+        section(
+          'shells',
+          'Shells',
+          'yellow',
+          <Text key="shells-head" color="yellow">
+            $ {background.length} running
+          </Text>,
+          background.map(shell => (
+            <Text key={`shell-${shell.id}`} wrap="truncate-end">
+              <Text color="yellow" bold>
+                ${' '}
+              </Text>
+              <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
+              <Text color="yellow"> {elapsed(now - shell.startedAt)}</Text>
+            </Text>
+          )),
+        ),
       agents: section(
         'agents',
-        'Agents & shells',
+        'Agents',
         'magenta',
         <Text key="agents-head">
-          {background.length > 0 && <Text color="yellow">$ {background.length} </Text>}
           {running.length > 0 && <Text color="cyan">● {running.length} running </Text>}
           {finished.length > 0 && <Text color="green">✓ {finished.length}</Text>}
         </Text>,
-        all.length === 0 && background.length === 0 && (
+        all.length === 0 && (
           <Text key="agents-none" dimColor>
-            No subagents or background shells yet.
+            No subagents yet.
           </Text>
         ),
-        background.map(shell => (
-          <Text key={`shell-${shell.id}`} wrap="truncate-end">
-            <Text color="yellow" bold>
-              ${' '}
-            </Text>
-            <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
-            <Text color="yellow"> {now - shell.startedAt < 60_000 ? '<1m' : duration(now - shell.startedAt)}</Text>
-          </Text>
-        )),
         recent.map(spawn => (
           <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
             <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'} </Text>
@@ -1188,7 +1204,7 @@ export const register: Register = (on, options) => {
               {shortSeat(spawn.seat)}
             </Text>
             <Text dimColor={spawn.isDone}> {spawn.description}</Text>
-            {!spawn.isDone && <Text color="cyan"> {duration(now - spawn.startedAt) || '<1m'}</Text>}
+            {!spawn.isDone && <Text color="cyan"> {elapsed(now - spawn.startedAt)}</Text>}
           </Text>
         )),
         sortedSeats.length > 0 && (
@@ -1316,6 +1332,7 @@ const S = {
   waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent }>(),
   ticker: null as Timer | null,
   ticks: 0,
+  isTurnLive: false,
   isBudgetSent: false,
   // Ledger events already seen, so a reload or a re-read sends nothing twice.
   ledgerSeen: null as Set<string> | null,
@@ -1373,22 +1390,28 @@ async function turnFields($: EngineInterface): Promise<{ name: string; value: st
 
 async function setActivity($: EngineInterface, change: (now: CockpitActivity) => CockpitActivity) {
   await update($, activity, change)
+  await syncTicker($)
+  scheduleState($)
+}
+
+// The pane's clock: a redraw a second while a turn runs, a background shell
+// runs or a subagent works, so their timers count seconds; and while a turn
+// runs, the state file's heartbeat.
+async function syncTicker($: EngineInterface) {
   const now = await read($, activity)
-  const isLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
-  if (isLive && S.ticker === null) {
-    // The Now row's clock: a redraw a second while a turn runs, and the
-    // state file's heartbeat.
+  S.isTurnLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
+  const isTicking = S.isTurnLive || (await read($, shells)).length > 0 || (await read($, spawns)).some(one => !one.isDone)
+  if (isTicking && S.ticker === null) {
     S.ticks = 0
     S.ticker = $.clock.every(1000, () => {
       S.ticks++
       $.ui.invalidate('ui.render')
-      if ((S.ticks * 1000) % HEARTBEAT_MS === 0) scheduleState($, true)
+      if (S.isTurnLive && (S.ticks * 1000) % HEARTBEAT_MS === 0) scheduleState($, true)
     })
-  } else if (!isLive && S.ticker !== null) {
+  } else if (!isTicking && S.ticker !== null) {
     S.ticker.cancel()
     S.ticker = null
   }
-  scheduleState($)
 }
 
 // The state file dr-status reads: written at most twice a second, and only
@@ -1902,12 +1925,16 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     if (typeof id !== 'string' || id === '') return
     const shell: CockpitShell = { id, command: String((e as { command?: unknown }).command ?? ''), startedAt: await $.clock.now() }
     await update($, shells, list => [...list.filter(one => one.id !== id), shell].slice(-20))
+    await syncTicker($)
     return
   }
   if (tool === 'TaskStop' || tool === 'KillShell' || tool === 'KillBash') {
     const input = e as { task_id?: unknown; shell_id?: unknown }
     const id = (result as { task_id?: unknown } | undefined)?.task_id ?? input.task_id ?? input.shell_id
-    if (typeof id === 'string') await update($, shells, list => list.filter(one => one.id !== id))
+    if (typeof id === 'string') {
+      await update($, shells, list => list.filter(one => one.id !== id))
+      await syncTicker($)
+    }
   }
 }
 

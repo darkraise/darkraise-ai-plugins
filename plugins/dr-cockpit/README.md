@@ -41,9 +41,11 @@ session is doing:
 │ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
 │     resets in 3h40m · on pace                     │
 ╰───────────────────────────────────────────────────╯
-╭ Agents & shells ─────────────── $ 1 ● 1 running ✓ 2 ╮
-│ $ npm run dev 12m                                 │
-│ ● impl-sonnet-low Task 4 4m                       │
+╭ Shells ─────────────────────────────── $ 1 running ╮
+│ $ npm run dev 12m04s                              │
+╰───────────────────────────────────────────────────╯
+╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
+│ ● impl-sonnet-low Task 4 4m17s                    │
 │ ✓ reviewer-opus Review task 3                     │
 │ Seats by input                                    │
 │   impl-sonnet-low ×1                              │
@@ -95,12 +97,13 @@ window refills.
   session's cost and cost per hour. Once a window is ten minutes old each meter
   says whether the limit lasts to its reset at the pace so far (`on pace`), or
   when it runs out first, in amber.
-- **Agents & shells** lists the background shells still running (a Bash call
-  sent to the background, by Claude or with Ctrl+B) with how long each has run,
-  until its notification or a stop ends it; then the subagents running and
-  recently finished, then each
-  subagent type (seat) with its runs, input tokens, the share served from the
-  prompt cache and output tokens. Use it to see where a plan's tokens go.
+- **Shells** lists the background shells still running (a Bash call sent to
+  the background, by Claude or with Ctrl+B) with how long each has run, to the
+  second, until its notification or a stop ends it. The card shows only while
+  one runs.
+- **Agents** lists the subagents running, each timed to the second, and those
+  recently finished, then each subagent type (seat) with its runs, input
+  tokens, the share served from the prompt cache and output tokens. Use it to see where a plan's tokens go.
 - **Plan** follows the main session's todo list or task list, centred on the
   item in progress. In a `dr-superpowers` run it becomes **Run**, read from the
   run's ledger (`.superpowers/sdd/<run>/progress.md`) and its plan: the review
@@ -236,7 +239,7 @@ in your user settings
 | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | `warnAt` | `80` | Where the strip's handoff reading appears, as a percentage of the handoff budget (1-99). |
 | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip (the `dr-status` lines and the buttons) above the prompt. `full` or `compact`: always that one. |
-| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `agents`, `plan`, `repo`, `guard`. Empty shows all seven. The compact strip always draws the `dr-status` lines. |
+| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. A list written before `shells` existed leaves it out until you add it. The compact strip always draws the `dr-status` lines. |
 | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
 | `limitAlertAt` | `90` | The usage-limit alert's line, in percent. `0` turns the alert off. |
