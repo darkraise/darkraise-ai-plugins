@@ -96,8 +96,20 @@ launch toolu_bash 'Command running in background with ID: b1. Output is being wr
 launch toolu_grep 'notes.md: Async agent launched successfully'
 write_ledger 'Task 1: dispatched'
 check "agent and command running: passes" "$(stop s-1 'Waiting on the reviewer.' false "$BG")" ""
+out=$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x' false "$BG")
+check "next-step block over running work: blocks" "$(decision "$out")" "block"
+check "the hold counts the running launches" "$(jq -r .reason <<<"$out" | grep -c '2 background launch')" "1"
+check "finishing menu over running work: blocks" "$(decision "$(stop s-1 'Which option?' false "$BG")")" "block"
+check "retry over running work: passes" "$(stop s-1 'Which option?' true "$BG")" ""
+sleep 1; prompt s-1
+check "next-step block over running work, no ledger write: blocks" \
+  "$(decision "$(stop s-1 $'## Next session\n\nx' false "$BG")")" "block"
+check "plain stop over running work, no ledger write: passes" "$(stop s-1 'Waiting.' false "$BG")" ""
+write_ledger 'Task 1: dispatched'
 notify toolu_agent completed
 check "command still running: passes" "$(stop s-1 'Waiting on the reviewer.' false "$BG")" ""
+# A launch inside a subagent's own transcript lines is not the controller's.
+jq -nc '{type:"user",isSidechain:true,message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_side",content:"Command running in background with ID: s1."}]}}' >> "$BG"
 notify toolu_bash killed
 check "all background work finished: blocks" "$(decision "$(stop s-1 'Waiting on the reviewer.' false "$BG")")" "block"
 check "the block says to wait without the next-step block" \

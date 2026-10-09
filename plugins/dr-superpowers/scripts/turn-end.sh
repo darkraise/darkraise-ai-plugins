@@ -6,10 +6,11 @@
 # block the stop once with the instruction; Claude Code sets stop_hook_active on
 # the retry, which always passes. Anything missing (jq, the turn stamp from
 # scripts/turn-start.sh, a ledger written this turn) passes silently, and so
-# does a stop while an agent or command this session started in the background
-# is still running: the controller is waiting on it, its notification starts
-# the next turn, and a next-step block there would invite the human to end a
-# session whose work is still in flight.
+# does a plain stop while an agent or command this session started in the
+# background is still running: the controller is waiting on it, and its
+# notification starts the next turn. The reverse is held once: a next-step
+# block or finishing menu printed over running work would invite the human to
+# end a session whose work is still in flight.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,9 +30,6 @@ stamp="${HOME:-}/.claude/dr-superpowers/sessions/turns/$(printf '%s' "$session_i
 [ -f "$stamp" ] || exit 0
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -d "$root/.superpowers/sdd" ] || exit 0
-ledger=$(find "$root/.superpowers/sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | head -n 1)
-[ -n "$ledger" ] || exit 0
-
 # Background launches answered with a task id but no finished notification yet.
 # The tool result opens "Command running in background with ID" (Bash) or
 # "Async agent launched" (Agent); the notification names the launch's tool_use id beside its
@@ -39,7 +37,7 @@ ledger=$(find "$root/.superpowers/sdd" -mindepth 2 -maxdepth 2 -name progress.md
 has_pending_background() {
   [ -n "$transcript_path" ] && [ -f "$transcript_path" ] || return 1
   local launched finished
-  launched=$(jq -rR 'fromjson? | select(.type? == "user") | .message.content? | arrays | .[]
+  launched=$(jq -rR 'fromjson? | select(.type? == "user" and .isSidechain? != true) | .message.content? | arrays | .[]
       | select(.type? == "tool_result")
       | select((.content | if type == "array" then (.[0].text? // "") else tostring end)
           | test("^(Command running in background with ID|Async agent launched)"))
@@ -48,9 +46,9 @@ has_pending_background() {
   finished=$(grep -oE '<tool-use-id>[^<]+</tool-use-id>[^<]*(<output-file>[^<]*</output-file>[^<]*)?<status>[a-z_]+</status>' \
       "$transcript_path" 2>/dev/null | grep -vE '<status>(running|pending)</status>' \
       | sed -E 's/^<tool-use-id>([^<]+)<.*/\1/' | tr -d '\r' | sort -u)
-  [ -n "$(comm -23 <(printf '%s\n' "$launched") <(printf '%s\n' "$finished"))" ]
+  pending=$(comm -23 <(printf '%s\n' "$launched") <(printf '%s\n' "$finished") | grep -c .)
+  [ "$pending" -gt 0 ]
 }
-has_pending_background && exit 0
 
 last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")
 if [ -z "$last" ] && [ -f "$transcript_path" ]; then
@@ -58,6 +56,24 @@ if [ -z "$last" ] && [ -f "$transcript_path" ]; then
     | if type == "string" then . elif type == "array" then map(select(.type == "text") | .text) | join("\n") else "" end' \
     "$transcript_path" 2>/dev/null || true)
 fi
+
+# While background work runs, a plain stop is the controller waiting for it and
+# passes, in any turn. A message that ends the session over it (the next-step
+# block or the finishing menu) is held once, in any turn too: that is the
+# handoff that would leave the work to die with the session.
+pending=0
+if has_pending_background; then
+  case "$last" in
+    *'## Next session'* | *'Which option?'*)
+      reason="Your message ends the session (the next-step block or the finishing menu), but ${pending} background launch(es) you started this session have not reported back. Do not hand off over running work. Either wait for each (end the turn without the block; its notification starts the next turn), or stop it with TaskStop and record a Ruling line in the ledger for the task it served, then run next-step again and end with the fresh block."
+      jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
+      ;;
+  esac
+  exit 0
+fi
+
+ledger=$(find "$root/.superpowers/sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | head -n 1)
+[ -n "$ledger" ] || exit 0
 
 # The endings the skills prescribe: the next-step block, the finishing menu,
 # and finishing's own stops (failing tests, a discard or worktree prompt).
