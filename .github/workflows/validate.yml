@@ -34,8 +34,8 @@ jobs:
       - name: Validate and test the dr-cockpit mod
         timeout-minutes: 3
         run: |
-          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.292 plugin validate plugins/dr-cockpit
-          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.292 plugin test plugins/dr-cockpit
+          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate plugins/dr-cockpit
+          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.295 plugin test plugins/dr-cockpit
 
       - name: Run maintained regression suites
         timeout-minutes: 12

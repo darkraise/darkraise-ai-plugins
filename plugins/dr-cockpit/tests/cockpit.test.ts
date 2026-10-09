@@ -10,6 +10,7 @@ import {
   duration,
   elapsed,
   fitStatus,
+  isAtLeast,
   levelOf,
   limitForecast,
   modelName,
@@ -112,6 +113,8 @@ type World = {
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
+  /** The Claude Code release the engine reports; absent, `$.session.version()` fails. */
+  version?: string
   /** Tools that answer in their own way, by name. */
   tools?: Record<string, () => Promise<{ result: unknown; text: string }> | { result: unknown; text: string }>
 }
@@ -141,6 +144,10 @@ function world(on: On, w: World) {
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
+  on('session.version', () => {
+    if (w.version === undefined) throw new Error('no version')
+    return { value: { version: w.version, base: w.version } }
+  })
   on('ui.open', () => ({ value: w.open ?? { isPlaced: true } }))
   on('session.compact', (_$, e) => ({ messages: e.messages }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -619,6 +626,36 @@ describe('buttons', () => {
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('permission')
     expect((await ui.find({ key: 'pane-compact-box' }))?.props.borderColor).toBe('inactive')
+  })
+
+  test('underline the hotkey letter where Claude Code draws styled labels', async ($, on) => {
+    world(on, { ...SIGNED_IN, version: '2.1.295' })
+    signedIn(on)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const compact = await ui.find({ key: 'pane-compact' })
+    expect(compact?.props).toMatchObject({ label: 'Compact', plain: true })
+    expect(compact?.props.hotkey).toBeUndefined()
+    expect(JSON.stringify(compact?.children)).toContain('{"type":"Text","props":{"underline":true},"children":["C"]}')
+    // The hotkey rides on a hidden twin that presses the same thing.
+    expect((await ui.find({ key: 'pane-settings-hotkey-box' }))?.props.display).toBe('none')
+    expect((await ui.find({ key: 'pane-settings-hotkey' }))?.props.hotkey).toBe('s')
+    await ui.press({ key: 'pane-settings-hotkey' })
+    expect((await ui.find({ key: 'settings-back' }))?.props.label).toBe('Back')
+    expect((await ui.find({ key: 'settings-back-hotkey' }))?.props.hotkey).toBe('b')
+  })
+
+  test('keep the "c: " prefix on an older Claude Code', async ($, on) => {
+    world(on, { ...SIGNED_IN, version: '2.1.292' })
+    signedIn(on)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'pane-compact' }))?.props).toMatchObject({ hotkey: 'c', plain: true })
+    expect(await ui.find({ key: 'pane-compact-hotkey' })).toBeUndefined()
+    expect(isAtLeast('2.1.300-dev', '2.1.295')).toBe(true)
+    expect(isAtLeast('2.2.0', '2.1.295')).toBe(true)
+    expect(isAtLeast('2.1.294', '2.1.295')).toBe(false)
+    expect(isAtLeast(undefined, '2.1.295')).toBe(false)
   })
 
   test('read as on, chosen or off in the settings', async ($, on) => {
