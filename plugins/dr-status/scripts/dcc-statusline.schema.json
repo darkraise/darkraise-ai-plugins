@@ -18,7 +18,8 @@
         "type": "array",
         "items": {
           "enum": ["dir", "git", "model", "effort", "fast", "agent", "style",
-                   "account", "ctx", "cache", "cost", "5h", "7d", "time"]
+                   "turn", "run", "account", "ctx", "cache", "cost", "5h", "7d",
+                   "time"]
         }
       }
     },

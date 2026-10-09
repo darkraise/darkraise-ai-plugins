@@ -353,6 +353,24 @@ render_twice() { # -> the git call count across two identical renders
 check "two identical renders share one git collect" "$(render_twice)" "2"
 rm -rf "$cachetmp"
 
+# dr-cockpit's per-session state file adds the turn and run segments to line
+# one, read inside the same jq call; a corrupt one costs only those segments.
+plain="$(bash "$SCRIPT" < "$F/full.json" | strip_ansi)"
+mkdir -p "$CLAUDE_CONFIG_DIR/dr-cockpit/state"
+ckfile="$CLAUDE_CONFIG_DIR/dr-cockpit/state/abc123.json"
+printf '{"v":1,"activity":{"kind":"running","since":%d,"tool":"Bash"},"run":{"done":3,"total":6,"round":2,"blocked":0},"updatedAt":%d}\n' \
+  $(( DCC_NOW - 134 )) "$DCC_NOW" > "$ckfile"
+ck1="$(bash "$SCRIPT" < "$F/full.json" | strip_ansi | sed -n 1p)"
+check "line one shows the cockpit's turn" "$(printf '%s' "$ck1" | grep -c '● 2m14s · Bash')" "1"
+check "line one shows the cockpit's run" "$(printf '%s' "$ck1" | grep -c 'run 3/6 r2')" "1"
+printf '{ not json' > "$ckfile"
+ck2="$(bash "$SCRIPT" < "$F/full.json" | strip_ansi)"
+check "a corrupt state file costs only its own segments" "$ck2" "$plain"
+other="$(jq -c '.session_id = "../../../etc/passwd"' "$F/full.json")"
+check "a session id that is not plain reads no file" \
+  "$(printf '%s' "$other" | bash "$SCRIPT" | strip_ansi)" "$plain"
+rm -rf "$CLAUDE_CONFIG_DIR/dr-cockpit"
+
 # Payload strings reach the terminal verbatim, so control characters in a
 # directory or agent name must be dropped rather than replayed as escapes.
 evil="$(jq -c '.workspace.current_dir = "/tmp/a\u001b]0;PWNED\u0007b" | .cwd = .workspace.current_dir | .agent.name = "x\u001b[2Jy"' "$F/full.json")"

@@ -289,6 +289,35 @@ check "an unknown level falls back" "$(effcolour weird)" "38;5;245"
 check "an absent level renders nothing" "$(effcolour '')" ""
 P_EFFORT="xhigh"
 
+# --- turn and run, from dr-cockpit's state file --------------------------------
+# The state file says what the turn is doing; a live state older than 90
+# seconds means the session is gone, and an idle one says nothing.
+P_TURN_KIND="running"; P_TURN_SINCE=$(( DCC_NOW - 134 )); P_TURN_TOOL="Bash"; P_CK_UPDATED="$DCC_NOW"
+check "a running turn shows its time and tool" "$(seg turn)" "● 2m14s · Bash"
+check "a running turn charges a cell per character" "$(segcells turn)" "14"
+dcc_seg_reset; dcc_segment turn 2
+check "the tool goes first when the line is tight" "$(printf '%s' "$DCC_SEG_OUT" | strip_ansi)" "● 2m14s"
+P_TURN_KIND="waiting"; P_TURN_SINCE=$(( DCC_NOW - 42 ))
+check "a waiting approval shows how long it waits" "$(seg turn)" "approve? 42s"
+P_TURN_KIND="asking"; P_TURN_SINCE=$(( DCC_NOW - 3725 ))
+check "a question shows how long it waits" "$(seg turn)" "asking 1h02m"
+P_CK_UPDATED=$(( DCC_NOW - 91 ))
+check "a stale live state is dropped" "$(seg turn)" ""
+P_TURN_KIND="failed"
+check "a failed turn holds until the next" "$(seg turn)" "turn failed"
+P_TURN_KIND=""
+check "an idle session shows nothing" "$(seg turn)" ""
+
+P_RUN_DONE=3; P_RUN_TOTAL=6; P_RUN_ROUND=2; P_RUN_BLOCKED=0
+check "a run shows its tasks and round" "$(seg run)" "run 3/6 r2"
+P_RUN_ROUND=""
+check "a run between reviews shows its tasks" "$(seg run)" "run 3/6"
+P_RUN_BLOCKED=1
+check "a blocked run says so" "$(seg run)" "run 3/6 blocked"
+P_RUN_TOTAL=""
+check "no run shows nothing" "$(seg run)" ""
+P_RUN_BLOCKED=0
+
 # --- icon cell accounting -----------------------------------------------------
 check "unicode mode charges no cells for an icon" "$(segcells model)" "4"
 DCC_ICON_MODE="nerd"; DCC_ICON_W=2

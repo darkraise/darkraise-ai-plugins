@@ -1,12 +1,14 @@
 import { atom, read, update } from 'claude-code'
-import type { ConfigValue, EngineInterface, Register, RenderChildren, TurnUsage } from 'claude-code'
+import type { ConfigValue, EngineInterface, Register, RenderChildren, Timer, TurnUsage } from 'claude-code'
 
 import type {
   CockpitAccount,
+  CockpitActivity,
   CockpitBreakdown,
   CockpitBudget,
   CockpitPlanItem,
   CockpitRefusal,
+  CockpitRun,
   CockpitSeat,
   CockpitSpawn,
   CockpitUsage,
@@ -18,18 +20,25 @@ import {
   billingLabel,
   budgetFor,
   duration,
+  elapsed,
   fitStatus,
   isGitWriteTool,
   isSuperpowers,
   kTokens,
   levelOf,
+  limitForecast,
   limitLabel,
   modelName,
+  nowBadge,
+  nowLine,
+  parseLedger,
+  planTasks,
   planFromTodos,
   planWithUpdate,
   positive,
   rampColor,
   repoFromPorcelain,
+  roundNumber,
   runsWidth,
   SECTIONS,
   sectionsFrom,
@@ -39,11 +48,23 @@ import {
   stepped,
   termColor,
   track,
+  turnsToBudget,
   windowElapsed,
   warnShare,
   writesGitText,
 } from './lib'
 import type { Run, Section, StatusInput, TrackPart } from './lib'
+import {
+  discordBody,
+  excerpt,
+  isDiscordWebhook,
+  maskWebhook,
+  mentionId,
+  NOTIFY_KINDS,
+  notifyKindsFrom,
+  notifyKindsToggled,
+} from './notify'
+import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
 
 const PANE = 'dr-cockpit'
 const PANE_COLUMNS = 56
@@ -57,6 +78,20 @@ const MAX_BREAKDOWN_ROWS = 12
 const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
+const RESUME_PROMPT = 'Resume the work in .superpowers/handoff/latest.md with the dr-superpowers resume-execution skill.'
+// A handoff older than this is not offered for resuming.
+const RESUME_WITHIN = 3 * 86_400_000
+// The tools that wait on the person by their nature: their dialog is the question.
+const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
+// Permission modes in which an "ask" is settled without the person.
+const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
+// How often the state file is rewritten while a turn runs, so dr-status can
+// tell a live turn from one whose session went away.
+const HEARTBEAT_MS = 30_000
+// How many main-turn context readings the forecast keeps.
+const TURN_READINGS = 12
+const STORE_URL = 'notifyUrl'
+const STORE_MENTION = 'notifyMention'
 // How many context readings the trend line keeps.
 const TREND_LENGTH = 40
 // The colors the context breakdown cycles through, largest category first.
@@ -74,7 +109,6 @@ const spawns = atom({ plugin: 'dr-cockpit', key: 'spawns' } as const, [])
 const plan = atom({ plugin: 'dr-cockpit', key: 'plan' } as const, [])
 const repo = atom({ plugin: 'dr-cockpit', key: 'repo' } as const, null)
 const refusals = atom({ plugin: 'dr-cockpit', key: 'refusals' } as const, [])
-const isBandHidden = atom({ plugin: 'dr-cockpit', key: 'isBandHidden' } as const, false)
 const isNudged = atom({ plugin: 'dr-cockpit', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dr-cockpit', key: 'isPlanSession' } as const, false)
 const alerted = atom({ plugin: 'dr-cockpit', key: 'alerted' } as const, [])
@@ -83,18 +117,34 @@ const view = atom({ plugin: 'dr-cockpit', key: 'view' } as const, 'cockpit')
 const account = atom({ plugin: 'dr-cockpit', key: 'account' } as const, null)
 const place = atom({ plugin: 'dr-cockpit', key: 'place' } as const, null)
 const engine = atom({ plugin: 'dr-cockpit', key: 'engine' } as const, { model: null, effort: null, cache: null })
+const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
+const activity = atom({ plugin: 'dr-cockpit', key: 'activity' } as const, IDLE)
+const turnTokens = atom({ plugin: 'dr-cockpit', key: 'turnTokens' } as const, [])
+const run = atom({ plugin: 'dr-cockpit', key: 'run' } as const, null)
+const handoffAt = atom({ plugin: 'dr-cockpit', key: 'handoffAt' } as const, null)
+const notifier = atom({ plugin: 'dr-cockpit', key: 'notifier' } as const, {
+  url: null,
+  isFromEnv: false,
+  mention: null,
+  editing: null,
+  error: null,
+  last: null,
+})
 
 type Options = {
   handoffTokens: number
   nudgeModel: boolean
   guardAttribution: boolean
-  showHint: boolean
   warnAt: number
   layout: string
   sections: string
   breakdownRows: number
   openAtStart: boolean
   limitAlertAt: number
+  notifyOn: string
+  notifyAfter: number
+  notifyAskAfter: number
+  notifyDetail: string
 }
 
 /** What the budget reading is judged by. */
@@ -105,13 +155,16 @@ export const register: Register = (on, options) => {
     handoffTokens = 0,
     nudgeModel = true,
     guardAttribution = true,
-    showHint = true,
     warnAt: warnPercent = 80,
     layout: layoutSetting = 'auto',
     sections: sectionList = '',
     breakdownRows = 6,
     openAtStart = true,
     limitAlertAt = 90,
+    notifyOn = '',
+    notifyAfter = 60,
+    notifyAskAfter = 20,
+    notifyDetail = 'full',
   } = options as Partial<Options>
   // A plain string in the manifest (older validators refuse a picker), so
   // anything but the three words reads as auto.
@@ -122,6 +175,9 @@ export const register: Register = (on, options) => {
   // The settings' autoCompactWindow, read at the start and after each main
   // turn rather than on every tool call.
   let compactWindow: number | undefined
+  S.kinds = notifyOn === 'none' ? [] : notifyKindsFrom(notifyOn)
+  S.isBrief = notifyDetail === 'brief'
+  S.notifyAskAfter = notifyAskAfter
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -130,10 +186,13 @@ export const register: Register = (on, options) => {
       argumentHint: '[settings]',
     })
     compactWindow = await readCompactWindow($)
-    await refresh($, tuning, compactWindow)
+    await onBudget($, await refresh($, tuning, compactWindow))
     await readAccount($)
     await readPlace($)
     await readEngine($)
+    await readWhere($)
+    await readNotifier($)
+    await readRun($)
     // Unasked, the engine seats the pane from 144 columns and holds it below.
     if (openAtStart) void $.ui.open(paneArgs)
 
@@ -141,6 +200,8 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'cockpit' }, async ($, e) => {
+    const words = e.args.trim().split(/\s+/)
+    if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     await update($, view, () => (wantsSettings ? 'settings' : 'cockpit'))
     await readAccount($)
@@ -167,20 +228,51 @@ export const register: Register = (on, options) => {
       })),
     }
     await update($, usage, () => reading)
-    if (limitAlertAt > 0) await alertLimits($, reading, limitAlertAt)
+    if (limitAlertAt > 0) {
+      for (const limit of await alertLimits($, reading, limitAlertAt)) {
+        await notify($, {
+          kind: 'limit',
+          title: `📊 ${limitLabel(limit.kind)} limit at ${Math.round(limit.percent)}%`,
+          detail: limit.resetsAt === null ? undefined : `Resets in ${duration(limit.resetsAt - now) || 'under a minute'}.`,
+          isPlain: true,
+        })
+      }
+    }
     if (await isPaneUp($)) await refreshDetail($)
 
     return done
   })
 
+  on('session.end', async ($, e, next) => {
+    if (e.reason !== 'clear') {
+      const head = await read($, budget)
+      const started = (await read($, usage))?.startedAt
+      const stamp = await $.clock.now()
+      await notify($, {
+        kind: 'session',
+        title: '🏁 Session ended',
+        detail: `claude --resume ${e.sessionId}`,
+        isPlain: true,
+        fields: [
+          ...(started === undefined ? [] : [{ name: 'Took', value: elapsed(stamp - started) }]),
+          ...(head?.usd == null ? [] : [{ name: 'Cost', value: `$${head.usd.toFixed(2)}` }]),
+        ],
+      })
+    }
+    S.ticker?.cancel()
+    S.ticker = null
+    await setActivity($, () => IDLE)
+    await writeState($)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   // A compaction leaves no reading until the next response: drop the stale
-  // one and re-arm the note and Hide, so neither stays latched.
+  // one and re-arm the note, so it does not stay latched.
   on('session.compact', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
-      await update($, isBandHidden, () => false)
     }
 
     return done
@@ -203,6 +295,43 @@ export const register: Register = (on, options) => {
     return started
   })
 
+  // A main turn begins: the Now row starts its clock.
+  on('turn.start', async ($, e, next) => {
+    const stamp = await $.clock.now()
+    for (const id of [...S.waits.keys()]) await settleWait($, id, '⏹ Turn ended')
+    await setActivity($, now => ({
+      ...IDLE,
+      kind: 'running',
+      since: stamp,
+      turnStartedAt: stamp,
+      lastTurnMs: now.lastTurnMs,
+    }))
+    return next(e)
+  })
+
+  // Watches the permission decision, never changes it: an "ask" on a call
+  // means the person is about to be asked, unless the mode settles it alone.
+  on('tool.check', async ($, e, next) => {
+    const decided = await next(e)
+    const id = e.tool_use_id
+    if (decided.decision !== 'ask' || id === undefined || S.isUnattended || ASKING_TOOLS.includes(e.tool) || S.waits.has(id)) return decided
+    const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
+    await startWait($, id, 'waiting', {
+      kind: 'ask',
+      title: '⏳ Waiting for approval',
+      detail: `${e.tool}${callSummary(e.tool, e.input) === '' ? '' : `: ${excerpt(callSummary(e.tool, e.input), 200)}`}`,
+      fields: [...(seat === null ? [] : [{ name: 'Agent', value: shortSeat(seat) }]), ...(await turnFields($)).slice(0, 1)],
+    })
+    return decided
+  }).catch(($, e, next) => next(e))
+
+  // The background pill under a Bash call is drawn only once the call runs,
+  // so an approval waiting on it was given.
+  on('ui.render', { component: 'ToolProgress' }, async ($, e, next) => {
+    if (S.waits.has(e.props.tool_use_id)) await endWait($, e.props.tool_use_id, '✓ Approved')
+    return next(e)
+  })
+
   // The model and effort the main loop's requests go out with, as the status
   // line shows them.
   on('turn.step', async function* ($, e, next) {
@@ -210,6 +339,8 @@ export const register: Register = (on, options) => {
       const effort = typeof e.effort === 'string' ? e.effort : null
       const before = await read($, engine)
       if (before.model !== e.model || before.effort !== effort) await update($, engine, now => ({ ...now, model: e.model, effort }))
+      const step = e.index + 1
+      await update($, activity, now => (now.kind === 'idle' || now.kind === 'failed' || now.step === step ? now : { ...now, step }))
     }
     return yield* next(e)
   })
@@ -218,11 +349,44 @@ export const register: Register = (on, options) => {
     const done = await next(e)
     if (e.agentId === undefined) {
       compactWindow = await readCompactWindow($)
-      await refresh($, tuning, compactWindow)
+      await onBudget($, await refresh($, tuning, compactWindow))
       const turnUsage = e.usage as TurnUsage | undefined
       if (turnUsage !== undefined) {
         const cache = cacheOf(turnUsage)
         await update($, engine, now => ({ ...now, cache }))
+      }
+      const head = await read($, budget)
+      if (head !== null) await update($, turnTokens, list => [...list, head.tokens].slice(-TURN_READINGS))
+      for (const id of [...S.waits.keys()]) await settleWait($, id, '⏹ Turn ended')
+      const stamp = await $.clock.now()
+      const failed = e.reason === 'error' || e.reason === 'refusal'
+      const why = failed ? failureOf(e) : null
+      await setActivity($, now => ({
+        ...IDLE,
+        kind: failed ? 'failed' : 'idle',
+        since: now.since,
+        lastTurnMs: e.durationMs,
+        endedAt: stamp,
+        detail: why,
+      }))
+      await readRun($)
+      if (failed) {
+        const messageId = await notify($, {
+          kind: 'error',
+          title: `❌ Turn failed${why === null ? '' : `: ${why}`}`,
+          detail: `After ${duration(e.durationMs) || '<1m'}. Send a prompt to continue.`,
+          isPlain: true,
+          fields: await turnFields($),
+        })
+        if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+      } else if (e.reason === 'answer' && e.durationMs >= Math.max(0, notifyAfter) * 1000) {
+        const messageId = await notify($, {
+          kind: 'done',
+          title: `✅ Done in ${elapsed(e.durationMs)}`,
+          detail: e.answer.trim() === '' ? undefined : excerpt(e.answer, 300),
+          fields: await turnFields($),
+        })
+        if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
       }
       return done
     }
@@ -232,6 +396,13 @@ export const register: Register = (on, options) => {
     if (spawn === undefined) return done
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true } : one)))
     if (e.usage !== undefined) await update($, seats, all => addRun(all, spawn.seat, e.usage as TurnUsage))
+    await notify($, {
+      kind: 'agent',
+      title: `🤖 ${shortSeat(spawn.seat)} finished`,
+      detail: spawn.description,
+      isPlain: true,
+      fields: [{ name: 'Took', value: elapsed(e.durationMs) }],
+    })
 
     return done
   })
@@ -252,62 +423,42 @@ export const register: Register = (on, options) => {
       await update($, refusals, list => [...list, refusal].slice(-20))
       return { deny: `dr-cockpit: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
     }
-    const ran = await next(e)
+    const id = e.tool_use_id
+    const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
+    if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : shortSeat(seat) }))
+    if (id !== undefined && e.agentId === undefined && ASKING_TOOLS.includes(tool)) {
+      await startWait($, id, 'asking', {
+        kind: 'question',
+        title: tool === 'ExitPlanMode' ? '📋 Plan ready for review' : '❓ Claude is asking',
+        detail: questionOf(e) || undefined,
+        fields: (await turnFields($)).slice(0, 1),
+      })
+    }
+    let ran: Awaited<ReturnType<typeof next>>
+    try {
+      ran = await next(e)
+    } catch (error) {
+      if (id !== undefined && S.waits.has(id)) await endWait($, id, '⏹ Interrupted')
+      throw error
+    }
+    if (id !== undefined && S.waits.has(id)) {
+      await endWait($, id, ran.deny !== undefined ? '✗ Denied' : ASKING_TOOLS.includes(tool) ? '✓ Answered' : '✓ Approved')
+    }
+    if ((await read($, activity)).tool === tool) await setActivity($, now => (now.kind === 'running' ? { ...now, tool: null, agent: null } : now))
     if (tool === 'Skill' && isSuperpowers(String((e as { skill?: unknown }).skill ?? ''))) {
       await update($, isPlanSession, () => true)
     }
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
-      await refresh($, tuning, compactWindow)
+      await onBudget($, await refresh($, tuning, compactWindow))
+      // The controller writes its ledger with its own tool calls.
+      if (JSON.stringify(e).includes('.superpowers')) await readRun($)
     }
 
     return ran
   }).catch(($, e, next) =>
     next.called || !guardAttribution ? next(e) : { deny: 'dr-cockpit: its attribution guard failed.' },
   )
-
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const now = await read($, budget)
-    if (e.props.hasSurvey || now === null) return next(e)
-    const level = levelOf(now.tokens, now.limit, tuning.warnAt)
-    // Hide quiets the warning only; past the budget the band always shows.
-    if (level === 'quiet' || (level === 'warn' && (await read($, isBandHidden)))) return next(e)
-
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const percent = Math.round((now.tokens / now.limit) * 100)
-    const canHandOff = await read($, isPlanSession)
-
-    return (
-      <Box key="cockpit-band">
-        <Text color={level === 'handoff' ? 'red' : 'yellow'} bold={level === 'handoff'}>
-          {level === 'handoff' ? 'Hand off: ' : 'Nearing handoff: '}
-          {kTokens(now.tokens)} of {kTokens(now.limit)} ({percent}%){' '}
-        </Text>
-        {canHandOff && (
-          <Button
-            key="handoff"
-            label="Hand off"
-            variant="primary"
-            onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true })}
-          />
-        )}
-        {level === 'warn' && <Button key="hide" label="Hide" onPress={() => update($, isBandHidden, () => true)} />}
-      </Box>
-    )
-  })
-
-  // The quiet, always-there reading: a dim tail on the hint line under the
-  // prompt, so the band only has to speak up near the budget.
-  if (showHint) {
-    on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-      const now = await read($, budget)
-      if (now === null) return next(e)
-      const reading = `${kTokens(now.tokens)}/${kTokens(now.limit)} handoff`
-      const tail = e.props.tail === undefined ? reading : `${e.props.tail} · ${reading}`
-
-      return next({ ...e, props: { ...e.props, tail } })
-    })
-  }
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -323,6 +474,16 @@ export const register: Register = (on, options) => {
     const git = await read($, repo)
     const refused = await read($, refusals)
     const canHandOff = await read($, isPlanSession)
+    const act = await read($, activity)
+    const summary = await read($, run)
+    const handoffTime = await read($, handoffAt)
+    const canResume = !canHandOff && handoffTime !== null && now - handoffTime < RESUME_WITHIN
+    const drawRuns = (key: string, runs: Run[]) =>
+      runs.map((one, index) => (
+        <Text key={`${key}-${index}`} color={one.color} bold={one.bold} dimColor={one.dim}>
+          {one.text}
+        </Text>
+      ))
 
     const actions = (
       <Box key="actions">
@@ -334,6 +495,7 @@ export const register: Register = (on, options) => {
             onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true })}
           />
         )}
+        {canResume && <Button key="pane-resume" label="Resume" hotkey="r" onPress={() => $.prompt.submit({ text: RESUME_PROMPT, asUser: true })} />}
         <Button key="pane-compact" label="Compact" hotkey="c" onPress={() => $.session.compact()} />
         <Button key="pane-settings" label="Settings" hotkey="s" onPress={() => update($, view, () => 'settings')} />
       </Box>
@@ -365,6 +527,111 @@ export const register: Register = (on, options) => {
           <Button key={`set-${key}-less`} label="-" onPress={onLess} />,
           <Button key={`set-${key}-more`} label="+" onPress={onMore} />,
         )
+
+      // A surface without text fields (the mobile app) sets the webhook from a terminal.
+      const elements = $.ui.resolve(e)
+      const Input = 'Input' in elements ? elements.Input : undefined
+      const canType = Input !== undefined
+      const notes = await read($, notifier)
+      const field = (key: 'url' | 'mention', placeholder: string, onSave: (value: string) => Promise<string | null>) =>
+        Input !== undefined && (
+          <Box key={`set-notify-${key}-field`} flexDirection="column" flexGrow={1}>
+            <Input
+              key={`set-notify-${key}-input`}
+              placeholder={placeholder}
+              submitLabel="save"
+              autoFocus
+              onSubmit={async (value: string) => {
+                const problem = await onSave(value)
+                await update($, notifier, now => ({ ...now, editing: problem === null ? null : key, error: problem }))
+              }}
+            />
+            {notes.error !== null && <Text color="red">✗ {notes.error}</Text>}
+            <Box key={`set-notify-${key}-cancel`}>
+              <Button key={`set-notify-${key}-cancel-button`} label="Cancel" onPress={() => update($, notifier, now => ({ ...now, editing: null, error: null }))} />
+            </Box>
+          </Box>
+        )
+      const edit = (key: 'url' | 'mention') => update($, notifier, now => ({ ...now, editing: key, error: null }))
+      const notifyRows = (
+        <Box key="set-notify" flexDirection="column">
+          <Text bold>
+            Notifications <Text dimColor>(Discord)</Text>
+          </Text>
+          <Box key="set-notify-rows" flexDirection="column" paddingLeft={INDENT}>
+            {notes.editing === 'url' && canType
+              ? row('set-notify-url', 'Webhook', field('url', 'https://discord.com/api/webhooks/…', value => saveWebhook($, value)))
+              : row(
+                  'set-notify-url',
+                  'Webhook',
+                  notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
+                  notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from DR_COCKPIT_NOTIFY_URL</Text>,
+                  !notes.isFromEnv && canType && <Button key="set-notify-url-edit" label={notes.url === null ? 'Set' : 'Change'} onPress={() => edit('url')} />,
+                  !notes.isFromEnv && notes.url !== null && <Button key="set-notify-url-remove" label="Remove" onPress={() => saveWebhook($, '')} />,
+                  notes.url !== null && <Button key="set-notify-test" label="Send test" onPress={() => sendTest($)} />,
+                  !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it from a terminal: /cockpit notify url</Text>,
+                )}
+            {notes.last !== null && (
+              <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
+                {' '.repeat(16)}
+                {notes.last.isError ? '✗ ' : '✓ '}
+                {notes.last.text}
+              </Text>
+            )}
+            {notes.editing === 'mention' && canType
+              ? row('set-notify-mention', 'Mention', field('mention', 'your Discord user id', value => saveMention($, value)))
+              : row(
+                  'set-notify-mention',
+                  'Mention',
+                  <Text key="set-notify-mention-value" dimColor={notes.mention === null}>
+                    {notes.mention === null ? 'nobody ' : `${notes.mention.slice(0, 10)}… `}
+                  </Text>,
+                  canType && <Button key="set-notify-mention-edit" label={notes.mention === null ? 'Set' : 'Change'} onPress={() => edit('mention')} />,
+                )}
+            <Text key="set-notify-on">Send on</Text>
+            <Box key="set-notify-kinds" flexDirection="column" paddingLeft={INDENT}>
+              {[NOTIFY_KINDS.slice(0, 3), NOTIFY_KINDS.slice(3, 7), NOTIFY_KINDS.slice(7)].map((line, index) => (
+                <Box key={`set-notify-kinds-${index}`} flexDirection="row">
+                  {line.map(kind => (
+                    <Button
+                      key={`set-notify-kind-${kind}`}
+                      label={`${S.kinds.includes(kind) ? '✓' : '○'} ${kindLabel(kind)}`}
+                      variant={S.kinds.includes(kind) ? 'primary' : 'secondary'}
+                      onPress={() => set('notifyOn', notifyKindsToggled(S.kinds, kind))}
+                    />
+                  ))}
+                </Box>
+              ))}
+            </Box>
+            {number(
+              'notifyAfter',
+              'Done after',
+              notifyAfter > 0 ? `${notifyAfter}s` : 'any',
+              () => set('notifyAfter', stepped(notifyAfter, notifyAfter > 60 ? -60 : -15, 0, 3600)),
+              () => set('notifyAfter', stepped(notifyAfter, notifyAfter >= 60 ? 60 : 15, 0, 3600)),
+            )}
+            {number(
+              'notifyAskAfter',
+              'Ask after',
+              `${notifyAskAfter}s`,
+              () => set('notifyAskAfter', stepped(notifyAskAfter, -10, 0, 600)),
+              () => set('notifyAskAfter', stepped(notifyAskAfter, 10, 0, 600)),
+            )}
+            {row(
+              'set-notifyDetail',
+              'Detail',
+              ...(['full', 'brief'] as const).map(choice => (
+                <Button
+                  key={`set-notifyDetail-${choice}`}
+                  label={choice}
+                  variant={(S.isBrief ? 'brief' : 'full') === choice ? 'primary' : 'secondary'}
+                  onPress={() => set('notifyDetail', choice)}
+                />
+              )),
+            )}
+          </Box>
+        </Box>
+      )
 
       return (
         <Box flexDirection="column">
@@ -408,7 +675,7 @@ export const register: Register = (on, options) => {
             )}
             {number(
               'warnAt',
-              'Band at',
+              'Warn at',
               `${warnPercent}%`,
               () => set('warnAt', stepped(warnPercent, -5, 5, 95)),
               () => set('warnAt', stepped(warnPercent, 5, 5, 95)),
@@ -427,10 +694,10 @@ export const register: Register = (on, options) => {
               () => set('breakdownRows', stepped(breakdownRows, -1, 0, MAX_BREAKDOWN_ROWS)),
               () => set('breakdownRows', stepped(breakdownRows, 1, 0, MAX_BREAKDOWN_ROWS)),
             )}
-            {toggle('showHint', 'Hint reading', showHint)}
             {toggle('nudgeModel', 'Handoff note', nudgeModel)}
             {toggle('guardAttribution', 'Attr. guard', guardAttribution)}
           </Box>
+          {notifyRows}
           <Text dimColor>Saved to your user settings, like /config.</Text>
           <Box key="settings-actions">
             <Button key="settings-back" label="Back" hotkey="b" onPress={() => update($, view, () => 'cockpit')} />
@@ -467,15 +734,11 @@ export const register: Register = (on, options) => {
         usd: head?.usd ?? null,
         limits,
         now,
+        handoff: head === null ? null : { tokens: head.tokens, limit: head.limit, warnAt: tuning.warnAt },
+        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, round: roundNumber(runRound(summary)) },
       }
       const width = isFramed ? room - 4 : room
       const { lines } = fitStatus(status, width)
-      const drawRuns = (key: string, runs: Run[]) =>
-        runs.map((run, index) => (
-          <Text key={`${key}-${index}`} color={run.color} bold={run.bold} dimColor={run.dim}>
-            {run.text}
-          </Text>
-        ))
       const row = (key: string, runs: Run[]) =>
         isFramed ? (
           <Text key={key} wrap="truncate-end">
@@ -490,20 +753,34 @@ export const register: Register = (on, options) => {
           </Text>
         )
       const title = who?.email == null ? '' : [...who.email].slice(0, Math.max(0, room - 6)).join('')
+      // The turn's activity rides on the top rule, so the strip keeps its height.
+      const left = title === '' ? 2 : 4 + [...title].length
+      const fullBadge = nowBadge(act, now)
+      const badge = room - left - runsWidth(fullBadge) - 4 >= 2 ? fullBadge : []
+      const dashes = Math.max(0, room - left - (badge.length > 0 ? runsWidth(badge) + 4 : 1))
 
       return (
         <Box flexDirection="column">
           {isFramed && (
             <Text key="frame-top" color={tint} wrap="truncate-end">
-              {title === '' ? '╭' + '─'.repeat(room - 2) : '╭─ '}
+              {title === '' ? '╭─' : '╭─ '}
               {title !== '' && <Text bold>{title}</Text>}
-              {title === '' ? '╮' : ` ${'─'.repeat(Math.max(0, room - 5 - [...title].length))}╮`}
+              {title === '' ? '' : ' '}
+              {'─'.repeat(dashes)}
+              {badge.length > 0 && ' '}
+              {badge.length > 0 && drawRuns('frame-badge', badge)}
+              {badge.length > 0 ? ' ─╮' : '╮'}
             </Text>
           )}
           {/* Without a frame to carry it, the email takes a line of its own. */}
           {!isFramed && who?.email != null && (
             <Text key="status-email" color={tint} bold wrap="truncate-end">
               {who.email}
+            </Text>
+          )}
+          {!isFramed && fullBadge.length > 0 && (
+            <Text key="status-now" wrap="truncate-end">
+              {drawRuns('status-now', fullBadge)}
             </Text>
           )}
           {row('status-1', lines[0])}
@@ -630,6 +907,92 @@ export const register: Register = (on, options) => {
 
     const engineNow = await read($, engine)
     const billing = billingLabel(who?.billing ?? null)
+    const turnsLeft = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
+    const runCard = () => {
+      if (summary === null) return null
+      const blocked = summary.tasks.filter(task => task.state === 'blocked')
+      const round = runRound(summary)
+      const color = blocked.length > 0 ? 'red' : 'yellow'
+      return section(
+        'plan',
+        'Run',
+        color,
+        <Text key="plan-head">
+          {blocked.length > 0 ? (
+            <Text color="red" bold>
+              {blocked.length} blocked
+            </Text>
+          ) : (
+            round !== null && <Text dimColor>round {round}</Text>
+          )}
+          {(blocked.length > 0 || round !== null) && <Text dimColor> · </Text>}
+          <Text bold>
+            {summary.done}/{summary.total}
+          </Text>
+        </Text>,
+        <Text key="plan-progress" color={color}>
+          {bar(summary.done / summary.total, inner)}
+        </Text>,
+        summary.plan !== null && (
+          <Text key="plan-path" dimColor wrap="truncate-end">
+            plan {summary.plan}
+          </Text>
+        ),
+        runWindow(summary.tasks, 6).map(task => {
+          const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
+          if (task.state === 'complete') {
+            return (
+              <Text key={`plan-${task.n}`} wrap="truncate-end">
+                <Text color="green">✓ </Text>
+                <Text dimColor>
+                  {label}
+                  {task.isClean ? ' · clean' : ''}
+                </Text>
+              </Text>
+            )
+          }
+          if (task.state === 'blocked') {
+            return (
+              <Box key={`plan-${task.n}`} flexDirection="column">
+                <Text color="red" bold wrap="truncate-end">
+                  ✗ {label}
+                </Text>
+                <Box paddingLeft={INDENT}>
+                  <Text color="red">BLOCKED{task.reason === null ? '' : ` · ${task.reason}`}</Text>
+                </Box>
+              </Box>
+            )
+          }
+          if (task.state === 'assigned') {
+            return (
+              <Box key={`plan-${task.n}`} flexDirection="column">
+                <Text wrap="truncate-end">
+                  <Text color="yellow">▸ </Text>
+                  <Text bold>{label}</Text>
+                </Text>
+                {(task.round !== null || task.seat !== null) && (
+                  <Text dimColor wrap="truncate-end">
+                    {'  '}
+                    {[task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')}
+                  </Text>
+                )}
+              </Box>
+            )
+          }
+          return (
+            <Text key={`plan-${task.n}`} wrap="truncate-end">
+              <Text dimColor>○ </Text>
+              {label}
+            </Text>
+          )
+        }),
+        summary.isFinished && (
+          <Text key="plan-finished" color="green">
+            Final review clean.
+          </Text>
+        ),
+      )
+    }
     const byName: Record<Section, RenderChildren> = {
       // Who the session runs as, framed in the color dr-status gives the account.
       account:
@@ -678,8 +1041,16 @@ export const register: Register = (on, options) => {
             no reading yet
           </Text>
         ) : (
-          <Text key="ctx-head" color={rampColor((head.tokens / head.limit) * 100)} bold>
-            {Math.round((head.tokens / head.limit) * 100)}% of handoff
+          <Text key="ctx-head">
+            <Text color={rampColor((head.tokens / head.limit) * 100)} bold>
+              {Math.round((head.tokens / head.limit) * 100)}% of handoff
+            </Text>
+            {turnsLeft !== null && (
+              <Text color={turnsLeft <= 3 ? '#ffaf5f' : undefined} bold={turnsLeft <= 3} dimColor={turnsLeft > 3}>
+                {' '}
+                · ≈{turnsLeft} {turnsLeft === 1 ? 'turn' : 'turns'}
+              </Text>
+            )}
           </Text>
         ),
         ...contextBody,
@@ -701,7 +1072,8 @@ export const register: Register = (on, options) => {
         limits.map(limit => {
           // The pace mark: how far through its window the limit is, so a fill
           // past the mark is spending faster than the window refills.
-          const elapsed = windowElapsed(limit.kind, limit.resetsAt, now)
+          const gone = windowElapsed(limit.kind, limit.resetsAt, now)
+          const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
           const width = Math.max(6, inner - 14)
           return (
             <Box key={`limit-${limit.kind}`} flexDirection="column">
@@ -710,7 +1082,7 @@ export const register: Register = (on, options) => {
                 {drawTrack(
                   `limit-${limit.kind}-track`,
                   limit.percent,
-                  track(limit.percent / 100, width, elapsed === null ? [] : [{ at: elapsed, glyph: '┊', name: 'pace' }]),
+                  track(limit.percent / 100, width, gone === null ? [] : [{ at: gone, glyph: '┊', name: 'pace' }]),
                   { pace: 'white' },
                 )}
                 <Text color={rampColor(limit.percent)} bold>
@@ -719,9 +1091,18 @@ export const register: Register = (on, options) => {
                 </Text>
               </Text>
               {limit.resetsAt !== null && (
-                <Text dimColor>
-                  {'    '}resets in {duration(limit.resetsAt - now) || 'now'}
-                  {elapsed === null ? '' : ` · ${Math.round(elapsed * 100)}% of the window gone`}
+                <Text wrap="truncate-end">
+                  <Text dimColor>
+                    {'    '}resets in {duration(limit.resetsAt - now) || 'now'}
+                    {forecast === null && gone !== null ? ` · ${Math.round(gone * 100)}% of the window gone` : ''}
+                    {forecast === 'pace' ? ' · on pace' : ''}
+                  </Text>
+                  {typeof forecast === 'number' && (
+                    <Text color="#ffaf5f" bold>
+                      {' '}
+                      · runs out in {duration(forecast) || '<1m'}, before reset
+                    </Text>
+                  )}
                 </Text>
               )}
             </Box>
@@ -777,8 +1158,12 @@ export const register: Register = (on, options) => {
             )),
           ),
       ),
+      // In a dr-superpowers run the card reads the run's ledger instead: the
+      // round in flight, reviews that came back clean, and blocked tasks.
       plan:
-        items.length > 0 &&
+        summary !== null && summary.total > 0 ? (
+          runCard()
+        ) : items.length > 0 &&
         section(
           'plan',
           'Plan',
@@ -844,6 +1229,9 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column">
+        <Text key="now" wrap="truncate-end">
+          {drawRuns('now', nowLine(act, now))}
+        </Text>
         {shown.map(name => byName[name])}
         {!shown.includes('context') && actions}
       </Box>
@@ -851,9 +1239,407 @@ export const register: Register = (on, options) => {
   })
 }
 
+// What the hooks share beyond $.state: settings read at load, facts read at
+// the start, and the timers and S.waits in flight. A reload starts it over.
+const S = {
+  kinds: [] as NotifyKind[],
+  isBrief: false,
+  notifyAskAfter: 20,
+  where: { host: null, tmux: null, primary: null, sessionId: null, configDir: null } as {
+    host: string | null
+    tmux: string | null
+    primary: string | null
+    sessionId: string | null
+    configDir: string | null
+  },
+  // An approval or question the person has not answered yet: its timer, and
+  // the Discord message sent for it, edited once it is answered.
+  waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent }>(),
+  ticker: null as Timer | null,
+  ticks: 0,
+  isBudgetSent: false,
+  // Ledger events already seen, so a reload or a re-read sends nothing twice.
+  ledgerSeen: null as Set<string> | null,
+  stateTimer: null as Timer | null,
+  lastState: '',
+  isUnattended: false,
+}
+
+// Sends one event to Discord when it is on and a webhook is set; resolves
+// the message id, or null.
+async function notify($: EngineInterface, event: NotifyEvent, editId?: string): Promise<string | null> {
+  if (!S.kinds.includes(event.kind)) return null
+  const state = await read($, notifier)
+  if (state.url === null) return null
+  const git = await read($, repo)
+  const at = await read($, place)
+  const who = await read($, account)
+  const root = S.where.primary ?? at?.root ?? null
+  const placeNow: NotifyPlace = {
+    host: S.where.host,
+    repo: root === null ? null : (root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? null),
+    branch: git?.branch ?? null,
+    tmux: S.where.tmux,
+    account: who?.key ?? null,
+  }
+  const body = discordBody(event, placeNow, { mention: state.mention, isBrief: S.isBrief, now: await $.clock.now() })
+  const sent = await sendDiscord($, state.url, body, editId)
+  const stamp = await $.clock.now()
+  if (sent.isSent) {
+    await update($, notifier, now => ({ ...now, last: { at: stamp, text: `sent ${event.kind}`, isError: false } }))
+    return sent.id
+  }
+  const before = (await read($, notifier)).last
+  await update($, notifier, now => ({ ...now, last: { at: stamp, text: sent.reason, isError: true } }))
+  // Said once, not on every event, until a send works again.
+  if (before?.isError !== true) $.ui.toast(`dr-cockpit: Discord notification failed: ${sent.reason}`)
+  return null
+}
+
+// The context, cost and plan fields most messages carry.
+async function turnFields($: EngineInterface): Promise<{ name: string; value: string }[]> {
+  const head = await read($, budget)
+  const items = await read($, plan)
+  const summary = await read($, run)
+  const fields: { name: string; value: string }[] = []
+  if (head !== null) fields.push({ name: 'Context', value: `${kTokens(head.tokens)} · ${Math.round((head.tokens / head.limit) * 100)}% of handoff` })
+  if (head?.usd != null) fields.push({ name: 'Cost', value: `$${head.usd.toFixed(2)}` })
+  if (summary !== null && summary.total > 0) fields.push({ name: 'Run', value: `${summary.done}/${summary.total}` })
+  else if (items.length > 0) fields.push({ name: 'Plan', value: `${items.filter(item => item.status === 'completed').length}/${items.length}` })
+  return fields
+}
+
+async function setActivity($: EngineInterface, change: (now: CockpitActivity) => CockpitActivity) {
+  await update($, activity, change)
+  const now = await read($, activity)
+  const isLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
+  if (isLive && S.ticker === null) {
+    // The Now row's clock: a redraw a second while a turn runs, and the
+    // state file's heartbeat.
+    S.ticks = 0
+    S.ticker = $.clock.every(1000, () => {
+      S.ticks++
+      $.ui.invalidate('ui.render')
+      if ((S.ticks * 1000) % HEARTBEAT_MS === 0) scheduleState($, true)
+    })
+  } else if (!isLive && S.ticker !== null) {
+    S.ticker.cancel()
+    S.ticker = null
+  }
+  scheduleState($)
+}
+
+// The state file dr-status reads: written at most twice a second, and only
+// when it changed, unless a heartbeat asks.
+function scheduleState($: EngineInterface, isHeartbeat = false) {
+  if (S.where.sessionId === null || S.where.configDir === null) return
+  if (isHeartbeat) S.lastState = ''
+  if (S.stateTimer !== null) return
+  S.stateTimer = $.clock.after(500, () => {
+    S.stateTimer = null
+    void writeState($)
+  })
+}
+
+async function writeState($: EngineInterface) {
+  try {
+    const now = await read($, activity)
+    const summary = await read($, run)
+    const body = {
+      v: 1,
+      activity: {
+        kind: now.kind,
+        since: Math.floor((now.kind === 'idle' || now.kind === 'failed' ? (now.endedAt ?? now.since) : now.since) / 1000),
+        tool: now.tool,
+      },
+      run:
+        summary === null || summary.total === 0
+          ? null
+          : {
+              done: summary.done,
+              total: summary.total,
+              round: roundNumber(summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null),
+              blocked: summary.tasks.filter(task => task.state === 'blocked').length,
+            },
+    }
+    const text = JSON.stringify(body)
+    if (text === S.lastState) return
+    S.lastState = text
+    const stamp = Math.floor((await $.clock.now()) / 1000)
+    await $.fs.write(`${S.where.configDir}/dr-cockpit/state/${S.where.sessionId}.json`, JSON.stringify({ ...body, updatedAt: stamp }) + '\n')
+  } catch {
+    // No state file: dr-status shows its own segments alone.
+  }
+}
+
+// An approval or question was answered (or the turn ended): stop its timer
+// and edit its message to say how it went.
+async function settleWait($: EngineInterface, id: string, outcome: string) {
+  const wait = S.waits.get(id)
+  if (wait === undefined) return
+  S.waits.delete(id)
+  wait.timer?.cancel()
+  if (wait.messageId !== null) {
+    await notify($, { ...wait.event, title: outcome }, wait.messageId)
+  }
+}
+
+// Starts waiting on the person: the Now row says so at once, Discord after
+// notifyAskAfter seconds if it is still unanswered.
+async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'asking', event: NotifyEvent) {
+  const stamp = await $.clock.now()
+  await setActivity($, now => ({ ...now, kind, since: stamp, detail: event.detail ?? null, isSent: false }))
+  const send = async () => {
+    const wait = S.waits.get(id)
+    if (wait === undefined) return
+    wait.timer = null
+    const messageId = await notify($, event)
+    if (messageId === null) return
+    wait.messageId = messageId
+    await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
+  }
+  const delay = Math.max(0, S.notifyAskAfter) * 1000
+  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send()), messageId: null, event })
+  if (delay === 0) await send()
+}
+
+// Back to running once nothing S.waits on the person.
+async function endWait($: EngineInterface, id: string, outcome: string) {
+  await settleWait($, id, outcome)
+  if (S.waits.size > 0) return
+  await setActivity($, now => (now.kind === 'waiting' || now.kind === 'asking' ? { ...now, kind: 'running', detail: null, isSent: false } : now))
+}
+
+// The run's ledger, its plan's tasks, and the newest handoff: read from the
+// primary checkout, S.where dr-superpowers keeps .superpowers/.
+async function readRun($: EngineInterface) {
+  const root = S.where.primary ?? (await read($, place))?.root ?? null
+  if (root === null) return
+  try {
+    const handoff = await $.fs.stat(`${root}/.superpowers/handoff/latest.md`).catch(() => null)
+    const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
+    if ((await read($, handoffAt)) !== handoffTime) await update($, handoffAt, () => handoffTime)
+    const base = `${root}/.superpowers/sdd`
+    const entries = await $.fs.list(base).catch(() => [])
+    let newest: { path: string; at: number } | null = null
+    for (const entry of entries) {
+      if (entry.kind !== 'dir') continue
+      const info = await $.fs.stat(`${base}/${entry.name}/progress.md`).catch(() => null)
+      if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
+    }
+    const startedAt = (await read($, usage))?.startedAt ?? 0
+    // A ledger counts once this session works on it, or when it is the one
+    // the session started next to.
+    if (newest === null || (!(await read($, isPlanSession)) && newest.at < startedAt)) {
+      if ((await read($, run)) !== null) await update($, run, () => null)
+      return
+    }
+    const ledger = parseLedger(String(await $.fs.read(newest.path)))
+    let titles: { n: number; title: string }[] = []
+    if (ledger.plan !== null) {
+      const planPath = ledger.plan.startsWith('/') ? ledger.plan : null
+      for (const candidate of planPath === null ? [(await read($, place))?.root, root].filter(Boolean).map(dir => `${dir}/${ledger.plan}`) : [planPath]) {
+        try {
+          titles = planTasks(String(await $.fs.read(candidate)))
+          if (titles.length > 0) break
+        } catch {
+          // Try the next checkout.
+        }
+      }
+    }
+    const numbers = [...new Set([...titles.map(one => one.n), ...ledger.tasks.map(one => one.n)])].sort((a, b) => a - b)
+    const summary: CockpitRun = {
+      plan: ledger.plan,
+      tasks: numbers.map(n => {
+        const known = ledger.tasks.find(one => one.n === n)
+        return {
+          n,
+          title: titles.find(one => one.n === n)?.title ?? '',
+          state: known?.state ?? 'pending',
+          round: known?.round ?? null,
+          seat: known?.seat ?? null,
+          isClean: known?.isClean ?? false,
+          reason: known?.reason ?? null,
+        }
+      }),
+      done: ledger.tasks.filter(one => one.state === 'complete').length,
+      total: numbers.length,
+      isFinished: ledger.isFinished,
+    }
+    await update($, run, () => summary)
+    scheduleState($)
+    await sendLedgerEvents($, summary)
+  } catch {
+    // No readable ledger: the Plan card stays as it is.
+  }
+}
+
+// A task that became blocked or complete since the last read, said once.
+async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
+  const keys = summary.tasks.flatMap(task =>
+    task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`] : task.state === 'complete' ? [`complete:${task.n}`] : [],
+  )
+  if (summary.isFinished) keys.push('finished')
+  if (S.ledgerSeen === null) {
+    S.ledgerSeen = new Set(keys)
+    return
+  }
+  for (const key of keys) {
+    if (S.ledgerSeen.has(key)) continue
+    S.ledgerSeen.add(key)
+    const [what, n] = key.split(':')
+    const task = summary.tasks.find(one => String(one.n) === n)
+    if (what === 'blocked' && task !== undefined) {
+      await notify($, {
+        kind: 'blocked',
+        title: `🛑 Task ${task.n} blocked`,
+        detail: task.reason ?? undefined,
+        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
+      })
+    } else if (what === 'complete' && task !== undefined) {
+      await notify($, {
+        kind: 'task',
+        title: `✅ Task ${task.n} complete${task.isClean ? ', review clean' : ''}`,
+        detail: task.title || undefined,
+        isPlain: true,
+        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
+      })
+    } else if (what === 'finished') {
+      await notify($, { kind: 'task', title: '🏁 Final review clean', fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }] })
+    }
+  }
+}
+
+// The webhook and mention, from the environment or the mod's own store.
+async function readNotifier($: EngineInterface) {
+  try {
+    const fromEnv = ((await $.env.get('DR_COCKPIT_NOTIFY_URL')) ?? '').trim()
+    const stored = await $.store.get(STORE_URL)
+    const url = isDiscordWebhook(fromEnv) ? fromEnv : typeof stored === 'string' && isDiscordWebhook(stored) ? stored : null
+    const mention = await $.store.get(STORE_MENTION)
+    await update($, notifier, now => ({
+      ...now,
+      url,
+      isFromEnv: isDiscordWebhook(fromEnv),
+      mention: typeof mention === 'string' ? mentionId(mention) : null,
+    }))
+  } catch {
+    // No store on this host: notifications stay off.
+  }
+}
+
+// Where the messages come from and S.where the state file goes, read once.
+async function readWhere($: EngineInterface) {
+  try {
+    S.where.sessionId = await $.session.id()
+  } catch {
+    S.where.sessionId = null
+  }
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
+  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home === '' ? '' : `${home}/.claude`)
+  S.where.configDir = configDir === '' ? null : configDir.replace(/[\\/]+$/, '')
+  try {
+    const settings = (await $.settings.read()) as { permissions?: { defaultMode?: unknown } }
+    S.isUnattended = UNATTENDED_MODES.includes(String(settings.permissions?.defaultMode ?? ''))
+  } catch {
+    S.isUnattended = false
+  }
+  const firstLine = async (argv: string[]) => {
+    try {
+      const ran = await $.process.run(argv, { timeoutMs: 2000 })
+      const line = ran.exitCode === 0 ? (ran.stdout.split('\n')[0] ?? '').trim() : ''
+      return line === '' ? null : line
+    } catch {
+      return null
+    }
+  }
+  S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
+  S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
+  // A worktree's .superpowers/ lives in the primary checkout.
+  const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+  S.where.primary = common === null ? null : common.replace(/[\\/]\.git[\\/]?$/, '') || null
+}
+
+// The context crossed its handoff budget: said once per crossing.
+async function onBudget($: EngineInterface, reading: { now: CockpitBudget; isPast: boolean } | undefined) {
+  if (reading === undefined) return
+  const { now, isPast } = reading
+  if (!isPast) {
+    S.isBudgetSent = false
+    return
+  }
+  if (S.isBudgetSent) return
+  S.isBudgetSent = true
+  await notify($, {
+    kind: 'budget',
+    title: '🔶 Handoff budget reached',
+    detail: `${kTokens(now.tokens)} of ${kTokens(now.limit)}.${(await read($, isPlanSession)) ? ' The controller hands off after the task in flight.' : ''}`,
+    isPlain: true,
+  })
+}
+
+// Saves the webhook, or says why not; an empty value removes it.
+async function saveWebhook($: EngineInterface, value: string): Promise<string | null> {
+  const url = value.trim()
+  if (url !== '' && !isDiscordWebhook(url)) return 'not a Discord webhook URL'
+  try {
+    if (url === '') await $.store.delete(STORE_URL)
+    else await $.store.set(STORE_URL, url)
+  } catch (error) {
+    return error instanceof Error ? error.message : 'could not be saved'
+  }
+  await readNotifier($)
+  return null
+}
+
+async function saveMention($: EngineInterface, value: string): Promise<string | null> {
+  const id = mentionId(value)
+  if (value.trim() !== '' && id === null) return 'not a Discord user id (digits only)'
+  try {
+    if (id === null) await $.store.delete(STORE_MENTION)
+    else await $.store.set(STORE_MENTION, id)
+  } catch (error) {
+    return error instanceof Error ? error.message : 'could not be saved'
+  }
+  await readNotifier($)
+  return null
+}
+
+async function sendTest($: EngineInterface): Promise<string> {
+  const state = await read($, notifier)
+  if (state.url === null) return 'No Discord webhook is set.'
+  const body = discordBody(
+    { kind: 'done', title: '🔔 Test from dr-cockpit', detail: 'Notifications reach this channel.', isPlain: true },
+    { host: S.where.host, repo: null, branch: null, tmux: S.where.tmux, account: (await read($, account))?.key ?? null },
+    { mention: null, isBrief: S.isBrief, now: await $.clock.now() },
+  )
+  const sent = await sendDiscord($, state.url, body)
+  const stamp = await $.clock.now()
+  await update($, notifier, now => ({ ...now, last: { at: stamp, text: sent.isSent ? 'test sent' : sent.reason, isError: !sent.isSent } }))
+  return sent.isSent ? 'Test message sent to Discord.' : `Test message not sent: ${sent.reason}`
+}
+
+async function notifyCommand($: EngineInterface, words: string[]): Promise<{ text: string }> {
+  const [verb = '', ...rest] = words
+  if (verb === 'test') return { text: await sendTest($) }
+  if (verb === 'url') {
+    const problem = await saveWebhook($, rest.join(' '))
+    return { text: problem ?? (rest.join('').trim() === '' ? 'Discord webhook removed.' : 'Discord webhook saved.') }
+  }
+  if (verb === 'mention') {
+    const problem = await saveMention($, rest.join(' '))
+    return { text: problem ?? 'Discord mention saved.' }
+  }
+  const state = await read($, notifier)
+  return {
+    text: state.url === null ? 'No Discord webhook is set. /cockpit notify url <url> sets one.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from DR_COCKPIT_NOTIFY_URL)' : ''}.`,
+  }
+}
+
+
 // Reads the status line's figures (free without a breakdown) and, past the
 // budget in a dr-superpowers session, tells the model once.
-async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number | undefined) {
+async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number | undefined): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
   const { handoffTokens, nudgeModel } = tuning
   const figures = await $.session.usage()
   const tokens = figures.context.tokens
@@ -875,15 +1661,12 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   }
 
   const level = levelOf(tokens, limit, tuning.warnAt)
-  if (level === 'quiet') {
-    // Back under (a compaction, /clear): show the warning again next time.
-    if (await read($, isBandHidden)) await update($, isBandHidden, () => false)
-  }
+  const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd }, isPast: level === 'handoff' }
   if (level !== 'handoff') {
     if (await read($, isNudged)) await update($, isNudged, () => false)
-    return
+    return reading
   }
-  if (!nudgeModel || (await read($, isNudged)) || !(await read($, isPlanSession))) return
+  if (!nudgeModel || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
   await update($, isNudged, () => true)
   const note = `dr-cockpit: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
   try {
@@ -892,6 +1675,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
     // The host would not take the row: say it to the person instead.
     $.ui.toast(note)
   }
+  return reading
 }
 
 // The pane's slower readings: the /context breakdown, estimated locally, and
@@ -1013,13 +1797,16 @@ async function readCompactWindow($: EngineInterface): Promise<number | undefined
 // Says once per window and reset when a rate limit crosses the alert line.
 async function alertLimits($: EngineInterface, reading: CockpitUsage, at: number) {
   const said = await read($, alerted)
+  const crossed: CockpitUsage['limits'] = []
   for (const limit of reading.limits) {
     const key = `${limit.kind}@${limit.resetsAt ?? ''}`
     if (limit.percent < at || said.includes(key)) continue
     await update($, alerted, list => [...list, key].slice(-20))
     const reset = limit.resetsAt === null ? '' : ` · resets in ${duration(limit.resetsAt - reading.readAt) || 'now'}`
     $.ui.toast(`dr-cockpit: ${limitLabel(limit.kind)} limit at ${Math.round(limit.percent)}%${reset}`)
+    crossed.push(limit)
   }
+  return crossed
 }
 
 async function isPaneUp($: EngineInterface): Promise<boolean> {
@@ -1115,4 +1902,80 @@ function totalIn(seat: CockpitSeat): number {
 function cacheShare(seat: CockpitSeat): number {
   const total = totalIn(seat)
   return total === 0 ? 0 : Math.round((seat.cacheRead / total) * 100)
+}
+
+// The round of the task in flight, as a number, for the strip.
+function runRound(summary: CockpitRun): string | null {
+  return summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null
+}
+
+// The run's tasks around the one in flight, so a long plan shows where it is.
+function runWindow(tasks: CockpitRun['tasks'], size: number): CockpitRun['tasks'] {
+  if (tasks.length <= size) return [...tasks]
+  const at = tasks.findIndex(task => task.state !== 'complete')
+  const start = Math.max(0, Math.min((at === -1 ? tasks.length : at) - 2, tasks.length - size))
+  return tasks.slice(start, start + size)
+}
+
+// What a call asks permission for, in a line: the command, the file, or the URL.
+function callSummary(tool: string, input: unknown): string {
+  const args = (input ?? {}) as Record<string, unknown>
+  for (const key of ['command', 'file_path', 'notebook_path', 'url', 'path', 'pattern']) {
+    const value = args[key]
+    if (typeof value === 'string' && value !== '') return value.split('\n')[0] ?? ''
+  }
+  return ''
+}
+
+// The question an AskUserQuestion call puts, or the plan ExitPlanMode shows, cut short.
+function questionOf(e: object): string {
+  const args = e as { questions?: { question?: unknown; options?: { label?: unknown }[] }[]; plan?: unknown }
+  const first = args.questions?.[0]
+  if (first !== undefined && typeof first.question === 'string') {
+    const labels = (first.options ?? []).map(option => option.label).filter((label): label is string => typeof label === 'string')
+    return excerpt(`${first.question}${labels.length > 0 ? `\n${labels.map((label, index) => `${index + 1}. ${label}`).join('  ')}` : ''}`, 500)
+  }
+  return typeof args.plan === 'string' ? excerpt(args.plan, 300) : ''
+}
+
+// Why a turn failed, in a few words.
+function failureOf(e: object): string | null {
+  const refusal = (e as { refusal?: { explanation?: unknown; category?: unknown } }).refusal
+  if (refusal !== undefined) return typeof refusal.explanation === 'string' ? excerpt(refusal.explanation, 80) : 'refused'
+  const answer = String((e as { answer?: unknown }).answer ?? '').trim()
+  return answer === '' ? 'API error' : excerpt(answer.split('\n')[0] ?? '', 80)
+}
+
+function kindLabel(kind: NotifyKind): string {
+  return kind === 'ask' ? 'approval' : kind
+}
+
+/**
+ * Posts a body to the webhook, or with `id` edits that message, waiting out
+ * one rate limit. Never throws.
+ */
+async function sendDiscord($: EngineInterface, url: string, body: Record<string, unknown>, id?: string): Promise<SendResult> {
+  const base = url.trim().replace(/\/$/, '')
+  const target = id === undefined ? `${base}?wait=true` : `${base}/messages/${id}`
+  const init = { method: id === undefined ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const answer = await $.http.fetch(target, init)
+      if (answer.status === 429 && attempt === 0) {
+        const wait = Number((JSON.parse(answer.text || '{}') as { retry_after?: unknown }).retry_after)
+        await $.clock.sleep(Math.min(10_000, Math.max(250, (Number.isFinite(wait) ? wait : 1) * 1000)))
+        continue
+      }
+      if (!answer.ok) return { isSent: false, reason: `Discord answered ${answer.status}` }
+      try {
+        const sent = JSON.parse(answer.text || '{}') as { id?: unknown }
+        return { isSent: true, id: typeof sent.id === 'string' ? sent.id : (id ?? null) }
+      } catch {
+        return { isSent: true, id: id ?? null }
+      }
+    } catch (error) {
+      return { isSent: false, reason: error instanceof Error ? error.message : String(error) }
+    }
+  }
+  return { isSent: false, reason: 'Discord is rate limiting' }
 }

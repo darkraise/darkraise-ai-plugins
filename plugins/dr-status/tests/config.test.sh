@@ -55,7 +55,7 @@ unset CLAUDE_CONFIG_DIR
 DCC_ACCT_KEY="~/.claude"
 dcc_parse_all "$(cat "$F/full.json")" /dev/null /dev/null
 check "defaults: config is not flagged bad"     "$DCC_CONFIG_BAD" "0"
-check "defaults: line one segment order"        "$DCC_LINE1" "dir git model effort fast agent style account"
+check "defaults: line one segment order"        "$DCC_LINE1" "dir git model effort fast agent style turn run account"
 check "defaults: line two segment order"        "$DCC_LINE2" "ctx cache cost 5h 7d"
 check "defaults: context meter width"           "$DCC_W_CTX" "10"
 check "defaults: cache meter width"             "$DCC_W_CACHE" "10"
