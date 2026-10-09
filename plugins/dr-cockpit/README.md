@@ -23,6 +23,7 @@ session is doing:
 │ ● you@example.com                                 │
 │   You · Acme (admin)                              │
 │   Opus 5.5 · xhigh effort                         │
+│   Remote ● connected · phone                      │
 │   config ~/.claude                                │
 ╰───────────────────────────────────────────────────╯
 ╭ Context ─────────────────── 68% of handoff · ≈7 turns ╮
@@ -40,7 +41,8 @@ session is doing:
 │ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
 │     resets in 3h40m · on pace                     │
 ╰───────────────────────────────────────────────────╯
-╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
+╭ Agents & shells ─────────────── $ 1 ● 1 running ✓ 2 ╮
+│ $ npm run dev 12m                                 │
 │ ● impl-sonnet-low Task 4 4m                       │
 │ ✓ reviewer-opus Review task 3                     │
 │ Seats by input                                    │
@@ -70,12 +72,17 @@ window refills.
 
 - **Now** is the turn in flight: running with its time, step, tool and the
   subagent calling it; waiting for your approval; Claude asking you something;
-  idle with the last turn's length; or the last turn failed. It adds
+  idle with the last turn's length; the last turn failed; or Esc
+  interrupted it, with the background shells and agents still running after
+  it (Esc stops the turn, not them). It adds
   `Discord ✓` once a notification went out for what it shows.
 - **Account** is who the session runs as: the email, name, organization and
   role from the account's `.claude.json` (under `CLAUDE_CONFIG_DIR` when set),
-  the billing type, the model and effort the last request used, and the config
-  directory. Its frame takes the color `dr-status` assigns the account in
+  the billing type, the model and effort the last request used, Remote Control,
+  and the config directory. Remote reads `connected` with the devices attached
+  (a phone, the desktop app), `on · no device yet` when "Enable Remote Control
+  for all sessions" is on in `/config`, and `not connected` otherwise; a session
+  started with `/remote-control` reads `not connected` until a device joins. Its frame takes the color `dr-status` assigns the account in
   `~/.claude/dcc-statusline.json` (`DCC_STATUSLINE_CONFIG` when set).
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated
@@ -88,7 +95,10 @@ window refills.
   session's cost and cost per hour. Once a window is ten minutes old each meter
   says whether the limit lasts to its reset at the pace so far (`on pace`), or
   when it runs out first, in amber.
-- **Agents** lists the subagents running and recently finished, then each
+- **Agents & shells** lists the background shells still running (a Bash call
+  sent to the background, by Claude or with Ctrl+B) with how long each has run,
+  until its notification or a stop ends it; then the subagents running and
+  recently finished, then each
   subagent type (seat) with its runs, input tokens, the share served from the
   prompt cache and output tokens. Use it to see where a plan's tokens go.
 - **Plan** follows the main session's todo list or task list, centred on the
@@ -104,13 +114,15 @@ what `dr-status` draws, with the cockpit's buttons under it: the frame in the
 account's color with its email on the top rule, the path, branch, model and
 effort, then the context, cache, cost and limit meters. A running turn rides on
 the top rule's right end, a `dr-superpowers` run adds `run 3/6 r2` to the first
-line, and past `warnAt` a `handoff 86%` reading follows `ctx`:
+line, past `warnAt` a `handoff 86%` reading follows `ctx`, and the bottom rule
+counts the background shells running and names the Remote Control devices
+attached:
 
 ```
 ╭─ you@example.com ──────────────────────────────────────────────────────────────── ● 2m14s · Bash ─╮
 │ darkraise-ai-plugins/…/dr-cockpit · feat/cockpit-pane-overhaul* · Opus · xhigh · run 3/6 r2      │
 │ ctx ▰▰▱▱ 41% · cache ▰▰▰▱ 93% · $4.85 · 5h ▰▱▱ 23% · 7d ▰▰▱ 61%                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╰─ $ 2 shells · ● phone ───────────────────────────────────────────────────────────────────────────╯
 ╭──────────╮ ╭─────────╮ ╭──────────╮
 │ Hand off │ │ Compact │ │ Settings │
 ╰──────────╯ ╰─────────╯ ╰──────────╯

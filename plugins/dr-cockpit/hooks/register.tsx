@@ -10,12 +10,14 @@ import type {
   CockpitRefusal,
   CockpitRun,
   CockpitSeat,
+  CockpitShell,
   CockpitSpawn,
   CockpitUsage,
 } from '../types'
 import {
   accountKey,
   attributionIn,
+  backgroundBadge,
   bar,
   billingLabel,
   budgetFor,
@@ -38,6 +40,7 @@ import {
   planWithUpdate,
   positive,
   rampColor,
+  remoteRuns,
   repoFromPorcelain,
   roundNumber,
   runsWidth,
@@ -47,6 +50,7 @@ import {
   sparkline,
   stackedRuns,
   stepped,
+  tasksEnded,
   termColor,
   track,
   turnsToBudget,
@@ -112,6 +116,8 @@ const usage = atom({ plugin: 'dr-cockpit', key: 'usage' } as const, null)
 const breakdown = atom({ plugin: 'dr-cockpit', key: 'breakdown' } as const, null)
 const seats = atom({ plugin: 'dr-cockpit', key: 'seats' } as const, [])
 const spawns = atom({ plugin: 'dr-cockpit', key: 'spawns' } as const, [])
+const shells = atom({ plugin: 'dr-cockpit', key: 'shells' } as const, [])
+const remote = atom({ plugin: 'dr-cockpit', key: 'remote' } as const, { clients: [], setting: null })
 const plan = atom({ plugin: 'dr-cockpit', key: 'plan' } as const, [])
 const repo = atom({ plugin: 'dr-cockpit', key: 'repo' } as const, null)
 const refusals = atom({ plugin: 'dr-cockpit', key: 'refusals' } as const, [])
@@ -200,6 +206,7 @@ export const register: Register = (on, options) => {
     await readNotifier($)
     await readRun($)
     await readVersion($)
+    await readRemote($)
     // Unasked, the engine seats the pane from 144 columns and holds it below.
     if (openAtStart) void $.ui.open(paneArgs)
 
@@ -302,6 +309,28 @@ export const register: Register = (on, options) => {
     return started
   })
 
+  // Remote Control clients joining and leaving; the terminal raises neither.
+  on('session.attach', async ($, e, next) => {
+    const joined = await next(e)
+    await update($, remote, now => ({ ...now, clients: [...now.clients.filter(one => one.id !== e.clientId), { id: e.clientId, surface: e.surface }] }))
+    return joined
+  }).catch(($, e, next) => next(e))
+
+  on('session.detach', async ($, e, next) => {
+    const left = await next(e)
+    await update($, remote, now => ({ ...now, clients: now.clients.filter(one => one.id !== e.clientId) }))
+    return left
+  }).catch(($, e, next) => next(e))
+
+  // A background shell's end arrives as its task notification.
+  on('prompt.submit', async ($, e, next) => {
+    if (e.origin.kind === 'task-notification') {
+      const ended = new Set(tasksEnded(e.text).map(one => one.id))
+      if (ended.size > 0) await update($, shells, list => list.filter(one => !ended.has(one.id)))
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   // A main turn begins: the Now row starts its clock.
   on('turn.start', async ($, e, next) => {
     const stamp = await $.clock.now()
@@ -368,9 +397,10 @@ export const register: Register = (on, options) => {
       const stamp = await $.clock.now()
       const failed = e.reason === 'error' || e.reason === 'refusal'
       const why = failed ? failureOf(e) : null
+      await readRemote($)
       await setActivity($, now => ({
         ...IDLE,
-        kind: failed ? 'failed' : 'idle',
+        kind: failed ? 'failed' : e.reason === 'aborted' ? 'interrupted' : 'idle',
         since: now.since,
         lastTurnMs: e.durationMs,
         endedAt: stamp,
@@ -455,6 +485,7 @@ export const register: Register = (on, options) => {
     if (tool === 'Skill' && isSuperpowers(String((e as { skill?: unknown }).skill ?? ''))) {
       await update($, isPlanSession, () => true)
     }
+    if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
       await onBudget($, await refresh($, tuning, compactWindow))
@@ -477,6 +508,8 @@ export const register: Register = (on, options) => {
     const rows = await read($, breakdown)
     const list = await read($, seats)
     const all = await read($, spawns)
+    const background = await read($, shells)
+    const remoteNow = await read($, remote)
     const items = await read($, plan)
     const git = await read($, repo)
     const refused = await read($, refusals)
@@ -708,6 +741,12 @@ export const register: Register = (on, options) => {
       )
     }
     const running = all.filter(one => !one.isDone)
+    // After Esc, what kept going: background shells and agents survive it.
+    const kept = [
+      background.length > 0 ? `${background.length} ${background.length === 1 ? 'shell' : 'shells'}` : '',
+      running.length > 0 ? `${running.length} ${running.length === 1 ? 'agent' : 'agents'}` : '',
+    ].filter(Boolean)
+    const actNow = act.kind === 'interrupted' ? { ...act, detail: kept.length === 0 ? 'nothing left running' : `${kept.join(' and ')} still running` } : act
     const finished = all.filter(one => one.isDone)
     const doneCount = items.filter(item => item.status === 'completed').length
     const current = items.find(item => item.status === 'in_progress') ?? items.find(item => item.status === 'pending')
@@ -757,7 +796,9 @@ export const register: Register = (on, options) => {
       const title = who?.email == null ? '' : [...who.email].slice(0, Math.max(0, room - 6)).join('')
       // The turn's activity rides on the top rule, so the strip keeps its height.
       const left = title === '' ? 2 : 4 + [...title].length
-      const fullBadge = nowBadge(act, now)
+      const fullBadge = nowBadge(actNow, now)
+      const lowBadge = backgroundBadge(background.length, remoteNow.clients)
+      const lowFits = lowBadge.length > 0 && room - runsWidth(lowBadge) - 6 >= 2
       const badge = room - left - runsWidth(fullBadge) - 4 >= 2 ? fullBadge : []
       const dashes = Math.max(0, room - left - (badge.length > 0 ? runsWidth(badge) + 4 : 1))
 
@@ -788,8 +829,10 @@ export const register: Register = (on, options) => {
           {row('status-1', lines[0])}
           {row('status-2', lines[1])}
           {isFramed && (
-            <Text key="frame-bottom" color={tint}>
-              {'╰' + '─'.repeat(room - 2) + '╯'}
+            <Text key="frame-bottom" color={tint} wrap="truncate-end">
+              {lowFits ? '╰─ ' : '╰' + '─'.repeat(room - 2) + '╯'}
+              {lowFits && drawRuns('frame-low', lowBadge)}
+              {lowFits && ' ' + '─'.repeat(Math.max(0, room - runsWidth(lowBadge) - 5)) + '╯'}
             </Text>
           )}
           {actions}
@@ -1029,6 +1072,10 @@ export const register: Register = (on, options) => {
                 {engineNow.effort !== null && <Text dimColor> · {engineNow.effort} effort</Text>}
               </Text>
             ),
+            <Text key="account-remote" wrap="truncate-end">
+              <Text dimColor>Remote </Text>
+              {drawRuns('account-remote', remoteRuns(remoteNow.clients, remoteNow.setting))}
+            </Text>,
             <Text key="account-dir" dimColor wrap="truncate-end">
               config {who.key}
             </Text>,
@@ -1113,17 +1160,27 @@ export const register: Register = (on, options) => {
       ),
       agents: section(
         'agents',
-        'Agents',
+        'Agents & shells',
         'magenta',
         <Text key="agents-head">
+          {background.length > 0 && <Text color="yellow">$ {background.length} </Text>}
           {running.length > 0 && <Text color="cyan">● {running.length} running </Text>}
           {finished.length > 0 && <Text color="green">✓ {finished.length}</Text>}
         </Text>,
-        all.length === 0 && (
+        all.length === 0 && background.length === 0 && (
           <Text key="agents-none" dimColor>
-            No subagents yet.
+            No subagents or background shells yet.
           </Text>
         ),
+        background.map(shell => (
+          <Text key={`shell-${shell.id}`} wrap="truncate-end">
+            <Text color="yellow" bold>
+              ${' '}
+            </Text>
+            <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
+            <Text color="yellow"> {now - shell.startedAt < 60_000 ? '<1m' : duration(now - shell.startedAt)}</Text>
+          </Text>
+        )),
         recent.map(spawn => (
           <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
             <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'} </Text>
@@ -1232,7 +1289,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         <Text key="now" wrap="truncate-end">
-          {drawRuns('now', nowLine(act, now))}
+          {drawRuns('now', nowLine(actNow, now))}
         </Text>
         {shown.map(name => byName[name])}
         {!shown.includes('context') && actions}
@@ -1829,6 +1886,45 @@ async function readVersion($: EngineInterface) {
     S.canUnderline = isAtLeast((await $.session.version()).base, UNDERLINE_SINCE)
   } catch {
     S.canUnderline = false
+  }
+}
+
+// A Bash call that went to the background (asked for, Ctrl+B, or its
+// timeout) is a running shell until its notification or a stop names it.
+function clip(text: string, width: number): string {
+  const chars = [...text]
+  return chars.length <= width ? text : chars.slice(0, width - 1).join('') + '…'
+}
+
+async function trackShells($: EngineInterface, tool: string, e: object, result: unknown) {
+  if (tool === 'Bash') {
+    const id = (result as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
+    if (typeof id !== 'string' || id === '') return
+    const shell: CockpitShell = { id, command: String((e as { command?: unknown }).command ?? ''), startedAt: await $.clock.now() }
+    await update($, shells, list => [...list.filter(one => one.id !== id), shell].slice(-20))
+    return
+  }
+  if (tool === 'TaskStop' || tool === 'KillShell' || tool === 'KillBash') {
+    const input = e as { task_id?: unknown; shell_id?: unknown }
+    const id = (result as { task_id?: unknown } | undefined)?.task_id ?? input.task_id ?? input.shell_id
+    if (typeof id === 'string') await update($, shells, list => list.filter(one => one.id !== id))
+  }
+}
+
+// The /config row "Enable Remote Control for all sessions", and the remote
+// clients already attached when the session starts.
+async function readRemote($: EngineInterface) {
+  try {
+    const row = (await $.config.list()).find(one => one.key === 'remoteControl')
+    const setting = row === undefined ? null : String(row.value)
+    const before = await read($, remote)
+    if (before.setting !== setting) await update($, remote, now => ({ ...now, setting }))
+    if (before.clients.length === 0) {
+      const away = (await $.session.surfaces()).filter(one => one !== 'terminal')
+      if (away.length > 0) await update($, remote, now => ({ ...now, clients: away.map(surface => ({ id: `${surface}:default`, surface })) }))
+    }
+  } catch {
+    // Attach events still fill it in.
   }
 }
 
