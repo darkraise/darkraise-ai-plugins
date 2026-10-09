@@ -319,7 +319,10 @@ Sonnet especially, tend to summarize the run and stop instead. A
 that turn wrote a plan ledger (`.superpowers/sdd/*/progress.md`). If it did and
 the last message carries neither ending, the hook blocks the stop once and
 tells Claude which one is missing. The retry always passes, and without `jq`,
-a stamp or a ledger written this turn, the hook does nothing.
+a stamp or a ledger written this turn, the hook does nothing. It also lets the
+stop through while an agent or command the session started in the background
+has not reported back: the controller is waiting on it, not ending the run, and
+a next-step block there would invite ending a session whose work is in flight.
 
 ## Session budget
 
