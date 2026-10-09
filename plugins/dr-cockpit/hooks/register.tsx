@@ -69,9 +69,12 @@ import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
 const PANE = 'dr-cockpit'
 const PANE_COLUMNS = 56
 const INDENT = 2
+// A button's rounded frame: the accent on the one that matters, gray at rest.
+const BUTTON_MAIN = 'permission'
+const BUTTON_REST = 'inactive'
 // The rows the compact layout asks for above the prompt: the framed two
-// lines and the buttons.
-const COMPACT_ROWS = 5
+// lines, and the buttons in their boxes.
+const COMPACT_ROWS = 7
 // The most /context categories the pane lists (breakdownRows caps it lower).
 const MAX_BREAKDOWN_ROWS = 12
 // Below this the strip drops its frame, as dr-status does.
@@ -485,19 +488,24 @@ export const register: Register = (on, options) => {
         </Text>
       ))
 
+    // Every control is a button in a rounded box: gray at rest, the accent on
+    // the one that matters (`isMain`), dim when it reads as off.
+    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) => (
+      <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
+        <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress}>
+          <Text color={look.isMain ? BUTTON_MAIN : undefined} bold={look.isMain}>
+            {label}
+          </Text>
+        </Button>
+      </Box>
+    )
+    const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, tuning.warnAt) !== 'quiet'
     const actions = (
-      <Box key="actions">
-        {canHandOff && (
-          <Button
-            key="pane-handoff"
-            label="Hand off"
-            hotkey="h"
-            onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true })}
-          />
-        )}
-        {canResume && <Button key="pane-resume" label="Resume" hotkey="r" onPress={() => $.prompt.submit({ text: RESUME_PROMPT, asUser: true })} />}
-        <Button key="pane-compact" label="Compact" hotkey="c" onPress={() => $.session.compact()} />
-        <Button key="pane-settings" label="Settings" hotkey="s" onPress={() => update($, view, () => 'settings')} />
+      <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {canHandOff && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
+        {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: RESUME_PROMPT, asUser: true }), { hotkey: 'r', isMain: true })}
+        {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
+        {button('pane-settings', 'Settings', () => update($, view, () => 'settings'), { hotkey: 's' })}
       </Box>
     )
 
@@ -506,17 +514,20 @@ export const register: Register = (on, options) => {
       // reloads the mod with it, so the rows below always show what is saved.
       const set = (key: keyof Options, value: ConfigValue) => setOption($, key, value)
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
-        <Box key={key} flexDirection="row" flexWrap="wrap">
-          <Text>{label.padEnd(16)}</Text>
+        <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
+          <Text>{label.padEnd(15)}</Text>
           {controls}
         </Box>
       )
       const toggle = (key: keyof Options, label: string, isOn: boolean) =>
-        row(
-          `set-${key}`,
-          label,
-          <Button key={`set-${key}-toggle`} label={isOn ? 'On' : 'Off'} variant={isOn ? 'primary' : 'secondary'} onPress={() => set(key, !isOn)} />,
-        )
+        row(`set-${key}`, label, button(`set-${key}-toggle`, isOn ? '● On' : '○ Off', () => set(key, !isOn), { isMain: isOn, isOff: !isOn }))
+      const choices = <T extends string>(key: keyof Options, label: string, all: readonly T[], chosen: T) =>
+        row(`set-${key}`, label, ...all.map(choice => button(`set-${key}-${choice}`, choice, () => set(key, choice), { isMain: chosen === choice, isOff: chosen !== choice })))
+      const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
+        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={INDENT}>
+          {names.map(name => button(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
+        </Box>
+      )
       const number = (key: keyof Options, label: string, value: string, onLess: () => unknown, onMore: () => unknown) =>
         row(
           `set-${key}`,
@@ -524,8 +535,8 @@ export const register: Register = (on, options) => {
           <Text key={`set-${key}-value`} bold>
             {value.padEnd(6)}
           </Text>,
-          <Button key={`set-${key}-less`} label="-" onPress={onLess} />,
-          <Button key={`set-${key}-more`} label="+" onPress={onMore} />,
+          button(`set-${key}-less`, '−', onLess),
+          button(`set-${key}-more`, '+', onMore),
         )
 
       // A surface without text fields (the mobile app) sets the webhook from a terminal.
@@ -548,7 +559,7 @@ export const register: Register = (on, options) => {
             />
             {notes.error !== null && <Text color="red">✗ {notes.error}</Text>}
             <Box key={`set-notify-${key}-cancel`}>
-              <Button key={`set-notify-${key}-cancel-button`} label="Cancel" onPress={() => update($, notifier, now => ({ ...now, editing: null, error: null }))} />
+              {button(`set-notify-${key}-cancel-button`, 'Cancel', () => update($, notifier, now => ({ ...now, editing: null, error: null })))}
             </Box>
           </Box>
         )
@@ -566,9 +577,9 @@ export const register: Register = (on, options) => {
                   'Webhook',
                   notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
                   notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from DR_COCKPIT_NOTIFY_URL</Text>,
-                  !notes.isFromEnv && canType && <Button key="set-notify-url-edit" label={notes.url === null ? 'Set' : 'Change'} onPress={() => edit('url')} />,
-                  !notes.isFromEnv && notes.url !== null && <Button key="set-notify-url-remove" label="Remove" onPress={() => saveWebhook($, '')} />,
-                  notes.url !== null && <Button key="set-notify-test" label="Send test" onPress={() => sendTest($)} />,
+                  notes.url !== null && button('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
+                  !notes.isFromEnv && canType && button('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
+                  !notes.isFromEnv && notes.url !== null && button('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
                   !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it from a terminal: /cockpit notify url</Text>,
                 )}
             {notes.last !== null && (
@@ -586,23 +597,16 @@ export const register: Register = (on, options) => {
                   <Text key="set-notify-mention-value" dimColor={notes.mention === null}>
                     {notes.mention === null ? 'nobody ' : `${notes.mention.slice(0, 10)}… `}
                   </Text>,
-                  canType && <Button key="set-notify-mention-edit" label={notes.mention === null ? 'Set' : 'Change'} onPress={() => edit('mention')} />,
+                  canType && button('set-notify-mention-edit', notes.mention === null ? 'Set' : 'Change', () => edit('mention')),
                 )}
             <Text key="set-notify-on">Send on</Text>
-            <Box key="set-notify-kinds" flexDirection="column" paddingLeft={INDENT}>
-              {[NOTIFY_KINDS.slice(0, 3), NOTIFY_KINDS.slice(3, 7), NOTIFY_KINDS.slice(7)].map((line, index) => (
-                <Box key={`set-notify-kinds-${index}`} flexDirection="row">
-                  {line.map(kind => (
-                    <Button
-                      key={`set-notify-kind-${kind}`}
-                      label={`${S.kinds.includes(kind) ? '✓' : '○'} ${kindLabel(kind)}`}
-                      variant={S.kinds.includes(kind) ? 'primary' : 'secondary'}
-                      onPress={() => set('notifyOn', notifyKindsToggled(S.kinds, kind))}
-                    />
-                  ))}
-                </Box>
-              ))}
-            </Box>
+            {chips(
+              'set-notify-kind',
+              NOTIFY_KINDS,
+              kind => S.kinds.includes(kind as NotifyKind),
+              kind => kindLabel(kind as NotifyKind),
+              kind => set('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
+            )}
             {number(
               'notifyAfter',
               'Done after',
@@ -617,18 +621,7 @@ export const register: Register = (on, options) => {
               () => set('notifyAskAfter', stepped(notifyAskAfter, -10, 0, 600)),
               () => set('notifyAskAfter', stepped(notifyAskAfter, 10, 0, 600)),
             )}
-            {row(
-              'set-notifyDetail',
-              'Detail',
-              ...(['full', 'brief'] as const).map(choice => (
-                <Button
-                  key={`set-notifyDetail-${choice}`}
-                  label={choice}
-                  variant={(S.isBrief ? 'brief' : 'full') === choice ? 'primary' : 'secondary'}
-                  onPress={() => set('notifyDetail', choice)}
-                />
-              )),
-            )}
+            {choices('notifyDetail', 'Detail', ['full', 'brief'] as const, S.isBrief ? 'brief' : 'full')}
           </Box>
         </Box>
       )
@@ -638,34 +631,16 @@ export const register: Register = (on, options) => {
           <Text bold>Settings</Text>
           <Box flexDirection="column" paddingLeft={INDENT}>
             {toggle('openAtStart', 'Show at start', openAtStart)}
-            {row(
-              'set-layout',
-              'Layout',
-              ...(['auto', 'full', 'compact'] as const).map(choice => (
-                <Button
-                  key={`set-layout-${choice}`}
-                  label={choice}
-                  variant={layout === choice ? 'primary' : 'secondary'}
-                  onPress={() => set('layout', choice)}
-                />
-              )),
-            )}
+            {choices('layout', 'Layout', ['auto', 'full', 'compact'] as const, layout)}
             <Text key="set-sections">Sections</Text>
-            {/* Three to a line, under their label, so they fit a docked pane. */}
-            <Box key="set-sections-list" flexDirection="column" paddingLeft={INDENT}>
-              {[SECTIONS.slice(0, 3), SECTIONS.slice(3, 6), SECTIONS.slice(6)].map((line, index) => (
-                <Box key={`set-sections-${index}`} flexDirection="row">
-                  {line.map(name => (
-                    <Button
-                      key={`set-section-${name}`}
-                      label={`${shown.includes(name) ? '✓' : '○'} ${name}`}
-                      variant={shown.includes(name) ? 'primary' : 'secondary'}
-                      onPress={() => set('sections', sectionsToggled(shown, name))}
-                    />
-                  ))}
-                </Box>
-              ))}
-            </Box>
+            {/* Under their label, wrapping to the pane's width. */}
+            {chips(
+              'set-section',
+              SECTIONS,
+              name => shown.includes(name as Section),
+              name => name,
+              name => set('sections', sectionsToggled(shown, name as Section)),
+            )}
             {number(
               'handoffTokens',
               'Handoff budget',
@@ -700,7 +675,7 @@ export const register: Register = (on, options) => {
           {notifyRows}
           <Text dimColor>Saved to your user settings, like /config.</Text>
           <Box key="settings-actions">
-            <Button key="settings-back" label="Back" hotkey="b" onPress={() => update($, view, () => 'cockpit')} />
+            {button('settings-back', 'Back', () => update($, view, () => 'cockpit'), { hotkey: 'b' })}
           </Box>
         </Box>
       )

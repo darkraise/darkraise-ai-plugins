@@ -601,6 +601,39 @@ describe('/cockpit', () => {
   })
 })
 
+describe('buttons', () => {
+  test('wear a rounded box, the accent on the one that matters', { options: { handoffTokens: 400_000 } }, async ($, on) => {
+    const w: World = { ...SIGNED_IN, tokens: 200_000 }
+    world(on, w)
+    signedIn(on)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'pane-handoff-box' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'inactive' })
+    expect((await ui.find({ key: 'pane-handoff' }))?.props).toMatchObject({ hotkey: 'h', plain: true })
+    await ui.unmount()
+    // Past warnAt, Hand off is the one to press.
+    w.tokens = 350_000
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('permission')
+    expect((await ui.find({ key: 'pane-compact-box' }))?.props.borderColor).toBe('inactive')
+  })
+
+  test('read as on, chosen or off in the settings', async ($, on) => {
+    world(on, { tokens: 50_000 })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect((await ui.find({ key: 'set-layout-auto-box' }))?.props.borderColor).toBe('permission')
+    expect((await ui.find({ key: 'set-layout-full' }))?.props.dimColor).toBe(true)
+    expect((await ui.find({ key: 'set-openAtStart-toggle' }))?.props.label).toBe('● On')
+    expect((await ui.find({ key: 'set-notify-kind-task' }))?.props).toMatchObject({ label: '○ task', dimColor: true })
+    expect((await ui.find({ key: 'settings-back' }))?.props.hotkey).toBe('b')
+  })
+})
+
 describe('settings view', () => {
   test('toggles sections without losing the order or the last one', () => {
     expect(sectionsToggled(['account', 'context', 'usage', 'agents', 'plan', 'repo', 'guard'], 'repo')).toBe('account,context,usage,agents,plan,guard')
