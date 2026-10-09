@@ -612,7 +612,7 @@ export function elapsed(ms: number): string {
 
 /** What the session is doing, as the Now row reads it. */
 export type ActivityInput = {
-  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed'
+  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed' | 'interrupted'
   since: number
   turnStartedAt: number | null
   step: number
@@ -661,6 +661,12 @@ export function nowLine(now: ActivityInput, at: number): Run[] {
         ...(now.lastTurnMs === null ? [] : [sep, { text: elapsed(now.lastTurnMs), dim: true }]),
         ...sent,
       ]
+    case 'interrupted':
+      return [
+        { text: '■ interrupted', color: AMBER, bold: true },
+        ...(now.detail === null ? [] : [sep, { text: now.detail }]),
+        ...(now.endedAt === null ? [] : [sep, { text: at - now.endedAt < 60_000 ? 'just now' : `${duration(at - now.endedAt)} ago`, dim: true }]),
+      ]
     default:
       return [
         { text: '○ idle', dim: true },
@@ -685,7 +691,48 @@ export function nowBadge(now: ActivityInput, at: number): Run[] {
       return [{ text: `❓ asking ${elapsed(at - now.since)}`, color: AMBER, bold: true }]
     case 'failed':
       return [{ text: '✗ failed', color: 'error', bold: true }]
+    case 'interrupted':
+      return [{ text: '■ interrupted', color: AMBER, bold: true }]
     default:
       return []
   }
+}
+
+/** A background task's end as its notification reads: `<task-id>` and `<status>`. */
+export function tasksEnded(text: string): { id: string; status: string }[] {
+  const ended: { id: string; status: string }[] = []
+  for (const block of text.split('<task-notification>').slice(1)) {
+    const id = /<task-id>\s*([^<\s]+)\s*<\/task-id>/.exec(block)?.[1]
+    if (id === undefined) continue
+    ended.push({ id, status: /<status>\s*([^<\s]+)\s*<\/status>/.exec(block)?.[1] ?? 'completed' })
+  }
+  return ended
+}
+
+/** A remote client's surface as a person names the device. */
+export function deviceName(surface: string): string {
+  return surface === 'mobile' ? 'phone' : surface === 'desktop' ? 'desktop app' : surface === 'vscode' ? 'VS Code' : surface
+}
+
+/** Remote Control as the cockpit can see it: the devices attached, or the startup setting. */
+export function remoteRuns(clients: readonly { surface: string }[], setting: string | null): Run[] {
+  if (clients.length > 0) {
+    const names = [...new Set(clients.map(one => deviceName(one.surface)))]
+    const what = clients.length === 1 ? names[0] : names.length === 1 ? `${clients.length} ${names[0]}s` : `${clients.length} devices`
+    return [{ text: '● ', color: 'green', bold: true }, { text: 'connected' }, { text: ' · ', dim: true }, { text: what, color: 'green' }]
+  }
+  if (setting === 'true') return [{ text: '○ ', color: 'green' }, { text: 'on', color: 'green' }, { text: ' · no device yet', dim: true }]
+  return [{ text: '○ not connected', dim: true }]
+}
+
+/** What keeps running beside the turn, for the strip's bottom rule: shells and remote devices. */
+export function backgroundBadge(shells: number, clients: readonly { surface: string }[]): Run[] {
+  const runs: Run[] = []
+  if (shells > 0) runs.push({ text: '$ ', color: 'yellow', bold: true }, { text: `${shells} ${shells === 1 ? 'shell' : 'shells'}`, color: 'yellow' })
+  if (clients.length > 0) {
+    if (runs.length > 0) runs.push({ text: ' · ', dim: true })
+    const names = [...new Set(clients.map(one => deviceName(one.surface)))]
+    runs.push({ text: '● ', color: 'green', bold: true }, { text: clients.length === 1 || names.length === 1 ? names[0] : `${clients.length} devices`, color: 'green' })
+  }
+  return runs
 }

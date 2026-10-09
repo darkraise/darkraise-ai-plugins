@@ -4,6 +4,7 @@ import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMe
 import {
   accountKey,
   attributionIn,
+  backgroundBadge,
   bar,
   billingLabel,
   budgetFor,
@@ -18,6 +19,7 @@ import {
   parseLedger,
   planTasks,
   planWithUpdate,
+  remoteRuns,
   repoFromPorcelain,
   runsWidth,
   sectionsToggled,
@@ -25,13 +27,14 @@ import {
   stackedRuns,
   statusLines,
   stepped,
+  tasksEnded,
   termColor,
   track,
   turnsToBudget,
   windowElapsed,
   writesGitText,
 } from '../hooks/lib'
-import type { ActivityInput } from '../hooks/lib'
+import type { ActivityInput, Run } from '../hooks/lib'
 import {
   discordBody,
   excerpt,
@@ -44,6 +47,7 @@ import {
 } from '../hooks/notify'
 
 const SURFACES = ['terminal', 'desktop'] as const
+const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
 const BAND = {
   plugin: 'dr-cockpit',
   component: 'AbovePrompt',
@@ -112,6 +116,8 @@ type World = {
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
+  /** The /config row "Enable Remote Control for all sessions"; absent unless said. */
+  remoteControl?: string
   /** Tools that answer in their own way, by name. */
   tools?: Record<string, () => Promise<{ result: unknown; text: string }> | { result: unknown; text: string }>
 }
@@ -141,6 +147,16 @@ function world(on: On, w: World) {
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  on('session.attach', (_$, e) => ({ clientId: e.clientId }))
+  on('session.detach', (_$, e) => ({ clientId: e.clientId }))
+  on('session.surfaces', () => ({ value: ['terminal'] }))
+  on('config.list', () => ({
+    value:
+      w.remoteControl === undefined
+        ? []
+        : [{ key: 'remoteControl', label: 'Enable Remote Control for all sessions', kind: 'choice', value: w.remoteControl, provider: { kind: 'engine' }, isLocked: false }],
+  }) as never)
   on('ui.open', () => ({ value: w.open ?? { isPlaced: true } }))
   on('session.compact', (_$, e) => ({ messages: e.messages }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -876,6 +892,76 @@ describe('now row', () => {
     await $.turn.start({ text: 'go', turnId: 't1' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com ─{74} ● 0s ─╮$/ })).toBeDefined()
+  })
+})
+
+describe('shells and remote', () => {
+  const SHELL = { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }
+  const ENDED = '<task-notification>\n<task-id>b7k2</task-id>\n<status>completed</status>\n<summary>done</summary>\n</task-notification>'
+
+  test('reads task ends and names devices', () => {
+    expect(tasksEnded(ENDED)).toEqual([{ id: 'b7k2', status: 'completed' }])
+    expect(tasksEnded('no tasks here')).toEqual([])
+    expect(runsText(remoteRuns([{ surface: 'mobile' }], 'false'))).toBe('● connected · phone')
+    expect(runsText(remoteRuns([{ surface: 'mobile' }, { surface: 'mobile' }], null))).toBe('● connected · 2 phones')
+    expect(runsText(remoteRuns([], 'true'))).toBe('○ on · no device yet')
+    expect(runsText(remoteRuns([], 'default'))).toBe('○ not connected')
+    expect(runsText(backgroundBadge(2, [{ surface: 'desktop' }]))).toBe('$ 2 shells · ● desktop app')
+    expect(backgroundBadge(0, [])).toEqual([])
+  })
+
+  test('list a background shell until its notification ends it', async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev <1m$/ })).toBeDefined()
+    await ui.unmount()
+    await $.prompt.submit({ text: ENDED, wait: false, origin: { kind: 'task-notification' } } as never)
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
+  })
+
+  test('drop a shell TaskStop stopped', async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL, TaskStop: () => ({ result: { message: 'stopped', task_id: 'b7k2', task_type: 'local_bash' }, text: 'stopped' }) } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.tool.call({ tool: 'TaskStop', task_id: 'b7k2' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
+  })
+
+  test('show Remote Control in the account card and on the strip', async ($, on) => {
+    world(on, { ...SIGNED_IN, remoteControl: 'true', tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Remote ○ on · no device yet/ })).toBeDefined()
+    await ui.unmount()
+    await $.session.attach({ surface: 'mobile', clientId: 'mobile:default' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Remote ● connected · phone/ })).toBeDefined()
+    await ui.unmount()
+    ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^╰─ \$ 1 shell · ● phone ─+╯$/ })).toBeDefined()
+    await ui.unmount()
+    await $.session.detach({ surface: 'mobile', clientId: 'mobile:default' } as never)
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Remote ○ on · no device yet/ })).toBeDefined()
+  })
+
+  test('say what kept running after Esc', async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.turn.complete({ answer: '', durationMs: 3_000, isAborted: true, turnId: 't1', reason: 'aborted' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^■ interrupted · 1 shell still running · just now$/ })).toBeDefined()
   })
 })
 
