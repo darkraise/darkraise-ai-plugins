@@ -698,6 +698,18 @@ export function nowBadge(now: ActivityInput, at: number): Run[] {
   }
 }
 
+/** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */
+export function isAtLeast(base: string | undefined, least: string): boolean {
+  const parts = (text: string) => text.split('-')[0]!.split('.').map(Number)
+  if (base === undefined || !/^\d+\.\d+\.\d+/.test(base)) return false
+  const have = parts(base)
+  const want = parts(least)
+  for (let i = 0; i < want.length; i++) {
+    if ((have[i] ?? 0) !== want[i]) return (have[i] ?? 0) > want[i]!
+  }
+  return true
+}
+
 /** A background task's end as its notification reads: `<task-id>` and `<status>`. */
 export function tasksEnded(text: string): { id: string; status: string }[] {
   const ended: { id: string; status: string }[] = []

@@ -4,7 +4,7 @@ A Claude Code mod for long sessions, and for `dr-superpowers` plans in
 particular. It is a hooks module, not a set of skills, so it costs the model no
 context: it draws in the interface and acts on the engine's events.
 
-Claude Code only. Built and tested against Claude Code 2.1.292 and 2.1.294; the
+Claude Code only. Built and tested against Claude Code 2.1.292 to 2.1.295; the
 mod API is early access and may change between releases.
 
 ## What it does
@@ -33,9 +33,9 @@ session is doing:
 │ ██████████████████████████████████████▓▓▓▓▒▒▒░░  │
 │   ■ Messages              318k  78%               │
 │   ■ System tools           41k  10%               │
-│ ╭─────────────╮ ╭────────────╮ ╭─────────────╮    │
-│ │ h: Hand off │ │ c: Compact │ │ s: Settings │    │
-│ ╰─────────────╯ ╰────────────╯ ╰─────────────╯    │
+│ ╭──────────╮ ╭─────────╮ ╭──────────╮             │
+│ │ Hand off │ │ Compact │ │ Settings │             │
+│ ╰──────────╯ ╰─────────╯ ╰──────────╯             │
 ╰───────────────────────────────────────────────────╯
 ╭ Usage ──────────────────────────── $4.85 · $2.35/h ╮
 │ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
@@ -123,9 +123,9 @@ attached:
 │ darkraise-ai-plugins/…/dr-cockpit · feat/cockpit-pane-overhaul* · Opus · xhigh · run 3/6 r2      │
 │ ctx ▰▰▱▱ 41% · cache ▰▰▰▱ 93% · $4.85 · 5h ▰▱▱ 23% · 7d ▰▰▱ 61%                                  │
 ╰─ $ 2 shells · ● phone ───────────────────────────────────────────────────────────────────────────╯
-╭─────────────╮ ╭────────────╮ ╭─────────────╮
-│ h: Hand off │ │ c: Compact │ │ s: Settings │
-╰─────────────╯ ╰────────────╯ ╰─────────────╯
+╭──────────╮ ╭─────────╮ ╭──────────╮
+│ Hand off │ │ Compact │ │ Settings │
+╰──────────╯ ╰─────────╯ ╰──────────╯
 ```
 
 Each line shrinks the way `dr-status`' do, a step at a time until it fits: the
@@ -136,9 +136,11 @@ show the percentage alone. Below 48 columns the frame goes and the email takes
 a line of its own above them. The pane draws no Nerd Font icons. The context
 meter is the share of the model's window, as `dr-status` shows it.
 
-Each button sits in a rounded box with its hotkey, which presses it while the
-pane has the keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s`
-**Settings**. The box is gray at rest and takes the accent color on the one
+Each button sits in a rounded box, the letter of its hotkey underlined in the
+label as a desktop app marks one; the hotkey presses it while the pane has the
+keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s` **Settings**,
+and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
+draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
 that matters: **Hand off** once the context passes `warnAt`, **Resume**
 whenever it shows. In the settings view a switch reads `● On` or `○ Off`, the
 chosen option of a row takes the accent, and what is off is drawn dim.

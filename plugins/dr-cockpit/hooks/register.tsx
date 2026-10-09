@@ -24,6 +24,7 @@ import {
   duration,
   elapsed,
   fitStatus,
+  isAtLeast,
   isGitWriteTool,
   isSuperpowers,
   kTokens,
@@ -79,6 +80,8 @@ const BUTTON_REST = 'inactive'
 // The rows the compact layout asks for above the prompt: the framed two
 // lines, and the buttons in their boxes.
 const COMPACT_ROWS = 7
+// The first Claude Code that takes styled children in a Button.
+const UNDERLINE_SINCE = '2.1.295'
 // The most /context categories the pane lists (breakdownRows caps it lower).
 const MAX_BREAKDOWN_ROWS = 12
 // Below this the strip drops its frame, as dr-status does.
@@ -202,6 +205,7 @@ export const register: Register = (on, options) => {
     await readWhere($)
     await readNotifier($)
     await readRun($)
+    await readVersion($)
     await readRemote($)
     // Unasked, the engine seats the pane from 144 columns and holds it below.
     if (openAtStart) void $.ui.open(paneArgs)
@@ -523,11 +527,38 @@ export const register: Register = (on, options) => {
 
     // Every control is a button in a rounded box: gray at rest, the accent on
     // the one that matters (`isMain`), dim when it reads as off.
-    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) => (
-      <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
-        <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
-      </Box>
-    )
+    if (S.canUnderline === null) await readVersion($)
+    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) => {
+      // The hotkey's letter is underlined in the label, as a desktop app marks
+      // one; a hidden twin holds the hotkey, since a Button with one draws "c: "
+      // before its label. Older Claude Code draws that prefix instead.
+      if (!S.canUnderline) {
+        return (
+          <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
+            <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
+          </Box>
+        )
+      }
+      const at = look.hotkey === undefined ? -1 : label.toLowerCase().indexOf(look.hotkey)
+      return (
+        <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
+          {at < 0 ? (
+            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
+          ) : (
+            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress}>
+              {label.slice(0, at)}
+              <Text underline>{label.slice(at, at + 1)}</Text>
+              {label.slice(at + 1)}
+            </Button>
+          )}
+          {at >= 0 && (
+            <Box key={`${key}-hotkey-box`} display="none">
+              <Button key={`${key}-hotkey`} label={label} hotkey={look.hotkey} plain onPress={onPress} />
+            </Box>
+          )}
+        </Box>
+      )
+    }
     const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, tuning.warnAt) !== 'quiet'
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
@@ -1291,6 +1322,9 @@ const S = {
   stateTimer: null as Timer | null,
   lastState: '',
   isUnattended: false,
+  // Whether this Claude Code draws a Button's label from styled children,
+  // so the hotkey's letter can be underlined in it.
+  canUnderline: null as boolean | null,
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -1847,6 +1881,14 @@ async function isPaneUp($: EngineInterface): Promise<boolean> {
 
 // Follows the main loop's todo list (TodoWrite) or task list (TaskCreate and
 // TaskUpdate), whichever the session uses.
+async function readVersion($: EngineInterface) {
+  try {
+    S.canUnderline = isAtLeast((await $.session.version()).base, UNDERLINE_SINCE)
+  } catch {
+    S.canUnderline = false
+  }
+}
+
 // A Bash call that went to the background (asked for, Ctrl+B, or its
 // timeout) is a running shell until its notification or a stop names it.
 function clip(text: string, width: number): string {
