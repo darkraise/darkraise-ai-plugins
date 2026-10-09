@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { ConfigValue, EngineInterface, Register, RenderChildren, TurnUsage } from 'claude-code'
 
 import type {
+  CockpitAccount,
   CockpitBreakdown,
   CockpitBudget,
   CockpitPlanItem,
@@ -11,42 +12,49 @@ import type {
   CockpitUsage,
 } from '../types'
 import {
+  accountKey,
   attributionIn,
   bar,
+  billingLabel,
   budgetFor,
   duration,
+  fitStatus,
   isGitWriteTool,
   isSuperpowers,
   kTokens,
   levelOf,
   limitLabel,
+  modelName,
   planFromTodos,
   planWithUpdate,
   positive,
   rampColor,
   repoFromPorcelain,
+  runsWidth,
   SECTIONS,
   sectionsFrom,
   sectionsToggled,
   sparkline,
   stackedRuns,
   stepped,
+  termColor,
   track,
   windowElapsed,
   warnShare,
   writesGitText,
 } from './lib'
-import type { Section, TrackPart } from './lib'
+import type { Run, Section, StatusInput, TrackPart } from './lib'
 
 const PANE = 'dr-cockpit'
 const PANE_COLUMNS = 56
 const INDENT = 2
-// The rows the compact layout asks for above the prompt.
-const COMPACT_ROWS = 8
+// The rows the compact layout asks for above the prompt: the framed two
+// lines and the buttons.
+const COMPACT_ROWS = 5
 // The most /context categories the pane lists (breakdownRows caps it lower).
 const MAX_BREAKDOWN_ROWS = 12
-// Room the compact layout needs to keep context and usage on one line.
-const ONE_LINE_COLUMNS = 90
+// Below this the strip drops its frame, as dr-status does.
+const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
 // How many context readings the trend line keeps.
@@ -72,6 +80,9 @@ const isPlanSession = atom({ plugin: 'dr-cockpit', key: 'isPlanSession' } as con
 const alerted = atom({ plugin: 'dr-cockpit', key: 'alerted' } as const, [])
 const trend = atom({ plugin: 'dr-cockpit', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dr-cockpit', key: 'view' } as const, 'cockpit')
+const account = atom({ plugin: 'dr-cockpit', key: 'account' } as const, null)
+const place = atom({ plugin: 'dr-cockpit', key: 'place' } as const, null)
+const engine = atom({ plugin: 'dr-cockpit', key: 'engine' } as const, { model: null, effort: null, cache: null })
 
 type Options = {
   handoffTokens: number
@@ -120,6 +131,9 @@ export const register: Register = (on, options) => {
     })
     compactWindow = await readCompactWindow($)
     await refresh($, tuning, compactWindow)
+    await readAccount($)
+    await readPlace($)
+    await readEngine($)
     // Unasked, the engine seats the pane from 144 columns and holds it below.
     if (openAtStart) void $.ui.open(paneArgs)
 
@@ -129,6 +143,7 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'cockpit' }, async ($, e) => {
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     await update($, view, () => (wantsSettings ? 'settings' : 'cockpit'))
+    await readAccount($)
     // The settings take the keyboard and as many rows as they need.
     const opened = await $.ui.open(wantsSettings ? { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, focus: true } : paneArgs)
     await refreshDetail($)
@@ -188,11 +203,27 @@ export const register: Register = (on, options) => {
     return started
   })
 
+  // The model and effort the main loop's requests go out with, as the status
+  // line shows them.
+  on('turn.step', async function* ($, e, next) {
+    if (e.agentId === undefined) {
+      const effort = typeof e.effort === 'string' ? e.effort : null
+      const before = await read($, engine)
+      if (before.model !== e.model || before.effort !== effort) await update($, engine, now => ({ ...now, model: e.model, effort }))
+    }
+    return yield* next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined) {
       compactWindow = await readCompactWindow($)
       await refresh($, tuning, compactWindow)
+      const turnUsage = e.usage as TurnUsage | undefined
+      if (turnUsage !== undefined) {
+        const cache = cacheOf(turnUsage)
+        await update($, engine, now => ({ ...now, cache }))
+      }
       return done
     }
     const agentId = e.agentId
@@ -368,7 +399,7 @@ export const register: Register = (on, options) => {
             <Text key="set-sections">Sections</Text>
             {/* Three to a line, under their label, so they fit a docked pane. */}
             <Box key="set-sections-list" flexDirection="column" paddingLeft={INDENT}>
-              {[SECTIONS.slice(0, 3), SECTIONS.slice(3)].map((line, index) => (
+              {[SECTIONS.slice(0, 3), SECTIONS.slice(3, 6), SECTIONS.slice(6)].map((line, index) => (
                 <Box key={`set-sections-${index}`} flexDirection="row">
                   {line.map(name => (
                     <Button
@@ -427,76 +458,74 @@ export const register: Register = (on, options) => {
     const limits = spend?.limits ?? []
     const cost = head?.usd == null ? null : `$${head.usd.toFixed(2)}`
 
+    const who = await read($, account)
+    const tint = termColor(who?.color)
+
     if (isCompact) {
-      // One row per section, for the strip above the prompt.
-      const contextMeter =
-        head === null
-          ? null
-          : meter('ctx', 'ctx', (head.tokens / head.limit) * 100, `${kTokens(head.tokens)}/${kTokens(head.limit)}`)
-      const isOneLine = room >= ONE_LINE_COLUMNS
-      // Beside the context meter the limits keep short bars; on a line of
-      // their own they get the full compact width.
-      const limitMeters = limits.map(limit =>
-        meter(`limit-${limit.kind}`, limitLabel(limit.kind), limit.percent, '', isOneLine ? 4 : meterWidth),
-      )
-      const joined = (key: string, parts: RenderChildren[]) => (
-        <Text key={key} wrap="truncate-end">
-          {parts.filter(part => part !== null && part !== false).flatMap((part, index) =>
-            index === 0 ? [part] : [<Text dimColor>{' · '}</Text>, part],
-          )}
-        </Text>
-      )
-      const wantsUsage = shown.includes('usage')
-      const byName: Record<Section, RenderChildren> = {
-        context: joined('c-context', [
-          contextMeter,
-          ...(wantsUsage && isOneLine ? limitMeters : []),
-          wantsUsage && cost !== null ? <Text>{cost}</Text> : null,
-        ]),
-        usage: isOneLine || limitMeters.length === 0 ? null : joined('c-usage', limitMeters),
-        agents:
-          running.length + finished.length === 0 ? null : (
-            <Text key="c-agents" wrap="truncate-end">
-              {running[0] === undefined
-                ? `✓ ${finished.length} done`
-                : `▸ ${shortSeat(running[0].seat)}: ${running[0].description} · ${duration(now - running[0].startedAt) || '<1m'}`}
-              <Text dimColor>
-                {running.length > 1 ? `  +${running.length - 1} running` : ''}
-                {running[0] !== undefined && finished.length > 0 ? `  +${finished.length} done` : ''}
-              </Text>
-            </Text>
-          ),
-        plan:
-          items.length === 0 ? null : (
-            <Text key="c-plan" wrap="truncate-end">
-              <Text bold>
-                Plan {doneCount}/{items.length}
-              </Text>
-              {current === undefined ? '' : ` ▸ ${current.text}`}
-            </Text>
-          ),
-        repo:
-          git === null ? null : (
-            <Text key="c-repo" wrap="truncate-end">
-              <Text color="magenta" bold>
-                {git.branch}
-              </Text>
-              {git.ahead > 0 ? ` ↑${git.ahead}` : ''}
-              {git.behind > 0 ? ` ↓${git.behind}` : ''}
-              <Text dimColor>{repoChanges(git)}</Text>
-            </Text>
-          ),
-        guard:
-          refused.length === 0 ? null : (
-            <Text key="c-guard" color="yellow" wrap="truncate-end">
-              guard refused {refused.length === 1 ? '1 git write' : `${refused.length} git writes`}
-            </Text>
-          ),
+      // dr-status' two lines, framed in the account's color with its email on
+      // the top rule, and the cockpit's buttons under them. Each line shrinks
+      // on its own until it fits.
+      const where = await read($, place)
+      const engineNow = await read($, engine)
+      const isFramed = room >= FRAME_MIN_COLUMNS
+      const status: StatusInput = {
+        cwd: where?.cwd ?? null,
+        root: where?.root ?? null,
+        home: where?.home ?? null,
+        repo: git,
+        model: engineNow.model,
+        effort: engineNow.effort,
+        context: head === null ? null : { tokens: head.tokens, window: head.window },
+        cache: engineNow.cache,
+        usd: head?.usd ?? null,
+        limits,
+        now,
       }
+      const width = isFramed ? room - 4 : room
+      const { lines } = fitStatus(status, width)
+      const drawRuns = (key: string, runs: Run[]) =>
+        runs.map((run, index) => (
+          <Text key={`${key}-${index}`} color={run.color} bold={run.bold} dimColor={run.dim}>
+            {run.text}
+          </Text>
+        ))
+      const row = (key: string, runs: Run[]) =>
+        isFramed ? (
+          <Text key={key} wrap="truncate-end">
+            <Text color={tint}>{'│ '}</Text>
+            {drawRuns(key, runs)}
+            {' '.repeat(Math.max(0, width - runsWidth(runs)))}
+            <Text color={tint}>{' │'}</Text>
+          </Text>
+        ) : (
+          <Text key={key} wrap="truncate-end">
+            {drawRuns(key, runs)}
+          </Text>
+        )
+      const title = who?.email == null ? '' : [...who.email].slice(0, Math.max(0, room - 6)).join('')
 
       return (
         <Box flexDirection="column">
-          {shown.map(name => byName[name])}
+          {isFramed && (
+            <Text key="frame-top" color={tint} wrap="truncate-end">
+              {title === '' ? '╭' + '─'.repeat(room - 2) : '╭─ '}
+              {title !== '' && <Text bold>{title}</Text>}
+              {title === '' ? '╮' : ` ${'─'.repeat(Math.max(0, room - 5 - [...title].length))}╮`}
+            </Text>
+          )}
+          {/* Without a frame to carry it, the email takes a line of its own. */}
+          {!isFramed && who?.email != null && (
+            <Text key="status-email" color={tint} bold wrap="truncate-end">
+              {who.email}
+            </Text>
+          )}
+          {row('status-1', lines[0])}
+          {row('status-2', lines[1])}
+          {isFramed && (
+            <Text key="frame-bottom" color={tint}>
+              {'╰' + '─'.repeat(room - 2) + '╯'}
+            </Text>
+          )}
           {actions}
         </Box>
       )
@@ -612,7 +641,47 @@ export const register: Register = (on, options) => {
       }
     }
 
+    const engineNow = await read($, engine)
+    const billing = billingLabel(who?.billing ?? null)
     const byName: Record<Section, RenderChildren> = {
+      // Who the session runs as, framed in the color dr-status gives the account.
+      account:
+        who !== null &&
+        section(
+          'account',
+          'Account',
+          tint ?? 'blue',
+          <Text key="account-head" dimColor>
+            {billing ?? ''}
+          </Text>,
+          <Text key="account-email" wrap="truncate-end">
+            <Text color={tint} bold>
+              ● {who.email ?? 'not signed in'}
+            </Text>
+          </Text>,
+          details(
+            'account-rows',
+            (who.name !== null || who.organization !== null) && (
+              <Text key="account-org" wrap="truncate-end">
+                {who.name ?? ''}
+                {who.name !== null && who.organization !== null ? <Text dimColor> · </Text> : ''}
+                {who.organization ?? ''}
+                {who.role !== null && <Text dimColor> ({who.role})</Text>}
+              </Text>
+            ),
+            engineNow.model !== null && (
+              <Text key="account-model" wrap="truncate-end">
+                <Text color="cyan" bold>
+                  {modelName(engineNow.model)}
+                </Text>
+                {engineNow.effort !== null && <Text dimColor> · {engineNow.effort} effort</Text>}
+              </Text>
+            ),
+            <Text key="account-dir" dimColor wrap="truncate-end">
+              config {who.key}
+            </Text>,
+          ),
+        ),
       context: section(
         'context',
         'Context',
@@ -847,6 +916,7 @@ async function setOption($: EngineInterface, key: string, value: ConfigValue) {
 }
 
 async function refreshDetail($: EngineInterface) {
+  await readPlace($)
   try {
     const figures = await $.session.usage({ breakdown: 'summary' })
     const detail = figures.context.breakdown
@@ -871,6 +941,78 @@ async function refreshDetail($: EngineInterface) {
   } catch {
     await update($, repo, () => null)
   }
+}
+
+/**
+ * The account as dr-status reads it: the email and organization from the
+ * account's .claude.json (CLAUDE_CONFIG_DIR's, else the home one), and the frame
+ * color from dr-status' own config, keyed by the config directory.
+ */
+async function readAccount($: EngineInterface) {
+  try {
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+    if (home === undefined || home === '') return
+    const configDir = await $.env.get('CLAUDE_CONFIG_DIR')
+    const state = await readJson($, configDir ? `${configDir}/.claude.json` : `${home}/.claude.json`)
+    const oauth = (state?.oauthAccount ?? {}) as Record<string, unknown>
+    const key = accountKey(configDir || `${home}/.claude`, home)
+    const config = await readJson($, (await $.env.get('DCC_STATUSLINE_CONFIG')) || `${home}/.claude/dcc-statusline.json`)
+    const accounts = (config?.accounts ?? {}) as Record<string, { color?: unknown }>
+    const color = accounts[key]?.color
+    const text = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null)
+    const next: CockpitAccount = {
+      email: text(oauth.emailAddress),
+      name: text(oauth.displayName),
+      organization: text(oauth.organizationName),
+      role: text(oauth.organizationRole),
+      billing: text(oauth.billingType),
+      key,
+      color: typeof color === 'string' || typeof color === 'number' ? String(color) : null,
+    }
+    await update($, account, () => next)
+  } catch {
+    // No account to show: the pane leaves it out.
+  }
+}
+
+async function readJson($: EngineInterface, path: string): Promise<Record<string, unknown> | null> {
+  try {
+    const value: unknown = JSON.parse(String(await $.fs.read(path)))
+    return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+async function readPlace($: EngineInterface) {
+  try {
+    const cwd = await $.session.cwd()
+    const repoAt = await $.session.repo().catch(() => null)
+    const home = ((await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))) || null
+    const before = await read($, place)
+    if (before?.cwd !== cwd || before.root !== (repoAt?.root ?? null) || before.home !== home) {
+      await update($, place, () => ({ cwd, root: repoAt?.root ?? null, home }))
+    }
+  } catch {
+    // No working directory on this host: the strip starts at the branch.
+  }
+}
+
+// Until the first request goes out: the session's model and the effort setting.
+async function readEngine($: EngineInterface) {
+  try {
+    const model = await $.session.model()
+    const effortLevel = ((await $.settings.read()) as { effortLevel?: unknown }).effortLevel
+    const effort = typeof effortLevel === 'string' ? effortLevel : null
+    await update($, engine, now => ({ ...now, model: now.model ?? model, effort: now.effort ?? effort }))
+  } catch {
+    // The first request fills them in.
+  }
+}
+
+function cacheOf(usage: TurnUsage): number | null {
+  const total = usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
+  return total > 0 ? usage.cache_read_input_tokens / total : null
 }
 
 async function readCompactWindow($: EngineInterface): Promise<number | undefined> {

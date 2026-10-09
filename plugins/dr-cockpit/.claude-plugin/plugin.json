@@ -54,13 +54,13 @@
     "layout": {
       "type": "string",
       "title": "Pane layout",
-      "description": "auto, full or compact. auto: the full layout docked beside the transcript, a compact strip when the pane sits above the prompt. full or compact: always that one. Anything else counts as auto.",
+      "description": "auto, full or compact. auto: the full layout docked beside the transcript, the compact strip (dr-status' two framed lines and the buttons) when the pane sits above the prompt. full or compact: always that one. Anything else counts as auto.",
       "default": "auto"
     },
     "sections": {
       "type": "string",
       "title": "Pane sections",
-      "description": "Which sections the pane shows, in order, comma-separated: context, usage, agents, plan, repo, guard. Empty shows all six.",
+      "description": "Which sections the full pane shows, in order, comma-separated: account, context, usage, agents, plan, repo, guard. Empty shows all seven.",
       "default": ""
     },
     "breakdownRows": {

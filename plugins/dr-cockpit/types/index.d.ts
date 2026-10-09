@@ -87,6 +87,36 @@ export type CockpitRefusal = {
   line: string
 }
 
+/** The account the session runs as, from its .claude.json and dr-status' config. */
+export type CockpitAccount = {
+  email: string | null
+  name: string | null
+  organization: string | null
+  role: string | null
+  /** Claude's billing type, such as `stripe_subscription`. */
+  billing: string | null
+  /** The config directory as dr-status keys it: `~/.claude`, `~/.claude-work`. */
+  key: string
+  /** The frame color dr-status assigns this account, as configured. */
+  color: string | null
+}
+
+/** Where the session runs, for the status strip's path. */
+export type CockpitPlace = {
+  cwd: string
+  /** The repository's root, when the working directory is in one. */
+  root: string | null
+  home: string | null
+}
+
+/** The main loop's model, effort and cache hit rate, as its last request had them. */
+export type CockpitEngine = {
+  model: string | null
+  effort: string | null
+  /** The share of the last main turn's input served from the cache, 0 to 1. */
+  cache: number | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'dr-cockpit': {
@@ -98,6 +128,9 @@ declare module 'claude-code' {
       plan: CockpitPlanItem[]
       repo: CockpitRepo | null
       refusals: CockpitRefusal[]
+      account: CockpitAccount | null
+      place: CockpitPlace | null
+      engine: CockpitEngine
       /** Rate-limit windows already alerted, as `<kind>@<resetsAt>`. */
       alerted: string[]
       /** The main session's context readings, oldest first, for the trend line. */

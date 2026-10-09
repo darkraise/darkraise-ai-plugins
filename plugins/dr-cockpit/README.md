@@ -17,6 +17,12 @@ prompt. In the full layout each section is a framed card in its own color, its
 headline on the title line:
 
 ```
+╭ Account ──────────────────────────── subscription ╮
+│ ● you@example.com                                 │
+│   You · Acme (admin)                              │
+│   Opus 5.5 · xhigh effort                         │
+│   config ~/.claude                                │
+╰───────────────────────────────────────────────────╯
 ╭ Context ─────────────────────────── 68% of handoff ╮
 │ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱┃▱▱▱▱▱┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
 │ 412k of 1.0M ┃ handoff 604k ┊ compacts 744k      │
@@ -56,6 +62,11 @@ category, each color matching its row. On a usage-limit meter `┊` marks how fa
 through its window the limit is, so a fill past it is spending faster than the
 window refills.
 
+- **Account** is who the session runs as: the email, name, organization and
+  role from the account's `.claude.json` (under `CLAUDE_CONFIG_DIR` when set),
+  the billing type, the model and effort the last request used, and the config
+  directory. Its frame takes the color `dr-status` assigns the account in
+  `~/.claude/dcc-statusline.json` (`DCC_STATUSLINE_CONFIG` when set).
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated
   locally with no API calls. **Hand off** appears in `dr-superpowers` sessions.
@@ -69,20 +80,28 @@ window refills.
 - **Repo** is the working tree's branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
-When the pane sits above the prompt (`layout` `auto`, the default), it switches to
-a compact strip of about seven rows, one per section:
+When the pane sits above the prompt (`layout` `auto`, the default), it draws
+what `dr-status` draws, with the cockpit's buttons under it: the frame in the
+account's color with its email on the top rule, the path, branch, model and
+effort, then the context, cache, cost and limit meters:
 
 ```
-ctx ▰▰▰▰▰▱▱▱ 68% · 412k/604k · 5h ▰▱▱▱ 23% · 7d ▰▰▱▱ 61% · $4.85
-▸ impl-sonnet-low: Task 4 · 4m  +2 done
-Plan 3/6 ▸ Task 4: Draw usage and agents
-feat/cockpit-pane-overhaul ↑3 · 2 changed · 1 untracked
-guard refused 1 git write
-[ Hand off ] [ Compact ]
+╭─ you@example.com ────────────────────────────────────────────────────────────────────────────────╮
+│ darkraise-ai-plugins/…/dr-cockpit · feat/cockpit-pane-overhaul* · Opus · xhigh                   │
+│ ctx ▰▰▱▱ 41% · cache ▰▰▰▱ 93% · $4.85 · 5h ▰▱▱ 23% · 7d ▰▰▱ 61%                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+[ Hand off ] [ Compact ] [ Settings ]
 ```
 
-Under 90 columns the usage meters take a line of their own. While the pane has
-the keyboard, `h` presses **Hand off**, `c` presses **Compact** and `s` opens the
+Each line shrinks the way `dr-status`' do, a step at a time until it fits: the
+path drops what leads to the repository, then its middle, then all but the
+leaf; the branch drops its counters, then shortens; the model drops its
+version; the meters narrow, drop the token count and reset times, and at last
+show the percentage alone. Below 48 columns the frame goes and the email takes
+a line of its own above them. The pane draws no Nerd Font icons. The context
+meter is the share of the model's window, as `dr-status` shows it; the hint
+line under the prompt keeps the handoff reading. While the pane has the
+keyboard, `h` presses **Hand off**, `c` presses **Compact** and `s` opens the
 settings.
 
 **Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
@@ -152,8 +171,8 @@ in your user settings
 | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | `showHint` | `true` | Add the handoff reading to the hint line under the prompt. |
 | `warnAt` | `80` | Where the yellow band appears, as a percentage of the handoff budget (1-99). |
-| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip above the prompt. `full` or `compact`: always that one. |
-| `sections` | empty | The pane's sections and their order, comma-separated: `context`, `usage`, `agents`, `plan`, `repo`, `guard`. Empty shows all six. |
+| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip (the `dr-status` lines and the buttons) above the prompt. `full` or `compact`: always that one. |
+| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `agents`, `plan`, `repo`, `guard`. Empty shows all seven. The compact strip always draws the `dr-status` lines. |
 | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
 | `limitAlertAt` | `90` | The usage-limit alert's line, in percent. `0` turns the alert off. |
