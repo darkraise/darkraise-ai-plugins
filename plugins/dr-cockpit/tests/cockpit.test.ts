@@ -689,9 +689,9 @@ describe('buttons', () => {
 
 describe('settings view', () => {
   test('toggles sections without losing the order or the last one', () => {
-    expect(sectionsToggled(['account', 'context', 'usage', 'agents', 'plan', 'repo', 'guard'], 'repo')).toBe('account,context,usage,agents,plan,guard')
+    expect(sectionsToggled(['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'], 'repo')).toBe('account,context,usage,shells,agents,plan,guard')
     expect(sectionsToggled(['plan', 'context'], 'usage')).toBe('plan,context,usage')
-    expect(sectionsToggled(['account', 'context', 'usage', 'agents', 'plan', 'repo'], 'guard')).toBe('')
+    expect(sectionsToggled(['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo'], 'guard')).toBe('')
     expect(sectionsToggled(['plan'], 'plan')).toBe('plan')
     expect(stepped(90, 5, 0, 100)).toBe(95)
     expect(stepped(100, 5, 0, 100)).toBe(100)
@@ -725,7 +725,7 @@ describe('settings view', () => {
         ['dr-cockpit.openAtStart', true],
         ['dr-cockpit.warnAt', 85],
         ['dr-cockpit.layout', 'compact'],
-        ['dr-cockpit.sections', 'account,context,usage,agents,plan,repo'],
+        ['dr-cockpit.sections', 'account,context,usage,shells,agents,plan,repo'],
       ])
       await ui.press({ key: 'settings-back' })
       expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
@@ -953,11 +953,17 @@ describe('shells and remote', () => {
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    // Shells is a card of its own, ahead of Agents, and Agents lists no shell.
+    expect((await ui.find({ key: 'shells' }))?.props.borderColor).toBe('yellow')
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev <1m$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Agents$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /No subagents yet\./ })).toBeDefined()
     await ui.unmount()
     await $.prompt.submit({ text: ENDED, wait: false, origin: { kind: 'task-notification' } } as never)
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
+    // With no shell left the card goes.
+    expect(await ui.find({ key: 'shells' })).toBeUndefined()
   })
 
   test('drop a shell TaskStop stopped', async ($, on) => {

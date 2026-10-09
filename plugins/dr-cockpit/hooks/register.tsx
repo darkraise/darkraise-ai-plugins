@@ -1158,29 +1158,40 @@ export const register: Register = (on, options) => {
           )
         }),
       ),
+      // The background shells still running, each with its command and age;
+      // the card is left out while there are none.
+      shells:
+        background.length > 0 &&
+        section(
+          'shells',
+          'Shells',
+          'yellow',
+          <Text key="shells-head" color="yellow">
+            $ {background.length} running
+          </Text>,
+          background.map(shell => (
+            <Text key={`shell-${shell.id}`} wrap="truncate-end">
+              <Text color="yellow" bold>
+                ${' '}
+              </Text>
+              <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
+              <Text color="yellow"> {now - shell.startedAt < 60_000 ? '<1m' : duration(now - shell.startedAt)}</Text>
+            </Text>
+          )),
+        ),
       agents: section(
         'agents',
-        'Agents & shells',
+        'Agents',
         'magenta',
         <Text key="agents-head">
-          {background.length > 0 && <Text color="yellow">$ {background.length} </Text>}
           {running.length > 0 && <Text color="cyan">● {running.length} running </Text>}
           {finished.length > 0 && <Text color="green">✓ {finished.length}</Text>}
         </Text>,
-        all.length === 0 && background.length === 0 && (
+        all.length === 0 && (
           <Text key="agents-none" dimColor>
-            No subagents or background shells yet.
+            No subagents yet.
           </Text>
         ),
-        background.map(shell => (
-          <Text key={`shell-${shell.id}`} wrap="truncate-end">
-            <Text color="yellow" bold>
-              ${' '}
-            </Text>
-            <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
-            <Text color="yellow"> {now - shell.startedAt < 60_000 ? '<1m' : duration(now - shell.startedAt)}</Text>
-          </Text>
-        )),
         recent.map(spawn => (
           <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
             <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'} </Text>
