@@ -48,6 +48,26 @@ export function sectionsFrom(text: string): Section[] {
   return once.length === 0 ? [...SECTIONS] : once
 }
 
+/**
+ * The sections setting after turning one section on or off: the shown order
+ * kept, a section turned on added last, and the last one left never turned
+ * off. All six in their own order is the empty setting.
+ */
+export function sectionsToggled(shown: readonly Section[], name: Section): string {
+  const next = shown.includes(name)
+    ? shown.length === 1
+      ? [...shown]
+      : shown.filter(one => one !== name)
+    : [...shown, name]
+  const isDefault = next.length === SECTIONS.length && next.every((one, index) => one === SECTIONS[index])
+  return isDefault ? '' : next.join(',')
+}
+
+/** A number setting one step up or down, kept within its range. */
+export function stepped(value: number, step: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value + step))
+}
+
 /** 465000 → "465k"; 1234567 → "1.2M". */
 export function kTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

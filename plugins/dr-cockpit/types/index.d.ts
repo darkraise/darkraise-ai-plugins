@@ -100,6 +100,8 @@ declare module 'claude-code' {
       refusals: CockpitRefusal[]
       /** Rate-limit windows already alerted, as `<kind>@<resetsAt>`. */
       alerted: string[]
+      /** Whether the pane shows the cockpit or its settings. */
+      view: 'cockpit' | 'settings'
       isBandHidden: boolean
       isNudged: boolean
       isPlanSession: boolean

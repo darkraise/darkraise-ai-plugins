@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
-import type { On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
+import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
 
 import {
   attributionIn,
@@ -9,6 +9,8 @@ import {
   levelOf,
   planWithUpdate,
   repoFromPorcelain,
+  sectionsToggled,
+  stepped,
   writesGitText,
 } from '../hooks/lib'
 
@@ -50,6 +52,14 @@ const MEASURE: SessionMeasureInput = {
   ],
   cost: { usd: 1.5 },
   changed: ['context', 'rateLimits'],
+}
+
+// The person typing /cockpit at a wide fullscreen terminal.
+const COCKPIT: CommandRunInput = {
+  command: 'cockpit',
+  args: '',
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: true, columns: 160 },
 }
 
 // What a compaction leaves: one row standing for the conversation.
@@ -489,14 +499,71 @@ describe('/cockpit', () => {
   test('says the pane opened when Claude Code draws it', async ($, on) => {
     world(on, { tokens: 284_000 })
     on('ui.open', () => ({ value: { isPlaced: true } }))
-    const answer = await $.command.run({ command: 'cockpit' })
+    const answer = await $.command.run(COCKPIT)
     expect(answer.text).toBe('Cockpit pane opened.')
   })
 
   test('says why when Claude Code holds the pane back', async ($, on) => {
     world(on, { tokens: 284_000 })
     on('ui.open', () => ({ value: { isPlaced: false, reason: 'this desktop app places no panes' } }))
-    const answer = await $.command.run({ command: 'cockpit' })
+    const answer = await $.command.run(COCKPIT)
     expect(answer.text).toBe('Cockpit pane is waiting: this desktop app places no panes')
+  })
+})
+
+describe('settings view', () => {
+  test('toggles sections without losing the order or the last one', () => {
+    expect(sectionsToggled(['context', 'usage', 'agents', 'plan', 'repo', 'guard'], 'repo')).toBe('context,usage,agents,plan,guard')
+    expect(sectionsToggled(['plan', 'context'], 'usage')).toBe('plan,context,usage')
+    expect(sectionsToggled(['context', 'usage', 'agents', 'plan', 'repo'], 'guard')).toBe('')
+    expect(sectionsToggled(['plan'], 'plan')).toBe('plan')
+    expect(stepped(90, 5, 0, 100)).toBe(95)
+    expect(stepped(100, 5, 0, 100)).toBe(100)
+    expect(stepped(0, -5, 0, 100)).toBe(0)
+  })
+
+  test('/cockpit settings opens the settings', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    await $.command.run({ ...COCKPIT, args: 'settings' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Settings' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'set-openAtStart-toggle' })).toBeDefined()
+  })
+
+  for (const surface of SURFACES) {
+    test(`writes each press through /config on ${surface}`, { options: { openAtStart: false, warnAt: 80 } }, async ($, on) => {
+      const writes: [string, unknown][] = []
+      world(on, { tokens: 284_000 })
+      on('config.set', (_$, e) => {
+        writes.push([e.key, e.value])
+        return { value: e.value }
+      })
+      await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
+      const ui = await $.ui.mount({ ...PANE, surface })
+      await ui.press({ key: 'pane-settings' })
+      await ui.press({ key: 'set-openAtStart-toggle' })
+      await ui.press({ key: 'set-warnAt-more' })
+      await ui.press({ key: 'set-layout-compact' })
+      await ui.press({ key: 'set-section-guard' })
+      expect(writes).toEqual([
+        ['dr-cockpit.openAtStart', true],
+        ['dr-cockpit.warnAt', 85],
+        ['dr-cockpit.layout', 'compact'],
+        ['dr-cockpit.sections', 'context,usage,agents,plan,repo'],
+      ])
+      await ui.press({ key: 'settings-back' })
+      expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
+    })
+  }
+
+  test('says when a setting is refused', async ($, on) => {
+    const toasts: string[] = []
+    world(on, { tokens: 284_000, toasts })
+    on('config.set', () => ({ deny: 'managed settings own it' }))
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'set-showHint-toggle' })
+    expect(toasts).toContain('dr-cockpit: showHint not saved: managed settings own it')
   })
 })

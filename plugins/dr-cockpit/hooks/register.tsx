@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderChildren, TurnUsage } from 'claude-code'
+import type { ConfigValue, EngineInterface, Register, RenderChildren, TurnUsage } from 'claude-code'
 
 import type {
   CockpitBreakdown,
@@ -25,7 +25,10 @@ import {
   positive,
   rampColor,
   repoFromPorcelain,
+  SECTIONS,
   sectionsFrom,
+  sectionsToggled,
+  stepped,
   warnShare,
   writesGitText,
 } from './lib'
@@ -42,6 +45,9 @@ const MAX_BREAKDOWN_ROWS = 12
 const ONE_LINE_COLUMNS = 90
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
+// The handoff budget's step and ceiling in the settings view.
+const HANDOFF_STEP = 50_000
+const MAX_HANDOFF = 2_000_000
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
 const budget = atom({ plugin: 'dr-cockpit', key: 'budget' } as const, null)
@@ -56,6 +62,7 @@ const isBandHidden = atom({ plugin: 'dr-cockpit', key: 'isBandHidden' } as const
 const isNudged = atom({ plugin: 'dr-cockpit', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dr-cockpit', key: 'isPlanSession' } as const, false)
 const alerted = atom({ plugin: 'dr-cockpit', key: 'alerted' } as const, [])
+const view = atom({ plugin: 'dr-cockpit', key: 'view' } as const, 'cockpit')
 
 type Options = {
   handoffTokens: number
@@ -100,6 +107,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'cockpit',
       description: 'Show context, usage, subagents, the plan and the repo in a pane',
+      argumentHint: '[settings]',
     })
     compactWindow = await readCompactWindow($)
     await refresh($, tuning, compactWindow)
@@ -109,8 +117,11 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'cockpit' }, async $ => {
-    const opened = await $.ui.open(paneArgs)
+  on('command.run', { command: 'cockpit' }, async ($, e) => {
+    const wantsSettings = e.args.trim().toLowerCase() === 'settings'
+    await update($, view, () => (wantsSettings ? 'settings' : 'cockpit'))
+    // The settings take the keyboard and as many rows as they need.
+    const opened = await $.ui.open(wantsSettings ? { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, focus: true } : paneArgs)
     await refreshDetail($)
 
     // A surface that seats no panes (an older desktop) holds it undrawn: say
@@ -297,8 +308,109 @@ export const register: Register = (on, options) => {
           />
         )}
         <Button key="pane-compact" label="Compact" hotkey="c" onPress={() => $.session.compact()} />
+        <Button key="pane-settings" label="Settings" hotkey="s" onPress={() => update($, view, () => 'settings')} />
       </Box>
     )
+
+    if ((await read($, view)) === 'settings') {
+      // Each press writes the setting as /config would; Claude Code then
+      // reloads the mod with it, so the rows below always show what is saved.
+      const set = (key: keyof Options, value: ConfigValue) => setOption($, key, value)
+      const row = (key: string, label: string, ...controls: RenderChildren[]) => (
+        <Box key={key} flexDirection="row" flexWrap="wrap">
+          <Text>{label.padEnd(16)}</Text>
+          {controls}
+        </Box>
+      )
+      const toggle = (key: keyof Options, label: string, isOn: boolean) =>
+        row(
+          `set-${key}`,
+          label,
+          <Button key={`set-${key}-toggle`} label={isOn ? 'On' : 'Off'} variant={isOn ? 'primary' : 'secondary'} onPress={() => set(key, !isOn)} />,
+        )
+      const number = (key: keyof Options, label: string, value: string, onLess: () => unknown, onMore: () => unknown) =>
+        row(
+          `set-${key}`,
+          label,
+          <Text key={`set-${key}-value`} bold>
+            {value.padEnd(6)}
+          </Text>,
+          <Button key={`set-${key}-less`} label="-" onPress={onLess} />,
+          <Button key={`set-${key}-more`} label="+" onPress={onMore} />,
+        )
+
+      return (
+        <Box flexDirection="column">
+          <Text bold>Settings</Text>
+          <Box flexDirection="column" paddingLeft={INDENT}>
+            {toggle('openAtStart', 'Show at start', openAtStart)}
+            {row(
+              'set-layout',
+              'Layout',
+              ...(['auto', 'full', 'compact'] as const).map(choice => (
+                <Button
+                  key={`set-layout-${choice}`}
+                  label={choice}
+                  variant={layout === choice ? 'primary' : 'secondary'}
+                  onPress={() => set('layout', choice)}
+                />
+              )),
+            )}
+            <Text key="set-sections">Sections</Text>
+            {/* Three to a line, under their label, so they fit a docked pane. */}
+            <Box key="set-sections-list" flexDirection="column" paddingLeft={INDENT}>
+              {[SECTIONS.slice(0, 3), SECTIONS.slice(3)].map((line, index) => (
+                <Box key={`set-sections-${index}`} flexDirection="row">
+                  {line.map(name => (
+                    <Button
+                      key={`set-section-${name}`}
+                      label={`${shown.includes(name) ? '✓' : '○'} ${name}`}
+                      variant={shown.includes(name) ? 'primary' : 'secondary'}
+                      onPress={() => set('sections', sectionsToggled(shown, name))}
+                    />
+                  ))}
+                </Box>
+              ))}
+            </Box>
+            {number(
+              'handoffTokens',
+              'Handoff budget',
+              handoffTokens > 0 ? kTokens(handoffTokens) : 'auto',
+              () => set('handoffTokens', stepped(handoffTokens, -HANDOFF_STEP, 0, MAX_HANDOFF)),
+              () => set('handoffTokens', stepped(handoffTokens, HANDOFF_STEP, 0, MAX_HANDOFF)),
+            )}
+            {number(
+              'warnAt',
+              'Band at',
+              `${warnPercent}%`,
+              () => set('warnAt', stepped(warnPercent, -5, 5, 95)),
+              () => set('warnAt', stepped(warnPercent, 5, 5, 95)),
+            )}
+            {number(
+              'limitAlertAt',
+              'Limit alert at',
+              limitAlertAt > 0 ? `${limitAlertAt}%` : 'off',
+              () => set('limitAlertAt', stepped(limitAlertAt, -5, 0, 100)),
+              () => set('limitAlertAt', stepped(limitAlertAt, 5, 0, 100)),
+            )}
+            {number(
+              'breakdownRows',
+              'Context rows',
+              String(breakdownRows),
+              () => set('breakdownRows', stepped(breakdownRows, -1, 0, MAX_BREAKDOWN_ROWS)),
+              () => set('breakdownRows', stepped(breakdownRows, 1, 0, MAX_BREAKDOWN_ROWS)),
+            )}
+            {toggle('showHint', 'Hint reading', showHint)}
+            {toggle('nudgeModel', 'Handoff note', nudgeModel)}
+            {toggle('guardAttribution', 'Attr. guard', guardAttribution)}
+          </Box>
+          <Text dimColor>Saved to your user settings, like /config.</Text>
+          <Box key="settings-actions">
+            <Button key="settings-back" label="Back" hotkey="b" onPress={() => update($, view, () => 'cockpit')} />
+          </Box>
+        </Box>
+      )
+    }
     const running = all.filter(one => !one.isDone)
     const finished = all.filter(one => one.isDone)
     const doneCount = items.filter(item => item.status === 'completed').length
@@ -573,6 +685,12 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
 
 // The pane's slower readings: the /context breakdown, estimated locally, and
 // the working tree's git state. Read while the pane is up, never per tool call.
+/** Writes one of the mod's own settings as /config would, saying why if refused. */
+async function setOption($: EngineInterface, key: string, value: ConfigValue) {
+  const saved = await $.config.set({ key: `dr-cockpit.${key}`, value })
+  if (saved.deny !== undefined) $.ui.toast(`dr-cockpit: ${key} not saved: ${saved.deny}`)
+}
+
 async function refreshDetail($: EngineInterface) {
   try {
     const figures = await $.session.usage({ breakdown: 'summary' })

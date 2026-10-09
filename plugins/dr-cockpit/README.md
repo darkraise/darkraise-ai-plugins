@@ -66,7 +66,16 @@ guard refused 1 git write
 ```
 
 Under 90 columns the usage meters take a line of their own. While the pane has
-the keyboard, `h` presses **Hand off** and `c` presses **Compact**.
+the keyboard, `h` presses **Hand off**, `c` presses **Compact** and `s` opens the
+settings.
+
+**Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
+mod's settings: whether it shows at session start, the layout, which sections
+show, the handoff budget, where the band and the limit alert appear, how many
+context rows to list, and the hint, note and guard switches. Each press saves
+the setting the way `/config` does, and the pane redraws with it. **Back** (`b`)
+returns to the cockpit.
+
 
 The breakdown and the repo are read after each turn while the pane is open, and
 when it opens; nothing in the pane costs the model context.
@@ -105,7 +114,8 @@ Code" or a Claude session link). Human co-authors pass.
 
 ## Settings
 
-Set these in `/config` under the plugin's rows, or in your user settings
+Set these in the pane's settings view, in `/config` under the plugin's rows, or
+in your user settings
 (`~/.claude/settings.json`; project settings are not read) under
 `pluginConfigs["dr-cockpit@darkraise"].options`, then start a new session:
 
