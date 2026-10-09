@@ -8,9 +8,15 @@ import {
   billingLabel,
   budgetFor,
   duration,
+  elapsed,
   fitStatus,
   levelOf,
+  limitForecast,
   modelName,
+  nowBadge,
+  nowLine,
+  parseLedger,
+  planTasks,
   planWithUpdate,
   repoFromPorcelain,
   runsWidth,
@@ -21,9 +27,21 @@ import {
   stepped,
   termColor,
   track,
+  turnsToBudget,
   windowElapsed,
   writesGitText,
 } from '../hooks/lib'
+import type { ActivityInput } from '../hooks/lib'
+import {
+  discordBody,
+  excerpt,
+  isDiscordWebhook,
+  maskWebhook,
+  mentionId,
+  notifyKindsFrom,
+  notifyKindsToggled,
+  redact,
+} from '../hooks/notify'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const BAND = {
@@ -86,6 +104,16 @@ type World = {
   toasts?: string[]
   notes?: string[]
   env?: Record<string, string>
+  /** Files the plugin reads, by path, with their modification time. */
+  files?: Record<string, { text: string; mtimeMs?: number }>
+  /** What the plugin writes, by path. */
+  written?: Record<string, string>
+  /** Each request the plugin sends through $.http.fetch. */
+  fetches?: { url: string; method: string; body: Record<string, unknown> }[]
+  /** How Claude Code answers the pane opening; placed unless said. */
+  open?: { isPlaced: true } | { isPlaced: false; reason: string }
+  /** Tools that answer in their own way, by name. */
+  tools?: Record<string, () => Promise<{ result: unknown; text: string }> | { result: unknown; text: string }>
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -93,7 +121,7 @@ type World = {
 // and every row the plugin appends recorded in `w.notes`.
 function world(on: On, w: World) {
   mock.env(on, w.env ?? {})
-  mock.clock(on, { now: 1_000_000 })
+  const clock = mock.clock(on, { now: 1_000_000 })
   on('command.register', () => ({ value: undefined }) as never)
   on('session.start', (_$, e) => e as never)
   on('session.usage', (_$, e) => ({
@@ -109,14 +137,42 @@ function world(on: On, w: World) {
     },
   }))
   on('settings.read', () => ({ value: w.settings ?? {} }))
-  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  on('tool.call', (_$, e) => w.tools?.[String(e.tool)]?.() ?? { result: 'ok', text: 'ok' })
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'agent-1' }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
+  on('ui.open', () => ({ value: w.open ?? { isPlaced: true } }))
   on('session.compact', (_$, e) => ({ messages: e.messages }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
-  on('process.run', () => ({
-    value: { exitCode: 0, stdout: PORCELAIN, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
-  }))
+  on('process.run', (_$, e) => {
+    const argv = e.argv.join(' ')
+    const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? '/home/me/code/shop/.git\n' : PORCELAIN
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('fs.stat', (_$, e) => {
+    const file = w.files?.[e.path]
+    if (file === undefined) throw new Error('ENOENT')
+    return { value: { kind: 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: false } }
+  })
+  on('fs.list', (_$, e) => {
+    const prefix = `${e.path}/`
+    const names = new Set(
+      Object.keys(w.files ?? {})
+        .filter(path => path.startsWith(prefix))
+        .map(path => path.slice(prefix.length).split('/')[0] ?? ''),
+    )
+    if (names.size === 0) throw new Error('ENOENT')
+    return { value: [...names].map(name => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })) }
+  })
+  on('fs.write', (_$, e) => {
+    if (w.written !== undefined) w.written[e.path] = e.text
+    return { value: undefined }
+  })
+  on('http.fetch', (_$, e) => {
+    w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(e.init?.body ?? '{}') as Record<string, unknown> })
+    return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
+  })
   on('ui.panes', () => ({ value: [{ id: 'dr-cockpit', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
   on('session.append', (_$, e, next) => {
     const part = (e.message as { content?: { text?: string }[] }).content?.[0]
@@ -134,14 +190,16 @@ function world(on: On, w: World) {
     if (e.component === 'PromptHint') return h(Text, {}, e.props.tail ?? '') as RenderElement
     return h(Box, { key: 'engine' }) as RenderElement
   })
+  return clock
 }
 
 // A signed-in account with a frame color in dr-status' config, working in a
 // repository under home.
 const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
-function signedIn(on: On) {
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+function signedIn(on: On, files: World['files'] = {}) {
   on('fs.read', (_$, e) => {
+    const file = files[e.path]
+    if (file !== undefined) return { value: file.text }
     if (e.path === '/home/me/.claude.json') {
       return {
         value: JSON.stringify({
@@ -183,8 +241,9 @@ describe('budget rule', () => {
   test('reads autoCompactWindow from the settings', async ($, on) => {
     world(on, { tokens: 610_000, window: 1_000_000, settings: { autoCompactWindow: 800_000 } })
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Hand off: 610k of 604k/ })).toBeDefined()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /610k of 1\.0M ┃ handoff 604k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^101% of handoff$/ })).toBeDefined()
   })
 })
 
@@ -253,42 +312,46 @@ describe('attribution guard', () => {
   })
 })
 
-describe('handoff band', () => {
-  test('stays empty well under the budget', async ($, on) => {
-    world(on, { tokens: 100_000 })
+describe('handoff reading', () => {
+  test('shows in no band and no hint line, past the budget too', async ($, on) => {
+    world(on, { tokens: 470_000 })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...BAND, surface })
-      expect(await ui.find({ text: /handoff/i })).toBeUndefined()
-      await ui.unmount()
+      const band = await $.ui.mount({ ...BAND, surface })
+      expect(await band.find({ text: /hand ?off/i })).toBeUndefined()
+      await band.unmount()
+      const hint = await $.ui.mount({ ...HINT, surface })
+      expect(await hint.find({ text: /handoff/ })).toBeUndefined()
+      await hint.unmount()
     }
   })
 
-  test('warns near the budget and hides on request', async ($, on) => {
-    world(on, { tokens: 400_000 })
+  test('joins the strip above the prompt once the context nears the budget', async ($, on) => {
+    const w: World = { ...SIGNED_IN, tokens: 284_000 }
+    world(on, w)
+    signedIn(on)
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...BAND, surface })
-      expect(await ui.find({ type: 'Text', text: /Nearing handoff: 400k of 465k \(86%\)/ })).toBeDefined()
-      expect(await ui.find({ key: 'handoff' })).toBeUndefined()
-      await ui.unmount()
-    }
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    await ui.press({ key: 'hide' })
-    expect(await ui.find({ text: /handoff/i })).toBeUndefined()
+    let ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^handoff $/ })).toBeUndefined()
+    await ui.unmount()
+
+    w.tokens = 400_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^handoff $/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^86%$/ })).toBeDefined()
   })
 
-  test('in a plan session, offers the handoff and sends the note once', async ($, on) => {
+  test('in a plan session, offers the handoff in the pane and sends the note once', async ($, on) => {
     const notes: string[] = []
     world(on, { tokens: 470_000, notes })
     await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(1)
     expect(notes[0]).toMatch(/budget: 470k of 465k — handoff/)
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Hand off: 470k of 465k/ })).toBeDefined()
-    expect(await ui.find({ key: 'handoff' })).toBeDefined()
-    expect(await ui.find({ key: 'hide' })).toBeUndefined()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
   })
 
   test('stays quiet to the model outside a plan session', async ($, on) => {
@@ -298,51 +361,24 @@ describe('handoff band', () => {
     expect(notes).toEqual([])
   })
 
-  test('clears after a compaction and re-arms the note and Hide', async ($, on) => {
+  test('clears after a compaction and re-arms the note', async ($, on) => {
     const notes: string[] = []
-    const w: World = { tokens: 400_000, notes }
+    const w: World = { tokens: 470_000, notes }
     world(on, w)
     await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
-    const warn = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    await warn.press({ key: 'hide' })
-    await warn.unmount()
-
-    w.tokens = 470_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(1)
 
     await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
     w.tokens = undefined
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const cleared = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await cleared.find({ text: /hand off/i })).toBeUndefined()
+    const cleared = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await cleared.find({ type: 'Text', text: /no reading yet/ })).toBeDefined()
     await cleared.unmount()
-
-    w.tokens = 400_000
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const back = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await back.find({ type: 'Text', text: /Nearing handoff: 400k/ })).toBeDefined()
-    await back.unmount()
 
     w.tokens = 480_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(2)
-  })
-})
-
-describe('hint line', () => {
-  test('carries the reading under the prompt', async ($, on) => {
-    world(on, { tokens: 284_000 })
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...HINT, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: '284k/465k handoff' })).toBeDefined()
-  })
-
-  test('is off when configured off', { options: { showHint: false } }, async ($, on) => {
-    world(on, { tokens: 284_000 })
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...HINT, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /handoff/ })).toBeUndefined()
   })
 })
 
@@ -436,11 +472,11 @@ describe('cockpit pane', () => {
 })
 
 describe('settings', () => {
-  test('warnAt moves the band', { options: { warnAt: 70 } }, async ($, on) => {
+  test('warnAt moves where the strip shows the handoff', { options: { warnAt: 70 } }, async ($, on) => {
     world(on, { tokens: 340_000 })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Nearing handoff: 340k of 465k \(73%\)/ })).toBeDefined()
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
   })
 
   test('sections picks and orders the pane', { options: { sections: 'plan, repo' } }, async ($, on) => {
@@ -554,14 +590,12 @@ describe('compact layout', () => {
 describe('/cockpit', () => {
   test('says the pane opened when Claude Code draws it', async ($, on) => {
     world(on, { tokens: 284_000 })
-    on('ui.open', () => ({ value: { isPlaced: true } }))
     const answer = await $.command.run(COCKPIT)
     expect(answer.text).toBe('Cockpit pane opened.')
   })
 
   test('says why when Claude Code holds the pane back', async ($, on) => {
-    world(on, { tokens: 284_000 })
-    on('ui.open', () => ({ value: { isPlaced: false, reason: 'this desktop app places no panes' } }))
+    world(on, { tokens: 284_000, open: { isPlaced: false, reason: 'this desktop app places no panes' } })
     const answer = await $.command.run(COCKPIT)
     expect(answer.text).toBe('Cockpit pane is waiting: this desktop app places no panes')
   })
@@ -580,7 +614,6 @@ describe('settings view', () => {
 
   test('/cockpit settings opens the settings', async ($, on) => {
     world(on, { tokens: 284_000 })
-    on('ui.open', () => ({ value: { isPlaced: true } }))
     await $.command.run({ ...COCKPIT, args: 'settings' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Settings' })).toBeDefined()
@@ -619,8 +652,8 @@ describe('settings view', () => {
     on('config.set', () => ({ deny: 'managed settings own it' }))
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'set-showHint-toggle' })
-    expect(toasts).toContain('dr-cockpit: showHint not saved: managed settings own it')
+    await ui.press({ key: 'set-guardAttribution-toggle' })
+    expect(toasts).toContain('dr-cockpit: guardAttribution not saved: managed settings own it')
   })
 })
 
@@ -681,7 +714,6 @@ describe('account', () => {
 
   test('leaves the card out when no account is found', async ($, on) => {
     world(on, { tokens: 284_000 })
-    on('ui.open', () => ({ value: { isPlaced: true } }))
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Account' })).toBeUndefined()
@@ -725,5 +757,313 @@ describe('status strip', () => {
     expect(last.tiers).toEqual([3, 3])
     expect(last.lines.every(line => runsWidth(line) <= 30)).toBe(true)
     expect(text(last.lines[0]).endsWith('…')).toBe(true)
+  })
+})
+
+const WEBHOOK = 'https://discord.com/api/webhooks/123456789012/abcDEF_token-x'
+const IDLE: ActivityInput = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
+const flat = (runs: { text: string }[]) => runs.map(run => run.text).join('')
+
+describe('forecasts', () => {
+  test('count the turns left to the budget from recent growth', () => {
+    expect(turnsToBudget([100_000, 120_000], 465_000)).toBeNull()
+    expect(turnsToBudget([100_000, 120_000, 140_000, 160_000], 465_000)).toBe(16)
+    // A compaction's drop is not growth.
+    expect(turnsToBudget([300_000, 40_000, 60_000, 80_000], 465_000)).toBe(20)
+    expect(turnsToBudget([400_000, 420_000, 470_000], 465_000)).toBeNull()
+    expect(turnsToBudget([200_000, 200_000, 200_000], 465_000)).toBeNull()
+  })
+
+  test('say whether a limit lasts to its reset at the pace so far', () => {
+    const hour = 3_600_000
+    // Two hours into five, at 60%: 100% comes in 1h20m, before the reset.
+    expect(limitForecast('five_hour', 60, 3 * hour, 0)).toBe((40 / 60) * 2 * hour)
+    // Two hours in at 20%: it lasts.
+    expect(limitForecast('five_hour', 20, 3 * hour, 0)).toBe('pace')
+    // Too young a window, or one of unknown length, says nothing.
+    expect(limitForecast('five_hour', 20, 5 * hour - 60_000, 0)).toBeNull()
+    expect(limitForecast('spend_limit', 50, hour, 0)).toBeNull()
+  })
+
+  test('mark the context card and the limit meters', async ($, on) => {
+    const w: World = { tokens: 100_000 }
+    world(on, w)
+    for (const tokens of [100_000, 300_000, 400_000]) {
+      w.tokens = tokens
+      await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
+    }
+    // 1h50m left of 5h at 78%: it runs out in about 53m.
+    await $.session.measure({ ...MEASURE, rateLimits: [{ kind: 'five_hour', percentUsed: 78, resetsAt: new Date(1_000_000 + 6_600_000).toISOString() }] })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /≈1 turn$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /runs out in 53m, before reset/ })).toBeDefined()
+  })
+})
+
+describe('now row', () => {
+  test('reads each state on one line', () => {
+    const at = 200_000
+    expect(flat(nowLine({ ...IDLE }, at))).toBe('○ idle')
+    expect(flat(nowLine({ ...IDLE, kind: 'running', since: 66_000, turnStartedAt: 66_000, step: 18, tool: 'Bash', agent: 'impl-sonnet-low' }, at))).toBe(
+      '● running 2m14s · step 18 · Bash in impl-sonnet-low',
+    )
+    expect(flat(nowLine({ ...IDLE, kind: 'waiting', since: 158_000, detail: 'Bash: git push', isSent: true }, at))).toBe('⏳ approve? Bash: git push · 42s · Discord ✓')
+    expect(flat(nowLine({ ...IDLE, kind: 'idle', lastTurnMs: 760_000, endedAt: 20_000 }, at))).toBe('○ idle · last turn 12m40s · ended 3m ago')
+    expect(flat(nowBadge({ ...IDLE }, at))).toBe('')
+    expect(flat(nowBadge({ ...IDLE, kind: 'running', since: 66_000, turnStartedAt: 66_000, tool: 'Bash' }, at))).toBe('● 2m14s · Bash')
+    expect(elapsed(3_725_000)).toBe('1h02m')
+  })
+
+  test('follows a turn from start to end, and its tool calls', async ($, on) => {
+    const w: World = { tokens: 50_000 }
+    const clock = world(on, w)
+    w.tools = {
+      Read: async () => {
+        await clock.sleep(5_000)
+        return { result: 'ok', text: 'ok' }
+      },
+    }
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    const reading = $.tool.call({ tool: 'Read', file_path: 'a.md' })
+    await clock.advance(2_000)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /running 2s · Read/ })).toBeDefined()
+    await ui.unmount()
+    await clock.advance(4_000)
+    await reading
+    await $.turn.complete({ answer: 'ok', durationMs: 6_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /○ idle · last turn 6s/ })).toBeDefined()
+  })
+
+  test('rides on the strip\'s top rule while a turn runs', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on)
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com ─{74} ● 0s ─╮$/ })).toBeDefined()
+  })
+})
+
+describe('discord', () => {
+  test('knows a webhook, masks it, and reads a mention', () => {
+    expect(isDiscordWebhook(WEBHOOK)).toBe(true)
+    expect(isDiscordWebhook('https://ptb.discord.com/api/webhooks/1/x')).toBe(true)
+    expect(isDiscordWebhook('https://example.com/api/webhooks/1/x')).toBe(false)
+    expect(maskWebhook(WEBHOOK)).toBe('discord.com/…/1234…/••••')
+    expect(mentionId('<@123456789>')).toBe('123456789')
+    expect(mentionId('me')).toBeNull()
+  })
+
+  test('masks secrets and cuts excerpts', () => {
+    expect(redact('curl -H "Authorization: Bearer abcdefghijkl" x')).toBe('curl -H "Authorization: Bearer [token]" x')
+    expect(redact('export GH=ghp_abcdefghijklmnopqrstuvwxyz0123')).toBe('export GH=[token]')
+    expect(redact('API_KEY=hunter2 make')).toBe('API_KEY=[hidden] make')
+    expect(redact(`post ${WEBHOOK}`)).toBe('post [webhook]')
+    expect(excerpt('a'.repeat(20), 10)).toBe(`${'a'.repeat(9)}…`)
+  })
+
+  test('picks kinds and keeps the default set as the empty setting', () => {
+    expect(notifyKindsFrom('')).toEqual(['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit'])
+    expect(notifyKindsFrom('done, nope, done')).toEqual(['done'])
+    expect(notifyKindsToggled(notifyKindsFrom(''), 'agent')).toBe('ask,question,done,error,blocked,budget,limit,agent')
+    expect(notifyKindsToggled(['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit', 'agent'], 'agent')).toBe('')
+    expect(notifyKindsToggled(['done'], 'done')).toBe('none')
+  })
+
+  test('mentions the person only for what needs them', () => {
+    const place = { host: 'devbox', repo: 'shop', branch: 'feat/x', tmux: 'work', account: '~/.claude' }
+    const ping = discordBody({ kind: 'ask', title: '⏳ Waiting for approval', detail: 'Bash: git push' }, place, { mention: '42424242', isBrief: false, now: 0 })
+    expect(ping.content).toBe('<@42424242>')
+    expect(ping.allowed_mentions).toEqual({ parse: [], users: ['42424242'] })
+    const embed = (ping.embeds as Record<string, unknown>[])[0]
+    expect(embed?.author).toEqual({ name: 'devbox · shop' })
+    expect(embed?.footer).toEqual({ text: 'dr-cockpit · ~/.claude · tmux work' })
+    expect(embed?.description).toBe('Bash: git push')
+    const quiet = discordBody({ kind: 'done', title: '✅ Done', detail: 'the answer' }, place, { mention: '42424242', isBrief: true, now: 0 })
+    expect(quiet.content).toBeUndefined()
+    expect(quiet.flags).toBe(4096)
+    expect((quiet.embeds as Record<string, unknown>[])[0]?.description).toBeUndefined()
+  })
+
+  test('sends a long turn\'s end, and nothing without a webhook', { options: { notifyAfter: 60 } }, async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches })
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.turn.complete({ answer: 'quick', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(0)
+    await $.turn.start({ text: 'go', turnId: 't2' })
+    await $.turn.complete({ answer: 'Done. API_KEY=hunter2', durationMs: 125_000, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(fetches).toHaveLength(1)
+    expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
+    const embed = (fetches[0]?.body.embeds as Record<string, unknown>[])[0]
+    expect(embed?.title).toBe('✅ Done in 2m05s')
+    expect(embed?.description).toBe('Done. API_KEY=[hidden]')
+    expect(embed?.author).toEqual({ name: 'devbox · shop' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Discord ✓/ })).toBeUndefined()
+  })
+
+  test('says nothing when no webhook is set', { options: { notifyAfter: 0 } }, async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toEqual([])
+  })
+
+  test('asks for an answer, then edits the message once it comes', { options: { notifyAskAfter: 0 } }, async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches })
+    mock.store(on, { notifyUrl: WEBHOOK, notifyMention: '42424242' })
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.tool.call({ tool: 'AskUserQuestion', questions: [{ question: 'Which layout?', header: 'Layout', multiSelect: false, options: [{ label: 'Compact', description: '' }, { label: 'Full', description: '' }] }] })
+    expect(fetches.map(one => one.method)).toEqual(['POST', 'PATCH'])
+    expect(fetches[0]?.body.content).toBe('<@42424242>')
+    const asked = (fetches[0]?.body.embeds as Record<string, unknown>[])[0]
+    expect(asked?.title).toBe('❓ Claude is asking')
+    expect(asked?.description).toBe('Which layout?\n1. Compact  2. Full')
+    expect(fetches[1]?.url).toBe(`${WEBHOOK}/messages/m1`)
+    expect((fetches[1]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('✓ Answered')
+  })
+
+  test('says when a turn fails', async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches })
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.turn.complete({ answer: 'API Error: 529 overloaded', durationMs: 360_000, isAborted: false, turnId: 't1', reason: 'error' })
+    expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('❌ Turn failed: API Error: 529 overloaded')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /✗ last turn failed/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Discord ✓/ })).toBeDefined()
+  })
+
+  test('takes the webhook in the settings view and shows it masked', async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches })
+    mock.store(on, {})
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect(await ui.find({ type: 'Text', text: /not set/ })).toBeDefined()
+    await ui.press({ key: 'set-notify-url-edit' })
+    await ui.input({ key: 'set-notify-url-input', text: 'https://example.com/hook', kind: 'submit' })
+    expect(await ui.find({ type: 'Text', text: /not a Discord webhook URL/ })).toBeDefined()
+    await ui.input({ key: 'set-notify-url-input', text: WEBHOOK, kind: 'submit' })
+    expect(await ui.find({ type: 'Text', text: /discord\.com\/…\/1234…\/••••/ })).toBeDefined()
+    await ui.press({ key: 'set-notify-test' })
+    expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
+    expect(JSON.stringify(await ui.drawn())).not.toContain('abcDEF_token')
+  })
+
+  test('/cockpit notify sets, tests and refuses', async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches })
+    mock.store(on, {})
+    await $.session.start(START)
+    expect((await $.command.run({ ...COCKPIT, args: 'notify url https://example.com/x' })).text).toBe('not a Discord webhook URL')
+    expect((await $.command.run({ ...COCKPIT, args: `notify url ${WEBHOOK}` })).text).toBe('Discord webhook saved.')
+    expect((await $.command.run({ ...COCKPIT, args: 'notify test' })).text).toBe('Test message sent to Discord.')
+    expect(fetches).toHaveLength(1)
+  })
+})
+
+describe('run card', () => {
+  const LEDGER = [
+    '# SDD ledger — plan: docs/plans/p.md',
+    'Task 1: implementer dr-superpowers:impl-sonnet-low (assigned; base abc1234)',
+    'Task 1: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none',
+    'Task 2: implementer dr-superpowers:impl-sonnet-low (assigned; base def5678)',
+    'Task 2: fix round 2/5 (1 addressed, 1 open — meter width; commits c..d; fresh)',
+  ].join('\n')
+  const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n\n### Task 3: Ship it\n'
+  const runFiles = (ledger: string): World['files'] => ({
+    '/home/me/code/shop/.superpowers/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 },
+    '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
+  })
+
+  test('reads the ledger and the plan', () => {
+    const ledger = parseLedger(`${LEDGER}\nGroup 3-4: review round 1/5 (open)\nTask 5: BLOCKED — impl exhausted — pick a rule\nFinal review: clean (commits a..b)`)
+    expect(ledger.plan).toBe('docs/plans/p.md')
+    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
+      [1, 'complete', null],
+      [2, 'assigned', '2/5'],
+      [3, 'assigned', '1/5'],
+      [4, 'assigned', '1/5'],
+      [5, 'blocked', null],
+    ])
+    expect(ledger.tasks[0]?.isClean).toBe(true)
+    expect(ledger.tasks[4]?.reason).toBe('impl exhausted — pick a rule')
+    expect(ledger.isFinished).toBe(true)
+    expect(planTasks(PLAN)).toEqual([
+      { n: 1, title: 'Add the helpers' },
+      { n: 2, title: 'Draw the card' },
+      { n: 3, title: 'Ship it' },
+    ])
+  })
+
+  test('replaces the plan card in a dr-superpowers run', async ($, on) => {
+    const files = runFiles(LEDGER)
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^1\/3$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /round 2\/5 · impl-sonnet-low/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
+  })
+
+  test('says a blocked task once, in red and on Discord', async ($, on) => {
+    const files = runFiles(LEDGER)
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.session.start(START)
+    expect(fetches).toHaveLength(0)
+    const ledger = files?.['/home/me/code/shop/.superpowers/sdd/p/progress.md']
+    if (ledger !== undefined) ledger.text += '\nTask 2: BLOCKED — impl exhausted — pick a meter width rule'
+    await $.tool.call({ tool: 'Bash', command: 'echo x >> .superpowers/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'cat .superpowers/sdd/p/progress.md' })
+    expect(fetches).toHaveLength(1)
+    expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('🛑 Task 2 blocked')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^1 blocked$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /BLOCKED · impl exhausted/ })).toBeDefined()
+  })
+
+  test('offers Resume when a recent handoff waits', async ($, on) => {
+    const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
+  })
+})
+
+describe('state file', () => {
+  test('tells dr-status what the turn and the run are doing', async ($, on) => {
+    const written: Record<string, string> = {}
+    const clock = world(on, { ...SIGNED_IN, written })
+    signedIn(on)
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await clock.advance(600)
+    const state = JSON.parse(written['/home/me/.claude/dr-cockpit/state/sess-1.json'] ?? '{}') as { activity?: { kind?: string; since?: number }; updatedAt?: number }
+    expect(state.activity).toEqual({ kind: 'running', since: 1000, tool: null })
+    expect(state.updatedAt).toBe(1000)
   })
 })

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "dr-cockpit",
-  "description": "A Claude Code mod for long sessions: a cockpit pane of context, usage limits, subagents, the plan and the repo; a handoff reading under the prompt and a band near the budget; and a guard that keeps AI attribution out of commits and pull requests.",
-  "version": "0.3.0",
+  "description": "A Claude Code mod for long sessions: a cockpit pane of what the session is doing, context against its handoff budget, usage limits with forecasts, subagents, the dr-superpowers run and the repo; Discord notifications when a turn needs you or ends; and a guard that keeps AI attribution out of commits and pull requests.",
+  "version": "0.4.0",
   "author": {
     "name": "Darkraise"
   },
@@ -39,16 +39,10 @@
       "description": "Drop the commit trailer and pull request footer Claude Code asks for, and refuse commits and pull requests that still carry AI attribution.",
       "default": true
     },
-    "showHint": {
-      "type": "boolean",
-      "title": "Show the handoff reading under the prompt",
-      "description": "Add the main session's context against its handoff budget to the hint line under the prompt (terminal only).",
-      "default": true
-    },
     "warnAt": {
       "type": "number",
       "title": "Warn at (% of the handoff budget)",
-      "description": "Where the yellow band appears, as a share of the handoff budget, 1 to 99.",
+      "description": "Where the strip above the prompt starts showing the handoff reading, as a share of the handoff budget, 1 to 99.",
       "default": 80
     },
     "layout": {
@@ -80,6 +74,30 @@
       "title": "Usage limit alert (%)",
       "description": "Show a toast once when the 5-hour or 7-day limit crosses this share, again after it resets. 0 turns it off.",
       "default": 90
+    },
+    "notifyOn": {
+      "type": "string",
+      "title": "Discord: events to send",
+      "description": "Comma-separated: ask, question, done, error, blocked, budget, limit, task, session, agent. Empty sends ask, question, done, error, blocked, budget and limit; none sends nothing. The webhook itself is set in the cockpit's settings view.",
+      "default": ""
+    },
+    "notifyAfter": {
+      "type": "number",
+      "title": "Discord: done after (seconds)",
+      "description": "A finished turn is sent only when it ran at least this long. 0 sends every turn.",
+      "default": 60
+    },
+    "notifyAskAfter": {
+      "type": "number",
+      "title": "Discord: approval after (seconds)",
+      "description": "An approval or question is sent only when it is still unanswered after this long. 0 sends at once.",
+      "default": 20
+    },
+    "notifyDetail": {
+      "type": "string",
+      "title": "Discord: detail",
+      "description": "full sends command, question and answer excerpts (secrets masked); brief sends titles and figures only.",
+      "default": "full"
     }
   }
 }

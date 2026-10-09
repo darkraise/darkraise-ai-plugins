@@ -28,7 +28,7 @@
     {
       "name": "dr-cockpit",
       "source": "./plugins/dr-cockpit",
-      "description": "A Claude Code mod for long sessions: a cockpit pane of context, usage limits, subagents, the plan and the repo; a handoff reading under the prompt and a band near the budget; and a guard that keeps AI attribution out of commits and pull requests.",
+      "description": "A Claude Code mod for long sessions: a cockpit pane of what the session is doing, context against its handoff budget, usage limits with forecasts, subagents, the dr-superpowers run and the repo; Discord notifications when a turn needs you or ends; and a guard that keeps AI attribution out of commits and pull requests.",
       "category": "productivity",
       "keywords": [
         "mod",
@@ -38,7 +38,8 @@
         "token-usage",
         "attribution",
         "rate-limits",
-        "git"
+        "git",
+        "discord"
       ]
     },
     {

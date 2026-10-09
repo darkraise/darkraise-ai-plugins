@@ -117,6 +117,63 @@ export type CockpitEngine = {
   cache: number | null
 }
 
+/** What the session is doing now, for the Now row and the state file. */
+export type CockpitActivity = {
+  /** `waiting` on an approval, `asking` a question, `failed` once a turn ended in an error. */
+  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed'
+  /** When this state began, in milliseconds since the epoch. */
+  since: number
+  /** When the running turn began. */
+  turnStartedAt: number | null
+  /** The main loop's request count this turn. */
+  step: number
+  /** The tool in flight, and the subagent seat running it. */
+  tool: string | null
+  agent: string | null
+  /** What waits on the person, or why the turn failed. */
+  detail: string | null
+  lastTurnMs: number | null
+  endedAt: number | null
+  /** Whether a Discord message went out for this state. */
+  isSent: boolean
+}
+
+/** One task of a dr-superpowers run, from its plan and its ledger. */
+export type CockpitRunTask = {
+  n: number
+  title: string
+  state: 'pending' | 'assigned' | 'complete' | 'blocked'
+  /** The fix or review round in flight, "2/5". */
+  round: string | null
+  seat: string | null
+  isClean: boolean
+  reason: string | null
+}
+
+/** A dr-superpowers run as its SDD ledger tells it. */
+export type CockpitRun = {
+  plan: string | null
+  tasks: CockpitRunTask[]
+  done: number
+  total: number
+  isFinished: boolean
+}
+
+/** The Discord webhook's state, as the settings view shows it. */
+export type CockpitNotifier = {
+  /** The webhook URL; never drawn, only masked. */
+  url: string | null
+  isFromEnv: boolean
+  /** The Discord user id that ping messages mention. */
+  mention: string | null
+  /** The field being edited in the settings view. */
+  editing: 'url' | 'mention' | null
+  /** Why the last edit was refused. */
+  error: string | null
+  /** The last send's outcome. */
+  last: { at: number; text: string; isError: boolean } | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'dr-cockpit': {
@@ -137,7 +194,13 @@ declare module 'claude-code' {
       trend: number[]
       /** Whether the pane shows the cockpit or its settings. */
       view: 'cockpit' | 'settings'
-      isBandHidden: boolean
+      activity: CockpitActivity
+      /** The main session's context at the end of each turn, oldest first, for the forecast. */
+      turnTokens: number[]
+      run: CockpitRun | null
+      /** When the newest handoff note was written, in milliseconds since the epoch. */
+      handoffAt: number | null
+      notifier: CockpitNotifier
       isNudged: boolean
       isPlanSession: boolean
     }

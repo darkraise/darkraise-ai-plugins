@@ -1,6 +1,6 @@
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
-/** The band shows from this share of the budget. */
+/** The strip's handoff reading shows from this share of the budget. */
 export const WARN_AT = 0.8
 
 /**
@@ -277,6 +277,10 @@ export type StatusInput = {
   usd: number | null
   limits: readonly { kind: string; percent: number; resetsAt: number | null }[]
   now: number
+  /** The context against the handoff budget, shown once it nears it; null keeps it off the strip. */
+  handoff?: { tokens: number; limit: number; warnAt: number } | null
+  /** A dr-superpowers run's progress: tasks done of all, and the round in flight. */
+  run?: { done: number; total: number; round: number | null } | null
 }
 
 // dr-status' default palette.
@@ -422,6 +426,10 @@ export function statusLines(input: StatusInput, tier: number): [Run[], Run[]] {
 
   const model = input.model === null ? null : [{ text: modelName(input.model, tier >= 2), color: MODEL, bold: true }]
   const effort = input.effort === null ? null : [{ text: input.effort, color: EFFORT[input.effort] ?? 'gray' }]
+  const run =
+    input.run == null || input.run.total === 0
+      ? null
+      : [{ text: `run ${input.run.done}/${input.run.total}${tier < 2 && input.run.round !== null ? ` r${input.run.round}` : ''}`, color: 'yellow' }]
 
   const meter = (label: string, share: number, colorShare: number, width: number, extra: string): Run[] => {
     const percent = Math.round(share * 100)
@@ -438,13 +446,22 @@ export function statusLines(input: StatusInput, tier: number): [Run[], Run[]] {
       ? null
       : meter('ctx', input.context.tokens / input.context.window, input.context.tokens / input.context.window, widths.ctx, kTokens(input.context.tokens))
   // A high hit rate is good news: the bar fills with the hits, the color reads the misses.
+  // The handoff reading joins the strip only once the context nears its budget.
+  const near = input.handoff == null ? null : levelOf(input.handoff.tokens, input.handoff.limit, input.handoff.warnAt)
+  const handoff =
+    input.handoff == null || near === null || near === 'quiet'
+      ? null
+      : [
+          { text: tier < 3 ? 'handoff ' : 'ho ' },
+          { text: `${Math.round((input.handoff.tokens / input.handoff.limit) * 100)}%`, color: near === 'handoff' ? 'error' : 'warning', bold: true },
+        ]
   const cache = input.cache === null ? null : meter('cache', input.cache, 1 - input.cache, widths.cache, '')
   const cost = input.usd === null ? null : [{ text: `$${input.usd.toFixed(2)}`, color: COST, bold: true }]
   const limits = input.limits.map(limit =>
     meter(limitLabel(limit.kind), limit.percent / 100, limit.percent / 100, widths.limit, limit.resetsAt === null ? '' : duration(limit.resetsAt - input.now)),
   )
 
-  return [join([dir, git, model, effort]), join([ctx, cache, cost, ...limits])]
+  return [join([dir, git, model, effort, run]), join([ctx, handoff, cache, cost, ...limits])]
 }
 
 /**
@@ -462,4 +479,213 @@ export function fitStatus(input: StatusInput, width: number): { tiers: [number, 
   const [oneTier, one] = fit(0)
   const [twoTier, two] = fit(1)
   return { tiers: [oneTier, twoTier], lines: [one, two] }
+}
+
+/**
+ * How many main turns until the context reaches the budget, at the average
+ * growth of the last few turns; null with too little to go on, no growth, or
+ * already past it.
+ */
+export function turnsToBudget(perTurn: readonly number[], limit: number): number | null {
+  const recent = perTurn.slice(-6)
+  const last = recent[recent.length - 1]
+  if (recent.length < 3 || last === undefined || last >= limit) return null
+  const steps = recent.slice(1).map((value, index) => value - (recent[index] ?? value)).filter(step => step > 0)
+  if (steps.length === 0) return null
+  const growth = steps.reduce((sum, step) => sum + step, 0) / steps.length
+  return Math.max(1, Math.ceil((limit - last) / growth))
+}
+
+/**
+ * Where a rate limit is headed at the pace spent so far in its window: the
+ * milliseconds until it runs out when that comes before the reset, 'pace' when
+ * it lasts, null when the window is too young or its length unknown.
+ */
+export function limitForecast(kind: string, percent: number, resetsAt: number | null, now: number): number | 'pace' | null {
+  const length = WINDOW_MS[kind]
+  if (length === undefined || resetsAt === null || percent <= 0 || percent >= 100) return null
+  const spent = length - (resetsAt - now)
+  if (spent < 10 * 60_000) return null
+  const left = ((100 - percent) / percent) * spent
+  return now + left < resetsAt ? left : 'pace'
+}
+
+/** One task's state in a dr-superpowers SDD ledger. */
+export type LedgerTask = {
+  n: number
+  state: 'assigned' | 'complete' | 'blocked'
+  /** The fix or review round in flight, "2/5". */
+  round: string | null
+  /** The seat the task was assigned to. */
+  seat: string | null
+  isClean: boolean
+  reason: string | null
+}
+
+/** What a run's ledger says: its plan, each task it names, and whether the final review came back clean. */
+export type Ledger = { plan: string | null; tasks: LedgerTask[]; isFinished: boolean }
+
+/** Reads the subagent-driven-development ledger (progress.md) as its grammar writes it. */
+export function parseLedger(text: string): Ledger {
+  const tasks = new Map<number, LedgerTask>()
+  const task = (n: number) => {
+    const found = tasks.get(n) ?? { n, state: 'assigned' as const, round: null, seat: null, isClean: false, reason: null }
+    tasks.set(n, found)
+    return found
+  }
+  let plan: string | null = null
+  let isFinished = false
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    const header = /^#\s*SDD ledger\s*[—-]+\s*plan:\s*(.+)$/.exec(line)
+    if (header) {
+      plan = header[1]?.trim() ?? null
+      continue
+    }
+    if (/^Final review: clean/.test(line)) {
+      isFinished = true
+      continue
+    }
+    const group = /^Group (\d+)-(\d+): review round (\d+\/\d+)/.exec(line)
+    if (group) {
+      for (let n = Number(group[1]); n <= Number(group[2]); n++) {
+        const one = task(n)
+        if (one.state === 'assigned') one.round = group[3] ?? null
+      }
+      continue
+    }
+    const match = /^Task (\d+): (.*)$/.exec(line)
+    if (!match) continue
+    const one = task(Number(match[1]))
+    const rest = match[2] ?? ''
+    const assigned = /^implementer (\S+) \(assigned/.exec(rest)
+    if (assigned) {
+      one.seat = assigned[1] ?? null
+      if (one.state !== 'complete') one.state = 'assigned'
+      one.reason = null
+      continue
+    }
+    const round = /^fix round (\d+\/\d+)/.exec(rest)
+    if (round) {
+      one.round = round[1] ?? null
+      continue
+    }
+    if (/^complete\b/.test(rest)) {
+      one.state = 'complete'
+      one.round = null
+      one.isClean = /review clean/.test(rest)
+      continue
+    }
+    const blocked = /^BLOCKED\s*[—-]+\s*(.*)$/.exec(rest)
+    if (blocked) {
+      one.state = 'blocked'
+      one.reason = blocked[1]?.trim() || null
+    }
+  }
+  return { plan, tasks: [...tasks.values()].sort((a, b) => a.n - b.n), isFinished }
+}
+
+/** A plan file's tasks, from its "### Task N: title" headings. */
+export function planTasks(text: string): { n: number; title: string }[] {
+  const out: { n: number; title: string }[] = []
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^#{2,4}\s+Task\s+(\d+)\s*[:.\-—]?\s*(.*)$/.exec(line.trim())
+    if (match && !out.some(one => one.n === Number(match[1]))) out.push({ n: Number(match[1]), title: (match[2] ?? '').trim() })
+  }
+  return out
+}
+
+/** "2/5" → 2. */
+export function roundNumber(round: string | null): number | null {
+  const n = Number((round ?? '').split('/')[0])
+  return round !== null && Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** Milliseconds → "42s", "2m14s", "1h05m": a turn's clock, to the second under an hour. */
+export function elapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m${String(seconds % 60).padStart(2, '0')}s`
+  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}m`
+}
+
+/** What the session is doing, as the Now row reads it. */
+export type ActivityInput = {
+  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed'
+  since: number
+  turnStartedAt: number | null
+  step: number
+  tool: string | null
+  agent: string | null
+  detail: string | null
+  lastTurnMs: number | null
+  endedAt: number | null
+  isSent: boolean
+}
+
+const AMBER = '#ffaf5f'
+
+/** The Now row: one line, whatever the state, so the pane never jumps. */
+export function nowLine(now: ActivityInput, at: number): Run[] {
+  const sep: Run = { text: ' · ', dim: true }
+  const sent: Run[] = now.isSent ? [sep, { text: 'Discord ✓', dim: true }] : []
+  switch (now.kind) {
+    case 'running':
+      return [
+        { text: '● ', color: 'cyan', bold: true },
+        { text: 'running ' },
+        { text: elapsed(at - (now.turnStartedAt ?? now.since)), color: 'cyan', bold: true },
+        ...(now.step > 0 ? [sep, { text: `step ${now.step}`, dim: true }] : []),
+        ...(now.tool === null ? [] : [sep, { text: now.tool }]),
+        ...(now.tool !== null && now.agent !== null ? [{ text: ' in ', dim: true }, { text: now.agent, color: 'magenta' }] : []),
+      ]
+    case 'waiting':
+      return [
+        { text: '⏳ approve? ', color: AMBER, bold: true },
+        ...(now.detail === null ? [] : [{ text: now.detail }, sep]),
+        { text: elapsed(at - now.since), color: AMBER, bold: true },
+        ...sent,
+      ]
+    case 'asking':
+      return [
+        { text: '❓ Claude is asking ', color: AMBER, bold: true },
+        { text: elapsed(at - now.since), color: AMBER, bold: true },
+        ...(now.detail === null ? [] : [sep, { text: now.detail }]),
+        ...sent,
+      ]
+    case 'failed':
+      return [
+        { text: '✗ last turn failed', color: 'error', bold: true },
+        ...(now.detail === null ? [] : [{ text: ` ${now.detail}` }]),
+        ...(now.lastTurnMs === null ? [] : [sep, { text: elapsed(now.lastTurnMs), dim: true }]),
+        ...sent,
+      ]
+    default:
+      return [
+        { text: '○ idle', dim: true },
+        ...(now.lastTurnMs === null ? [] : [sep, { text: 'last turn ', dim: true }, { text: elapsed(now.lastTurnMs) }]),
+        ...(now.endedAt === null ? [] : [sep, { text: `ended ${duration(at - now.endedAt) || '<1m'} ago`, dim: true }]),
+      ]
+  }
+}
+
+/** The Now row cut down for the strip's top rule; nothing while idle. */
+export function nowBadge(now: ActivityInput, at: number): Run[] {
+  switch (now.kind) {
+    case 'running':
+      return [
+        { text: '● ', color: 'cyan', bold: true },
+        { text: elapsed(at - (now.turnStartedAt ?? now.since)), color: 'cyan' },
+        ...(now.tool === null ? [] : [{ text: ` · ${now.tool}`, color: 'cyan' }]),
+      ]
+    case 'waiting':
+      return [{ text: `⏳ waiting ${elapsed(at - now.since)}`, color: AMBER, bold: true }]
+    case 'asking':
+      return [{ text: `❓ asking ${elapsed(at - now.since)}`, color: AMBER, bold: true }]
+    case 'failed':
+      return [{ text: '✗ failed', color: 'error', bold: true }]
+    default:
+      return []
+  }
 }
