@@ -64,6 +64,23 @@ export type CockpitSpawn = {
   startedAt: number
 }
 
+/** One background shell the session started and has not heard the end of. */
+export type CockpitShell = {
+  /** The background task's id, as its notification names it. */
+  id: string
+  command: string
+  /** When it went to the background, in milliseconds since the epoch. */
+  startedAt: number
+}
+
+/** Remote Control as the cockpit sees it. */
+export type CockpitRemote = {
+  /** The remote clients attached now (a phone, the desktop app). */
+  clients: { id: string; surface: string }[]
+  /** The `/config` row "Enable Remote Control for all sessions": `true`, `false` or `default`. */
+  setting: string | null
+}
+
 /** One item of the session's todo or task list. */
 export type CockpitPlanItem = {
   id: string
@@ -119,8 +136,8 @@ export type CockpitEngine = {
 
 /** What the session is doing now, for the Now row and the state file. */
 export type CockpitActivity = {
-  /** `waiting` on an approval, `asking` a question, `failed` once a turn ended in an error. */
-  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed'
+  /** `waiting` on an approval, `asking` a question, `failed` once a turn ended in an error, `interrupted` once Esc stopped it. */
+  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed' | 'interrupted'
   /** When this state began, in milliseconds since the epoch. */
   since: number
   /** When the running turn began. */
@@ -182,6 +199,8 @@ declare module 'claude-code' {
       breakdown: CockpitBreakdown | null
       seats: CockpitSeat[]
       spawns: CockpitSpawn[]
+      shells: CockpitShell[]
+      remote: CockpitRemote
       plan: CockpitPlanItem[]
       repo: CockpitRepo | null
       refusals: CockpitRefusal[]
