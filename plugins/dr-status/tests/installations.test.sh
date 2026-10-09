@@ -25,7 +25,7 @@ check 'quoted installed command runs renderer' "$([[ "$rendered" == *ownership-p
 unset DCC_STATUSLINE_HOME
 printf '0.7.0\n' > "$custom/VERSION"
 CLAUDE_PLUGIN_ROOT="$HERE/.." bash "$HERE/../scripts/sync.sh" >/dev/null 2>&1
-check 'sync resolves record without override' "$(cat "$custom/VERSION")" '0.8.1'
+check 'sync resolves record without override' "$(cat "$custom/VERSION")" "$(cat "$HERE/../scripts/VERSION")"
 out="$(DCC_STATUSLINE_HOME="$fake/wrong" bash "$install_script" status)"
 check 'status ignores changed ambient destination' "$([[ "$out" == *"$custom"* ]] && echo yes || echo no)" yes
 out="$(bash "$install_script" doctor 2>&1)"

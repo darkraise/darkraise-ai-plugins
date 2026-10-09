@@ -76,6 +76,19 @@ _dcc_meter() { # _dcc_meter <icon> <label> <pct> <width> <reset-epoch> <tokens|"
   fi
 }
 
+_dcc_elapsed() { # _dcc_elapsed <seconds> -> DCC_ELAPSED, as dr-cockpit writes it: 42s, 2m14s, 1h05m
+  local s="${1:-0}"
+  case "$s" in ''|*[!0-9]*) s=0 ;; esac
+  if   [ "$s" -ge 3600 ]; then printf -v DCC_ELAPSED '%dh%02dm' $(( s / 3600 )) $(( (s % 3600) / 60 ))
+  elif [ "$s" -ge 60 ];   then printf -v DCC_ELAPSED '%dm%02ds' $(( s / 60 )) $(( s % 60 ))
+  else                         printf -v DCC_ELAPSED '%ds' "$s"
+  fi
+}
+
+# How long dr-cockpit's word on a live turn holds. It rewrites the file every
+# 30 seconds while a turn runs, so anything older means the session is gone.
+DCC_CK_STALE=90
+
 dcc_segment() { # dcc_segment <name> [tier] -> DCC_SEG_OUT, DCC_SEG_CELLS
   local name="${1:-}" tier="${2:-0}"
   local cwd root home leaf parent ancestry reponame sub eff br lim tnow
@@ -241,6 +254,49 @@ dcc_segment() { # dcc_segment <name> [tier] -> DCC_SEG_OUT, DCC_SEG_CELLS
         dcc_seg_add "$money" "$DCC_P_COST" bold
       else
         dcc_seg_add "\$$money" "$DCC_P_COST" bold
+      fi
+      ;;
+    turn)
+      # The turn as dr-cockpit sees it: running, waiting on an approval, asking
+      # a question, or failed. An idle session shows nothing.
+      [ -n "$P_TURN_KIND" ] || return 0
+      local since="$P_TURN_SINCE" upd="$P_CK_UPDATED" tool
+      case "$since" in ''|*[!0-9]*) since="" ;; esac
+      case "$upd" in ''|*[!0-9]*) upd=0 ;; esac
+      if [ "$P_TURN_KIND" != "failed" ] && [ $(( DCC_NOW - upd )) -gt "$DCC_CK_STALE" ]; then return 0; fi
+      DCC_ELAPSED=""
+      [ -n "$since" ] && [ "$DCC_NOW" -ge "$since" ] && _dcc_elapsed $(( DCC_NOW - since ))
+      case "$P_TURN_KIND" in
+        running)
+          dcc_seg_add "$DCC_DOT_FILLED " cyan bold 2
+          dcc_seg_add "$DCC_ELAPSED" cyan
+          if [ "$tier" -lt 2 ] && [ -n "$P_TURN_TOOL" ]; then
+            _dcc_trunc "$P_TURN_TOOL" 20; tool="$DCC_TRUNC"
+            dcc_seg_add " $DCC_SEP_DOT $tool" "$DCC_P_MUTE" "" $(( 3 + ${#tool} ))
+          fi
+          ;;
+        waiting)
+          dcc_seg_add "approve? " yellow bold
+          dcc_seg_add "$DCC_ELAPSED" yellow
+          ;;
+        asking)
+          dcc_seg_add "asking " yellow bold
+          dcc_seg_add "$DCC_ELAPSED" yellow
+          ;;
+        failed) dcc_seg_add "turn failed" red bold ;;
+      esac
+      ;;
+    run)
+      # A dr-superpowers run: tasks done of the plan's total, and the review
+      # round in flight. Red while a task is blocked and needs a person.
+      case "$P_RUN_TOTAL" in ''|*[!0-9]*|0) return 0 ;; esac
+      case "$P_RUN_DONE" in ''|*[!0-9]*) return 0 ;; esac
+      if [ "${P_RUN_BLOCKED:-0}" -gt 0 ] 2>/dev/null; then
+        dcc_seg_add "run $P_RUN_DONE/$P_RUN_TOTAL" red bold
+        [ "$tier" -lt 2 ] && dcc_seg_add " blocked" red
+      else
+        dcc_seg_add "run $P_RUN_DONE/$P_RUN_TOTAL" yellow
+        case "$P_RUN_ROUND" in ''|*[!0-9]*) : ;; *) [ "$tier" -lt 2 ] && dcc_seg_add " r$P_RUN_ROUND" yellow ;; esac
       fi
       ;;
     ctx)   _dcc_meter "$DCC_I_CTX"   "${DCC_L_CTX:-ctx}"     "$P_CTX_PCT"   "$DCC_W_CTX"   "" "$P_CTX_TOK" "$tier" ;;

@@ -24,6 +24,16 @@ P_5H_PCT=""
 P_5H_RESET=""
 P_7D_PCT=""
 P_7D_RESET=""
+# What dr-cockpit's state file says about this session (see
+# dcc_cockpit_state_path); empty when there is no file.
+P_TURN_KIND=""
+P_TURN_SINCE=""
+P_TURN_TOOL=""
+P_RUN_DONE=""
+P_RUN_TOTAL=""
+P_RUN_ROUND=""
+P_RUN_BLOCKED=0
+P_CK_UPDATED=""
 
 # Same gap, and the same fix, for the config-side globals: whitespace-only
 # stdin holds no JSON value, so jq exits 0 having eval'd nothing at all, and
@@ -106,28 +116,55 @@ dcc_claude_json_path() { # -> DCC_CLAUDE_JSON, or /dev/null when absent
   if [ -f "$p" ]; then DCC_CLAUDE_JSON="$p"; else DCC_CLAUDE_JSON=/dev/null; fi
 }
 
+dcc_cockpit_state_path() { # dcc_cockpit_state_path <payload-json> -> DCC_CK_STATE, or /dev/null
+  # dr-cockpit writes one file per session at
+  # <config dir>/dr-cockpit/state/<session id>.json. The session id is read with
+  # a bash regex rather than a second jq, which the process budget does not
+  # allow, and only a plain id is accepted, so the payload cannot point the
+  # read anywhere else.
+  local re='"session_id"[[:space:]]*:[[:space:]]*"([A-Za-z0-9._-]+)"' id d
+  DCC_CK_STATE=/dev/null
+  [[ "$1" =~ $re ]] || return 0
+  id="${BASH_REMATCH[1]}"
+  case "$id" in .|..) return 0 ;; esac
+  dcc_path_norm "${CLAUDE_CONFIG_DIR:-}"; d="$DCC_PATH"
+  if [ -z "$d" ]; then dcc_path_norm "${HOME:-}"; d="$DCC_PATH"; [ -n "$d" ] || return 0; d="$d/.claude"; fi
+  [ -f "$d/dr-cockpit/state/$id.json" ] && DCC_CK_STATE="$d/dr-cockpit/state/$id.json"
+  return 0
+}
+
+_dcc_jq() { # _dcc_jq <config> <account-file> <cockpit-state> -> out (the caller's)
+  out=$(jq -r --argjson d "$DCC_DEFAULT_CONFIG" --argjson themes "$DCC_THEMES" \
+             --arg acct "${DCC_ACCT_KEY:-}" \
+             --slurpfile cfg "$1" --slurpfile who "$2" --slurpfile ck "$3" \
+             "$DCC_JQ_PROG" <<<"$input" 2>/dev/null)
+}
+
 dcc_parse_all() { # dcc_parse_all <payload-json> <config-path> <claude-json-path>
-  local input="$1" cfg="$2" who="$3" out cfg_existed=0
+  local input="$1" cfg="$2" who="$3" out cfg_existed=0 ck
   DCC_CONFIG_BAD=0
   [ -f "$cfg" ] && cfg_existed=1
   [ -f "$cfg" ] || cfg=/dev/null
   [ -f "$who" ] || who=/dev/null
+  dcc_cockpit_state_path "$input"; ck="$DCC_CK_STATE"
 
-  if out=$(jq -r --argjson d "$DCC_DEFAULT_CONFIG" --argjson themes "$DCC_THEMES" \
-                 --arg acct "${DCC_ACCT_KEY:-}" \
-                 --slurpfile cfg "$cfg" --slurpfile who "$who" \
-                 "$DCC_JQ_PROG" <<<"$input" 2>/dev/null); then
+  if _dcc_jq "$cfg" "$who" "$ck"; then
     eval "$out"; return 0
+  fi
+
+  # dr-cockpit may be mid-write, or its file corrupt: it is the least important
+  # input, so it goes first, before the config or the account file is blamed.
+  if [ "$ck" != /dev/null ]; then
+    ck=/dev/null
+    if _dcc_jq "$cfg" "$who" "$ck"; then
+      eval "$out"; return 0
+    fi
   fi
 
   # The config might be the corrupt one; retry without it so a good account
   # file (and its email) still comes through. A nonexistent config can't be
   # the cause of a failure, so there is nothing to gain by retrying without one.
-  if [ "$cfg_existed" -eq 1 ] && \
-     out=$(jq -r --argjson d "$DCC_DEFAULT_CONFIG" --argjson themes "$DCC_THEMES" \
-                 --arg acct "${DCC_ACCT_KEY:-}" \
-                 --slurpfile cfg /dev/null --slurpfile who "$who" \
-                 "$DCC_JQ_PROG" <<<"$input" 2>/dev/null); then
+  if [ "$cfg_existed" -eq 1 ] && _dcc_jq /dev/null "$who" "$ck"; then
     DCC_CONFIG_BAD=1
     eval "$out"; return 0
   fi
@@ -135,11 +172,7 @@ dcc_parse_all() { # dcc_parse_all <payload-json> <config-path> <claude-json-path
   # The config survived that retry (or never existed), so the account's
   # .claude.json must be the corrupt one. Dropping only that keeps the config
   # -- and any account tint it defines -- intact.
-  if [ "$cfg_existed" -eq 1 ] && \
-     out=$(jq -r --argjson d "$DCC_DEFAULT_CONFIG" --argjson themes "$DCC_THEMES" \
-                 --arg acct "${DCC_ACCT_KEY:-}" \
-                 --slurpfile cfg "$cfg" --slurpfile who /dev/null \
-                 "$DCC_JQ_PROG" <<<"$input" 2>/dev/null); then
+  if [ "$cfg_existed" -eq 1 ] && _dcc_jq "$cfg" /dev/null "$ck"; then
     eval "$out"; return 0
   fi
 
@@ -147,9 +180,6 @@ dcc_parse_all() { # dcc_parse_all <payload-json> <config-path> <claude-json-path
   # to begin with). Reaching here with cfg_existed=1 proves the config itself
   # doesn't parse either -- the previous attempt just tried it alone and failed.
   DCC_CONFIG_BAD=$cfg_existed
-  out=$(jq -r --argjson d "$DCC_DEFAULT_CONFIG" --argjson themes "$DCC_THEMES" \
-             --arg acct "${DCC_ACCT_KEY:-}" \
-             --slurpfile cfg /dev/null --slurpfile who /dev/null \
-             "$DCC_JQ_PROG" <<<"$input" 2>/dev/null) || return 1
+  _dcc_jq /dev/null /dev/null "$ck" || return 1
   eval "$out"
 }

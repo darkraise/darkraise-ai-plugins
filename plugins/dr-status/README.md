@@ -207,7 +207,16 @@ defaults.
 | `segments.ctx.label` | Label text for a meter, likewise `cache`, `5h` and `7d` |
 
 Segment names: `dir`, `git`, `model`, `effort`, `fast`, `agent`, `style`,
-`account`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Unknown names are ignored.
+`turn`, `run`, `account`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Unknown
+names are ignored.
+
+`turn` and `run` come from `dr-cockpit`, which writes the session's state to
+`<config dir>/dr-cockpit/state/<session id>.json`. `turn` shows a running turn
+with its time and tool (`● 2m14s · Bash`), an approval or question waiting on
+you, or a failed turn; an idle session, or a live state older than 90 seconds,
+shows nothing. `run` shows a `dr-superpowers` run's tasks done and review round
+(`run 3/6 r2`), in red while a task is blocked. Without `dr-cockpit` both are
+absent.
 
 `cache` reads the prompt-cache hit rate of the most recent request: the tokens
 served from cache as a share of every input token that request was billed for,
@@ -256,8 +265,8 @@ network call and no credential access; the only cache is the git one above. Rate
 first API response of a session, which is why the usage meters can be missing
 briefly after `/clear`.
 
-A render costs five processes: one `jq` that parses the payload, the config, and
-the account file together, and two `git` calls with their timeout wrappers. Bash
+A render costs five processes: one `jq` that parses the payload, the config,
+the account file, and `dr-cockpit`'s state file together, and two `git` calls with their timeout wrappers. Bash
 functions return values through global out-variables rather than command
 substitution, because each fork costs roughly 10-20ms under MSYS2.
 
