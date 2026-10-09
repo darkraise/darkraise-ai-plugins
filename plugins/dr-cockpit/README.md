@@ -32,7 +32,9 @@ session is doing:
 │ ██████████████████████████████████████▓▓▓▓▒▒▒░░  │
 │   ■ Messages              318k  78%               │
 │   ■ System tools           41k  10%               │
-│ [ Hand off ] [ Compact ] [ Settings ]             │
+│ ╭─────────────╮ ╭────────────╮ ╭─────────────╮    │
+│ │ h: Hand off │ │ c: Compact │ │ s: Settings │    │
+│ ╰─────────────╯ ╰────────────╯ ╰─────────────╯    │
 ╰───────────────────────────────────────────────────╯
 ╭ Usage ──────────────────────────── $4.85 · $2.35/h ╮
 │ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
@@ -109,7 +111,9 @@ line, and past `warnAt` a `handoff 86%` reading follows `ctx`:
 │ darkraise-ai-plugins/…/dr-cockpit · feat/cockpit-pane-overhaul* · Opus · xhigh · run 3/6 r2      │
 │ ctx ▰▰▱▱ 41% · cache ▰▰▰▱ 93% · $4.85 · 5h ▰▱▱ 23% · 7d ▰▰▱ 61%                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-[ Hand off ] [ Compact ] [ Settings ]
+╭─────────────╮ ╭────────────╮ ╭─────────────╮
+│ h: Hand off │ │ c: Compact │ │ s: Settings │
+╰─────────────╯ ╰────────────╯ ╰─────────────╯
 ```
 
 Each line shrinks the way `dr-status`' do, a step at a time until it fits: the
@@ -118,9 +122,14 @@ leaf; the branch drops its counters, then shortens; the model drops its
 version; the meters narrow, drop the token count and reset times, and at last
 show the percentage alone. Below 48 columns the frame goes and the email takes
 a line of its own above them. The pane draws no Nerd Font icons. The context
-meter is the share of the model's window, as `dr-status` shows it. While the
-pane has the keyboard, `h` presses **Hand off**, `c` presses **Compact** and `s` opens the
-settings.
+meter is the share of the model's window, as `dr-status` shows it.
+
+Each button sits in a rounded box with its hotkey, which presses it while the
+pane has the keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s`
+**Settings**. The box is gray at rest and takes the accent color on the one
+that matters: **Hand off** once the context passes `warnAt`, **Resume**
+whenever it shows. In the settings view a switch reads `● On` or `○ Off`, the
+chosen option of a row takes the accent, and what is off is drawn dim.
 
 **Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
 mod's settings: whether it shows at session start, the layout, which sections
