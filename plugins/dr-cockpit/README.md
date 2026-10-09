@@ -9,9 +9,11 @@ mod API is early access and may change between releases.
 
 ## What it does
 
-**Cockpit pane.** `/cockpit` opens a pane with the session at a glance. In
-fullscreen at 110 columns or more it docks beside the transcript; otherwise it
-sits above the prompt. Each section's rows sit two cells in under its title, and
+**Cockpit pane.** A pane with the session at a glance. It opens by itself when
+a session starts, once the terminal is 144 columns wide; `/cockpit` opens it at
+any width, and says why if Claude Code holds it back. In fullscreen at 110
+columns or more it docks beside the transcript; otherwise it sits above the
+prompt. Each section's rows sit two cells in under its title, and
 their details two cells further.
 
 ```
@@ -116,7 +118,7 @@ Set these in `/config` under the plugin's rows, or in `settings.json` under
 | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip above the prompt. `full` or `compact`: always that one. |
 | `sections` | empty | The pane's sections and their order, comma-separated: `context`, `usage`, `agents`, `plan`, `repo`, `guard`. Empty shows all six. |
 | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
-| `openAtStart` | `false` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before). |
+| `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
 | `limitAlertAt` | `90` | The usage-limit alert's line, in percent. `0` turns the alert off. |
 
 ## Install
@@ -125,6 +127,10 @@ Set these in `/config` under the plugin's rows, or in `settings.json` under
 /plugin marketplace add darkraise/darkraise-ai-plugins
 /plugin install dr-cockpit@darkraise
 ```
+
+An installed copy stays at the version it was installed at. To take a new
+release, run `claude plugin update dr-cockpit@darkraise` and start a new session
+(or run `/reload-plugins`).
 
 ## Development
 

@@ -83,7 +83,7 @@ export const register: Register = (on, options) => {
     layout: layoutSetting = 'auto',
     sections: sectionList = '',
     breakdownRows = 6,
-    openAtStart = false,
+    openAtStart = true,
     limitAlertAt = 90,
   } = options as Partial<Options>
   // A plain string in the manifest (older validators refuse a picker), so
@@ -110,10 +110,12 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'cockpit' }, async $ => {
-    await $.ui.open(paneArgs)
+    const opened = await $.ui.open(paneArgs)
     await refreshDetail($)
 
-    return { text: 'Cockpit pane opened.' }
+    // A surface that seats no panes (an older desktop) holds it undrawn: say
+    // why rather than claim it opened.
+    return { text: opened.isPlaced ? 'Cockpit pane opened.' : `Cockpit pane is waiting: ${opened.reason}` }
   })
 
   on('session.measure', async ($, e, next) => {

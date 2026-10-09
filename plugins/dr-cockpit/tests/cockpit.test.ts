@@ -484,3 +484,19 @@ describe('compact layout', () => {
     expect(await inline.find({ type: 'Text', text: 'Context' })).toBeUndefined()
   })
 })
+
+describe('/cockpit', () => {
+  test('says the pane opened when Claude Code draws it', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    const answer = await $.command.run({ command: 'cockpit' })
+    expect(answer.text).toBe('Cockpit pane opened.')
+  })
+
+  test('says why when Claude Code holds the pane back', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    on('ui.open', () => ({ value: { isPlaced: false, reason: 'this desktop app places no panes' } }))
+    const answer = await $.command.run({ command: 'cockpit' })
+    expect(answer.text).toBe('Cockpit pane is waiting: this desktop app places no panes')
+  })
+})
