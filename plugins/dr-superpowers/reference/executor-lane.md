@@ -55,17 +55,23 @@ timeout, so never ask this one through it:
 
 1. Start the timer as a background Bash call and keep its task id:
    `sleep 900; echo lane-question-timeout`. A background call re-invokes the
-   session when it exits.
+   session when it exits. On Codex, where the timer is a plain background
+   shell, start it as `sleep 900 & echo $!` and keep the pid it prints.
 2. Ask in plain text: the offerable ids, one prose line for the rest, and
    `Reply with the ids to use, or "none". No answer in 15 minutes means
    Claude-only.` Then end the turn.
-3. **A reply arrives first:** stop the timer. The ids it names from the offer
+3. **A reply arrives first:** stop the timer: `TaskStop` with its task id on
+   Claude Code; on Codex, `kill` the pid. The ids it names from the offer
    are ticked. Any other reply - `none`, `Claude only`, or a message unrelated
    to the question, such as a prompt queued in advance - means Claude-only:
    finish the plan, then act on that message as its own instruction.
 4. **The timer fires first:** say `<ids> not selected - no answer in 15
    minutes; Claude-only` in one line and continue the plan without waiting.
-   A timer that fires after the question was answered is ignored.
+   A timer that fires after the question was answered is ignored. A timer
+   still running when the session would end is stopped first, as
+   dr-superpowers:handoff step 0 says: until it fires or is stopped it is a
+   launch that has not reported back, and it would wake a handed-off session
+   with `lane-question-timeout`.
 
 Claude-only writes no header line. Record a tick as one appended blockquote
 line in the plan header:
@@ -108,8 +114,7 @@ the ledger, the five-round cap - is unchanged, because the contract the loop
 enforces is files and commits, not a particular runtime.
 
 **There is no driver subagent.** Run the wrapper yourself as a background Bash
-call, exactly as you already run `sdd-workspace` and `task-brief`. It prints one
-status line and writes everything else to files.
+call. It prints one status line and writes everything else to files.
 
 **Background is not a preference here, it is the only shape that works.** The
 Bash tool's `timeout` caps at 600000 ms - ten minutes - and every rung in
@@ -118,12 +123,17 @@ foreground timeout you can pass that outlasts even the cheapest rung, so a
 foreground call is cut mid-run and a controller reading that as a Codex failure
 has misdiagnosed its own harness.
 
-A background call is not bound by `timeout` at all - measured, not assumed: a
-25-second command under a 5000 ms timeout ran to completion and exited 0. So
-pass no timeout and wait for the completion notification. The bound is the
-client's own deadline, taken from the rung's timeout block, with an outer
-`timeout` of that plus 60 seconds as a backstop; the wrapper always prints a
-status line, which is the guarantee that makes waiting safe.
+A background call is bounded too: its `timeout` defaults to 1800000 ms (30
+minutes) and caps at 7200000 ms (two hours), and the host kills the shell when
+it expires. A killed wrapper never prints its status line, so it looks like
+the exit 2 row below. So
+pass `timeout` = (rung bound + 120) × 1000 ms, capped at 7200000, and wait for
+the completion notification: 1020000 for a 900-second rung, 2520000 for 2400.
+When you raise `--timeout`, compute it from the raised value; a bound above
+7080 seconds cannot fit and is not a retry to make. The client's own deadline
+is the rung's bound, with an outer `timeout` of that plus 60 seconds as a
+backstop, so the wrapper prints its status line inside the call's limit; that
+status line is the guarantee that makes waiting safe.
 
 If you have a reason to run one in the foreground anyway, the ceiling is raised
 by the `BASH_MAX_TIMEOUT_MS` environment variable, which your human partner sets
@@ -181,12 +191,25 @@ for ownership, artifacts, approved write sets, and recovery operations.
    Record BASE before the run. The wrapper's status line reports the same range
    as `commits=<a7>..<b7>` once the run finishes.
 
-3. **Record the assignment** when the wrapper's status line arrives, reading the
-   thread id from its `thread=` field:
+3. **Record the assignment** before the wrapper launches, as a provisional
+   line with the thread still pending:
+
+   ```
+   Task <N>: implementer impl-sonnet-low (assigned; base <sha7>; executor <id> <model>/<effort>, thread pending)
+   ```
+
+   When the wrapper's status line arrives, append the same line again with the
+   thread id read from its `thread=` field:
 
    ```
    Task <N>: implementer impl-sonnet-low (assigned; base <sha7>; executor <id> <model>/<effort>, thread 01a0...)
    ```
+
+   The provisional line is what a compaction or a handoff sees while the
+   wrapper runs. Without it the ledger's last line is the previous task's
+   `complete` line, and a resumed controller would take the task in flight for
+   finished. A `thread pending` line is never a resume point
+   (dr-superpowers:handoff step 0).
 
    The thread id must reach the ledger. It also lands in the report file. If it
    lived only in your context, a compaction would turn round 2 into a fresh
@@ -392,8 +415,10 @@ gate again before its roster and reports `FAILED` with
 session. It then establishes usability from the roster itself and never trusts the
 plan's copy, passes the `codex-judge` row's bound to the client as a deadline, and
 reports `FAILED` with the roster's own `reason` when Codex is not usable. Run it
-as a background Bash call: the Bash tool's `timeout` caps at ten minutes, the
-rung's bound is longer, and a background call is not bound by it at all.
+as a background Bash call: a foreground `timeout` caps at ten minutes and the
+rung's bound is longer. Pass `timeout` = (row bound + 120) × 1000 ms: 2520000
+for `--tier light`, and 5520000 for `--tier heavy`, which runs the first row.
+A refusal falls back within that limit, since a refused turn ends at once.
 
 ```bash
 bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy> \
@@ -491,11 +516,12 @@ nothing: skip it, say so, and report the Claude review alone, exactly as a
 missing Codex has always been reported.
 
 The final-review kind runs read-only by nature and takes no sandbox flag. Run
-the runner as a background Bash call: the Bash tool's own `timeout` caps at ten
-minutes while a whole-branch round needs more, and a background call is not
-bound by it at all. The bound is the `codex-judge` row's third field, which the
-runner passes to the client as a deadline; the client interrupts the turn and
-reaps the broker when it expires.
+the runner as a background Bash call: a foreground `timeout` caps at ten
+minutes while a whole-branch round needs more. Pass
+`timeout` = (row bound + 120) × 1000 ms for the first row, 5520000 today. The
+bound is the `codex-judge` row's third field, which the runner passes to the
+client as a deadline; the client interrupts the turn and reaps the broker when
+it expires.
 
 The runner composes that round's prompt itself: `criteria/codex-final-review.md`
 followed by `git diff <base>...HEAD`. It does not use the Codex plugin's own

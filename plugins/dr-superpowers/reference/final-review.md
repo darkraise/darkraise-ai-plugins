@@ -51,7 +51,12 @@ re-deriving the branch diff with git commands.
    run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say
    which, and go to step 3 with the Claude review alone. An absent or empty
    report is never a clean round.
-3. **Dedupe and verify, only with two lists.** When the Claude review and the
+3. **Wait for the round's status line first.** Until the runner has printed
+   `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`, there is no step 3: end the turn
+   and resume on its notification. An absent report is a round still running,
+   never a one-list case.
+
+   **Dedupe and verify, only with two lists.** When the Claude review and the
    Codex round each produced at least one finding, dispatch a fresh
    `dr-superpowers:judge-opus` once, given both lists. It merges findings that
    name the same defect in the same place (not merely the same file), tags each

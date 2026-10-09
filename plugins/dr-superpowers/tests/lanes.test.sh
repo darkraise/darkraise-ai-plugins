@@ -164,6 +164,30 @@ while read -r model effort secs _; do
 done <<< "$judge"
 check "codex-judge agrees with codex-timeout" "$drift" "NONE"
 
+# Controllers run the wrapper and the review runner as background Bash calls
+# with timeout = (bound + 120) * 1000 ms, and a background call caps at
+# 7200000 ms. A bound past 7080 seconds would be killed by the host before the
+# wrapper could print its status line.
+too_long=NONE
+while read -r pair secs; do
+  [ -n "$pair" ] || continue
+  [ $(( (secs + 120) * 1000 )) -le 7200000 ] || too_long="timeout:$pair:$secs"
+done <<< "$timeouts"
+while read -r model effort secs _; do
+  [ -n "$model" ] || continue
+  [ $(( (secs + 120) * 1000 )) -le 7200000 ] || too_long="judge:$model/$effort:$secs"
+done <<< "$judge"
+check "every bound plus 120 s fits a background call's 7200000 ms cap" "$too_long" "NONE"
+
+# The docs that launch those calls state the formula rather than the old claim
+# that a background call has no limit.
+REF="$HERE/../reference"
+SK="$HERE/../skills"
+unbounded=$(grep -l -i 'not bound by\|with no timeout' "$REF/executor-lane.md" "$REF/delegated-task.md" "$SK/writing-plans/SKILL.md" 2>/dev/null | tr '\n' ' ')
+check "no doc says a background call is unbounded" "${unbounded:-NONE}" "NONE"
+formula=$(grep -cE '\((rung|row) bound \+ 120\) × 1000 ms' "$REF/executor-lane.md")
+check "executor-lane states the timeout formula for the wrapper and both runners" "$formula" "3"
+
 # The judge block must not leak into execution admission.
 leak=NONE
 printf '%s\n' "$assignment" | awk '{print $2}' | grep -qxF gpt-6-astra && leak=assignment

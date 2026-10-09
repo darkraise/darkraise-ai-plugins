@@ -28,13 +28,35 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.
 - Your human partner says they are stepping away for more than an hour, or
-  asks you to stop.
+  asks you to stop. Reconcile live children first, exactly as step 0 says:
+  wait for them, or stop them and record a Ruling. Tell your partner which you
+  did.
 
 ## Steps
 
+0. **Nothing you started is still running.** List every background Bash
+   call, Monitor and Agent this session launched that has not reported back
+   (`/tasks` on Claude Code, `list_agents` on Codex, or the launch ids in your
+   transcript). For each, either wait for it, or stop it:
+   - Wait: on Claude Code, end the turn without the block; its notification
+     starts the next turn, and you resume here. On Codex, `wait_agent` in
+     bounded stretches, since completion mail does not wake an idle session.
+   - Stop: `TaskStop` with its task id on Claude Code; on Codex, `kill` a
+     background shell's pid, or `close_agent` where your tools offer it. Then
+     append a ruling to the ledger naming the task it served and that its
+     result is void:
+     `Task <N>: Ruling: stopped <what> at handoff — its result is void — <cost if wrong>`.
+
+   Only then continue. An assigned line is a resume point only when nothing
+   it names is still running: the agent or wrapper reported back, or you
+   stopped it and ruled on it. An executor line that carries a thread id is
+   resumed by that id in the next session, on either host. One that still
+   says `thread pending` names a wrapper that has not reported: wait for it
+   or stop it.
 1. **Make the durable record current.**
    - Execution: the ledger's last line records where you are (a
-     `Task N: complete`, a fix-round line, or an assigned line). Update
+     `Task N: complete`, a fix-round line, or an assigned line whose run is
+     over, per step 0). Update
      `<workspace>/handoff.md` (below); `<workspace>` is the directory
      `scripts/sdd-workspace PLAN_FILE` prints.
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
@@ -120,4 +142,5 @@ task state lives in the ledger and git.
 | "The next session can read my summary" | It has none of your context. Only files cross the boundary. |
 | "I'll write the resume prompt myself" | `next-step` computes it from the plan and ledger. Hand-written guides go stale. |
 | "There is no plan, so I'll write the block myself" | Use `next-step --adhoc`. A hand-written launch command guesses the model. |
+| "The agent is nearly done, I'll hand off and it will finish" | Its result arrives in a session that has ended, and nobody reads it. Wait for it or stop it and record a Ruling (step 0). |
 | "Compaction will take care of it" | Compaction drops reports, findings and rulings. Hand off before it fires. |

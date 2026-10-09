@@ -190,6 +190,18 @@ else
       # switch is recorded there and the plan is never edited. The escalation
       # holds until a later inline assignment shows the plan came back.
       escalated_at=$(ledger_left_inline "$ledger_file")
+      # A last line that assigns a task to an agent or an executor means that
+      # run may still be going. The block is still printed, since it is the
+      # resume guide either way, but a handoff over a live run loses its result.
+      last_line=$(grep -v '^[[:space:]]*$' <<<"$ledger_text" | tail -n 1 || true)
+      if [[ $last_line =~ ^Task\ ([0-9]+):\ implementer\ ([^ ]+)\ \(assigned ]] \
+         && [ "${BASH_REMATCH[2]}" != inline ]; then
+        if [[ $last_line == *'thread pending)'* ]]; then
+          printf 'next-step: warning: Task %s is assigned with its thread pending: the executor wrapper has not reported. Wait for it or stop it and record a Ruling before handing off (dr-superpowers:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
+        else
+          printf 'next-step: warning: the ledger ends on an assigned line for Task %s. If the run it names is still going, wait for it or stop it and record a Ruling before handing off (dr-superpowers:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
+        fi
+      fi
     else
       ledger_note="the ledger at \`$ledger_file\` belongs to another plan and is ignored"
     fi

@@ -93,6 +93,24 @@ lacks "mid-plan: handoff drops the stale block" "$hand" "Old stale block."
 check "mid-plan: handoff has one Next session section" "$(grep -c '^## Next session' "$HANDOFF")" "1"
 has "mid-plan: handoff carries the new next step" "$hand" "Resume at Task 3 (Third thing)."
 
+# --- a ledger ending on an assigned line warns, and still prints the block ---
+lacks "mid-plan: no assigned-line warning" "$(cat "$TMP/stderr")" "warning"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: implementer impl-sonnet-low (assigned; base bbbbbbb; executor codex gpt-6.1-sol/low, thread pending)'
+run "$REPO" "$PLAN_REL"
+check "thread pending: exits 0" "$status" "0"
+has "thread pending: still prints the block" "$out" "**Next:** Resume at Task 2 (Second thing)."
+has "thread pending: warns on stderr" "$(cat "$TMP/stderr")" "Task 2 is assigned with its thread pending"
+has "thread pending: names handoff step 0" "$(cat "$TMP/stderr")" "dr-superpowers:handoff step 0"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: implementer dr-superpowers:impl-sonnet-low (assigned; base bbbbbbb)'
+run "$REPO" "$PLAN_REL"
+has "agent assigned: warns on stderr" "$(cat "$TMP/stderr")" "the ledger ends on an assigned line for Task 2"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: implementer inline (assigned; base bbbbbbb)'
+run "$REPO" "$PLAN_REL"
+lacks "inline assigned: no warning, the controller is the implementer" "$(cat "$TMP/stderr")" "warning"
+
 # --- ledger for another plan is ignored ---
 mkdir -p "$LEDGER_DIR"
 printf '# SDD ledger — plan: docs/plans/other.md\nTask 1: complete (x)\n' > "$LEDGER_DIR/progress.md"
