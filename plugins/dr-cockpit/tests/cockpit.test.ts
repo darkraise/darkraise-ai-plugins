@@ -105,6 +105,7 @@ const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
 type World = {
   tokens: number | undefined
   window?: number
+  startedAt?: number
   settings?: Record<string, unknown>
   toasts?: string[]
   notes?: string[]
@@ -135,7 +136,7 @@ function world(on: On, w: World) {
   on('session.start', (_$, e) => e as never)
   on('session.usage', (_$, e) => ({
     value: {
-      startedAt: 0,
+      startedAt: w.startedAt ?? 0,
       context: {
         tokens: w.tokens,
         window: w.window ?? 650_000,
@@ -1207,6 +1208,27 @@ describe('run card', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^1 blocked$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /BLOCKED · impl exhausted/ })).toBeDefined()
+  })
+
+  test('clears a run finished before the session started', async ($, on) => {
+    const done = [
+      '# SDD ledger — plan: docs/plans/p.md',
+      ...[1, 2, 3].map(n => `Task ${n}: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`),
+    ].join('\n')
+    const files = runFiles(done)
+    world(on, { ...SIGNED_IN, files, startedAt: 3_000_000 })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:brainstorming' })
+    await $.session.start(START)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeUndefined()
+    await ui.unmount()
+    // A run still open from before keeps its card.
+    const ledger = files?.['/home/me/code/shop/.superpowers/sdd/p/progress.md']
+    if (ledger !== undefined) ledger.text = LEDGER
+    await $.tool.call({ tool: 'Bash', command: 'cat .superpowers/sdd/p/progress.md' })
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
   })
 
   test('offers Resume when a recent handoff waits', async ($, on) => {

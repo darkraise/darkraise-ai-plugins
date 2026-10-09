@@ -1512,13 +1512,14 @@ async function readRun($: EngineInterface) {
       const info = await $.fs.stat(`${base}/${entry.name}/progress.md`).catch(() => null)
       if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
     }
-    const startedAt = (await read($, usage))?.startedAt ?? 0
+    const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage().catch(() => null))?.startedAt ?? 0
+    const isOlder = newest !== null && newest.at < startedAt
+    const clear = async () => {
+      if ((await read($, run)) !== null) await update($, run, () => null)
+    }
     // A ledger counts once this session works on it, or when it is the one
     // the session started next to.
-    if (newest === null || (!(await read($, isPlanSession)) && newest.at < startedAt)) {
-      if ((await read($, run)) !== null) await update($, run, () => null)
-      return
-    }
+    if (newest === null || (!(await read($, isPlanSession)) && isOlder)) return clear()
     const ledger = parseLedger(String(await $.fs.read(newest.path)))
     let titles: { n: number; title: string }[] = []
     if (ledger.plan !== null) {
@@ -1551,6 +1552,9 @@ async function readRun($: EngineInterface) {
       total: numbers.length,
       isFinished: ledger.isFinished,
     }
+    // A run whose every task was done before this session started is history:
+    // a new session starts with no Run card.
+    if (isOlder && (summary.isFinished || (summary.total > 0 && summary.done === summary.total))) return clear()
     await update($, run, () => summary)
     scheduleState($)
     await sendLedgerEvents($, summary)
