@@ -42,10 +42,10 @@ session is doing:
 │     resets in 3h40m · on pace                     │
 ╰───────────────────────────────────────────────────╯
 ╭ Shells ─────────────────────────────── $ 1 running ╮
-│ $ npm run dev 12m                                 │
+│ $ npm run dev 12m04s                              │
 ╰───────────────────────────────────────────────────╯
 ╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
-│ ● impl-sonnet-low Task 4 4m                       │
+│ ● impl-sonnet-low Task 4 4m17s                    │
 │ ✓ reviewer-opus Review task 3                     │
 │ Seats by input                                    │
 │   impl-sonnet-low ×1                              │
@@ -98,11 +98,12 @@ window refills.
   says whether the limit lasts to its reset at the pace so far (`on pace`), or
   when it runs out first, in amber.
 - **Shells** lists the background shells still running (a Bash call sent to
-  the background, by Claude or with Ctrl+B) with how long each has run, until
-  its notification or a stop ends it. The card shows only while one runs.
-- **Agents** lists the subagents running and recently finished, then each
-  subagent type (seat) with its runs, input tokens, the share served from the
-  prompt cache and output tokens. Use it to see where a plan's tokens go.
+  the background, by Claude or with Ctrl+B) with how long each has run, to the
+  second, until its notification or a stop ends it. The card shows only while
+  one runs.
+- **Agents** lists the subagents running, each timed to the second, and those
+  recently finished, then each subagent type (seat) with its runs, input
+  tokens, the share served from the prompt cache and output tokens. Use it to see where a plan's tokens go.
 - **Plan** follows the main session's todo list or task list, centred on the
   item in progress. In a `dr-superpowers` run it becomes **Run**, read from the
   run's ledger (`.superpowers/sdd/<run>/progress.md`) and its plan: the review

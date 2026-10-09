@@ -948,16 +948,19 @@ describe('shells and remote', () => {
   })
 
   test('list a background shell until its notification ends it', async ($, on) => {
-    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    const clock = world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
     signedIn(on)
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     // Shells is a card of its own, ahead of Agents, and Agents lists no shell.
     expect((await ui.find({ key: 'shells' }))?.props.borderColor).toBe('yellow')
-    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev <1m$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev 0s$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Agents$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /No subagents yet\./ })).toBeDefined()
+    // Idle, the pane still ticks each second while the shell runs.
+    await clock.advance(65_000)
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev 1m05s$/ })).toBeDefined()
     await ui.unmount()
     await $.prompt.submit({ text: ENDED, wait: false, origin: { kind: 'task-notification' } } as never)
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
