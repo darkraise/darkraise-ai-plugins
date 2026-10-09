@@ -314,8 +314,6 @@ export const register: Register = (on, options) => {
     const now = await $.clock.now()
     const room = e.props.bodyColumns
     const isCompact = layout === 'compact' || (layout === 'auto' && e.props.placement === 'inline')
-    // Room for the label, percentage and suffix beside the bar, inside the indent.
-    const meterWidth = isCompact ? 8 : Math.max(6, Math.min(20, room - INDENT - 30))
     const head = await read($, budget)
     const spend = await read($, usage)
     const rows = await read($, breakdown)
@@ -326,17 +324,6 @@ export const register: Register = (on, options) => {
     const refused = await read($, refusals)
     const canHandOff = await read($, isPlanSession)
 
-    const meter = (key: string, label: string, percent: number, suffix: string, width = meterWidth) => (
-      <Text key={key}>
-        <Text dimColor>{label.padEnd(isCompact ? label.length + 1 : 4)}</Text>
-        <Text color={rampColor(percent)}>{bar(percent / 100, width)}</Text>
-        <Text color={rampColor(percent)} bold>
-          {' '}
-          {Math.round(percent)}%
-        </Text>
-        {suffix !== '' && <Text dimColor> · {suffix}</Text>}
-      </Text>
-    )
     const actions = (
       <Box key="actions">
         {canHandOff && (
