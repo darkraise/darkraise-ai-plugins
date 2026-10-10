@@ -961,6 +961,15 @@ describe('now row', () => {
 describe('shells and remote', () => {
   const SHELL = { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }
   const ENDED = '<task-notification>\n<task-id>b7k2</task-id>\n<status>completed</status>\n<summary>done</summary>\n</task-notification>'
+  // The notification row a loop keeps: the main conversation's, or a subagent's.
+  const notified = (text: string, agentId?: string) =>
+    ({
+      message: { type: 'user', role: 'user', content: [{ type: 'text', text }] },
+      door: 'prompt',
+      origin: { kind: 'task-notification' },
+      uuid: `row-${text.length}`,
+      ...(agentId === undefined ? {} : { agentId }),
+    }) as never
 
   test('reads task ends and names devices', () => {
     expect(tasksEnded(ENDED)).toEqual([{ id: 'b7k2', status: 'completed' }])
@@ -988,10 +997,23 @@ describe('shells and remote', () => {
     await clock.advance(65_000)
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev 1m05s$/ })).toBeDefined()
     await ui.unmount()
-    await $.prompt.submit({ text: ENDED, wait: false, origin: { kind: 'task-notification' } } as never)
+    await $.session.append(notified(ENDED))
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
     // With no shell left the card goes.
+    expect(await ui.find({ key: 'shells' })).toBeUndefined()
+  })
+
+  test('drop a shell a subagent started once its notification reaches the subagent', async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true, agentId: 'agent-1' } as never)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ npm test/ })).toBeDefined()
+    await ui.unmount()
+    await $.session.append(notified(`[SYSTEM NOTIFICATION - NOT USER INPUT]\n\n${ENDED}`, 'agent-1'))
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'shells' })).toBeUndefined()
   })
 
