@@ -79,10 +79,11 @@ deck. The account comes first, then what Claude is doing, then three gauges:
 the context against its handoff budget with the turns left, and the 5-hour and
 7-day limits, each with a tick where its window has run to, its reset and its
 forecast. Every other section follows as a softly filled panel with a colored
-lamp; the usage panel says how far each window has run. The context window,
-trend and category split, each seat's input and the run's tasks are vector
-drawings, the model, config, branch and changes sit in filled chips, and the
-buttons are the desktop's own. With **Show at start** on it opens once the
+lamp; the usage panel says how far each window has run. The desktop's own text
+has one size and spaces rows a whole line apart, so each panel's rows, chips
+and charts are drawn as one picture at their own sizes and gaps, its text in
+your system's light or dark tones (its words are in the picture's alt text).
+The buttons are the desktop's own. With **Show at start** on it opens once the
 desktop window joins the session, unless you closed it.
 
 - **Now** is the turn in flight: running with its time, step, tool and the
