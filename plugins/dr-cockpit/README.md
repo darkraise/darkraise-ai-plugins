@@ -111,7 +111,12 @@ window refills.
   run's ledger (`.superpowers/sdd/<run>/progress.md`) and its plan: the review
   round in flight, the tasks done, which were reviewed clean, and a blocked
   task in red with its reason. A run whose tasks were all done before the
-  session started is left out, so a new session starts without it.
+  session started is left out, so a new session starts without it. Its
+  **Finish** row shows what dr-superpowers will do if the finishing menu goes
+  unanswered (the option chosen before the run), then counts down the menu's
+  30 minutes (`⏱ Finish push and open a PR · in 23m`) and says once it was
+  carried out. It disappears when you answer the menu yourself. Work done
+  without a plan shows the row on the Plan card.
 - **Repo** names the repository (`owner/name` from its remote, else its folder)
   and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.

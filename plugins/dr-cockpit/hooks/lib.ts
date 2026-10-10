@@ -1,3 +1,5 @@
+import type { CockpitFinish } from '../types'
+
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
 /** The strip's handoff reading shows from this share of the budget. */
@@ -736,6 +738,59 @@ export function isAtLeast(base: string | undefined, least: string): boolean {
     if ((have[i] ?? 0) !== want[i]) return (have[i] ?? 0) > want[i]!
   }
   return true
+}
+
+/** finish.json as dr-superpowers' finish-choice writes it; null when unreadable. */
+export function parseFinish(text: string): CockpitFinish | null {
+  try {
+    const raw = JSON.parse(text) as Record<string, unknown>
+    const action = raw.action
+    if (action !== 'merge' && action !== 'pr' && action !== 'keep' && action !== 'wait') return null
+    const ms = (value: unknown) => (typeof value === 'number' ? value * 1000 : null)
+    return {
+      action,
+      base: typeof raw.base === 'string' ? raw.base : null,
+      dueAt: ms(raw.dueAt),
+      answer: typeof raw.answer === 'string' ? raw.answer : null,
+      firedAt: ms(raw.firedAt),
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Whether the finish choice counts down: armed, unanswered, not yet carried out. */
+export function isFinishArmed(finish: CockpitFinish | null): boolean {
+  return finish !== null && finish.action !== 'wait' && finish.dueAt !== null && finish.answer === null && finish.firedAt === null
+}
+
+/**
+ * The Run card's finish row: the option chosen before the run, then its
+ * countdown once the menu is up, or that it was carried out. Nothing once you
+ * answered the menu yourself.
+ */
+export function finishLine(finish: CockpitFinish, at: number): Run[] {
+  if (finish.answer !== null) return []
+  const label =
+    finish.action === 'merge'
+      ? `merge into ${finish.base ?? 'the base branch'}`
+      : finish.action === 'pr'
+        ? 'push and open a PR'
+        : finish.action === 'keep'
+          ? 'keep the branch'
+          : 'wait for your answer'
+  const head: Run = { text: 'Finish ', dim: true }
+  if (finish.firedAt !== null) return [{ text: '✓ ', color: 'green' }, head, { text: label, bold: true }, { text: ' · no answer, so done', dim: true }]
+  if (finish.action === 'wait') return [head, { text: label }]
+  if (finish.dueAt === null) return [head, { text: label, bold: true }, { text: ' if the menu goes unanswered', dim: true }]
+  const left = duration(finish.dueAt - at)
+  return [
+    { text: '⏱ ', color: AMBER },
+    head,
+    { text: label, bold: true },
+    { text: ' · ', dim: true },
+    { text: left === '' || left === '0m' ? 'due now' : `in ${left}`, color: AMBER, bold: true },
+  ]
 }
 
 /** A background task's end as its notification reads: `<task-id>` and `<status>`. */

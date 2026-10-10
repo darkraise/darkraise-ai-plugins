@@ -107,6 +107,14 @@ dr-superpowers:using-git-worktrees to create one or verify the existing one.
 Never start implementation on a main/master branch without your human partner's
 explicit consent.
 
+**Ask the finish preference first.** Before this run writes anything to its
+ledger, follow [finish-preference.md](../../reference/finish-preference.md):
+ask what finishing should do if its menu goes unanswered for 30 minutes,
+record the answer, and start work in the same turn. Skip it when
+`scripts/finish-choice get --plan PLAN_FILE` already prints a choice, or when
+this plan's ledger already exists: a resumed run does not stop to ask. It is
+the run's one question; nothing else waits on your human partner.
+
 Conversation memory does not survive compaction. Track progress in a ledger
 file, not only in todos.
 
