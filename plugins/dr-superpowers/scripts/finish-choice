@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# The finish action your human partner chose before execution started: what
+# dr-superpowers:finishing-a-development-branch carries out when its menu goes
+# unanswered. The choice is asked once, before the first task, because a run
+# ends while its human is away and the menu would otherwise wait forever.
+#
+# One JSON file holds it: `<workspace>/finish.json` beside a plan's ledger, or
+# `.superpowers/sdd/finish.json` for work done without a plan. Both are
+# git-ignored; the dr-cockpit Run card reads the file to show the choice.
+#
+# Usage: finish-choice <command> [--plan PLAN_FILE] [args]
+#   set ACTION [--base BRANCH]  record the choice: merge | pr | keep | wait
+#   get                         print the file; exit 3 when nothing is chosen
+#   arm [--minutes N]           start the clock as the menu is shown (default
+#                               30); print the cron line, the due time and the
+#                               wake prompt. Exit 3 when no action is armed:
+#                               nothing chosen, `wait`, or already answered.
+#   job ID                      record the scheduler's job id
+#   answer ACTION               your human partner answered the menu: disarm,
+#                               and print the job id to cancel (if any)
+#   due                         at the wake: print the action and mark it
+#                               fired when armed, unanswered and due. Exit 3
+#                               when there is nothing to do, 4 when not due.
+#   clear                       forget the choice
+#
+# FINISH_CHOICE_NOW (epoch seconds) stands in for the clock in tests.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+usage() { sed -n '/^# Usage:/,/^# FINISH_CHOICE_NOW/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "finish-choice needs jq" >&2; exit 2; }
+[ $# -ge 1 ] || usage
+cmd=$1; shift
+
+plan=""
+args=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --plan) [ $# -ge 2 ] || usage; plan=$2; shift 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+set -- "${args[@]+"${args[@]}"}"
+
+if [ -n "$plan" ]; then
+  dir=$(bash "$HERE/sdd-workspace" "$plan")
+else
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "not inside a git repository" >&2; exit 2; }
+  dir="$root/.superpowers/sdd"
+  mkdir -p "$dir"
+  printf '*\n' > "$dir/.gitignore"
+fi
+file="$dir/finish.json"
+now=${FINISH_CHOICE_NOW:-$(date +%s)}
+
+valid_action() {
+  case $1 in merge|pr|keep|wait) return 0 ;; *) return 1 ;; esac
+}
+write() { # write <jq filter> [jq args...]: rewrite the file through the filter
+  local filter=$1; shift
+  local current='{}'
+  [ -s "$file" ] && current=$(cat "$file")
+  jq "$@" "$filter" <<<"$current" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+need_file() { [ -s "$file" ] || { echo "no finish action chosen" >&2; exit 3; }; }
+
+case $cmd in
+  set)
+    [ $# -ge 1 ] && valid_action "$1" || { echo "set takes one of: merge pr keep wait" >&2; exit 2; }
+    action=$1; shift
+    base=""
+    if [ $# -ge 2 ] && [ "$1" = "--base" ]; then base=$2; shift 2; fi
+    [ $# -eq 0 ] || usage
+    jq -n --arg action "$action" --arg base "$base" --argjson now "$now" \
+      '{action: $action, base: (if $base == "" then null else $base end), chosenAt: $now}' > "$file"
+    cat "$file"
+    ;;
+  get)
+    need_file
+    cat "$file"
+    ;;
+  arm)
+    need_file
+    minutes=30
+    if [ $# -ge 2 ] && [ "$1" = "--minutes" ]; then minutes=$2; shift 2; fi
+    [ $# -eq 0 ] && [[ $minutes =~ ^[1-9][0-9]*$ ]] || usage
+    action=$(jq -r '.action' "$file")
+    if [ "$action" = "wait" ] || [ "$(jq -r '.answer // empty' "$file")" != "" ]; then
+      echo "no finish action to arm ($action)" >&2; exit 3
+    fi
+    due=$((now + minutes * 60))
+    write '.armedAt = $now | .dueAt = $due | del(.job, .firedAt)' --argjson now "$now" --argjson due "$due"
+    # Cron reads local time and has no seconds: round up to the next minute.
+    at=$(( (due + 59) / 60 * 60 ))
+    jq -rn --argjson t "$at" '$t | localtime | "cron: \(.[4]) \(.[3]) \(.[2]) \(.[1] + 1) *", "due: \(strftime("%H:%M"))"'
+    where=${plan:+ --plan $plan}
+    printf 'prompt: dr-superpowers finish timer: the finishing menu went unanswered. Run `bash %s/finish-choice due%s` with the working directory in this worktree. If it prints an action, carry it out from dr-superpowers:finishing-a-development-branch Step 5 as if your human partner had chosen it; if it exits non-zero, do nothing and end the turn in one line.\n' "$HERE" "$where"
+    ;;
+  job)
+    [ $# -eq 1 ] || usage
+    need_file
+    write '.job = $id' --arg id "$1"
+    ;;
+  answer)
+    [ $# -eq 1 ] || usage
+    need_file
+    jq -r '.job // empty' "$file"
+    write '.answer = $answer | .answeredAt = $now' --arg answer "$1" --argjson now "$now"
+    ;;
+  due)
+    [ $# -eq 0 ] || usage
+    [ -s "$file" ] || exit 3
+    state=$(jq -r --argjson now "$now" '
+      if (.answer // null) != null or (.firedAt // null) != null or (.dueAt // null) == null or .action == "wait" then "none"
+      elif $now + 90 < .dueAt then "early"
+      else "due" end' "$file")
+    case $state in
+      none) echo "nothing to do: the menu was answered, already handled, or never armed" >&2; exit 3 ;;
+      early) echo "not due until $(jq -r '.dueAt | localtime | strftime("%H:%M")' "$file")" >&2; exit 4 ;;
+    esac
+    write '.firedAt = $now' --argjson now "$now"
+    jq -r '.action' "$file"
+    ;;
+  clear)
+    rm -f "$file"
+    ;;
+  *) usage ;;
+esac

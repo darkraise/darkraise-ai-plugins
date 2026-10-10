@@ -126,14 +126,14 @@ digraph process {
         "Append completion to ledger, mark todo complete" [shape=box];
     }
 
-    "Setup: worktree, ledger check, plan header, legacy names, pre-flight ruling" [shape=box];
+    "Setup: worktree, finish preference, ledger check, plan header, legacy names, pre-flight ruling" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Final review: code reviewer + Codex round, judge verifies the union" [shape=box];
     "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" [shape=box];
     "Final review clean: ledger it, print rulings" [shape=box];
     "Use dr-superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
-    "Setup: worktree, ledger check, plan header, legacy names, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
+    "Setup: worktree, finish preference, ledger check, plan header, legacy names, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
     "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" -> "Implementer reports NEEDS_CONTEXT?";
     "Implementer reports NEEDS_CONTEXT?" -> "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [label="yes"];
     "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" -> "Implementer implements, tests, commits, self-reviews";
@@ -170,6 +170,14 @@ Ensure the work happens in an isolated workspace: use
 dr-superpowers:using-git-worktrees to create one or verify the existing one.
 Never start implementation on a main/master branch without your human
 partner's explicit consent.
+
+**Ask the finish preference first.** Before this run writes anything to its
+ledger, follow [finish-preference.md](../../reference/finish-preference.md):
+ask what finishing should do if its menu goes unanswered for 30 minutes,
+record the answer, and start work in the same turn. Skip it when
+`scripts/finish-choice get --plan PLAN_FILE` already prints a choice, or when
+this plan's ledger already exists: a resumed run does not stop to ask. It is
+the run's one question; nothing else waits on your human partner.
 
 Conversation memory does not survive compaction. In real sessions,
 controllers that lost their place have re-dispatched entire completed task

@@ -106,3 +106,10 @@ the user to use the App's native controls:
 
 The agent can still run tests, stage files, and output suggested branch
 names, commit messages, and PR descriptions for the user to copy.
+
+## No scheduled wake
+
+Codex has no CronCreate, so nothing wakes a session whose finishing menu went
+unanswered. Still ask the finish preference before a run and record it; at the
+menu, say which option was chosen before the run and wait for a reply
+([finish-preference.md](../../../reference/finish-preference.md)).

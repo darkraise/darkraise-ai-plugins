@@ -6,6 +6,7 @@ import type {
   CockpitActivity,
   CockpitBreakdown,
   CockpitBudget,
+  CockpitFinish,
   CockpitPlanItem,
   CockpitRefusal,
   CockpitRun,
@@ -23,8 +24,10 @@ import {
   budgetFor,
   duration,
   elapsed,
+  finishLine,
   fitStatus,
   isAtLeast,
+  isFinishArmed,
   isGitWriteTool,
   isSuperpowers,
   kTokens,
@@ -34,6 +37,7 @@ import {
   modelName,
   nowBadge,
   nowLine,
+  parseFinish,
   parseLedger,
   planTasks,
   planFromTodos,
@@ -133,6 +137,7 @@ const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, ste
 const activity = atom({ plugin: 'dr-cockpit', key: 'activity' } as const, IDLE)
 const turnTokens = atom({ plugin: 'dr-cockpit', key: 'turnTokens' } as const, [])
 const run = atom({ plugin: 'dr-cockpit', key: 'run' } as const, null)
+const finish = atom({ plugin: 'dr-cockpit', key: 'finish' } as const, null)
 const handoffAt = atom({ plugin: 'dr-cockpit', key: 'handoffAt' } as const, null)
 const notifier = atom({ plugin: 'dr-cockpit', key: 'notifier' } as const, {
   url: null,
@@ -495,7 +500,7 @@ export const register: Register = (on, options) => {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
       await onBudget($, await refresh($, tuning, compactWindow))
       // The controller writes its ledger with its own tool calls.
-      if (JSON.stringify(e).includes('.superpowers')) await readRun($)
+      if (/\.superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
     }
 
     return ran
@@ -521,6 +526,7 @@ export const register: Register = (on, options) => {
     const canHandOff = await read($, isPlanSession)
     const act = await read($, activity)
     const summary = await read($, run)
+    const finishNow = await read($, finish)
     const handoffTime = await read($, handoffAt)
     const canResume = !canHandOff && handoffTime !== null && now - handoffTime < RESUME_WITHIN
     const drawRuns = (key: string, runs: Run[]) =>
@@ -988,6 +994,11 @@ export const register: Register = (on, options) => {
             plan {summary.plan}
           </Text>
         ),
+        finishNow !== null && finishLine(finishNow, now).length > 0 && (
+          <Text key="plan-finish" wrap="truncate-end">
+            {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+          </Text>
+        ),
         runWindow(summary.tasks, 6).map(task => {
           const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
           if (task.state === 'complete') {
@@ -1259,6 +1270,11 @@ export const register: Register = (on, options) => {
               </Text>
             </Text>
           )),
+          finishNow !== null && finishLine(finishNow, now).length > 0 && (
+            <Text key="plan-finish" wrap="truncate-end">
+              {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+            </Text>
+          ),
         ),
       repo:
         git !== null &&
@@ -1400,7 +1416,8 @@ async function setActivity($: EngineInterface, change: (now: CockpitActivity) =>
 async function syncTicker($: EngineInterface) {
   const now = await read($, activity)
   S.isTurnLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
-  const isTicking = S.isTurnLive || (await read($, shells)).length > 0 || (await read($, spawns)).some(one => !one.isDone)
+  const isTicking =
+    S.isTurnLive || (await read($, shells)).length > 0 || (await read($, spawns)).some(one => !one.isDone) || isFinishArmed(await read($, finish))
   if (isTicking && S.ticker === null) {
     S.ticks = 0
     S.ticker = $.clock.every(1000, () => {
@@ -1512,6 +1529,7 @@ async function readRun($: EngineInterface) {
       const info = await $.fs.stat(`${base}/${entry.name}/progress.md`).catch(() => null)
       if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
     }
+    await readFinish($, newest === null ? `${base}/finish.json` : newest.path.replace(/progress\.md$/, 'finish.json'))
     const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage().catch(() => null))?.startedAt ?? 0
     const isOlder = newest !== null && newest.at < startedAt
     const clear = async () => {
@@ -1561,6 +1579,16 @@ async function readRun($: EngineInterface) {
   } catch {
     // No readable ledger: the Plan card stays as it is.
   }
+}
+
+// The finish action dr-superpowers asked for before the run, from the run's
+// finish.json, or the one beside the workspaces for work without a plan.
+async function readFinish($: EngineInterface, path: string) {
+  const text = await $.fs.read(path).catch(() => null)
+  const next: CockpitFinish | null = text === null ? null : parseFinish(String(text))
+  if (JSON.stringify(await read($, finish)) === JSON.stringify(next)) return
+  await update($, finish, () => next)
+  await syncTicker($)
 }
 
 // A task that became blocked or complete since the last read, said once.

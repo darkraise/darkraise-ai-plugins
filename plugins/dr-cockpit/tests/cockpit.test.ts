@@ -10,6 +10,7 @@ import {
   budgetFor,
   duration,
   elapsed,
+  finishLine,
   fitStatus,
   isAtLeast,
   levelOf,
@@ -17,6 +18,7 @@ import {
   modelName,
   nowBadge,
   nowLine,
+  parseFinish,
   parseLedger,
   planTasks,
   planWithUpdate,
@@ -1251,6 +1253,35 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Bash', command: 'cat .superpowers/sdd/p/progress.md' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+  })
+
+  test('reads the finish choice and counts it down', () => {
+    const chosen = parseFinish('{"action":"pr","base":"main","chosenAt":900}')
+    expect(chosen).toEqual({ action: 'pr', base: 'main', dueAt: null, answer: null, firedAt: null })
+    expect(parseFinish('{"action":"later"}')).toBeNull()
+    expect(parseFinish('{broken')).toBeNull()
+    if (chosen === null) return
+    expect(runsText(finishLine(chosen, 0))).toBe('Finish push and open a PR if the menu goes unanswered')
+    const armed = { ...chosen, action: 'merge' as const, dueAt: 1_800_000 }
+    expect(runsText(finishLine(armed, 420_000))).toBe('⏱ Finish merge into main · in 23m')
+    expect(runsText(finishLine(armed, 1_800_000))).toBe('⏱ Finish merge into main · due now')
+    expect(runsText(finishLine({ ...armed, firedAt: 1_800_000 }, 1_900_000))).toBe('✓ Finish merge into main · no answer, so done')
+    expect(finishLine({ ...armed, answer: 'keep' }, 420_000)).toEqual([])
+    expect(runsText(finishLine({ ...chosen, action: 'wait' }, 0))).toBe('Finish wait for your answer')
+  })
+
+  test('shows the finish choice on the Run card', async ($, on) => {
+    const files = {
+      ...runFiles(LEDGER),
+      '/home/me/code/shop/.superpowers/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    // The world's clock reads 1,000,000 ms; the menu's 30 minutes end at 2,800 s.
+    expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
   })
 
   test('offers Resume when a recent handoff waits', async ($, on) => {

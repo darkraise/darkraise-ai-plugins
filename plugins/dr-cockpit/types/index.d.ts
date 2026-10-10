@@ -176,6 +176,21 @@ export type CockpitRun = {
   isFinished: boolean
 }
 
+/**
+ * What dr-superpowers finishing does if its menu goes unanswered, as its
+ * `finish-choice` script keeps it (finish.json). Times in milliseconds.
+ */
+export type CockpitFinish = {
+  action: 'merge' | 'pr' | 'keep' | 'wait'
+  base: string | null
+  /** When the menu's 30 minutes run out, once finishing armed the choice. */
+  dueAt: number | null
+  /** Your own answer to the menu, which overrides the choice. */
+  answer: string | null
+  /** When the wake carried the choice out. */
+  firedAt: number | null
+}
+
 /** The Discord webhook's state, as the settings view shows it. */
 export type CockpitNotifier = {
   /** The webhook URL; never drawn, only masked. */
@@ -217,6 +232,7 @@ declare module 'claude-code' {
       /** The main session's context at the end of each turn, oldest first, for the forecast. */
       turnTokens: number[]
       run: CockpitRun | null
+      finish: CockpitFinish | null
       /** When the newest handoff note was written, in milliseconds since the epoch. */
       handoffAt: number | null
       notifier: CockpitNotifier

@@ -330,6 +330,19 @@ in any turn: a handoff there would invite ending a session whose work is still
 in flight. When the turn wrote more than one ledger, each one must have its
 ending.
 
+A run also asks one question before its first task: what finishing should do
+if its menu goes unanswered for 30 minutes (merge locally, push and open a pull
+request, keep the branch, or wait). `scripts/finish-choice` keeps the answer
+beside the ledger (`.superpowers/sdd/<plan>/finish.json`, or
+`.superpowers/sdd/finish.json` for work done without a plan). When finishing
+shows its menu, it arms that choice and schedules a one-shot wake with
+CronCreate; the menu's last line says what happens and when. An answer to the
+menu inside the 30 minutes disarms the wake and wins; otherwise the wake
+carries out the chosen option as if it had been picked, and stops wherever an
+attended finish would ask. The dr-cockpit Run card shows the choice and the
+deadline. Codex has no scheduler, so there the menu names the choice and waits.
+See [reference/finish-preference.md](reference/finish-preference.md).
+
 Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
 catches a summarize-and-stop there. On Codex you must run `next-step` yourself
 on every early stop.
