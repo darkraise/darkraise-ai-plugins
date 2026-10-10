@@ -136,8 +136,8 @@ and every task carrying an `**Executor:**` line: each runs through
 subagent — or, for an Executor line, that executor's wrapper — and the full
 per-task review. The tasks not delegated are the **self-implemented** tasks.
 
-- `subagent` when the plan runs parallel waves (see Parallel waves), and
-  otherwise when more than half the tasks are heavy:
+- `subagent` when more than half the tasks are heavy, and always when the
+  plan runs parallel waves (see Parallel waves):
   `claude --model sonnet --effort high`. The controller owns no judgment calls
   — the ruling seat does — so it needs no stronger model.
 - Otherwise `inline`, the default, on `sonnet`: every self-implemented task
