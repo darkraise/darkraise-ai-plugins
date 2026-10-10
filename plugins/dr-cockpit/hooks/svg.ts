@@ -30,7 +30,15 @@ export function svgWidth(columns: number): number {
   return Math.max(120, Math.min(640, Math.round(columns * 7.5)))
 }
 
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+const SANS = "system-ui, -apple-system, 'Segoe UI', sans-serif"
+
 const n = (value: number) => String(Math.round(value * 10) / 10)
+const esc = (text: string) => text.replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`)
+// A label in the drawings' small monospace type, about 6.3 pixels a character.
+const LABEL_EM = 6.3
+const label = (x: number, y: number, text: string, anchor: 'start' | 'middle' | 'end', color = MARK) =>
+  `<text x="${n(x)}" y="${y}" text-anchor="${anchor}" font-family="${MONO}" font-size="10.5" fill="${color}">${esc(text)}</text>`
 const clamp = (share: number) => Math.min(Math.max(Number.isFinite(share) ? share : 0, 0), 1)
 const svg = (width: number, height: number, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`
@@ -55,16 +63,55 @@ export function meterSvg(share: number, width: number, color: string, marks: rea
   return svg(width, height, `<rect x="0" y="${n(y)}" width="${width}" height="${n(bar)}" rx="${n(r)}" fill="${TRACK}"/>${fill}${lines}`)
 }
 
-/** The readings as a line over a soft fill, the latest one marked. */
-export function trendSvg(values: readonly number[], width: number, color: string, height = 40): string {
+/** A headline figure, large in its color, with its words beside it. */
+export function statSvg(value: string, words: string, width: number, color: string): string {
+  // Figures at 24px run about 14px wide, a percent sign 21px.
+  const after = 8 + [...value].reduce((sum, ch) => sum + (ch === '%' ? 21 : ch === '.' || ch === ',' ? 7 : 14.5), 0)
+  return svg(
+    width,
+    30,
+    `<text x="0" y="23" font-family="${SANS}" font-size="24" font-weight="600" fill="${paint(color)}">${esc(value)}</text>` +
+      `<text x="${n(after)}" y="23" font-family="${SANS}" font-size="13" fill="${MARK}">${esc(words)}</text>`,
+  )
+}
+
+export type SvgLabel = { at: number; text: string; color?: string }
+
+/**
+ * A meter with its marks named beneath it: each label sits under its point,
+ * the first and last against the ends, and one that would run into a label
+ * already placed is left out.
+ */
+export function labelledMeterSvg(share: number, width: number, color: string, marks: readonly SvgMark[], labels: readonly SvgLabel[]): string {
+  const bar = meterSvg(share, width, color, marks, 16)
+  const inner = bar.slice(bar.indexOf('>') + 1, bar.lastIndexOf('</svg>'))
+  const taken: [number, number][] = []
+  const texts = labels
+    .map(one => {
+      const size = one.text.length * LABEL_EM
+      const x = clamp(one.at) * width
+      const anchor = x - size / 2 <= 0 ? 'start' : x + size / 2 >= width ? 'end' : 'middle'
+      const from = anchor === 'start' ? 0 : anchor === 'end' ? width - size : x - size / 2
+      if (taken.some(([a, b]) => from < b + 8 && from + size > a - 8)) return ''
+      taken.push([from, from + size])
+      return label(anchor === 'start' ? 0 : anchor === 'end' ? width : x, 32, one.text, anchor, one.color === undefined ? MARK : paint(one.color))
+    })
+    .join('')
+  return svg(width, 38, inner + texts)
+}
+
+/** The readings as a line over a soft fill, the latest one marked, with the change and the span at its right. */
+export function trendSvg(values: readonly number[], width: number, color: string, height = 40, labels: { top?: string; bottom?: string } = {}): string {
   const shown = values.filter(Number.isFinite)
   if (shown.length < 2) return svg(width, height, '')
   const low = Math.min(...shown)
   const high = Math.max(...shown)
   const span = high - low || 1
   const pad = 4
+  // The change sits above the line, clear of its latest point.
+  const top = labels.top === undefined ? pad : 16
   const step = (width - 2 * pad) / (shown.length - 1)
-  const points = shown.map((value, index) => [pad + index * step, height - pad - ((value - low) / span) * (height - 2 * pad)] as const)
+  const points = shown.map((value, index) => [pad + index * step, height - pad - ((value - low) / span) * (height - pad - top)] as const)
   const line = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${n(x)} ${n(y)}`).join(' ')
   const [lastX, lastY] = points[points.length - 1] ?? [0, 0]
   const hue = paint(color)
@@ -74,7 +121,9 @@ export function trendSvg(values: readonly number[], width: number, color: string
     `<line x1="0" y1="${height - pad}" x2="${width}" y2="${height - pad}" stroke="${TRACK}"/>` +
       `<path d="${line} L${n(lastX)} ${height - pad} L${pad} ${height - pad} Z" fill="${hue}" fill-opacity="0.18"/>` +
       `<path d="${line}" fill="none" stroke="${hue}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>` +
-      `<circle cx="${n(lastX)}" cy="${n(lastY)}" r="3" fill="${hue}"/>`,
+      `<circle cx="${n(lastX)}" cy="${n(lastY)}" r="3" fill="${hue}"/>` +
+      (labels.top === undefined ? '' : label(width, 11, labels.top, 'end', hue)) +
+      (labels.bottom === undefined ? '' : label(width, height - pad - 4, labels.bottom, 'end')),
   )
 }
 
@@ -99,6 +148,28 @@ export function stackSvg(values: readonly number[], colors: readonly string[], w
   )
 }
 
+/**
+ * A seat's line: its name and token counts above a bar of its input against
+ * the busiest seat's, the share served from the prompt cache shaded.
+ */
+export function seatSvg(name: string, counts: string, share: number, cached: number, width: number, color: string): string {
+  const hue = paint(color)
+  const filled = clamp(share) * width
+  const warm = filled * clamp(cached)
+  return svg(
+    width,
+    28,
+    label(0, 10, name, 'start') +
+      label(width, 10, counts, 'end') +
+      `<rect x="0" y="16" width="${width}" height="8" rx="4" fill="${TRACK}"/>` +
+      (filled <= 0
+        ? ''
+        : `<defs><clipPath id="s"><rect x="0" y="16" width="${n(Math.max(filled, 8))}" height="8" rx="4"/></clipPath></defs>` +
+          `<g clip-path="url(#s)"><rect x="0" y="16" width="${n(warm)}" height="8" fill="${hue}" fill-opacity="0.45"/>` +
+          `<rect x="${n(warm)}" y="16" width="${n(Math.max(filled, 8) - warm)}" height="8" fill="${hue}"/></g>`),
+  )
+}
+
 export type Segment = 'done' | 'active' | 'blocked' | 'todo'
 const SEGMENT_COLORS: Record<Segment, string> = { done: PALETTE.green, active: PALETTE.blue, blocked: PALETTE.red, todo: TRACK }
 
@@ -115,8 +186,7 @@ export function segmentsSvg(states: readonly Segment[], width: number, height = 
 
 /** A round badge in the account's color with its first letter. */
 export function avatarSvg(name: string, color: string | undefined, size = 30): string {
-  const letter = ([...name.trim()][0] ?? '?').toUpperCase()
-  const text = letter.replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`)
+  const text = esc(([...name.trim()][0] ?? '?').toUpperCase())
   const r = size / 2
   return svg(
     size,

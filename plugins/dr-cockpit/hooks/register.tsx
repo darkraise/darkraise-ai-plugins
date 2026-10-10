@@ -77,7 +77,7 @@ import {
   notifyKindsToggled,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
-import { avatarSvg, meterSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
+import { avatarSvg, labelledMeterSvg, meterSvg, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from './svg'
 import type { Segment } from './svg'
 
 const PANE = 'dr-cockpit'
@@ -882,6 +882,20 @@ export const register: Register = (on, options) => {
     const wide = Math.max(10, inner - 2 * INDENT)
     const px = svgWidth(inner)
     const picture = (key: string, source: string, alt: string) => Svg !== undefined && <Svg key={key} source={source} alt={alt} />
+    // The desktop's small facts sit in chips: a quiet rounded frame each, in a
+    // row that wraps.
+    const chip = (key: string, body: RenderChildren, color?: string) => (
+      <Box key={key} borderStyle="round" borderColor="inactive" paddingX={1}>
+        <Text color={color} wrap="truncate-end">
+          {body}
+        </Text>
+      </Box>
+    )
+    const chips = (key: string, ...items: RenderChildren[]) => (
+      <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {items}
+      </Box>
+    )
     const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) =>
       isDesktop ? (
         // A quiet frame, the section's color on its marker alone.
@@ -942,17 +956,29 @@ export const register: Register = (on, options) => {
     if (head !== null) {
       const percent = (head.tokens / head.limit) * 100
       const compactAt = rows?.compactAt ?? null
-      contextBody.push(
-        isDesktop
-          ? picture(
-              'ctx-track',
-              meterSvg(head.tokens / head.window, px, rampColor(percent), [
-                ...(compactAt === null ? [] : [{ at: compactAt / head.window, isDashed: true }]),
-                { at: head.limit / head.window },
-              ], 14),
-              `${kTokens(head.tokens)} of ${kTokens(head.window)} tokens, handoff at ${kTokens(head.limit)}`,
-            )
-          : drawTrack(
+      if (isDesktop) {
+        // The share of the budget large, then the window with its handoff and
+        // compaction points marked and named beneath.
+        contextBody.push(
+          picture('ctx-stat', statSvg(`${Math.round(percent)}%`, 'of handoff budget', px, rampColor(percent)), `${Math.round(percent)}% of the handoff budget`),
+          picture(
+            'ctx-track',
+            labelledMeterSvg(
+              head.tokens / head.window,
+              px,
+              rampColor(percent),
+              [...(compactAt === null ? [] : [{ at: compactAt / head.window, isDashed: true }]), { at: head.limit / head.window }],
+              [
+                { at: 0, text: `${kTokens(head.tokens)} / ${kTokens(head.window)}` },
+                { at: head.limit / head.window, text: `handoff ${kTokens(head.limit)}`, color: rampColor(percent) },
+                ...(compactAt === null ? [] : [{ at: compactAt / head.window, text: `compacts ${kTokens(compactAt)}` }]),
+              ],
+            ),
+            `${kTokens(head.tokens)} of ${kTokens(head.window)} tokens, handoff at ${kTokens(head.limit)}`,
+          ),
+        )
+      } else contextBody.push(
+          drawTrack(
               'ctx-track',
               percent,
               track(head.tokens / head.window, inner, [
@@ -971,12 +997,14 @@ export const register: Register = (on, options) => {
       if (readings.length > 1) {
         const change = (readings[readings.length - 1] ?? 0) - (readings[readings.length - 2] ?? 0)
         if (isDesktop) {
+          const count = Math.min(24, readings.length)
+          const label = `${change >= 0 ? '+' : '−'}${kTokens(Math.abs(change))}`
           contextBody.push(
-            <Text key="ctx-trend-label" dimColor wrap="truncate-end">
-              trend {change >= 0 ? '+' : '−'}
-              {kTokens(Math.abs(change))}
-            </Text>,
-            picture('ctx-trend', trendSvg(readings.slice(-24), px, 'cyan'), `Context over the last ${Math.min(24, readings.length)} readings`),
+            picture(
+              'ctx-trend',
+              trendSvg(readings.slice(-24), px, 'cyan', 46, { top: label, bottom: `${count} turns` }),
+              `Context over the last ${count} readings, ${label} on the last`,
+            ),
           )
         } else contextBody.push(
           <Text key="ctx-trend" wrap="truncate-end">
@@ -1017,7 +1045,22 @@ export const register: Register = (on, options) => {
               ))}
             </Text>
           ),
-          details(
+          isDesktop ? (
+            <Box key="ctx-rows" flexDirection="column">
+              {breakdownShown.map((row, index) => (
+                <Box key={`ctx-row-${row.name}`} flexDirection="row" columnGap={1}>
+                  <Text color={colorOf(index)}>■</Text>
+                  <Box key={`ctx-row-${row.name}-name`} flexGrow={1} flexShrink={1}>
+                    <Text wrap="truncate-end">{row.name}</Text>
+                  </Box>
+                  <Text bold>{kTokens(row.tokens)}</Text>
+                  <Box key={`ctx-row-${row.name}-share`} width={5} justifyContent="flex-end">
+                    <Text dimColor>{Math.round((row.tokens / Math.max(1, used)) * 100)}%</Text>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          ) : details(
             'ctx-rows',
             breakdownShown.map((row, index) => (
               <Text key={`ctx-row-${row.name}`} wrap="truncate-end">
@@ -1044,6 +1087,11 @@ export const register: Register = (on, options) => {
         'plan',
         'Run',
         color,
+        isDesktop && blocked.length === 0 ? (
+          <Text key="plan-head" dimColor>
+            {[round === null ? '' : `round ${round}`, `${summary.done} of ${summary.total}`].filter(Boolean).join(' · ')}
+          </Text>
+        ) : (
         <Text key="plan-head">
           {blocked.length > 0 ? (
             <Text color="red" bold>
@@ -1056,7 +1104,8 @@ export const register: Register = (on, options) => {
           <Text bold>
             {summary.done}/{summary.total}
           </Text>
-        </Text>,
+        </Text>
+        ),
         isDesktop ? (
           picture(
             'plan-progress',
@@ -1070,16 +1119,36 @@ export const register: Register = (on, options) => {
         ),
         summary.plan !== null && (
           <Text key="plan-path" dimColor wrap="truncate-end">
-            plan {summary.plan}
+            {isDesktop ? '' : 'plan '}
+            {summary.plan}
           </Text>
         ),
-        finishNow !== null && finishLine(finishNow, now).length > 0 && (
-          <Text key="plan-finish" wrap="truncate-end">
-            {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
-          </Text>
-        ),
+        finishNow !== null &&
+          finishLine(finishNow, now).length > 0 &&
+          (isDesktop ? (
+            chips('plan-finish', chip('plan-finish-chip', drawRuns('plan-finish-runs', finishLine(finishNow, now))))
+          ) : (
+            <Text key="plan-finish" wrap="truncate-end">
+              {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+            </Text>
+          )),
         runWindow(summary.tasks, 6).map(task => {
           const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
+          if (task.state === 'complete' && isDesktop) {
+            return (
+              <Box key={`plan-${task.n}`} flexDirection="column">
+                <Text wrap="truncate-end">
+                  <Text color="green">✓ </Text>
+                  {label}
+                </Text>
+                {task.isClean && (
+                  <Box key={`plan-${task.n}-meta`} paddingLeft={INDENT}>
+                    <Text dimColor>reviewed clean</Text>
+                  </Box>
+                )}
+              </Box>
+            )
+          }
           if (task.state === 'complete') {
             return (
               <Text key={`plan-${task.n}`} wrap="truncate-end">
@@ -1147,9 +1216,17 @@ export const register: Register = (on, options) => {
           isDesktop ? (
             <Box key="account-email" flexDirection="row" alignItems="center" columnGap={1}>
               {picture('account-badge', avatarSvg(who.name ?? who.email ?? '?', tint), '')}
-              <Text bold wrap="truncate-end">
-                {who.email ?? 'not signed in'}
-              </Text>
+              <Box key="account-who" flexDirection="column" flexShrink={1}>
+                <Text bold wrap="truncate-end">
+                  {who.email ?? 'not signed in'}
+                </Text>
+                {(who.name !== null || who.organization !== null) && (
+                  <Text dimColor wrap="truncate-end">
+                    {[who.name, who.organization].filter(Boolean).join(' · ')}
+                    {who.role !== null ? ` (${who.role})` : ''}
+                  </Text>
+                )}
+              </Box>
             </Box>
           ) : (
             <Text key="account-email" wrap="truncate-end">
@@ -1158,6 +1235,14 @@ export const register: Register = (on, options) => {
               </Text>
             </Text>
           ),
+          isDesktop &&
+            chips(
+              'account-chips',
+              engineNow.model !== null && chip('account-model', modelName(engineNow.model), 'cyan'),
+              engineNow.model !== null && engineNow.effort !== null && chip('account-effort', `${engineNow.effort} effort`),
+              chip('account-remote', ['Remote ', drawRuns('account-remote-runs', remoteRuns(remoteNow.clients, remoteNow.setting))]),
+            ),
+          !isDesktop &&
           details(
             'account-rows',
             (who.name !== null || who.organization !== null) && (
@@ -1192,6 +1277,11 @@ export const register: Register = (on, options) => {
         head === null ? (
           <Text key="ctx-head" dimColor>
             no reading yet
+          </Text>
+        ) : isDesktop ? (
+          // The share itself is the card's large figure; the headline keeps the turns.
+          <Text key="ctx-head" color={turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined} dimColor={turnsLeft === null || turnsLeft > 3}>
+            {turnsLeft === null ? '' : `≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'} left`}
           </Text>
         ) : (
           <Text key="ctx-head">
@@ -1264,8 +1354,14 @@ export const register: Register = (on, options) => {
                   <Text dimColor>
                     {isDesktop ? '' : '    '}resets in {duration(limit.resetsAt - now) || 'now'}
                     {forecast === null && gone !== null ? ` · ${Math.round(gone * 100)}% of the window gone` : ''}
-                    {forecast === 'pace' ? ' · on pace' : ''}
+                    {forecast === 'pace' && !isDesktop ? ' · on pace' : ''}
                   </Text>
+                  {forecast === 'pace' && isDesktop && (
+                    <Text>
+                      <Text dimColor> · </Text>
+                      <Text color="success">on pace</Text>
+                    </Text>
+                  )}
                   {typeof forecast === 'number' && (
                     <Text color="#ffaf5f" bold>
                       {' '}
@@ -1303,16 +1399,34 @@ export const register: Register = (on, options) => {
         'agents',
         'Agents',
         'magenta',
-        <Text key="agents-head">
-          {running.length > 0 && <Text color="cyan">● {running.length} running </Text>}
-          {finished.length > 0 && <Text color="green">✓ {finished.length}</Text>}
-        </Text>,
+        isDesktop ? (
+          <Text key="agents-head" dimColor>
+            {[running.length > 0 ? `${running.length} running` : '', finished.length > 0 ? `${finished.length} done` : ''].filter(Boolean).join(' · ')}
+          </Text>
+        ) : (
+          <Text key="agents-head">
+            {running.length > 0 && <Text color="cyan">● {running.length} running </Text>}
+            {finished.length > 0 && <Text color="green">✓ {finished.length}</Text>}
+          </Text>
+        ),
         all.length === 0 && (
           <Text key="agents-none" dimColor>
             No subagents yet.
           </Text>
         ),
-        recent.map(spawn => (
+        recent.map(spawn =>
+          isDesktop ? (
+            <Box key={`spawn-${spawn.agentId}`} flexDirection="row" alignItems="center" columnGap={1}>
+              <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'}</Text>
+              {chip(`spawn-${spawn.agentId}-seat`, shortSeat(spawn.seat), spawn.isDone ? undefined : 'magenta')}
+              <Box key={`spawn-${spawn.agentId}-what`} flexGrow={1} flexShrink={1}>
+                <Text dimColor={spawn.isDone} wrap="truncate-end">
+                  {spawn.description}
+                </Text>
+              </Box>
+              {!spawn.isDone && <Text dimColor>{elapsed(now - spawn.startedAt)}</Text>}
+            </Box>
+          ) : (
           <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
             <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'} </Text>
             <Text bold={!spawn.isDone} dimColor={spawn.isDone}>
@@ -1321,13 +1435,36 @@ export const register: Register = (on, options) => {
             <Text dimColor={spawn.isDone}> {spawn.description}</Text>
             {!spawn.isDone && <Text color="cyan"> {elapsed(now - spawn.startedAt)}</Text>}
           </Text>
-        )),
+          ),
+        ),
         sortedSeats.length > 0 && (
           <Text key="seats" dimColor>
             Seats by input
           </Text>
         ),
-        sortedSeats.length > 0 &&
+        isDesktop &&
+          sortedSeats.map(seat =>
+            picture(
+              `seat-${seat.seat}-bar`,
+              seatSvg(
+                `${shortSeat(seat.seat)} ×${seat.runs}`,
+                `${kTokens(totalIn(seat))} in · ${kTokens(seat.output)} out`,
+                totalIn(seat) / mostIn,
+                cacheShare(seat) / 100,
+                px,
+                'magenta',
+              ),
+              `${shortSeat(seat.seat)}: ${kTokens(totalIn(seat))} input tokens, ${cacheShare(seat)}% cached, ${kTokens(seat.output)} output`,
+            ),
+          ),
+        isDesktop &&
+          sortedSeats.length > 0 && (
+            <Text key="seats-note" dimColor wrap="truncate-end">
+              The lighter part of each bar came from the prompt cache.
+            </Text>
+          ),
+        !isDesktop &&
+          sortedSeats.length > 0 &&
           details(
             'seat-rows',
             sortedSeats.map(seat => (
@@ -1336,10 +1473,9 @@ export const register: Register = (on, options) => {
                   {shortSeat(seat.seat)}
                   <Text dimColor> ×{seat.runs}</Text>
                 </Text>
-                {isDesktop && picture(`seat-${seat.seat}-bar`, meterSvg(totalIn(seat) / mostIn, svgWidth(wide), 'magenta', [], 10), `${kTokens(totalIn(seat))} input tokens`)}
                 <Text wrap="truncate-end">
-                  {!isDesktop && <Text color="magenta">{bar(totalIn(seat) / mostIn, Math.max(6, wide - 26)).replace(/▱+$/, rest => ' '.repeat(rest.length))}</Text>}
-                  <Text bold>{isDesktop ? '' : ' '}{kTokens(totalIn(seat))}</Text>
+                  <Text color="magenta">{bar(totalIn(seat) / mostIn, Math.max(6, wide - 26)).replace(/▱+$/, rest => ' '.repeat(rest.length))}</Text>
+                  <Text bold> {kTokens(totalIn(seat))}</Text>
                   <Text dimColor>
                     {' '}
                     in · {cacheShare(seat)}% cached · {kTokens(seat.output)} out
@@ -1400,24 +1536,35 @@ export const register: Register = (on, options) => {
           </Text>,
           placeNow !== null && placeNow.root !== null && (
             <Text key="repo-name" wrap="truncate-end">
-              <Text dimColor>repo </Text>
+              {!isDesktop && <Text dimColor>repo </Text>}
               <Text bold>{repoName(placeNow.remote ?? null, placeNow.root)}</Text>
             </Text>
           ),
           placeNow !== null && (
             <Text key="repo-cwd" wrap="truncate-start">
-              <Text dimColor>dir  </Text>
+              {!isDesktop && <Text dimColor>dir  </Text>}
               {drawRuns('repo-cwd-runs', folderRuns(placeNow.cwd, placeNow.root, placeNow.home))}
             </Text>
           ),
+          isDesktop &&
+            chips(
+              'repo',
+              chip('repo-branch', `⎇ ${git.branch}`, 'magenta'),
+              git.ahead > 0 && chip('repo-ahead', `↑${git.ahead}`, 'success'),
+              git.behind > 0 && chip('repo-behind', `↓${git.behind}`, 'error'),
+              git.changed > 0 && chip('repo-changed', `~${git.changed} changed`, 'warning'),
+              git.untracked > 0 && chip('repo-untracked', `?${git.untracked} untracked`),
+            ),
+          !isDesktop && (
           <Text key="repo" wrap="truncate-end">
             <Text color="magenta" bold>
               ⎇ {git.branch}
             </Text>
             {git.ahead > 0 && <Text color="green"> ↑{git.ahead}</Text>}
             {git.behind > 0 && <Text color="red"> ↓{git.behind}</Text>}
-          </Text>,
-          git.changed + git.untracked > 0 && (
+          </Text>
+          ),
+          !isDesktop && git.changed + git.untracked > 0 && (
             <Text key="repo-changes" wrap="truncate-end">
               {git.changed > 0 && <Text color="yellow">~{git.changed} changed </Text>}
               {git.untracked > 0 && <Text dimColor>?{git.untracked} untracked</Text>}
@@ -1445,9 +1592,17 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column">
-        <Text key="now" wrap="truncate-end">
-          {drawRuns('now', nowLine(actNow, now))}
-        </Text>
+        {isDesktop ? (
+          <Box key="now-card" borderStyle="round" borderColor="inactive" paddingX={1}>
+            <Text key="now" wrap="truncate-end">
+              {drawRuns('now', nowLine(actNow, now))}
+            </Text>
+          </Box>
+        ) : (
+          <Text key="now" wrap="truncate-end">
+            {drawRuns('now', nowLine(actNow, now))}
+          </Text>
+        )}
         {shown.map(name => byName[name])}
         {!shown.includes('context') && actions}
       </Box>
