@@ -329,8 +329,10 @@ Wait for the user's response. If they request changes, make them and run one new
 
 **Implementation:**
 
-- Run `scripts/context-size` (see using-superpowers §Session Budget).
-  On exit 5 (handoff), invoke dr-superpowers:handoff with
+- Run `scripts/context-size --plan` (see using-superpowers §Session Budget).
+  It measures against 150% of the task budget, capped at the final-phase
+  limit: writing the plan here costs less than a fresh session's baseline
+  and reload. On exit 5 (handoff), invoke dr-superpowers:handoff with
   the spec as the draft and the next action "Write the implementation plan
   with dr-superpowers:writing-plans." — the plan is written in a fresh session.
 - Otherwise invoke the writing-plans skill to create a detailed implementation plan.

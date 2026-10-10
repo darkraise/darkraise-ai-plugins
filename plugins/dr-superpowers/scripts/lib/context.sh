@@ -17,6 +17,10 @@ CTX_FINAL_PCT=85
 # brief measures them against the final-phase limit. Finishing them here costs
 # less than a fresh session's baseline plus its reload.
 CTX_TAIL_TASKS=2
+# After a committed spec, the plan is written in the same session while the
+# context is under 150% of the task budget, capped at the final-phase limit so
+# plan writing never starts at the compaction point.
+CTX_PLAN_PCT=150
 
 ctx_jq() { "${DR_SUPERPOWERS_JQ:-jq}" "$@"; }
 ctx_have_jq() { command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; }
@@ -247,6 +251,22 @@ ctx_final_budget() {
   echo $(( $(ctx_window "$1") * CTX_FINAL_PCT / 100 ))
 }
 
+# ctx_plan_budget MODEL — the limit for writing the plan after the spec:
+# CTX_PLAN_PCT of the task budget (DR_SUPERPOWERS_BUDGET included), never above
+# the final-phase limit.
+ctx_plan_budget() {
+  local task final plan
+  case ${DR_SUPERPOWERS_BUDGET:-} in
+    ''|*[!0-9]*) task="" ;;
+    *) task=$DR_SUPERPOWERS_BUDGET; [ "$task" -gt 0 ] || task="" ;;
+  esac
+  [ -n "$task" ] || task=$(ctx_budget "$1")
+  final=$(ctx_final_budget "$1")
+  plan=$(( task * CTX_PLAN_PCT / 100 ))
+  [ "$plan" -le "$final" ] || plan=$final
+  echo "$plan"
+}
+
 # The primary checkout's root: a worktree's .superpowers lives with the
 # checkout that owns the repository, so every session logs to one file.
 ctx_primary_root() {
@@ -276,7 +296,7 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
-# ctx_line [final | tail R | wave W] — print the budget line; return 0 ok, 5
+# ctx_line [final | tail R | plan | wave W] — print the budget line; return 0 ok, 5
 # handoff, 3 unknown. With final, measure against the final-phase limit instead
 # of the task budget; tail R does the same before one of a plan's last R tasks
 # (CTX_TAIL_TASKS), so the tail of a plan and its final phase share one limit.
@@ -293,6 +313,7 @@ ctx_line() {
     limit=final
     if [ "${2:-1}" = 1 ]; then label="budget (last task)"; else label="budget (last ${2} tasks)"; fi
   fi
+  [ "${1:-}" = plan ] && label="budget (plan)" limit=plan
   if [ "${1:-}" = wave ]; then
     label="budget (wave of ${2:-1})"
     extra=$(( (${2:-1} - 1) * CTX_TASK_MARGIN ))
@@ -325,6 +346,8 @@ ctx_line() {
   fi
   if [ "$limit" = final ]; then
     budget=$(ctx_final_budget "$model")
+  elif [ "$limit" = plan ]; then
+    budget=$(ctx_plan_budget "$model")
   else
     case ${DR_SUPERPOWERS_BUDGET:-} in
       ''|*[!0-9]*) ;;
