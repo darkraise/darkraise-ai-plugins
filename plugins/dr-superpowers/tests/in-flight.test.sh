@@ -23,14 +23,17 @@ TP="$TMP/$SID.jsonl"
 mkdir -p "$HOME/.claude/dr-superpowers/sessions/by-id"
 jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dr-superpowers/sessions/by-id/$SID.json"
 
+# Git Bash rewrites arguments that look like POSIX paths, and a jq filter full
+# of </tag> text does; the fixtures are opaque data, so suppress the conversion.
+fjq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
 use() { # use <tool_use_id> <description> — the controller's tool call
-  jq -nc --arg id "$1" --arg d "$2" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:$id,name:"Agent",input:{description:$d}}]}}' >> "$TP"
+  fjq -nc --arg id "$1" --arg d "$2" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:$id,name:"Agent",input:{description:$d}}]}}' >> "$TP"
 }
 result() { # result <tool_use_id> <text>
-  jq -nc --arg id "$1" --arg t "$2" '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t}]}}' >> "$TP"
+  fjq -nc --arg id "$1" --arg t "$2" '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t}]}}' >> "$TP"
 }
 notify() { # notify <tool_use_id> <status> [note]
-  jq -nc --arg id "$1" --arg st "$2" --arg note "${3:-}" \
+  fjq -nc --arg id "$1" --arg st "$2" --arg note "${3:-}" \
     '{type:"attachment",attachment:{type:"queued_command",prompt:("<task-notification>\n<task-id>x</task-id>\n<tool-use-id>" + $id + "</tool-use-id>\n<output-file>/tmp/x.output</output-file>\n<status>" + $st + "</status>\n<summary>Agent \"x\" finished</summary>\n" + (if $note == "" then "" else "<note>" + $note + "</note>\n" end) + "</task-notification>")}}' >> "$TP"
 }
 LINGER='This agent stopped with background work of its own still running. It may resume on its own when that work completes or reports, and the same task-id notifies again if it does; the result below may be interim.'
@@ -56,7 +59,7 @@ check "a quoted notification changes nothing" "$(bash "$INFLIGHT" >/dev/null; ec
 
 # Once its own work ends, the agent's final notification names only its task
 # id, and says nothing about work still running.
-jq -nc '{type:"attachment",attachment:{type:"queued_command",prompt:"<task-notification>\n<task-id>a3</task-id>\n<output-file>/tmp/a3.output</output-file>\n<status>completed</status>\n<summary>Agent \"x\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own.</note>\n</task-notification>"}}' >> "$TP"
+fjq -nc '{type:"attachment",attachment:{type:"queued_command",prompt:"<task-notification>\n<task-id>a3</task-id>\n<output-file>/tmp/a3.output</output-file>\n<status>completed</status>\n<summary>Agent \"x\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own.</note>\n</task-notification>"}}' >> "$TP"
 check "its final notification by task id alone: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
 
 use toolu_sh 'Run the suite'
