@@ -33,20 +33,36 @@ root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 # Background launches answered with a task id but no finished notification yet.
 # The tool result opens "Command running in background with ID" (Bash) or
 # "Async agent launched" (Agent); the notification names the launch's tool_use id beside its
-# status. A line that is not JSON is skipped rather than ending the scan.
+# status. A line that is not JSON is skipped rather than ending the scan. Two
+# kinds of launch never get a notification and are not pending: one stopped by
+# TaskStop (its result opens "Successfully stopped task: <id>"), and one made
+# before this session last started or resumed, whose process died with the old
+# one (scripts/session-start.sh records that time beside the turn stamp).
 has_pending_background() {
   [ -n "$transcript_path" ] && [ -f "$transcript_path" ] || return 1
-  local launched finished
-  launched=$(jq -rR 'fromjson? | select(.type? == "user" and .isSidechain? != true) | .message.content? | arrays | .[]
+  local since="" events launched stopped finished
+  [ -f "${stamp}.since" ] && since=$(head -n 1 "${stamp}.since" | tr -d '\r')
+  events=$(jq -rR --arg since "$since" 'fromjson? | select(.type? == "user" and .isSidechain? != true)
+      | select($since == "" or ((.timestamp? // $since) >= $since))
+      | .message.content? | arrays | .[]
       | select(.type? == "tool_result")
-      | select((.content | if type == "array" then (.[0].text? // "") else tostring end)
-          | test("^(Command running in background with ID|Async agent launched)"))
-      | .tool_use_id // empty' "$transcript_path" 2>/dev/null | tr -d '\r' | sort -u)
+      | (.content | if type == "array" then (.[0].text? // "") else tostring end) as $text
+      | if ($text | test("^(Command running in background with ID|Async agent launched)")) then
+          "L \(.tool_use_id // "-") \(($text | capture("(with ID: |agentId: )(?<id>[A-Za-z0-9_-]+)").id) // "-")"
+        elif ($text | test("^(\\{\"message\":\")?Successfully (stopped task|killed shell): ")) then
+          "S \(($text | capture("Successfully (stopped task|killed shell): (?<id>[A-Za-z0-9_-]+)").id) // "-")"
+        else empty end' "$transcript_path" 2>/dev/null | tr -d '\r')
+  launched=$(awk '$1 == "L" && $2 != "-"' <<<"$events")
   [ -n "$launched" ] || return 1
+  stopped=$(awk '$1 == "S" && $2 != "-" { print $2 }' <<<"$events" | sort -u)
   finished=$(grep -oE '<tool-use-id>[^<]+</tool-use-id>[^<]*(<output-file>[^<]*</output-file>[^<]*)?<status>[a-z_]+</status>' \
       "$transcript_path" 2>/dev/null | grep -vE '<status>(running|pending)</status>' \
       | sed -E 's/^<tool-use-id>([^<]+)<.*/\1/' | tr -d '\r' | sort -u)
-  pending=$(comm -23 <(printf '%s\n' "$launched") <(printf '%s\n' "$finished") | grep -c .)
+  pending=$(STOPPED="$stopped" FINISHED="$finished" awk '
+      BEGIN { n = split(ENVIRON["STOPPED"], s, "\n"); for (i = 1; i <= n; i++) gone[s[i]] = 1
+              n = split(ENVIRON["FINISHED"], f, "\n"); for (i = 1; i <= n; i++) done[f[i]] = 1 }
+      !($2 in done) && !($3 in gone) && !seen[$2]++ { c++ }
+      END { print c + 0 }' <<<"$launched")
   [ "$pending" -gt 0 ]
 }
 

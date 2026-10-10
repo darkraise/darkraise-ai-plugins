@@ -127,6 +127,45 @@ check "all background work finished: blocks" "$(decision "$(stop s-1 'Waiting on
 check "the block says to wait without the next-step block" \
   "$(jq -r .reason <<<"$(stop s-1 'Done.' false "$BG")" | grep -c 'end the turn without the block')" "1"
 
+# A launch stopped by TaskStop never sends a notification; it is not running.
+# Neither is one whose ID only shows up later in some other tool's output.
+: > "$BG"
+launch toolu_timer 'Command running in background with ID: t1. Output is being written to: /tmp/t1.output.'
+launch toolu_watch 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+launch toolu_grep2 'grep output: Successfully stopped task: w1 (sleep 900)'
+NEXT=$'Stopping here.\n\n## Next session\n\n**Status:** x'
+check "unstopped commands: next-step block holds" "$(decision "$(stop s-1 "$NEXT" false "$BG")")" "block"
+launch toolu_stop '{"message":"Successfully stopped task: t1 (sleep 900)","task_id":"t1","task_type":"local_bash"}'
+out=$(stop s-1 "$NEXT" false "$BG")
+check "one stopped, one running: still holds" "$(decision "$out")" "block"
+check "the stopped command is not counted" "$(jq -r .reason <<<"$out" | grep -c '1 background launch')" "1"
+launch toolu_stop2 'Successfully stopped task: w1 (sleep 900)'
+check "every launch stopped: next-step block passes" "$(stop s-1 "$NEXT" false "$BG")" ""
+launch toolu_agent2 $'Async agent launched successfully.\nagentId: a7 (internal ID)' array
+check "a running agent still holds" "$(decision "$(stop s-1 "$NEXT" false "$BG")")" "block"
+launch toolu_stop3 '{"message":"Successfully stopped task: a7","task_id":"a7"}'
+check "a stopped agent passes" "$(stop s-1 "$NEXT" false "$BG")" ""
+
+# Work launched before the session last started or resumed died with that
+# process, so its missing notification does not count.
+: > "$BG"
+jq -nc '{type:"user",timestamp:"2026-10-10T08:00:00.000Z",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_old",content:"Command running in background with ID: o1."}]}}' >> "$BG"
+check "launch with no restart since: holds" "$(decision "$(stop s-1 "$NEXT" false "$BG")")" "block"
+jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-1",transcript_path:$tp,cwd:$cwd,source:"resume"}' \
+  | bash "$HERE/../scripts/session-start.sh" >/dev/null
+check "session-start records the resume time" \
+  "$([ -f "$HOME/.claude/dr-superpowers/sessions/turns/s-1.since" ] && echo yes || echo no)" "yes"
+check "launch from before the resume: passes" "$(stop s-1 "$NEXT" false "$BG")" ""
+jq -nc '{type:"user",timestamp:"2999-01-01T00:00:00.000Z",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_new",content:"Command running in background with ID: n1."}]}}' >> "$BG"
+check "launch after the resume: holds" "$(decision "$(stop s-1 "$NEXT" false "$BG")")" "block"
+before=$(cat "$HOME/.claude/dr-superpowers/sessions/turns/s-1.since")
+sleep 1
+jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-1",transcript_path:$tp,cwd:$cwd,source:"compact"}' \
+  | bash "$HERE/../scripts/session-start.sh" >/dev/null
+check "compaction keeps the running work's start time" \
+  "$(cat "$HOME/.claude/dr-superpowers/sessions/turns/s-1.since")" "$before"
+rm -f "$HOME/.claude/dr-superpowers/sessions/turns/s-1.since"
+
 # --- another session, or no stamp ---
 check "unstamped session: passes" "$(stop s-other 'Done.')" ""
 check "malformed stdin: passes" "$(printf 'nope' | bash "$END"; echo "exit $?")" "exit 0"

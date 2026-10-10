@@ -327,7 +327,9 @@ command the session started in the background has not reported back, a plain
 stop passes (the controller is waiting on it), and a message that ends the
 session over it, with the next-step block or the finishing menu, is held once
 in any turn: a handoff there would invite ending a session whose work is still
-in flight. When the turn wrote more than one ledger, each one must have its
+in flight. Work stopped with `TaskStop`, and work launched before the session
+last started or resumed, sends no notification and does not count as running.
+When the turn wrote more than one ledger, each one must have its
 ending.
 
 A run also asks one question before its first task: what finishing should do
