@@ -2,23 +2,23 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
 
 import {
+  accountColor,
   accountKey,
   isAbsolutePath,
   attributionIn,
-  backgroundBadge,
   bar,
   billingLabel,
   budgetFor,
   duration,
   elapsed,
   finishLine,
-  fitStatus,
+  bandLines,
+  fitBand,
   folderRuns,
   isAtLeast,
   levelOf,
   limitForecast,
   modelName,
-  nowBadge,
   nowLine,
   parseFinish,
   parseLedger,
@@ -31,7 +31,7 @@ import {
   sectionsToggled,
   sparkline,
   stackedRuns,
-  statusLines,
+  shellAge,
   stepped,
   tasksEnded,
   termColor,
@@ -51,7 +51,7 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/notify'
-import { avatarSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -228,8 +228,7 @@ function world(on: On, w: World) {
   return clock
 }
 
-// A signed-in account with a frame color in dr-status' config, working in a
-// repository under home.
+// A signed-in account working in a repository under home.
 const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
 function signedIn(on: On, files: World['files'] = {}) {
   on('fs.read', (_$, e) => {
@@ -248,7 +247,6 @@ function signedIn(on: On, files: World['files'] = {}) {
         }),
       }
     }
-    if (e.path === '/home/me/.claude/dcc-statusline.json') return { value: JSON.stringify({ accounts: { '~/.claude': { color: '141' } } }) }
     throw new Error('ENOENT')
   })
   on('session.cwd', () => ({ value: '/home/me/code/shop/web' }))
@@ -372,20 +370,19 @@ describe('handoff reading', () => {
     }
   })
 
-  test('joins the strip above the prompt once the context nears the budget', async ($, on) => {
+  test('the band reads the context against the budget', async ($, on) => {
     const w: World = { ...SIGNED_IN, tokens: 284_000 }
     world(on, w)
     signedIn(on)
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     let ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^handoff $/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^61%$/ })).toBeDefined()
     await ui.unmount()
 
     w.tokens = 400_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^handoff $/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^86%$/ })).toBeDefined()
   })
 
@@ -594,15 +591,13 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /compacts 604k/ })).toBeDefined()
   })
 
-  test('limitAlertAt toasts once per window', async ($, on) => {
+  test('a limit past the alert line never pops up', async ($, on) => {
     const toasts: string[] = []
     world(on, { tokens: 50_000, toasts })
     const high = { ...MEASURE, rateLimits: [{ kind: 'five_hour', percentUsed: 92, resetsAt: '2026-10-08T12:00:00Z' }] }
     await $.session.measure(high)
     await $.session.measure(high)
-    expect(toasts.filter(text => /5h limit at 92%/.test(text))).toHaveLength(1)
-    await $.session.measure({ ...high, rateLimits: [{ kind: 'five_hour', percentUsed: 95, resetsAt: '2026-10-08T17:00:00Z' }] })
-    expect(toasts.filter(text => /5h limit at/.test(text))).toHaveLength(2)
+    expect(toasts).toEqual([])
   })
 
   test('limitAlertAt 0 stays quiet', { options: { limitAlertAt: 0 } }, async ($, on) => {
@@ -613,30 +608,34 @@ describe('settings', () => {
   })
 })
 
-describe('compact layout', () => {
-  test('draws dr-status\' two lines in the account\'s frame, with the buttons', async ($, on) => {
-    world(on, SIGNED_IN)
+describe('minimized band', () => {
+  test('draws the band in the account\'s frame, with Expand on the top rule', async ($, on) => {
+    const shell = { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }
+    world(on, { ...SIGNED_IN, tools: { Bash: () => shell } })
     signedIn(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    await $.tool.call({
-      tool: 'TodoWrite',
-      todos: [{ content: 'Write the pane', status: 'in_progress', activeForm: 'Writing' }],
-    })
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
     await $.session.measure(MEASURE)
-    for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...INLINE, surface })
-      expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
-      expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com ─{81}╮$/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /~\/code\/shop\/web.*feat\/pane\* ↑2 ↓1 \?1.*Opus 5\.5.*xhigh/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /ctx ▰+▱+ 44% · 284k.*\$1\.50.*5h ▰+▱+ 23%.*7d ▰+▱+ 61%/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Plan/ })).toBeUndefined()
-      expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
-      await ui.unmount()
-    }
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ off ─+ $/ })).toBeDefined()
+    expect(await ui.find({ key: 'band-expand' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /\$ 1 shell · longest 0s.*~\/code\/shop\/web ⎇ feat\/pane\* ↑2 ↓1 ~1 \?1/ })).toBeDefined()
+    // No buttons beside Expand, and no commands.
+    expect(await ui.find({ key: 'pane-compact' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /npm run dev/ })).toBeUndefined()
+    await ui.unmount()
+    const desk = await $.ui.mount({ ...INLINE, surface: 'desktop' })
+    const drawn = JSON.stringify(await desk.drawn())
+    expect(drawn).toContain('me@example.com · subscription')
+    expect(drawn).toContain('5h 23%')
+    expect(drawn).toContain('1 shell · longest 0s')
+    expect(drawn).not.toContain('npm run dev')
+    expect(await desk.find({ key: 'band-expand' })).toBeDefined()
   })
 
-  test('drops the frame below 48 columns, the email on a line of its own', async ($, on) => {
+  test('drops the frame below 48 columns, the email beside Expand', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on)
     await $.session.start(START)
@@ -645,17 +644,46 @@ describe('compact layout', () => {
     const ui = await $.ui.mount({ ...INLINE, props: { ...INLINE.props, bodyColumns: 40 }, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /╭/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: 'me@example.com' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^shop\/web · feat\/pane\* · Opus · xhigh$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^ctx 44% · \$1\.50 · 5h 23% · 7d 61%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ctx 61% ≈?.*· 5h 23%.*· 7d 61%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /shop\/web ⎇ feat\/pane\*/ })).toBeDefined()
   })
 
-  test('is used docked too when asked', { options: { layout: 'compact' } }, async ($, on) => {
+  test('says what is blocked or refused on a line of its own', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /✗ 1 refused/ })).toBeDefined()
+  })
+
+  test('is used docked too when minimized', { options: { layout: 'compact' } }, async ($, on) => {
     world(on, { tokens: 284_000 })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱+ 44% · 284k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%/ })).toBeDefined()
   })
+
+  for (const surface of SURFACES) {
+    test(`Minimize and Expand save the layout on ${surface}`, async ($, on) => {
+      const writes: [string, unknown][] = []
+      world(on, { tokens: 284_000 })
+      on('config.set', (_$, e) => {
+        writes.push([e.key, e.value])
+        return { value: e.value }
+      })
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+      const full = await $.ui.mount({ ...PANE, surface })
+      await full.press({ key: 'pane-minimize' })
+      await full.unmount()
+      const inline = await $.ui.mount({ ...INLINE, surface })
+      expect(await inline.find({ key: 'pane-minimize' })).toBeUndefined()
+      await inline.press({ key: 'band-expand' })
+      expect(writes).toEqual([
+        ['dr-cockpit.layout', 'compact'],
+        ['dr-cockpit.layout', 'full'],
+      ])
+    })
+  }
 
   test('full keeps the sections above the prompt', { options: { layout: 'full' } }, async ($, on) => {
     world(on, { tokens: 284_000 })
@@ -960,11 +988,13 @@ describe('pane graphics', () => {
 })
 
 describe('account', () => {
-  test('keys, colors, names and billing read as dr-status reads them', () => {
+  test('keys, colors, names and billing', () => {
     expect(accountKey('/home/me/.claude', '/home/me')).toBe('~/.claude')
     expect(accountKey('C:\\Users\\me\\.claude-work', 'C:\\Users\\me')).toBe('~/.claude-work')
     expect(accountKey('/srv/claude', '/home/me')).toBe('/srv/claude')
     expect(termColor('141')).toBe('#af87ff')
+    expect(accountColor('~/.claude')).toBe(accountColor('~/.claude'))
+    expect(new Set(['~/.claude', '~/.claude-work', '~/.claude-2', '/srv/claude'].map(accountColor)).size).toBeGreaterThan(1)
     expect(termColor('orange')).toBe('#ff8700')
     expect(termColor('cyan')).toBe('cyan')
     expect(termColor('')).toBeUndefined()
@@ -994,43 +1024,49 @@ describe('account', () => {
   })
 })
 
-describe('status strip', () => {
+describe('band lines', () => {
+  const hour = 3_600_000
   const input = {
     cwd: '/home/me/code/shop/web/src',
     root: '/home/me/code/shop',
     home: '/home/me',
-    repo: { branch: 'feat/a-rather-long-branch-name', ahead: 2, behind: 0, changed: 1, untracked: 2 },
-    model: 'claude-opus-5-5',
-    effort: 'high',
-    context: { tokens: 94_000, window: 200_000 },
-    cache: 0.93,
-    usd: 1.2,
-    limits: [{ kind: 'five_hour', percent: 23, resetsAt: 1_000_000 + 13_200_000 }],
-    now: 1_000_000,
-    email: null,
+    repo: { branch: 'feat/a-rather-long-branch-name', ahead: 2, behind: 1, changed: 1, untracked: 2 },
+    context: { tokens: 284_000, limit: 465_000, window: 650_000 },
+    turnsLeft: 9,
+    limits: [
+      { kind: 'five_hour', percent: 23, resetsAt: 2 * hour },
+      { kind: 'seven_day', percent: 61, resetsAt: 86 * hour },
+    ],
+    agents: 1,
+    shells: { count: 2, longest: 12 * 60_000 },
+    now: 0,
   }
   const text = (runs: { text: string }[]) => runs.map(run => run.text).join('')
 
-  test('draws the fullest tier the way dr-status does', () => {
-    const [one, two] = statusLines(input, 0)
-    expect(text(one)).toBe('~/code/shop/web/src  ·  feat/a-rather-long-branch-name* ↑2 ?2  ·  Opus 5.5  ·  high')
-    expect(text(two)).toBe('ctx ▰▰▰▰▰▱▱▱▱▱ 47% · 94k  ·  cache ▰▰▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱▱▱▱▱ 23% · 3h40m')
+  test('draws the fullest tier with pace, agents, shells and the repo', () => {
+    const [one, two] = bandLines(input, 0)
+    expect(text(one)).toBe('ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 2h0m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h')
+    expect(text(two)).toBe('● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
   })
 
-  test('steps down a tier at a time until both lines fit', () => {
-    const fits = (width: number) => fitStatus(input, width)
-    expect(fits(200).tiers).toEqual([0, 0])
-    expect(fits(76).tiers).toEqual([1, 1])
-    expect(text(fits(76).lines[0])).toBe('shop/web/src  ·  feat/a-rather-long-branch-name* ↑2 ?2  ·  Opus 5.5  ·  high')
-    expect(fits(75).tiers).toEqual([2, 2])
-    expect(text(fits(60).lines[0])).toBe('shop/…/src · feat/a-rather-long-branch-name* · Opus · high')
-    expect(text(fits(60).lines[1])).toBe('ctx ▰▰▱▱ 47% · cache ▰▰▰▱ 93% · $1.20 · 5h ▰▱▱ 23%')
-    // Each line steps down on its own: the meters keep their bars beside a long first line.
-    expect(fits(57).tiers).toEqual([3, 2])
-    const last = fits(30)
-    expect(last.tiers).toEqual([3, 3])
-    expect(last.lines.every(line => runsWidth(line) <= 30)).toBe(true)
-    expect(text(last.lines[0]).endsWith('…')).toBe(true)
+  test('steps each line down until it fits, never naming a command', () => {
+    for (const width of [160, 90, 60, 40, 24]) {
+      const [one, two] = fitBand(input, width)
+      expect(runsWidth(one)).toBeLessThanOrEqual(width)
+      expect(runsWidth(two)).toBeLessThanOrEqual(width)
+    }
+    expect(text(fitBand(input, 40)[0])).toBe('ctx 61% ≈9t · 5h 23% ✓ · 7d 61% 2d4h')
+    expect(text(bandLines(input, 3)[1])).toBe('● 1 · $ 2 · shop ⎇ feat/a-rather-l…*')
+    expect(shellAge(42_000)).toBe('42s')
+    expect(shellAge(12 * 60_000)).toBe('12m')
+  })
+
+  test('leaves out what is not running', () => {
+    const [, two] = bandLines({ ...input, agents: 0, shells: { count: 0, longest: 0 } }, 0)
+    expect(text(two)).toBe('~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
+    const meters = bandMetersSvg([{ key: 'Context', percent: 61, share: 0.44, color: 'yellow', tick: 0.72, note: [{ text: '≈9 turns' }] }], 300)
+    expect(meters).toContain('>CONTEXT</text>')
+    expect(meters).toContain('61%')
   })
 })
 
@@ -1083,8 +1119,6 @@ describe('now row', () => {
     )
     expect(flat(nowLine({ ...IDLE, kind: 'waiting', since: 158_000, detail: 'Bash: git push', isSent: true }, at))).toBe('⏳ approve? Bash: git push · 42s · Discord ✓')
     expect(flat(nowLine({ ...IDLE, kind: 'idle', lastTurnMs: 760_000, endedAt: 20_000 }, at))).toBe('○ idle · last turn 12m40s · ended 3m ago')
-    expect(flat(nowBadge({ ...IDLE }, at))).toBe('')
-    expect(flat(nowBadge({ ...IDLE, kind: 'running', since: 66_000, turnStartedAt: 66_000, tool: 'Bash' }, at))).toBe('● 2m14s · Bash')
     expect(elapsed(3_725_000)).toBe('1h02m')
   })
 
@@ -1109,15 +1143,6 @@ describe('now row', () => {
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /○ idle · last turn 6s/ })).toBeDefined()
   })
-
-  test('rides on the strip\'s top rule while a turn runs', async ($, on) => {
-    world(on, SIGNED_IN)
-    signedIn(on)
-    await $.session.start(START)
-    await $.turn.start({ text: 'go', turnId: 't1' })
-    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com ─{74} ● 0s ─╮$/ })).toBeDefined()
-  })
 })
 
 describe('shells and remote', () => {
@@ -1140,8 +1165,6 @@ describe('shells and remote', () => {
     expect(runsText(remoteRuns([{ surface: 'mobile' }, { surface: 'mobile' }], null))).toBe('● connected · 2 phones')
     expect(runsText(remoteRuns([], 'true'))).toBe('○ on · no device yet')
     expect(runsText(remoteRuns([], 'default'))).toBe('○ not connected')
-    expect(runsText(backgroundBadge(2, [{ surface: 'desktop' }]))).toBe('$ 2 shells · ● desktop app')
-    expect(backgroundBadge(0, [])).toEqual([])
   })
 
   test('list a background shell until its notification ends it', async ($, on) => {
@@ -1189,7 +1212,7 @@ describe('shells and remote', () => {
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
   })
 
-  test('show Remote Control in the account card and on the strip', async ($, on) => {
+  test('show Remote Control in the account card and on the band', async ($, on) => {
     world(on, { ...SIGNED_IN, remoteControl: 'true', tools: { Bash: () => SHELL } })
     signedIn(on)
     await $.session.start(START)
@@ -1202,7 +1225,7 @@ describe('shells and remote', () => {
     expect(await ui.find({ type: 'Text', text: /Remote ● connected · phone/ })).toBeDefined()
     await ui.unmount()
     ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^╰─ \$ 1 shell · ● phone ─+╯$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ● connected ─+ $/ })).toBeDefined()
     await ui.unmount()
     await $.session.detach({ surface: 'mobile', clientId: 'mobile:default' } as never)
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -1476,20 +1499,6 @@ describe('run card', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
-  })
-})
-
-describe('state file', () => {
-  test('tells dr-status what the turn and the run are doing', async ($, on) => {
-    const written: Record<string, string> = {}
-    const clock = world(on, { ...SIGNED_IN, written })
-    signedIn(on)
-    await $.session.start(START)
-    await $.turn.start({ text: 'go', turnId: 't1' })
-    await clock.advance(600)
-    const state = JSON.parse(written['/home/me/.claude/dr-cockpit/state/sess-1.json'] ?? '{}') as { activity?: { kind?: string; since?: number }; updatedAt?: number }
-    expect(state.activity).toEqual({ kind: 'running', since: 1000, tool: null })
-    expect(state.updatedAt).toBe(1000)
   })
 })
 

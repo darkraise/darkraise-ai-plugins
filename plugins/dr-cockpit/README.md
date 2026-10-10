@@ -100,8 +100,8 @@ desktop window joins the session, unless you closed it.
   and the config directory. Remote reads `connected` with the devices attached
   (a phone, the desktop app), `on · no device yet` when "Enable Remote Control
   for all sessions" is on in `/config`, and `not connected` otherwise; a session
-  started with `/remote-control` reads `not connected` until a device joins. Its frame takes the color `dr-status` assigns the account in
-  `~/.claude/dcc-statusline.json` (`DCC_STATUSLINE_CONFIG` when set).
+  started with `/remote-control` reads `not connected` until a device joins. Its frame takes one of eight colors picked from the config
+  directory, so each account keeps its own.
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated
   locally with no API calls. The title adds about how many turns are left to
@@ -135,36 +135,33 @@ desktop window joins the session, unless you closed it.
   and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
-When the pane sits above the prompt (`layout` `auto`, the default), it draws
-what `dr-status` draws, with the cockpit's buttons under it: the frame in the
-account's color with its email on the top rule, the path, branch, model and
-effort, then the context, cache, cost and limit meters. A running turn rides on
-the top rule's right end, a `dr-superpowers` run adds `run 3/6 r2` to the first
-line, past `warnAt` a `handoff 86%` reading follows `ctx`, and the bottom rule
-counts the background shells running and names the Remote Control devices
-attached:
+**Minimize** (`m`) folds the cockpit into a band, and **Expand** on the band's
+top rule opens it again. Each saves the `layout` setting, so the next session
+opens the same way. The band is also what the pane draws above the prompt
+(`layout` `auto`, the default). Its frame takes the account's color, with the
+email, billing and Remote Control on the top rule. The first line has the
+context against the handoff budget with the turns left, and the 5-hour and
+7-day limits with their pace (`on pace`, or when the window runs out before
+it resets). The second has the subagents running, the background shells with
+how long the longest has run, and the folder with the branch, ahead and behind
+counts and changes. A blocked run task or a refused command adds a red line.
 
 ```
-╭─ you@example.com ──────────────────────────────────────────────────────────────── ● 2m14s · Bash ─╮
-│ darkraise-ai-plugins/…/dr-cockpit · feat/cockpit-pane-overhaul* · Opus · xhigh · run 3/6 r2      │
-│ ctx ▰▰▱▱ 41% · cache ▰▰▰▱ 93% · $4.85 · 5h ▰▱▱ 23% · 7d ▰▰▱ 61%                                  │
-╰─ $ 2 shells · ● phone ───────────────────────────────────────────────────────────────────────────╯
-╭──────────╮ ╭─────────╮ ╭──────────╮
-│ Hand off │ │ Compact │ │ Settings │
-╰──────────╯ ╰─────────╯ ╰──────────╯
+╭─ you@example.com · subscription · Remote ● connected ───────────────────────────────── Expand ─╮
+│ ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h │
+│ ● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1              │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-Each line shrinks the way `dr-status`' do, a step at a time until it fits: the
-path drops what leads to the repository, then its middle, then all but the
-leaf; the branch drops its counters, then shortens; the model drops its
-version; the meters narrow, drop the token count and reset times, and at last
-show the percentage alone. Below 48 columns the frame goes and the email takes
-a line of its own above them. The pane draws no Nerd Font icons. The context
-meter is the share of the model's window, as `dr-status` shows it.
+Each line shrinks a step at a time until it fits: the meters narrow and then
+show the percentage alone, the labels shorten, and the path keeps the
+repository's name. Below 48 columns the frame goes and the email sits beside
+**Expand**. The pane draws no Nerd Font icons. In the desktop app the band is
+one card with slim meters whose ticks mark how far each window has run.
 
 Each button sits in a rounded box, the letter of its hotkey underlined in the
 label as a desktop app marks one; the hotkey presses it while the pane has the
-keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s` **Settings**,
+keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s` **Settings**, `m` **Minimize**,
 and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
 draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
 that matters: **Hand off** once the context passes `warnAt`, **Resume**
@@ -173,8 +170,8 @@ chosen option of a row takes the accent, and what is off is drawn dim.
 
 **Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
 mod's settings: whether it shows at session start, the layout, which sections
-show, the handoff budget, where the strip's handoff reading and the limit alert
-appear, how many context rows to list, the note and guard switches, and the
+show, the handoff budget, where Hand off takes the accent and the Discord limit
+message goes out, how many context rows to list, the note and guard switches, and the
 Discord notifications. Each press saves
 the setting the way `/config` does, and the pane redraws with it. **Back** (`b`)
 returns to the cockpit.
@@ -183,12 +180,11 @@ returns to the cockpit.
 The breakdown and the repo are read after each turn while the pane is open, and
 when it opens; nothing in the pane costs the model context.
 
-**Limit alerts.** When the 5-hour or 7-day limit crosses 90%, a toast says so
-once, with when it resets; it can say so again after the window resets.
+The cockpit never pops up a banner. Usage limits show in the gauges and the
+band, and a Discord message that fails to send shows in the settings view.
 
 **Handoff reading.** The handoff reading shows only in the cockpit: the
-Context card, and the strip's `handoff N%` once the context reaches `warnAt`
-(yellow, red past the budget). The main session re-reads its whole context on every request, so a session that
+Context card and the band. The main session re-reads its whole context on every request, so a session that
 runs past its budget pays for it on each turn after. In a session running
 `dr-superpowers` (one that has loaded one of its skills or started one of its
 agents), **Hand off** queues a prompt asking the controller to finish the task
@@ -227,10 +223,6 @@ redactor that masks common tokens and `key=`/`token=`/`password=` values;
 approvals are not watched when the session runs in `auto`, `bypassPermissions`
 or `dontAsk` mode.
 
-**State file for dr-status.** The mod writes the turn's state and the run's
-progress to `<config dir>/dr-cockpit/state/<session id>.json`, and `dr-status`
-draws them as its `turn` and `run` segments.
-
 **Attribution guard.** Claude Code asks the model to add a `Co-Authored-By`
 trailer to commits and a "Generated with Claude Code" footer to pull requests.
 The mod blanks both where the engine composes them, and refuses a `git commit`,
@@ -260,12 +252,12 @@ in your user settings
 | `handoffTokens` | `0` | The handoff budget in tokens. `0` follows `DR_SUPERPOWERS_BUDGET`, else `dr-superpowers`' own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000 (465k at 650k, 604k on a 1M model with `autoCompactWindow` at 800k). Windows too small for that rule get a fifth of the window. |
 | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-superpowers` sessions. |
 | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
-| `warnAt` | `80` | Where the strip's handoff reading appears, as a percentage of the handoff budget (1-99). |
-| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the compact strip (the `dr-status` lines and the buttons) above the prompt. `full` or `compact`: always that one. |
-| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. A list written before `shells` existed leaves it out until you add it. The compact strip always draws the `dr-status` lines. |
+| `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
+| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band above the prompt. `full` or `compact`: always that one. **Minimize** sets `compact`, **Expand** sets `auto` (`full` above the prompt). |
+| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. A list written before `shells` existed leaves it out until you add it. The band always draws its own lines. |
 | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
-| `limitAlertAt` | `90` | The usage-limit alert's line, in percent. `0` turns the alert off. |
+| `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
 | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. |
 | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |

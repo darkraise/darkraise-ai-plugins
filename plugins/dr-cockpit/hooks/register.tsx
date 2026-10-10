@@ -16,16 +16,16 @@ import type {
   CockpitUsage,
 } from '../types'
 import {
+  accountColor,
   accountKey,
   attributionIn,
-  backgroundBadge,
   bar,
   billingLabel,
   budgetFor,
   duration,
   elapsed,
   finishLine,
-  fitStatus,
+  fitBand,
   folderRuns,
   isAtLeast,
   isFinishArmed,
@@ -36,7 +36,6 @@ import {
   limitForecast,
   limitLabel,
   modelName,
-  nowBadge,
   nowLine,
   parseFinish,
   parseLedger,
@@ -49,6 +48,7 @@ import {
   repoFromPorcelain,
   isAbsolutePath,
   repoName,
+  shellAge,
   roundNumber,
   runsWidth,
   SECTIONS,
@@ -65,7 +65,7 @@ import {
   warnShare,
   writesGitText,
 } from './lib'
-import type { Run, Section, StatusInput, TrackPart } from './lib'
+import type { BandInput, Run, Section, TrackPart } from './lib'
 import {
   discordBody,
   excerpt,
@@ -77,8 +77,8 @@ import {
   notifyKindsToggled,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
-import { avatarSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
-import type { PanelLine, PanelRun, Segment } from './svg'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
+import type { BandMeter, PanelLine, PanelRun, Segment } from './svg'
 
 const PANE = 'dr-cockpit'
 const PANE_COLUMNS = 56
@@ -86,14 +86,13 @@ const INDENT = 2
 // A button's rounded frame: the accent on the one that matters, gray at rest.
 const BUTTON_MAIN = 'permission'
 const BUTTON_REST = 'inactive'
-// The rows the compact layout asks for above the prompt: the framed two
-// lines, and the buttons in their boxes.
-const COMPACT_ROWS = 7
+// The rows the band asks for: its frame, two lines and a warning.
+const COMPACT_ROWS = 5
 // The first Claude Code that takes styled children in a Button.
 const UNDERLINE_SINCE = '2.1.295'
 // The most /context categories the pane lists (breakdownRows caps it lower).
 const MAX_BREAKDOWN_ROWS = 12
-// Below this the strip drops its frame, as dr-status does.
+// Below this the band drops its frame.
 const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
@@ -104,9 +103,6 @@ const RESUME_WITHIN = 3 * 86_400_000
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
-// How often the state file is rewritten while a turn runs, so dr-status can
-// tell a live turn from one whose session went away.
-const HEARTBEAT_MS = 30_000
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -293,7 +289,6 @@ export const register: Register = (on, options) => {
     S.ticker?.cancel()
     S.ticker = null
     await setActivity($, () => IDLE)
-    await writeState($)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -607,6 +602,7 @@ export const register: Register = (on, options) => {
         {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: RESUME_PROMPT, asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
         {button('pane-settings', 'Settings', () => update($, view, () => 'settings'), { hotkey: 's' })}
+        {!isDesktop && !isCompact && button('pane-minimize', 'Minimize', () => setOption($, 'layout', 'compact'), { hotkey: 'm' })}
       </Box>
     )
 
@@ -796,31 +792,137 @@ export const register: Register = (on, options) => {
 
     const who = await read($, account)
     const tint = termColor(who?.color)
+    const billing = billingLabel(who?.billing ?? null)
+    const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
+    const picture = (key: string, source: string, alt: string) => Svg !== undefined && <Svg key={key} source={source} alt={alt} />
 
+    // Minimize folds the pane into the band and Expand opens it again; each
+    // writes the layout setting, so the next session opens the same way.
+    const setLayout = (to: string) => setOption($, 'layout', to)
     if (isCompact) {
-      // dr-status' two lines, framed in the account's color with its email on
-      // the top rule, and the cockpit's buttons under them. Each line shrinks
-      // on its own until it fits.
+      // The band: the account on the top rule, then the readings with their
+      // pace, then what runs beside the turn and where. Each line shrinks on
+      // its own until it fits.
       const where = await read($, place)
-      const engineNow = await read($, engine)
-      const isFramed = room >= FRAME_MIN_COLUMNS
-      const status: StatusInput = {
+      const turnsNow = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
+      const band: BandInput = {
         cwd: where?.cwd ?? null,
         root: where?.root ?? null,
         home: where?.home ?? null,
         repo: git,
-        model: engineNow.model,
-        effort: engineNow.effort,
-        context: head === null ? null : { tokens: head.tokens, window: head.window },
-        cache: engineNow.cache,
-        usd: head?.usd ?? null,
-        limits,
+        context: head === null ? null : { tokens: head.tokens, limit: head.limit, window: head.window },
+        turnsLeft: turnsNow,
+        limits: GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind)),
+        agents: running.length,
+        shells: { count: background.length, longest: background.reduce((most, shell) => Math.max(most, now - shell.startedAt), 0) },
         now,
-        handoff: head === null ? null : { tokens: head.tokens, limit: head.limit, warnAt: tuning.warnAt },
-        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, round: roundNumber(runRound(summary)) },
       }
+      const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
+      const warning: Run[] = [
+        ...(blocked.length === 0
+          ? []
+          : [{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]),
+        ...(blocked.length > 0 && refused.length > 0 ? [{ text: '  ·  ', dim: true }] : []),
+        ...(refused.length === 0 ? [] : [{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]),
+      ]
+      const remoteBand: Run[] =
+        remoteNow.clients.length > 0
+          ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
+          : remoteNow.setting === 'true'
+            ? [{ text: 'Remote ○ on', color: 'green' }]
+            : [{ text: 'Remote ○ off', dim: true }]
+      const expandTo = e.props.placement === 'inline' ? 'full' : 'auto'
+
+      if (isDesktop) {
+        const w = svgWidth(room - 4)
+        const meters: BandMeter[] = [
+          ...(head === null
+            ? []
+            : [
+                {
+                  key: 'Context',
+                  percent: (head.tokens / head.limit) * 100,
+                  share: head.tokens / head.window,
+                  color: rampColor((head.tokens / head.limit) * 100),
+                  tick: head.limit / head.window,
+                  note: turnsNow === null ? [] : [{ text: `≈${turnsNow} ${turnsNow === 1 ? 'turn' : 'turns'}`, color: turnsNow <= 3 ? 'warning' : undefined }],
+                },
+              ]),
+          ...band.limits.map((limit): BandMeter => {
+            const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
+            return {
+              key: limitLabel(limit.kind),
+              percent: limit.percent,
+              share: limit.percent / 100,
+              color: rampColor(limit.percent),
+              tick: windowElapsed(limit.kind, limit.resetsAt, now),
+              note:
+                forecast === 'pace'
+                  ? [{ text: 'on pace', color: 'green' }]
+                  : typeof forecast === 'number'
+                    ? [{ text: `out in ${duration(forecast) || '<1m'}`, color: 'yellow' }]
+                    : limit.resetsAt === null
+                      ? []
+                      : [{ text: `resets ${duration(limit.resetsAt - now) || 'now'}` }],
+            }
+          }),
+        ]
+        const facts: PanelRun[] = [
+          ...(running.length === 0 ? [] : [{ text: '● ', color: 'green' }, { text: `${running.length} ${running.length === 1 ? 'agent' : 'agents'} running` }, { text: '   ' }]),
+          ...(background.length === 0
+            ? []
+            : [{ text: '$ ', color: 'yellow', mono: true }, { text: `${background.length} ${background.length === 1 ? 'shell' : 'shells'}` }, { text: ` · longest ${shellAge(band.shells.longest)}`, dim: true }, { text: '   ' }]),
+          ...(where === null ? [] : [{ text: where.root === null ? (where.cwd.split(/[\\/]/).pop() ?? where.cwd) : repoName(where.remote ?? null, where.root), bold: true }]),
+        ]
+        const chips: PanelRun[] =
+          git === null
+            ? []
+            : [
+                pill(`⎇ ${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ''}${git.behind > 0 ? ` ↓${git.behind}` : ''}`, 'magenta'),
+                ...(git.changed > 0 ? [pill(`~${git.changed} changed`, 'yellow')] : []),
+                ...(git.untracked > 0 ? [pill(`?${git.untracked} untracked`)] : []),
+              ]
+        const head0: PanelLine[] = [
+          {
+            kind: 'text',
+            left: [
+              { text: who?.email ?? 'not signed in', bold: true },
+              ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]),
+              { text: '  ' },
+              pill(remoteBand.map(run => run.text).join(''), remoteNow.clients.length > 0 || remoteNow.setting === 'true' ? 'green' : undefined),
+            ],
+          },
+        ]
+        const rest: PanelLine[] = [
+          ...(facts.length > 0 ? [{ kind: 'text', left: facts } as PanelLine] : []),
+          ...(chips.length > 0 ? [{ kind: 'chips', chips } as PanelLine] : []),
+          ...(warning.length > 0 ? [{ kind: 'text', left: warning.map(run => ({ ...run, color: run.color === undefined ? undefined : 'red' })) } as PanelLine] : []),
+        ]
+        return (
+          <Box key="band" flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
+            <Box key="band-top" flexDirection="row" alignItems="center" columnGap={1}>
+              <Box key="band-who" flexGrow={1}>
+                {picture('band-who-line', panelSvg(head0, svgWidth(room - 16)), panelText(head0))}
+              </Box>
+              {button('band-expand', 'Expand', () => setLayout(expandTo), { hotkey: 'e' })}
+            </Box>
+            {meters.length > 0 && (
+              <Box key="band-meters" paddingX={1}>
+                {picture(
+                  'band-meters-line',
+                  bandMetersSvg(meters, w - 18),
+                  meters.map(meter => [`${meter.key} ${Math.round(meter.percent)}%`, ...meter.note.map(run => run.text)].join(', ')).join('\n'),
+                )}
+              </Box>
+            )}
+            {rest.length > 0 && picture('band-rest', panelSvg(rest, w), panelText(rest))}
+          </Box>
+        )
+      }
+
+      const isFramed = room >= FRAME_MIN_COLUMNS
       const width = isFramed ? room - 4 : room
-      const { lines } = fitStatus(status, width)
+      const [one, two] = fitBand(band, width)
       const row = (key: string, runs: Run[]) =>
         isFramed ? (
           <Text key={key} wrap="truncate-end">
@@ -834,49 +936,52 @@ export const register: Register = (on, options) => {
             {drawRuns(key, runs)}
           </Text>
         )
-      const title = who?.email == null ? '' : [...who.email].slice(0, Math.max(0, room - 6)).join('')
-      // The turn's activity rides on the top rule, so the strip keeps its height.
-      const left = title === '' ? 2 : 4 + [...title].length
-      const fullBadge = nowBadge(actNow, now)
-      const lowBadge = backgroundBadge(background.length, remoteNow.clients)
-      const lowFits = lowBadge.length > 0 && room - runsWidth(lowBadge) - 6 >= 2
-      const badge = room - left - runsWidth(fullBadge) - 4 >= 2 ? fullBadge : []
-      const dashes = Math.max(0, room - left - (badge.length > 0 ? runsWidth(badge) + 4 : 1))
+      // A bare button on the top rule, so the band keeps its height.
+      const expand = <Button key="band-expand" label="Expand" plain hover={{ bold: true }} onPress={() => setLayout(expandTo)} />
+      const email = who?.email ?? ''
+      // What rides on the top rule, dropped from the end while it does not fit.
+      const tops: Run[][] = [
+        [{ text: email, bold: true }, ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]), { text: ' · ', dim: true }, ...remoteBand],
+        [{ text: email, bold: true }, { text: ' · ', dim: true }, ...remoteBand],
+        [{ text: email, bold: true }],
+        [],
+      ]
+      // "╭─ " + top + " " + dashes + " Expand ─╮"
+      const room0 = room - 3 - 1 - 1 - 6 - 3
+      const top = tops.find(runs => runsWidth(runs) <= room0 - 1) ?? []
+      const dashes = Math.max(1, room0 - runsWidth(top) - (top.length > 0 ? 0 : -1))
+      const lines = [one, two].filter(line => line.length > 0)
 
       return (
         <Box flexDirection="column">
-          {isFramed && (
-            <Text key="frame-top" color={tint} wrap="truncate-end">
-              {title === '' ? '╭─' : '╭─ '}
-              {title !== '' && <Text bold>{title}</Text>}
-              {title === '' ? '' : ' '}
-              {'─'.repeat(dashes)}
-              {badge.length > 0 && ' '}
-              {badge.length > 0 && drawRuns('frame-badge', badge)}
-              {badge.length > 0 ? ' ─╮' : '╮'}
-            </Text>
+          {isFramed ? (
+            <Box key="frame-top" flexDirection="row">
+              <Text key="frame-top-left" color={tint} wrap="truncate-end">
+                {top.length > 0 ? '╭─ ' : '╭─'}
+                {top.length > 0 && drawRuns('frame-top-runs', top)}
+                {top.length > 0 ? ' ' : ''}
+                {'─'.repeat(dashes)}{' '}
+              </Text>
+              {expand}
+              <Text key="frame-top-right" color={tint}>
+                {' ─╮'}
+              </Text>
+            </Box>
+          ) : (
+            <Box key="band-head" flexDirection="row" columnGap={1}>
+              <Text key="band-email" color={tint} bold wrap="truncate-end">
+                {email}
+              </Text>
+              {expand}
+            </Box>
           )}
-          {/* Without a frame to carry it, the email takes a line of its own. */}
-          {!isFramed && who?.email != null && (
-            <Text key="status-email" color={tint} bold wrap="truncate-end">
-              {who.email}
-            </Text>
-          )}
-          {!isFramed && fullBadge.length > 0 && (
-            <Text key="status-now" wrap="truncate-end">
-              {drawRuns('status-now', fullBadge)}
-            </Text>
-          )}
-          {row('status-1', lines[0])}
-          {row('status-2', lines[1])}
+          {lines.map((line, index) => row(`band-${index + 1}`, line))}
+          {warning.length > 0 && row('band-warning', warning)}
           {isFramed && (
             <Text key="frame-bottom" color={tint} wrap="truncate-end">
-              {lowFits ? '╰─ ' : '╰' + '─'.repeat(room - 2) + '╯'}
-              {lowFits && drawRuns('frame-low', lowBadge)}
-              {lowFits && ' ' + '─'.repeat(Math.max(0, room - runsWidth(lowBadge) - 5)) + '╯'}
+              {'╰' + '─'.repeat(Math.max(0, room - 2)) + '╯'}
             </Text>
           )}
-          {actions}
         </Box>
       )
     }
@@ -885,7 +990,6 @@ export const register: Register = (on, options) => {
     // headline on the first line, its rows below, and a row's details two cells in.
     const inner = Math.max(20, room - 4)
     const wide = Math.max(10, inner - 2 * INDENT)
-    const picture = (key: string, source: string, alt: string) => Svg !== undefined && <Svg key={key} source={source} alt={alt} />
     const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) => (
       <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
         <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
@@ -993,7 +1097,6 @@ export const register: Register = (on, options) => {
     }
 
     const engineNow = await read($, engine)
-    const billing = billingLabel(who?.billing ?? null)
     const turnsLeft = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
     const runCard = () => {
       if (summary === null) return null
@@ -1095,7 +1198,7 @@ export const register: Register = (on, options) => {
         }),
     )
     const byName: Record<Section, RenderChildren> = {
-      // Who the session runs as, framed in the color dr-status gives the account.
+      // Who the session runs as, framed in the account's color.
       account:
         who !== null &&
         section(
@@ -1377,7 +1480,6 @@ export const register: Register = (on, options) => {
       // (desktop text has one size and whole-line spacing); its buttons stay
       // the desktop's own.
       const width = svgWidth(inner)
-      const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
       const panel = (key: string, title: string, lamp: string, right: PanelRun[], lines: PanelLine[], ...native: RenderChildren[]) => {
         const all: PanelLine[] = [{ kind: 'head', lamp, title, right }, ...lines]
         return (
@@ -1664,9 +1766,14 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column" rowGap={1}>
           {shown.includes('account') && panels.account}
-          <Text key="now" wrap="truncate-end">
-            {drawRuns('now', nowLine(actNow, now))}
-          </Text>
+          <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
+            <Box key="now-box" flexGrow={1} flexShrink={1}>
+              <Text key="now" wrap="truncate-end">
+                {drawRuns('now', nowLine(actNow, now))}
+              </Text>
+            </Box>
+            {button('pane-minimize', 'Minimize', () => setOption($, 'layout', 'compact'), { hotkey: 'm' })}
+          </Box>
           {tiles.length > 0 && (
             <Box key="gauges" flexDirection="column" rowGap={1}>
               {gaugeRows.map(gaugeRow)}
@@ -1696,24 +1803,19 @@ const S = {
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,
-  where: { host: null, tmux: null, primary: null, sessionId: null, configDir: null } as {
+  where: { host: null, tmux: null, primary: null } as {
     host: string | null
     tmux: string | null
     primary: string | null
-    sessionId: string | null
-    configDir: string | null
   },
   // An approval or question the person has not answered yet: its timer, and
   // the Discord message sent for it, edited once it is answered.
   waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent }>(),
   ticker: null as Timer | null,
-  ticks: 0,
   isTurnLive: false,
   isBudgetSent: false,
   // Ledger events already seen, so a reload or a re-read sends nothing twice.
   ledgerSeen: null as Set<string> | null,
-  stateTimer: null as Timer | null,
-  lastState: '',
   isUnattended: false,
   // Whether this Claude Code draws a Button's label from styled children,
   // so the hotkey's letter can be underlined in it.
@@ -1746,10 +1848,8 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string): 
     await update($, notifier, now => ({ ...now, last: { at: stamp, text: `sent ${event.kind}`, isError: false } }))
     return sent.id
   }
-  const before = (await read($, notifier)).last
+  // A failed send shows in the settings' Discord row, never as a pop-up.
   await update($, notifier, now => ({ ...now, last: { at: stamp, text: sent.reason, isError: true } }))
-  // Said once, not on every event, until a send works again.
-  if (before?.isError !== true) $.ui.toast(`dr-cockpit: Discord notification failed: ${sent.reason}`)
   return null
 }
 
@@ -1769,70 +1869,20 @@ async function turnFields($: EngineInterface): Promise<{ name: string; value: st
 async function setActivity($: EngineInterface, change: (now: CockpitActivity) => CockpitActivity) {
   await update($, activity, change)
   await syncTicker($)
-  scheduleState($)
 }
 
 // The pane's clock: a redraw a second while a turn runs, a background shell
-// runs or a subagent works, so their timers count seconds; and while a turn
-// runs, the state file's heartbeat.
+// runs or a subagent works, so their timers count seconds.
 async function syncTicker($: EngineInterface) {
   const now = await read($, activity)
   S.isTurnLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
   const isTicking =
     S.isTurnLive || (await read($, shells)).length > 0 || (await read($, spawns)).some(one => !one.isDone) || isFinishArmed(await read($, finish))
   if (isTicking && S.ticker === null) {
-    S.ticks = 0
-    S.ticker = $.clock.every(1000, () => {
-      S.ticks++
-      $.ui.invalidate('ui.render')
-      if (S.isTurnLive && (S.ticks * 1000) % HEARTBEAT_MS === 0) scheduleState($, true)
-    })
+    S.ticker = $.clock.every(1000, () => $.ui.invalidate('ui.render'))
   } else if (!isTicking && S.ticker !== null) {
     S.ticker.cancel()
     S.ticker = null
-  }
-}
-
-// The state file dr-status reads: written at most twice a second, and only
-// when it changed, unless a heartbeat asks.
-function scheduleState($: EngineInterface, isHeartbeat = false) {
-  if (S.where.sessionId === null || S.where.configDir === null) return
-  if (isHeartbeat) S.lastState = ''
-  if (S.stateTimer !== null) return
-  S.stateTimer = $.clock.after(500, () => {
-    S.stateTimer = null
-    void writeState($)
-  })
-}
-
-async function writeState($: EngineInterface) {
-  try {
-    const now = await read($, activity)
-    const summary = await read($, run)
-    const body = {
-      v: 1,
-      activity: {
-        kind: now.kind,
-        since: Math.floor((now.kind === 'idle' || now.kind === 'failed' ? (now.endedAt ?? now.since) : now.since) / 1000),
-        tool: now.tool,
-      },
-      run:
-        summary === null || summary.total === 0
-          ? null
-          : {
-              done: summary.done,
-              total: summary.total,
-              round: roundNumber(summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null),
-              blocked: summary.tasks.filter(task => task.state === 'blocked').length,
-            },
-    }
-    const text = JSON.stringify(body)
-    if (text === S.lastState) return
-    S.lastState = text
-    const stamp = Math.floor((await $.clock.now()) / 1000)
-    await $.fs.write(`${S.where.configDir}/dr-cockpit/state/${S.where.sessionId}.json`, JSON.stringify({ ...body, updatedAt: stamp }) + '\n')
-  } catch {
-    // No state file: dr-status shows its own segments alone.
   }
 }
 
@@ -1936,7 +1986,6 @@ async function readRun($: EngineInterface) {
     // a new session starts with no Run card.
     if (isOlder && (summary.isFinished || (summary.total > 0 && summary.done === summary.total))) return clear()
     await update($, run, () => summary)
-    scheduleState($)
     await sendLedgerEvents($, summary)
   } catch {
     // No readable ledger: the Plan card stays as it is.
@@ -2009,14 +2058,6 @@ async function readNotifier($: EngineInterface) {
 
 // Where the messages come from and S.where the state file goes, read once.
 async function readWhere($: EngineInterface) {
-  try {
-    S.where.sessionId = await $.session.id()
-  } catch {
-    S.where.sessionId = null
-  }
-  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || ''
-  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home === '' ? '' : `${home}/.claude`)
-  S.where.configDir = configDir === '' ? null : configDir.replace(/[\\/]+$/, '')
   try {
     const settings = (await $.settings.read()) as { permissions?: { defaultMode?: unknown } }
     S.isUnattended = UNATTENDED_MODES.includes(String(settings.permissions?.defaultMode ?? ''))
@@ -2194,9 +2235,9 @@ async function refreshDetail($: EngineInterface) {
 }
 
 /**
- * The account as dr-status reads it: the email and organization from the
- * account's .claude.json (CLAUDE_CONFIG_DIR's, else the home one), and the frame
- * color from dr-status' own config, keyed by the config directory.
+ * The account: the email and organization from the account's .claude.json
+ * (CLAUDE_CONFIG_DIR's, else the home one), and a frame color picked from the
+ * config directory, so each account keeps its own.
  */
 async function readAccount($: EngineInterface) {
   try {
@@ -2206,9 +2247,6 @@ async function readAccount($: EngineInterface) {
     const state = await readJson($, configDir ? `${configDir}/.claude.json` : `${home}/.claude.json`)
     const oauth = (state?.oauthAccount ?? {}) as Record<string, unknown>
     const key = accountKey(configDir || `${home}/.claude`, home)
-    const config = await readJson($, (await $.env.get('DCC_STATUSLINE_CONFIG')) || `${home}/.claude/dcc-statusline.json`)
-    const accounts = (config?.accounts ?? {}) as Record<string, { color?: unknown }>
-    const color = accounts[key]?.color
     const text = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null)
     const next: CockpitAccount = {
       email: text(oauth.emailAddress),
@@ -2217,7 +2255,7 @@ async function readAccount($: EngineInterface) {
       role: text(oauth.organizationRole),
       billing: text(oauth.billingType),
       key,
-      color: typeof color === 'string' || typeof color === 'number' ? String(color) : null,
+      color: accountColor(key),
     }
     await update($, account, () => next)
   } catch {
@@ -2274,7 +2312,8 @@ async function readCompactWindow($: EngineInterface): Promise<number | undefined
   }
 }
 
-// Says once per window and reset when a rate limit crosses the alert line.
+// The limits that crossed the alert line, once per window and reset, for the
+// Discord message; the pane's own gauges show them, so nothing pops up.
 async function alertLimits($: EngineInterface, reading: CockpitUsage, at: number) {
   const said = await read($, alerted)
   const crossed: CockpitUsage['limits'] = []
@@ -2282,8 +2321,6 @@ async function alertLimits($: EngineInterface, reading: CockpitUsage, at: number
     const key = `${limit.kind}@${limit.resetsAt ?? ''}`
     if (limit.percent < at || said.includes(key)) continue
     await update($, alerted, list => [...list, key].slice(-20))
-    const reset = limit.resetsAt === null ? '' : ` · resets in ${duration(limit.resetsAt - reading.readAt) || 'now'}`
-    $.ui.toast(`dr-cockpit: ${limitLabel(limit.kind)} limit at ${Math.round(limit.percent)}%${reset}`)
     crossed.push(limit)
   }
   return crossed
