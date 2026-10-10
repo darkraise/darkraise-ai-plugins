@@ -60,6 +60,8 @@ session is doing:
 │ ○ Task 5: Track the plan and repo                 │
 ╰───────────────────────────────────────────────────╯
 ╭ Repo ─────────────────────────────────── ● dirty ╮
+│ repo darkraise/darkraise-ai-plugins               │
+│ dir  ~/code/darkraise-ai-plugins/plugins          │
 │ ⎇ feat/cockpit-pane-overhaul ↑3                   │
 │ ~2 changed ?1 untracked                           │
 ╰───────────────────────────────────────────────────╯
@@ -115,7 +117,8 @@ window refills.
   30 minutes (`⏱ Finish push and open a PR · in 23m`) and says once it was
   carried out. It disappears when you answer the menu yourself. Work done
   without a plan shows the row on the Plan card.
-- **Repo** is the working tree's branch, ahead and behind counts and changes.
+- **Repo** names the repository (`owner/name` from its remote, else its folder)
+  and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
 When the pane sits above the prompt (`layout` `auto`, the default), it draws

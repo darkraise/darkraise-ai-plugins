@@ -388,6 +388,34 @@ export function pathParts(cwd: string, root: string | null, home: string | null)
   return { lead, anchor: anchorPath.slice(cut + 1) || anchorPath, inner: at.slice(anchorPath.length) }
 }
 
+/**
+ * The repository's name: `owner/name` from its origin remote (scp-style or
+ * URL, `.git` dropped), else the root folder's name.
+ */
+export function repoName(remote: string | null, root: string): string {
+  const path = (remote ?? '')
+    .trim()
+    .replace(/\.git\/?$/, '')
+    .replace(/\/+$/, '')
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*\//i, '')
+    .replace(/^[^@/]+@[^:/]+:/, '')
+  const parts = path.split('/').filter(Boolean)
+  if (parts.length >= 2) return parts.slice(-2).join('/')
+  if (parts.length === 1) return parts[0] ?? ''
+  const top = slashes(root).replace(/\/+$/, '')
+  return top.slice(top.lastIndexOf('/') + 1) || top
+}
+
+/** The working folder as dr-status draws it: the way there dim, the repository bold, the rest plain. */
+export function folderRuns(cwd: string, root: string | null, home: string | null): Run[] {
+  const { lead, anchor, inner } = pathParts(cwd, root, home)
+  return [
+    ...(lead === '' ? [] : [{ text: lead, color: DIR, dim: true }]),
+    { text: anchor, color: DIR, bold: true },
+    ...(inner === '' ? [] : [{ text: inner, color: DIR }]),
+  ]
+}
+
 /** dr-status' two lines at one tier: 0 is the fullest, 3 the most compact. */
 export function statusLines(input: StatusInput, tier: number): [Run[], Run[]] {
   const sep: Run = { text: tier < 2 ? '  ·  ' : ' · ', dim: true }

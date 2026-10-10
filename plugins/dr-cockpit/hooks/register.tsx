@@ -26,6 +26,7 @@ import {
   elapsed,
   finishLine,
   fitStatus,
+  folderRuns,
   isAtLeast,
   isFinishArmed,
   isGitWriteTool,
@@ -46,6 +47,7 @@ import {
   rampColor,
   remoteRuns,
   repoFromPorcelain,
+  repoName,
   roundNumber,
   runsWidth,
   SECTIONS,
@@ -522,6 +524,7 @@ export const register: Register = (on, options) => {
     const remoteNow = await read($, remote)
     const items = await read($, plan)
     const git = await read($, repo)
+    const placeNow = await read($, place)
     const refused = await read($, refusals)
     const canHandOff = await read($, isPlanSession)
     const act = await read($, activity)
@@ -1285,6 +1288,18 @@ export const register: Register = (on, options) => {
           <Text key="repo-head" color={git.changed + git.untracked === 0 ? 'green' : 'yellow'}>
             {git.changed + git.untracked === 0 ? '● clean' : '● dirty'}
           </Text>,
+          placeNow !== null && placeNow.root !== null && (
+            <Text key="repo-name" wrap="truncate-end">
+              <Text dimColor>repo </Text>
+              <Text bold>{repoName(placeNow.remote ?? null, placeNow.root)}</Text>
+            </Text>
+          ),
+          placeNow !== null && (
+            <Text key="repo-cwd" wrap="truncate-start">
+              <Text dimColor>dir  </Text>
+              {drawRuns('repo-cwd-runs', folderRuns(placeNow.cwd, placeNow.root, placeNow.home))}
+            </Text>
+          ),
           <Text key="repo" wrap="truncate-end">
             <Text color="magenta" bold>
               ⎇ {git.branch}
@@ -1878,8 +1893,9 @@ async function readPlace($: EngineInterface) {
     const repoAt = await $.session.repo().catch(() => null)
     const home = ((await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))) || null
     const before = await read($, place)
-    if (before?.cwd !== cwd || before.root !== (repoAt?.root ?? null) || before.home !== home) {
-      await update($, place, () => ({ cwd, root: repoAt?.root ?? null, home }))
+    const next = { cwd, root: repoAt?.root ?? null, remote: repoAt?.remote ?? null, home }
+    if (before?.cwd !== next.cwd || before.root !== next.root || (before.remote ?? null) !== next.remote || before.home !== next.home) {
+      await update($, place, () => next)
     }
   } catch {
     // No working directory on this host: the strip starts at the branch.
