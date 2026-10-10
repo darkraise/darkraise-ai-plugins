@@ -176,6 +176,21 @@ DR_SUPERPOWERS_BUDGET=465000 run --final
 check "800k window, pinned task budget: the final phase continues" "$out" "budget (final): 500k of 680k (73%) — ok — source: record"
 settings 650000
 
+# --- a plan's last tasks share the final-phase limit ---
+asst 500000 > "$T"
+run --tail 1
+check "tail of 1: past the task budget, below the final limit: exit 0" "$status" "0"
+check "tail of 1: line" "$out" "budget (last task): 500k of 553k (90%) — ok — source: record"
+DR_SUPERPOWERS_BUDGET=300000 run --tail 2
+check "tail of 2: the task override does not move it" "$out" "budget (last 2 tasks): 500k of 553k (90%) — ok — source: record"
+asst 560000 > "$T"
+run --tail 2
+check "tail: over: exit 5" "$status" "5"
+run --tail 3
+check "tail of 3: usage" "$status" "2"
+run --tail 0
+check "tail of 0: usage" "$status" "2"
+
 # --- a wave reserves one task's growth per extra concurrent task ---
 asst 200000 > "$T"
 run --wave 1

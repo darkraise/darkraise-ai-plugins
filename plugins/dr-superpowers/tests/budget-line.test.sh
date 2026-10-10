@@ -30,7 +30,7 @@ unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUD
 REPO="$TMP/repo"
 git init -q "$REPO"
 mkdir -p "$REPO/docs"
-printf '# Plan\n\n### Task 1: Only thing\n\nBody.\n' > "$REPO/docs/plan.md"
+printf '# Plan\n\n### Task 1: First\n\nBody.\n\n### Task 2: Second\n\nBody.\n\n### Task 3: Third\n\nBody.\n' > "$REPO/docs/plan.md"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm plan
 BASE=$(git -C "$REPO" rev-parse HEAD)
 printf 'x\n' > "$REPO/file.txt"
@@ -60,6 +60,30 @@ check "review-package: budget line says handoff" "$(tail -n 1 <<<"$out")" \
 out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
 check "task-brief: budget line says handoff" "$(tail -n 1 <<<"$out")" \
   "budget: 500k of 465k (107%) — handoff — source: record"
+
+# --- the plan's last two tasks measure against the final-phase limit ---
+# 553k is 85% of the 650k window: the tail finishes here rather than paying a
+# fresh session's baseline and reload for one or two tasks.
+L="$REPO/.superpowers/sdd/plan/progress.md"
+mkdir -p "$(dirname "$L")"
+printf '# SDD ledger — plan: docs/plan.md
+Task 1: complete (commit abc1234)
+' > "$L"
+out=$(bash "$P/scripts/task-brief" docs/plan.md 2 2>/dev/null)
+check "task-brief: two tasks left: the tail limit" "$(tail -n 1 <<<"$out")" \
+  "budget (last 2 tasks): 500k of 553k (90%) — ok — source: record"
+printf 'Task 2: complete (commit abc1235)
+' >> "$L"
+out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null)
+check "task-brief: one task left: the tail limit" "$(tail -n 1 <<<"$out")" \
+  "budget (last task): 500k of 553k (90%) — ok — source: record"
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":560000}}}\n' > "$T"
+out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null); status=$?
+check "task-brief: past the tail limit: handoff" "$(tail -n 1 <<<"$out")" \
+  "budget (last task): 560k of 553k (101%) — handoff — source: record"
+check "task-brief: past the tail limit: exit unchanged" "$status" "0"
+rm -f "$L"
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
 
 # --- a missing task still fails the way it did ---
 bash "$P/scripts/task-brief" docs/plan.md 9 >/dev/null 2>&1; status=$?

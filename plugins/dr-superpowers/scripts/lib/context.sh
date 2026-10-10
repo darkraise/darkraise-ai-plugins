@@ -13,6 +13,10 @@
 CTX_COMPACT_PCT=93
 CTX_TASK_MARGIN=140000
 CTX_FINAL_PCT=85
+# A plan's last tasks join the final phase: once this many or fewer remain, the
+# brief measures them against the final-phase limit. Finishing them here costs
+# less than a fresh session's baseline plus its reload.
+CTX_TAIL_TASKS=2
 
 ctx_jq() { "${DR_SUPERPOWERS_JQ:-jq}" "$@"; }
 ctx_have_jq() { command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; }
@@ -272,16 +276,23 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
-# ctx_line [final | wave W] — print the budget line; return 0 ok, 5 handoff, 3
-# unknown. With final, measure against the final-phase limit instead of the task
-# budget. With wave W, reserve one task's worst growth for each of the W - 1
+# ctx_line [final | tail R | wave W] — print the budget line; return 0 ok, 5
+# handoff, 3 unknown. With final, measure against the final-phase limit instead
+# of the task budget; tail R does the same before one of a plan's last R tasks
+# (CTX_TAIL_TASKS), so the tail of a plan and its final phase share one limit.
+# With wave W, reserve one task's worst growth for each of the W - 1
 # tasks that run beside the first, so a parallel wave that starts under its
 # budget lands before compaction just as one task does
 # (reference/parallel-waves.md).
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
   local label=budget extra=0
-  [ "${1:-}" = final ] && label="budget (final)"
+  local limit=task
+  [ "${1:-}" = final ] && label="budget (final)" limit=final
+  if [ "${1:-}" = tail ]; then
+    limit=final
+    if [ "${2:-1}" = 1 ]; then label="budget (last task)"; else label="budget (last ${2} tasks)"; fi
+  fi
   if [ "${1:-}" = wave ]; then
     label="budget (wave of ${2:-1})"
     extra=$(( (${2:-1} - 1) * CTX_TASK_MARGIN ))
@@ -312,7 +323,7 @@ ctx_line() {
     CTX_TRANSCRIPT=$claude
     model=$(ctx_model "$CTX_TRANSCRIPT")
   fi
-  if [ "${1:-}" = final ]; then
+  if [ "$limit" = final ]; then
     budget=$(ctx_final_budget "$model")
   else
     case ${DR_SUPERPOWERS_BUDGET:-} in

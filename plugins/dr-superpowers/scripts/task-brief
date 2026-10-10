@@ -87,4 +87,21 @@ echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
 # task, so checking the session budget costs no extra request. It must never
 # fail the brief.
 # --header mode has no task number; --observations ignores the header rows.
-DR_SUPERPOWERS_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" 2>/dev/null || true
+# Before one of the plan's last tasks the line measures against the final-phase
+# limit (context-size --tail): finishing a short tail here costs less than a
+# fresh session's baseline and reload. Remaining tasks are the plan's tasks with
+# no complete line in this checkout's ledger, the briefed one included.
+budget_mode=()
+if [ -n "$n" ]; then
+  . "$HERE/lib/context.sh"
+  ledger="$(git rev-parse --show-toplevel 2>/dev/null || true)/.superpowers/sdd/$(basename "$plan" .md)/progress.md"
+  done_tasks=""
+  [ ! -f "$ledger" ] || done_tasks=$(ledger_done "$ledger" || true)
+  remaining=$(plan_tasks "$src" | cut -f1 | DONE="$done_tasks" awk '
+    BEGIN { n = split(ENVIRON["DONE"], d, "\n"); for (i = 1; i <= n; i++) done[d[i]] = 1 }
+    !($1 in done) && !seen[$1]++ { c++ } END { print c + 0 }')
+  if [ "$remaining" -ge 1 ] && [ "$remaining" -le "$CTX_TAIL_TASKS" ]; then
+    budget_mode=(--tail "$remaining")
+  fi
+fi
+DR_SUPERPOWERS_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true

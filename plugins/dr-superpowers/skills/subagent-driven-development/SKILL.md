@@ -433,6 +433,10 @@ request:
   `Task N: complete` line — then invoke dr-superpowers:handoff. Start no new
   task. The budget holds one task's worst growth, so the task lands before
   compaction.
+- The plan's last two tasks are measured against the final-phase limit:
+  their brief prints `budget (last 2 tasks)` or `budget (last task)`, and only
+  that line's verdict decides. A short tail costs less to finish here than a
+  fresh session's baseline and reload.
 - After the last task's `Task N: complete` line, run
   `scripts/context-size --final`, which measures against the final-phase limit
   (85% of the compaction window) instead of the task budget. On `ok` or
@@ -507,8 +511,8 @@ append `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to
 the ledger. Do not delete the workspace:
 dr-superpowers:finishing-a-development-branch removes it with the worktree once
 the work is merged or discarded, and until then it is what a later session
-resumes from. Then run `scripts/context-size --final`: on `handoff`, invoke
-dr-superpowers:handoff; otherwise go on to finishing.
+resumes from. Then go on to finishing: it is never budget-checked, since it
+costs far less than the fresh session a handoff would start.
 
 **Finishing is a Skill tool call in this same turn.** Call the Skill tool
 with `dr-superpowers:finishing-a-development-branch` right after the ledger
@@ -595,6 +599,6 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 [a fresh judge-opus dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch; one scoped re-review; clean]
 
-[Ledger: Final review: clean (commits a1b2c3d..f0e1d2c); context-size --final ok — continue]
+[Ledger: Final review: clean (commits a1b2c3d..f0e1d2c) — finishing is never budget-checked]
 [Skill tool: dr-superpowers:finishing-a-development-branch, in this turn — gates, Rulings I made, the three-option menu last]
 ```

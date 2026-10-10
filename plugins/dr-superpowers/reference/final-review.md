@@ -11,7 +11,8 @@ of the work being done.
   dr-superpowers:resume-execution brought the next session here. The final
   phase - this review, its one fix wave and finishing - is measured against
   that final-phase limit, not the task budget, so a `review-package` budget
-  line saying `handoff` here does not stop it.
+  line saying `handoff` here does not stop it. Once the review is clean,
+  finishing follows with no budget check.
 - **Either mode:** point the reviewer at the ledger's deferred-minor and parked
   lines, the complete lines' `discovered:` fields, every borderline (9-13) score,
   and every `(unseated)` ruling, so it can triage what must be fixed before
