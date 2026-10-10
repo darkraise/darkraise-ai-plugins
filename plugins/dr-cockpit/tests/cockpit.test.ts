@@ -51,7 +51,7 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/notify'
-import { avatarSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
+import { avatarSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -443,10 +443,9 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      if (surface === 'desktop') {
-        expect(await ui.find({ type: 'Text', text: 'impl-sonnet-low' })).toBeDefined()
-        expect(await ui.find({ type: 'Text', text: 'Task 3' })).toBeDefined()
-      } else expect(await ui.find({ type: 'Text', text: /● impl-sonnet-low Task 3/ })).toBeDefined()
+      // The desktop draws its panels as pictures, their words in each one's alt.
+      if (surface === 'desktop') expect(JSON.stringify(await ui.drawn())).toMatch(/●  impl-sonnet-low  Task 3/)
+      else expect(await ui.find({ type: 'Text', text: /● impl-sonnet-low Task 3/ })).toBeDefined()
       await ui.unmount()
     }
     await $.turn.complete({
@@ -467,7 +466,9 @@ describe('cockpit pane', () => {
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
       if (surface === 'desktop') {
-        expect(JSON.stringify(await ui.drawn())).toContain('"alt":"impl-sonnet-low: 40k input tokens, 75% cached, 3k output"')
+        const drawn = JSON.stringify(await ui.drawn())
+        expect(drawn).toContain('impl-sonnet-low ×1 40k in · 75% cached · 3k out')
+        expect(drawn).toContain('✓  impl-sonnet-low  Task 3')
       } else {
         expect(await ui.find({ type: 'Text', text: /40k in · 75% cached · 3k out/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low Task 3/ })).toBeDefined()
@@ -489,17 +490,18 @@ describe('cockpit pane', () => {
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
       const drawn = JSON.stringify(await ui.drawn())
-      expect(await ui.find({ type: 'Text', text: /\$1\.50/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
       expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
       if (surface === 'desktop') {
-        // The desktop names the figures in its drawings and sets the repo's facts in chips.
-        expect(drawn).toContain('"alt":"61% of the handoff budget"')
-        expect(drawn).toContain('"alt":"5h limit 23% used"')
-        expect(drawn).toContain('"alt":"284k of 650k tokens, handoff at 465k"')
-        expect(await ui.find({ type: 'Text', text: '~1 changed' })).toBeDefined()
-        expect(await ui.find({ type: 'Text', text: '?1 untracked' })).toBeDefined()
+        // The desktop draws its panels as pictures, naming their figures and
+        // the repo's chips in each one's alt.
+        expect(drawn).toContain('Usage: $1.50')
+        expect(drawn).toContain('61% of the handoff budget')
+        expect(drawn).toContain('5h limit 23% used')
+        expect(drawn).toContain('284k of 650k tokens, handoff at 465k')
+        expect(drawn).toContain('⎇ feat/pane, ↑2, ↓1, ~1 changed, ?1 untracked')
       } else {
+        expect(await ui.find({ type: 'Text', text: /\$1\.50/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /61%/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
@@ -791,7 +793,7 @@ describe('settings view', () => {
         ['dr-cockpit.sections', 'account,context,usage,shells,agents,plan,repo'],
       ])
       await ui.press({ key: 'settings-back' })
-      expect(await ui.find({ type: 'Text', text: /^Context$/i })).toBeDefined()
+      expect(await ui.find({ key: 'pane-settings' })).toBeDefined()
     })
   }
 
@@ -851,6 +853,32 @@ describe('desktop', () => {
     expect(dial.match(/<path /g)).toHaveLength(2)
     expect(dial).toContain('<line ')
     expect(gaugeSvg(0, 'success', 100, '0%').match(/<path /g)).toHaveLength(1)
+    // A panel lays its lines out in pixels: the header, text cut to fit
+    // beside its right side, pills, wrapped notes and drawings placed whole.
+    const lines = [
+      { kind: 'head', lamp: 'cyan', title: 'Context', right: [{ text: '284k of 650k' }] },
+      { kind: 'text', left: [{ text: 'a very long command line that will not fit in the room it has' }], right: [{ text: '12:04', mono: true }] },
+      { kind: 'chips', chips: [{ text: 'Opus 5.5', color: 'cyan' }, { text: 'xhigh effort' }] },
+      { kind: 'text', wrap: true, small: true, left: [{ text: 'one two three four five six seven eight nine ten eleven twelve', dim: true }] },
+      { kind: 'picture', svg: seatSvg(1, 0.5, 120, 'magenta'), alt: 'a seat' },
+      { kind: 'picture', svg: seatSvg(0.5, 0.5, 120, 'magenta') },
+    ] as const
+    const drawnPanel = panelSvg(lines as never, 120)
+    expect(drawnPanel).toContain('>CONTEXT</text>')
+    expect(drawnPanel).toContain('text-anchor="end"')
+    expect(drawnPanel).toContain('…</tspan>')
+    expect(drawnPanel).toContain('class="pill"')
+    expect(drawnPanel).toContain('@media (prefers-color-scheme: dark)')
+    expect(drawnPanel.match(/<text /g)?.length).toBeGreaterThan(6)
+    // Two placed drawings keep their clip paths apart.
+    const clips = [...drawnPanel.matchAll(/<clipPath id="([^"]+)"/g)].map(match => match[1])
+    expect(new Set(clips).size).toBe(2)
+    expect(panelText(lines as never)).toBe(
+      'Context: 284k of 650k\na very long command line that will not fit in the room it has 12:04\nOpus 5.5, xhigh effort\none two three four five six seven eight nine ten eleven twelve\na seat',
+    )
+    const row = gaugeTileSvg({ dial: gaugeSvg(0.5, 'warning', 100, '50%', null, true), key: 'Context', notes: [[{ text: 'of handoff' }]] }, 140)
+    expect(row).toContain('class="fg">50%</text>')
+    expect(row).toContain('>CONTEXT</text>')
     const seat = seatSvg(0.5, 0.8, 200, 'magenta')
     expect(seat).toContain('fill-opacity="0.45"')
     expect(seat).not.toContain('<text')
@@ -866,10 +894,11 @@ describe('desktop', () => {
     await $.session.measure(MEASURE)
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
     const drawn = JSON.stringify(await desk.drawn())
-    expect(drawn).toContain('"alt":"160k of 650k tokens, handoff at 465k"')
-    expect(drawn).toContain('"alt":"Context over the last 2 readings, +60k on the last"')
-    expect(drawn).toContain('"alt":"5h limit 23% used"')
-    expect(drawn).toContain('"alt":"34% of the handoff budget"')
+    // Each panel and the gauges are one drawing, saying in its alt what it shows.
+    expect(drawn).toContain('160k of 650k tokens, handoff at 465k')
+    expect(drawn).toContain('Context over the last 2 readings, +60k on the last')
+    expect(drawn).toContain('5h limit 23% used')
+    expect(drawn).toContain('34% of the handoff budget')
     // The flight deck: the account first, then the activity, then the gauges.
     expect(drawn.indexOf('"key":"account"')).toBeGreaterThan(-1)
     expect(drawn.indexOf('"key":"account"')).toBeLessThan(drawn.indexOf('"key":"gauges"'))
@@ -1496,32 +1525,51 @@ describe('flight deck', () => {
     await $.agent.spawn({ tool_use_id: 'toolu_2', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dr-superpowers:impl-sonnet-low', provider: { plugin: 'dr-superpowers', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
     const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 46, scroll: { offset: 0, bodyRows: 300 } }, surface: 'desktop' })
     const drawn = JSON.stringify(await ui.drawn())
-    // The gauges: context against the handoff, then each window with its reset and forecast.
-    expect(await ui.find({ type: 'Text', text: /^of handoff · ≈\d+ turns$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^resets 3h40m$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^on pace$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^out in / })).toBeDefined()
-    // Panels sit on a soft fill; chips are filled pills.
-    expect(drawn).toContain('"key":"usage","flexDirection":"column","borderStyle":"round","borderColor":"subtle","backgroundColor":"#8080800f","paddingX":2,"paddingY":1')
-    expect(drawn).toContain('"key":"account-model","backgroundColor":"#80808024"')
-    // A row between panels; the context tile is the widest of the three.
+    // The gauge tiles split each row by share and wrap when the dials won't
+    // fit, so they always span the same width as the panels.
+    const tileRows = async (bodyColumns: number) => {
+      const mounted = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns, scroll: { offset: 0, bodyRows: 300 } }, surface: 'desktop' })
+      type Node = { props?: { key?: string; width?: number; flexGrow?: number }; children?: Node[] }
+      const all: Node[] = []
+      const walk = (node: Node) => (all.push(node), node.children?.forEach(walk))
+      walk((await mounted.drawn()) as Node)
+      await mounted.unmount()
+      return all
+        .filter(node => /^gauges-\d+$/.test(node.props?.key ?? ''))
+        .map(row => (row.children ?? []).map(tile => `${tile.props?.key?.slice(6)}:${tile.props?.width}/${tile.props?.flexGrow}`))
+    }
+    // The gauges are one drawing per tile: context against the handoff, then
+    // each window with its reset and forecast; figures take the page's tone.
+    expect(drawn).toContain('of handoff · ≈')
+    expect(drawn).toContain('5h limit 23% used, resets 3h40m, on pace')
+    expect(drawn).toMatch(/7d limit 61% used, resets 3d14h, out in /)
+    expect(drawn).toContain('class=\\"fg\\">23%</text>')
+    // Panels sit on a soft fill, a row apart; their rows, chips and bars are
+    // one drawing each that takes the page's light or dark tones.
     expect(drawn).toStartWith('{"type":"Box","props":{"flexDirection":"column","rowGap":1}')
-    expect(drawn).toContain('"key":"gauge-context","flexDirection":"column","alignItems":"center","width":"38%"')
-    expect(drawn).toContain('"key":"plan-4-meta","paddingLeft":2')
-    expect(await ui.find({ type: 'Text', text: /^config / })).toBeDefined()
+    expect(drawn).toContain('"key":"usage","flexDirection":"column","borderStyle":"round","borderColor":"subtle","backgroundColor":"#8080800f"')
+    expect(drawn).toContain('@media (prefers-color-scheme: dark)')
+    expect(drawn).toContain('Opus 5.5, xhigh effort, Remote ○ on · no device yet, config ~/.claude')
     // Usage leaves the windows to their gauges and says what the ticks mean.
-    expect(await ui.find({ type: 'Text', text: "The gauges' ticks mark how far each window has run: 27% of 5h, 49% of 7d." })).toBeDefined()
+    expect(drawn).toContain("The gauges' ticks mark how far each window has run: 27% of 5h, 49% of 7d.")
     expect(drawn).not.toContain('of the window gone')
-    expect(await ui.find({ type: 'Text', text: /^2 running$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev$/ })).toBeDefined()
+    expect(drawn).toContain('Shells: 2 running')
+    expect(drawn).toContain('$ npm run dev 0s')
     // Each seat's counts sit on a row above its bar, with no title or caption.
-    expect(await ui.find({ type: 'Text', text: /^64k in · 72% cached · 3k out$/ })).toBeDefined()
+    expect(drawn).toContain('judge-opus ×1 64k in · 72% cached · 3k out')
     expect(drawn).not.toContain('Seats by input')
     expect(drawn).not.toContain('prompt cache.')
     // The window's labels slide clear of each other rather than drop out.
     expect(drawn).toContain('>compacts 604k</text>')
     expect(drawn).toContain('>handoff 465k</text>')
     expect(drawn).toContain('+14k · 7 turns</text>')
-    expect(await ui.find({ type: 'Text', text: /^1 blocked · $/ })).toBeDefined()
+    expect(drawn).toContain('Run: 1 blocked · round 2/5 · 1/6')
+    expect(drawn).toContain('round 2/5 · impl-sonnet-low')
+    // The buttons stay the desktop's own.
+    expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
+    await ui.unmount()
+    expect(await tileRows(80)).toEqual([['Context:0/1.35', '5h:0/1', '7d:0/1']])
+    expect(await tileRows(46)).toEqual([['Context:0/1.35'], ['5h:0/1', '7d:0/1']])
+    expect(await tileRows(30)).toEqual([['Context:0/1.35'], ['5h:0/1'], ['7d:0/1']])
   })
 })
