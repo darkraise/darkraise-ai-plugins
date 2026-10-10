@@ -74,6 +74,13 @@ category, each color matching its row. On a usage-limit meter `┊` marks how fa
 through its window the limit is, so a fill past it is spending faster than the
 window refills.
 
+In the Claude desktop app (its Code tab) the pane keeps the same sections and
+rows but draws them the desktop's way: each card in a quiet frame with its
+color on the title's marker, the context meter, trend and category split, the
+limit meters, each seat's input and the run's tasks as vector drawings, and the
+buttons as the desktop's own. With **Show at start** on it opens once the
+desktop window joins the session, unless you closed it.
+
 - **Now** is the turn in flight: running with its time, step, tool and the
   subagent calling it; waiting for your approval; Claude asking you something;
   idle with the last turn's length; the last turn failed; or Esc

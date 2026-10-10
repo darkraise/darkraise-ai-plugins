@@ -50,6 +50,7 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/notify'
+import { avatarSvg, meterSvg, paint, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -122,6 +123,8 @@ type World = {
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
+  opened?: string[]
+  isPaneShut?: boolean
   /** The Claude Code release the engine reports; absent, `$.session.version()` fails. */
   version?: string
   /** The /config row "Enable Remote Control for all sessions"; absent unless said. */
@@ -169,7 +172,10 @@ function world(on: On, w: World) {
         ? []
         : [{ key: 'remoteControl', label: 'Enable Remote Control for all sessions', kind: 'choice', value: w.remoteControl, provider: { kind: 'engine' }, isLocked: false }],
   }) as never)
-  on('ui.open', () => ({ value: w.open ?? { isPlaced: true } }))
+  on('ui.open', (_$, e) => {
+    w.opened?.push(e.id)
+    return { value: w.open ?? { isPlaced: true } }
+  })
   on('session.compact', (_$, e) => ({ messages: e.messages }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
@@ -201,7 +207,7 @@ function world(on: On, w: World) {
     w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(e.init?.body ?? '{}') as Record<string, unknown> })
     return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
   })
-  on('ui.panes', () => ({ value: [{ id: 'dr-cockpit', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
+  on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dr-cockpit', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
   on('session.append', (_$, e, next) => {
     const part = (e.message as { content?: { text?: string }[] }).content?.[0]
     if (part?.text !== undefined) w.notes?.push(part.text)
@@ -768,6 +774,69 @@ describe('settings view', () => {
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'set-guardAttribution-toggle' })
     expect(toasts).toContain('dr-cockpit: guardAttribution not saved: managed settings own it')
+  })
+})
+
+describe('desktop', () => {
+  test('draws meters, a trend, a stack, run segments and a badge as SVG', () => {
+    expect(paint('cyan')).toBe('#1fa8c9')
+    expect(paint('#ff8700')).toBe('#ff8700')
+    expect(paint('promptBorder')).toBe('#8a8a99')
+    expect(svgWidth(10)).toBe(120)
+    expect(svgWidth(56)).toBe(420)
+    const meter = meterSvg(0.25, 200, 'success', [{ at: 0.5 }, { at: 0.75, isDashed: true }])
+    expect(meter).toStartWith('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="12"')
+    expect(meter).toContain('width="50" height="8" rx="4" fill="#3fb36b"')
+    expect(meter).toContain('<line x1="100"')
+    expect(meter).toContain('stroke-dasharray="2 2"')
+    expect(meterSvg(0, 200, 'red')).not.toContain('#e5534b')
+    expect(trendSvg([1], 100, 'cyan')).not.toContain('<path')
+    expect(trendSvg([1, 3, 2], 100, 'cyan')).toContain('<circle cx="96"')
+    expect(stackSvg([3, 1], ['cyan', 'magenta'], 100)).toContain('<rect x="75" y="0" width="25" height="10" fill="#c056d6"/>')
+    const segments = segmentsSvg(['done', 'active', 'todo', 'blocked'], 100)
+    expect(segments.match(/<rect /g)).toHaveLength(4)
+    expect(segments).toContain('#4f7cff')
+    expect(segments).toContain('#e5534b')
+    expect(avatarSvg('<me>', undefined)).toContain('>&#60;</text>')
+  })
+
+  test('draws the cards with vectors and native buttons on desktop alone', async ($, on) => {
+    const w: World = { tokens: 100_000 }
+    world(on, w)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
+    w.tokens = 160_000
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    await $.session.measure(MEASURE)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    const drawn = JSON.stringify(await desk.drawn())
+    expect(drawn).toContain('"alt":"160k of 650k tokens, handoff at 465k"')
+    expect(drawn).toContain('"alt":"Context over the last 2 readings"')
+    expect(drawn).toContain('"alt":"5h limit 23% used"')
+    expect(await desk.find({ type: 'Text', text: /^trend \+60k$/ })).toBeDefined()
+    expect(await desk.find({ type: 'Text', text: '▁█' })).toBeUndefined()
+    expect(await desk.find({ key: 'pane-compact' })).toBeDefined()
+    expect(await desk.find({ key: 'pane-compact-box' })).toBeUndefined()
+    await desk.unmount()
+    const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await term.find({ type: 'Svg' })).toBeUndefined()
+    expect(await term.find({ key: 'pane-compact-box' })).toBeDefined()
+  })
+
+  test('opens the pane when the desktop joins', async ($, on) => {
+    const opened: string[] = []
+    world(on, { tokens: 100_000, opened, isPaneShut: true })
+    await $.session.attach({ surface: 'mobile', clientId: 'mobile:default' } as never)
+    expect(opened).toEqual([])
+    await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
+    expect(opened).toEqual(['dr-cockpit'])
+  })
+
+  test('leaves the pane shut on a desktop joining when Show at start is off', { options: { openAtStart: false } }, async ($, on) => {
+    const opened: string[] = []
+    world(on, { tokens: 100_000, opened, isPaneShut: true })
+    await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
+    expect(opened).toEqual([])
   })
 })
 
