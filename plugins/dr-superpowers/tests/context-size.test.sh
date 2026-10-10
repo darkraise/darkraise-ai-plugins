@@ -191,6 +191,22 @@ check "tail of 3: usage" "$status" "2"
 run --tail 0
 check "tail of 0: usage" "$status" "2"
 
+# --- the plan after a spec: 150% of the task budget, capped at the final limit ---
+asst 500000 > "$T"
+run --plan
+check "plan: past the task budget, under the final cap: exit 0" "$status" "0"
+check "plan: capped at the final-phase limit" "$out" "budget (plan): 500k of 553k (90%) — ok — source: record"
+DR_SUPERPOWERS_BUDGET=300000 run --plan
+check "plan: 150% of a pinned task budget" "$out" "budget (plan): 500k of 450k (111%) — handoff — source: record"
+DR_SUPERPOWERS_BUDGET=300000 run --plan
+check "plan: over: exit 5" "$status" "5"
+settings 800000
+DR_SUPERPOWERS_BUDGET=465000 run --plan
+check "800k window, pinned 465k: capped at 680k, not 698k" "$out" "budget (plan): 500k of 680k (73%) — ok — source: record"
+settings 650000
+run --plan extra
+check "plan: arguments: exit 2" "$status" "2"
+
 # --- a wave reserves one task's growth per extra concurrent task ---
 asst 200000 > "$T"
 run --wave 1

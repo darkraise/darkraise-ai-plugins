@@ -14,6 +14,7 @@ never earlier.
 |------|-------|--------|
 | Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-19 |
 | Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DR_SUPERPOWERS_BUDGET` does not move it | Owner ruling, 2026-10-02 |
+| Plan after the spec | 150% of the task budget (`DR_SUPERPOWERS_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
 | Tail | The last 2 tasks are measured against the final-phase limit; finishing is never measured | Owner ruling, 2026-10-10 |
 | Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
 | `autoCompactWindow` | 800,000 with `DR_SUPERPOWERS_BUDGET` pinned at 465,000, in `~/.claude/settings.json` (650,000 before) | Set 2026-09-11; raised 2026-10-02 |
@@ -100,7 +101,8 @@ under `ok` is not a reason to stop.
   runs in the same session.
 - **Acting on `handoff`:** finish the task in flight through its
   `Task N: complete` line, then hand off. Start no new task.
-- **brainstorming:** `context-size` once, after the spec is committed.
+- **brainstorming:** `context-size --plan` once, after the spec is committed.
+  Below its limit the plan is written in the same session.
 - **Anywhere:** `context-size` when in doubt.
 
 ## Stops
