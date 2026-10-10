@@ -135,6 +135,13 @@ You never answer a requirements question from your own reading of one brief.
 3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
 4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
 
+**Still listed after its report:** on Claude Code, an implementer that left a
+shell or agent of its own running stays listed after it reports, whatever its
+status, and its notification says it "stopped with background work of its own
+still running". Once you have acted on the report, stop it with `TaskStop`
+(its report stands) so nothing it left keeps running into a handoff or the
+finishing menu. `scripts/in-flight` lists any you missed.
+
 **No status line:** the reply carries no `**Status:**` line, usually because
 the implementer ended its turn on a progress note that announces a next step
 instead of taking it. A reply without a status is not DONE, whatever it says

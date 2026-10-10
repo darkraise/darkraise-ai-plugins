@@ -73,6 +73,14 @@ decisions in view.
 
 ## Step 4: Present Options
 
+**Nothing still running.** "Implementation complete" is a claim about every
+launch, not only the reports. Run `scripts/in-flight` first. Exit 1 lists
+background shells and agents this session started that are still running,
+including an agent that sent its report but left work of its own alive. Wait
+for each, or stop it with `TaskStop` (a reported agent's report stands), as
+dr-superpowers:handoff step 0 says, and run it again. Present the menu only on
+exit 0, or on exit 3 after checking by hand.
+
 **Normal repo and named-branch worktree — present exactly these 3 options:**
 
 ```
