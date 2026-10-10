@@ -47,6 +47,7 @@ import {
   rampColor,
   remoteRuns,
   repoFromPorcelain,
+  isAbsolutePath,
   repoName,
   roundNumber,
   runsWidth,
@@ -1667,7 +1668,7 @@ async function readRun($: EngineInterface) {
     const ledger = parseLedger(String(await $.fs.read(newest.path)))
     let titles: { n: number; title: string }[] = []
     if (ledger.plan !== null) {
-      const planPath = ledger.plan.startsWith('/') ? ledger.plan : null
+      const planPath = isAbsolutePath(ledger.plan) ? ledger.plan : null
       for (const candidate of planPath === null ? [(await read($, place))?.root, root].filter(Boolean).map(dir => `${dir}/${ledger.plan}`) : [planPath]) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
@@ -1778,7 +1779,7 @@ async function readWhere($: EngineInterface) {
   } catch {
     S.where.sessionId = null
   }
-  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || ''
   const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home === '' ? '' : `${home}/.claude`)
   S.where.configDir = configDir === '' ? null : configDir.replace(/[\\/]+$/, '')
   try {
@@ -1964,7 +1965,7 @@ async function refreshDetail($: EngineInterface) {
  */
 async function readAccount($: EngineInterface) {
   try {
-    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
     if (home === undefined || home === '') return
     const configDir = await $.env.get('CLAUDE_CONFIG_DIR')
     const state = await readJson($, configDir ? `${configDir}/.claude.json` : `${home}/.claude.json`)
@@ -2002,7 +2003,7 @@ async function readPlace($: EngineInterface) {
   try {
     const cwd = await $.session.cwd()
     const repoAt = await $.session.repo().catch(() => null)
-    const home = ((await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))) || null
+    const home = ((await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))) || null
     const before = await read($, place)
     const next = { cwd, root: repoAt?.root ?? null, remote: repoAt?.remote ?? null, home }
     if (before?.cwd !== next.cwd || before.root !== next.root || (before.remote ?? null) !== next.remote || before.home !== next.home) {

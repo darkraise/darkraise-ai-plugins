@@ -3,6 +3,7 @@ import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMe
 
 import {
   accountKey,
+  isAbsolutePath,
   attributionIn,
   backgroundBadge,
   bar,
@@ -301,6 +302,17 @@ describe('pane helpers', () => {
     ]
     expect(planWithUpdate(items, '1', { status: 'completed' })[0]?.status).toBe('completed')
     expect(planWithUpdate(items, '2', { status: 'deleted' })).toHaveLength(1)
+  })
+})
+
+describe('windows paths', () => {
+  test('a plan path is absolute from a slash or a drive letter', () => {
+    expect(isAbsolutePath('/repo/docs/plan.md')).toBe(true)
+    expect(isAbsolutePath('C:\\repo\\docs\\plan.md')).toBe(true)
+    expect(isAbsolutePath('d:/repo/docs/plan.md')).toBe(true)
+    expect(isAbsolutePath('\\\\host\\share\\plan.md')).toBe(true)
+    expect(isAbsolutePath('docs/plan.md')).toBe(false)
+    expect(isAbsolutePath('docs\\plan.md')).toBe(false)
   })
 })
 
