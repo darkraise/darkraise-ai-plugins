@@ -449,7 +449,8 @@ elif [ -n "$mode" ]; then
   heavy_count=$(grep -c $'\theavy$' <<<"$delegated" || true)
   if [ "$mode" = inline ] && [ $((2 * heavy_count)) -gt "$task_count" ]; then
     say WARN header "Execution line is inline but $heavy_count of $task_count tasks are heavy"
-  elif [ "$mode" = subagent ] && [ $((2 * heavy_count)) -le "$task_count" ]; then
+  elif [ "$mode" = subagent ] && [ $((2 * heavy_count)) -le "$task_count" ] \
+       && [ "$(plan_parallelism "$src")" != waves ]; then
     say WARN header "Execution line is subagent but only $heavy_count of $task_count tasks are heavy"
   fi
   family=$exec_model
@@ -472,6 +473,76 @@ elif [ -n "$mode" ]; then
     fi
     [ "$(effort_rank "$exec_effort")" -ge "$(effort_rank "$need")" ] \
       || say ERROR header "inline execution needs --effort $need or above (effort $exec_effort)"
+  fi
+fi
+
+# --- parallel waves (reference/parallel-waves.md) ---
+# Serializing a wave is always correct only while waves are contiguous ranges
+# and every dependency points into an earlier wave, so those are errors; the
+# rest keeps work that cannot share a wave safely in a wave of its own.
+parallelism=$(plan_parallelism "$src")
+if [ "$parallelism" = bad ]; then
+  say ERROR header "Parallelism line does not match '**Parallelism:** sequential' or '**Parallelism:** waves — <N|A-B> | …'"
+elif [ "$parallelism" = waves ]; then
+  [ "$codex" -eq 0 ] || say ERROR header "parallel waves are not supported on a Codex host"
+  [ "$mode" != inline ] || say ERROR header "parallel waves need a subagent Execution line"
+  for label in 'Integration check' 'Worktree setup'; do
+    [ -n "$(header_line "$label")" ] || say ERROR header "a waves plan needs its **$label:** line"
+  done
+  if ! waves=$(plan_waves "$src"); then
+    say ERROR header "Parallelism waves must be '<N>' or '<A>-<B>' ranges separated by '|'"
+  else
+    expect=1 contiguous=1
+    while IFS=$'\t' read -r k a b; do
+      [ -n "$k" ] || continue
+      [ "$a" -eq "$expect" ] || contiguous=0
+      expect=$((b + 1))
+    done <<<"$waves"
+    task_count=$(grep -c . <<<"$nums" || true)
+    [ "$contiguous" -eq 1 ] && [ "$((expect - 1))" -eq "$task_count" ] \
+      || say ERROR header "Parallelism waves must be ascending, contiguous ranges covering Tasks 1-$task_count exactly once"
+    wave_of() { awk -F'\t' -v n="$1" '$2 <= n && n <= $3 { print $1 }' <<<"$waves"; }
+    scores=$(plan_scores "$src")
+    execs=$(plan_executors "$src" | cut -f1)
+    lockfiles=' package.json package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml pnpm-workspace.yaml bun.lockb bun.lock Cargo.toml Cargo.lock go.mod go.sum requirements.txt pyproject.toml poetry.lock uv.lock Pipfile Pipfile.lock Gemfile Gemfile.lock composer.json composer.lock '
+    while IFS=$'\t' read -r k a b; do
+      [ -n "$k" ] || continue
+      width=$((b - a + 1))
+      [ "$width" -le 4 ] || say WARN header "wave $k runs $width tasks; at most 3 run at once, so it runs in parts"
+      : > "$TMP/wave-paths"
+      for n in $(seq "$a" "$b"); do
+        text=$(plan_task_text "$src" "$n") || continue
+        if deps=$(plan_task_depends <<<"$text"); then
+          for dep in $deps; do
+            dw=$(wave_of "$dep")
+            if [ -z "$dw" ] || [ "$dep" -ge "$n" ]; then
+              say ERROR "Task $n" "Depends on Task $dep, which is not an earlier task"
+            elif [ "$dw" -ge "$k" ]; then
+              say ERROR "Task $n" "Depends on Task $dep in the same wave ($k); move one of them to another wave"
+            fi
+          done
+        else
+          say ERROR "Task $n" "a waves plan needs a **Depends on:** line (Task numbers or none)"
+        fi
+        [ "$width" -gt 1 ] || continue
+        risk=$(awk -F'\t' -v n="$n" '$1 == n { print $3 }' <<<"$scores")
+        [ "$risk" != 3 ] || say ERROR "Task $n" "a risk-3 task must run alone in its wave"
+        ! grep -qx "$n" <<<"$execs" || say ERROR "Task $n" "a task with an **Executor:** line must run alone in its wave"
+        while IFS= read -r path; do
+          [ -n "$path" ] || continue
+          [[ "$lockfiles" != *" ${path##*/} "* ]] \
+            || say ERROR "Task $n" "$path is a dependency manifest or lockfile; the task must run alone in its wave"
+          printf '%s\t%s\n' "$path" "$n" >> "$TMP/wave-paths"
+        done < <(plan_task_paths <<<"$text")
+      done
+      [ "$width" -gt 1 ] || continue
+      sort -u "$TMP/wave-paths" | awk -F'\t' '
+        { owners[$1] = owners[$1] (owners[$1] == "" ? "" : ", ") "Task " $2; count[$1]++ }
+        END { for (p in count) if (count[p] > 1) print p "\t" owners[p] }
+      ' | sort | while IFS=$'\t' read -r path owners; do
+        say ERROR header "wave $k: $path is named by $owners; tasks in one wave must not share a file"
+      done
+    done <<<"$waves"
   fi
 fi
 

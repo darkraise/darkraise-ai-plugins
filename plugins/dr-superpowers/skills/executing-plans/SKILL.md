@@ -165,6 +165,11 @@ the seat marks its rulings provisional.
   `Ruling: inline by invocation — plan predates the Execution line — if wrong,
   the run escalates at the first task that will not converge` and continue.
 
+A `**Parallelism:** waves` line is read only by subagent mode. When your human
+partner has put a waves plan in this mode, run its tasks in index order and
+ignore the waves: a waves plan's index order is always a correct sequential
+order ([parallel-waves.md](../../reference/parallel-waves.md)).
+
 Never re-score the tasks. `scripts/plan-lint` enforced the eligibility rule
 when the plan was saved, and a plan whose Execution line says `inline` has
 passed it.

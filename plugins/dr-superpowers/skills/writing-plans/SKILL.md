@@ -77,6 +77,12 @@ Constraints and Contracts.
 
 **Execution:** [inline|subagent] — `claude --model <model> --effort <effort>` — [why]
 
+**Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
+
+**Integration check:** [waves only: the command that proves a merged wave works, normally the full suite]
+
+**Worktree setup:** [waves only: what a fresh worktree runs before its tests, or `none`]
+
 **Program:** [only when the spec is one sub-project of a program design:
 `<program spec path>` — sub-project <k> of <n> — next: <title of sub-project
 k+1, copied from the program's decomposition>. On the final sub-project,
@@ -130,7 +136,8 @@ and every task carrying an `**Executor:**` line: each runs through
 subagent — or, for an Executor line, that executor's wrapper — and the full
 per-task review. The tasks not delegated are the **self-implemented** tasks.
 
-- `subagent` when more than half the tasks are heavy:
+- `subagent` when the plan runs parallel waves (see Parallel waves), and
+  otherwise when more than half the tasks are heavy:
   `claude --model sonnet --effort high`. The controller owns no judgment calls
   — the ruling seat does — so it needs no stronger model.
 - Otherwise `inline`, the default, on `sonnet`: every self-implemented task
@@ -144,6 +151,61 @@ per-task review. The tasks not delegated are the **self-implemented** tasks.
 - Your human partner may override the line; `plan-lint` checks its grammar,
   warns when it disputes the majority rule, and lists the delegated tasks with
   their reasons.
+
+## Parallel waves
+
+**Ask first.** Read the spec's `**Execution strategy:**` line. When the spec has
+none — it predates the question, or there is no spec — ask your human partner
+the question in dr-superpowers:brainstorming §Choosing the execution strategy
+before you draft any task, and wait for the answer. On a Codex host do not ask:
+the plan is sequential. Sequential writes
+`**Parallelism:** sequential — <why>` and nothing below applies.
+
+**Parallel leans the plan toward independence.** It does not lower any other
+bar here — every task keeps its tests, its review and its Rule S — and it
+never invents parallelism the work does not have:
+
+1. **Draft the tasks as usual, then group them into waves.** A wave is a run
+   of consecutive task numbers whose tasks can run at the same time. Order the
+   tasks so that tasks which can run together are adjacent, and give every
+   task a `**Depends on:**` line below its `**Interfaces:**` block (and its
+   `**Items:**` line, when there is one): `none`, or the tasks whose output it
+   consumes, as `Task 1, Task 3`. Every dependency sits in an earlier wave.
+2. **Shared things go first.** A type, schema, config key or helper that
+   several tasks use is created by a foundation task in an earlier wave, and
+   recorded in Contracts, so that the tasks of a later wave consume a fixed
+   name rather than inventing their own.
+3. **No two tasks in a wave name the same file** in their `**Files:**` blocks —
+   Create, Modify, Test or Delete. Registries, index files, route tables and
+   shared fixtures have one owner.
+4. **Some tasks always run alone in their wave:** a task with risk 3, a task
+   carrying an `**Executor:**` line, and a task that touches a dependency
+   manifest or lockfile (`package.json`, `Cargo.toml`, `go.mod`,
+   `pyproject.toml`, and their lockfiles).
+5. **Keep a wave to three tasks** unless more are trivially independent: at
+   most three run at once, and a wider wave runs in parts.
+6. **Say how the tests stay apart.** When tasks' tests could meet at run time
+   — a port, a database, a fixed temporary path, global state — write in
+   Global Constraints how each task's tests avoid it, or move the tasks to
+   different waves.
+7. **Write the three header lines.** `**Parallelism:** waves — 1 | 2-4 | 5`
+   lists the waves in order, a single task or an `A-B` range each, covering
+   every task once. `**Integration check:**` names the command that proves a
+   merged wave works together — normally the whole suite.
+   `**Worktree setup:**` is what a fresh checkout needs before its tests run
+   (`npm ci`, a code generator), or `none`.
+8. **The Execution line names `subagent`**, `claude --model sonnet --effort
+   high`, whatever the heavy-task count: inline mode implements every task in
+   the session itself, so it has nothing to run in parallel. `plan-lint`
+   skips the majority-rule warning for a waves plan.
+
+`plan-lint` checks the waves mechanically — ranges, dependencies, shared
+files, the tasks that must run alone, the header lines — and the pre-flight
+ruling seat checks every same-wave pair for coupling the file lists cannot
+show. A wave the seat or the run doubts is run one task after another, which
+is always correct; see [parallel-waves.md](../../reference/parallel-waves.md).
+If a plan ends up with no wave of two or more tasks, say so and write
+`**Parallelism:** sequential — no independent tasks`.
 
 ## Task Structure
 
@@ -164,6 +226,9 @@ per-task review. The tasks not delegated are the **self-implemented** tasks.
 **Items:** [only when a register covers this plan's spec: the register row
 identifiers this task discharges, comma-separated, for example `4, 16`. Omit
 the line otherwise.]
+
+**Depends on:** [waves plans only: `none`, or the tasks whose output this one
+consumes, for example `Task 1, Task 3`. Omit the line in a sequential plan.]
 
 - [ ] **Step 1: Write the failing test**
 
@@ -245,9 +310,9 @@ user's inline or delegation preference on either host.
    make the offer once per plan
    for every executor whose gate prints `lane=true`. If none is usable, ask
    nothing.
-5. **Write the lines** directly below the task's `**Items:**` line, or its
-   `**Interfaces:**` block when there is no Items line, in
-   this order:
+5. **Write the lines** directly below the task's `**Depends on:**` line, or
+   its `**Items:**` line, or its `**Interfaces:**` block when it has neither,
+   in this order:
    - `**Implementer:**` — always; the fully qualified agent, for example
      `dr-superpowers:impl-sonnet-low`
    - `**Executor:**` — only when the lane gate passed, for example
@@ -323,6 +388,8 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 **2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
 
 **3. Contracts:** Every cross-task name appears in Contracts, and every task uses it exactly as stated there. A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
+
+**3a. Waves (waves plans only):** Every `**Depends on:**` line names every task whose output the task consumes, including through Contracts; a missing dependency is the one waves error `plan-lint` cannot see.
 
 **4. Lint:** Run the checker under Lint and Review.
 

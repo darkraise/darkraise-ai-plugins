@@ -236,6 +236,74 @@ plan_delegated() {
   '
 }
 
+# plan_parallelism FILE — the plan's execution strategy: `sequential` when the
+# header has no **Parallelism:** line or names sequential, `waves` for a waves
+# line, `bad` for anything else. See reference/parallel-waves.md.
+plan_parallelism() {
+  local line
+  line=$(plan_header_line "$1" Parallelism)
+  if [ -z "$line" ] || [[ "$line" =~ ^\*\*Parallelism:\*\*[[:space:]]+sequential([[:space:]]|$) ]]; then
+    echo sequential
+  elif [[ "$line" =~ ^\*\*Parallelism:\*\*[[:space:]]+waves( — | – | - | -- ) ]]; then
+    echo waves
+  else
+    echo bad
+  fi
+}
+
+# plan_waves FILE — one "K<TAB>FIRST<TAB>LAST" line per wave of a waves plan,
+# in the order the **Parallelism:** line lists them; nothing for a sequential
+# plan. Exit 4, printing nothing, when a range does not parse. Whether the
+# ranges are contiguous and cover the plan is plan-lint's check, not this one's.
+plan_waves() {
+  local line body k=0 r a b out=""
+  [ "$(plan_parallelism "$1")" = waves ] || return 0
+  line=$(plan_header_line "$1" Parallelism)
+  body=$(sed -E 's/^\*\*Parallelism:\*\*[[:space:]]+waves( — | – | - | -- )//; s/[[:space:]]+$//' <<<"$line")
+  IFS='|' read -r -a ranges <<<"$body"
+  for r in "${ranges[@]}"; do
+    r=$(tr -d ' \t' <<<"$r")
+    if [[ "$r" =~ ^([0-9]+)$ ]]; then a=${BASH_REMATCH[1]} b=$a
+    elif [[ "$r" =~ ^([0-9]+)-([0-9]+)$ ]]; then a=${BASH_REMATCH[1]} b=${BASH_REMATCH[2]}
+    else return 4
+    fi
+    [ "$a" -le "$b" ] || return 4
+    k=$((k + 1))
+    out="$out$k"$'\t'"$((10#$a))"$'\t'"$((10#$b))"$'\n'
+  done
+  [ "$k" -gt 0 ] || return 4
+  printf '%s' "$out"
+}
+
+# plan_task_paths — the repository paths the task text on stdin names in its
+# `- Create:`, `- Modify:`, `- Test:` and `- Delete:` lines outside fences, in
+# every part, one per line, unique. A `:123-145` line range is dropped.
+plan_task_paths() {
+  awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^[ \t]*- (Create|Modify|Test|Delete):[ \t]*`[^`]+`/ {
+      p = $0; sub(/^[^`]*`/, "", p); sub(/`.*$/, "", p)
+      sub(/:[0-9]+(-[0-9]+)?$/, "", p)
+      sub(/^\.\//, "", p)
+      if (p != "" && !seen[p]++) print p
+    }
+  '
+}
+
+# plan_task_depends — the task numbers the first **Depends on:** line of the
+# task text on stdin names, one per line; `none` prints nothing. Exit 3 when
+# the text has no Depends on line.
+plan_task_depends() {
+  local line
+  line=$(awk "$_PLAN_AWK"'
+    stop { next }
+    in_fence($0) { next }
+    /^\*\*Depends on:\*\*/ { print; stop = 1 }')
+  [ -n "$line" ] || return 3
+  line=${line#"**Depends on:**"}
+  grep -oE '[0-9]+' <<<"$line" || true
+}
+
 # Git reports the top level in one form (C:/… under Git Bash) whichever way the
 # path was spelled, so comparing <top level>/<prefix><name> is stable where pwd
 # output is not: /tmp and /c/Users/…/Temp name the same directory.

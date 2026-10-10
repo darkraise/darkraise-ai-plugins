@@ -63,8 +63,8 @@ Subagent ([JUDGE]):
 
       Old must occur exactly once in that task (its heading through the line
       before the next task heading) or in the header (everything before the
-      first task). Never touch the Spec, Execution, Program, Plan review,
-      Host or Routing policy lines. Never add or remove a task heading. A
+      first task). Never touch the Spec, Execution, Parallelism, Program, Plan
+      review, Host or Routing policy lines. Never add or remove a task heading. A
       task that is too large is an AMEND that rewrites its body into
       `#### Part A: <title>` and `#### Part B: <title>` units under the same
       heading, each with its own Files, Interfaces, Implementer, Evaluation
@@ -86,6 +86,14 @@ Subagent ([JUDGE]):
       against its code, the files it creates against the files it later
       touches). Then one verdict block per row that found something, with id
       `preflight-<row number>`. Rows that found nothing get no block.
+      When the header has a `**Parallelism:** waves` line, add one row for
+      every pair of tasks in the same wave, whether or not they share a
+      file: can either observe the other's change at run or test time — a
+      registry, index or config both extend, global or module state, a test
+      resource both use (a port, a database, a fixed path), an order one
+      assumes? Coupling there is a CONFIRMED-GAP whose smallest fix is
+      `serialize Task <a> and Task <b>`; the controller then runs that wave
+      one task after another.
     - plan-conflict: a review finding that conflicts with what the plan's
       text requires, or is labelled plan-mandated.
     - cannot-verify: a requirement the task reviewer could not verify from
