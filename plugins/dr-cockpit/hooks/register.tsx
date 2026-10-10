@@ -77,7 +77,7 @@ import {
   notifyKindsToggled,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
-import { avatarSvg, gaugeRowSvg, gaugeSvg, labelledMeterSvg, meterSvg, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
+import { avatarSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
 import type { PanelLine, PanelRun, Segment } from './svg'
 
 const PANE = 'dr-cockpit'
@@ -1630,8 +1630,37 @@ export const register: Register = (on, options) => {
           ],
         })
       }
-      // As wide as a panel: its drawing plus the frame and padding around it.
-      const fullWidth = svgWidth(room)
+      // The gauges sit in framed tiles that line up with the panels: a row of
+      // tiles fills the body exactly (frames, padding and gaps included), and
+      // a body too narrow for every dial puts the context on its own row, then
+      // each tile on its own.
+      const share = (tile: (typeof tiles)[number]) => (tile.key === 'Context' ? 1.35 : 1)
+      const least = (tile: (typeof tiles)[number]) => (tile.key === 'Context' ? 16 : 12) + 5
+      const fits = (row: typeof tiles) => {
+        const total = row.reduce((sum, tile) => sum + share(tile), 0)
+        return row.every(tile => Math.floor(((room - row.length + 1) * share(tile)) / total) >= least(tile))
+      }
+      const gaugeRows = fits(tiles) ? [tiles] : tiles[0]?.key === 'Context' && fits(tiles.slice(1)) ? [tiles.slice(0, 1), tiles.slice(1)] : tiles.map(tile => [tile])
+      // Tiles grow from nothing by their shares, so they split whatever the
+      // row really measures; each drawing is sized from the columns a tile
+      // gets, a column short to leave slack for rounding.
+      const gaugeRow = (row: typeof tiles, at: number) => {
+        const avail = room - row.length + 1
+        const total = row.reduce((sum, tile) => sum + share(tile), 0)
+        return (
+          <Box key={`gauges-${at}`} flexDirection="row" columnGap={1}>
+            {row.map(tile => (
+              <Box key={`gauge-${tile.key}`} width={0} flexGrow={share(tile)} flexDirection="column" alignItems="center" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
+                {picture(
+                  `gauge-${tile.key}-dial`,
+                  gaugeTileSvg(tile, Math.round((Math.floor((avail * share(tile)) / total) - 5) * 7.5)),
+                  [tile.alt, ...tile.notes.map(note => note.map(run => run.text).join(''))].join(', '),
+                )}
+              </Box>
+            ))}
+          </Box>
+        )
+      }
       return (
         <Box flexDirection="column" rowGap={1}>
           {shown.includes('account') && panels.account}
@@ -1639,12 +1668,8 @@ export const register: Register = (on, options) => {
             {drawRuns('now', nowLine(actNow, now))}
           </Text>
           {tiles.length > 0 && (
-            <Box key="gauges">
-              {picture(
-                'gauges-dials',
-                gaugeRowSvg(tiles, fullWidth, tiles.map(tile => (tile.key === 'Context' ? 1.35 : 1))),
-                tiles.map(tile => [tile.alt, ...tile.notes.map(note => note.map(run => run.text).join(''))].join(', ')).join('\n'),
-              )}
+            <Box key="gauges" flexDirection="column" rowGap={1}>
+              {gaugeRows.map(gaugeRow)}
             </Box>
           )}
           {shown.filter(name => name !== 'account').map(name => panels[name])}

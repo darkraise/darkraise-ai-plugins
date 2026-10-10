@@ -488,35 +488,23 @@ export function panelSvg(lines: readonly PanelLine[], width: number, pad = PAD):
   return svg(width, Math.ceil(y), THEME + out)
 }
 
-/** The gauges as tiles side by side, each a dial over its key and notes. */
-export function gaugeRowSvg(tiles: readonly { dial: string; key: string; notes: PanelRun[][] }[], width: number, shares: readonly number[]): string {
-  const gap = 7
-  const free = width - gap * (tiles.length - 1)
-  const sum = shares.reduce((total, share) => total + share, 0) || 1
+/**
+ * A gauge tile's face: the dial over its key and notes, centered in `width`.
+ * The tile's frame is the desktop's own, so it stretches with the pane as the
+ * panels do.
+ */
+export function gaugeTileSvg(tile: { dial: string; key: string; notes: readonly PanelRun[][] }, width: number): string {
   nested = 0
-  let x = 0
-  const drawn = tiles.map((tile, index) => {
-    const tileWidth = (free * (shares[index] ?? 1)) / sum
-    const at = x
-    x += tileWidth + gap
-    const dial = place(tile.dial, 0, 8)
-    const height = 8 + dial.height + 4 + 12 + tile.notes.length * 15 + 7
-    return { tile, at, tileWidth, dial, height }
-  })
-  const height = Math.max(...drawn.map(one => one.height))
-  let out = ''
-  for (const one of drawn) {
-    const cx = one.at + one.tileWidth / 2
-    out += `<rect x="${n(one.at + 0.5)}" y="0.5" width="${n(one.tileWidth - 1)}" height="${n(height - 1)}" rx="12" fill="rgba(128,128,140,0.06)" stroke="rgba(128,128,140,0.32)"/>`
-    out += place(one.tile.dial, cx - one.dial.width / 2, 8).svg
-    let y = 8 + one.dial.height + 4
-    out += `<text x="${n(cx)}" y="${n(y + 9)}" text-anchor="middle" class="faint" font-family="${MONO}" font-size="10" font-weight="600" letter-spacing="0.8">${esc(one.tile.key.toUpperCase())}</text>`
-    y += 12
-    for (const note of one.tile.notes) {
-      const runs = cut(note, 11, one.tileWidth - 8)
-      out += `<text x="${n(cx)}" y="${n(y + 11)}" text-anchor="middle" xml:space="preserve">${runs.map(run => tspan({ ...run, dim: run.color === undefined ? true : run.dim }, 11)).join('')}</text>`
-      y += 15
-    }
+  const cx = width / 2
+  const dial = place(tile.dial, 0, 0)
+  let out = place(tile.dial, cx - dial.width / 2, 6).svg
+  let y = 6 + dial.height + 4
+  out += `<text x="${n(cx)}" y="${n(y + 9)}" text-anchor="middle" class="faint" font-family="${MONO}" font-size="10" font-weight="600" letter-spacing="0.8">${esc(tile.key.toUpperCase())}</text>`
+  y += 12
+  for (const note of tile.notes) {
+    const runs = cut(note, 11, width - 4)
+    out += `<text x="${n(cx)}" y="${n(y + 11)}" text-anchor="middle" xml:space="preserve">${runs.map(run => tspan({ ...run, dim: run.color === undefined ? true : run.dim }, 11)).join('')}</text>`
+    y += 15
   }
-  return svg(width, Math.ceil(height), THEME + out)
+  return svg(width, Math.ceil(y + 6), THEME + out)
 }

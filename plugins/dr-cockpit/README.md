@@ -78,7 +78,9 @@ In the Claude desktop app (its Code tab) the pane is laid out as a flight
 deck. The account comes first, then what Claude is doing, then three gauges:
 the context against its handoff budget with the turns left, and the 5-hour and
 7-day limits, each with a tick where its window has run to, its reset and its
-forecast. Every other section follows as a softly filled panel with a colored
+forecast. The gauges sit in framed tiles that span the same width as the
+panels; a narrow pane moves the context to its own row, then stacks every
+tile. Every other section follows as a softly filled panel with a colored
 lamp; the usage panel says how far each window has run. The desktop's own text
 has one size and spaces rows a whole line apart, so each panel's rows, chips
 and charts are drawn as one picture at their own sizes and gaps, its text in

@@ -51,7 +51,7 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/notify'
-import { avatarSvg, gaugeRowSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
+import { avatarSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -876,7 +876,7 @@ describe('desktop', () => {
     expect(panelText(lines as never)).toBe(
       'Context: 284k of 650k\na very long command line that will not fit in the room it has 12:04\nOpus 5.5, xhigh effort\none two three four five six seven eight nine ten eleven twelve\na seat',
     )
-    const row = gaugeRowSvg([{ dial: gaugeSvg(0.5, 'warning', 100, '50%', null, true), key: 'Context', notes: [[{ text: 'of handoff' }]] }], 300, [1])
+    const row = gaugeTileSvg({ dial: gaugeSvg(0.5, 'warning', 100, '50%', null, true), key: 'Context', notes: [[{ text: 'of handoff' }]] }, 140)
     expect(row).toContain('class="fg">50%</text>')
     expect(row).toContain('>CONTEXT</text>')
     const seat = seatSvg(0.5, 0.8, 200, 'magenta')
@@ -1525,8 +1525,21 @@ describe('flight deck', () => {
     await $.agent.spawn({ tool_use_id: 'toolu_2', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dr-superpowers:impl-sonnet-low', provider: { plugin: 'dr-superpowers', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
     const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 46, scroll: { offset: 0, bodyRows: 300 } }, surface: 'desktop' })
     const drawn = JSON.stringify(await ui.drawn())
-    // The gauges are one drawing: context against the handoff, then each
-    // window with its reset and forecast; their figures take the page's tone.
+    // The gauge tiles split each row by share and wrap when the dials won't
+    // fit, so they always span the same width as the panels.
+    const tileRows = async (bodyColumns: number) => {
+      const mounted = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns, scroll: { offset: 0, bodyRows: 300 } }, surface: 'desktop' })
+      type Node = { props?: { key?: string; width?: number; flexGrow?: number }; children?: Node[] }
+      const all: Node[] = []
+      const walk = (node: Node) => (all.push(node), node.children?.forEach(walk))
+      walk((await mounted.drawn()) as Node)
+      await mounted.unmount()
+      return all
+        .filter(node => /^gauges-\d+$/.test(node.props?.key ?? ''))
+        .map(row => (row.children ?? []).map(tile => `${tile.props?.key?.slice(6)}:${tile.props?.width}/${tile.props?.flexGrow}`))
+    }
+    // The gauges are one drawing per tile: context against the handoff, then
+    // each window with its reset and forecast; figures take the page's tone.
     expect(drawn).toContain('of handoff · ≈')
     expect(drawn).toContain('5h limit 23% used, resets 3h40m, on pace')
     expect(drawn).toMatch(/7d limit 61% used, resets 3d14h, out in /)
@@ -1554,5 +1567,9 @@ describe('flight deck', () => {
     expect(drawn).toContain('round 2/5 · impl-sonnet-low')
     // The buttons stay the desktop's own.
     expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
+    await ui.unmount()
+    expect(await tileRows(80)).toEqual([['Context:0/1.35', '5h:0/1', '7d:0/1']])
+    expect(await tileRows(46)).toEqual([['Context:0/1.35'], ['5h:0/1', '7d:0/1']])
+    expect(await tileRows(30)).toEqual([['Context:0/1.35'], ['5h:0/1'], ['7d:0/1']])
   })
 })
