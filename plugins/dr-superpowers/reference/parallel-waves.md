@@ -66,7 +66,9 @@ At a wave boundary — every earlier task complete, every earlier wave
    `scripts/context-size --wave <c>` and lower `c` while it exits 5; it
    reserves one task's worst growth for every task beside the first. `c = 1`
    serializes the wave, and `scripts/context-size` alone then decides between
-   the next task and a handoff, exactly as in sequential mode.
+   the next task and a handoff, exactly as in sequential mode: within the
+   plan's last two tasks that is `scripts/context-size --tail <R>`, the line
+   their briefs print.
 4. **Check the checkout.** `git status --porcelain --untracked-files=no` is
    empty; commit your own bookkeeping first if it is not.
 5. **Log** `Wave <k>: started (base <sha7>; Tasks <a>-<b>; at most <c> at once)`.

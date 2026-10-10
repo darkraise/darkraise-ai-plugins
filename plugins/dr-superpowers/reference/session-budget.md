@@ -14,6 +14,7 @@ never earlier.
 |------|-------|--------|
 | Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_SUPERPOWERS_BUDGET` overrides | Owner ruling, 2026-09-19 |
 | Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DR_SUPERPOWERS_BUDGET` does not move it | Owner ruling, 2026-10-02 |
+| Tail | The last 2 tasks are measured against the final-phase limit; finishing is never measured | Owner ruling, 2026-10-10 |
 | Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
 | `autoCompactWindow` | 800,000 with `DR_SUPERPOWERS_BUDGET` pinned at 465,000, in `~/.claude/settings.json` (650,000 before) | Set 2026-09-11; raised 2026-10-02 |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
@@ -23,7 +24,14 @@ never earlier.
 
 The budget sits below the point where compaction fires by one task's worst
 growth — a controller adds about 140k across a long fix loop — so a task that
-starts under budget always finishes before compaction. `scripts/lib/context.sh`
+starts under budget always finishes before compaction.
+
+The tail trades that margin for a session. A fresh session reloads its system
+prompt, tools and the durable record before it does anything, which costs more
+than finishing one or two tasks and the final phase here. So the last two
+tasks start whenever the session is under the final-phase limit; in the rare
+case where both hit a worst-case fix loop the session may compact, and the
+compaction snapshot below carries it on. `scripts/lib/context.sh`
 reads `autoCompactWindow` from `settings.json` and the model from the
 transcript, so the budget follows either when they change.
 
@@ -79,10 +87,17 @@ under `ok` is not a reason to stop.
 
 - **subagent-driven-development:** every `task-brief` and `review-package`
   until the last task completes; then `context-size --final` after the last
-  `Task N: complete` line and again before finishing.
+  `Task N: complete` line.
 - **executing-plans:** the budget line on every `task-brief`; then
-  `context-size --final` after the last `Task N: complete` line and again
-  before finishing.
+  `context-size --final` after the last `Task N: complete` line.
+- **The tail:** the brief of each of the plan's last two tasks (counted from
+  the ledger's complete lines) prints `budget (last 2 tasks)` or
+  `budget (last task)`, measured against the final-phase limit
+  (`context-size --tail R`). Only that line's verdict decides; a
+  `review-package` line saying `handoff` inside a tail task does not stop the
+  plan after it.
+- **Finishing:** never checked. Once the final review is clean, finishing
+  runs in the same session.
 - **Acting on `handoff`:** finish the task in flight through its
   `Task N: complete` line, then hand off. Start no new task.
 - **brainstorming:** `context-size` once, after the spec is committed.
@@ -93,12 +108,13 @@ under `ok` is not a reason to stop.
 - **Hard:** the plan is saved; a plan switches from inline to subagent mode.
   Both launch the execution model the Execution line names. writing-plans runs
   dr-superpowers:handoff once the plan is reviewed.
-- **Soft:** the last task is complete, in either mode; the final review is
-  clean. The final review and finishing follow in the same session unless
-  `context-size --final` says `handoff`. The final phase - the final review,
-  its one fix wave, the scoped re-review and finishing - grows far less than a
-  task's fix loop, so it is measured against the final-phase limit, and a task
-  budget line saying `handoff` inside it does not stop it.
+- **Soft:** the last task is complete, in either mode. The final review and
+  finishing follow in the same session unless `context-size --final` says
+  `handoff` there; a clean final review never stops before finishing. The
+  final phase - the final review, its one fix wave, the scoped re-review and
+  finishing - grows far less than a task's fix loop, so it is measured against
+  the final-phase limit, and a task budget line saying `handoff` inside it
+  does not stop it.
 - **Budget:** a `handoff` verdict at any checkpoint.
 - **Codex:** the count rule above.
 

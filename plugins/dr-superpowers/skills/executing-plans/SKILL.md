@@ -285,10 +285,12 @@ budget before every task at no extra request:
   then invoke dr-superpowers:handoff. Never hand off in the middle of a task,
   delegated ones included. The budget holds one task's worst growth.
 
-Run `scripts/context-size --final` after the last task's
-`Task <N>: complete` line, and again before finishing, and act on its exit 5
-the same way; after every earlier task, the next brief's budget line is the
-check.
+The plan's last two tasks are measured against the final-phase limit: their
+brief prints `budget (last 2 tasks)` or `budget (last task)`, and only that
+line's verdict decides. Run `scripts/context-size --final` after the last
+task's `Task <N>: complete` line and act on its exit 5 the same way; after
+every earlier task, the next brief's budget line is the check. Finishing is
+never budget-checked.
 
 The last task completing is a soft stop: the final review, its fix wave and
 finishing run in this session unless `context-size --final` says `handoff`. The
