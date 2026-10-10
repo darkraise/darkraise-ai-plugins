@@ -51,7 +51,7 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/notify'
-import { avatarSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
+import { avatarSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -790,7 +790,7 @@ describe('settings view', () => {
         ['dr-cockpit.sections', 'account,context,usage,shells,agents,plan,repo'],
       ])
       await ui.press({ key: 'settings-back' })
-      expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^Context$/i })).toBeDefined()
     })
   }
 
@@ -836,13 +836,18 @@ describe('desktop', () => {
     expect(named).toContain('>handoff 604k</text>')
     expect(named).not.toContain('compacts 620k')
     expect(trendSvg([1, 3], 100, 'cyan', 40, { top: '+2k', bottom: '2 turns' })).toContain('>+2k</text>')
+    const dial = gaugeSvg(0.5, 'warning', 100, '50%', 0.25)
+    expect(dial).toContain('fill="#d4a017">50%</text>')
+    expect(dial.match(/<path /g)).toHaveLength(2)
+    expect(dial).toContain('<line ')
+    expect(gaugeSvg(0, 'success', 100, '0%').match(/<path /g)).toHaveLength(1)
     const seat = seatSvg('impl ×1', '120k in · 7k out', 0.5, 0.8, 200, 'magenta')
     expect(seat).toContain('fill-opacity="0.45"')
     expect(seat).toContain('>impl ×1</text>')
   })
 
   test('draws the cards with vectors and native buttons on desktop alone', async ($, on) => {
-    const w: World = { tokens: 100_000 }
+    const w: World = { tokens: 100_000, env: { HOME: '/home/me' }, files: { '/home/me/.claude.json': { text: '{"oauthAccount":{"emailAddress":"me@example.com"}}' } } }
     world(on, w)
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
@@ -855,6 +860,10 @@ describe('desktop', () => {
     expect(drawn).toContain('"alt":"Context over the last 2 readings, +60k on the last"')
     expect(drawn).toContain('"alt":"5h limit 23% used"')
     expect(drawn).toContain('"alt":"34% of the handoff budget"')
+    // The flight deck: the account first, then the activity, then the gauges.
+    expect(drawn.indexOf('"key":"account"')).toBeGreaterThan(-1)
+    expect(drawn.indexOf('"key":"account"')).toBeLessThan(drawn.indexOf('"key":"gauges"'))
+    expect(drawn.indexOf('"key":"gauges"')).toBeLessThan(drawn.indexOf('"key":"context"'))
     expect(drawn).toContain('handoff 465k')
     expect(await desk.find({ type: 'Text', text: /trend/ })).toBeUndefined()
     expect(await desk.find({ type: 'Text', text: '▁█' })).toBeUndefined()
