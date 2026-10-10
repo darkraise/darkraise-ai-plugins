@@ -170,6 +170,42 @@ export function seatSvg(name: string, counts: string, share: number, cached: num
   )
 }
 
+/**
+ * A half-round gauge filled to `share`, its figure inside in the gauge's
+ * color, with an optional tick where the limit's window has run to.
+ */
+export function gaugeSvg(share: number, color: string, size: number, value: string, tick: number | null = null): string {
+  const stroke = Math.max(6, Math.round(size * 0.085))
+  const r = (size - stroke) / 2 - 2
+  const cx = size / 2
+  const cy = r + stroke / 2 + 2
+  const height = Math.ceil(cy + stroke / 2 + 2)
+  const at = (part: number) => {
+    const angle = Math.PI * (1 - clamp(part))
+    return [cx + r * Math.cos(angle), cy - r * Math.sin(angle)] as const
+  }
+  const hue = paint(color)
+  const arc = (part: number, paintWith: string) => {
+    const [x, y] = at(part)
+    return `<path d="M${n(cx - r)} ${n(cy)} A${n(r)} ${n(r)} 0 0 1 ${n(x)} ${n(y)}" fill="none" stroke="${paintWith}" stroke-width="${stroke}" stroke-linecap="round"/>`
+  }
+  let mark = ''
+  if (tick !== null && Number.isFinite(tick)) {
+    const angle = Math.PI * (1 - clamp(tick))
+    const inner = r - stroke * 0.9
+    const outer = r + stroke * 0.9
+    mark = `<line x1="${n(cx + inner * Math.cos(angle))}" y1="${n(cy - inner * Math.sin(angle))}" x2="${n(cx + outer * Math.cos(angle))}" y2="${n(cy - outer * Math.sin(angle))}" stroke="${MARK}" stroke-width="2" stroke-linecap="round"/>`
+  }
+  return svg(
+    size,
+    height,
+    arc(1, TRACK) +
+      (clamp(share) > 0 ? arc(share, hue) : '') +
+      mark +
+      `<text x="${n(cx)}" y="${n(cy - 2)}" text-anchor="middle" font-family="${SANS}" font-size="${n(size * 0.2)}" font-weight="700" fill="${hue}">${esc(value)}</text>`,
+  )
+}
+
 export type Segment = 'done' | 'active' | 'blocked' | 'todo'
 const SEGMENT_COLORS: Record<Segment, string> = { done: PALETTE.green, active: PALETTE.blue, blocked: PALETTE.red, todo: TRACK }
 

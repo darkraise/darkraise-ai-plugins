@@ -77,7 +77,7 @@ import {
   notifyKindsToggled,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
-import { avatarSvg, labelledMeterSvg, meterSvg, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from './svg'
+import { avatarSvg, gaugeSvg, labelledMeterSvg, meterSvg, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
 import type { Segment } from './svg'
 
 const PANE = 'dr-cockpit'
@@ -116,6 +116,8 @@ const TREND_LENGTH = 40
 // The colors the context breakdown cycles through, largest category first.
 const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] as const
 // How the desktop's run bar colors a task by its state.
+// The usage windows the desktop draws as gauges, in order.
+const GAUGED: readonly string[] = ['five_hour', 'seven_day']
 const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
 // The handoff budget's step and ceiling in the settings view.
 const HANDOFF_STEP = 50_000
@@ -898,13 +900,13 @@ export const register: Register = (on, options) => {
     )
     const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) =>
       isDesktop ? (
-        // A quiet frame, the section's color on its marker alone.
+        // A quiet panel, the section's color on its lamp alone.
         <Box key={key} flexDirection="column" borderStyle="round" borderColor="inactive" paddingX={1}>
           <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
             <Text>
-              <Text color={color}>■ </Text>
+              <Text color={color}>● </Text>
               <Text bold dimColor>
-                {title}
+                {title.toUpperCase()}
               </Text>
             </Text>
             {headline}
@@ -957,10 +959,9 @@ export const register: Register = (on, options) => {
       const percent = (head.tokens / head.limit) * 100
       const compactAt = rows?.compactAt ?? null
       if (isDesktop) {
-        // The share of the budget large, then the window with its handoff and
-        // compaction points marked and named beneath.
+        // The share of the budget is the context gauge's; the panel draws the
+        // window with its handoff and compaction points named beneath.
         contextBody.push(
-          picture('ctx-stat', statSvg(`${Math.round(percent)}%`, 'of handoff budget', px, rampColor(percent)), `${Math.round(percent)}% of the handoff budget`),
           picture(
             'ctx-track',
             labelledMeterSvg(
@@ -1279,9 +1280,9 @@ export const register: Register = (on, options) => {
             no reading yet
           </Text>
         ) : isDesktop ? (
-          // The share itself is the card's large figure; the headline keeps the turns.
-          <Text key="ctx-head" color={turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined} dimColor={turnsLeft === null || turnsLeft > 3}>
-            {turnsLeft === null ? '' : `≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'} left`}
+          // The share and the turns left are the context gauge's; the headline keeps the window.
+          <Text key="ctx-head" dimColor>
+            {kTokens(head.tokens)} of {kTokens(head.window)}
           </Text>
         ) : (
           <Text key="ctx-head">
@@ -1318,6 +1319,20 @@ export const register: Register = (on, options) => {
           const gone = windowElapsed(limit.kind, limit.resetsAt, now)
           const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
           const width = Math.max(6, inner - 14)
+          if (isDesktop && GAUGED.includes(limit.kind)) {
+            // Its gauge carries the share, the reset and the forecast; the
+            // panel adds how far the window has run.
+            return (
+              <Text key={`limit-${limit.kind}`} wrap="truncate-end">
+                <Text bold>{limitLabel(limit.kind)} </Text>
+                <Text color={rampColor(limit.percent)}>{Math.round(limit.percent)}%</Text>
+                <Text dimColor>
+                  {gone === null ? '' : ` · ${Math.round(gone * 100)}% of the window gone`}
+                  {limit.resetsAt === null ? '' : ` · resets in ${duration(limit.resetsAt - now) || 'now'}`}
+                </Text>
+              </Text>
+            )
+          }
           return (
             <Box key={`limit-${limit.kind}`} flexDirection="column">
               {isDesktop ? (
@@ -1590,19 +1605,77 @@ export const register: Register = (on, options) => {
         ),
     }
 
-    return (
-      <Box flexDirection="column">
-        {isDesktop ? (
-          <Box key="now-card" borderStyle="round" borderColor="inactive" paddingX={1}>
-            <Text key="now" wrap="truncate-end">
-              {drawRuns('now', nowLine(actNow, now))}
-            </Text>
-          </Box>
-        ) : (
+    if (isDesktop) {
+      // The flight deck: the account, what Claude is doing, then gauges for
+      // the context and the two usage windows, then a panel per section.
+      const gaugeSize = (isLarge: boolean) => Math.round(Math.max(isLarge ? 96 : 68, Math.min(isLarge ? 150 : 110, px * (isLarge ? 0.36 : 0.26))))
+      const gauge = (key: string, source: string, alt: string, label: string, ...under: RenderChildren[]) => (
+        <Box key={key} flexDirection="column" alignItems="center" flexGrow={1} flexShrink={1} borderStyle="round" borderColor="inactive" paddingX={1}>
+          {picture(`${key}-dial`, source, alt)}
+          <Text bold dimColor>
+            {label}
+          </Text>
+          {under}
+        </Box>
+      )
+      const gauged = GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind))
+      const gauges = (head !== null || gauged.length > 0) && (
+        <Box key="gauges" flexDirection="row" columnGap={1}>
+          {head !== null &&
+            gauge(
+              'gauge-context',
+              gaugeSvg(head.tokens / head.limit, rampColor((head.tokens / head.limit) * 100), gaugeSize(true), `${Math.round((head.tokens / head.limit) * 100)}%`),
+              `${Math.round((head.tokens / head.limit) * 100)}% of the handoff budget`,
+              'CONTEXT',
+              <Text key="gauge-context-turns" dimColor={turnsLeft === null || turnsLeft > 3} color={turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined} wrap="truncate-end">
+                {turnsLeft === null ? 'of handoff' : `≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'} left`}
+              </Text>,
+            )}
+          {gauged.map(limit => {
+            const gone = windowElapsed(limit.kind, limit.resetsAt, now)
+            const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
+            return gauge(
+              `gauge-${limit.kind}`,
+              gaugeSvg(limit.percent / 100, rampColor(limit.percent), gaugeSize(false), `${Math.round(limit.percent)}%`, gone),
+              `${limitLabel(limit.kind)} limit ${Math.round(limit.percent)}% used`,
+              limitLabel(limit.kind).toUpperCase(),
+              limit.resetsAt !== null && (
+                <Text key={`gauge-${limit.kind}-reset`} dimColor wrap="truncate-end">
+                  resets {duration(limit.resetsAt - now) || 'now'}
+                </Text>
+              ),
+              forecast === 'pace' && (
+                <Text key={`gauge-${limit.kind}-pace`} color="success">
+                  on pace
+                </Text>
+              ),
+              typeof forecast === 'number' && (
+                <Text key={`gauge-${limit.kind}-out`} color="warning" bold wrap="truncate-end">
+                  out in {duration(forecast) || '<1m'}
+                </Text>
+              ),
+            )
+          })}
+        </Box>
+      )
+      return (
+        <Box flexDirection="column">
+          {shown.includes('account') && byName.account}
           <Text key="now" wrap="truncate-end">
             {drawRuns('now', nowLine(actNow, now))}
           </Text>
-        )}
+          {gauges}
+          {shown.filter(name => name !== 'account').map(name => byName[name])}
+          {!shown.includes('context') && actions}
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column">
+        <Text key="now" wrap="truncate-end">
+          {drawRuns('now', nowLine(actNow, now))}
+        </Text>
         {shown.map(name => byName[name])}
         {!shown.includes('context') && actions}
       </Box>
