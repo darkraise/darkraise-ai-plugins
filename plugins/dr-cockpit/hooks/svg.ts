@@ -174,9 +174,10 @@ export function seatSvg(share: number, cached: number, width: number, color: str
 
 /**
  * A half-round gauge filled to `share`, its figure inside in the gauge's
- * color, with an optional tick where the limit's window has run to.
+ * color (or, `isThemed`, the page's text tone where the drawing it sits in
+ * carries the theme), with an optional tick where the limit's window has run to.
  */
-export function gaugeSvg(share: number, color: string, size: number, value: string, tick: number | null = null): string {
+export function gaugeSvg(share: number, color: string, size: number, value: string, tick: number | null = null, isThemed = false): string {
   const stroke = Math.max(6, Math.round(size * 0.085))
   const r = size / 2 - stroke * 0.9 - 2
   const cx = size / 2
@@ -205,7 +206,7 @@ export function gaugeSvg(share: number, color: string, size: number, value: stri
     arc(1, TRACK) +
       (clamp(share) > 0 ? arc(share, hue) : '') +
       mark +
-      `<text x="${n(cx)}" y="${n(cy - 2)}" text-anchor="middle" font-family="${SANS}" font-size="${n(size * 0.2)}" font-weight="700" fill="${hue}">${esc(value)}</text>`,
+      `<text x="${n(cx)}" y="${n(cy - 2)}" text-anchor="middle" font-family="${SANS}" font-size="${n(size * 0.2)}" font-weight="700"${isThemed ? ' class="fg"' : ` fill="${hue}"`}>${esc(value)}</text>`,
   )
 }
 
@@ -233,4 +234,277 @@ export function avatarSvg(name: string, color: string | undefined, size = 30): s
     `<circle cx="${r}" cy="${r}" r="${r}" fill="${paint(color, PALETTE.blue)}"/>` +
       `<text x="${r}" y="${r}" dy="0.35em" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${n(size * 0.45)}" font-weight="600" fill="#ffffff">${text}</text>`,
   )
+}
+
+// ---------------------------------------------------------------------------
+// Panels drawn whole. The desktop's native text has one size and spaces rows
+// by whole lines, so each panel's rows are laid out here in pixels instead,
+// at the preview's sizes and gaps. Text takes the page's light or dark tones
+// from the system setting; the accents are the drawings' own mid tones.
+
+/** One stretch of text in a panel line; `chip` sets it on a soft pill. */
+export type PanelRun = { text: string; color?: string; bold?: boolean; dim?: boolean; faint?: boolean; mono?: boolean; chip?: boolean }
+
+export type PanelLine =
+  /** Text, its `left` cut to fit beside `right`; `wrap` breaks a long `left` onto more lines instead. */
+  | { kind: 'text'; left: PanelRun[]; right?: PanelRun[]; indent?: number; small?: boolean; wrap?: boolean }
+  /** The panel's header: a lamp, the title in small capitals, and its headline at the right. */
+  | { kind: 'head'; lamp: string; title: string; right: PanelRun[] }
+  /** One of the drawings above, placed whole; `alt` says what it shows. */
+  | { kind: 'picture'; svg: string; alt?: string; indent?: number }
+  /** Pills in a row that wraps. */
+  | { kind: 'chips'; chips: PanelRun[] }
+  /** A badge beside two lines, as the account's. */
+  | { kind: 'badge'; svg: string; lines: PanelRun[][] }
+
+const THEME =
+  '<style>' +
+  '.fg{fill:#1d1d22}.dim{fill:#6b6b76}.faint{fill:#9a9aa6}.pill{fill:rgba(128,128,140,0.16)}' +
+  '@media (prefers-color-scheme: dark){.fg{fill:#ececf1}.dim{fill:#a3a3ae}.faint{fill:#7a7a85}}' +
+  '</style>'
+const BODY = 12.5
+const SMALL = 11.5
+const GAP = 6
+const PAD = 9
+const PILL_X = 7
+
+// A glyph's advance in pixels, near enough to cut and place text: wide
+// scripts take a full em, monospace 0.6, proportional text about 0.56.
+function advance(ch: string, size: number, mono: boolean): number {
+  const code = ch.codePointAt(0) ?? 0
+  if (code >= 0x2e80) return size
+  if (mono) return size * 0.6
+  if (' .,:;\'|!il'.includes(ch)) return size * 0.3
+  if ('MWmw@'.includes(ch)) return size * 0.82
+  if (/[A-Z]/.test(ch)) return size * 0.64
+  return size * 0.55
+}
+const measure = (text: string, size: number, mono = false) => [...text].reduce((sum, ch) => sum + advance(ch, size, mono), 0)
+// A chip's text is set small, whatever the line's size.
+const sizeOf = (run: PanelRun, size: number) => (run.chip ? Math.min(size, SMALL) : size) - (run.mono ? 1 : 0)
+const runWidth = (run: PanelRun, size: number) => measure(run.text, sizeOf(run, size), run.mono) + (run.chip ? 2 * PILL_X : 0)
+
+/** Runs cut to `room` pixels, the last kept one ending in an ellipsis. */
+function cut(runs: readonly PanelRun[], size: number, room: number): PanelRun[] {
+  const total = runs.reduce((sum, run) => sum + runWidth(run, size), 0)
+  if (total <= room) return [...runs]
+  const kept: PanelRun[] = []
+  let left = room - measure('…', size)
+  for (const run of runs) {
+    const width = runWidth(run, size)
+    if (width <= left) {
+      kept.push(run)
+      left -= width
+      continue
+    }
+    let text = ''
+    for (const ch of run.text) {
+      const next = advance(ch, run.mono ? size - 1 : size, Boolean(run.mono))
+      if (next > left - (run.chip ? 2 * PILL_X : 0)) break
+      text += ch
+      left -= next
+    }
+    kept.push({ ...run, text: text.trimEnd() + '…' })
+    break
+  }
+  return kept
+}
+
+/** Runs broken into lines no wider than `room`, at spaces where it can. */
+function wrapRuns(runs: readonly PanelRun[], size: number, room: number): PanelRun[][] {
+  const lines: PanelRun[][] = [[]]
+  let used = 0
+  for (const run of runs) {
+    for (const word of run.text.split(/(?<= )/)) {
+      const width = measure(word, size, Boolean(run.mono))
+      if (used + width > room && used > 0) {
+        lines.push([])
+        used = 0
+      }
+      lines[lines.length - 1]?.push({ ...run, text: used === 0 ? word.trimStart() : word })
+      used += width
+    }
+  }
+  // Pieces of one run on one line go back together, so the page spaces them.
+  return lines.map(line =>
+    line.reduce<PanelRun[]>((kept, run) => {
+      const last = kept[kept.length - 1]
+      if (last !== undefined && last.color === run.color && last.bold === run.bold && last.dim === run.dim && last.faint === run.faint && last.mono === run.mono && !last.chip && !run.chip) {
+        kept[kept.length - 1] = { ...last, text: last.text + run.text }
+      } else kept.push(run)
+      return kept
+    }, []),
+  )
+}
+
+function toneOf(run: PanelRun): { cls: string; fill: string; opacity: string } {
+  if (run.color !== undefined && PALETTE[run.color] === undefined && !/^#/.test(run.color)) {
+    // A theme key the drawings lack reads as body text.
+    return { cls: run.dim ? 'dim' : run.faint ? 'faint' : 'fg', fill: '', opacity: '' }
+  }
+  if (run.color !== undefined) return { cls: '', fill: ` fill="${paint(run.color)}"`, opacity: run.dim ? ' fill-opacity="0.7"' : '' }
+  return { cls: run.dim ? 'dim' : run.faint ? 'faint' : 'fg', fill: '', opacity: '' }
+}
+
+const tspan = (run: PanelRun, size: number) => {
+  const runSize = run.mono ? size - 1 : size
+  const tone = toneOf(run)
+  return (
+    `<tspan${tone.cls ? ` class="${tone.cls}"` : ''}${tone.fill}${tone.opacity} font-family="${run.mono ? MONO : SANS}" font-size="${n(runSize)}"` +
+    `${run.bold ? ' font-weight="600"' : ''}>${esc(run.text)}</tspan>`
+  )
+}
+
+/**
+ * The runs on the baseline `y`, from `x` on (or ending at `x`). Plain runs
+ * share one text element, so the page sets their spacing itself; a chip's
+ * pill is placed by its measured width.
+ */
+function drawRunsAt(runs: readonly PanelRun[], x: number, y: number, size: number, anchor: 'start' | 'end' = 'start'): string {
+  const line = (parts: readonly PanelRun[], at: number, end = false) =>
+    parts.length === 0 ? '' : `<text x="${n(at)}" y="${n(y)}"${end ? ' text-anchor="end"' : ''} xml:space="preserve">${parts.map(run => tspan(run, size)).join('')}</text>`
+  if (anchor === 'end') return line(runs, x, true)
+  let at = x
+  let out = ''
+  let group: PanelRun[] = []
+  const flush = () => {
+    out += line(group, at)
+    at += group.reduce((sum, run) => sum + runWidth(run, size), 0)
+    group = []
+  }
+  for (const run of runs) {
+    if (!run.chip) {
+      group.push(run)
+      continue
+    }
+    flush()
+    const runSize = sizeOf(run, size)
+    const width = runWidth(run, size)
+    const height = runSize + 7
+    out += `<rect class="pill" x="${n(at)}" y="${n(y - size * 0.35 - height / 2)}" width="${n(width)}" height="${n(height)}" rx="${n(height / 2)}"/>`
+    out += `<text x="${n(at + PILL_X)}" y="${n(y - (size - runSize) * 0.35)}" xml:space="preserve">${tspan({ ...run, chip: false }, runSize + (run.mono ? 1 : 0))}</text>`
+    at += width
+  }
+  flush()
+  return out
+}
+
+let nested = 0
+/** A whole drawing placed at `x`, `y` inside another, its ids made its own. */
+function place(source: string, x: number, y: number): { svg: string; width: number; height: number } {
+  const width = Number(/width="([\d.]+)"/.exec(source)?.[1] ?? 0)
+  const height = Number(/height="([\d.]+)"/.exec(source)?.[1] ?? 0)
+  const tag = `p${++nested}`
+  const body = source
+    .replace(/ id="([^"]+)"/g, ` id="${tag}$1"`)
+    .replace(/url\(#([^)]+)\)/g, `url(#${tag}$1)`)
+    .replace('<svg xmlns="http://www.w3.org/2000/svg" ', `<svg x="${n(x)}" y="${n(y)}" `)
+  return { svg: body, width, height }
+}
+
+/** What a panel's lines say, as words, for the drawing's `alt`. */
+export function panelText(lines: readonly PanelLine[]): string {
+  const say = (runs: readonly PanelRun[] = []) => runs.map(run => run.text).join('')
+  return lines
+    .map(line => {
+      if (line.kind === 'head') return [line.title, say(line.right)].filter(Boolean).join(': ')
+      if (line.kind === 'text') return [say(line.left), say(line.right)].filter(Boolean).join(' ')
+      if (line.kind === 'chips') return line.chips.map(chip => chip.text).join(', ')
+      if (line.kind === 'badge') return line.lines.map(say).join(' · ')
+      return line.alt ?? ''
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** A panel's lines laid out `width` pixels wide at the preview's sizes and gaps. */
+export function panelSvg(lines: readonly PanelLine[], width: number, pad = PAD): string {
+  nested = 0
+  let y = pad
+  let out = ''
+  lines.forEach((line, index) => {
+    if (index > 0) y += GAP
+    if (line.kind === 'head') {
+      const right = cut(line.right, SMALL, width / 2)
+      const rightWidth = right.reduce((sum, run) => sum + runWidth(run, SMALL), 0)
+      out += `<circle cx="4" cy="${n(y + 7)}" r="4" fill="${paint(line.lamp)}"/>`
+      out += `<text x="15" y="${n(y + 10.5)}" class="faint" font-family="${MONO}" font-size="10.5" font-weight="600" letter-spacing="0.84">${esc(line.title.toUpperCase())}</text>`
+      out += drawRunsAt(right.map(run => ({ ...run, dim: run.color === undefined ? true : run.dim })), width, y + 11, SMALL, 'end')
+      y += 14
+      return
+    }
+    if (line.kind === 'picture') {
+      const placed = place(line.svg, line.indent ?? 0, y)
+      out += placed.svg
+      y += placed.height
+      return
+    }
+    if (line.kind === 'chips') {
+      let x = 0
+      const height = SMALL + 7
+      line.chips.forEach(chip => {
+        const run = { ...chip, chip: true }
+        const chipWidth = Math.min(runWidth(run, SMALL), width)
+        if (x > 0 && x + chipWidth > width) {
+          x = 0
+          y += height + 5
+        }
+        out += drawRunsAt(cut([run], SMALL, width), x, y + height / 2 + SMALL * 0.35, SMALL)
+        x += chipWidth + 5
+      })
+      y += height
+      return
+    }
+    if (line.kind === 'badge') {
+      const placed = place(line.svg, 0, y)
+      const gap = 9
+      const textHeight = line.lines.length * 17
+      const top = y + Math.max(0, (placed.height - textHeight) / 2)
+      out += placed.svg
+      line.lines.forEach((runs, row) => {
+        const size = row === 0 ? BODY : SMALL
+        out += drawRunsAt(cut(runs, size, width - placed.width - gap), placed.width + gap, top + row * 17 + 13, size)
+      })
+      y += Math.max(placed.height, textHeight)
+      return
+    }
+    const size = line.small ? SMALL : BODY
+    const lineHeight = line.small ? 16 : 18
+    const indent = line.indent ?? 0
+    const right = line.right ?? []
+    const rightWidth = right.reduce((sum, run) => sum + runWidth(run, size), 0)
+    const room = width - indent - (rightWidth > 0 ? rightWidth + 10 : 0)
+    const hasChip = line.left.some(run => run.chip)
+    const rows = line.wrap ? wrapRuns(line.left, size, room) : [cut(line.left, size, room)]
+    const each = hasChip ? lineHeight + 4 : lineHeight
+    rows.forEach((runs, row) => {
+      const base = y + row * each + each / 2 + size * 0.35
+      out += drawRunsAt(runs, indent, base, size)
+      if (row === 0 && rightWidth > 0) out += drawRunsAt(right, width, base, size, 'end')
+    })
+    y += rows.length * each
+  })
+  y += pad
+  return svg(width, Math.ceil(y), THEME + out)
+}
+
+/**
+ * A gauge tile's face: the dial over its key and notes, centered in `width`.
+ * The tile's frame is the desktop's own, so it stretches with the pane as the
+ * panels do.
+ */
+export function gaugeTileSvg(tile: { dial: string; key: string; notes: readonly PanelRun[][] }, width: number): string {
+  nested = 0
+  const cx = width / 2
+  const dial = place(tile.dial, 0, 0)
+  let out = place(tile.dial, cx - dial.width / 2, 6).svg
+  let y = 6 + dial.height + 4
+  out += `<text x="${n(cx)}" y="${n(y + 9)}" text-anchor="middle" class="faint" font-family="${MONO}" font-size="10" font-weight="600" letter-spacing="0.8">${esc(tile.key.toUpperCase())}</text>`
+  y += 12
+  for (const note of tile.notes) {
+    const runs = cut(note, 11, width - 4)
+    out += `<text x="${n(cx)}" y="${n(y + 11)}" text-anchor="middle" xml:space="preserve">${runs.map(run => tspan({ ...run, dim: run.color === undefined ? true : run.dim }, 11)).join('')}</text>`
+    y += 15
+  }
+  return svg(width, Math.ceil(y + 6), THEME + out)
 }
