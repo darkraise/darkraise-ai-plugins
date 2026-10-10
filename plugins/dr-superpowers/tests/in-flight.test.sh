@@ -54,8 +54,10 @@ check "the reported agent is still listed" "$(grep -c '^- agent a3 ' <<<"$out")"
 result toolu_grep '<task-notification><tool-use-id>toolu_impl</tool-use-id><status>completed</status></task-notification>'
 check "a quoted notification changes nothing" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "1"
 
-notify toolu_impl completed
-check "its later notification without the note: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
+# Once its own work ends, the agent's final notification names only its task
+# id, and says nothing about work still running.
+jq -nc '{type:"attachment",attachment:{type:"queued_command",prompt:"<task-notification>\n<task-id>a3</task-id>\n<output-file>/tmp/a3.output</output-file>\n<status>completed</status>\n<summary>Agent \"x\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own.</note>\n</task-notification>"}}' >> "$TP"
+check "its final notification by task id alone: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
 
 use toolu_sh 'Run the suite'
 result toolu_sh 'Command running in background with ID: b9. Output is being written to: /tmp/b9.output.'

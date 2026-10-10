@@ -47,20 +47,31 @@ inflight_scan() {
       | [ .attachment.prompt?, (select(.type? == "queue-operation") | .content?),
           (select(.type? == "user") | .message.content? | if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end) ]
       | .[] | strings | select(contains("<task-notification>")) | gsub("[\r\n]+"; " ")' "$tp" 2>/dev/null \
-      | grep -oE '<tool-use-id>[^<]+</tool-use-id>[^<]*(<output-file>[^<]*</output-file>[^<]*)?<status>[a-z_]+</status>[^<]*(<summary>[^<]*</summary>[^<]*)?(<note>[^<]*</note>)?' \
       | awk '
-        { id = $0; sub(/^<tool-use-id>/, "", id); sub(/<.*/, "", id)
-          state = "done"
-          if ($0 ~ /<status>(running|pending)<\/status>/ || $0 ~ /background work of its own still running/) state = "running"
-          last[id] = state }
-        END { for (id in last) print id "\t" last[id] }')
+        # One line per delivered text; a text can carry several notifications.
+        # A notification names the launch by task id and, usually, by tool_use
+        # id: an agent'"'"'s final one after its own work ended carries only the
+        # task id. Each key keeps the state of its latest notification.
+        { n = split($0, chunk, "</task-notification>")
+          for (i = 1; i <= n; i++) {
+            c = chunk[i]
+            if (c !~ /<status>[a-z_]+<\/status>/) continue
+            state = "done"
+            if (c ~ /<status>(running|pending)<\/status>/ || c ~ /background work of its own still running/) state = "running"
+            seq++
+            if (match(c, /<task-id>[^<]+<\/task-id>/)) print "t:" substr(c, RSTART + 9, RLENGTH - 19) "\t" seq "\t" state
+            if (match(c, /<tool-use-id>[^<]+<\/tool-use-id>/)) print "u:" substr(c, RSTART + 13, RLENGTH - 27) "\t" seq "\t" state
+          } }')
   STOPPED="$stopped" LATEST="$latest" EVENTS="$events" awk -F '\t' '
       BEGIN { n = split(ENVIRON["STOPPED"], s, "\n"); for (i = 1; i <= n; i++) gone[s[i]] = 1
               n = split(ENVIRON["LATEST"], l, "\n")
-              for (i = 1; i <= n; i++) { split(l[i], p, "\t"); state[p[1]] = p[2] }
+              for (i = 1; i <= n; i++) { split(l[i], p, "\t"); seq[p[1]] = p[2] + 0; state[p[1]] = p[3] }
               n = split(ENVIRON["EVENTS"], e, "\n")
               for (i = 1; i <= n; i++) { split(e[i], p, "\t"); if (p[1] == "U") what[p[2]] = p[3] } }
-      ($2 in state) && state[$2] == "done" { next }
+      { u = "u:" $2; t = "t:" $3; k = ""
+        if (u in seq) k = u
+        if ((t in seq) && (k == "" || seq[t] > seq[k])) k = t
+        if (k != "" && state[k] == "done") next }
       ($3 in gone) || seen[$2]++ { next }
       { w = what[$2]; if (w == "") w = "(no description)"; print $4 " " $3 " " w }' <<<"$launched"
 }
