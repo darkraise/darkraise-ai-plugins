@@ -367,6 +367,11 @@ export function billingLabel(billing: string | null): string | null {
   return billing.replace(/^(stripe|apple|google)_/, '').replace(/_/g, ' ')
 }
 
+/** Whether a path is absolute on any platform: rooted at a slash or a drive letter. */
+export function isAbsolutePath(path: string): boolean {
+  return /^([\\/]|[a-z]:[\\/])/i.test(path)
+}
+
 function slashes(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/+$/, '')
 }
