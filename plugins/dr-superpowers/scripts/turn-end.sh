@@ -76,8 +76,8 @@ fi
 # active in one checkout. A plan whose final review is clean ends on the
 # finishing menu, one of finishing's own stops (failing tests, a discard or
 # worktree prompt) or the next-step block, which names finishing; any other
-# plan ends on the next-step block. The first ledger without its ending names
-# the reason.
+# plan ends on the next-step block, or on the finish-preference question asked
+# before its first task. The first ledger without its ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
 ledger="" clean=0
 while IFS= read -r candidate; do
@@ -87,7 +87,7 @@ while IFS= read -r candidate; do
               'Must fix before completing' 'Worktree removal refused' && continue
     ledger=$candidate clean=1
   else
-    ends_with '## Next session' && continue
+    ends_with '## Next session' 'If it gets none within 30 minutes' && continue
     ledger=$candidate clean=0
   fi
   break

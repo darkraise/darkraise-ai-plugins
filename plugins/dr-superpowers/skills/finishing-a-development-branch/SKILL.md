@@ -7,7 +7,7 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
-**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Record the plan → Clean up → Report the next step.
+**Core principle:** Verify tests → Detect environment → Present options (armed with the choice made before the run) → Execute choice → Record the plan → Clean up → Report the next step.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -54,9 +54,12 @@ This determines which menu to show and how cleanup works:
 ## Step 3: Determine Base Branch
 
 The base branch is whatever this work forked from — usually named in the
-plan, the conversation, or the branch's upstream. If it is not already
-known, ask: "This branch split from <your best guess> - is that correct?"
-Confirm before merging: merging into the wrong base is expensive to undo.
+plan, the conversation, or the branch's upstream. A finish preference
+recorded before the run (`scripts/finish-choice get [--plan PLAN_FILE]`) names
+the base your human partner confirmed then; use it. Otherwise, if it is not
+already known, ask: "This branch split from <your best guess> - is that
+correct?" Confirm before merging: merging into the wrong base is expensive to
+undo.
 
 **Rulings first.** If this work came from a plan with a ledger (`progress.md`
 in the directory `scripts/sdd-workspace PLAN_FILE` prints) and this session
@@ -109,6 +112,15 @@ complete` when it is the last sub-project, and `After integration: no
 follow-on work recorded` when there is no Program line or no plan. Step 7 turns
 this into the launch block once the choice is made.
 
+**Arm the finish preference.** When a choice was recorded before the run
+([finish-preference.md](../../reference/finish-preference.md)), run
+`scripts/finish-choice arm [--plan PLAN_FILE]` as you present the menu. Unless
+it exits 3, schedule the wake it prints (CronCreate on Claude Code), and make
+the menu's last line before `Which option?` say what happens without an answer:
+`No answer by <due>: I'll <option> (chosen before the run).` Without a
+scheduler, say `Chosen before the run: <option>. Reply to confirm or pick
+another.` instead.
+
 Present the menu exactly as written — concise, with every option coming
 from the list above. The menu is the last thing in your message: rulings,
 findings and the summary go above it, never after, and never replace it with
@@ -118,6 +130,16 @@ discard the work" below). Wait for their answer; the integration decision
 is theirs.
 
 ## Step 5: Execute Choice
+
+**Whose choice it is.** When your human partner answers the menu, run
+`scripts/finish-choice answer <merge|pr|keep|discard> [--plan PLAN_FILE]`
+first and cancel the wake it names with CronDelete: their answer overrides
+the one chosen before the run. When the wake fires instead, the action
+`scripts/finish-choice due` prints is the choice; follow
+[finish-preference.md](../../reference/finish-preference.md) §When the wake
+fires. An unattended finish never asks: where a step would ask (a refused
+worktree removal, a failing merged result), it stops, leaves everything in
+place and shows the menu again.
 
 ### Option 1: Merge Locally
 
@@ -367,7 +389,8 @@ plan file, end with: "No plan file — no follow-on work recorded."
 | Excuse | Reality |
 |--------|---------|
 | "Tests passed earlier this session" | Run the suite on the tree you are about to integrate. A green run only proves the tree it ran on. |
-| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait. |
+| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait; only the choice they made before the run acts for them, and only after 30 minutes unanswered. |
+| "The wake fired, but they replied a minute ago — the timer still says merge" | Their reply wins. `scripts/finish-choice answer` disarms the timer; a wake after it finds nothing due. |
 | "I'll ask for the merge in prose" | A request buried in a long report goes unseen. The three-option menu, verbatim, is the last thing in the message. |
 | "The open findings are in my report" | The report scrolls away and Step 6 deletes the ledger. Commit them in the followups note. |
 | "They seem done with this feature — I'll offer to discard it" | The menu is complete as written. Discard happens only when your human partner asks for it in so many words. |

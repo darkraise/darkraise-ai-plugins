@@ -139,6 +139,14 @@ Tests passing (<N> tests, 0 failures)
 Ready to implement <feature-name>
 ```
 
+### Work without a plan
+
+When no plan drives this work (it goes straight from the chat to
+dr-superpowers:finishing-a-development-branch), ask the finish preference now,
+before the first change: what finishing should do if its menu goes unanswered
+for 30 minutes. See [finish-preference.md](../../reference/finish-preference.md).
+A plan's execution skill asks it itself.
+
 ## Quick Reference
 
 | Situation | Action |
