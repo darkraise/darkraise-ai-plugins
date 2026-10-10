@@ -489,17 +489,18 @@ describe('cockpit pane', () => {
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
       const drawn = JSON.stringify(await ui.drawn())
-      expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /\$1\.50/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
       expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
       if (surface === 'desktop') {
         // The desktop names the figures in its drawings and sets the repo's facts in chips.
         expect(drawn).toContain('"alt":"61% of the handoff budget"')
+        expect(drawn).toContain('"alt":"5h limit 23% used"')
         expect(drawn).toContain('"alt":"284k of 650k tokens, handoff at 465k"')
         expect(await ui.find({ type: 'Text', text: '~1 changed' })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: '?1 untracked' })).toBeDefined()
       } else {
+        expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /61%/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /~1 changed \?1 untracked/ })).toBeDefined()
@@ -835,15 +836,24 @@ describe('desktop', () => {
     expect(named).toContain('text-anchor="start"')
     expect(named).toContain('>handoff 604k</text>')
     expect(named).not.toContain('compacts 620k')
+    // A label that would overlap its neighbour slides clear instead.
+    const slid = labelledMeterSvg(0.44, 300, 'cyan', [{ at: 0.72 }], [
+      { at: 0, text: '284k / 650k' },
+      { at: 0.92, text: 'compacts 600k' },
+      { at: 0.72, text: 'handoff 465k' },
+    ])
+    expect(slid).toContain('>handoff 465k</text>')
+    expect(slid).toContain('>compacts 600k</text>')
+    expect(slid.indexOf('handoff')).toBeGreaterThan(slid.indexOf('compacts'))
     expect(trendSvg([1, 3], 100, 'cyan', 40, { top: '+2k', bottom: '2 turns' })).toContain('>+2k</text>')
     const dial = gaugeSvg(0.5, 'warning', 100, '50%', 0.25)
     expect(dial).toContain('fill="#d4a017">50%</text>')
     expect(dial.match(/<path /g)).toHaveLength(2)
     expect(dial).toContain('<line ')
     expect(gaugeSvg(0, 'success', 100, '0%').match(/<path /g)).toHaveLength(1)
-    const seat = seatSvg('impl ×1', '120k in · 7k out', 0.5, 0.8, 200, 'magenta')
+    const seat = seatSvg(0.5, 0.8, 200, 'magenta')
     expect(seat).toContain('fill-opacity="0.45"')
-    expect(seat).toContain('>impl ×1</text>')
+    expect(seat).not.toContain('<text')
   })
 
   test('draws the cards with vectors and native buttons on desktop alone', async ($, on) => {
@@ -1451,5 +1461,67 @@ describe('state file', () => {
     const state = JSON.parse(written['/home/me/.claude/dr-cockpit/state/sess-1.json'] ?? '{}') as { activity?: { kind?: string; since?: number }; updatedAt?: number }
     expect(state.activity).toEqual({ kind: 'running', since: 1000, tool: null })
     expect(state.updatedAt).toBe(1000)
+  })
+})
+
+describe('flight deck', () => {
+  test('draws every panel the way the approved preview does', async ($, on) => {
+    const ledger = [
+      '# SDD ledger — plan: docs/plans/cockpit.md',
+      'Task 3: implementer dr-superpowers:impl-sonnet-low (assigned; base abc1234)',
+      'Task 3: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none',
+      'Task 4: implementer dr-superpowers:impl-sonnet-low (assigned; base def5678)',
+      'Task 4: fix round 2/5 (1 addressed, 1 open — meter width; commits c..d; fresh)',
+      'Task 5: BLOCKED — needs the ledger format',
+    ].join('\n')
+    const now = 1_000_000
+    const files: World['files'] = {
+      '/home/me/code/shop/.superpowers/sdd/p/progress.md': { text: ledger, mtimeMs: now },
+      '/home/me/code/shop/docs/plans/cockpit.md': { text: '# Plan\n\n### Task 1: Read the budget\n\n### Task 2: Draw the strip\n\n### Task 3: Draw the context section\n\n### Task 4: Draw usage and agents\n\n### Task 5: Track the plan and repo\n\n### Task 6: Write the README\n' },
+    }
+    const w: World = { ...SIGNED_IN, files, remoteControl: 'true' }
+    world(on, w)
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.session.start(START)
+    for (const [i, t] of [180_000, 205_000, 228_000, 251_000, 270_000, 284_000].entries()) { w.tokens = t; await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: `turn-${i}`, reason: 'answer' }) }
+    await $.session.measure({ context: { tokens: 284_000, window: 650_000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 23, resetsAt: new Date(1_000_000 + 220 * 60_000).toISOString() }, { kind: 'seven_day', percentUsed: 61, resetsAt: new Date(1_000_000 + 86 * 3600_000).toISOString() }], cost: { usd: 4.85 }, changed: ['context', 'rateLimits'], breakdown: true } as never)
+    w.tools = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: `b${Math.random()}` }, text: 'Running in the background' }) }
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -x --watch', run_in_background: true } as never)
+    w.tools = {}
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 3', description: 'Review task 3', subagentType: 'dr-superpowers:judge-opus', provider: { plugin: 'dr-superpowers', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 'turn-9', agentId: 'agent-1', reason: 'answer', usage: { model: 'claude-opus-5-5', input_tokens: 4_000, cache_read_input_tokens: 46_000, cache_creation_input_tokens: 14_000, output_tokens: 3_000 } })
+    await $.agent.spawn({ tool_use_id: 'toolu_2', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dr-superpowers:impl-sonnet-low', provider: { plugin: 'dr-superpowers', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 46, scroll: { offset: 0, bodyRows: 300 } }, surface: 'desktop' })
+    const drawn = JSON.stringify(await ui.drawn())
+    // The gauges: context against the handoff, then each window with its reset and forecast.
+    expect(await ui.find({ type: 'Text', text: /^of handoff · ≈\d+ turns$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^resets 3h40m$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^on pace$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^out in / })).toBeDefined()
+    // Panels sit on a soft fill; chips are filled pills.
+    expect(drawn).toContain('"key":"usage","flexDirection":"column","borderStyle":"round","borderColor":"subtle","backgroundColor":"#8080800f","paddingX":2,"paddingY":1')
+    expect(drawn).toContain('"key":"account-model","backgroundColor":"#80808024"')
+    // A row between panels; the context tile is the widest of the three.
+    expect(drawn).toStartWith('{"type":"Box","props":{"flexDirection":"column","rowGap":1}')
+    expect(drawn).toContain('"key":"gauge-context","flexDirection":"column","alignItems":"center","width":"38%"')
+    expect(drawn).toContain('"key":"plan-4-meta","paddingLeft":2')
+    expect(await ui.find({ type: 'Text', text: /^config / })).toBeDefined()
+    // Usage leaves the windows to their gauges and says what the ticks mean.
+    expect(await ui.find({ type: 'Text', text: "The gauges' ticks mark how far each window has run: 27% of 5h, 49% of 7d." })).toBeDefined()
+    expect(drawn).not.toContain('of the window gone')
+    expect(await ui.find({ type: 'Text', text: /^2 running$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev$/ })).toBeDefined()
+    // Each seat's counts sit on a row above its bar, with no title or caption.
+    expect(await ui.find({ type: 'Text', text: /^64k in · 72% cached · 3k out$/ })).toBeDefined()
+    expect(drawn).not.toContain('Seats by input')
+    expect(drawn).not.toContain('prompt cache.')
+    // The window's labels slide clear of each other rather than drop out.
+    expect(drawn).toContain('>compacts 604k</text>')
+    expect(drawn).toContain('>handoff 465k</text>')
+    expect(drawn).toContain('+14k · 7 turns</text>')
+    expect(await ui.find({ type: 'Text', text: /^1 blocked · $/ })).toBeDefined()
   })
 })

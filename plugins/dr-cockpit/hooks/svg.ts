@@ -91,10 +91,14 @@ export function labelledMeterSvg(share: number, width: number, color: string, ma
       const size = one.text.length * LABEL_EM
       const x = clamp(one.at) * width
       const anchor = x - size / 2 <= 0 ? 'start' : x + size / 2 >= width ? 'end' : 'middle'
-      const from = anchor === 'start' ? 0 : anchor === 'end' ? width - size : x - size / 2
-      if (taken.some(([a, b]) => from < b + 8 && from + size > a - 8)) return ''
+      const at = anchor === 'start' ? 0 : anchor === 'end' ? width - size : x - size / 2
+      const clashes = (from: number) => from < 0 || from + size > width || taken.some(([a, b]) => from < b + 8 && from + size > a - 8)
+      // A label that would run into one already placed slides clear of it,
+      // to the left first; with no room either side it is left out.
+      const from = [at, ...taken.flatMap(([a, b]) => [a - 8 - size, b + 8])].sort((p, q) => Math.abs(p - at) - Math.abs(q - at)).find(one => !clashes(one))
+      if (from === undefined) return ''
       taken.push([from, from + size])
-      return label(anchor === 'start' ? 0 : anchor === 'end' ? width : x, 32, one.text, anchor, one.color === undefined ? MARK : paint(one.color))
+      return label(from, 32, one.text, 'start', one.color === undefined ? MARK : paint(one.color))
     })
     .join('')
   return svg(width, 38, inner + texts)
@@ -149,24 +153,22 @@ export function stackSvg(values: readonly number[], colors: readonly string[], w
 }
 
 /**
- * A seat's line: its name and token counts above a bar of its input against
- * the busiest seat's, the share served from the prompt cache shaded.
+ * A seat's bar: its input against the busiest seat's, the share served from
+ * the prompt cache shaded.
  */
-export function seatSvg(name: string, counts: string, share: number, cached: number, width: number, color: string): string {
+export function seatSvg(share: number, cached: number, width: number, color: string): string {
   const hue = paint(color)
   const filled = clamp(share) * width
   const warm = filled * clamp(cached)
   return svg(
     width,
-    28,
-    label(0, 10, name, 'start') +
-      label(width, 10, counts, 'end') +
-      `<rect x="0" y="16" width="${width}" height="8" rx="4" fill="${TRACK}"/>` +
+    8,
+    `<rect x="0" y="0" width="${width}" height="8" rx="4" fill="${TRACK}"/>` +
       (filled <= 0
         ? ''
-        : `<defs><clipPath id="s"><rect x="0" y="16" width="${n(Math.max(filled, 8))}" height="8" rx="4"/></clipPath></defs>` +
-          `<g clip-path="url(#s)"><rect x="0" y="16" width="${n(warm)}" height="8" fill="${hue}" fill-opacity="0.45"/>` +
-          `<rect x="${n(warm)}" y="16" width="${n(Math.max(filled, 8) - warm)}" height="8" fill="${hue}"/></g>`),
+        : `<defs><clipPath id="s"><rect x="0" y="0" width="${n(Math.max(filled, 8))}" height="8" rx="4"/></clipPath></defs>` +
+          `<g clip-path="url(#s)"><rect x="0" y="0" width="${n(warm)}" height="8" fill="${hue}" fill-opacity="0.45"/>` +
+          `<rect x="${n(warm)}" y="0" width="${n(Math.max(filled, 8) - warm)}" height="8" fill="${hue}"/></g>`),
   )
 }
 
@@ -176,9 +178,10 @@ export function seatSvg(name: string, counts: string, share: number, cached: num
  */
 export function gaugeSvg(share: number, color: string, size: number, value: string, tick: number | null = null): string {
   const stroke = Math.max(6, Math.round(size * 0.085))
-  const r = (size - stroke) / 2 - 2
+  const r = size / 2 - stroke * 0.9 - 2
   const cx = size / 2
-  const cy = r + stroke / 2 + 2
+  // Room above the arc for the tick, which reaches past the stroke.
+  const cy = r + stroke * 0.9 + 2
   const height = Math.ceil(cy + stroke / 2 + 2)
   const at = (part: number) => {
     const angle = Math.PI * (1 - clamp(part))

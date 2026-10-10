@@ -78,9 +78,10 @@ In the Claude desktop app (its Code tab) the pane is laid out as a flight
 deck. The account comes first, then what Claude is doing, then three gauges:
 the context against its handoff budget with the turns left, and the 5-hour and
 7-day limits, each with a tick where its window has run to, its reset and its
-forecast. Every other section follows as a panel with a colored lamp. The
-context window, trend and category split, each seat's input and the run's tasks
-are vector drawings, the model, branch and changes sit in chips, and the
+forecast. Every other section follows as a softly filled panel with a colored
+lamp; the usage panel says how far each window has run. The context window,
+trend and category split, each seat's input and the run's tasks are vector
+drawings, the model, config, branch and changes sit in filled chips, and the
 buttons are the desktop's own. With **Show at start** on it opens once the
 desktop window joins the session, unless you closed it.
 

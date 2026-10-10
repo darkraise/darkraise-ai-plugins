@@ -118,6 +118,11 @@ const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] a
 // How the desktop's run bar colors a task by its state.
 // The usage windows the desktop draws as gauges, in order.
 const GAUGED: readonly string[] = ['five_hour', 'seven_day']
+// The desktop's panel fill: a faint gray that lifts a card off the pane in
+// the light theme and the dark alike.
+const CARD = '#8080800f'
+// A chip's fill, a step deeper than the panel's.
+const CHIP = '#80808024'
 const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
 // The handoff budget's step and ceiling in the settings view.
 const HANDOFF_STEP = 50_000
@@ -880,14 +885,15 @@ export const register: Register = (on, options) => {
 
     // Each section is a card: a rounded frame in its own color, its title and
     // headline on the first line, its rows below, and a row's details two cells in.
-    const inner = Math.max(20, room - 4)
+    // A desktop panel's frame and padding take six cells, a terminal card's four.
+    const inner = Math.max(20, room - (isDesktop ? 6 : 4))
     const wide = Math.max(10, inner - 2 * INDENT)
     const px = svgWidth(inner)
     const picture = (key: string, source: string, alt: string) => Svg !== undefined && <Svg key={key} source={source} alt={alt} />
-    // The desktop's small facts sit in chips: a quiet rounded frame each, in a
+    // The desktop's small facts sit in chips: a soft filled pill each, in a
     // row that wraps.
     const chip = (key: string, body: RenderChildren, color?: string) => (
-      <Box key={key} borderStyle="round" borderColor="inactive" paddingX={1}>
+      <Box key={key} backgroundColor={CHIP} paddingX={1}>
         <Text color={color} wrap="truncate-end">
           {body}
         </Text>
@@ -901,7 +907,9 @@ export const register: Register = (on, options) => {
     const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) =>
       isDesktop ? (
         // A quiet panel, the section's color on its lamp alone.
-        <Box key={key} flexDirection="column" borderStyle="round" borderColor="inactive" paddingX={1}>
+        // Padded a line above and below and two cells either side, the
+        // nearest the desktop's whole-cell spacing comes to the preview's.
+        <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={2} paddingY={1}>
           <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
             <Text>
               <Text color={color}>● </Text>
@@ -969,10 +977,11 @@ export const register: Register = (on, options) => {
               px,
               rampColor(percent),
               [...(compactAt === null ? [] : [{ at: compactAt / head.window, isDashed: true }]), { at: head.limit / head.window }],
+              // The ends are placed first, so the handoff slides clear of them.
               [
                 { at: 0, text: `${kTokens(head.tokens)} / ${kTokens(head.window)}` },
-                { at: head.limit / head.window, text: `handoff ${kTokens(head.limit)}`, color: rampColor(percent) },
                 ...(compactAt === null ? [] : [{ at: compactAt / head.window, text: `compacts ${kTokens(compactAt)}` }]),
+                { at: head.limit / head.window, text: `handoff ${kTokens(head.limit)}`, color: rampColor(percent) },
               ],
             ),
             `${kTokens(head.tokens)} of ${kTokens(head.window)} tokens, handoff at ${kTokens(head.limit)}`,
@@ -1003,7 +1012,7 @@ export const register: Register = (on, options) => {
           contextBody.push(
             picture(
               'ctx-trend',
-              trendSvg(readings.slice(-24), px, 'cyan', 46, { top: label, bottom: `${count} turns` }),
+              trendSvg(readings.slice(-24), px, 'cyan', 46, { top: `${label} · ${count} turns` }),
               `Context over the last ${count} readings, ${label} on the last`,
             ),
           )
@@ -1088,9 +1097,10 @@ export const register: Register = (on, options) => {
         'plan',
         'Run',
         color,
-        isDesktop && blocked.length === 0 ? (
-          <Text key="plan-head" dimColor>
-            {[round === null ? '' : `round ${round}`, `${summary.done} of ${summary.total}`].filter(Boolean).join(' · ')}
+        isDesktop ? (
+          <Text key="plan-head">
+            {blocked.length > 0 && <Text color="red">{blocked.length} blocked · </Text>}
+            <Text dimColor>{[round === null ? '' : `round ${round}`, `${summary.done}/${summary.total}`].filter(Boolean).join(' · ')}</Text>
           </Text>
         ) : (
         <Text key="plan-head">
@@ -1177,14 +1187,18 @@ export const register: Register = (on, options) => {
             return (
               <Box key={`plan-${task.n}`} flexDirection="column">
                 <Text wrap="truncate-end">
-                  <Text color="yellow">▸ </Text>
+                  <Text color={isDesktop ? 'blue' : 'yellow'}>▸ </Text>
                   <Text bold>{label}</Text>
                 </Text>
                 {(task.round !== null || task.seat !== null) && (
-                  <Text dimColor wrap="truncate-end">
-                    {'  '}
-                    {[task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')}
-                  </Text>
+                  // The desktop sets the details under the title by padding, as
+                  // it may fold a run of spaces.
+                  <Box key={`plan-${task.n}-meta`} paddingLeft={isDesktop ? INDENT : 0}>
+                    <Text dimColor wrap="truncate-end">
+                      {isDesktop ? '' : '  '}
+                      {[task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')}
+                    </Text>
+                  </Box>
                 )}
               </Box>
             )
@@ -1203,6 +1217,15 @@ export const register: Register = (on, options) => {
         ),
       )
     }
+    // How far each gauged window has run, for the usage panel's note.
+    const gaugedPace = GAUGED.flatMap(kind =>
+      limits
+        .filter(limit => limit.kind === kind)
+        .flatMap(limit => {
+          const gone = windowElapsed(limit.kind, limit.resetsAt, now)
+          return gone === null ? [] : [`${Math.round(gone * 100)}% of ${limitLabel(limit.kind)}`]
+        }),
+    )
     const byName: Record<Section, RenderChildren> = {
       // Who the session runs as, framed in the color dr-status gives the account.
       account:
@@ -1242,6 +1265,7 @@ export const register: Register = (on, options) => {
               engineNow.model !== null && chip('account-model', modelName(engineNow.model), 'cyan'),
               engineNow.model !== null && engineNow.effort !== null && chip('account-effort', `${engineNow.effort} effort`),
               chip('account-remote', ['Remote ', drawRuns('account-remote-runs', remoteRuns(remoteNow.clients, remoteNow.setting))]),
+              chip('account-dir', <Text dimColor>config {who.key}</Text>),
             ),
           !isDesktop &&
           details(
@@ -1304,7 +1328,7 @@ export const register: Register = (on, options) => {
         'usage',
         'Usage',
         'blue',
-        <Text key="usage-head" bold>
+        <Text key="usage-head" bold={!isDesktop} dimColor={isDesktop}>
           {cost ?? ''}
           <Text dimColor>{head?.usd == null ? '' : costRate(head.usd, spend?.startedAt, now)}</Text>
         </Text>,
@@ -1319,20 +1343,8 @@ export const register: Register = (on, options) => {
           const gone = windowElapsed(limit.kind, limit.resetsAt, now)
           const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
           const width = Math.max(6, inner - 14)
-          if (isDesktop && GAUGED.includes(limit.kind)) {
-            // Its gauge carries the share, the reset and the forecast; the
-            // panel adds how far the window has run.
-            return (
-              <Text key={`limit-${limit.kind}`} wrap="truncate-end">
-                <Text bold>{limitLabel(limit.kind)} </Text>
-                <Text color={rampColor(limit.percent)}>{Math.round(limit.percent)}%</Text>
-                <Text dimColor>
-                  {gone === null ? '' : ` · ${Math.round(gone * 100)}% of the window gone`}
-                  {limit.resetsAt === null ? '' : ` · resets in ${duration(limit.resetsAt - now) || 'now'}`}
-                </Text>
-              </Text>
-            )
-          }
+          // Its gauge carries the share, the reset and the forecast.
+          if (isDesktop && GAUGED.includes(limit.kind)) return null
           return (
             <Box key={`limit-${limit.kind}`} flexDirection="column">
               {isDesktop ? (
@@ -1388,6 +1400,11 @@ export const register: Register = (on, options) => {
             </Box>
           )
         }),
+        isDesktop && gaugedPace.length > 0 && (
+          <Text key="limits-pace" dimColor>
+            The gauges' ticks mark how far each window has run: {gaugedPace.join(', ')}.
+          </Text>
+        ),
       ),
       // The background shells still running, each with its command and age;
       // the card is left out while there are none.
@@ -1397,10 +1414,19 @@ export const register: Register = (on, options) => {
           'shells',
           'Shells',
           'yellow',
-          <Text key="shells-head" color="yellow">
-            $ {background.length} running
+          <Text key="shells-head" color={isDesktop ? undefined : 'yellow'} dimColor={isDesktop}>
+            {isDesktop ? '' : '$ '}
+            {background.length} running
           </Text>,
-          background.map(shell => (
+          background.map(shell =>
+            isDesktop ? (
+              <Box key={`shell-${shell.id}`} flexDirection="row" columnGap={1}>
+                <Box key={`shell-${shell.id}-cmd`} flexGrow={1} flexShrink={1}>
+                  <Text wrap="truncate-end">$ {shell.command.split('\n')[0]}</Text>
+                </Box>
+                <Text dimColor>{elapsed(now - shell.startedAt)}</Text>
+              </Box>
+            ) : (
             <Text key={`shell-${shell.id}`} wrap="truncate-end">
               <Text color="yellow" bold>
                 ${' '}
@@ -1408,7 +1434,8 @@ export const register: Register = (on, options) => {
               <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
               <Text color="yellow"> {elapsed(now - shell.startedAt)}</Text>
             </Text>
-          )),
+            ),
+          ),
         ),
       agents: section(
         'agents',
@@ -1432,8 +1459,10 @@ export const register: Register = (on, options) => {
         recent.map(spawn =>
           isDesktop ? (
             <Box key={`spawn-${spawn.agentId}`} flexDirection="row" alignItems="center" columnGap={1}>
-              <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'}</Text>
-              {chip(`spawn-${spawn.agentId}-seat`, shortSeat(spawn.seat), spawn.isDone ? undefined : 'magenta')}
+              <Text color={spawn.isDone ? undefined : 'success'} dimColor={spawn.isDone}>
+                {spawn.isDone ? '✓' : '●'}
+              </Text>
+              {chip(`spawn-${spawn.agentId}-seat`, shortSeat(spawn.seat))}
               <Box key={`spawn-${spawn.agentId}-what`} flexGrow={1} flexShrink={1}>
                 <Text dimColor={spawn.isDone} wrap="truncate-end">
                   {spawn.description}
@@ -1452,32 +1481,35 @@ export const register: Register = (on, options) => {
           </Text>
           ),
         ),
-        sortedSeats.length > 0 && (
-          <Text key="seats" dimColor>
-            Seats by input
-          </Text>
-        ),
-        isDesktop &&
-          sortedSeats.map(seat =>
-            picture(
-              `seat-${seat.seat}-bar`,
-              seatSvg(
-                `${shortSeat(seat.seat)} ×${seat.runs}`,
-                `${kTokens(totalIn(seat))} in · ${kTokens(seat.output)} out`,
-                totalIn(seat) / mostIn,
-                cacheShare(seat) / 100,
-                px,
-                'magenta',
-              ),
-              `${shortSeat(seat.seat)}: ${kTokens(totalIn(seat))} input tokens, ${cacheShare(seat)}% cached, ${kTokens(seat.output)} output`,
-            ),
-          ),
-        isDesktop &&
+        !isDesktop &&
           sortedSeats.length > 0 && (
-            <Text key="seats-note" dimColor wrap="truncate-end">
-              The lighter part of each bar came from the prompt cache.
+            <Text key="seats" dimColor>
+              Seats by input
             </Text>
           ),
+        // Each seat's name and counts over a bar of its input, the part
+        // served from the prompt cache lighter.
+        isDesktop &&
+          sortedSeats.map(seat => (
+            <Box key={`seat-${seat.seat}`} flexDirection="column">
+              <Box key={`seat-${seat.seat}-head`} flexDirection="row" columnGap={1}>
+                <Box key={`seat-${seat.seat}-name`} flexGrow={1} flexShrink={1}>
+                  <Text wrap="truncate-end">
+                    {shortSeat(seat.seat)}
+                    <Text dimColor> ×{seat.runs}</Text>
+                  </Text>
+                </Box>
+                <Text dimColor wrap="truncate-end">
+                  {kTokens(totalIn(seat))} in · {cacheShare(seat)}% cached · {kTokens(seat.output)} out
+                </Text>
+              </Box>
+              {picture(
+                `seat-${seat.seat}-bar`,
+                seatSvg(totalIn(seat) / mostIn, cacheShare(seat) / 100, px, 'magenta'),
+                `${shortSeat(seat.seat)}: ${kTokens(totalIn(seat))} input tokens, ${cacheShare(seat)}% cached, ${kTokens(seat.output)} output`,
+              )}
+            </Box>
+          )),
         !isDesktop &&
           sortedSeats.length > 0 &&
           details(
@@ -1609,8 +1641,23 @@ export const register: Register = (on, options) => {
       // The flight deck: the account, what Claude is doing, then gauges for
       // the context and the two usage windows, then a panel per section.
       const gaugeSize = (isLarge: boolean) => Math.round(Math.max(isLarge ? 96 : 68, Math.min(isLarge ? 150 : 110, px * (isLarge ? 0.36 : 0.26))))
+      const gauged = GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind))
+      // With all three up the context tile takes the larger share, as in the
+      // preview; with fewer each one grows to fill the row.
+      const isFullDeck = head !== null && gauged.length === GAUGED.length
       const gauge = (key: string, source: string, alt: string, label: string, ...under: RenderChildren[]) => (
-        <Box key={key} flexDirection="column" alignItems="center" flexGrow={1} flexShrink={1} borderStyle="round" borderColor="inactive" paddingX={1}>
+        <Box
+          key={key}
+          flexDirection="column"
+          alignItems="center"
+          width={isFullDeck ? (key === 'gauge-context' ? '38%' : '31%') : undefined}
+          flexGrow={isFullDeck ? 0 : 1}
+          flexShrink={1}
+          borderStyle="round"
+          borderColor="subtle"
+          backgroundColor={CARD}
+          paddingX={1}
+        >
           {picture(`${key}-dial`, source, alt)}
           <Text bold dimColor>
             {label}
@@ -1618,7 +1665,6 @@ export const register: Register = (on, options) => {
           {under}
         </Box>
       )
-      const gauged = GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind))
       const gauges = (head !== null || gauged.length > 0) && (
         <Box key="gauges" flexDirection="row" columnGap={1}>
           {head !== null &&
@@ -1628,7 +1674,7 @@ export const register: Register = (on, options) => {
               `${Math.round((head.tokens / head.limit) * 100)}% of the handoff budget`,
               'CONTEXT',
               <Text key="gauge-context-turns" dimColor={turnsLeft === null || turnsLeft > 3} color={turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined} wrap="truncate-end">
-                {turnsLeft === null ? 'of handoff' : `≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'} left`}
+                of handoff{turnsLeft === null ? '' : ` · ≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'}`}
               </Text>,
             )}
           {gauged.map(limit => {
@@ -1659,7 +1705,7 @@ export const register: Register = (on, options) => {
         </Box>
       )
       return (
-        <Box flexDirection="column">
+        <Box flexDirection="column" rowGap={1}>
           {shown.includes('account') && byName.account}
           <Text key="now" wrap="truncate-end">
             {drawRuns('now', nowLine(actNow, now))}
