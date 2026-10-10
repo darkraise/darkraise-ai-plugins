@@ -60,6 +60,8 @@ session is doing:
 │ ○ Task 5: Track the plan and repo                 │
 ╰───────────────────────────────────────────────────╯
 ╭ Repo ─────────────────────────────────── ● dirty ╮
+│ repo darkraise/darkraise-ai-plugins               │
+│ dir  ~/code/darkraise-ai-plugins/plugins          │
 │ ⎇ feat/cockpit-pane-overhaul ↑3                   │
 │ ~2 changed ?1 untracked                           │
 ╰───────────────────────────────────────────────────╯
@@ -110,7 +112,8 @@ window refills.
   round in flight, the tasks done, which were reviewed clean, and a blocked
   task in red with its reason. A run whose tasks were all done before the
   session started is left out, so a new session starts without it.
-- **Repo** is the working tree's branch, ahead and behind counts and changes.
+- **Repo** names the repository (`owner/name` from its remote, else its folder)
+  and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
 When the pane sits above the prompt (`layout` `auto`, the default), it draws

@@ -11,6 +11,7 @@ import {
   duration,
   elapsed,
   fitStatus,
+  folderRuns,
   isAtLeast,
   levelOf,
   limitForecast,
@@ -22,6 +23,7 @@ import {
   planWithUpdate,
   remoteRuns,
   repoFromPorcelain,
+  repoName,
   runsWidth,
   sectionsToggled,
   sparkline,
@@ -449,6 +451,7 @@ describe('cockpit pane', () => {
 
   test('shows the context, limits, cost and repo', async ($, on) => {
     world(on, { tokens: 284_000 })
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     await $.session.measure({
       context: { tokens: 284_000, window: 650_000 },
@@ -469,6 +472,28 @@ describe('cockpit pane', () => {
       expect(JSON.stringify(await ui.drawn())).toContain('"paddingLeft":2')
       await ui.unmount()
     }
+  })
+
+  test('names the repository and the working folder', async ($, on) => {
+    expect(repoName('git@github.com:darkraise/darkraise-ai-plugins.git', '/x')).toBe('darkraise/darkraise-ai-plugins')
+    expect(repoName('https://gitlab.example.com/group/sub/app.git/', '/x')).toBe('sub/app')
+    expect(repoName('ssh://git@host:2222/team/app', '/x')).toBe('team/app')
+    expect(repoName(null, 'C:\\code\\shop')).toBe('shop')
+    expect(runsText(folderRuns('/home/me/code/shop/web', '/home/me/code/shop', '/home/me'))).toBe('~/code/shop/web')
+    world(on, { tokens: 284_000 })
+    on('session.cwd', () => ({ value: '/home/me/code/shop/web' }))
+    on('session.repo', () => ({ value: { root: '/home/me/code/shop', remote: 'git@github.com:acme/shop.git', internal: false, name: null } }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure({
+      context: { tokens: 284_000, window: 650_000 },
+      rateLimits: [{ kind: 'five_hour', percentUsed: 23 }],
+      cost: { usd: 1.5 },
+      changed: ['context', 'rateLimits'],
+    })
+    const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, scroll: { offset: 0, bodyRows: 120 } }, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^repo acme\/shop$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^dir {2}\/home\/me\/code\/shop\/web$/ })).toBeDefined()
   })
 
   test('follows the todo list and the task list', async ($, on) => {

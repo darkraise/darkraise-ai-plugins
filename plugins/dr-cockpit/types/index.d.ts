@@ -123,6 +123,8 @@ export type CockpitPlace = {
   cwd: string
   /** The repository's root, when the working directory is in one. */
   root: string | null
+  /** The repository's `origin` remote URL, when it has one. */
+  remote?: string | null
   home: string | null
 }
 
