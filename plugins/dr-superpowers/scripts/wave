@@ -148,6 +148,7 @@ case $cmd in
     [ $# -eq 2 ] && is_num "$1" || usage
     read -r a b < <(wave_range "$1")
     base=$2; need_commit "$base"
+    seen=$'\n'
     for n in $(seq "$a" "$b"); do
       ref=$(task_ref "$n")
       git rev-parse --verify --quiet "refs/heads/$ref" >/dev/null || continue
@@ -156,6 +157,10 @@ case $cmd in
       fi
       while IFS= read -r wt; do
         [ -n "$wt" ] || continue
+        # A later task forked from a merged sibling holds that sibling's
+        # commits too, so one worktree can fall in several tasks' ranges.
+        [[ "$seen" != *$'\n'"$wt"$'\n'* ]] || continue
+        seen="$seen$wt"$'\n'
         if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
           echo "kept $wt: uncommitted changes"
         elif git worktree remove "$wt" >/dev/null 2>&1; then

@@ -19,6 +19,8 @@ has() { # has <name> <haystack> <needle>
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# git prints worktree paths as C:/… under Git Bash, where $TMP reads /tmp/….
+GTMP=$(cd "$TMP" && { pwd -W 2>/dev/null || pwd; })
 export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 REPO="$TMP/repo"
@@ -90,7 +92,7 @@ task 4 b.txt
 
 run status docs/plan.md 2 "$BASE"
 has "status: a committed task" "$out" "Task 2: ref sdd/plan/task-2"
-has "status: names its worktree" "$out" "merged no; worktree $TMP/wt-2"
+has "status: names its worktree" "$out" "merged no; worktree $GTMP/wt-2"
 
 # --- merge ---
 printf 'dirty\n' >> a.txt
@@ -126,10 +128,11 @@ check "merge: one merge commit per task" "$(git rev-list --merges --count "$BASE
 git worktree add -q -b own "$TMP/own" "$BASE"
 printf 'x\n' > "$TMP/wt-3/scratch"
 run clean docs/plan.md 2 "$BASE"
-has "clean: removes a merged task's worktree" "$out" "removed $TMP/wt-2"
-has "clean: keeps a worktree with uncommitted changes" "$out" "kept $TMP/wt-3: uncommitted changes"
+has "clean: removes a merged task's worktree" "$out" "removed $GTMP/wt-2"
+has "clean: keeps a worktree with uncommitted changes" "$out" "kept $GTMP/wt-3: uncommitted changes"
 has "clean: deletes the merged ref" "$out" "deleted sdd/plan/task-2"
-check "clean: a user's own worktree stays" "$(git worktree list | grep -c "$TMP/own ")" "1"
+check "clean: a worktree is reported once" "$(grep -c "wt-3: uncommitted" <<<"$out")" "1"
+check "clean: a user's own worktree stays" "$(git worktree list | grep -c "$GTMP/own ")" "1"
 check "clean: the removed worktree is gone" "$([ -d "$TMP/wt-2" ] && echo yes || echo no)" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
