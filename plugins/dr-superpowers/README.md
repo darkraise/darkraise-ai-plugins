@@ -120,6 +120,24 @@ implements, and `--effort high` once it delegates. A task that will not
 converge after three fix rounds escalates to subagent mode at the next task
 boundary, recorded in the ledger both modes write.
 
+**Opt-in parallel waves.** Brainstorming asks, once the approach is settled,
+whether the plan should run sequentially (the default) or with parallel
+subagents, and records the answer in the spec as `**Execution strategy:**`;
+writing-plans asks the same question when a spec carries no answer. A parallel
+plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
+contiguous task ranges whose tasks share no file and consume nothing from each
+other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
+tasks at once, each in its own git worktree, reviews each exactly as it would a
+sequential task, merges each reviewed task with `scripts/wave merge` (which
+refuses a task whose files overlap what the wave already merged), and runs the
+plan's `**Integration check:**` before the next wave starts. `plan-lint` keeps
+risk-3 tasks, executor tasks and dependency-manifest changes alone in their
+wave, the pre-flight ruling seat checks every same-wave pair for coupling the
+file lists cannot show, and `context-size --wave W` keeps room in the session
+for every task running at once. Running a wave one task after another is always
+correct, so every doubt serializes it; `reference/parallel-waves.md` holds the
+procedure. A plan without a `**Parallelism:**` line runs exactly as before.
+
 **An external executor lane.** A task scoring 2 to 4 with `risk <= 1` can run on
 the Codex CLI instead of a Claude implementer, for quota offload onto a separate
 ChatGPT subscription and for a second model family in the loop. The lane is a
@@ -539,6 +557,12 @@ the whole-branch review both execution skills end at.
 `scripts/run-codex-review.sh` runs every Codex review seat: it
 selects the judge rung from `codex-judge`, bounds the run, and classifies the
 outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
+
+`reference/parallel-waves.md` runs a waves plan: opening a wave, the parallel
+implementer dispatch, the merge and the integration check, and recovery.
+`scripts/wave` holds its mechanics: `list` the waves, the `ref` a parallel
+task commits to, `status` of a wave's tasks, `merge` one reviewed task, and
+`clean` a merged wave's worktrees and refs without ever forcing.
 
 `reference/project-state.md` describes the committed project-declared state —
 `gates.md`, `plans/completed.md` and `distilled/` — and the precedence order that

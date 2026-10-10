@@ -175,6 +175,18 @@ check "800k window, pinned task budget: tasks still hand off at 465k" "$out" "bu
 DR_SUPERPOWERS_BUDGET=465000 run --final
 check "800k window, pinned task budget: the final phase continues" "$out" "budget (final): 500k of 680k (73%) — ok — source: record"
 settings 650000
+
+# --- a wave reserves one task's growth per extra concurrent task ---
+asst 200000 > "$T"
+run --wave 1
+check "wave of 1: the task budget" "$out" "budget (wave of 1): 200k of 465k (43%) — ok — source: record"
+run --wave 3
+check "wave of 3: 280k less: exit 5" "$status" "5"
+check "wave of 3: line" "$out" "budget (wave of 3): 200k of 185k (108%) — handoff — source: record"
+run --wave 2
+check "wave of 2: fits" "$out" "budget (wave of 2): 200k of 325k (61%) — ok — source: record"
+run --wave 0
+check "wave of 0: usage" "$status" "2"
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run --final
 check "final: haiku's 200k window" "$out" "budget (final): 30k of 170k (17%) — ok — source: record"

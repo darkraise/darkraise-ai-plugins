@@ -38,6 +38,11 @@ instead of restating them, and when no two tasks contradict each other or a
 Global Constraint. Score LOW for a name used before any task creates it, a
 signature or path that differs between tasks or from Contracts, a task that
 breaks a Global Constraint, or a Task index that disagrees with the headings.
+When the header says `**Parallelism:** waves`, the waves are part of this
+criterion: score LOW when a task consumes a name produced by a task in its own
+wave or a later one, whatever its `**Depends on:**` line says, or when two
+tasks of one wave would meet at run time through something no Files block
+names (a registry, global state, a shared test resource).
 Ignore whether the spec is covered, and ignore how well each single task is
 written.
 

@@ -102,11 +102,12 @@ your path and complete them in order.
 2. **Explore project context** — check files, docs, recent commits
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+5. **Ask the execution strategy** — parallel subagent waves or sequential execution, one question (see Choosing the execution strategy)
+6. **Present design** — in sections scaled to their complexity, get user approval after each section
+7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+8. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
+9. **User reviews written spec** — ask user to review the spec file before proceeding
+10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
@@ -122,6 +123,7 @@ digraph brainstorming {
     "Explore project context" [shape=box];
     "Ask clarifying questions" [shape=box];
     "Propose 2-3 approaches" [shape=box];
+    "Ask execution strategy\n(parallel or sequential)" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
     "Write design doc" [shape=box];
@@ -141,7 +143,8 @@ digraph brainstorming {
     "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
     "Explore project context" -> "Ask clarifying questions";
     "Ask clarifying questions" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Present design sections";
+    "Propose 2-3 approaches" -> "Ask execution strategy\n(parallel or sequential)";
+    "Ask execution strategy\n(parallel or sequential)" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc" [label="yes"];
@@ -230,6 +233,48 @@ A revision your human partner asks for gets one new round.
 - Lead with your recommended option and explain why
 - YAGNI ruthlessly - remove unnecessary features from every approach and design
 
+**Choosing the execution strategy:**
+
+Once the approach is settled and before you present the design, ask your human
+partner one multiple-choice question, on its own:
+
+> How should the plan execute?
+> 1. **Sequential** (default) — one task at a time; the safest choice, and the
+>    right one when the work is one chain of dependent changes.
+> 2. **Parallel subagents** — independent tasks run at the same time, each in
+>    its own worktree, merged and checked together after each wave; faster
+>    when the work splits into parts that share no files.
+
+Recommend one: parallel only when you can already name two or more parts that
+share no file and do not consume each other's output; sequential otherwise.
+Parallel runs only in subagent mode on Claude Code. On a Codex host do not
+ask: the plan is sequential, and you say so in one line.
+
+Record the answer near the top of the spec, below its title, as
+`**Execution strategy:** parallel — <reason>` or
+`**Execution strategy:** sequential — <reason>`. The plan inherits it.
+
+When the answer is parallel, the design leans toward independence, because a
+part that shares nothing is a part that cannot break its sibling:
+
+- **Settle shared things first.** Types, interfaces, schemas, configuration
+  keys and file layout that several parts use belong to one foundation part
+  that runs before the others.
+- **Give every file one owner.** Registries, barrels and index files, route
+  tables, dependency manifests and lockfiles, migrations and version files are
+  where parallel work collides; assign each to exactly one part, or to the
+  foundation part.
+- **Keep risk alone.** Security, data-loss, migration and concurrency work
+  runs on its own, never beside a sibling.
+- **Isolate the tests.** Say how parts' tests avoid each other at run time —
+  ports, databases, fixed paths, global state — or that they share nothing.
+- Add a `## Parallel decomposition` section to the spec: the parts, the files
+  each owns, what each consumes from the foundation, and which parts may run
+  together. writing-plans turns it into waves.
+
+Never bend a design out of shape to make it parallel: a part that genuinely
+needs another's output waits for it.
+
 **Presenting the design:**
 
 - Once you believe you understand what you're building, present the design
@@ -269,6 +314,7 @@ required, and it is yours: run it once, never through a subagent.
 2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
+5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output.
 
 Fix any issues inline, then post `Self-review (round 1 of 1):` with one line
 per item: clean, or what you fixed. Do not re-review after fixing.

@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# Mechanics of a parallel wave (reference/parallel-waves.md): the waves a plan
+# declares, the ref each parallel task commits to, the checked merge of a
+# reviewed task into the feature branch, and the clean-up once a wave is merged.
+# Nothing here dispatches an agent or decides a review; the controller does.
+#
+# Usage:
+#   wave list   PLAN_FILE              one "wave K: Tasks A-B" line per wave, or
+#                                      "sequential" for a plan without waves
+#   wave ref    PLAN_FILE N            the branch parallel Task N commits to
+#   wave status PLAN_FILE K BASE       per task of wave K: ref, commits since
+#                                      BASE, merged or not, its worktree
+#   wave merge  PLAN_FILE N BASE       merge Task N's ref into the checked-out
+#                                      branch with --no-ff, refusing when its
+#                                      files overlap what the branch gained
+#                                      since the task forked
+#   wave clean  PLAN_FILE K BASE       remove the worktrees and refs of wave K's
+#                                      merged tasks; never forces
+# Exit: 0 done; 1 refused (overlap, conflict, not merged); 2 usage or missing
+# input; 3 the checkout is not clean; 4 the plan's waves do not parse.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+usage() {
+  echo "usage: wave list PLAN_FILE | ref PLAN_FILE N | status PLAN_FILE K BASE | merge PLAN_FILE N BASE | clean PLAN_FILE K BASE" >&2
+  exit 2
+}
+die() { echo "wave: $2" >&2; exit "$1"; }
+
+[ $# -ge 2 ] || usage
+cmd=$1 plan=$2
+shift 2
+[ -f "$plan" ] || die 2 "no such plan file: $plan"
+
+slug=$(basename "$plan" .md)
+task_ref() { # task_ref N — the branch name, checked by git's own rules
+  local ref="sdd/$slug/task-$1"
+  git check-ref-format --branch "$ref" >/dev/null 2>&1 || die 2 "cannot name a branch for Task $1 of $slug"
+  printf '%s\n' "$ref"
+}
+is_num() { [[ "$1" =~ ^[0-9]+$ ]]; }
+waves() {
+  local w
+  w=$(plan_waves "$plan") || die 4 "the **Parallelism:** waves line of $plan does not parse"
+  printf '%s' "$w"
+}
+wave_range() { # wave_range K — "A B", or exit 2
+  local r
+  r=$(waves | awk -F'\t' -v k="$1" '$1 == k { print $2, $3 }')
+  [ -n "$r" ] || die 2 "the plan has no wave $1"
+  printf '%s\n' "$r"
+}
+need_commit() { git rev-parse --verify --quiet "$1^{commit}" >/dev/null || die 2 "not a commit: $1"; }
+# worktrees_holding A B — "<path>" of every detached worktree whose HEAD lies in
+# A..B (an ancestor of B, not of A): the worktrees a parallel task's
+# implementers committed in. A user's own worktrees sit on branches, or outside
+# the range, so they are never listed.
+worktrees_holding() {
+  local path="" head="" detached=0 line
+  while IFS= read -r line; do
+    case $line in
+      'worktree '*) path=${line#worktree } head="" detached=0 ;;
+      'HEAD '*) head=${line#HEAD } ;;
+      detached) detached=1 ;;
+      '')
+        if [ -n "$path" ] && [ "$detached" -eq 1 ] && [ -n "$head" ] \
+           && git merge-base --is-ancestor "$head" "$2" 2>/dev/null \
+           && ! git merge-base --is-ancestor "$head" "$1" 2>/dev/null; then
+          printf '%s\n' "$path"
+        fi
+        path="" ;;
+    esac
+  done < <(git worktree list --porcelain; echo)
+}
+
+case $cmd in
+  list)
+    [ $# -eq 0 ] || usage
+    [ "$(plan_parallelism "$plan")" != bad ] || die 4 "the **Parallelism:** line of $plan does not parse"
+    if [ "$(plan_parallelism "$plan")" = sequential ]; then echo sequential; exit 0; fi
+    waves | awk -F'\t' '{ printf "wave %s: Tasks %s%s\n", $1, $2, ($3 == $2 ? "" : "-" $3) }'
+    ;;
+
+  ref)
+    [ $# -eq 1 ] && is_num "$1" || usage
+    task_ref "$1"
+    ;;
+
+  status)
+    [ $# -eq 2 ] && is_num "$1" || usage
+    read -r a b < <(wave_range "$1")
+    base=$2; need_commit "$base"
+    for n in $(seq "$a" "$b"); do
+      ref=$(task_ref "$n")
+      if ! git rev-parse --verify --quiet "refs/heads/$ref" >/dev/null; then
+        printf 'Task %s: ref none\n' "$n"; continue
+      fi
+      sha=$(git rev-parse --short "refs/heads/$ref")
+      count=$(git rev-list --count "$base..refs/heads/$ref")
+      merged=no
+      git merge-base --is-ancestor "refs/heads/$ref" HEAD && merged=yes
+      wt=$(worktrees_holding "$base" "refs/heads/$ref" | paste -sd ' ' -)
+      printf 'Task %s: ref %s %s; commits %s; merged %s; worktree %s\n' \
+        "$n" "$ref" "$sha" "$count" "$merged" "${wt:-none}"
+    done
+    ;;
+
+  merge)
+    [ $# -eq 2 ] && is_num "$1" || usage
+    n=$1 base=$2
+    need_commit "$base"
+    ref=$(task_ref "$n")
+    git rev-parse --verify --quiet "refs/heads/$ref" >/dev/null || die 2 "Task $n has no ref $ref"
+    [ -z "$(git status --porcelain --untracked-files=no)" ] || die 3 "the checkout is not clean; commit or clear it before merging"
+    git merge-base --is-ancestor "$base" "refs/heads/$ref" || die 1 "Task $n's ref does not descend from the wave base $base"
+    git merge-base --is-ancestor "$base" HEAD || die 1 "the checked-out branch does not descend from the wave base $base"
+    if git merge-base --is-ancestor "refs/heads/$ref" HEAD; then
+      echo "already merged: Task $n ($(git rev-parse --short "refs/heads/$ref"))"; exit 0
+    fi
+    fork=$(git merge-base HEAD "refs/heads/$ref")
+    mine=$(git diff --no-renames --name-only "$fork" "refs/heads/$ref" | sort -u)
+    theirs=$(git diff --no-renames --name-only "$fork" HEAD | sort -u)
+    overlap=$(comm -12 <(printf '%s\n' "$mine") <(printf '%s\n' "$theirs") | grep . || true)
+    files=$(grep -c . <<<"$mine" || true)
+    if [ -n "$overlap" ]; then
+      echo "overlap: Task $n changes files the branch already changed since $(git rev-parse --short "$fork"):"
+      sed 's/^/  /' <<<"$overlap"
+      exit 1
+    fi
+    title=$(plan_tasks "$plan" | awk -F'\t' -v n="$n" '$1 == n { print $2 }')
+    if ! git merge --no-ff --no-edit -m "Merge Task $n: ${title:-task $n}" "refs/heads/$ref" >/dev/null 2>&1; then
+      git merge --abort >/dev/null 2>&1 || true
+      die 1 "Task $n did not merge cleanly; the merge was aborted"
+    fi
+    echo "merged Task $n: $(git rev-parse --short HEAD) ($files files from $ref)"
+    # Files outside the task's plan list are not refused here (the task review
+    # judged scope), but the controller should see them.
+    listed=$(plan_task_text "$plan" "$n" 2>/dev/null | plan_task_paths)
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      grep -qxF "$f" <<<"$listed" || echo "note: $f is not in Task $n's **Files:**"
+    done <<<"$mine"
+    ;;
+
+  clean)
+    [ $# -eq 2 ] && is_num "$1" || usage
+    read -r a b < <(wave_range "$1")
+    base=$2; need_commit "$base"
+    seen=$'\n'
+    for n in $(seq "$a" "$b"); do
+      ref=$(task_ref "$n")
+      git rev-parse --verify --quiet "refs/heads/$ref" >/dev/null || continue
+      if ! git merge-base --is-ancestor "refs/heads/$ref" HEAD; then
+        echo "kept $ref: not merged"; continue
+      fi
+      while IFS= read -r wt; do
+        [ -n "$wt" ] || continue
+        # A later task forked from a merged sibling holds that sibling's
+        # commits too, so one worktree can fall in several tasks' ranges.
+        [[ "$seen" != *$'\n'"$wt"$'\n'* ]] || continue
+        seen="$seen$wt"$'\n'
+        if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
+          echo "kept $wt: uncommitted changes"
+        elif git worktree remove "$wt" >/dev/null 2>&1; then
+          echo "removed $wt"
+        else
+          echo "kept $wt: git worktree remove refused (locked or in use)"
+        fi
+      done < <(worktrees_holding "$base" "refs/heads/$ref")
+      if git branch -d "$ref" >/dev/null 2>&1; then echo "deleted $ref"; else echo "kept $ref: git branch -d refused"; fi
+    done
+    git worktree prune >/dev/null 2>&1 || true
+    ;;
+
+  *) usage ;;
+esac

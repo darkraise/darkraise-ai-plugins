@@ -811,5 +811,115 @@ lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dr-super
 lint fenced-files.md
 has "a fenced-only Files block is a missing Files block" "$out" "ERROR Task 1: missing **Files:** block"
 
+# --- parallel waves ---
+waves_plan() { # waves_plan <Parallelism value> — three tasks; Tasks 2 and 3 share wave 2
+  cat <<EOF
+# Demo Implementation Plan
+
+**Goal:** Demo.
+
+**Spec:** \`docs/spec.md\`
+
+**Execution:** subagent — \`claude --model sonnet --effort high\` — parallel waves
+
+**Parallelism:** $1
+
+**Integration check:** \`bash test.sh\`
+
+**Worktree setup:** none
+
+**Plan review:** 2026-10-10 — dr-superpowers:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+
+## Global Constraints
+
+- Bash only.
+
+## Contracts
+
+None
+
+## Assumptions (evidence)
+
+- None.
+
+## Task index
+
+1. One
+2. Two
+3. Three
+
+### Task 1: One
+
+**Files:**
+- Create: \`a.txt\`
+
+**Depends on:** none
+
+**Implementer:** dr-superpowers:impl-sonnet-low
+**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+
+### Task 2: Two
+
+**Files:**
+- Create: \`b.txt\`
+- Test: \`t/b.test.sh:3-9\`
+
+**Depends on:** Task 1
+
+**Implementer:** dr-superpowers:impl-sonnet-low
+**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+
+### Task 3: Three
+
+**Files:**
+- Create: \`c.txt\`
+
+**Depends on:** Task 1
+
+**Implementer:** dr-superpowers:impl-sonnet-low
+**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+EOF
+}
+waves_plan 'waves — 1 | 2-3' > waves.md
+lint waves.md --no-probe
+check "waves: a clean plan exits 0" "$status" "0"
+check "waves: no majority-rule warning" "$out" "plan-lint: 0 errors, 0 warnings"
+waves_plan 'sequential — one chain' > waves-seq.md
+lint waves-seq.md --no-probe
+has "sequential: the majority rule still warns" "$out" "Execution line is subagent but only 0 of 3 tasks are heavy"
+lacks "sequential: Depends on lines are not checked" "$out" "Depends on"
+waves_plan 'waves — 1 | two' > waves-bad.md
+lint waves-bad.md --no-probe
+has "waves: a bad range" "$out" "ERROR header: Parallelism waves must be '<N>' or '<A>-<B>' ranges"
+waves_plan 'waves — 1-2 | 2-3' > waves-gap.md
+lint waves-gap.md --no-probe
+has "waves: overlapping ranges" "$out" "ascending, contiguous ranges covering Tasks 1-3 exactly once"
+waves_plan 'waves — 1 | 2' > waves-short.md
+lint waves-short.md --no-probe
+has "waves: ranges must cover every task" "$out" "covering Tasks 1-3 exactly once"
+waves_plan 'parallel' > waves-word.md
+lint waves-word.md --no-probe
+has "waves: an unknown strategy" "$out" "ERROR header: Parallelism line does not match"
+waves_plan 'waves — 1 | 2-3' | sed 's#- Create: `c.txt`#- Modify: `t/b.test.sh:1-2`#' > waves-share.md
+lint waves-share.md --no-probe
+has "waves: a shared file, line ranges ignored" "$out" "ERROR header: wave 2: t/b.test.sh is named by Task 2, Task 3"
+waves_plan 'waves — 1 | 2-3' | awk '/^\*\*Depends on:\*\* Task 1$/ && ++n == 2 { print "**Depends on:** Task 2"; next } { print }' > waves-dep.md
+lint waves-dep.md --no-probe
+has "waves: a same-wave dependency" "$out" "ERROR Task 3: Depends on Task 2 in the same wave (2)"
+waves_plan 'waves — 1 | 2-3' | awk '/^\*\*Depends on:\*\* none$/ && !d++ { next } { print }' > waves-nodep.md
+lint waves-nodep.md --no-probe
+has "waves: every task needs a Depends on line" "$out" "ERROR Task 1: a waves plan needs a **Depends on:** line"
+waves_plan 'waves — 1 | 2-3' | sed 's/risk 0 = 1$/risk 3 = 4/' > waves-risk.md
+lint waves-risk.md --no-probe
+has "waves: risk 3 runs alone" "$out" "ERROR Task 2: a risk-3 task must run alone in its wave"
+lacks "waves: a wave of one may hold risk 3" "$out" "ERROR Task 1: a risk-3 task"
+waves_plan 'waves — 1 | 2-3' | sed 's#- Create: `b.txt`#- Modify: `package-lock.json`#' > waves-lock.md
+lint waves-lock.md --no-probe
+has "waves: a lockfile runs alone" "$out" "ERROR Task 2: package-lock.json is a dependency manifest or lockfile"
+waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Integration check:\*\*/d; s/^\*\*Execution:\*\* subagent — `claude --model sonnet --effort high`/**Execution:** inline — `claude --model sonnet --effort low`/' > waves-inline.md
+lint waves-inline.md --no-probe
+has "waves: inline is refused" "$out" "ERROR header: parallel waves need a subagent Execution line"
+has "waves: the integration check is required" "$out" "ERROR header: a waves plan needs its **Integration check:** line"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

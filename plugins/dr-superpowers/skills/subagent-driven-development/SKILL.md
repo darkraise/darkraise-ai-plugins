@@ -20,6 +20,9 @@ back. Before anything else:
    goes to review. An assigned line ending `thread pending` is an executor
    wrapper that may still be running: find it in the snapshot's background
    list and wait for its notification, or stop it and record a Ruling.
+   A `Wave <k>: started` line with no later `integrated` or `serialized` line
+   is a parallel wave in flight: follow
+   [parallel-waves.md](../../reference/parallel-waves.md) §Recovery.
 3. Run `scripts/context-size`. On exit 5, finish the task in flight, then
    invoke dr-superpowers:handoff.
 4. Re-read this skill in full before the next dispatch, and
@@ -219,7 +222,8 @@ a ledger file, not only in todos.
 Read the plan's header, never the whole plan: run
 `scripts/task-brief --header PLAN_FILE` (see using-superpowers §Session Budget), and read the
 file it prints (`<workspace>/plan-header.md`). Note the Execution line, the
-Global Constraints and the Contracts, and create a todo per Task index entry.
+`**Parallelism:**` line when there is one, the Global Constraints and the
+Contracts, and create a todo per Task index entry.
 A plan written before 1.4.0 may have no Task index: then run
 `scripts/task-brief PLAN_FILE N` for N = 1, 2, … until it exits 3, and take
 each task's title from its brief's first line. You never read the spec: the
@@ -241,6 +245,9 @@ The Ruling Seat). It scans the whole plan against the spec for:
 - tasks that contradict each other, the Contracts, or the Global Constraints
 - anything the plan explicitly mandates that the review rubric treats as a
   defect (a test that asserts nothing, verbatim duplication of a logic block)
+
+- for a plan whose `**Parallelism:**` line names waves, every pair of tasks
+  in one wave that could observe each other's change
 
 The seat returns a table, not a verdict: one row for every pair of tasks that
 share a file or an interface, and one row for every task on whether its own
@@ -276,9 +283,14 @@ This skill owns every line in `<workspace>/progress.md`. The grammar:
 
 ```
 # SDD ledger — plan: <path>
-Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; executor <id> <model>/<effort>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
+Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; wave <k>][; executor <id> <model>/<effort>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
 Task <N>: fix round R/5 (X addressed, Y open — <one-liners>; commits a..b[; progress p -> q]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
 Group <a>-<b>: review round R/5 (<same fields as a fix round>)
+Wave <k>: started (base <sha7>; Tasks <a>-<b>; at most <c> at once)
+Wave <k>: serialized — <reason>
+Wave <k>: check failed — <command> → <one-line summary>
+Wave <k>: fix round R/5 (<same fields as a fix round>)
+Wave <k>: integrated (head <sha7>; <command> → pass)
 Task <N>: escalated inline -> subagent — <trigger>          (written by inline mode only)
 Task <N>: minor (deferred): <one-liner>
 Task <N>: parked — <finding> — Ruling: <why the code stands>
@@ -287,7 +299,7 @@ Task <N>: BLOCKED — <agent> exhausted — <what a human must decide>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
-Task <N>: complete (commits a..b, review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
+Task <N>: complete (commits a..b[; merged <sha7>], review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
 Final fix: implementer <agent> (assigned; base <sha7>)
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
@@ -297,6 +309,9 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   tasks reviewed as a batch. Batches are contiguous task ranges so
   `Group <a>-<b>` names them; only a batch's review rounds log on its Group
   line.
+- `Wave` lines and the `wave` and `merged` fields belong to parallel waves
+  ([parallel-waves.md](../../reference/parallel-waves.md)); a sequential plan
+  never writes them.
 - The scores clause is present whenever a review seat, Codex or judge, scored the task.
 - The checkpoint after the `—` comes from the report's
   `## Discovered issues (not fixed)` and `## Assumptions made` sections — the
@@ -321,6 +336,7 @@ Then:
 | `review round R/5` on a `Group` line, R < 5 | Resume the batch's loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
 | `review round 5/5` on a `Group` line | Go to the breaker |
 | `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the first rung on the escalation table ranked strictly above both the task's `**Implementer:**` agent and the inline session's rung, the successor of whichever ranks higher ([escalation.md](references/escalation.md) §Escalating out of inline mode) fresh at round 1 of 5, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
+| `implementer <agent> (assigned …; wave <k>)`, or a `fix round R/5` after one | A parallel task: apply [parallel-waves.md](../../reference/parallel-waves.md) §Recovery |
 | `implementer <agent> (assigned …)` or `fix round R/5` | Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 
@@ -464,6 +480,14 @@ before dr-superpowers:handoff.
 For each task, or batch, run [delegated-task.md](../../reference/delegated-task.md):
 dispatch the implementer, handle the report, review the task, the fix loop and
 the complete line. Its contract names what the loop needs from you.
+
+**Parallel waves.** When the header says `**Parallelism:** waves — …`, run
+every wave of more than one task through
+[parallel-waves.md](../../reference/parallel-waves.md): its tasks run at once,
+each in its own worktree, each through the same loop above, and are merged and
+checked together before the next wave starts. A wave of one task, and every
+task of a plan without that line, runs here exactly as above. Batching never
+crosses a wave boundary.
 
 ## Final Review
 

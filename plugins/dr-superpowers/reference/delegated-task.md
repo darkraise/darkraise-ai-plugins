@@ -96,7 +96,9 @@ these steps directly.
 - Record the implementer's agent identity from the dispatch result — fix
   rounds 1-3 may resume it — and write the assigned line:
   `Task <N>: implementer <agent> (assigned; base <sha7>)`.
-- Never dispatch multiple implementation subagents in parallel (conflicts).
+- Never dispatch multiple implementation subagents in parallel (conflicts),
+  except the tasks of one parallel wave, each in its own worktree
+  ([parallel-waves.md](parallel-waves.md)).
 
 **Dispatch problems are rulings.** Each is said aloud and logged as a
 `Ruling:` line; none falls back silently and none stops the run:

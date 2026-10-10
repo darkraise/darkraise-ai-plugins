@@ -272,12 +272,20 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
-# ctx_line [final] — print the budget line; return 0 ok, 5 handoff, 3 unknown.
-# With final, measure against the final-phase limit instead of the task budget.
+# ctx_line [final | wave W] — print the budget line; return 0 ok, 5 handoff, 3
+# unknown. With final, measure against the final-phase limit instead of the task
+# budget. With wave W, reserve one task's worst growth for each of the W - 1
+# tasks that run beside the first, so a parallel wave that starts under its
+# budget lands before compaction just as one task does
+# (reference/parallel-waves.md).
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
-  local label=budget
+  local label=budget extra=0
   [ "${1:-}" = final ] && label="budget (final)"
+  if [ "${1:-}" = wave ]; then
+    label="budget (wave of ${2:-1})"
+    extra=$(( (${2:-1} - 1) * CTX_TASK_MARGIN ))
+  fi
   if ctx_have_jq; then
     if ctx_find_transcript; then claude=$CTX_TRANSCRIPT; fi
     if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
@@ -312,6 +320,8 @@ ctx_line() {
       *) [ "$DR_SUPERPOWERS_BUDGET" -gt 0 ] && budget=$DR_SUPERPOWERS_BUDGET ;;
     esac
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
+    budget=$(( budget - extra ))
+    [ "$budget" -gt 0 ] || budget=1
   fi
   bk=$(( (budget + 500) / 1000 ))
   if ! ctx_have_jq; then echo "$label: unknown of ${bk}k — unknown — no jq"; return 3; fi

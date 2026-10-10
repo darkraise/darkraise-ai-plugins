@@ -2,10 +2,12 @@
 # Print the running session's context size against the handoff budget as one
 # budget line (see reference/session-budget.md).
 #
-# Usage: context-size [--final | --observations]
+# Usage: context-size [--final | --wave W | --observations]
 # Exit: 0 ok; 5 handoff due; 3 unknown; 2 usage.
 #   --final         measure against the final-phase limit, the check after the
 #                   last task's complete line and before finishing.
+#   --wave W        the check before W parallel tasks start: the task budget
+#                   less one task's worst growth for each task beyond the first.
 #   --observations  print the per-task growth recorded on Codex hosts
 #                   (reference/session-budget.md) and exit 0.
 set -uo pipefail
@@ -15,15 +17,19 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 if [ "${1:-}" = --observations ]; then
   shift
-  [ $# -eq 0 ] || { echo "usage: context-size [--final | --observations]" >&2; exit 2; }
+  [ $# -eq 0 ] || { echo "usage: context-size [--final | --wave W | --observations]" >&2; exit 2; }
   ctx_observations
   exit 0
 fi
-mode=
-if [ "${1:-}" = --final ]; then mode=final; shift; fi
-[ $# -eq 0 ] || { echo "usage: context-size [--final | --observations]" >&2; exit 2; }
+mode=()
+if [ "${1:-}" = --final ]; then mode=(final); shift
+elif [ "${1:-}" = --wave ]; then
+  [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "usage: context-size [--final | --wave W | --observations]" >&2; exit 2; }
+  mode=(wave "$2"); shift 2
+fi
+[ $# -eq 0 ] || { echo "usage: context-size [--final | --wave W | --observations]" >&2; exit 2; }
 
-ctx_line $mode
+ctx_line "${mode[@]}"
 status=$?
 if [ "${CTX_SOURCE:-}" = guessed ]; then
   echo "context-size: no usable session record; measured the newest transcript for this directory — a guess" >&2
