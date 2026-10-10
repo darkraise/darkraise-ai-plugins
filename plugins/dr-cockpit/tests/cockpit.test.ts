@@ -51,7 +51,7 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/notify'
-import { avatarSvg, meterSvg, paint, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/svg'
+import { avatarSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -443,7 +443,10 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      expect(await ui.find({ type: 'Text', text: /● impl-sonnet-low Task 3/ })).toBeDefined()
+      if (surface === 'desktop') {
+        expect(await ui.find({ type: 'Text', text: 'impl-sonnet-low' })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: 'Task 3' })).toBeDefined()
+      } else expect(await ui.find({ type: 'Text', text: /● impl-sonnet-low Task 3/ })).toBeDefined()
       await ui.unmount()
     }
     await $.turn.complete({
@@ -463,8 +466,12 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      expect(await ui.find({ type: 'Text', text: /40k in · 75% cached · 3k out/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low Task 3/ })).toBeDefined()
+      if (surface === 'desktop') {
+        expect(JSON.stringify(await ui.drawn())).toContain('"alt":"impl-sonnet-low: 40k input tokens, 75% cached, 3k output"')
+      } else {
+        expect(await ui.find({ type: 'Text', text: /40k in · 75% cached · 3k out/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low Task 3/ })).toBeDefined()
+      }
       await ui.unmount()
     }
   })
@@ -481,15 +488,24 @@ describe('cockpit pane', () => {
     })
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
-      expect(await ui.find({ type: 'Text', text: /61%/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
+      const drawn = JSON.stringify(await ui.drawn())
       expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /\$1\.50/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /~1 changed \?1 untracked/ })).toBeDefined()
       expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
-      // Rows sit two cells in under their section, details two more.
-      expect(JSON.stringify(await ui.drawn())).toContain('"paddingLeft":2')
+      if (surface === 'desktop') {
+        // The desktop names the figures in its drawings and sets the repo's facts in chips.
+        expect(drawn).toContain('"alt":"61% of the handoff budget"')
+        expect(drawn).toContain('"alt":"284k of 650k tokens, handoff at 465k"')
+        expect(await ui.find({ type: 'Text', text: '~1 changed' })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: '?1 untracked' })).toBeDefined()
+      } else {
+        expect(await ui.find({ type: 'Text', text: /61%/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /~1 changed \?1 untracked/ })).toBeDefined()
+        // Rows sit two cells in under their section, details two more.
+        expect(drawn).toContain('"paddingLeft":2')
+      }
       await ui.unmount()
     }
   })
@@ -810,6 +826,19 @@ describe('desktop', () => {
     expect(segments).toContain('#4f7cff')
     expect(segments).toContain('#e5534b')
     expect(avatarSvg('<me>', undefined)).toContain('>&#60;</text>')
+    expect(statSvg('68%', 'of handoff budget', 200, 'success')).toContain('fill="#3fb36b">68%</text>')
+    const named = labelledMeterSvg(0.4, 300, 'cyan', [{ at: 0.6 }], [
+      { at: 0, text: '412k / 1.0M' },
+      { at: 0.6, text: 'handoff 604k' },
+      { at: 0.62, text: 'compacts 620k' },
+    ])
+    expect(named).toContain('text-anchor="start"')
+    expect(named).toContain('>handoff 604k</text>')
+    expect(named).not.toContain('compacts 620k')
+    expect(trendSvg([1, 3], 100, 'cyan', 40, { top: '+2k', bottom: '2 turns' })).toContain('>+2k</text>')
+    const seat = seatSvg('impl ×1', '120k in · 7k out', 0.5, 0.8, 200, 'magenta')
+    expect(seat).toContain('fill-opacity="0.45"')
+    expect(seat).toContain('>impl ×1</text>')
   })
 
   test('draws the cards with vectors and native buttons on desktop alone', async ($, on) => {
@@ -823,9 +852,11 @@ describe('desktop', () => {
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
     const drawn = JSON.stringify(await desk.drawn())
     expect(drawn).toContain('"alt":"160k of 650k tokens, handoff at 465k"')
-    expect(drawn).toContain('"alt":"Context over the last 2 readings"')
+    expect(drawn).toContain('"alt":"Context over the last 2 readings, +60k on the last"')
     expect(drawn).toContain('"alt":"5h limit 23% used"')
-    expect(await desk.find({ type: 'Text', text: /^trend \+60k$/ })).toBeDefined()
+    expect(drawn).toContain('"alt":"34% of the handoff budget"')
+    expect(drawn).toContain('handoff 465k')
+    expect(await desk.find({ type: 'Text', text: /trend/ })).toBeUndefined()
     expect(await desk.find({ type: 'Text', text: '▁█' })).toBeUndefined()
     expect(await desk.find({ key: 'pane-compact' })).toBeDefined()
     expect(await desk.find({ key: 'pane-compact-box' })).toBeUndefined()
