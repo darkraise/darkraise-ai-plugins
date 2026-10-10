@@ -38,6 +38,17 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
       fi
     fi
   fi
+  # Background work dies with the process, so a launch made before a startup or
+  # resume never sends its notification. scripts/turn-end.sh counts only the
+  # launches after this time as running.
+  case "$source_event" in
+    startup | resume)
+      if [ -n "$session_id" ] && mkdir -p "${HOME:-}/.claude/dr-superpowers/sessions/turns" 2>/dev/null; then
+        date -u +%Y-%m-%dT%H:%M:%S.000Z \
+          > "${HOME:-}/.claude/dr-superpowers/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').since" 2>/dev/null || true
+      fi
+      ;;
+  esac
 fi
 
 content="$(cat "${PLUGIN_ROOT}/skills/using-superpowers/SKILL.md" 2>/dev/null || true)"
