@@ -906,7 +906,7 @@ export const register: Register = (on, options) => {
     const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) =>
       isDesktop ? (
         // A quiet panel, the section's color on its lamp alone.
-        <Box key={key} flexDirection="column" borderStyle="round" borderColor="inactive" backgroundColor={CARD} paddingX={1}>
+        <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
           <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
             <Text>
               <Text color={color}>● </Text>
@@ -1188,10 +1188,14 @@ export const register: Register = (on, options) => {
                   <Text bold>{label}</Text>
                 </Text>
                 {(task.round !== null || task.seat !== null) && (
-                  <Text dimColor wrap="truncate-end">
-                    {'  '}
-                    {[task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')}
-                  </Text>
+                  // The desktop sets the details under the title by padding, as
+                  // it may fold a run of spaces.
+                  <Box key={`plan-${task.n}-meta`} paddingLeft={isDesktop ? INDENT : 0}>
+                    <Text dimColor wrap="truncate-end">
+                      {isDesktop ? '' : '  '}
+                      {[task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')}
+                    </Text>
+                  </Box>
                 )}
               </Box>
             )
@@ -1634,8 +1638,23 @@ export const register: Register = (on, options) => {
       // The flight deck: the account, what Claude is doing, then gauges for
       // the context and the two usage windows, then a panel per section.
       const gaugeSize = (isLarge: boolean) => Math.round(Math.max(isLarge ? 96 : 68, Math.min(isLarge ? 150 : 110, px * (isLarge ? 0.36 : 0.26))))
+      const gauged = GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind))
+      // With all three up the context tile takes the larger share, as in the
+      // preview; with fewer each one grows to fill the row.
+      const isFullDeck = head !== null && gauged.length === GAUGED.length
       const gauge = (key: string, source: string, alt: string, label: string, ...under: RenderChildren[]) => (
-        <Box key={key} flexDirection="column" alignItems="center" flexGrow={1} flexShrink={1} borderStyle="round" borderColor="inactive" backgroundColor={CARD} paddingX={1}>
+        <Box
+          key={key}
+          flexDirection="column"
+          alignItems="center"
+          width={isFullDeck ? (key === 'gauge-context' ? '38%' : '31%') : undefined}
+          flexGrow={isFullDeck ? 0 : 1}
+          flexShrink={1}
+          borderStyle="round"
+          borderColor="subtle"
+          backgroundColor={CARD}
+          paddingX={1}
+        >
           {picture(`${key}-dial`, source, alt)}
           <Text bold dimColor>
             {label}
@@ -1643,7 +1662,6 @@ export const register: Register = (on, options) => {
           {under}
         </Box>
       )
-      const gauged = GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind))
       const gauges = (head !== null || gauged.length > 0) && (
         <Box key="gauges" flexDirection="row" columnGap={1}>
           {head !== null &&
@@ -1684,7 +1702,7 @@ export const register: Register = (on, options) => {
         </Box>
       )
       return (
-        <Box flexDirection="column">
+        <Box flexDirection="column" rowGap={1}>
           {shown.includes('account') && byName.account}
           <Text key="now" wrap="truncate-end">
             {drawRuns('now', nowLine(actNow, now))}

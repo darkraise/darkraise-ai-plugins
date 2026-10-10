@@ -1502,8 +1502,12 @@ describe('flight deck', () => {
     expect(await ui.find({ type: 'Text', text: /^on pace$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^out in / })).toBeDefined()
     // Panels sit on a soft fill; chips are filled pills.
-    expect(drawn).toContain('"key":"usage","flexDirection":"column","borderStyle":"round","borderColor":"inactive","backgroundColor":"#8080800f"')
+    expect(drawn).toContain('"key":"usage","flexDirection":"column","borderStyle":"round","borderColor":"subtle","backgroundColor":"#8080800f"')
     expect(drawn).toContain('"key":"account-model","backgroundColor":"#80808024"')
+    // A row between panels; the context tile is the widest of the three.
+    expect(drawn).toStartWith('{"type":"Box","props":{"flexDirection":"column","rowGap":1}')
+    expect(drawn).toContain('"key":"gauge-context","flexDirection":"column","alignItems":"center","width":"38%"')
+    expect(drawn).toContain('"key":"plan-4-meta","paddingLeft":2')
     expect(await ui.find({ type: 'Text', text: /^config / })).toBeDefined()
     // Usage leaves the windows to their gauges and says what the ticks mean.
     expect(await ui.find({ type: 'Text', text: "The gauges' ticks mark how far each window has run: 27% of 5h, 49% of 7d." })).toBeDefined()
