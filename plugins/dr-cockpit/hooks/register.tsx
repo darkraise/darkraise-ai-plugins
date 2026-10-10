@@ -328,16 +328,16 @@ export const register: Register = (on, options) => {
     return left
   }).catch(($, e, next) => next(e))
 
-  // A background shell's end arrives as its task notification.
-  on('prompt.submit', async ($, e, next) => {
-    if (e.origin.kind === 'task-notification') {
-      const ended = new Set(tasksEnded(e.text).map(one => one.id))
-      if (ended.size > 0) {
-        await update($, shells, list => list.filter(one => !ended.has(one.id)))
-        await syncTicker($)
-      }
+  // A background shell's end arrives as its task notification, kept as a row
+  // of the loop that started it: the main conversation's, or a subagent's,
+  // which no prompt.submit announces.
+  on('session.append', async ($, e, next) => {
+    const kept = await next(e)
+    if (e.message.role === 'user') {
+      const text = e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
+      if (text.includes('<task-notification>')) await endShells($, text)
     }
-    return next(e)
+    return kept
   }).catch(($, e, next) => next(e))
 
   // A main turn begins: the Now row starts its clock.
@@ -1949,6 +1949,14 @@ async function readVersion($: EngineInterface) {
 function clip(text: string, width: number): string {
   const chars = [...text]
   return chars.length <= width ? text : chars.slice(0, width - 1).join('') + '…'
+}
+
+// The shells a task notification says ended leave the card.
+async function endShells($: EngineInterface, text: string) {
+  const ended = new Set(tasksEnded(text).map(one => one.id))
+  if (ended.size === 0 || !(await read($, shells)).some(one => ended.has(one.id))) return
+  await update($, shells, list => list.filter(one => !ended.has(one.id)))
+  await syncTicker($)
 }
 
 async function trackShells($: EngineInterface, tool: string, e: object, result: unknown) {
