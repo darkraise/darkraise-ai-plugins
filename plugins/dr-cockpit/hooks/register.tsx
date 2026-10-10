@@ -885,7 +885,8 @@ export const register: Register = (on, options) => {
 
     // Each section is a card: a rounded frame in its own color, its title and
     // headline on the first line, its rows below, and a row's details two cells in.
-    const inner = Math.max(20, room - 4)
+    // A desktop panel's frame and padding take six cells, a terminal card's four.
+    const inner = Math.max(20, room - (isDesktop ? 6 : 4))
     const wide = Math.max(10, inner - 2 * INDENT)
     const px = svgWidth(inner)
     const picture = (key: string, source: string, alt: string) => Svg !== undefined && <Svg key={key} source={source} alt={alt} />
@@ -906,7 +907,9 @@ export const register: Register = (on, options) => {
     const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) =>
       isDesktop ? (
         // A quiet panel, the section's color on its lamp alone.
-        <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
+        // Padded a line above and below and two cells either side, the
+        // nearest the desktop's whole-cell spacing comes to the preview's.
+        <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={2} paddingY={1}>
           <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
             <Text>
               <Text color={color}>● </Text>

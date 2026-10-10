@@ -1502,7 +1502,7 @@ describe('flight deck', () => {
     expect(await ui.find({ type: 'Text', text: /^on pace$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^out in / })).toBeDefined()
     // Panels sit on a soft fill; chips are filled pills.
-    expect(drawn).toContain('"key":"usage","flexDirection":"column","borderStyle":"round","borderColor":"subtle","backgroundColor":"#8080800f"')
+    expect(drawn).toContain('"key":"usage","flexDirection":"column","borderStyle":"round","borderColor":"subtle","backgroundColor":"#8080800f","paddingX":2,"paddingY":1')
     expect(drawn).toContain('"key":"account-model","backgroundColor":"#80808024"')
     // A row between panels; the context tile is the widest of the three.
     expect(drawn).toStartWith('{"type":"Box","props":{"flexDirection":"column","rowGap":1}')
