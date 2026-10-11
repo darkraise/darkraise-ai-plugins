@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, dirname, isAbsolute } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const names = ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-forge', 'dr-status'];
 const claudeOnly = ['dr-status'];
@@ -119,8 +119,37 @@ export function validateRepository(root) {
   return errors;
 }
 
+const GROUPS = ['Cockpit', 'Context', 'Notifications', 'Workflow'];
+
+export async function validateSchema(root) {
+  const rel = 'plugins/dr-forge/config/schema.mjs';
+  let schema;
+  try { schema = (await import(pathToFileURL(resolve(root, rel)).href)).default; }
+  catch (error) { return [`${rel}: ${error.message}`]; }
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return [`${rel}: must default-export an object`];
+  const errors = [];
+  for (const [key, spec] of Object.entries(schema)) {
+    const at = `schema ${key}`;
+    if (key === 'darkmem') { errors.push(`${at}: the key is reserved for the darkmem mapping`); continue; }
+    if (!['boolean', 'number', 'enum', 'string'].includes(spec?.type)) { errors.push(`${at}: type must be boolean, number, enum or string`); continue; }
+    if (!GROUPS.includes(spec.group)) errors.push(`${at}: group must be one of ${GROUPS.join(', ')}`);
+    if (typeof spec.title !== 'string' || !spec.title) errors.push(`${at}: title is required`);
+    if (typeof spec.description !== 'string' || !spec.description) errors.push(`${at}: description is required`);
+    if (!['forge', 'claude'].includes(spec.target)) errors.push(`${at}: target must be forge or claude`);
+    if (spec.env !== undefined && !/^[A-Z][A-Z0-9_]*$/.test(spec.env)) errors.push(`${at}: env must name an environment variable`);
+    if (spec.step !== undefined && !(typeof spec.step === 'number' && spec.step > 0)) errors.push(`${at}: step must be a positive number`);
+    const fits = spec.type === 'boolean' ? typeof spec.default === 'boolean'
+      : spec.type === 'number' ? Number.isFinite(spec.default) && (spec.min === undefined || (Number.isFinite(spec.min) && spec.default >= spec.min)) && (spec.max === undefined || (Number.isFinite(spec.max) && spec.default <= spec.max))
+      : spec.type === 'enum' ? Array.isArray(spec.values) && spec.values.length > 0 && spec.values.includes(spec.default)
+      : typeof spec.default === 'string';
+    if (!fits) errors.push(`${at}: default does not fit its type`);
+  }
+  return errors;
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const errors = validateRepository(process.argv[2] ?? fileURLToPath(new URL('../', import.meta.url)));
+  const root = process.argv[2] ?? fileURLToPath(new URL('../', import.meta.url));
+  const errors = [...validateRepository(root), ...await validateSchema(root)];
   if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
-  else console.log('Repository catalogs, manifests, versions, and bundled links are valid.');
+  else console.log('Repository catalogs, manifests, versions, bundled links and the settings schema are valid.');
 }

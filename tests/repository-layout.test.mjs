@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdtempSync, cpSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { resolve, sep } from 'node:path';
@@ -81,4 +81,23 @@ test('reference check skips template placeholders and resolves agents', async ()
       'subagent_type: dr-forge:impl-<model>-<effort>\nagent dr-forge:judge-fable\nskill dr-forge:writing-plans\n');
     assert.deepEqual(validateRepository(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('the settings schema is valid, and broken schemas are caught', async () => {
+  const { validateSchema } = await import('../scripts/validate-repository.mjs');
+  assert.deepEqual(await validateSchema(root), []);
+  // Each case gets its own directory: Node caches a module by its URL, so a
+  // rewritten file at one path would be imported once.
+  const broken = async text => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'dr-schema-'));
+    try {
+      mkdirSync(resolve(dir, 'plugins/dr-forge/config'), { recursive: true });
+      writeFileSync(resolve(dir, 'plugins/dr-forge/config/schema.mjs'), text);
+      return (await validateSchema(dir)).join('\n');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  };
+  const real = readFileSync(resolve(root, 'plugins/dr-forge/config/schema.mjs'), 'utf8');
+  assert.match(await broken(real.replace("default: 'auto'", "default: 'tiles'")), /schema layout: default does not fit its type/);
+  assert.match(await broken("export default { darkmem: { type: 'string', default: '', group: 'Cockpit', title: 't', description: 'd', target: 'forge' } }\n"), /schema darkmem: the key is reserved/);
+  assert.match(await broken('export default [];\n'), /must default-export an object/);
+  assert.match(await broken("export default { n: { type: 'number', default: Infinity, group: 'Cockpit', title: 't', description: 'd', target: 'forge' } }\n"), /schema n: default does not fit its type/);
 });
