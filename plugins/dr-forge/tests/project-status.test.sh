@@ -169,7 +169,7 @@ for skill_file in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-drive
   present "execution: rows go to doing at the start ($(basename "$(dirname "$skill_file")"))" \
     "$skill_file" "scripts/register set"
 done
-present "README: the register is documented" "$P/README.md" "docs/superpowers/registers/"
+present "README: the register is documented" "$P/README.md" "registers/"
 present "README: the states are documented" "$P/README.md" \
   "open, planned, doing, verify, done, deferred, n/a"
 
