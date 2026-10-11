@@ -445,10 +445,10 @@ export function splitAtBlankLines(text) {
   return text.split(/(?<=\n\r?\n)/).filter(piece => piece.length > 0);
 }
 
-// The darkmem uri a path names: what follows its `superpowers/` segment, so a
-// repository path (`docs/superpowers/plans/x.md`) and a mirror path both map.
+// The darkmem uri a path names: what follows its `superpowers/` segment (a
+// pre-2.0 repository path or a mirror path) or its `docs/forge/` segment.
 export function pathToUri(file) {
-  const match = String(file).replace(/\\/g, "/").match(/(?:^|\/)superpowers\/(.+)$/);
+  const match = String(file).replace(/\\/g, "/").match(/(?:^|\/)(?:superpowers|docs\/forge)\/(.+)$/);
   return match ? `${DOC_PREFIX}/${match[1]}` : null;
 }
 

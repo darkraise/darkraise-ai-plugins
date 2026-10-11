@@ -1,7 +1,8 @@
-// dr-forge's darkmem mode for one repository (darkmem mirror spec §1):
-// the mapping in ~/.dr-superpowers/config.json, the API key from the
-// environment variable the file names, the mirror's two roots, and the run key
-// a sync declares. No mapping, or no key, is local mode.
+// dr-forge's darkmem mode for one repository (darkmem mirror spec §1): the
+// mapping in ~/.dr-forge/config.json (the pre-2.0 ~/.dr-superpowers/config.json
+// until the new file exists), the API key from the environment variable the
+// file names, the mirror's two roots, and the run key a sync declares. No
+// mapping, or no key, is local mode.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -16,8 +17,25 @@ function homeOf(env) {
   return env.HOME || os.homedir();
 }
 
-export function superpowersHome(env = process.env) {
+export function forgeHome(env = process.env) {
+  return path.join(homeOf(env), ".dr-forge");
+}
+
+function legacyHome(env) {
   return path.join(homeOf(env), ".dr-superpowers");
+}
+
+// The new path, unless it does not exist and the pre-2.0 one does.
+export function preferNew(next, old) {
+  return !fs.existsSync(next) && fs.existsSync(old) ? old : next;
+}
+
+// A repository's dr-forge directory: docs/forge/ or .forge/, or the pre-2.0
+// docs/superpowers/ or .superpowers/ where only that exists.
+export function forgeDir(kind, root) {
+  return kind === "docs"
+    ? preferNew(path.join(root, "docs", "forge"), path.join(root, "docs", "superpowers"))
+    : preferNew(path.join(root, ".forge"), path.join(root, ".superpowers"));
 }
 
 function git(cwd, args) {
@@ -44,11 +62,11 @@ export function resolveMode({ cwd = process.cwd(), env = process.env } = {}) {
     mode: "local",
     reason,
     repoRoot,
-    docsRoot: repoRoot ? path.join(repoRoot, "docs", "superpowers") : null,
-    workRoot: repoRoot ? path.join(repoRoot, ".superpowers") : null,
+    docsRoot: repoRoot ? forgeDir("docs", repoRoot) : null,
+    workRoot: repoRoot ? forgeDir("state", repoRoot) : null,
   });
   if (!repoRoot) return local("not inside a git repository");
-  const file = path.join(superpowersHome(env), "config.json");
+  const file = preferNew(path.join(forgeHome(env), "config.json"), path.join(legacyHome(env), "config.json"));
   if (!fs.existsSync(file)) return local(`no ${file}`);
   let config;
   try {
@@ -74,7 +92,7 @@ export function resolveMode({ cwd = process.cwd(), env = process.env } = {}) {
   }
   const apiKey = env[keyEnv];
   if (!apiKey) return local(`${keyEnv} is not set`);
-  const mirror = path.join(superpowersHome(env), "mirror", project);
+  const mirror = preferNew(path.join(forgeHome(env), "mirror", project), path.join(legacyHome(env), "mirror", project));
   return {
     mode: "darkmem",
     reason: `project ${project}`,

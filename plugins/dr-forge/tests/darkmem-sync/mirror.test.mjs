@@ -76,6 +76,8 @@ test("paths name their uris; plans and drafts name their properties; a handoff n
   const { roots } = mirror();
   assert.equal(pathToUri("docs/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
   assert.equal(pathToUri("/home/u/.dr-superpowers/mirror/p/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
+  assert.equal(pathToUri("docs/forge/plans/p1.md"), "superpowers/plans/p1.md");
+  assert.equal(pathToUri("/r/docs/forge/specs/s.md"), "superpowers/specs/s.md");
   assert.equal(pathToUri("/repo/.superpowers/sdd/p1/progress.md"), null);
   assert.equal(ledgerPlanPath("# SDD ledger — plan: docs/superpowers/plans/p1.md\nTask 1: x\n"), "docs/superpowers/plans/p1.md");
   assert.equal(ledgerPlanPath("Task 1: x\n"), null);

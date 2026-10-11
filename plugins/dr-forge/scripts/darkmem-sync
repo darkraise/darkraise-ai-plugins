@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Keep this repository's dr-forge documents and progress in darkmem.
 #
-# A repository mapped in ~/.dr-superpowers/config.json, with the API key in the
-# environment variable that file names, syncs a mirror at
-# ~/.dr-superpowers/mirror/<project>/: superpowers/ (specs, plans, registers,
-# notes), work/sdd/<plan>/{progress.md,handoff.md}, work/handoff/latest.md.
+# A repository mapped in ~/.dr-forge/config.json (~/.dr-superpowers/ before 2.0),
+# with the API key in the environment variable that file names, syncs a mirror
+# at ~/.dr-forge/mirror/<project>/ (~/.dr-superpowers/ before 2.0): superpowers/
+# (specs, plans, registers, notes), work/sdd/<plan>/{progress.md,handoff.md},
+# work/handoff/latest.md.
 # Anything else is local mode: every command except import prints one line
 # and does nothing.
 #
