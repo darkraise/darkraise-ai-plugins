@@ -29,7 +29,7 @@ present "every entry carries Source" "$SKILL" 'Source:'
 
 # The three eligibility conditions. Each one closes a path by which a fact
 # could be destroyed with no way back.
-present "eligible paths are notes and findings" "$SKILL" 'docs/superpowers/findings/'
+present "eligible paths are notes and findings" "$SKILL" '<docs>/findings/'
 present "eligible is markdown only" "$SKILL" 'Markdown files (`*.md`) under'
 present "condition: tracked" "$SKILL" 'git ls-files --error-unmatch'
 present "condition: clean" "$SKILL" 'git status --porcelain'

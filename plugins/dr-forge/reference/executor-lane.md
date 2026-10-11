@@ -36,7 +36,7 @@ ask nothing, run no roster, and write the plan Claude-only, saying
 bash "<plugin-root>/scripts/detect-executors.sh"
 ```
 
-Read `docs/superpowers/distilled/constraints.md` first, when the project has
+Read `<docs>/distilled/constraints.md` first, when the project has
 one. If a constraint there declares an executor's lane on and the roster reports
 that executor `usable`, tick it without asking and say so in one line; the
 question below then covers only the other executors. An absent file is not an
@@ -181,7 +181,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    requires a clean initial index and worktree, stores authoritative artifacts
    under that worktree's Git directory, and stages only its verified scoped diff.
    Human-readable reports belong outside the checkout or in its ignored
-   `.superpowers` workspace. An unignored report path is rejected.
+   `<state>` workspace. An unignored report path is rejected.
    The `**Executor:**` line writes the rung as `<id> <model> / <effort>`; the
    wrapper takes the two as separate flags. The timeout comes from that
    executor's timeout block in [ladder.md](ladder.md), keyed by

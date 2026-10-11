@@ -1,6 +1,6 @@
 ---
 name: running-gates
-description: Use before the final whole-branch review or before merging, when the project declares gates in docs/superpowers/gates.md - runs the applicable gates in order and stops at the first red
+description: Use before the final whole-branch review or before merging, when the project declares gates in <docs>/gates.md - runs the applicable gates in order and stops at the first red
 ---
 
 # Running Gates
@@ -8,7 +8,7 @@ description: Use before the final whole-branch review or before merging, when th
 **Announce at start:** "I'm using the running-gates skill to run this project's declared gates."
 
 A project declares what proves a change works, in order, in
-`docs/superpowers/gates.md`. This skill reads that manifest and runs it. Gates
+`<docs>/gates.md`. This skill reads that manifest and runs it. Gates
 are **branch level**: they are reached from dr-forge:finishing-a-development-branch
 and from [final-review.md](../../reference/final-review.md), never from inside a
 per-task loop, where a five-gate manifest would cost more than the plan. See
@@ -70,7 +70,7 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
 
 ## Steps
 
-1. **Locate the manifest** at `<repo root>/docs/superpowers/gates.md`. Absent:
+1. **Locate the manifest** at `<repo root>/<docs>/gates.md`. Absent:
    say so, offer the bootstrap below, and fall back to the project's full test
    suite for this run. A missing manifest is not an error.
 2. **Compute the base and the change set.** Determine the base yourself — the

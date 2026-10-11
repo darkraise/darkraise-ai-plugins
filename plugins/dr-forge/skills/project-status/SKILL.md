@@ -21,20 +21,20 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
    task's last line is `BLOCKED`, name the plan and the task reached and route
    to dr-forge:resume-execution. Stop there: this skill orients a session
    with no thread to pick up, and never duplicates the resume path.
-3. **Classify each plan.** A file under `docs/superpowers/plans/` is a plan when
+3. **Classify each plan.** A file under `<docs>/plans/` is a plan when
    it has at least one `Task N` heading outside a fenced block — what
    `plan_tasks` in `scripts/lib/plan.sh` extracts, and the test `scripts/next-step`
    applies when it fails with "no tasks".
    Do **not** use the `**Execution:**` header as the discriminator:
    `plan-lint` requires it, but only plans written since 1.4.0 have one, so it
    would hide most plans. Then, in order:
-   - **In flight** — `<worktree>/.superpowers/sdd/<basename minus .md>/progress.md`
+   - **In flight** — `<worktree>/<state>/sdd/<basename minus .md>/progress.md`
      exists with incomplete tasks, checked under every worktree the audit lists,
      because a ledger lives in the worktree executing it. Compute that path
      directly; never call `scripts/sdd-workspace`, which creates the directory.
      A plan whose tasks are all complete but which is not yet indexed as merged
      is also in flight — a review or an integration is still ahead of it.
-   - **Complete** — listed in `docs/superpowers/plans/completed.md`. That index
+   - **Complete** — listed in `<docs>/plans/completed.md`. That index
      answers whether the branch landed, not whether the work is finished: an
      item register answers that. A ledger showing every task complete is not a
      completion signal either — the work may be unmerged.
@@ -54,14 +54,14 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
    check and rule 3 call every branch unmerged. Say which you used, since unlike
    finishing-a-development-branch you have no plan, conversation or upstream to
    derive it from.
-6. **Read the open constraints.** When `docs/superpowers/distilled/constraints.md`
+6. **Read the open constraints.** When `<docs>/distilled/constraints.md`
    exists, take the entries whose scope covers the current work.
-7. **Read the item registers.** Every `docs/superpowers/registers/*.md` the
+7. **Read the item registers.** Every `<docs>/registers/*.md` the
    audit lists. Unresolved rows — `open`, `planned`, `doing`, `verify` — are
    open work whatever the plans say, and a register whose `**Covers:**` is `-`
    is a list that arrived before anything was designed, which is open work too.
    Never report work complete while a covering register has an unresolved row.
-8. **Read the roadmap.** When `docs/superpowers/roadmap.md` exists, run
+8. **Read the roadmap.** When `<docs>/roadmap.md` exists, run
    `scripts/roadmap status`. It is read-only. A milestone is finished only when
    it reads `closed`; never infer it from merged plans.
 9. **Report** the shape below, then stop. There is no memory-store step: every

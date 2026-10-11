@@ -27,13 +27,13 @@ product spec and `scripts/roadmap check` reports `0 errors`.
   billing and analytics"). dr-forge:brainstorming's scope check sends
   these here instead of decomposing them in prose.
 
-A project that already has `docs/superpowers/roadmap.md` does not come here:
+A project that already has `<docs>/roadmap.md` does not come here:
 the roadmap exists, and new work is an epic row (see Changing the roadmap).
 
 ## Steps
 
 1. **Orient.** Run `scripts/repo-audit`. Read
-   `docs/superpowers/distilled/constraints.md` and `rejected.md` when present.
+   `<docs>/distilled/constraints.md` and `rejected.md` when present.
 2. **Discovery interview (M0).** One question per message, multiple choice when
    possible, as in brainstorming. Cover, in order: the problem and who has it;
    the users and their top tasks; what success looks like, measurably; the
@@ -49,19 +49,19 @@ the roadmap exists, and new work is an epic row (see Changing the roadmap).
    feature milestones, Hardening, Release. Propose it; your human partner edits
    it.
 5. **Write the product spec** to
-   `docs/superpowers/specs/YYYY-MM-DD-<product>-design.md`: problem, users,
+   `<docs>/specs/YYYY-MM-DD-<product>-design.md`: problem, users,
    success measures, non-goals, constraints, the requirement list, the epics
    (each naming its requirements by number), the milestones with their exit
    criteria, and the architecture direction known so far.
 6. **Write one register per milestone** at
-   `docs/superpowers/registers/YYYY-MM-DD-m<n>-<slug>.md`, with
+   `<docs>/registers/YYYY-MM-DD-m<n>-<slug>.md`, with
    `**Source:** roadmap` and `**Covers:**` the product spec. Add each epic as a
    row with `scripts/register add <file> "<epic title>" --assigned "<epic title>"
    --acceptance "<the requirement numbers it carries>"`. The label in Assigned
    is replaced by the epic's spec path once that spec exists. M0's rows are the
    discovery deliverables (brief, requirements, non-goals approved) and M1's
    include the walking skeleton, CI and `gates.md`.
-7. **Write `docs/superpowers/roadmap.md`** from the template, one table row per
+7. **Write `<docs>/roadmap.md`** from the template, one table row per
    milestone, every one `open`. Run `scripts/roadmap check` until it reports
    `0 errors`, and `scripts/roadmap status`.
 8. **Review.** Self-review once, inline: every requirement is in exactly one

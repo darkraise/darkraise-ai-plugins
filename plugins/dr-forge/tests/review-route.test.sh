@@ -403,7 +403,7 @@ EXEC="$P/reference/executor-lane.md"
 LAD="$P/reference/ladder.md"
 present "the lane reference has the task seats section" "$EXEC" '## Codex task review seats'
 absent "the lane reference drops the risk-3 seat section" "$EXEC" '## Risk-3 Codex seat'
-present "planning reads the distilled constraints" "$EXEC" 'Read `docs/superpowers/distilled/constraints.md` first'
+present "planning reads the distilled constraints" "$EXEC" 'Read `<docs>/distilled/constraints.md` first'
 present "a declared lane is ticked without asking" "$EXEC" 'tick it without asking'
 present "an executor task routes to a Claude judge" "$EXEC" 'always routes to a Claude judge'
 absent "the final round no longer cites the risk-3 seat" "$EXEC" 'Unlike the risk-3 seat'

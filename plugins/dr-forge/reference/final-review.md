@@ -25,7 +25,7 @@ the branch started from, for example `git merge-base main HEAD`) and include the
 printed path in each dispatch, so a reviewer reads one file instead of
 re-deriving the branch diff with git commands.
 
-0. **Gates.** When the project declares `docs/superpowers/gates.md`, run
+0. **Gates.** When the project declares `<docs>/gates.md`, run
    dr-forge:running-gates before dispatching any reviewer. A red gate stops
    the review, and so does a manifest defect: reviewing a branch that does not
    build, or whose suites fail, spends both reviewer seats on findings the gate

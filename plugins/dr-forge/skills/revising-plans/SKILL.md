@@ -22,7 +22,7 @@ carries `Host: codex` with exit 2, and the survey lists one as
 
 ## Survey first, when you do not know which plan
 
-`bash <plugin-root>/scripts/plan-revise --survey docs/superpowers/plans` prints
+`bash <plugin-root>/scripts/plan-revise --survey <docs>/plans` prints
 one row per plan: its task count, how many units score, how many are eligible,
 and its liveness evidence. It writes nothing. Report the rows and stop — which
 plan is worth revising is your human partner's call, not yours.
@@ -70,7 +70,7 @@ the scores, so scoring cannot follow the executor question.
    as far as the split requires. A task needing more than that needs re-planning,
    not revision — say so and stop.
    Scoring precedes the executor question.
-4. **Read the project's constraints.** `docs/superpowers/distilled/constraints.md`
+4. **Read the project's constraints.** `<docs>/distilled/constraints.md`
    when the project has one. An absent file is not an error.
 5. **Gate each executor, then run the roster.** Enumerate with
    `bash <plugin-root>/scripts/executors list`. For each id, run its gate:

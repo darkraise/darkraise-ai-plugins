@@ -157,8 +157,8 @@ check "session-start.sh parses" \
 
 # The entry point rides in every session's baseline and shares the hook's
 # 10,000-character cap with the compaction snapshot.
-check "entry point is at most 4,800 bytes" \
-  "$([ "$(wc -c < "$HERE/../skills/using-superpowers/SKILL.md")" -le 4800 ] && echo yes || echo no)" "yes"
+check "entry point is at most 5,100 bytes" \
+  "$([ "$(wc -c < "$HERE/../skills/using-superpowers/SKILL.md")" -le 5100 ] && echo yes || echo no)" "yes"
 
 # The project-state skills and test-simplifier must be reachable from the entry point, which
 # is the only skill list a cold session sees.

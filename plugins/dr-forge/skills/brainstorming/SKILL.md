@@ -104,7 +104,7 @@ your path and complete them in order.
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Ask the execution strategy** — parallel subagent waves or sequential execution, one question (see Choosing the execution strategy)
 6. **Present design** — in sections scaled to their complexity, get user approval after each section
-7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+7. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
 8. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
 9. **User reviews written spec** — ask user to review the spec file before proceeding
 10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
@@ -173,21 +173,21 @@ and its self-review is the whole process.
 **Understanding the idea:**
 
 - Check out the current project state first (files, docs, recent commits)
-- Read `docs/superpowers/distilled/constraints.md` and
-  `docs/superpowers/distilled/rejected.md` when the project has them: a
+- Read `<docs>/distilled/constraints.md` and
+  `<docs>/distilled/rejected.md` when the project has them: a
   constraint outranks the spec you are about to write, and a rejected approach
   is the one a fresh design most reliably re-proposes. Neither is an error when
   absent.
 - Run `scripts/register open --spec <any spec this work touches>`, then list
-  `docs/superpowers/registers/` and run `scripts/register open <file>` on every
+  `<docs>/registers/` and run `scripts/register open <file>` on every
   register whose `**Covers:**` is `-`: a list captured before anything was
   designed is named by no spec, so no `--spec` query reaches it. A row deferred
   months ago is a decision this design inherits; a findings file nobody reopens
   is how it was lost before.
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
-- A new product built from scratch, or a request naming several subsystems in a repository with no `docs/superpowers/roadmap.md`, goes to dr-forge:planning-a-product instead: its epics and milestones become register rows before any feature is designed, rather than prose in a program spec.
-- When `docs/superpowers/roadmap.md` exists, this spec is an epic. Find its row with `scripts/roadmap status`, set the row's Assigned cell to this spec's path once the spec is written (`scripts/register set <milestone register> <id> doing --assigned <spec path>`), and open the spec's requirement register below even when the request was one sentence: the roadmap is the list the requirements came from.
+- A new product built from scratch, or a request naming several subsystems in a repository with no `<docs>/roadmap.md`, goes to dr-forge:planning-a-product instead: its epics and milestones become register rows before any feature is designed, rather than prose in a program spec.
+- When `<docs>/roadmap.md` exists, this spec is an epic. Find its row with `scripts/roadmap status`, set the row's Assigned cell to this spec's path once the spec is written (`scripts/register set <milestone register> <id> doing --assigned <spec path>`), and open the spec's requirement register below even when the request was one sentence: the roadmap is the list the requirements came from.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
 - Prefer multiple choice questions when possible, but open-ended is fine too
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
@@ -197,7 +197,7 @@ and its self-review is the whole process.
 
 When a request, a review or a batch arrives carrying two or more distinct items,
 write them down before designing anything. Create
-`docs/superpowers/registers/YYYY-MM-DD-<slug>.md` with a `**Source:**` line
+`<docs>/registers/YYYY-MM-DD-<slug>.md` with a `**Source:**` line
 naming where the items came from, a `**Covers:**` line holding `-` until a spec
 exists, and the table header
 `| # | Item | Assigned | Acceptance | State | Note |` with its `|---|---|---|---|---|---|`
@@ -301,7 +301,7 @@ needs another's output waits for it.
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+- Write the validated design (spec) to `<docs>/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git

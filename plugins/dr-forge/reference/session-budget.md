@@ -65,7 +65,7 @@ count rule below still decides when a Codex session hands off.
 `DR_FORGE_BUDGET` does not apply to a rollout measurement.
 
 Each Codex measurement appends a row to
-`<primary checkout>/.superpowers/sdd/budget-log.tsv`, and
+`<primary checkout>/<state>/sdd/budget-log.tsv`, and
 `scripts/context-size --observations` prints it back as the growth between
 consecutive task briefs within each session, followed by one `span` line per
 session (`<session>  span  40k -> 31k`) — the data a later phase needs to set the

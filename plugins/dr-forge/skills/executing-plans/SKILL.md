@@ -96,7 +96,7 @@ did. Then run `scripts/next-step PLAN_FILE` (see using-superpowers §Session
 Budget) as your last action. The
 last thing in your final message is the block it prints, verbatim. It also
 rewrites the `## Next session` section of the primary checkout's
-`.superpowers/handoff/latest.md`; if it exits 4, say the handoff file could not
+`<state>/handoff/latest.md`; if it exits 4, say the handoff file could not
 be written. When the plan finishes,
 dr-forge:finishing-a-development-branch runs it instead.
 
@@ -120,12 +120,12 @@ file, not only in todos.
 
 - Each plan owns a workspace: run `scripts/sdd-workspace PLAN_FILE`
   (see using-superpowers §Session Budget), and it prints the plan's git-ignored directory
-  (`<repo-root>/.superpowers/sdd/<plan-basename>/`), home to every artifact for
+  (`<repo-root>/<state>/sdd/<plan-basename>/`), home to every artifact for
   THIS plan. Another plan's directory is never yours to read or write.
 - This plan's ledger is `<workspace>/progress.md`. If its first line names your
   plan file, recover each task's state with the Recovery table under The
   Ledger. A ledger whose first line names a different plan - or a stray ledger
-  at the old flat path `.superpowers/sdd/progress.md` - is another plan's
+  at the old flat path `<state>/sdd/progress.md` - is another plan's
   progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
   `# SDD ledger — plan: <plan file path>` — the path exactly as you pass it to
@@ -138,7 +138,7 @@ file, not only in todos.
 - Create `<workspace>/handoff.md` from the template in dr-forge:handoff
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes.
-- Read `docs/superpowers/distilled/constraints.md` when the project has one. Its
+- Read `<docs>/distilled/constraints.md` when the project has one. Its
   entries bind like the owner constraints in `handoff.md` and yield to them
   wherever both speak; an absent file is not an error. See
   [project-state.md](../../reference/project-state.md).

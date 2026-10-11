@@ -1,14 +1,14 @@
 # Project-declared state
 
 A project tells a session three kinds of thing through its repository. Specs and
-plans under `docs/superpowers/` are authored and permanent — the record of what
-was intended. `.superpowers/` is generated, gitignored and disposable — the state
+plans under `<docs>/` are authored and permanent — the record of what
+was intended. `<state>/` is generated, gitignored and disposable — the state
 of a run in flight. This document describes the third kind: small committed
 documents that state facts about the project a session cannot derive from the
 code.
 
 ```
-docs/superpowers/
+<docs>/
   specs/                 authored, permanent, never deleted by a skill
   plans/                 authored, permanent, never deleted by a skill
     completed.md         append-only index of merged plans
@@ -28,14 +28,14 @@ it does without it.
 
 ## The files, by full path
 
-- `docs/superpowers/gates.md`
-- `docs/superpowers/plans/completed.md`
-- `docs/superpowers/registers/*.md`
-- `docs/superpowers/roadmap.md`
-- `docs/superpowers/distilled/constraints.md`
-- `docs/superpowers/distilled/gotchas.md`
-- `docs/superpowers/distilled/reference.md`
-- `docs/superpowers/distilled/rejected.md`
+- `<docs>/gates.md`
+- `<docs>/plans/completed.md`
+- `<docs>/registers/*.md`
+- `<docs>/roadmap.md`
+- `<docs>/distilled/constraints.md`
+- `<docs>/distilled/gotchas.md`
+- `<docs>/distilled/reference.md`
+- `<docs>/distilled/rejected.md`
 
 ## Who writes what
 
@@ -67,6 +67,16 @@ judgment call.
 exception: a human may add an entry that an approved spec's owner decisions
 name, citing that spec as its `Source`. distilling-docs deletes sources under
 its own rules and never touches a spec, a plan, `completed.md`, or anything
-outside `docs/superpowers/notes/` and `docs/superpowers/findings/`. `gates.md`
+outside `<docs>/notes/` and `<docs>/findings/`. `gates.md`
 is edited by a human or by an approved bootstrap, never silently.
 `completed.md` is append-only.
+
+## Where `<state>` and `<docs>` are
+
+`<state>` is `.forge/` and `<docs>` is `docs/forge/`, except in a repository that
+has `.superpowers/` or `docs/superpowers/` and not the new directory: there the
+old one stays in use, for writing as well as reading, so a pre-2.0 checkout never
+splits across both. Every script resolves its paths through
+`scripts/lib/forge-dir.sh`; a skill resolves them with
+`bash <plugin-root>/scripts/forge-path state|docs [RELATIVE]` before it reads or
+writes, never by spelling either path.

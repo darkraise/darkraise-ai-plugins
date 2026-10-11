@@ -17,7 +17,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Context:** If working in an isolated worktree, it should have been created via the `dr-forge:using-git-worktrees` skill at execution time.
 
-**Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
+**Save plans to:** `<docs>/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
 
 ## Scope Check
@@ -87,7 +87,7 @@ Constraints and Contracts.
 `<program spec path>` — sub-project <k> of <n> — next: <title of sub-project
 k+1, copied from the program's decomposition>. On the final sub-project,
 end with `— last` instead of `— next: …`. Omit the line otherwise, and
-always when the spec is an epic on `docs/superpowers/roadmap.md`: the roadmap
+always when the spec is an epic on `<docs>/roadmap.md`: the roadmap
 computes what comes next.]
 
 ## Global Constraints
@@ -470,7 +470,7 @@ If you find issues, fix them inline. If you find a spec requirement with no task
 
 A saved, reviewed plan is a hard stop: execution starts in a fresh session.
 Invoke dr-forge:handoff. It commits the plan and the spec, writes
-`.superpowers/handoff/latest.md`, runs `scripts/next-step PLAN_FILE`, and ends
+`<state>/handoff/latest.md`, runs `scripts/next-step PLAN_FILE`, and ends
 your message with the resume guide — the launch command from the Execution
 line and the first prompt for the skill that line names. Offer no execution
 choice: the Execution line already made it.

@@ -9,7 +9,7 @@ description: Use when a roadmap milestone or project phase looks finished, when 
 
 The session that built a milestone is the worst judge of whether it is
 finished: it remembers what it did, not what was asked. A milestone on
-`docs/superpowers/roadmap.md` is done only when `scripts/roadmap close` has
+`<docs>/roadmap.md` is done only when `scripts/roadmap close` has
 written `closed`, and this skill is the only path to that command.
 
 <HARD-GATE>
@@ -27,7 +27,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    unresolved: report them, route by their Assigned cells as
    dr-forge:project-status does, and stop. `verify` rows are the
    exception: they are built and wait on this audit, so continue with them.
-3. **Gates.** When `docs/superpowers/gates.md` exists, run
+3. **Gates.** When `<docs>/gates.md` exists, run
    dr-forge:running-gates on the integration branch. A red gate stops the
    close. Keep each gate's output; the judge cannot run anything.
 4. **Collect the rows.** Every row of the milestone register, and every row of

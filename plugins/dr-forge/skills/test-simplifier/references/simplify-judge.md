@@ -15,7 +15,7 @@ path it can read or text in the prompt.
 - `[COMMIT]` — the SHA of the wave's commit.
 - `[DIFF]` — the output of `git show [COMMIT]`, in full.
 - `[EVIDENCE]` — either the paths of the before and after mutation reports
-  (saved under `.superpowers/test-simplifier/<wave>/`) with the killed-mutant
+  (saved under `<state>/test-simplifier/<wave>/`) with the killed-mutant
   counts, or the fault table from the ledger: each named fault, the kept tests
   run, and red or green.
 - `[GUARDS]` — the regression tests, contract, error-path and security tests,

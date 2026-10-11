@@ -24,12 +24,12 @@ check "exists: reference/project-state.md" \
 # The six project-state paths. A skill that names a different path than this
 # reference document is naming a file no other skill writes.
 for path in \
-  'docs/superpowers/gates.md' \
-  'docs/superpowers/plans/completed.md' \
-  'docs/superpowers/distilled/constraints.md' \
-  'docs/superpowers/distilled/gotchas.md' \
-  'docs/superpowers/distilled/reference.md' \
-  'docs/superpowers/distilled/rejected.md'; do
+  '<docs>/gates.md' \
+  '<docs>/plans/completed.md' \
+  '<docs>/distilled/constraints.md' \
+  '<docs>/distilled/gotchas.md' \
+  '<docs>/distilled/reference.md' \
+  '<docs>/distilled/rejected.md'; do
   present "project-state names $path" "$STATE" "$path"
 done
 
@@ -58,7 +58,7 @@ present "status uses the task-heading discriminator" "$SKILL" 'plan_tasks'
 present "status rejects the Execution header" "$SKILL" 'Do **not** use the `**Execution:**` header as the discriminator'
 
 # completed.md is the only completion signal, and it gates rules 4 and 5.
-present "status names the completed index" "$SKILL" 'docs/superpowers/plans/completed.md'
+present "status names the completed index" "$SKILL" '<docs>/plans/completed.md'
 present "status gates rules 4 and 5 on the index" "$SKILL" 'Rules 4 and 5 require'
 
 # The recommendation table must stay ordered: two sessions on one repo reach
@@ -102,7 +102,7 @@ present "the lane entry waits for the session gate" "$CONSTRAINTS" 'When `script
 # Every needle below sits on one source line in the skill: these assert with
 # grep -F, and a phrase the file wraps can never match.
 SKILL="$P/skills/project-status/SKILL.md"
-present "status: names the registers directory" "$SKILL" "docs/superpowers/registers/"
+present "status: names the registers directory" "$SKILL" "<docs>/registers/"
 present "status: completed.md is no longer the only completion signal" "$SKILL" \
   "not whether the work is finished"
 present "status: a register can veto done" "$SKILL" \
@@ -110,14 +110,14 @@ present "status: a register can veto done" "$SKILL" \
 present "status: the report has an open-items section" "$SKILL" "**Open items**"
 present "status: verify rows are the owner's" "$SKILL" "awaiting your check"
 present "status: seven sections now" "$SKILL" "Seven sections, in this order"
-present "state: registers are listed" "$STATE" "docs/superpowers/registers/"
+present "state: registers are listed" "$STATE" "<docs>/registers/"
 
 # --- the roadmap ---
 # A milestone is done only when the roadmap says closed, and every surface that
 # could claim otherwise must defer to it.
 CLOSE="$P/skills/closing-a-milestone/SKILL.md"
 PRODUCT="$P/skills/planning-a-product/SKILL.md"
-present "state: the roadmap is listed" "$STATE" "docs/superpowers/roadmap.md"
+present "state: the roadmap is listed" "$STATE" "<docs>/roadmap.md"
 present "status: reads the roadmap" "$SKILL" "scripts/roadmap status"
 present "status: a milestone is done only when closed" "$SKILL" "Only \`closed\` in \`roadmap status\` means done"
 present "status: routes a finished milestone to its audit" "$SKILL" "| dr-forge:closing-a-milestone |"
@@ -156,7 +156,7 @@ PLANS="$P/skills/writing-plans/SKILL.md"
 present "brainstorming: the trigger is two or more items" "$BRAIN" \
   "two or more distinct items"
 present "brainstorming: the register comes before the spec" "$BRAIN" \
-  "docs/superpowers/registers/YYYY-MM-DD-<slug>.md"
+  "<docs>/registers/YYYY-MM-DD-<slug>.md"
 present "brainstorming: an existing register is read first" "$BRAIN" \
   "scripts/register open"
 present "writing-plans: rows are assigned" "$PLANS" "scripts/register set"

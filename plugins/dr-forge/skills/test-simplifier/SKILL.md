@@ -21,7 +21,7 @@ removal here is proven by faults caught, never by coverage alone.
 
 ## The ledger
 
-Every run keeps one ledger, `docs/superpowers/test-simplifier/<YYYY-MM-DD>.md`:
+Every run keeps one ledger, `<docs>/test-simplifier/<YYYY-MM-DD>.md`:
 the baseline, one row per phase or wave with `test-profile --brief` before and
 after, every removal with its evidence, and every judge verdict with the SHA it
 was given. It is how a later session resumes and how a reviewer audits a
@@ -73,7 +73,7 @@ Split the run into three tiers. Nothing is deleted.
 | Full sweep | everything, slow layers and quarantine included | in CI after merge, or nightly |
 
 Propose the tiers to your human partner as a diff to
-`docs/superpowers/gates.md` (the branch gate, with a `Why:`) and one line for
+`<docs>/gates.md` (the branch gate, with a `Why:`) and one line for
 `CLAUDE.md` or `AGENTS.md` naming the inner-loop command, then apply them only
 on approval. Moving a slow layer out of the branch gate changes what proves a
 merge; it is their call, not yours. A full sweep that no longer runs anywhere
@@ -117,7 +117,7 @@ Whatever the evidence says:
 scoped to the wave's module:
 
 1. Before the wave, run it against the module with the current tests. Save the
-   report under `.superpowers/test-simplifier/<wave>/before`, and record the
+   report under `<state>/test-simplifier/<wave>/before`, and record the
    killed (or timed-out) count in the ledger.
 2. Make the wave's changes. Run the module's tests: green.
 3. Run the mutation tool again, same scope and configuration, saving to

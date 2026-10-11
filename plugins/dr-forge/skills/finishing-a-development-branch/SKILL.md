@@ -13,7 +13,7 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Step 1: Verify Tests
 
-When the project declares `docs/superpowers/gates.md`, run
+When the project declares `<docs>/gates.md`, run
 dr-forge:running-gates — it determines its own base, so it works here even
 though Step 3 has not established one yet. Otherwise run the project's full test
 suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
@@ -235,7 +235,7 @@ gitignored workspace that Step 6 deletes, and its branch is deleted with it.
 Without a record, dr-forge:project-status cannot tell a merged plan from
 one nobody ever started, and will recommend re-executing finished work.
 
-So append one line to `docs/superpowers/plans/completed.md` in the adopting
+So append one line to `<docs>/plans/completed.md` in the adopting
 project. The write is bound to the **outcome**, not to Step 6 — Step 6 also runs
 for a confirmed discard, and never runs for Options 2 and 3.
 
@@ -261,7 +261,7 @@ merge commit's own hash — a commit cannot contain its own hash, and the merge
 fast-forwards when it can, leaving no merge commit at all.
 
 Two branches each appending a last line conflict on integration. Adopting
-projects add `docs/superpowers/plans/completed.md merge=union` to
+projects add `<docs>/plans/completed.md merge=union` to
 `.gitattributes` so those appends resolve without one; say so once if the file
 is missing that line.
 
@@ -289,7 +289,7 @@ prose note is not written. In the same commit as the index line:
   `scripts/register add <register> "<item>"` — `--state deferred --note <the
   ruling>` when it is not work anyone will do, plain `open` when it is.
 
-When `docs/superpowers/roadmap.md` exists, run
+When `<docs>/roadmap.md` exists, run
 `scripts/roadmap settle --spec <the plan's Spec path>` after resolving those
 rows and commit its changes with them. It moves the epic row assigned to that
 spec to `verify` once every register covering the spec is resolved, and never
@@ -298,7 +298,7 @@ audited it. Settle before Step 7, so `next-step` routes to the next epic rather
 than back to this one.
 
 When no register covers the plan, write
-`docs/superpowers/notes/<slug>-followups.md` instead, listing those same
+`<docs>/notes/<slug>-followups.md` instead, listing those same
 findings one bullet each with its task number. Write nothing when all of them
 are empty. Either artifact travels with the same outcomes as the index line:
 Options 1 and 2 only.
@@ -311,7 +311,7 @@ main repo root — worktree removal must run from outside the worktree —
 and use the `GIT_DIR`/`GIT_COMMON`/`WORKTREE_PATH` values captured in
 Step 2, from before that directory change.
 
-A plan's workspace (`.superpowers/sdd/<plan>/`: ledger, briefs, reports,
+A plan's workspace (`<state>/sdd/<plan>/`: ledger, briefs, reports,
 `handoff.md`) is git-ignored and lives in the worktree, so it goes with it —
 `git worktree remove` deletes ignored files without `--force`. Options 2 and 3
 keep it for the next session.
@@ -376,7 +376,7 @@ the next program sub-project or roadmap epic with its launch command and
 first prompt, the milestone audit when the current milestone has nothing open,
 or that the program or roadmap is complete, or that the plan records no
 follow-on work. It
-also rewrites the primary checkout's `.superpowers/handoff/latest.md` to
+also rewrites the primary checkout's `<state>/handoff/latest.md` to
 match, so a fresh session finds the same answer. If it exits 4, say the
 handoff file could not be written.
 

@@ -14,7 +14,7 @@ session from memory or from a summary.
 ## Steps
 
 1. **Orient in one call.** Run `scripts/repo-audit` (see using-superpowers §Session Budget). Read
-   `<primary checkout>/.superpowers/handoff/latest.md`; the audit prints its path.
+   `<primary checkout>/<state>/handoff/latest.md`; the audit prints its path.
 2. **Verify the worktree** named in latest.md's `## State` against
    `git worktree list --porcelain`. Normalise both paths before comparing:
    forward slashes, lowercase drive letter, no trailing slash
@@ -38,8 +38,8 @@ session from memory or from a summary.
    `scripts/task-brief --header PLAN_FILE` and read the file it prints), and
    the ledger. The owner constraints and do-nots in
    `handoff.md` bind you as if your human partner had just said them. When the
-   project has them, read `docs/superpowers/distilled/constraints.md` and
-   `docs/superpowers/distilled/gotchas.md` in the same step: they bind the same
+   project has them, read `<docs>/distilled/constraints.md` and
+   `<docs>/distilled/gotchas.md` in the same step: they bind the same
    way, and yield to `handoff.md` wherever both speak. Neither is an error when
    absent. See [project-state.md](../../reference/project-state.md).
 5. **Continue** with what latest.md's `**Next:**` line says:

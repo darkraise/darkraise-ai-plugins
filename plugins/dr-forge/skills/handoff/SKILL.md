@@ -75,9 +75,9 @@ A fresh session reloads only its baseline plus these files. The numbers are in
      or draft file): the notes in `latest.md` are the authority, so step 3's
      `State` must carry every item.
 2. **Commit the plan and the spec** if either has uncommitted changes, in a
-   `docs(<scope>): …` commit of their own. Never commit `.superpowers/`.
+   `docs(<scope>): …` commit of their own. Never commit `<state>/`.
 3. **Write the notes sections of `latest.md`** at
-   `<primary checkout>/.superpowers/handoff/latest.md`. The primary checkout is
+   `<primary checkout>/<state>/handoff/latest.md`. The primary checkout is
    `git -C "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" rev-parse --show-toplevel`.
    Replace everything above `## Next session` with exactly these sections,
    each under 15 lines:

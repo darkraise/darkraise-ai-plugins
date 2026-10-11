@@ -25,7 +25,7 @@ The authoritative version-1 record lives under the worktree's Git directory:
 initial/expected HEAD, scope, model/effort/thread, attempt and review history,
 process identities, phase, snapshots, artifacts, and the intended commit.
 Report filenames do not identify tasks. Human reports must be outside the
-checkout or inside its actually ignored `.superpowers` workspace.
+checkout or inside its actually ignored `<state>` workspace.
 Pass `--review-round <N>` on review-fix resumes; clarification resumes omit it.
 Retries of the same review round preserve its number. The number cannot move
 backwards, and neither clarification nor transport retries reset review history.

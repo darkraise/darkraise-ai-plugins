@@ -1,6 +1,6 @@
 # The roadmap format
 
-`docs/superpowers/roadmap.md` lists a greenfield project's milestones in order.
+`<docs>/roadmap.md` lists a greenfield project's milestones in order.
 `scripts/roadmap` reads and writes it; `scripts/register` writes the registers it
 points at.
 
@@ -10,16 +10,16 @@ points at.
 # <Product> — roadmap
 
 **Product:** <one sentence: who it is for and what it does>
-**Spec:** docs/superpowers/specs/YYYY-MM-DD-<product>-design.md
+**Spec:** <docs>/specs/YYYY-MM-DD-<product>-design.md
 **Non-goals:** <comma-separated, or ->
 
 | M | Name | Exit criteria | Register | State | Note |
 |---|---|---|---|---|---|
-| M0 | Discovery | brief, users, non-goals and requirement list approved | docs/superpowers/registers/YYYY-MM-DD-m0-discovery.md | open | - |
-| M1 | Foundations | architecture decided, walking skeleton deployed end to end, CI and gates.md green | docs/superpowers/registers/YYYY-MM-DD-m1-foundations.md | open | - |
-| M2 | MVP | every MVP epic resolved, gates green | docs/superpowers/registers/YYYY-MM-DD-m2-mvp.md | open | - |
-| M3 | Hardening | security review, performance budget, accessibility, documentation | docs/superpowers/registers/YYYY-MM-DD-m3-hardening.md | open | - |
-| M4 | Release | deployed, runbook, versioning, handover | docs/superpowers/registers/YYYY-MM-DD-m4-release.md | open | - |
+| M0 | Discovery | brief, users, non-goals and requirement list approved | <docs>/registers/YYYY-MM-DD-m0-discovery.md | open | - |
+| M1 | Foundations | architecture decided, walking skeleton deployed end to end, CI and gates.md green | <docs>/registers/YYYY-MM-DD-m1-foundations.md | open | - |
+| M2 | MVP | every MVP epic resolved, gates green | <docs>/registers/YYYY-MM-DD-m2-mvp.md | open | - |
+| M3 | Hardening | security review, performance budget, accessibility, documentation | <docs>/registers/YYYY-MM-DD-m3-hardening.md | open | - |
+| M4 | Release | deployed, runbook, versioning, handover | <docs>/registers/YYYY-MM-DD-m4-release.md | open | - |
 ````
 
 ## Rules
@@ -40,7 +40,7 @@ points at.
 | Milestone | Typical epic rows |
 |---|---|
 | M0 Discovery | product brief approved; requirement list approved; non-goals approved |
-| M1 Foundations | architecture decisions recorded; repository and tooling; walking skeleton deployed end to end; CI running; `docs/superpowers/gates.md` declared |
+| M1 Foundations | architecture decisions recorded; repository and tooling; walking skeleton deployed end to end; CI running; `<docs>/gates.md` declared |
 | Feature milestones | one row per epic |
 | Hardening | security review; performance budget met; accessibility; error handling and observability; user and developer documentation |
 | Release | deployment and rollback; runbook; versioning and changelog; handover |

@@ -26,7 +26,7 @@ absent() { # absent <name> <file> <needle>
 check "exists: skills/running-gates/SKILL.md" \
   "$([ -f "$SKILL" ] && echo yes || echo no)" "yes"
 
-present "gates names the manifest path" "$SKILL" 'docs/superpowers/gates.md'
+present "gates names the manifest path" "$SKILL" '<docs>/gates.md'
 
 # Two required fields and seven optional ones.
 for f in Command Green; do
@@ -113,13 +113,13 @@ VBC="$P/skills/verification-before-completion/SKILL.md"
 
 present "finishing prefers the gates manifest" "$FIN" 'dr-forge:running-gates'
 present "finishing verifies the merged result with gates" "$FIN" 'gates when the project declares a manifest'
-present "finishing writes the completed index" "$FIN" 'docs/superpowers/plans/completed.md'
+present "finishing writes the completed index" "$FIN" '<docs>/plans/completed.md'
 present "index write is bound to the outcome" "$FIN" 'not to Step 6'
 present "option 2 records via PR" "$FIN" 'via PR'
 present "a discard records nothing" "$FIN" 'write nothing'
 present "the menu previews what follows the plan" "$FIN" 'After integration:'
 present "the menu ends the message" "$FIN" 'The menu is the last thing in your message'
-present "open findings outlive the workspace" "$FIN" 'docs/superpowers/notes/<slug>-followups.md'
+present "open findings outlive the workspace" "$FIN" '<docs>/notes/<slug>-followups.md'
 present "a prose merge request is a red flag" "$FIN" '"I'"'"'ll ask for the merge in prose"'
 
 # All sixteen implementer agents preload verification-before-completion. A

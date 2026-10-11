@@ -14,7 +14,7 @@ fact survived. See [project-state.md](../../reference/project-state.md).
 
 ## The four files
 
-Under `docs/superpowers/distilled/`, each an H1, a one-line statement of what
+Under `<docs>/distilled/`, each an H1, a one-line statement of what
 belongs in it, then `## <area>` sections holding `### <entry>` blocks.
 
 **`distilled/constraints.md`** — rulings and policy that bind future work.
@@ -54,7 +54,7 @@ wave's judge has ruled.
 ## What may be deleted
 
 Eligible by path and extension: Markdown files (`*.md`) under
-`docs/superpowers/notes/` and `docs/superpowers/findings/`. Every non-Markdown
+`<docs>/notes/` and `<docs>/findings/`. Every non-Markdown
 file under those paths is **never eligible** — captures and fixtures live there
 too, and a judge whose tools are `Read, Grep, Glob, WebFetch` cannot enumerate
 the facts in a binary, so `CARRIED` is unreachable for one by construction.
@@ -71,7 +71,7 @@ Three conditions, checked per file, all required:
    the content you actually distilled went unrecoverable. Commit it first, or
    leave it out of the wave.
 3. **Unreferenced** — `git grep` over tracked files outside those two
-   directories, plus the primary checkout's `.superpowers/handoff/latest.md`,
+   directories, plus the primary checkout's `<state>/handoff/latest.md`,
    finds neither the file's path, nor its basename, nor any **ancestor**
    directory path beneath those roots. The ancestor check matters: a plan naming
    a capture directory references every file in it without naming one.
