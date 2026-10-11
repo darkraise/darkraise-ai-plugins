@@ -3,7 +3,7 @@
 // The desktop draws them as images, so they carry their own colors: mid tones
 // and a translucent track that read on its light and dark themes alike.
 
-const PALETTE: Record<string, string> = {
+const PALETTE = {
   cyan: '#1fa8c9',
   blue: '#4f7cff',
   yellow: '#d4a017',
@@ -16,13 +16,14 @@ const PALETTE: Record<string, string> = {
   warning: '#d4a017',
   error: '#e5534b',
 }
+const PALETTE_BY_NAME: Record<string, string> = PALETTE
 const TRACK = 'rgba(128,128,140,0.24)'
 const MARK = '#8a8a99'
 
 /** A tree's color (a name, a theme key or hex) as one an SVG can paint. */
 export function paint(color: string | undefined, fallback = MARK): string {
   if (color !== undefined && /^#[0-9a-f]{3,8}$/i.test(color)) return color
-  return (color === undefined ? undefined : PALETTE[color]) ?? fallback
+  return (color === undefined ? undefined : PALETTE_BY_NAME[color]) ?? fallback
 }
 
 /** The drawing's width in CSS pixels for a pane `columns` cells wide. */
@@ -338,7 +339,7 @@ function wrapRuns(runs: readonly PanelRun[], size: number, room: number): PanelR
 }
 
 function toneOf(run: PanelRun): { cls: string; fill: string; opacity: string } {
-  if (run.color !== undefined && PALETTE[run.color] === undefined && !/^#/.test(run.color)) {
+  if (run.color !== undefined && PALETTE_BY_NAME[run.color] === undefined && !/^#/.test(run.color)) {
     // A theme key the drawings lack reads as body text.
     return { cls: run.dim ? 'dim' : run.faint ? 'faint' : 'fg', fill: '', opacity: '' }
   }

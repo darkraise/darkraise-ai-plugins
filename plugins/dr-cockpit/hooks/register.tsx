@@ -1172,7 +1172,7 @@ export const register: Register = (on, options) => {
               <Text color="yellow" bold>
                 ${' '}
               </Text>
-              <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
+              <Text>{clip(shell.command.split('\n')[0]!, Math.max(10, inner - 10))}</Text>
               <Text color="yellow"> {elapsed(now - shell.startedAt)}</Text>
             </Text>
           )),
@@ -1389,7 +1389,7 @@ export const register: Register = (on, options) => {
             })
           }
           if (breakdownShown.length > 0) {
-            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]
+            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] ?? BREAKDOWN_COLORS[0]
             const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
             lines.push({ kind: 'picture', svg: stackSvg(breakdownShown.map(row => row.tokens), breakdownShown.map((_, index) => colorOf(index)), width, 8) })
             for (const [index, row] of breakdownShown.entries()) {

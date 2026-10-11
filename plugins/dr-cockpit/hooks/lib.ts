@@ -467,7 +467,7 @@ export function accountKey(configDir: string, home: string): string {
 }
 
 // Frame colors that read on light and dark terminals alike.
-const ACCOUNT_COLORS = ['#af87ff', '#5fafff', '#5fd7af', '#ffaf5f', '#ff87af', '#87d75f', '#d787ff', '#5fd7ff']
+const ACCOUNT_COLORS = ['#af87ff', '#5fafff', '#5fd7af', '#ffaf5f', '#ff87af', '#87d75f', '#d787ff', '#5fd7ff'] as const
 
 /** The account's frame color: one of eight, picked from its key, so each account keeps its own. */
 export function accountColor(key: string): string {
@@ -816,7 +816,7 @@ export function deviceName(surface: string): string {
 export function remoteRuns(clients: readonly { surface: string }[], setting: string | null): Run[] {
   if (clients.length > 0) {
     const names = [...new Set(clients.map(one => deviceName(one.surface)))]
-    const what = clients.length === 1 ? names[0] : names.length === 1 ? `${clients.length} ${names[0]}s` : `${clients.length} devices`
+    const what = clients.length === 1 ? names[0]! : names.length === 1 ? `${clients.length} ${names[0]}s` : `${clients.length} devices`
     return [{ text: '● ', color: 'green', bold: true }, { text: 'connected' }, { text: ' · ', dim: true }, { text: what, color: 'green' }]
   }
   if (setting === 'true') return [{ text: '○ ', color: 'green' }, { text: 'on', color: 'green' }, { text: ' · no device yet', dim: true }]
