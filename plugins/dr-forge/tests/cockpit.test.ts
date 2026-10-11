@@ -1077,8 +1077,9 @@ describe('buttons', () => {
     expect((await ui.find({ key: 'pane-settings-hotkey-box' }))?.props.display).toBe('none')
     expect((await ui.find({ key: 'pane-settings-hotkey' }))?.props.hotkey).toBe('s')
     await ui.press({ key: 'pane-settings-hotkey' })
-    expect((await ui.find({ key: 'settings-back' }))?.props.label).toBe('Back')
-    expect((await ui.find({ key: 'settings-back-hotkey' }))?.props.hotkey).toBe('b')
+    // The settings controls are single-line buttons, the hotkey on the button itself.
+    expect((await ui.find({ key: 'settings-back' }))?.props).toMatchObject({ label: 'Back', hotkey: 'b' })
+    expect(await ui.find({ key: 'settings-back-box' })).toBeUndefined()
   })
 
   test('keep the "c: " prefix on an older Claude Code', async ($, on) => {
@@ -1099,7 +1100,9 @@ describe('buttons', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    expect((await ui.find({ key: 'set-layout-auto-box' }))?.props.borderColor).toBe('permission')
+    expect((await ui.find({ key: 'set-layout-auto' }))?.props).toMatchObject({ variant: 'primary' })
+    expect((await ui.find({ key: 'set-layout-auto' }))?.props.dimColor).not.toBe(true)
+    expect(await ui.find({ key: 'set-layout-auto-box' })).toBeUndefined()
     expect((await ui.find({ key: 'set-layout-full' }))?.props.dimColor).toBe(true)
     expect((await ui.find({ key: 'set-openAtStart-toggle' }))?.props.label).toBe('● On')
     expect((await ui.find({ key: 'set-notify-kind-task' }))?.props).toMatchObject({ label: '○ task', dimColor: true })

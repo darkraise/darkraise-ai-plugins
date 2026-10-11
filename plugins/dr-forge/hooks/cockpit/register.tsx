@@ -615,9 +615,10 @@ export const register: Register = on => {
     // Every control is a button in a rounded box: gray at rest, the accent on
     // the one that matters (`isMain`), dim when it reads as off.
     if (S.canUnderline === null) await readVersion($)
-    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) => {
-      // The desktop draws its own buttons, the main one in its primary look.
-      if (isDesktop) {
+    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean } = {}) => {
+      // The desktop draws its own buttons, the main one in its primary look. A compact
+      // button is that one on the terminal too: a single line, not a three-line box.
+      if (isDesktop || look.isCompact) {
         return <Button key={key} label={label} hotkey={look.hotkey} variant={look.isMain ? 'primary' : undefined} dimColor={look.isOff} onPress={onPress} />
       }
       // The hotkey's letter is underlined in the label, as a desktop app marks
@@ -664,19 +665,21 @@ export const register: Register = on => {
     if ((await read($, view)) === 'settings') {
       // Each press saves to ~/.dr-forge/config.json and puts the value in force, so the rows below always show what is saved.
       const set = (key: string, value: SettingValue) => setOption($, key, value)
-      const row = (key: string, label: string, ...controls: RenderChildren[]) => (
+      const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) =>
+        button(key, label, onPress, { ...look, isCompact: true })
+      const row =(key: string, label: string, ...controls: RenderChildren[]) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
           <Text>{label.padEnd(15)}</Text>
           {controls}
         </Box>
       )
       const toggle = (key: string, label: string, isOn: boolean) =>
-        row(`set-${key}`, label, button(`set-${key}-toggle`, isOn ? '● On' : '○ Off', () => set(key, !isOn), { isMain: isOn, isOff: !isOn }))
+        row(`set-${key}`, label, compact(`set-${key}-toggle`, isOn ? '● On' : '○ Off', () => set(key, !isOn), { isMain: isOn, isOff: !isOn }))
       const choices = <T extends string>(key: string, label: string, all: readonly T[], chosen: T) =>
-        row(`set-${key}`, label, ...all.map(choice => button(`set-${key}-${choice}`, choice, () => set(key, choice), { isMain: chosen === choice, isOff: chosen !== choice })))
+        row(`set-${key}`, label, ...all.map(choice => compact(`set-${key}-${choice}`, choice, () => set(key, choice), { isMain: chosen === choice, isOff: chosen !== choice })))
       const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={INDENT}>
-          {names.map(name => button(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
+          {names.map(name => compact(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
         </Box>
       )
       const number = (key: string, label: string, value: string, onLess: () => unknown, onMore: () => unknown) =>
@@ -686,8 +689,8 @@ export const register: Register = on => {
           <Text key={`set-${key}-value`} bold>
             {value.padEnd(6)}
           </Text>,
-          button(`set-${key}-less`, '−', onLess),
-          button(`set-${key}-more`, '+', onMore),
+          compact(`set-${key}-less`, '−', onLess),
+          compact(`set-${key}-more`, '+', onMore),
         )
 
       // A surface without text fields (the mobile app) sets the webhook from a terminal.
@@ -710,7 +713,7 @@ export const register: Register = on => {
             />
             {notes.error !== null && <Text color="red">✗ {notes.error}</Text>}
             <Box key={`set-notify-${key}-cancel`}>
-              {button(`set-notify-${key}-cancel-button`, 'Cancel', () => update($, notifier, now => ({ ...now, editing: null, error: null })))}
+              {compact(`set-notify-${key}-cancel-button`, 'Cancel', () => update($, notifier, now => ({ ...now, editing: null, error: null })))}
             </Box>
           </Box>
         )
@@ -724,9 +727,9 @@ export const register: Register = on => {
                 'Webhook',
                 notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
                 notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from the environment</Text>,
-                notes.url !== null && button('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
-                !notes.isFromEnv && canType && button('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
-                !notes.isFromEnv && notes.url !== null && button('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
+                notes.url !== null && compact('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
+                !notes.isFromEnv && canType && compact('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
+                !notes.isFromEnv && notes.url !== null && compact('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
                 !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it from a terminal: /cockpit notify url</Text>,
               )}
           {notes.last !== null && (
@@ -744,7 +747,7 @@ export const register: Register = on => {
                 <Text key="set-notify-mention-value" dimColor={notes.mention === null}>
                   {notes.mention === null ? 'nobody ' : `${notes.mention.slice(0, 10)}… `}
                 </Text>,
-                canType && button('set-notify-mention-edit', notes.mention === null ? 'Set' : 'Change', () => edit('mention')),
+                canType && compact('set-notify-mention-edit', notes.mention === null ? 'Set' : 'Change', () => edit('mention')),
               )}
         </Box>
       )
@@ -844,15 +847,17 @@ export const register: Register = on => {
         <Box flexDirection="column">
           <Text bold>Settings</Text>
           {groups.map(group => (
-            <Box key={`set-group-${group}`} flexDirection="column">
+            <Box key={`set-group-${group}`} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
               {group === 'Notifications' ? (
-                <Text bold>
+                <Text bold color={BUTTON_MAIN}>
                   Notifications <Text dimColor>(Discord)</Text>
                 </Text>
               ) : (
-                <Text bold>{group}</Text>
+                <Text bold color={BUTTON_MAIN}>
+                  {group}
+                </Text>
               )}
-              <Box key={`set-group-${group}-rows`} flexDirection="column" paddingLeft={INDENT}>
+              <Box key={`set-group-${group}-rows`} flexDirection="column">
                 {group === 'Notifications' && webhookRows}
                 {Object.entries(SCHEMA)
                   .filter(([, spec]) => spec.group === group)
@@ -867,7 +872,7 @@ export const register: Register = on => {
             </Text>
           ))}
           <Box key="settings-actions">
-            {button(
+            {compact(
               'settings-back',
               'Back',
               async () => {
