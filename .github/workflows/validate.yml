@@ -26,16 +26,16 @@ jobs:
         timeout-minutes: 3
         run: |
           timeout 90s npx --yes @anthropic-ai/claude-code@2.1.263 plugin validate .
-          for plugin in dr-status dr-forge dcc-darkraise-ui dcc-darkraise-win32ui; do
+          for plugin in dr-status dcc-darkraise-ui dcc-darkraise-win32ui; do
             timeout 30s npx --yes @anthropic-ai/claude-code@2.1.263 plugin validate "plugins/$plugin"
           done
 
       # Mods (hooks modules) need a newer CLI than the pinned validator above.
-      - name: Validate and test the dr-cockpit mod
+      - name: Validate and test dr-forge
         timeout-minutes: 3
         run: |
-          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate plugins/dr-cockpit
-          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.295 plugin test plugins/dr-cockpit
+          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate plugins/dr-forge
+          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.295 plugin test plugins/dr-forge
 
       - name: Run maintained regression suites
         timeout-minutes: 12

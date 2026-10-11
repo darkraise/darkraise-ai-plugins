@@ -112,7 +112,7 @@ export function discordBody(event: NotifyEvent, place: NotifyPlace, style: Notif
     .slice(0, 6)
     .map(field => ({ name: field.name.slice(0, 256), value: (field.value || '—').slice(0, 1024), inline: true }))
   const description = event.detail === undefined || (style.isBrief && event.isPlain !== true) ? undefined : event.detail.slice(0, 1500)
-  const footer = ['dr-cockpit', place.account, place.tmux === null ? null : `tmux ${place.tmux}`].filter(Boolean).join(' · ')
+  const footer = ['dr-forge', place.account, place.tmux === null ? null : `tmux ${place.tmux}`].filter(Boolean).join(' · ')
   const author = [place.host, place.repo].filter(Boolean).join(' · ')
   const embed: Record<string, unknown> = {
     title: event.title.slice(0, 256),

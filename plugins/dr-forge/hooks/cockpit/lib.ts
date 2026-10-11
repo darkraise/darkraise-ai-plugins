@@ -1,4 +1,4 @@
-import type { CockpitFinish } from '../types'
+import type { CockpitFinish } from '../../types'
 
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
@@ -7,7 +7,7 @@ export const WARN_AT = 0.8
 
 /**
  * The handoff budget: the configured tokens, else DR_SUPERPOWERS_BUDGET, else
- * dr-superpowers' own rule (reference/session-budget.md): the compaction point
+ * dr-forge's own rule (reference/session-budget.md): the compaction point
  * minus one task's worst growth, min(autoCompactWindow, window) × 93% − 140,000.
  * Small windows, where that comes out near zero, hold a fifth of the window.
  */
@@ -108,9 +108,9 @@ export function isGitWriteTool(tool: string): boolean {
   return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
 }
 
-/** Whether a subagent type or skill name belongs to dr-superpowers. */
+/** Whether a subagent type or skill name belongs to dr-forge. */
 export function isSuperpowers(name: string): boolean {
-  return name.startsWith('dr-superpowers:')
+  return name.startsWith('dr-forge:')
 }
 
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
@@ -565,7 +565,7 @@ export function limitForecast(kind: string, percent: number, resetsAt: number | 
   return now + left < resetsAt ? left : 'pace'
 }
 
-/** One task's state in a dr-superpowers SDD ledger. */
+/** One task's state in a dr-forge SDD ledger. */
 export type LedgerTask = {
   n: number
   state: 'assigned' | 'complete' | 'blocked'
@@ -743,7 +743,7 @@ export function isAtLeast(base: string | undefined, least: string): boolean {
   return true
 }
 
-/** finish.json as dr-superpowers' finish-choice writes it; null when unreadable. */
+/** finish.json as dr-forge's finish-choice writes it; null when unreadable. */
 export function parseFinish(text: string): CockpitFinish | null {
   try {
     const raw = JSON.parse(text) as Record<string, unknown>

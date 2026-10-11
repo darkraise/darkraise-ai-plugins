@@ -1,5 +1,6 @@
 {
-  "description": "Injects the dr-forge entry point at session start, persists the session's transcript path for budget tooling, appends a compaction snapshot after compaction, and holds a stop once when a turn that advanced a plan ends without the finishing menu or the next step.",
+  "description": "Loads the cockpit mod, injects the dr-forge entry point at session start, persists the session's transcript path for budget tooling, appends a compaction snapshot after compaction, and holds a stop once when a turn that advanced a plan ends without the finishing menu or the next step.",
+  "modules": ["./cockpit/register.tsx"],
   "hooks": {
     "SessionStart": [
       {

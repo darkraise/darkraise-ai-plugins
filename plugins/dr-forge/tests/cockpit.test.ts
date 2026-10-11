@@ -39,8 +39,8 @@ import {
   turnsToBudget,
   windowElapsed,
   writesGitText,
-} from '../hooks/lib'
-import type { ActivityInput, Run } from '../hooks/lib'
+} from '../hooks/cockpit/lib'
+import type { ActivityInput, Run } from '../hooks/cockpit/lib'
 import {
   discordBody,
   excerpt,
@@ -50,25 +50,25 @@ import {
   notifyKindsFrom,
   notifyKindsToggled,
   redact,
-} from '../hooks/notify'
-import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/svg'
+} from '../hooks/cockpit/notify'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
 const BAND = {
-  plugin: 'dr-cockpit',
+  plugin: 'dr-forge',
   component: 'AbovePrompt',
   props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 100, scroll: { offset: 0, bodyRows: 3 }, view: {} },
 } as const
 const HINT = {
-  plugin: 'dr-cockpit',
+  plugin: 'dr-forge',
   component: 'PromptHint',
   props: { isDraft: false, isWorking: false, hint: '? for shortcuts' },
 } as const
 const PANE = {
-  plugin: 'dr-cockpit',
+  plugin: 'dr-forge',
   component: 'Pane',
-  requestId: 'dr-cockpit',
+  requestId: 'dr-forge',
   props: { title: 'Cockpit', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 const PORCELAIN = '# branch.oid abc1234def\n# branch.head feat/pane\n# branch.ab +2 -1\n1 .M N... 100644 100644 100644 a b src/a.ts\n? notes.md\n'
@@ -214,7 +214,7 @@ function world(on: On, w: World) {
     w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(e.init?.body ?? '{}') as Record<string, unknown> })
     return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
   })
-  on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dr-cockpit', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
+  on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dr-forge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
   on('session.append', (_$, e, next) => {
     const part = (e.message as { content?: { text?: string }[] }).content?.[0]
     if (part?.text !== undefined) w.notes?.push(part.text)
@@ -261,7 +261,7 @@ function signedIn(on: On, files: World['files'] = {}) {
 }
 
 describe('budget rule', () => {
-  test('follows the setting, then the env, then dr-superpowers', () => {
+  test('follows the setting, then the env, then dr-forge', () => {
     expect(budgetFor(200_000, '465000', 650_000)).toBe(200_000)
     expect(budgetFor(0, '465000', 650_000)).toBe(465_000)
     expect(budgetFor(0, undefined, 650_000)).toBe(464_500)
@@ -395,7 +395,7 @@ describe('handoff reading', () => {
   test('in a plan session, offers the handoff in the pane and sends the note once', async ($, on) => {
     const notes: string[] = []
     world(on, { tokens: 470_000, notes })
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(1)
     expect(notes[0]).toMatch(/budget: 470k of 465k — handoff/)
@@ -414,7 +414,7 @@ describe('handoff reading', () => {
     const notes: string[] = []
     const w: World = { tokens: 470_000, notes }
     world(on, w)
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(1)
 
@@ -438,8 +438,8 @@ describe('cockpit pane', () => {
       tool_use_id: 'toolu_1',
       prompt: 'Implement task 3',
       description: 'Task 3',
-      subagentType: 'dr-superpowers:impl-sonnet-low',
-      provider: { plugin: 'dr-superpowers', tier: 'user' },
+      subagentType: 'dr-forge:impl-sonnet-low',
+      provider: { plugin: 'dr-forge', tier: 'user' },
       parentModel: 'claude-opus-5-5',
       background: false,
       fork: false,
@@ -681,14 +681,14 @@ describe('minimized band', () => {
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       const full = await $.ui.mount({ ...PANE, surface })
       await full.press({ key: 'pane-minimize' })
-      expect(closed).toEqual(['dr-cockpit'])
+      expect(closed).toEqual(['dr-forge'])
       await full.unmount()
       const inline = await $.ui.mount({ ...INLINE, surface })
       expect(await inline.find({ key: 'pane-minimize' })).toBeUndefined()
       await inline.press({ key: 'band-expand' })
       expect(writes).toEqual([
-        ['dr-cockpit.layout', 'compact'],
-        ['dr-cockpit.layout', 'full'],
+        ['dr-forge.layout', 'compact'],
+        ['dr-forge.layout', 'full'],
       ])
     })
 
@@ -719,7 +719,7 @@ describe('minimized band', () => {
       opened.length = 0
       const docking = await $.ui.mount({ ...BAND, surface, viewport: { columns: 160, rows: 50, isFullscreen: true } })
       await docking.press({ key: 'band-expand' })
-      expect(opened).toEqual(['dr-cockpit'])
+      expect(opened).toEqual(['dr-forge'])
       await docking.unmount()
       const pane = await $.ui.mount({ ...PANE, surface })
       expect(await pane.find({ type: 'Text', text: 'Settings' })).toBeUndefined()
@@ -727,8 +727,8 @@ describe('minimized band', () => {
       const main = await $.ui.mount({ ...BAND, surface, viewport: { columns: 100, rows: 50, isFullscreen: false } })
       await main.press({ key: 'band-expand' })
       expect(writes).toEqual([
-        ['dr-cockpit.layout', 'auto'],
-        ['dr-cockpit.layout', 'full'],
+        ['dr-forge.layout', 'auto'],
+        ['dr-forge.layout', 'full'],
       ])
     })
 
@@ -762,7 +762,7 @@ describe('minimized band', () => {
     await $.session.start(START)
     await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
     expect(opened).toEqual([])
-    expect(closed).toEqual(['dr-cockpit'])
+    expect(closed).toEqual(['dr-forge'])
   })
 
   // Saving a setting reloads the mod, which starts the session again.
@@ -802,12 +802,12 @@ describe('minimized band', () => {
       return { value: e.value }
     })
     await $.command.run(COCKPIT)
-    expect(opened).toEqual(['dr-cockpit'])
-    expect(writes).toEqual([['dr-cockpit.layout', 'auto']])
+    expect(opened).toEqual(['dr-forge'])
+    expect(writes).toEqual([['dr-forge.layout', 'auto']])
   })
 
   for (const [layout, want] of [
-    ['compact', ['dr-cockpit']],
+    ['compact', ['dr-forge']],
     ['auto', []],
   ] as const) {
     test(`Back from the settings ${want.length > 0 ? 'closes the pane' : 'keeps the pane'} with layout ${layout}`, { options: { layout } }, async ($, on) => {
@@ -857,7 +857,7 @@ describe('buttons', () => {
     const w: World = { ...SIGNED_IN, tokens: 200_000 }
     world(on, w)
     signedIn(on)
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -950,10 +950,10 @@ describe('settings view', () => {
       await ui.press({ key: 'set-layout-compact' })
       await ui.press({ key: 'set-section-guard' })
       expect(writes).toEqual([
-        ['dr-cockpit.openAtStart', true],
-        ['dr-cockpit.warnAt', 85],
-        ['dr-cockpit.layout', 'compact'],
-        ['dr-cockpit.sections', 'account,context,usage,shells,agents,plan,repo'],
+        ['dr-forge.openAtStart', true],
+        ['dr-forge.warnAt', 85],
+        ['dr-forge.layout', 'compact'],
+        ['dr-forge.sections', 'account,context,usage,shells,agents,plan,repo'],
       ])
       await ui.press({ key: 'settings-back' })
       expect(await ui.find({ key: 'pane-settings' })).toBeDefined()
@@ -967,7 +967,7 @@ describe('settings view', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'set-guardAttribution-toggle' })
-    expect(toasts).toContain('dr-cockpit: guardAttribution not saved: managed settings own it')
+    expect(toasts).toContain('dr-forge: guardAttribution not saved: managed settings own it')
   })
 })
 
@@ -1083,7 +1083,7 @@ describe('desktop', () => {
     await $.session.attach({ surface: 'mobile', clientId: 'mobile:default' } as never)
     expect(opened).toEqual([])
     await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
-    expect(opened).toEqual(['dr-cockpit'])
+    expect(opened).toEqual(['dr-forge'])
   })
 
   test('leaves the pane shut on a desktop joining when Show at start is off', { options: { openAtStart: false } }, async ($, on) => {
@@ -1412,7 +1412,7 @@ describe('discord', () => {
     expect(ping.allowed_mentions).toEqual({ parse: [], users: ['42424242'] })
     const embed = (ping.embeds as Record<string, unknown>[])[0]
     expect(embed?.author).toEqual({ name: 'devbox · shop' })
-    expect(embed?.footer).toEqual({ text: 'dr-cockpit · ~/.claude · tmux work' })
+    expect(embed?.footer).toEqual({ text: 'dr-forge · ~/.claude · tmux work' })
     expect(embed?.description).toBe('Bash: git push')
     const quiet = discordBody({ kind: 'done', title: '✅ Done', detail: 'the answer' }, place, { mention: '42424242', isBrief: true, now: 0 })
     expect(quiet.content).toBeUndefined()
@@ -1511,9 +1511,9 @@ describe('discord', () => {
 describe('run card', () => {
   const LEDGER = [
     '# SDD ledger — plan: docs/plans/p.md',
-    'Task 1: implementer dr-superpowers:impl-sonnet-low (assigned; base abc1234)',
+    'Task 1: implementer dr-forge:impl-sonnet-low (assigned; base abc1234)',
     'Task 1: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none',
-    'Task 2: implementer dr-superpowers:impl-sonnet-low (assigned; base def5678)',
+    'Task 2: implementer dr-forge:impl-sonnet-low (assigned; base def5678)',
     'Task 2: fix round 2/5 (1 addressed, 1 open — meter width; commits c..d; fresh)',
   ].join('\n')
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n\n### Task 3: Ship it\n'
@@ -1542,11 +1542,11 @@ describe('run card', () => {
     ])
   })
 
-  test('replaces the plan card in a dr-superpowers run', async ($, on) => {
+  test('replaces the plan card in a dr-forge run', async ($, on) => {
     const files = runFiles(LEDGER)
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
@@ -1563,7 +1563,7 @@ describe('run card', () => {
     world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     expect(fetches).toHaveLength(0)
     const ledger = files?.['/home/me/code/shop/.superpowers/sdd/p/progress.md']
@@ -1585,7 +1585,7 @@ describe('run card', () => {
     const files = runFiles(done)
     world(on, { ...SIGNED_IN, files, startedAt: 3_000_000 })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:brainstorming' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:brainstorming' })
     await $.session.start(START)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Run' })).toBeUndefined()
@@ -1620,7 +1620,7 @@ describe('run card', () => {
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     // The world's clock reads 1,000,000 ms; the menu's 30 minutes end at 2,800 s.
@@ -1641,9 +1641,9 @@ describe('flight deck', () => {
   test('draws every panel the way the approved preview does', async ($, on) => {
     const ledger = [
       '# SDD ledger — plan: docs/plans/cockpit.md',
-      'Task 3: implementer dr-superpowers:impl-sonnet-low (assigned; base abc1234)',
+      'Task 3: implementer dr-forge:impl-sonnet-low (assigned; base abc1234)',
       'Task 3: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none',
-      'Task 4: implementer dr-superpowers:impl-sonnet-low (assigned; base def5678)',
+      'Task 4: implementer dr-forge:impl-sonnet-low (assigned; base def5678)',
       'Task 4: fix round 2/5 (1 addressed, 1 open — meter width; commits c..d; fresh)',
       'Task 5: BLOCKED — needs the ledger format',
     ].join('\n')
@@ -1655,7 +1655,7 @@ describe('flight deck', () => {
     const w: World = { ...SIGNED_IN, files, remoteControl: 'true' }
     world(on, w)
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dr-superpowers:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     for (const [i, t] of [180_000, 205_000, 228_000, 251_000, 270_000, 284_000].entries()) { w.tokens = t; await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: `turn-${i}`, reason: 'answer' }) }
     await $.session.measure({ context: { tokens: 284_000, window: 650_000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 23, resetsAt: new Date(1_000_000 + 220 * 60_000).toISOString() }, { kind: 'seven_day', percentUsed: 61, resetsAt: new Date(1_000_000 + 86 * 3600_000).toISOString() }], cost: { usd: 4.85 }, changed: ['context', 'rateLimits'], breakdown: true } as never)
@@ -1664,9 +1664,9 @@ describe('flight deck', () => {
     await $.tool.call({ tool: 'Bash', command: 'pytest -x --watch', run_in_background: true } as never)
     w.tools = {}
     await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 3', description: 'Review task 3', subagentType: 'dr-superpowers:judge-opus', provider: { plugin: 'dr-superpowers', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 3', description: 'Review task 3', subagentType: 'dr-forge:judge-opus', provider: { plugin: 'dr-forge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
     await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 'turn-9', agentId: 'agent-1', reason: 'answer', usage: { model: 'claude-opus-5-5', input_tokens: 4_000, cache_read_input_tokens: 46_000, cache_creation_input_tokens: 14_000, output_tokens: 3_000 } })
-    await $.agent.spawn({ tool_use_id: 'toolu_2', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dr-superpowers:impl-sonnet-low', provider: { plugin: 'dr-superpowers', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    await $.agent.spawn({ tool_use_id: 'toolu_2', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dr-forge:impl-sonnet-low', provider: { plugin: 'dr-forge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
     const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 46, scroll: { offset: 0, bodyRows: 300 } }, surface: 'desktop' })
     const drawn = JSON.stringify(await ui.drawn())
     // The gauge tiles split each row by share and wrap when the dials won't

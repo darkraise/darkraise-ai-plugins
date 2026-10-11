@@ -14,7 +14,7 @@ import type {
   CockpitShell,
   CockpitSpawn,
   CockpitUsage,
-} from '../types'
+} from '../../types'
 import {
   accountColor,
   accountKey,
@@ -80,7 +80,7 @@ import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
 import type { BandMeter, PanelLine, PanelRun, Segment } from './svg'
 
-const PANE = 'dr-cockpit'
+const PANE = 'dr-forge'
 const PANE_COLUMNS = 56
 const INDENT = 2
 // A button's rounded frame: the accent on the one that matters, gray at rest.
@@ -95,8 +95,8 @@ const MAX_BREAKDOWN_ROWS = 12
 // Below this the band drops its frame.
 const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
-  'Finish the task in flight through its completion line, then hand off with the dr-superpowers handoff skill. Start no new task.'
-const RESUME_PROMPT = 'Resume the work in .superpowers/handoff/latest.md with the dr-superpowers resume-execution skill.'
+  'Finish the task in flight through its completion line, then hand off with the dr-forge handoff skill. Start no new task.'
+const RESUME_PROMPT = 'Resume the work in .superpowers/handoff/latest.md with the dr-forge resume-execution skill.'
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
 // The tools that wait on the person by their nature: their dialog is the question.
@@ -123,31 +123,31 @@ const HANDOFF_STEP = 50_000
 const MAX_HANDOFF = 2_000_000
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
-const budget = atom({ plugin: 'dr-cockpit', key: 'budget' } as const, null)
-const usage = atom({ plugin: 'dr-cockpit', key: 'usage' } as const, null)
-const breakdown = atom({ plugin: 'dr-cockpit', key: 'breakdown' } as const, null)
-const seats = atom({ plugin: 'dr-cockpit', key: 'seats' } as const, [])
-const spawns = atom({ plugin: 'dr-cockpit', key: 'spawns' } as const, [])
-const shells = atom({ plugin: 'dr-cockpit', key: 'shells' } as const, [])
-const remote = atom({ plugin: 'dr-cockpit', key: 'remote' } as const, { clients: [], setting: null })
-const plan = atom({ plugin: 'dr-cockpit', key: 'plan' } as const, [])
-const repo = atom({ plugin: 'dr-cockpit', key: 'repo' } as const, null)
-const refusals = atom({ plugin: 'dr-cockpit', key: 'refusals' } as const, [])
-const isNudged = atom({ plugin: 'dr-cockpit', key: 'isNudged' } as const, false)
-const isPlanSession = atom({ plugin: 'dr-cockpit', key: 'isPlanSession' } as const, false)
-const alerted = atom({ plugin: 'dr-cockpit', key: 'alerted' } as const, [])
-const trend = atom({ plugin: 'dr-cockpit', key: 'trend' } as const, [])
-const view = atom({ plugin: 'dr-cockpit', key: 'view' } as const, 'cockpit')
-const account = atom({ plugin: 'dr-cockpit', key: 'account' } as const, null)
-const place = atom({ plugin: 'dr-cockpit', key: 'place' } as const, null)
-const engine = atom({ plugin: 'dr-cockpit', key: 'engine' } as const, { model: null, effort: null, cache: null })
+const budget = atom({ plugin: 'dr-forge', key: 'budget' } as const, null)
+const usage = atom({ plugin: 'dr-forge', key: 'usage' } as const, null)
+const breakdown = atom({ plugin: 'dr-forge', key: 'breakdown' } as const, null)
+const seats = atom({ plugin: 'dr-forge', key: 'seats' } as const, [])
+const spawns = atom({ plugin: 'dr-forge', key: 'spawns' } as const, [])
+const shells = atom({ plugin: 'dr-forge', key: 'shells' } as const, [])
+const remote = atom({ plugin: 'dr-forge', key: 'remote' } as const, { clients: [], setting: null })
+const plan = atom({ plugin: 'dr-forge', key: 'plan' } as const, [])
+const repo = atom({ plugin: 'dr-forge', key: 'repo' } as const, null)
+const refusals = atom({ plugin: 'dr-forge', key: 'refusals' } as const, [])
+const isNudged = atom({ plugin: 'dr-forge', key: 'isNudged' } as const, false)
+const isPlanSession = atom({ plugin: 'dr-forge', key: 'isPlanSession' } as const, false)
+const alerted = atom({ plugin: 'dr-forge', key: 'alerted' } as const, [])
+const trend = atom({ plugin: 'dr-forge', key: 'trend' } as const, [])
+const view = atom({ plugin: 'dr-forge', key: 'view' } as const, 'cockpit')
+const account = atom({ plugin: 'dr-forge', key: 'account' } as const, null)
+const place = atom({ plugin: 'dr-forge', key: 'place' } as const, null)
+const engine = atom({ plugin: 'dr-forge', key: 'engine' } as const, { model: null, effort: null, cache: null })
 const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
-const activity = atom({ plugin: 'dr-cockpit', key: 'activity' } as const, IDLE)
-const turnTokens = atom({ plugin: 'dr-cockpit', key: 'turnTokens' } as const, [])
-const run = atom({ plugin: 'dr-cockpit', key: 'run' } as const, null)
-const finish = atom({ plugin: 'dr-cockpit', key: 'finish' } as const, null)
-const handoffAt = atom({ plugin: 'dr-cockpit', key: 'handoffAt' } as const, null)
-const notifier = atom({ plugin: 'dr-cockpit', key: 'notifier' } as const, {
+const activity = atom({ plugin: 'dr-forge', key: 'activity' } as const, IDLE)
+const turnTokens = atom({ plugin: 'dr-forge', key: 'turnTokens' } as const, [])
+const run = atom({ plugin: 'dr-forge', key: 'run' } as const, null)
+const finish = atom({ plugin: 'dr-forge', key: 'finish' } as const, null)
+const handoffAt = atom({ plugin: 'dr-forge', key: 'handoffAt' } as const, null)
+const notifier = atom({ plugin: 'dr-forge', key: 'notifier' } as const, {
   url: null,
   isFromEnv: false,
   mention: null,
@@ -494,7 +494,7 @@ export const register: Register = (on, options) => {
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
       await update($, refusals, list => [...list, refusal].slice(-20))
-      return { deny: `dr-cockpit: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
+      return { deny: `dr-forge: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
     }
     const id = e.tool_use_id
     const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
@@ -531,7 +531,7 @@ export const register: Register = (on, options) => {
 
     return ran
   }).catch(($, e, next) =>
-    next.called || !guardAttribution ? next(e) : { deny: 'dr-cockpit: its attribution guard failed.' },
+    next.called || !guardAttribution ? next(e) : { deny: 'dr-forge: its attribution guard failed.' },
   )
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -1226,7 +1226,7 @@ export const register: Register = (on, options) => {
             )),
           ),
       ),
-      // In a dr-superpowers run the card reads the run's ledger instead: the
+      // In a dr-forge run the card reads the run's ledger instead: the
       // round in flight, reviews that came back clean, and blocked tasks.
       plan:
         summary !== null && summary.total > 0 ? (
@@ -1982,7 +1982,7 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
 }
 
 // The run's ledger, its plan's tasks, and the newest handoff: read from the
-// primary checkout, S.where dr-superpowers keeps .superpowers/.
+// primary checkout, S.where dr-forge keeps .superpowers/.
 async function readRun($: EngineInterface) {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return
@@ -2049,7 +2049,7 @@ async function readRun($: EngineInterface) {
   }
 }
 
-// The finish action dr-superpowers asked for before the run, from the run's
+// The finish action dr-forge asked for before the run, from the run's
 // finish.json, or the one beside the workspaces for work without a plan.
 async function readFinish($: EngineInterface, path: string) {
   const text = await $.fs.read(path).catch(() => null)
@@ -2186,7 +2186,7 @@ async function sendTest($: EngineInterface): Promise<string> {
   const state = await read($, notifier)
   if (state.url === null) return 'No Discord webhook is set.'
   const body = discordBody(
-    { kind: 'done', title: '🔔 Test from dr-cockpit', detail: 'Notifications reach this channel.', isPlain: true },
+    { kind: 'done', title: '🔔 Test from dr-forge', detail: 'Notifications reach this channel.', isPlain: true },
     { host: S.where.host, repo: null, branch: null, tmux: S.where.tmux, account: (await read($, account))?.key ?? null },
     { mention: null, isBrief: S.isBrief, now: await $.clock.now() },
   )
@@ -2215,7 +2215,7 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
 
 
 // Reads the status line's figures (free without a breakdown) and, past the
-// budget in a dr-superpowers session, tells the model once.
+// budget in a dr-forge session, tells the model once.
 async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number | undefined): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
   const { handoffTokens, nudgeModel } = tuning
   const figures = await $.session.usage()
@@ -2245,7 +2245,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   }
   if (!nudgeModel || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
   await update($, isNudged, () => true)
-  const note = `dr-cockpit: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
+  const note = `dr-forge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
   try {
     await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
   } catch {
@@ -2276,8 +2276,8 @@ async function expand($: EngineInterface, isDocking: boolean) {
 
 /** Writes one of the mod's own settings as /config would, saying why if refused; resolves whether it was saved. */
 async function setOption($: EngineInterface, key: string, value: ConfigValue): Promise<boolean> {
-  const saved = await $.config.set({ key: `dr-cockpit.${key}`, value })
-  if (saved.deny !== undefined) $.ui.toast(`dr-cockpit: ${key} not saved: ${saved.deny}`)
+  const saved = await $.config.set({ key: `dr-forge.${key}`, value })
+  if (saved.deny !== undefined) $.ui.toast(`dr-forge: ${key} not saved: ${saved.deny}`)
   return saved.deny === undefined
 }
 
@@ -2546,7 +2546,7 @@ function repoChanges(git: { changed: number; untracked: number }): string {
 }
 
 function shortSeat(seat: string): string {
-  return seat.replace(/^dr-superpowers:/, '')
+  return seat.replace(/^dr-forge:/, '')
 }
 
 function costRate(usd: number, startedAt: number | undefined, now: number): string {

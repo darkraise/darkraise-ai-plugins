@@ -157,7 +157,7 @@ export type CockpitActivity = {
   isSent: boolean
 }
 
-/** One task of a dr-superpowers run, from its plan and its ledger. */
+/** One task of a dr-forge run, from its plan and its ledger. */
 export type CockpitRunTask = {
   n: number
   title: string
@@ -169,7 +169,7 @@ export type CockpitRunTask = {
   reason: string | null
 }
 
-/** A dr-superpowers run as its SDD ledger tells it. */
+/** A dr-forge run as its SDD ledger tells it. */
 export type CockpitRun = {
   plan: string | null
   tasks: CockpitRunTask[]
@@ -179,7 +179,7 @@ export type CockpitRun = {
 }
 
 /**
- * What dr-superpowers finishing does if its menu goes unanswered, as its
+ * What dr-forge finishing does if its menu goes unanswered, as its
  * `finish-choice` script keeps it (finish.json). Times in milliseconds.
  */
 export type CockpitFinish = {
@@ -210,7 +210,7 @@ export type CockpitNotifier = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'dr-cockpit': {
+    'dr-forge': {
       budget: CockpitBudget | null
       usage: CockpitUsage | null
       breakdown: CockpitBreakdown | null
