@@ -60,13 +60,15 @@ Each entry of `config/schema.mjs` keeps `type`, `default`, `group`, `title`,
 - `label` (required): the row label in the view, at most 16 characters. The
   thirteen existing keys take the labels the view hand-writes today
   ("Show at start", "Handoff budget", …), with "Attr. guard" spelled
-  "Attribution guard".
+  "AI attribution".
 - `unit` (numbers, optional): `%`, `s`, `min` or `k` (thousands of tokens).
 - `zero` (numbers, optional): the word shown at 0 (`auto`, `off`, `any`,
   `hidden`, `unset`).
 - `floor` (numbers, optional): the smallest value allowed other than 0, for a
   key where 0 means unset. A value is valid when it is 0 or lies in
   `floor..max`.
+
+A number setting is a whole number; every validator refuses a fraction.
 - `enforcedBy` (optional): `script` or `skill`. A `skill` key appears in the
   `forge-config workflow` line and raises the mid-session note. A key the mod
   itself applies, or that belongs to Claude, omits the field.
@@ -86,7 +88,7 @@ All defaults reproduce the behaviour of 2.0.0.
 | Workflow | `codexLane` | boolean, `true` | forge | script | `false`: `codex-gate` reports `lane=false`. |
 | Workflow | `codexReview` | boolean, `true` | forge | script | `false`: `codex-gate` reports `review=false`. |
 | Workflow | `executionStrategy` | enum `ask`, `sequential`, `parallel` | forge | skill | Anything but `ask` replaces brainstorming's execution-strategy question. `parallel` falls back to sequential when the design cannot name two parts that share no file, and on a Codex host. |
-| Workflow | `executionMode` | enum `auto`, `inline`, `subagent` | forge | skill | `auto`: writing-plans' current rule. `inline` and `subagent` fix the plan's `**Execution:**` line; an inline plan still delegates its heavy tasks and every task with an `**Executor:**` line. |
+| Workflow | `executionMode` | enum `auto`, `inline`, `subagent` | forge | skill | `auto`: writing-plans' current rule. `inline` and `subagent` fix the plan's `**Execution:**` line. `inline` also makes the plan sequential, whatever the execution strategy says, because an inline session implements every task itself; such a plan still delegates its heavy tasks and every task with an `**Executor:**` line. |
 | Workflow | `worktree` | enum `ask`, `always`, `never` | forge | skill | Replaces using-git-worktrees' consent question. `never` does not stop parallel waves isolating each task. |
 | Process | `processBias` | enum `standard`, `lighter`, `heavier` | forge | skill | `lighter`: the architectural path only when a trigger plainly holds; doubt resolves to bounded. `heavier`: doubt resolves to architectural. A request for a spec and the irreducible-risk trigger hold under every value. |
 | Process | `designApproval` | enum `sections`, `whole` | forge | skill | `whole`: the design is presented in full with one approval question. |
@@ -144,7 +146,7 @@ The view opens on the first group with help shown.
 
 ### Rows
 
-Every row is drawn from its schema entry: `label` in a 17-column label column,
+Every row is drawn from its schema entry: `label` padded to a 16-column label column,
 then the control, then `*` when the value differs from the default.
 
 | Type | Control |
@@ -176,30 +178,34 @@ value in force and its source, with no controls:
 
 This closes merge-register row 11.
 
-**Reset group** turns into `Confirm reset` and `Cancel`; the confirmation
-resets every unlocked key of the open group. Any other press cancels it.
+**Reset group** is offered while a row of the open group differs from its
+default. It turns into `Confirm reset` and `Cancel`; the confirmation resets
+every changed row of the group (a locked row is never one). Any other press,
+and reopening the settings, cancels it.
 
 ### Structure
 
-- `hooks/cockpit/settings-view.tsx` (new): the view, as a top-level function
-  `drawSettings($, e, context)` that `register.tsx` calls where the inline block
-  is today. The mod loads only top-level functions, so nothing in it captures
-  `$` in a closure constant.
+- `hooks/cockpit/settings-view.tsx` (new): the view, as a function
+  `drawSettings(table, model, actions)` that `register.tsx` calls where the
+  inline block is today. The engine refuses to pass `$` across an import, so
+  the module takes the element table from `$.ui.resolve(e)`, a row model and
+  one callback per press; `register.tsx` builds the callbacks.
 - `hooks/cockpit/config.ts`: the pure row model.
   - `tabsOf(schema): string[]`
-  - `rowOf(key, spec, value, lock): SettingRow` with `label`, `kind`, `shown`
-    (the value as text), `isChanged`, `lockedBy`
+  - `rowOf(key, spec, value, lock): ViewRow` with `label`, `kind`, `shown`
+    (the value as text), `isChanged`, `lockedBy`; `rowsOf(schema, values, group, locks)`
   - `shownValue(spec, value): string`
-  - `typedNumber(spec, text): number | undefined`
-  - `changedCount(schema, values, group): number`
+  - `typedNumber(spec, text): number | undefined` and `rangeText(spec)`
+  - `steppedSetting(spec, value, direction)`: the next multiple of `step`,
+    kept in range
+  - `envLocks` and `claudeLocks`
   - `isValidSetting` learns `floor`.
 - `register.tsx` keeps `setOption`, `applySettings` and `loadSettings`, and
   loses the 220-line settings block and the `custom` map.
 
-**Probe before building:** that the engine loads a second `.tsx` module beside
-`register.tsx` (`claude plugin validate` and `claude plugin test`). If it does
-not, `settings-view.ts` builds the same tree from the element table without
-JSX.
+Probed 2026-10-12 on Claude Code 2.1.296: a second `.tsx` module that draws
+with JSX validates and loads (127 tests pass with it imported); the same module
+taking `$` fails validation.
 
 ## Enforcement
 
@@ -208,7 +214,10 @@ JSX.
 Bash scripts call `bash "$HERE/forge-config" get <key>` (through a helper in
 `scripts/lib/forge-env.sh`, `forge_setting KEY DEFAULT`). A failing call (no
 Node, an unreadable file) yields the default, so a damaged settings file never
-blocks a task, a budget line or the finish menu.
+blocks a task, a budget line or the finish menu. The helper sets
+`DR_FORGE_NO_IMPORT=1`, so reading a setting never creates the settings file,
+and `DR_FORGE_NO_SETTINGS=1` makes it answer the default outright, for a test
+suite that runs against the real home directory.
 
 ### Script-enforced keys
 
@@ -217,15 +226,19 @@ blocks a task, a budget line or the finish menu.
   `false`. The forced values go into the session file the gate writes, which is
   what `review-route` and the executor scripts read, and into the gate's line.
   With both `false` the gate skips the Codex probe and reports
-  `usable=false reason=setting`. With one `false` and the other surface open,
+  `usable=false reason=setting … source=setting`; an answer cached with that
+  reason is never reused once a switch is back on. With one `false` and the other surface open,
   `reason` is unchanged. The repository constraint "the Codex executor lane is
   on" (`docs/superpowers/distilled/constraints.md`) still holds: it binds the
   planner to the gate's answer, and the switch changes that answer.
-- **`handoffMode` in `scripts/lib/context.sh`.** In `relaxed`, `ctx_line` with
-  no argument, `tail`, and `wave` measure against the final-phase limit; the
-  label reads `budget (relaxed)`, `budget (relaxed, wave of N)` and so on, and a
-  wave still reserves one task margin per extra task. `final` and `plan` are
-  unchanged. `DR_FORGE_BUDGET` and `handoffTokens` do not move the final-phase
+- **`handoffMode` in `scripts/lib/context.sh`.** In `relaxed`, a plain
+  `ctx_line` and a `wave` measure against the final-phase limit; the label
+  reads `budget (relaxed)` or `budget (relaxed, wave of N)`, and a wave still
+  reserves one task margin per extra task. `final`, `tail` and `plan` are
+  unchanged (`tail` already uses that limit).
+- **`handoffTokens` in `scripts/lib/context.sh`.** The task budget is
+  `DR_FORGE_BUDGET`, else the `handoffTokens` setting when above 0, else the
+  rule, so the scripts and the pane read one budget (merge-register row 5). `DR_FORGE_BUDGET` and `handoffTokens` do not move the final-phase
   limit, so in `relaxed` they have no effect on the verdict; the
   `handoffTokens` row's description says so. The cockpit's copy of the rule
   (`hooks/cockpit/lib.ts`) uses the same limit in `relaxed`, so the pane's
@@ -269,11 +282,14 @@ dr-forge settings in force (each replaces the matching question or default in th
     `reference/finish-preference.md`: "30 minutes" becomes the configured wait,
     and the finish question is described as skipped when `finish-choice get`
     prints a choice from the setting.
-- **Mid-session change.** When `setOption` saves an `enforcedBy: skill` key in
-  a session running dr-forge (`isPlanSession`), the cockpit adds one note to the
-  conversation, `dr-forge setting changed: <key>=<value>`, through the mechanism
-  the handoff note uses. Several changes before the next prompt collapse into
-  one note listing the latest value of each.
+- **Mid-session change.** When `setOption` saves an `enforcedBy: skill` key,
+  the cockpit remembers it and, when the settings close (Back, or the pane
+  closing), adds one note to the conversation through the mechanism the handoff
+  note uses: `dr-forge settings changed: <key>=<value>; … Each replaces the
+  matching question or default in the skills.`, with the latest value of each
+  key. Outside a session running dr-forge (`isPlanSession`) the note waits
+  until the session becomes one, and a note the session refuses stays pending
+  for the next close.
 
 ## Claude's settings file
 
@@ -295,10 +311,10 @@ dr-forge settings in force (each replaces the matching question or default in th
 - **Symlinks.** The write goes to the file's real path, so a symlinked settings
   file stays a symlink.
 - **From the cockpit.** `setOption` routes a `target: claude` key to
-  `forge-config set` through `$.process.run`, then re-reads the settings.
-  **Probe before building:** that the mod can resolve its own plugin root and
-  run the script. If it cannot, the cockpit implements the same four rules with
-  `$.fs`, and the tests cover both writers.
+  `node <$.plugin.root>/scripts/lib/forge-config.mjs set` through
+  `$.process.run`, then re-reads the settings. Probed 2026-10-12: that call
+  validates in a top-level function of `register.tsx`.
+- The write keeps the file's mode, since Claude's settings file may be private.
 - The view's description says the value applies from the next session. The
   budget scripts read the file on every run, so the handoff budget follows at
   once.
@@ -328,8 +344,8 @@ and `forge-config` refuse to put one there.
 
 | Order | Part | Owns | Consumes |
 |---|---|---|---|
-| 1 | Foundation | `config/schema.mjs`; the `SettingSpec` type and `isValidSetting` in `hooks/cockpit/config.ts`; `scripts/lib/forge-config.mjs` (`floor`, `workflow`); `scripts/lib/forge-env.sh`; `scripts/validate-repository.mjs`; `tests/forge-config.test.sh` | - |
-| 2, alone | Claude settings write | The Claude target in `scripts/lib/forge-config.mjs`; `tests/forge-config.test.sh` | Foundation |
+| 1 | Foundation | `config/schema.mjs`; `scripts/lib/forge-config.mjs` (`workflow`); `scripts/lib/forge-env.sh`; `scripts/validate-repository.mjs`; `tests/forge-config.test.sh` | - |
+| 2, alone | Claude settings write | The Claude target and `floor` in `scripts/lib/forge-config.mjs`; the two Claude keys in `config/schema.mjs`; `tests/forge-config.test.sh` | Foundation |
 | 3, wave | View | `hooks/cockpit/settings-view.tsx`, `register.tsx`, `config.ts` (row model), `lib.ts`; `types/index.d.ts`; `tests/cockpit.test.ts` | Foundation, part 2 |
 | 3, wave | Scripts | `scripts/codex-gate`, `scripts/lib/context.sh`, `scripts/finish-choice`; `tests/codex-gate.test.sh`, `tests/context-size.test.sh`, `tests/budget-line.test.sh`, `tests/finish-choice.test.sh`; `reference/session-budget.md` | Foundation |
 | 3, wave | Skills | `scripts/session-start.sh`; `tests/hook.test.sh`; the `SKILL.md` of `brainstorming`, `writing-plans`, `using-git-worktrees`, `subagent-driven-development`, `executing-plans` and `finishing-a-development-branch`; `reference/finish-preference.md`; `tests/settings-skills.test.sh` (new) | Foundation |
@@ -337,6 +353,9 @@ and `forge-config` refuse to put one there.
 
 Part 2 runs alone because it carries the data-loss risk. The three wave parts
 may run together: each file has one owner, and none consumes another's output.
+The plan may still run them one at a time: the repository's Codex-lane ruling
+gives every task that passes the lane gate to Codex, and such a task runs
+alone in its wave.
 The View part implements the relaxed limit in `hooks/cockpit/lib.ts` and the
 Scripts part implements it in `scripts/lib/context.sh`, both from the rule
 stated under Enforcement; `tests/cockpit.test.ts` and
