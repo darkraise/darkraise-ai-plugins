@@ -316,10 +316,10 @@ else
         ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
         next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dr-forge:closing-a-milestone."
         launch_cmd=$(launch_for design)
-        prompt="Close milestone $ms_id ($ms_name) of \`docs/superpowers/roadmap.md\` with dr-forge:closing-a-milestone."
+        prompt="Close milestone $ms_id ($ms_name) of \`$(forge_dir_rel docs "$root")/roadmap.md\` with dr-forge:closing-a-milestone."
         launch=1
       else
-        next_line="Nothing — every milestone in \`docs/superpowers/roadmap.md\` is closed."
+        next_line="Nothing — every milestone in \`$(forge_dir_rel docs "$root")/roadmap.md\` is closed."
       fi
     elif [ -z "$program" ]; then
       status_line="Plan \`$rel\` is complete."

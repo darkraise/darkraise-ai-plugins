@@ -8,6 +8,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+. "${SCRIPT_DIR}/lib/forge-dir.sh"
 
 stdin_json="$(cat 2>/dev/null || true)"
 transcript_path="" cwd=""
@@ -78,7 +79,7 @@ context="<EXTREMELY_IMPORTANT>\nYou have dr-forge.\n\n**Below is the full conten
 # which epic is still open. Anything that fails here injects nothing extra.
 roadmap_line=""
 roadmap_root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)
-if [ -n "$roadmap_root" ] && [ -f "$roadmap_root/docs/superpowers/roadmap.md" ]; then
+if [ -n "$roadmap_root" ] && [ -f "$(forge_dir docs "$roadmap_root")/roadmap.md" ]; then
   roadmap_line=$(bash "${SCRIPT_DIR}/roadmap" status --root "$roadmap_root" --line 2>/dev/null \
     | head -n 1 | tr -d '\001-\010\013\014\016-\037' || true)
   if [ -n "$roadmap_line" ]; then

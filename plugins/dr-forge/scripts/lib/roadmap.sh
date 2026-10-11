@@ -14,7 +14,8 @@ ROADMAP_STATES='open closed'
 
 # roadmap_file ROOT — the roadmap path, printed only when it exists.
 roadmap_file() {
-  local f="$1/docs/superpowers/roadmap.md"
+  local f
+  f="$(forge_dir docs "$1")/roadmap.md"
   [ -f "$f" ] && printf '%s\n' "$f"
   return 0
 }
@@ -109,7 +110,7 @@ roadmap_line() {
   [ -n "$file" ] || return 0
   cur=$(roadmap_current "$file")
   if [ -z "$cur" ]; then
-    printf 'Roadmap: every milestone is closed (docs/superpowers/roadmap.md).\n'
+    printf 'Roadmap: every milestone is closed (%s/roadmap.md).\n' "$(forge_dir_rel docs "$root")"
     return 0
   fi
   IFS=$'\t' read -r m name _ reg _ _ <<<"$cur"

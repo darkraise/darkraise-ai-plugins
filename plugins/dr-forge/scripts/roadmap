@@ -57,7 +57,7 @@ done
 set -- ${args[@]+"${args[@]}"}
 [ -n "$root" ] || root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 root=$(cd "$root" 2>/dev/null && pwd) || { echo "no such directory: $root" >&2; exit 2; }
-FILE="$root/docs/superpowers/roadmap.md"
+FILE="$(forge_dir docs "$root")/roadmap.md"
 
 need_roadmap() {
   [ -f "$FILE" ] || { echo "no roadmap at $FILE" >&2; exit 2; }

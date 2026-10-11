@@ -83,6 +83,9 @@ check "register_for_spec: matches one" \
   "$(register_for_spec "$ROOT" docs/superpowers/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: no spec argument prints nothing" "$(register_for_spec "$ROOT")" ""
 check "register_files: no directory prints nothing" "$(register_files "$TMP/absent")" ""
+mkdir -p "$TMP/forge/docs/forge/registers"
+reg "$TMP/forge/docs/forge/registers/one.md" '| 1 | A | - | - | open | - |'
+check "register_files: a docs/forge checkout" "$(register_files "$TMP/forge" | xargs -n1 basename)" "one.md"
 
 # --- register check ---
 REG="$HERE/../scripts/register"

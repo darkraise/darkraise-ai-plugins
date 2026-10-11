@@ -1,5 +1,6 @@
 # Item register parsing shared by register, next-step, plan-lint and repo-audit,
 # so every reader agrees on what a row is. Sourced; defines functions only.
+. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
 
 _REGISTER_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$_REGISTER_LIB_DIR/plan.sh"
@@ -88,7 +89,8 @@ register_covers() {
 
 # register_files ROOT — every register in the repository.
 register_files() {
-  local dir="$1/docs/superpowers/registers" f
+  local dir f
+  dir="$(forge_dir docs "$1")/registers"
   [ -d "$dir" ] || return 0
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue

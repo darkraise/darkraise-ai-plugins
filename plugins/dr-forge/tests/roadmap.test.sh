@@ -152,6 +152,19 @@ check "all closed: the hook line" "$OUT" "Roadmap: every milestone is closed (do
 run bash "$RM" check --root "$ROOT"
 check "close: the written roadmap checks clean" "$RC" "0"
 
+# --- a dr-forge checkout keeps its roadmap in docs/forge ---
+FROOT="$TMP/forge"
+git init -q -b main "$FROOT"
+mkdir -p "$FROOT/docs"
+cp -R "$D" "$FROOT/docs/forge"
+for f in "$FROOT"/docs/forge/roadmap.md "$FROOT"/docs/forge/registers/*.md; do
+  sed 's#docs/superpowers/#docs/forge/#g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+done
+run bash "$RM" status --root "$FROOT" --line
+check "docs/forge: the hook line names its roadmap" "$OUT" "Roadmap: every milestone is closed (docs/forge/roadmap.md)."
+run bash "$RM" check --root "$FROOT"
+check "docs/forge: the roadmap checks clean" "$RC" "0"
+
 # --- add, order and reopen ---
 register "$D/registers/m2.md" "$PRODUCT" '| 1 | Hardening review | - | - | open | - |'
 register "$D/registers/m3.md" "$PRODUCT" '| 1 | Release | - | - | done | - |'
