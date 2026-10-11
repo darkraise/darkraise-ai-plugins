@@ -42,9 +42,9 @@ test('the grid stops starting cells once its minutes are spent', () => {
 });
 
 test('the grid refuses to run when the plugin drifted from the start commit', () => {
-  writeFileSync(join(fx.repo, 'plugins/dr-superpowers/marker.txt'), 'changed\n');
+  writeFileSync(join(fx.repo, 'plugins/dr-forge/marker.txt'), 'changed\n');
   const drifted = node('run-grid.mjs', ['--stage', 'written']);
-  writeFileSync(join(fx.repo, 'plugins/dr-superpowers/marker.txt'), 'fixture\n');
+  writeFileSync(join(fx.repo, 'plugins/dr-forge/marker.txt'), 'fixture\n');
   assert.equal(drifted.status, 2);
   assert.match(drifted.stderr, /differs from the manifest's start commit/);
   assert.equal(node('run-grid.mjs', ['--stage', 'nope']).status, 2);

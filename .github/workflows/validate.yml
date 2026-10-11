@@ -26,7 +26,7 @@ jobs:
         timeout-minutes: 3
         run: |
           timeout 90s npx --yes @anthropic-ai/claude-code@2.1.263 plugin validate .
-          for plugin in dr-status dr-superpowers dcc-darkraise-ui dcc-darkraise-win32ui; do
+          for plugin in dr-status dr-forge dcc-darkraise-ui dcc-darkraise-win32ui; do
             timeout 30s npx --yes @anthropic-ai/claude-code@2.1.263 plugin validate "plugins/$plugin"
           done
 

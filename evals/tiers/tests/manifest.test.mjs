@@ -33,11 +33,11 @@ test('build-manifest writes the selected cases and every exclusion', () => {
 });
 
 test('build-manifest refuses to pin a start commit while the plugin is dirty', () => {
-  writeFileSync(join(fx.repo, 'plugins/dr-superpowers/marker.txt'), 'changed\n');
+  writeFileSync(join(fx.repo, 'plugins/dr-forge/marker.txt'), 'changed\n');
   const r = build();
-  writeFileSync(join(fx.repo, 'plugins/dr-superpowers/marker.txt'), 'fixture\n');
+  writeFileSync(join(fx.repo, 'plugins/dr-forge/marker.txt'), 'fixture\n');
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /plugins\/dr-superpowers has uncommitted changes/);
+  assert.match(r.stderr, /plugins\/dr-forge has uncommitted changes/);
 });
 
 test('every arm of the real arms table names an agent the plugin ships', () => {

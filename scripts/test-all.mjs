@@ -38,6 +38,8 @@ async function run(executable, args, seconds) {
     });
   });
 }
+// The cockpit's tests need the claude CLI; CI runs them in their own pinned-CLI step.
+const hasClaude = !options.list && process.platform !== 'win32' && spawnSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }).status === 0;
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
@@ -45,7 +47,8 @@ const jobs = [
   // tests run on POSIX only.
   ...(process.platform === 'win32' ? [] : [[process.execPath, ['--test', ...readdirSync(resolve(root, 'evals/tiers/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `evals/tiers/tests/${name}`)], 300]]),
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
-  ...readdirSync(resolve(root, 'plugins/dr-superpowers/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dr-superpowers/tests/${name}`], 600]),
+  ...readdirSync(resolve(root, 'plugins/dr-forge/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dr-forge/tests/${name}`], 600]),
+  ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dr-forge'], 300]] : []),
 ];
 let success = true;
 for (const [executable, args, seconds] of selectShard(jobs, options.shard)) {

@@ -122,7 +122,7 @@ export function strippedRow(c) {
 }
 
 export function slug(plan) {
-  return basename(plan, '.md').replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/^dr-superpowers-/, '');
+  return basename(plan, '.md').replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/^dr-(?:superpowers|forge)-/, '');
 }
 
 // select CASES — at most CAP of CASES, taken round-robin across plans in plan
