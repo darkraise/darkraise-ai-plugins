@@ -73,7 +73,15 @@ make_shim() { # make_shim <name> <real-path>
 }
 make_shim jq "$REAL_JQ"
 make_shim git "$REAL_GIT"
-make_shim timeout "$REAL_TIMEOUT"
+# The render guards each git call with `timeout 1`. On a loaded Windows runner
+# a cold `git status` through the bash shim can take longer than that; the
+# guard then kills it, dcc_git_collect stops after one call, and the counts
+# below come back short although the render path is unchanged. This file
+# counts processes, not how fast they run, so the timeout shim forwards with a
+# generous limit instead of the render's one second.
+printf '#!%s\nprintf "%%s\\n" "timeout" >> "%s"\nshift\nexec "%s" 30 "$@"\n' \
+  "$REAL_BASH" "$log" "$REAL_TIMEOUT" > "$shims/timeout"
+chmod +x "$shims/timeout"
 
 # One run, stdout and stderr captured separately. The stderr assertion is
 # load-bearing: a call to a binary that is neither shimmed nor on the
