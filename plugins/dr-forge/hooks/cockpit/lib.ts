@@ -6,7 +6,7 @@ import type { CockpitFinish } from '../../types'
 export const WARN_AT = 0.8
 
 /**
- * The handoff budget: the configured tokens, else DR_SUPERPOWERS_BUDGET, else
+ * The handoff budget: the configured tokens, else DR_FORGE_BUDGET (or the pre-2.0 DR_SUPERPOWERS_BUDGET), else
  * dr-forge's own rule (reference/session-budget.md): the compaction point
  * minus one task's worst growth, min(autoCompactWindow, window) × 93% − 140,000.
  * Small windows, where that comes out near zero, hold a fifth of the window.
@@ -108,9 +108,9 @@ export function isGitWriteTool(tool: string): boolean {
   return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
 }
 
-/** Whether a subagent type or skill name belongs to dr-forge. */
+/** Whether a subagent type or skill name belongs to dr-forge, under its name or the pre-2.0 dr-superpowers. */
 export function isSuperpowers(name: string): boolean {
-  return name.startsWith('dr-forge:')
+  return name.startsWith('dr-forge:') || name.startsWith('dr-superpowers:')
 }
 
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */

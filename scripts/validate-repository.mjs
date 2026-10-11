@@ -86,7 +86,11 @@ export function validateRepository(root) {
     visit(skillRoot);
   }
   const legacyPattern = /(?:^|[^\w-])superpowers:|dr-superpowers:|dcc-superpower-companions:/;
-  const legacyAllowed = new Set(['plugins/dr-forge/reference/legacy-names.md']);
+  const legacyAllowed = new Set([
+    'plugins/dr-forge/reference/legacy-names.md',
+    'plugins/dr-forge/hooks/cockpit/lib.ts',
+    'plugins/dr-forge/tests/cockpit.test.ts',
+  ]);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;

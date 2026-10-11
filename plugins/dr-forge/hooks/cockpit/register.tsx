@@ -689,7 +689,7 @@ export const register: Register = (on, options) => {
                   'set-notify-url',
                   'Webhook',
                   notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
-                  notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from DR_COCKPIT_NOTIFY_URL</Text>,
+                  notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from the environment</Text>,
                   notes.url !== null && button('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
                   !notes.isFromEnv && canType && button('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
                   !notes.isFromEnv && notes.url !== null && button('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
@@ -2098,7 +2098,7 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
 // The webhook and mention, from the environment or the mod's own store.
 async function readNotifier($: EngineInterface) {
   try {
-    const fromEnv = ((await $.env.get('DR_COCKPIT_NOTIFY_URL')) ?? '').trim()
+    const fromEnv = ((await $.env.get('DR_FORGE_NOTIFY_URL')) || (await $.env.get('DR_COCKPIT_NOTIFY_URL')) || '').trim()
     const stored = await $.store.get(STORE_URL)
     const url = isDiscordWebhook(fromEnv) ? fromEnv : typeof stored === 'string' && isDiscordWebhook(stored) ? stored : null
     const mention = await $.store.get(STORE_MENTION)
@@ -2209,7 +2209,7 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
   }
   const state = await read($, notifier)
   return {
-    text: state.url === null ? 'No Discord webhook is set. /cockpit notify url <url> sets one.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from DR_COCKPIT_NOTIFY_URL)' : ''}.`,
+    text: state.url === null ? 'No Discord webhook is set. /cockpit notify url <url> sets one.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
   }
 }
 
@@ -2222,7 +2222,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   const tokens = figures.context.tokens
   if (tokens === undefined) return
   const window = figures.context.window
-  const limit = budgetFor(handoffTokens, await $.env.get('DR_SUPERPOWERS_BUDGET'), window, compactWindow)
+  const limit = budgetFor(handoffTokens, (await $.env.get('DR_FORGE_BUDGET')) || (await $.env.get('DR_SUPERPOWERS_BUDGET')), window, compactWindow)
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -2546,7 +2546,7 @@ function repoChanges(git: { changed: number; untracked: number }): string {
 }
 
 function shortSeat(seat: string): string {
-  return seat.replace(/^dr-forge:/, '')
+  return seat.replace(/^dr-(?:forge|superpowers):/, '')
 }
 
 function costRate(usd: number, startedAt: number | undefined, now: number): string {

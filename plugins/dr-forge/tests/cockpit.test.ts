@@ -5,6 +5,7 @@ import {
   accountColor,
   accountKey,
   isAbsolutePath,
+  isSuperpowers,
   attributionIn,
   bar,
   billingLabel,
@@ -259,6 +260,12 @@ function signedIn(on: On, files: World['files'] = {}) {
   on('session.repo', () => ({ value: { root: '/home/me/code/shop', remote: null, internal: false, name: null } }))
   on('session.model', () => ({ value: 'claude-opus-5-5[1m]' }))
 }
+
+test('a dr-forge and a pre-2.0 dr-superpowers name both mark a workflow session', () => {
+  expect(isSuperpowers('dr-forge:brainstorming')).toBe(true)
+  expect(isSuperpowers('dr-superpowers:brainstorming')).toBe(true)
+  expect(isSuperpowers('feature-dev:code-reviewer')).toBe(false)
+})
 
 describe('budget rule', () => {
   test('follows the setting, then the env, then dr-forge', () => {
@@ -1494,6 +1501,36 @@ describe('discord', () => {
     await ui.press({ key: 'set-notify-test' })
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
     expect(JSON.stringify(await ui.drawn())).not.toContain('abcDEF_token')
+  })
+
+  test('sends to the webhook named by DR_FORGE_NOTIFY_URL alone', { options: { notifyAfter: 0 } }, async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches, env: { DR_FORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(1)
+    expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
+  })
+
+  test('sends to the webhook named by DR_COCKPIT_NOTIFY_URL when DR_FORGE_NOTIFY_URL is unset', { options: { notifyAfter: 0 } }, async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches, env: { DR_COCKPIT_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(1)
+    expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
+  })
+
+  test('prefers DR_FORGE_NOTIFY_URL over DR_COCKPIT_NOTIFY_URL', { options: { notifyAfter: 0 } }, async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches, env: { DR_FORGE_NOTIFY_URL: WEBHOOK, DR_COCKPIT_NOTIFY_URL: 'https://discord.com/api/webhooks/2/old' } })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(1)
+    expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
   })
 
   test('/cockpit notify sets, tests and refuses', async ($, on) => {

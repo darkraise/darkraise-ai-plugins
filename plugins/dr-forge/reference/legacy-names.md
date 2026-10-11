@@ -4,8 +4,10 @@ Plans, ledgers, and notes written before dr-forge 2.0.0 name skills and
 agents under older plugin prefixes. Resolve them with this table when you read
 them.
 
-This is the only file in the maintained plugins allowed to spell the old
-prefixes literally; `scripts/validate-repository.mjs` enforces that.
+This is the only document in the maintained plugins allowed to spell the old
+prefixes literally; the cockpit's `hooks/cockpit/lib.ts` and its test also
+spell `dr-superpowers:` to recognise pre-2.0 sessions.
+`scripts/validate-repository.mjs` enforces both.
 
 ## Rule
 
