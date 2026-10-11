@@ -907,8 +907,8 @@ export const register: Register = on => {
     // Minimize shuts the pane for the band above the prompt and Expand opens
     // it again; each writes the layout setting, so the next session opens the
     // same way. A band drawn in the pane itself only changes the layout.
-    // Saving the layout no longer reloads the mod, so an inline pane, opened for the
-    // band's rows, is asked again for the full pane.
+    // Saving the layout does not reload the mod, so an inline pane, opened for the
+    // band's rows, has to be asked for the full pane.
     if (isCompact) {
       const isInline = e.props.placement === 'inline'
       return drawBand($, e, async () => {
@@ -2420,7 +2420,7 @@ async function importSettings($: EngineInterface, path: string): Promise<Setting
   const file = importedSettings(SCHEMA, claude, old)
   // The mod has no exclusive create: a file saved while the reads above ran is kept.
   if (await $.fs.exists(path).catch(() => false)) return (await readSettingsFile($, path)) ?? file
-  await $.fs.write(path,`${JSON.stringify(file, null, 2)}\n`).catch(() => undefined)
+  await $.fs.write(path, `${JSON.stringify(file, null, 2)}\n`).catch(() => undefined)
   return file
 }
 
