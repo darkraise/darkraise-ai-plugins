@@ -22,8 +22,10 @@ CTX_TAIL_TASKS=2
 # plan writing never starts at the compaction point.
 CTX_PLAN_PCT=150
 
-ctx_jq() { "${DR_SUPERPOWERS_JQ:-jq}" "$@"; }
-ctx_have_jq() { command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; }
+. "$(dirname "${BASH_SOURCE[0]}")/forge-env.sh"
+
+ctx_jq() { "${DR_FORGE_JQ:-jq}" "$@"; }
+ctx_have_jq() { command -v "${DR_FORGE_JQ:-jq}" >/dev/null 2>&1; }
 
 # Keys are built from the native path so they match what the hook received from
 # Claude Code (a Windows path under Git Bash).
@@ -245,20 +247,20 @@ ctx_budget() {
   echo $(( $(ctx_window "$1") * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
 }
 
-# ctx_final_budget MODEL — the final phase's limit. DR_SUPERPOWERS_BUDGET pins
+# ctx_final_budget MODEL — the final phase's limit. DR_FORGE_BUDGET pins
 # the task budget only, so it never moves this one.
 ctx_final_budget() {
   echo $(( $(ctx_window "$1") * CTX_FINAL_PCT / 100 ))
 }
 
 # ctx_plan_budget MODEL — the limit for writing the plan after the spec:
-# CTX_PLAN_PCT of the task budget (DR_SUPERPOWERS_BUDGET included), never above
+# CTX_PLAN_PCT of the task budget (DR_FORGE_BUDGET included), never above
 # the final-phase limit.
 ctx_plan_budget() {
   local task final plan
-  case ${DR_SUPERPOWERS_BUDGET:-} in
+  case ${DR_FORGE_BUDGET:-} in
     ''|*[!0-9]*) task="" ;;
-    *) task=$DR_SUPERPOWERS_BUDGET; [ "$task" -gt 0 ] || task="" ;;
+    *) task=$DR_FORGE_BUDGET; [ "$task" -gt 0 ] || task="" ;;
   esac
   [ -n "$task" ] || task=$(ctx_budget "$1")
   final=$(ctx_final_budget "$1")
@@ -292,7 +294,7 @@ ctx_log_observation() {
   sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
     | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
   printf '%s\t%s\t%s\t%s\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DR_SUPERPOWERS_BUDGET_CALLER:-direct}" "$sid" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DR_FORGE_BUDGET_CALLER:-direct}" "$sid" \
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
@@ -335,7 +337,7 @@ ctx_line() {
     tk=$(( (tokens + 500) / 1000 ))
     # No denominator: no Codex budget has been set yet, and the verdict stays
     # unknown so reference/session-budget.md's count rule keeps the session.
-    # DR_SUPERPOWERS_BUDGET stays a Claude override for the same reason.
+    # DR_FORGE_BUDGET stays a Claude override for the same reason.
     echo "$label: ${tk}k measured — unknown — source: rollout"
     return 3
   fi
@@ -349,9 +351,9 @@ ctx_line() {
   elif [ "$limit" = plan ]; then
     budget=$(ctx_plan_budget "$model")
   else
-    case ${DR_SUPERPOWERS_BUDGET:-} in
+    case ${DR_FORGE_BUDGET:-} in
       ''|*[!0-9]*) ;;
-      *) [ "$DR_SUPERPOWERS_BUDGET" -gt 0 ] && budget=$DR_SUPERPOWERS_BUDGET ;;
+      *) [ "$DR_FORGE_BUDGET" -gt 0 ] && budget=$DR_FORGE_BUDGET ;;
     esac
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
     budget=$(( budget - extra ))

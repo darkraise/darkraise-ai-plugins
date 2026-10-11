@@ -49,7 +49,7 @@ export function makeHome({ repo, url = "http://127.0.0.1:9", project = "proj", c
     ...process.env,
     HOME: home,
     DARKMEM_API_KEY: KEY,
-    DR_SUPERPOWERS_SESSION_ID: "sess-1",
+    DR_FORGE_SESSION_ID: "sess-1",
     DARKMEM_SYNC_TIMEOUT_MS: "3000",
   };
   const mirror = path.join(home, ".dr-superpowers", "mirror", project);

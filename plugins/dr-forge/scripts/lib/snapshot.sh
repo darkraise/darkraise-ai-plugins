@@ -12,6 +12,8 @@
 
 SNAPSHOT_CAP=5500
 
+. "$(dirname "${BASH_SOURCE[0]}")/forge-env.sh"
+
 snapshot_latest() { # CWD — the Next session block of the primary checkout's latest.md
   local primary latest
   primary=$(plan_primary_root "$1") || return 0
@@ -43,7 +45,7 @@ snapshot_ledgers() { # CWD — every worktree's ledgers: last 8 lines, last 10 r
 # FILE — sections 4-6 from the transcript's last 3000 lines, separated by
 # @@4 / @@5 / @@6 marker lines.
 snapshot_transcript_sections() {
-  tail -n 3000 "$1" | tr -d '\r' | "${DR_SUPERPOWERS_JQ:-jq}" -R -r -n '
+  tail -n 3000 "$1" | tr -d '\r' | "${DR_FORGE_JQ:-jq}" -R -r -n '
     [inputs | select(length > 0) | (try fromjson catch null) | objects
      | select((.isSidechain // false) == false)] as $e
     | ([$e[] | select(.type == "assistant") | .message.content[]?
@@ -106,7 +108,7 @@ dr-forge plugin-root path, with the working directory inside the project;
 if the next budget line says `handoff`, run the dr-forge handoff skill.'
   s2=$(snapshot_latest "$cwd")
   s3=$(snapshot_ledgers "$cwd")
-  if [ -n "$tp" ] && command -v "${DR_SUPERPOWERS_JQ:-jq}" >/dev/null 2>&1; then
+  if [ -n "$tp" ] && command -v "${DR_FORGE_JQ:-jq}" >/dev/null 2>&1; then
     if command -v cygpath >/dev/null 2>&1; then tp=$(cygpath -u "$tp"); fi
     if [ -f "$tp" ]; then
       raw=$(snapshot_transcript_sections "$tp")

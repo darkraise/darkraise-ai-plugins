@@ -265,6 +265,7 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
 
 test("without a declared session the run key falls back to the machine and day", async t => {
   const s = await setup(t);
+  delete s.env.DR_FORGE_SESSION_ID;
   delete s.env.DR_SUPERPOWERS_SESSION_ID;
   write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
   assert.equal((await s.push()).code, 0);

@@ -28,7 +28,7 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
-unset DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID
+unset DR_FORGE_BUDGET DR_FORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -95,8 +95,12 @@ check "no usage: line" "$out" "budget: unknown of 465k — unknown — no usage 
 
 # --- budget override ---
 asst 285000 > "$T"
-DR_SUPERPOWERS_BUDGET=300000 run
+DR_FORGE_BUDGET=300000 run
 check "override: line" "$out" "budget: 285k of 300k (95%) — ok — source: record"
+DR_SUPERPOWERS_BUDGET=300000 run
+check "pre-2.0 override name still applies" "$out" "budget: 285k of 300k (95%) — ok — source: record"
+DR_FORGE_BUDGET=380000 DR_SUPERPOWERS_BUDGET=300000 run
+check "the dr-forge name wins" "$out" "budget: 285k of 380k (75%) — ok — source: record"
 
 # --- the budget follows the model's window and autoCompactWindow ---
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
@@ -110,7 +114,7 @@ rm -f "$HOME/.claude/settings.json"
 run
 check "no settings: the model's window" "$out" "budget: 285k of 790k (36%) — ok — source: record"
 settings 650000
-DR_SUPERPOWERS_BUDGET=junk run
+DR_FORGE_BUDGET=junk run
 check "invalid override is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 run --plan docs/p.md
 check "arguments: exit 2" "$status" "2"
@@ -148,7 +152,7 @@ check "no transcript: exit 3" "$status" "3"
 check "no transcript: line, no settings" "$out" "budget: unknown of 790k — unknown — no transcript found"
 
 # --- no jq ---
-DR_SUPERPOWERS_JQ=no-such-jq run
+DR_FORGE_JQ=no-such-jq run
 check "no jq: exit 3" "$status" "3"
 check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
 
@@ -167,12 +171,12 @@ run --final
 check "final: over: exit 5" "$status" "5"
 check "final: over: line" "$out" "budget (final): 560k of 553k (101%) — handoff — source: record"
 asst 500000 > "$T"
-DR_SUPERPOWERS_BUDGET=300000 run --final
+DR_FORGE_BUDGET=300000 run --final
 check "final: the task override does not move it" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
 settings 800000
-DR_SUPERPOWERS_BUDGET=465000 run
+DR_FORGE_BUDGET=465000 run
 check "800k window, pinned task budget: tasks still hand off at 465k" "$out" "budget: 500k of 465k (107%) — handoff — source: record"
-DR_SUPERPOWERS_BUDGET=465000 run --final
+DR_FORGE_BUDGET=465000 run --final
 check "800k window, pinned task budget: the final phase continues" "$out" "budget (final): 500k of 680k (73%) — ok — source: record"
 settings 650000
 
@@ -181,7 +185,7 @@ asst 500000 > "$T"
 run --tail 1
 check "tail of 1: past the task budget, below the final limit: exit 0" "$status" "0"
 check "tail of 1: line" "$out" "budget (last task): 500k of 553k (90%) — ok — source: record"
-DR_SUPERPOWERS_BUDGET=300000 run --tail 2
+DR_FORGE_BUDGET=300000 run --tail 2
 check "tail of 2: the task override does not move it" "$out" "budget (last 2 tasks): 500k of 553k (90%) — ok — source: record"
 asst 560000 > "$T"
 run --tail 2
@@ -196,12 +200,12 @@ asst 500000 > "$T"
 run --plan
 check "plan: past the task budget, under the final cap: exit 0" "$status" "0"
 check "plan: capped at the final-phase limit" "$out" "budget (plan): 500k of 553k (90%) — ok — source: record"
-DR_SUPERPOWERS_BUDGET=300000 run --plan
+DR_FORGE_BUDGET=300000 run --plan
 check "plan: 150% of a pinned task budget" "$out" "budget (plan): 500k of 450k (111%) — handoff — source: record"
-DR_SUPERPOWERS_BUDGET=300000 run --plan
+DR_FORGE_BUDGET=300000 run --plan
 check "plan: over: exit 5" "$status" "5"
 settings 800000
-DR_SUPERPOWERS_BUDGET=465000 run --plan
+DR_FORGE_BUDGET=465000 run --plan
 check "800k window, pinned 465k: capped at 680k, not 698k" "$out" "budget (plan): 500k of 680k (73%) — ok — source: record"
 settings 650000
 run --plan extra
@@ -221,7 +225,7 @@ check "wave of 0: usage" "$status" "2"
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run --final
 check "final: haiku's 200k window" "$out" "budget (final): 30k of 170k (17%) — ok — source: record"
-DR_SUPERPOWERS_JQ=no-such-jq run --final
+DR_FORGE_JQ=no-such-jq run --final
 check "final: no jq: line" "$out" "budget (final): unknown of 553k — unknown — no jq"
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
@@ -359,8 +363,8 @@ run
 check "rollout: exit 3" "$status" "3"
 has "rollout: measured line" "$out" "budget: 187k measured — unknown — source: rollout"
 
-DR_SUPERPOWERS_BUDGET=100000 run
-has "rollout: DR_SUPERPOWERS_BUDGET does not make a verdict" "$out" "measured — unknown"
+DR_FORGE_BUDGET=100000 run
+has "rollout: DR_FORGE_BUDGET does not make a verdict" "$out" "measured — unknown"
 
 { meta "$REPO_NATIVE"; printf 'not json\n'; } > "$RB"
 run
@@ -411,7 +415,7 @@ check "log: the session id lands in field 4" "$(awk -F'\t' 'NR==1 {print $4}' "$
 check "log: the directory self-ignores" "$(cat "$REPO/.superpowers/sdd/.gitignore")" "*"
 check "log: the checkout stays clean" "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)" ""
 
-DR_SUPERPOWERS_BUDGET_CALLER=task-brief:3 run
+DR_FORGE_BUDGET_CALLER=task-brief:3 run
 check "log: the caller tag lands in field 3" "$(awk -F'\t' 'END {print $3}' "$LOG")" "task-brief:3"
 check "log: a second measurement appends" "$(wc -l < "$LOG" | tr -d ' ')" "2"
 

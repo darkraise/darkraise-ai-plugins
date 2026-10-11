@@ -104,4 +104,4 @@ if [ -n "$n" ]; then
     budget_mode=(--tail "$remaining")
   fi
 fi
-DR_SUPERPOWERS_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true
+DR_FORGE_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true

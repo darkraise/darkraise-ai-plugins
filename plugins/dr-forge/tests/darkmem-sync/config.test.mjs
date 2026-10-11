@@ -61,6 +61,7 @@ test("the run key prefers the declared id, then the session record, then a day k
   const repo = makeRepo();
   const { home, env } = makeHome({ repo });
   assert.equal(runKey({ cwd: repo, env }), "sess-1");
+  delete env.DR_FORGE_SESSION_ID;
   delete env.DR_SUPERPOWERS_SESSION_ID;
   const now = new Date("2026-09-24T10:00:00Z");
   assert.equal(runKey({ cwd: repo, env, now }), `codex:${os.hostname()}:2026-09-24`);
@@ -68,4 +69,11 @@ test("the run key prefers the declared id, then the session record, then a day k
   fs.mkdirSync(sessions, { recursive: true });
   fs.writeFileSync(path.join(sessions, `${repo.replace(/[^A-Za-z0-9]/g, "-")}.json`), JSON.stringify({ session_id: "abc-123" }));
   assert.equal(runKey({ cwd: repo, env, now }), "abc-123");
+});
+
+test("the pre-2.0 session id variable still declares the run, behind the new one", () => {
+  const cwd = makeRepo();
+  const HOME = scratch("dms-home-");
+  assert.equal(runKey({ cwd, env: { HOME, DR_SUPERPOWERS_SESSION_ID: "old-1" } }), "old-1");
+  assert.equal(runKey({ cwd, env: { HOME, DR_FORGE_SESSION_ID: "new-1", DR_SUPERPOWERS_SESSION_ID: "old-1" } }), "new-1");
 });

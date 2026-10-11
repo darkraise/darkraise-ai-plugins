@@ -90,11 +90,11 @@ export function resolveMode({ cwd = process.cwd(), env = process.env } = {}) {
 }
 
 // The run a sync declares; darkmem refuses an undeclared one.
-// DR_SUPERPOWERS_SESSION_ID lets a hook pass the id it holds; otherwise the
+// DR_FORGE_SESSION_ID (or the pre-2.0 DR_SUPERPOWERS_SESSION_ID) lets a hook pass the id it holds; otherwise the
 // record scripts/session-start.sh writes for this directory; otherwise one run
 // per machine per day, which is what a Codex session (no hooks) gets.
 export function runKey({ cwd = process.cwd(), env = process.env, now = new Date() } = {}) {
-  const declared = env.DR_SUPERPOWERS_SESSION_ID?.trim();
+  const declared = env.DR_FORGE_SESSION_ID?.trim() || env.DR_SUPERPOWERS_SESSION_ID?.trim();
   if (declared) return declared;
   const sessions = path.join(homeOf(env), ".claude", "dr-forge", "sessions");
   for (const dir of [cwd, git(cwd, ["rev-parse", "--show-toplevel"]), primaryRoot(cwd)]) {

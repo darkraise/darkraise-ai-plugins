@@ -32,7 +32,7 @@ export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DR_SUPERPOWERS_JQ
+unset DR_FORGE_JQ DR_SUPERPOWERS_JQ
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
@@ -114,7 +114,7 @@ lacks "commands: a foreground Bash call excluded" "$out" "Foreground test run"
 has "agents and commands share one heading" "$out" "### Background agents and commands"
 
 # --- no jq: transcript sections skipped, the rest kept ---
-out=$(DR_SUPERPOWERS_JQ=no-such-jq snapshot_build "$T" "$REPO")
+out=$(DR_FORGE_JQ=no-such-jq snapshot_build "$T" "$REPO")
 has "no jq: ledger kept" "$out" "Task 2: fix round 1/5"
 lacks "no jq: no transcript sections" "$out" "### Files edited"
 
