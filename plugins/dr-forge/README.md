@@ -1,0 +1,655 @@
+# dr-forge
+
+A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
+(MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
+strong model writes the plan, a Sonnet-class session or small tiered
+implementers execute it literally, and every judgment call goes to one strong
+ruling seat. Install `dr-forge@darkraise` from the repository-root
+marketplace, then disable the upstream `superpowers` plugin,
+`dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
+two enabled plugins can double-trigger.
+
+## Why
+
+Four findings from real transcripts drove the fork; the numbers are in
+`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`.
+
+- **Cost.** The main session was 92% of token spend, most of it re-reading a
+  400–700k context. The plugin hands off at a budget printed by its own
+  scripts (the compaction point minus one task's growth, 465k at a 650000
+  window), keeps the execution
+  controller on Sonnet, and reads the plan one task at a time instead of whole.
+- **Small models executing literally.** Upstream advises picking a model per
+  task but has no field for the choice, and the Agent tool could not pass
+  reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
+  dispatch still passes neither model nor effort, so the pinned pair is what
+  runs). Here every task records an implementer from a model ×
+  effort grid, the plan's `**Execution:**` line decides inline or subagent
+  mode, and `plan-lint` checks the header, the scores and the mode before a
+  plan is saved.
+- **Judgment in one seat.** Executors and controllers rule only on mechanical
+  conflicts and log every ruling. Plan defects, contested findings and
+  cannot-verify items go to an Opus judge whose verdicts —
+  CONFIRMED-GAP, PARK, AMEND, BLOCKED — are carried out verbatim; AMEND edits
+  the plan through `scripts/plan-amend` so the plan on disk stays immutable.
+- **Karpathy guidelines baked in.** Think before coding, simplicity first,
+  surgical changes, goal-driven verification: in the entry point, the plan
+  template, the implementer template and TDD.
+
+**Codex host.** Read [native-codex.md](reference/native-codex.md). Its
+`codex-v4` policy routes scores 0–9 through Luna, Sol and Astra with
+the same four raw axes; scouts start at Sol medium, judges at Astra high; the
+Claude hooks are disabled in the native manifest. Native reviewers have
+independent contexts; enforce read-only restrictions where the host allows and
+disclose instruction-only restrictions where it does not.
+
+**External CLI lane.** On Claude, a task scoring 2–4 at risk ≤ 1 may run on the
+Codex CLI instead of a Claude implementer. The lane needs an exclusively
+assigned linked worktree, stable task IDs, approved file paths and durable
+recovery; read [external-task-recovery.md](reference/external-task-recovery.md)
+before offloading. Names written under older plugin prefixes are translated at
+read time per [legacy-names.md](reference/legacy-names.md).
+
+## What you get
+
+**Twenty agents in three classes.** Seven execution implementers - Sonnet 5.5
+and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
+everything the assignment table and the escalation ladder can reach; no score
+assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
+escalation. Since 1.27.0 no score assigns `impl-haiku` either: total 0 runs on
+`impl-sonnet-low`, which cost less per pass in the tier evaluation, and Haiku
+is reached only by a human `**Implementer:**` override. Nine reserve implementers - the `xhigh` and `max` efforts, and
+every Fable 5.1 tier - are reachable only by a human override, or by a task
+that has already been split once and still exhausted `impl-opus-high`. Four
+read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
+`judge-fable` (a human override only), and `scout-sonnet` - whose `tools:`
+frontmatter omits `Edit`, `Write`, and `Agent`, so a reviewer that cannot
+modify the tree or spawn subagents is a fact about the registry rather than a
+request in a prompt.
+
+The reserve exists so that a human ruling, and a task that genuinely cannot be
+split any further, both have somewhere to go. It is not a way around the gate:
+above `impl-opus-high` the first answer to a hard task is still to split it, and
+the reserve is only entered when that split has already been spent.
+
+**A four-axis rubric that gates the plan.** Files, spec completeness, coupling,
+and risk, each scored 0 to 3. Three of those four measure how the task was
+drawn, not how hard the change is, so Rule S sends a task scoring 4 or more
+across them back to be split rather than to a larger model. That cap is what
+makes the assignment table stop at 6.
+
+**An escalation ladder.** Every execution implementer has exactly one successor,
+changing model before effort except at the two Opus effort rows, where Opus is
+already the top model and there is nowhere else to go. Walks terminate at a
+SPLIT action rather than an agent, and only a task that survives that split
+enters the reserve chain, which terminates at BLOCKED. Used at fix rounds 4
+and 5, at the BLOCKED handler, and at round 3 when the re-review reports
+stalled progress.
+
+**Criteria-scored reviews.** `criteria/` holds narrow scored criteria adapted
+from LLM-as-a-Verifier (arXiv:2607.05391): a ground-truth note the judge sees on
+every evaluation, and 2 to 4 criteria that each say where to look, what scores
+high, what scores low, and what to ignore. Task reviews score four criteria -
+spec, scope, verification, quality - 1 to 20 each, alongside the spec and
+quality verdicts and never replacing them, because the fix loop keys on those
+verdicts. Tasks at risk 3 are reviewed by Codex `gpt-6-astra` and then by
+`judge-opus`, which rules CONFIRMED or REJECTED on every Codex finding in the
+same pass.
+
+**Best-of-3 approach selection.** `selecting-approaches` gates an open approach
+decision to inline, one advisory pass, or three scouts ranked by a judge in a
+ring pass that cancels positional bias. Five numbered skip conditions send most
+decisions to inline, including bug fixes with a located root cause - where
+ranking candidates generated before the root cause is known would launder
+guesses into a confident pick.
+
+**Two execution modes, chosen by the plan.** The `**Execution:**` line decides
+whether a plan runs under subagent-driven-development, a dispatch and a scored
+review per task, or under executing-plans, where one session implements every
+task itself. Inline mode is the default unless more than half the tasks are
+heavy (total 5 or more, or risk 3). An inline plan delegates its heavy
+tasks, which are too large or risky to implement in the session,
+and every task carrying an `**Executor:**` line, which runs on that executor
+rather than in the session. Each delegated task runs through an implementer
+subagent — or, for an Executor line, that executor's wrapper — with the full
+per-task review loop, shared with subagent mode in
+`reference/delegated-task.md`; the session implements the rest itself, trading
+their per-task review for one whole-branch review at the end, which both modes
+share. `plan-lint` requires the session's effort to cover the highest score it
+implements, and `--effort high` once it delegates. A task that will not
+converge after three fix rounds escalates to subagent mode at the next task
+boundary, recorded in the ledger both modes write.
+
+**Opt-in parallel waves.** Brainstorming asks, once the approach is settled,
+whether the plan should run sequentially (the default) or with parallel
+subagents, and records the answer in the spec as `**Execution strategy:**`;
+writing-plans asks the same question when a spec carries no answer. A parallel
+plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
+contiguous task ranges whose tasks share no file and consume nothing from each
+other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
+tasks at once, each in its own git worktree, reviews each exactly as it would a
+sequential task, merges each reviewed task with `scripts/wave merge` (which
+refuses a task whose files overlap what the wave already merged), and runs the
+plan's `**Integration check:**` before the next wave starts. `plan-lint` keeps
+risk-3 tasks, executor tasks and dependency-manifest changes alone in their
+wave, the pre-flight ruling seat checks every same-wave pair for coupling the
+file lists cannot show, and `context-size --wave W` keeps room in the session
+for every task running at once. Running a wave one task after another is always
+correct, so every doubt serializes it; `reference/parallel-waves.md` holds the
+procedure. A plan without a `**Parallelism:**` line runs exactly as before.
+
+**An external executor lane.** A task scoring 2 to 4 with `risk <= 1` can run on
+the Codex CLI instead of a Claude implementer, for quota offload onto a separate
+ChatGPT subscription and for a second model family in the loop. The lane is a
+gate in front of the assignment table, never a rung on the escalation ladder:
+offload selects downward at the cheap end while the ladder only moves upward, and
+one total order cannot express both. The Claude ladder stays the sole backstop,
+so its termination proof is untouched.
+
+The gate floors at score 2 on purpose. Rule S caps `reducible` at 3, so under
+`risk <= 1` the eligible totals are exactly 2, 3, and 4; without the floor the
+gate would reduce to `risk <= 1` and capture nearly every task by count, and it
+would offload score-0 work where the displaced agent is `impl-sonnet-low` and
+the wrapper costs more to orchestrate than it saves.
+
+`**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
+an override on a second line, which is what makes a machine without Codex, a cold
+session, and an executor whose auth has lapsed all degrade by reading a line that
+is already there rather than re-deriving the assignment at dispatch. Under
+`dr-forge:executing-plans` both lines are read only for the tasks an
+inline plan delegates; for the tasks the session implements itself they are
+inert, so nothing falls back.
+
+`revising-plans` brings a plan written before the external executor lane up to the current format, scoring what is unscored and writing the `**Executor:**` and `**Execution:**` lines from `scripts/plan-revise`.
+
+The following observations were made against the external CLI lane on Windows
+with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy
+evidence, not native Codex capability declarations:
+
+- Only `gpt-5.5` and `gpt-5.6-sol` were available. `luna` and `terra` were
+  rejected with HTTP 400 and Codex held no metadata for either.
+- Valid reasoning efforts are `low`, `medium`, `high`, `xhigh`, `ultra`.
+  `minimal` is rejected. The CLI validates neither model nor effort locally - it
+  echoes any string and fails at the API - so `scripts/run-codex-task.sh`
+  validates both before spawning anything.
+- Codex **cannot commit**. Its Windows restricted-token sandbox denies writes to
+  `.git` under `-s workspace-write`, which `codex sandbox -- git add -A`
+  reproduces with no model call. The wrapper owns the commit, so the ledger's
+  commit range is measured rather than reported. It also inlines the repository's
+  `CLAUDE.md` into every prompt, because Codex natively reads only `AGENTS.md`,
+  and passes the model's own conventional-commit subject to `git commit`
+  unmodified.
+- Resume is a request field, not a subcommand. `scripts/lib/codex-client.mjs`
+  passes `resumeThreadId`, and the runner re-sends the model and the effort on
+  every resumed turn, because a resumed thread that fell back to the user's
+  config defaults would run a fix round at a tier the ledger does not record.
+
+Every Codex interaction — the session gate, both runners and the executor
+roster — goes through the official `codex@openai-codex` plugin.
+`scripts/codex-plugin` locates it for the active profile and enforces a version
+allowlist; `scripts/lib/codex-client.mjs` runs one turn through the plugin's own
+client and reaps the broker it causes to exist. This plugin never names the
+`codex` executable and never reads Codex-owned state.
+
+That probe is a dated observation, not a standing fact: the same two models were
+listed in the local catalog on 2026-09-14, and `gpt-6-astra` ran there on that
+date. This plugin reads no model catalog at all: the judge seats attempt the preferred
+rung and fall back once on a refusal, which is the only evidence of entitlement
+that has ever been reliable.
+
+On 2026-09-23 the lane and the judge fallback moved to `gpt-6-sol`: `gpt-5.5`
+retires from Codex with ChatGPT sign-in on 2026-10-14, and Codex 0.155.1's
+catalog lists `gpt-6-sol` as the upgrade for `gpt-5.6-sol`, with every lane
+effort advertised for a ChatGPT Pro sign-in.
+
+On 2026-10-07 they moved again, to `gpt-6.1-sol`, Codex's default since
+0.159.1, and the review seat for totals 4 to 6 moved from Astra to it. The move
+rests on OpenAI's description of 6.1 Sol as near-Astra on software work, at
+about a fifth of Astra's price; no calibration replay was run, because no Codex
+client was available to run one. Native Codex plans moved to `codex-v4`, which
+puts `gpt-6.1-sol` at ranks 3 to 6.
+
+A different machine, account, or Codex version must verify the tables against
+its own account before relying on them. Do not make paid capability probes.
+
+**Cross-family review.** Codex is the default task reviewer: `gpt-6.1-sol` for
+tasks totalling 0 to 6, and `gpt-6-astra` followed by `judge-opus` at risk 3. A task the executor lane implemented is always
+reviewed by a Claude judge, so Codex never reviews its own work there; when a
+Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
+`judge-opus` 4 to 6 and at risk 3. Plan review takes Astra for round 1
+(`judge-opus` when Codex is off) and `judge-opus` for delta rounds,
+capped by the plan's highest task total.
+The final whole-branch review runs on `judge-opus`, its one fix subagent on
+the highest tier among the tasks the findings touch, and gains a Codex round. When both reviewers return findings,
+a fresh `judge-opus` dedupes and verifies them. No route names `judge-fable`:
+on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
+known defects, at about 40% of the cost, so Fable is dispatched on a judge seat
+only when you ask for it. With one list there is no third seat:
+the fixer triages each finding against the code and the scoped re-review rules
+on every rejection. The Codex round is not self-review-free, because the branch
+contains whatever the executor lane produced, which is why no finding is acted
+on unchecked.
+`scripts/review-route` prints the review seat for a task or plan round, and
+every Codex seat runs through `scripts/run-codex-review.sh`, which checks
+availability on each run and falls back once to `gpt-6.1-sol` when Astra
+refuses the run. Selection, the run bound and the four
+outcomes live in those scripts rather than in prose, so a refused model is a
+recorded substitution instead of a silently missing seat.
+
+**The Codex session gate.** Before any Codex use, `scripts/codex-gate` checks the official codex plugin
+once per session - enabled, installed at an allowed version, logged in, not on
+a free ChatGPT plan, and within quota - through the plugin's own client, and
+caches the answer per session. When Codex is unusable, every Codex seat, the final-review Codex round,
+the executor lane and `plan-lint`'s lane probe are skipped for the session and
+Claude seats take over; a quota error mid-run turns Codex off the same way. A
+usable Codex is still used only on a surface whose shipping gate passed,
+recorded per surface in `reference/codex-plugin.json`: the calibration replay
+opens the review seats, and the executor-lane smoke test opens the lane.
+
+**Project state.** `docs/superpowers/` holds what a project knows about
+  itself, not just its specs and plans: `gates.md` declares the verification
+  gates in order, `plans/completed.md` indexes merged plans, and `distilled/`
+  holds four durable files — constraints, gotchas, reference, rejected —
+  collapsed from session notes. Three skills use it. `project-status` reports
+  where the work stands and exactly one next step, and writes nothing.
+  `running-gates` runs the declared gates in order and stops at the first red,
+  judging each by its `Evidence` type so a gate whose proof is a picture is
+  never passed off a metric. `distilling-docs` distils notes into the four files
+  and deletes the tracked sources it absorbed, once an independent judge has
+  confirmed every enumerated fact was carried. Every one of these files is
+  optional; a project without them behaves exactly as before.
+
+**Test simplification.** `test-simplifier` shrinks a suite that TDD has grown
+  slow, in the order that risks the least. `scripts/test-profile` reads the
+  JUnit XML reports a runner already emits and prints a short table of where
+  the time goes. Then the skill speeds tests up without deleting any, tiers the
+  run into an inner loop, a branch gate and a full sweep, and only then merges
+  or removes tests, one module per wave. A wave changes test files only, and
+  stands only when every mutant the old tests killed is still killed (or, with
+  no mutation tool, every fault a judge named still turns the suite red) and
+  `judge-opus` returns `KEPT`. Coverage alone never proves a test redundant.
+  `test-driven-development` and `writing-plans` now place each test at the
+  lowest layer that can fail for its change, so the suite stops regrowing.
+
+**darkmem mirror (optional).** `scripts/darkmem-sync` keeps a repository's
+  planning documents and progress in a darkmem instance over its keyed REST
+  routes. Map the repository's primary checkout in
+  `~/.dr-superpowers/config.json` —
+  `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
+  — and export a `dmk_` key in that variable, and the repository syncs a mirror
+  at `~/.dr-superpowers/mirror/<project>/`. The key needs the `read` and
+  `capture` scopes, and `import --replace` also `admin`. `pull` fetches what
+  changed;
+  `push` sends documents under their last synced hash and ledgers as the bytes
+  appended since the last push; `status` lists local changes and the last
+  run's conflicts; `import` moves an existing `docs/superpowers/` and its
+  ledgers in once, verified byte for byte. A conflict is reported, never
+  merged. Without a mapping every command but `import` prints one line and
+  does nothing. The skills do not call it yet: they still read and write the
+  repository's own paths.
+
+## Requirements
+
+**The superpowers workflow ships in-plugin.** The fork carries the full skill
+set — brainstorming through finishing-a-development-branch — frozen at upstream
+6.3.0, so no other plugin is required: every agent definition preloads
+`dr-forge:verification-before-completion` through its `skills:`
+frontmatter, and writing-plans and subagent-driven-development use the plugin's own
+`scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
+`context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
+action and keeps `.superpowers/handoff/latest.md` pointing at it. Disable the
+upstream `superpowers` plugin: same-named skills in two enabled plugins can
+double-trigger.
+
+**Bash, jq, Git, and GNU timeout/coreutils.** These are requirements of the external executor lane:
+`scripts/detect-executors.sh` builds every field with `jq`, and
+`scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a
+message naming the dependency rather than degrading, because a missing `jq`
+would otherwise read as "no executor usable" or as a task Codex blocked on. The
+SessionStart hook is the lenient case: without `jq` it still injects the entry
+point and only skips persisting the session record, and `bash` is required for
+it to run at all. On Windows that means Git for
+Windows. The hook declares `"shell": "bash"` so it takes the Git Bash
+route explicitly: without that key Claude Code falls back to PowerShell on a
+machine with no Git Bash, where the command is meaningless, and with it the
+user gets Claude Code's actionable "requires bash but Git Bash was not found"
+message instead.
+
+## How it fires
+
+A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
+`dr-forge:using-superpowers` entry point as `additionalContext`, so every
+session starts with the skill-routing rules — including the pointers to
+`selecting-approaches`, implementer assignment in `writing-plans`, and tiered
+dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same
+script persists the session's `transcript_path`, `session_id`, `cwd`, and
+`source` to `~/.claude/dr-forge/sessions/by-id/<sanitized-session-id>.json`
+and to `~/.claude/dr-forge/sessions/<sanitized-cwd>.json` (last writer
+wins per directory). `scripts/context-size` reads the session's own record by
+`CLAUDE_CODE_SESSION_ID`, so two sessions in one checkout each measure their
+own transcript, and falls back to the directory's record. On the
+`compact` source it also appends a compaction snapshot (see Session budget).
+Malformed stdin skips persistence but never blocks the injection, and the
+hook always exits 0.
+
+A run must end on its next step: the finishing menu once the final review is
+clean, otherwise the `## Next session` block from `next-step`. Controllers,
+Sonnet especially, tend to summarize the run and stop instead. A
+`UserPromptSubmit` hook stamps the start of each turn under
+`~/.claude/dr-forge/sessions/turns/`, and a `Stop` hook checks whether
+that turn wrote a plan ledger (`.superpowers/sdd/*/progress.md`). If it did and
+the last message carries neither ending, the hook blocks the stop once and
+tells Claude which one is missing. The retry always passes, and without `jq`,
+a stamp or a ledger written this turn, the hook does nothing. While an agent or
+command the session started in the background has not reported back, a plain
+stop passes (the controller is waiting on it), and a message that ends the
+session over it, with the next-step block or the finishing menu, is held once
+in any turn: a handoff there would invite ending a session whose work is still
+in flight. Work stopped with `TaskStop`, and work launched before the session
+last started or resumed, sends no notification and does not count as running.
+An agent that sent its report but left a shell or agent of its own alive still
+counts: Claude Code keeps listing it, and its notification says so.
+`scripts/in-flight` prints the same list on demand; handoff step 0 and the
+finishing menu run it, and `scripts/next-step` prints no block (exit 5) while
+anything is on it.
+When the turn wrote more than one ledger, each one must have its
+ending.
+
+A run also asks one question before its first task: what finishing should do
+if its menu goes unanswered for 30 minutes (merge locally, push and open a pull
+request, keep the branch, or wait). `scripts/finish-choice` keeps the answer
+beside the ledger (`.superpowers/sdd/<plan>/finish.json`, or
+`.superpowers/sdd/finish.json` for work done without a plan). When finishing
+shows its menu, it arms that choice and schedules a one-shot wake with
+CronCreate; the menu's last line says what happens and when. An answer to the
+menu inside the 30 minutes disarms the wake and wins; otherwise the wake
+carries out the chosen option as if it had been picked, and stops wherever an
+attended finish would ask. The dr-cockpit Run card shows the choice and the
+deadline. Codex has no scheduler, so there the menu names the choice and waits.
+See [reference/finish-preference.md](reference/finish-preference.md).
+
+Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
+catches a summarize-and-stop there. On Codex you must run `next-step` yourself
+on every early stop.
+
+## Session budget
+
+Long sessions cost more than they look: every request re-reads the whole
+context, and compaction drops the reports, findings and rulings a controller
+needs. dr-forge hands off instead.
+
+- **The budget line.** `scripts/task-brief` and `scripts/review-package` end
+  with `budget: 312k of 465k (67%) — ok — source: record`, so the controller
+  checks before every task and every review at no extra request;
+  `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
+  skill writes `latest.md` and the plan's `handoff.md` and ends with the
+  resume guide from `scripts/next-step`.
+- **Stops.** A saved plan and a switch from inline to subagent mode are hard
+  stops; a finished task list is a soft stop in both modes, so the final
+  whole-branch review and finishing run in the same session unless
+  `scripts/context-size --final` says otherwise after the last task: the final
+  phase has its own limit, 85% of the compaction window, which the plan's
+  last two tasks share, and finishing itself is never budget-checked. A
+  `handoff` verdict waits for the task in flight to complete. The
+  budget is the compaction point minus one task's worst growth, derived from
+  `autoCompactWindow` and the model's window; see
+  [session-budget.md](reference/session-budget.md) for the numbers and the
+  full Stops table.
+- **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
+  snapshot of branch, worktrees, dirty files, plans in flight and handoff
+  staleness — verifies the worktree, and hands control back to the plan's
+  execution skill.
+- **Compaction.** The SessionStart hook appends a snapshot of what summaries
+  drop. Compaction fires at about 93-96% of `autoCompactWindow`, so set the
+  window to suit you — the budget follows it, 465k at 650000 — and paste the
+  Compact Instructions block from
+  [session-budget.md](reference/session-budget.md) into your project's
+  CLAUDE.md.
+
+## Migrating from 0.x
+
+1.0.0 is standalone and breaking. On a machine with the old setup:
+
+1. **Re-point the marketplace.** The `darkraise` marketplace registration in
+   `~/.claude/settings.json` may still name `darkraise/claude-code-plugins`;
+   the canonical repository is `darkraise/darkraise-ai-plugins`. Remove and
+   re-add the marketplace (or edit the registration) to point there.
+2. **Statusline.** `dcc-statusline` is `dr-status` in this catalog; enable
+   `dr-status@darkraise` and disable the old name.
+3. **Telegram notifications.** `dcc-telegram-notify` is not in this catalog;
+   keep it installed from its previous source or drop it.
+4. **Disable the superseded plugins:** `superpowers` (its skills now ship
+   here), `dcc-superpower-companions` (folded into this plugin), and
+   `andrej-karpathy-skills` (its guidelines are folded into the skills where
+   they fire).
+
+## What a plan looks like
+
+A plan opens with a header block: Goal, Spec, the `**Execution:**` line that
+decides inline or subagent execution, Global Constraints, Contracts (every name
+one task produces and another consumes), Assumptions with evidence, and a Task
+index. `scripts/plan-lint` checks it, and a judge reviews it against
+`criteria/plan-review.md` before it is saved. That Execution line is binding: a
+session does not change mode because subagents happen to be available, and only
+your explicit instruction overrides it. Each task then reads:
+
+```markdown
+### Task 4: Wire the export pipeline
+
+**Files:**
+- Create: `src/export/pipeline.ts`
+
+**Interfaces:**
+- Consumes: `formatRow(row: Row): string` from Task 2
+- Produces: `runExport(cfg: Config): Promise<Report>`
+
+**Implementer:** dr-forge:impl-sonnet-high
+**Evaluation:** files 0 - spec 1 - coupling 2 - risk 2 = 5
+**Approach:** inline - skip 2: follows the existing exporter pattern
+```
+
+Edit the `**Implementer:**` line to override. `subagent-driven-development`
+obeys the line and never recomputes when it is present. Add
+`**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
+the deviation as a warning instead of an error.
+
+The heading keeps superpowers' `### Task N: <name>` form on purpose.
+`scripts/task-brief` finds a task by matching a heading that starts with
+`Task <N>`, so a heading like `### Wire the export pipeline (Task 4)` yields an
+empty brief and a non-zero exit — and, because the extractor keeps copying
+until the next heading it recognizes, quietly appends that task's body to the
+previous task's brief.
+
+## Differences from upstream 6.3.0
+
+The superpowers loop is kept - the brief and report protocol, the review
+package, the five-round cap, the breaker (whose adjudication now goes to the ruling seat), and the
+handoff to dr-forge:finishing-a-development-branch - with these
+differences:
+
+1. **Named seats.** The implementer is the fleet agent the plan's
+   `**Implementer:**` line names, dispatched with no `model` argument: passing
+   one would override the agent file's model while `effort` kept its
+   frontmatter value. The task reviewer is a judge agent scoring the criteria
+   file. General-purpose seats still name their model explicitly.
+2. **Scores and progress.** Task reviews add four 1-to-20 scores alongside the
+   verdicts, and the scoped re-review adds a progress reading that can pull
+   escalation from round 4 to round 3.
+3. **Escalation ladder.** Rounds 4 and 5 and the BLOCKED handler climb
+   [ladder.md](reference/ladder.md)'s table, ending in one split and then the
+   reserve chain. An external task hands back to its Claude implementer instead.
+4. **Cache-aware resumes.** Fix rounds 1 to 3 resume the implementer only while
+   its cache is warm - returned under five minutes ago, or under about 100k
+   tokens of context - and otherwise dispatch a fresh copy on the same tier.
+5. **One ledger grammar.** Every task gets an assigned line and a complete line
+   carrying its scores and a checkpoint (done, verified, remaining, discovered
+   issues, assumptions), which crash recovery and the final review read.
+6. **Cross-family final review.** The final whole-branch review adds a Codex
+   round, and a judge verifies the union of both reviewers' findings.
+7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
+   unavailable model, an Executor line the wrapper refuses - are logged
+   rulings, never silent fallbacks and never stops.
+8. **Session budget.** A budget line, a compaction snapshot, and the
+   dr-forge:handoff / dr-forge:resume-execution pair replace
+   upstream's unmeasured sessions - see [Session budget](#session-budget).
+9. **Small-model planning.** A strong model plans once; small models execute.
+   Every task brief carries the header's Global Constraints and Contracts, the
+   controller reads only the header and one brief at a time, and judgment
+   calls go to a read-only ruling seat (`judge-opus`, with the reason
+   `review-route --ruling` prints). Its plan corrections
+   land in an append-only `amendments.md` through `scripts/plan-amend`; the
+   plan file is never edited during execution.
+10. **Two modes, chosen by the plan.** Upstream picks `executing-plans` when
+    subagents are unavailable and recommends subagent execution otherwise. Here
+    the `**Execution:**` line decides and is binding: `executing-plans` is a
+    full inline mode that writes the same ledger, sends its judgment to the
+    same ruling seat, and ends at the same shared
+    [final-review.md](reference/final-review.md), with no per-task review. A
+    task it cannot land in three fix rounds escalates to subagent mode at the
+    next task boundary.
+
+Names written under older plugin prefixes resolve through
+[legacy-names.md](reference/legacy-names.md).
+
+## Licenses
+
+MIT. `LICENSES/` carries the licenses of the forked and folded projects:
+[superpowers](https://github.com/obra/superpowers) by Jesse Vincent (MIT),
+frozen at 6.3.0 with no upstream sync, and
+[andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills)
+(MIT).
+
+## Tests
+
+```bash
+for t in plugins/dr-forge/tests/*.test.sh; do bash "$t"; done
+```
+
+Requires `jq` and `git`. No model calls: the executor suites run against a stub
+`codex` on `PATH` and a synthetic roster, never the real CLI. `project-status.test.sh`,
+`gates-manifest.test.sh` and `distilling-docs.test.sh` check the project-state
+skills the same way — structurally, against the documents themselves.
+`test-simplifier.test.sh` does the same for that skill and runs
+`scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
+`scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
+drives the turn-stamp and Stop hooks against a temporary repository and ledger.
+`codex-review.test.sh` covers the judge seats' selection and outcome policy
+against a stub `codex`, so every branch — refusal, fallback, timeout, empty
+report — is exercised without a model call.
+`darkmem-sync.test.sh` runs the `node:test` suites under
+`tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
+darkmem instance is needed.
+
+## Reference
+
+`reference/ladder.md` holds the raw rubric, Rule S, and Claude assignment,
+escalation, reserve, and external CLI tables. Native Codex reads
+`reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
+score, request format, and plan conversion. `scripts/select-native-tier.sh`
+validates raw scores and history before returning a native routing decision.
+
+`reference/executors/` holds one JSON entry per external executor and
+`scripts/executors` is the only reader of it: `executors list` prints every
+valid id, `executors get <id> <dotted.key>` one field, and
+`executors path <id> <dotted.key>` that field resolved against the plugin root.
+An entry names the executor's locator, probe, wrapper, gate, session directory,
+surfaces and ladder blocks, so adding an executor is an entry, a wrapper and a
+ladder block rather than an edit to every script. `reference/executor-lane.md`
+states the entry schema and holds the Claude-hosted external executor lanes,
+`reference/legacy-names.md` translates names written under older plugin
+prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
+stops and the Compact Instructions block, and `reference/final-review.md` holds
+the whole-branch review both execution skills end at.
+`scripts/run-codex-review.sh` runs every Codex review seat: it
+selects the judge rung from `codex-judge`, bounds the run, and classifies the
+outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
+
+`reference/parallel-waves.md` runs a waves plan: opening a wave, the parallel
+implementer dispatch, the merge and the integration check, and recovery.
+`scripts/wave` holds its mechanics: `list` the waves, the `ref` a parallel
+task commits to, `status` of a wave's tasks, `merge` one reviewed task, and
+`clean` a merged wave's worktrees and refs without ever forcing.
+
+`reference/project-state.md` describes the committed project-declared state —
+`gates.md`, `plans/completed.md` and `distilled/` — and the precedence order that
+settles a disagreement between them.
+
+`criteria/` holds the verifier criteria, including `plan-review.md` for plan
+review, `codex-review-schema.json` for the Codex task seats, and
+`codex-plan-review-schema.json` for the Codex plan-review round;
+`criteria/TEMPLATE.md` documents the format.
+`tests/criteria.test.sh` validates every file in that directory.
+
+`scripts/` holds the external executor lane:
+
+- `detect-executors.sh` emits the JSON roster read at plan time and again as a
+  dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
+  plugin ships no wrapper for reports `usable: false` with the reason.
+- `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
+  one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
+  no status line - either a refusal before launch or a git failure after the run,
+  which the dispatching skill tells the controller apart and recovers from
+  differently. The status line also carries Codex's own `exit=` code and a
+  `note=timed-out` marker, and the report lifts Codex's error text out of the
+  `--json` stream into a `## Codex error` section. All three exist because
+  `status` is forced to `BLOCKED` on any non-zero exit, so on its own it cannot
+  separate a parse failure, a timeout, and a model that gave up - and the error
+  text is on stdout, where a controller reading `<report>.stderr` never finds it.
+- `codex-report-schema.json` is the `--output-schema` the wrapper passes, and
+  the shape of the verdict it parses back.
+- `codex-task-contract.md` is appended to every prompt the wrapper sends,
+  resume rounds included.
+
+### Item registers
+
+A register is the list of source items a body of work must answer, and the
+authority on whether that work is finished. One file per incoming list —
+an owner's list, a review's findings, a batch — at
+`docs/superpowers/registers/YYYY-MM-DD-<slug>.md`, committed, and required
+whenever a request carries two or more distinct items.
+
+Each row carries an identifier, the requester's words, an assignment, an
+acceptance, a state and a note. The states are
+open, planned, doing, verify, done, deferred, n/a
+— the first four unresolved, with `verify` meaning built and the owner's
+confirmation still owed. A note is mandatory for verify, deferred and n/a,
+because those three record a decision rather than progress.
+
+`scripts/register` reads and writes them: `check` validates a file, `open`
+reports the unresolved rows for a file or a spec and exits 1 while any remain,
+and `set` and `add` are the only writers. Readers resolve a register from a
+plan's `**Spec:**` and `**Program:**` spec paths rather than from a pointer in
+the plan, so the link cannot go stale.
+
+No surface may claim a body of work complete while a row is unresolved:
+`next-step` reports the open rows instead of "every sub-project is done",
+`plan-lint` rejects a `last` Program line that a register contradicts,
+`repo-audit` counts the open rows, and `project-status` lists them. When no register covers a spec, every
+surface behaves exactly as it did before.
+
+### Greenfield roadmap
+
+A project built from scratch spans many specs and many sessions, and what goes
+missing there is whole epics: decided once in prose, then forgotten when a later
+session calls the phase done. `planning-a-product` runs discovery first and
+writes `docs/superpowers/roadmap.md`, the milestones in order (by default M0
+Discovery, M1 Foundations, the feature milestones, Hardening, Release), each
+with exit criteria and one item register whose rows are its epics. Each epic's
+spec then gets its own register of requirements, which `plan-lint` already ties
+to plan tasks through `**Items:**`.
+
+`scripts/roadmap` computes a milestone's progress from those registers rather
+than storing it: `status` reports it, `open` lists every unresolved row below a
+milestone, including the requirements under an epic someone marked done too
+early, and `settle` moves an integrated epic to `verify`, never to `done`.
+`close` is the only writer of `closed`; it refuses while anything below the
+milestone is unresolved or an earlier milestone is open, and
+`closing-a-milestone` runs it only after a fresh `judge-opus` has ruled every
+row `MET` on evidence and your human partner has signed off.
+
+`next-step` takes the next epic from the current milestone instead of a copied
+Program line, `repo-audit` and `project-status` show the milestones, and the
+SessionStart hook injects one line, such as
+`Roadmap: M2 Beta, 3 of 5 epics resolved, open: #4 Billing, #5 Search`, so a
+fresh or compacted session starts knowing where the project stands. Without a
+roadmap every surface behaves exactly as before.

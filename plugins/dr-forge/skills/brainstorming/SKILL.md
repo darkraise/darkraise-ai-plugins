@@ -1,0 +1,340 @@
+---
+name: brainstorming
+description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation."
+---
+
+# Brainstorming Ideas Into Designs
+
+Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
+
+Start by classifying how much process the request needs, then work
+through your path: understand the context, refine the idea, present a
+design, and get your human partner's approval.
+
+<HARD-GATE>
+Do NOT invoke any implementation skill, write any code, scaffold any
+project, or take any implementation action until you have told your
+human partner what you intend and they have approved it. This applies
+to EVERY task on EVERY path below — the ceremony scales with the task;
+the approval gate never does.
+</HARD-GATE>
+
+## Three Paths
+
+Before your first question, classify the request and say it in one
+line — `Process: <spike|bounded|architectural>, <inline|subagent> —
+<trigger | no trigger>` — so your human partner can override it. The mode
+slot is your expectation only; the plan's Execution line decides. The
+triggers are the seven in dr-forge:using-superpowers' Process Depth:
+a new project or subsystem; an interface that something outside its own
+files depends on changes; the files touched cannot be enumerated after
+exploring; a load-bearing approach question is open; irreducible risk
+(security, data loss, migration, concurrency); behaviour too intricate for
+a chat design; or your human partner asked for a spec.
+
+- **Spike** — a feasibility question ("can we...", "is it possible...",
+  "quick and dirty is fine") whose output is an answer, not code you
+  keep. Present the question and what you'll try in 2-3 sentences, get
+  a nod, then find out as cheaply as correctness allows. No design
+  doc, no spec file. Report findings as a recommendation; anything you
+  built stays labeled throwaway.
+- **Bounded** — no trigger holds: a new flag, a small endpoint, a
+  one-file fix, or a small feature that adds a new flow. Ask the clarifying
+  questions that matter, present a short design IN CHAT (a few
+  sentences to a few short paragraphs), self-review it once, and
+  STOP. Implementation starts only after your human partner says yes
+  to that design — a bounded task's approval is as hard a gate as an
+  architectural one. No spec file, no implementation plan document.
+- **Architectural** — at least one trigger holds; name it. Follow the
+  full process: questions, approaches, sectioned
+  design, written spec, then the writing-plans skill.
+
+Doubt means check the trigger list, not jump to the heavier path. The
+ratchet is one-way: a trigger discovered mid-task upgrades the path —
+stop, say so, and step up. Nothing downgrades mid-task.
+
+## Anti-Pattern: "Too Simple To Need Approval"
+
+Every path ends with your human partner approving your intent before
+implementation. A todo list, a single-function utility, a config
+change — the design may be two sentences in chat, but you MUST present
+it and get approval. "Simple" tasks are where unexamined assumptions
+cause the most wasted work. What scales with simplicity is the
+artifact, never the approval.
+
+## Red Flags
+
+| Thought | Reality |
+|---------|---------|
+| "This is too simple to need a design" | Simple means a short design, not no design. Two sentences in chat, then approval. |
+| "I'll call it bounded and skip the spec" | Name, for each of the seven triggers, why it fails — or take the architectural path. |
+| "It's bounded and the design is obvious — I'll start while they read it" | The gate is the approval, not the design's length. Present, then stop until you hear yes. |
+| "I understand this kind of app, so it's bounded" | Bounded is decided by the trigger list, not by familiarity. A new project is a trigger. |
+| "The spike works, so I'll keep the code" | A spike's output is an answer. Keeping the code is a new request — classify it. |
+| "It grew, but I'm almost done — no need to re-classify" | Hidden complexity upgrades the path mid-task. Stop and say so. |
+| "They approved the spike, so the follow-up change is approved too" | Each task gets its own classification and its own approval. |
+| "The design reads fine, so I'll skip the self-review" | The round is required on every design and spec. No `Self-review (round 1 of 1):` block before the approval question means it did not happen. |
+| "A reviewer subagent can do the self-review" | The round is yours. Any other review comes after it and does not replace it. |
+
+## Checklist
+
+Classify first, announce the path, then create a task for each item on
+your path and complete them in order.
+
+**Spike:**
+1. **Explore project context** — enough to frame the probe
+2. **Present question + probe plan** — 2-3 sentences
+3. **Get approval** — a nod is enough
+4. **Investigate** — as cheaply as correctness allows
+5. **Report findings** — a recommendation; label anything built as throwaway
+
+**Bounded:**
+1. **Explore project context** — check files, docs, recent commits
+2. **Ask clarifying questions** — one at a time, the ones that matter
+3. **Present short design in chat** — approach, files touched, testing
+4. **Self-review the design** — one round, its block in the same message as the design (see Self-reviewing a bounded design)
+5. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
+6. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
+
+**Architectural:**
+1. **Open the item register** — when the request or a review carries two or
+   more distinct items, before the spec
+2. **Explore project context** — check files, docs, recent commits
+3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
+4. **Propose 2-3 approaches** — with trade-offs and your recommendation
+5. **Ask the execution strategy** — parallel subagent waves or sequential execution, one question (see Choosing the execution strategy)
+6. **Present design** — in sections scaled to their complexity, get user approval after each section
+7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+8. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
+9. **User reviews written spec** — ask user to review the spec file before proceeding
+10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+
+## Process Flow
+
+```dot
+digraph brainstorming {
+    "Classify: spike / bounded / architectural" [shape=diamond];
+    "Present question + probe (2-3 sentences)" [shape=box];
+    "Ask clarifying questions (bounded)" [shape=box];
+    "Present short design in chat\n+ self-review block" [shape=box];
+    "Human approves?" [shape=diamond];
+    "Investigate; report recommendation" [shape=doublecircle];
+    "Implement via normal workflow (no plan doc)" [shape=doublecircle];
+    "Explore project context" [shape=box];
+    "Ask clarifying questions" [shape=box];
+    "Propose 2-3 approaches" [shape=box];
+    "Ask execution strategy\n(parallel or sequential)" [shape=box];
+    "Present design sections" [shape=box];
+    "User approves design?" [shape=diamond];
+    "Write design doc" [shape=box];
+    "Spec self-review\n(one round, shown)" [shape=box];
+    "User reviews spec?" [shape=diamond];
+    "Invoke writing-plans skill" [shape=doublecircle];
+    "Hidden complexity? Upgrade path" [shape=box];
+
+    "Classify: spike / bounded / architectural" -> "Present question + probe (2-3 sentences)" [label="spike"];
+    "Classify: spike / bounded / architectural" -> "Ask clarifying questions (bounded)" [label="bounded"];
+    "Classify: spike / bounded / architectural" -> "Explore project context" [label="architectural"];
+    "Present question + probe (2-3 sentences)" -> "Human approves?";
+    "Ask clarifying questions (bounded)" -> "Present short design in chat\n+ self-review block";
+    "Present short design in chat\n+ self-review block" -> "Human approves?";
+    "Human approves?" -> "Investigate; report recommendation" [label="spike: yes"];
+    "Human approves?" -> "Implement via normal workflow (no plan doc)" [label="bounded: yes"];
+    "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
+    "Explore project context" -> "Ask clarifying questions";
+    "Ask clarifying questions" -> "Propose 2-3 approaches";
+    "Propose 2-3 approaches" -> "Ask execution strategy\n(parallel or sequential)";
+    "Ask execution strategy\n(parallel or sequential)" -> "Present design sections";
+    "Present design sections" -> "User approves design?";
+    "User approves design?" -> "Present design sections" [label="no, revise"];
+    "User approves design?" -> "Write design doc" [label="yes"];
+    "Write design doc" -> "Spec self-review\n(one round, shown)";
+    "Spec self-review\n(one round, shown)" -> "User reviews spec?";
+    "User reviews spec?" -> "Write design doc" [label="changes requested"];
+    "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
+}
+```
+
+**Terminal states are path-bound.** Architectural: the ONLY skill you
+invoke after brainstorming is writing-plans — never frontend-design,
+mcp-builder, or any other implementation skill. Bounded: after
+approval, implementation proceeds directly through the normal
+development workflow; no plan document. Spike: the terminal state is a
+reported recommendation.
+
+## The Process
+
+The subsections below serve the bounded and architectural paths (a
+spike stops at "present the probe, get a nod"). Sections from
+**Exploring approaches** onward are architectural-path depth — for
+bounded work, context plus a few questions plus a short in-chat design
+and its self-review is the whole process.
+
+**Understanding the idea:**
+
+- Check out the current project state first (files, docs, recent commits)
+- Read `docs/superpowers/distilled/constraints.md` and
+  `docs/superpowers/distilled/rejected.md` when the project has them: a
+  constraint outranks the spec you are about to write, and a rejected approach
+  is the one a fresh design most reliably re-proposes. Neither is an error when
+  absent.
+- Run `scripts/register open --spec <any spec this work touches>`, then list
+  `docs/superpowers/registers/` and run `scripts/register open <file>` on every
+  register whose `**Covers:**` is `-`: a list captured before anything was
+  designed is named by no spec, so no `--spec` query reaches it. A row deferred
+  months ago is a decision this design inherits; a findings file nobody reopens
+  is how it was lost before.
+- Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
+- If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
+- A new product built from scratch, or a request naming several subsystems in a repository with no `docs/superpowers/roadmap.md`, goes to dr-forge:planning-a-product instead: its epics and milestones become register rows before any feature is designed, rather than prose in a program spec.
+- When `docs/superpowers/roadmap.md` exists, this spec is an epic. Find its row with `scripts/roadmap status`, set the row's Assigned cell to this spec's path once the spec is written (`scripts/register set <milestone register> <id> doing --assigned <spec path>`), and open the spec's requirement register below even when the request was one sentence: the roadmap is the list the requirements came from.
+- For appropriately-scoped projects, ask questions one at a time to refine the idea
+- Prefer multiple choice questions when possible, but open-ended is fine too
+- Only one question per message - if a topic needs more exploration, break it into multiple questions
+- Focus on understanding: purpose, constraints, success criteria
+
+**Opening an item register:**
+
+When a request, a review or a batch arrives carrying two or more distinct items,
+write them down before designing anything. Create
+`docs/superpowers/registers/YYYY-MM-DD-<slug>.md` with a `**Source:**` line
+naming where the items came from, a `**Covers:**` line holding `-` until a spec
+exists, and the table header
+`| # | Item | Assigned | Acceptance | State | Note |` with its `|---|---|---|---|---|---|`
+separator row. Add each item with
+`scripts/register add <file> "<the requester's words>"` — their words, not your
+paraphrase — and confirm the file with `scripts/register check <file>`.
+
+Once the spec is written, set the register's `**Covers:**` line to that spec's
+repository-relative path, comma-separated when several apply. Nothing else
+fills it in, and until it is filled no plan-side surface can see the register.
+
+The register is the authority on whether the work is finished. A list that
+lives only in the conversation is a list that gets shorter every session.
+
+**Self-reviewing a bounded design:**
+
+Before asking for approval, check the design once yourself, never through a
+subagent, and fix what you find inline:
+
+1. **Files:** every file the change touches is named.
+2. **Testing:** the design says how the change will be verified.
+3. **Assumptions:** every assumption you made is stated, so your human partner can correct it.
+4. **Ambiguity:** nothing in it can be read two ways.
+
+Below the design, in the same message, post `Self-review (round 1 of 1):` with
+one line per item: clean, or what you fixed. Do not re-review after fixing.
+A revision your human partner asks for gets one new round.
+
+**Exploring approaches:**
+
+- Propose 2-3 different approaches with trade-offs
+- Present options conversationally with your recommendation and reasoning
+- Lead with your recommended option and explain why
+- YAGNI ruthlessly - remove unnecessary features from every approach and design
+
+**Choosing the execution strategy:**
+
+Once the approach is settled and before you present the design, ask your human
+partner one multiple-choice question, on its own:
+
+> How should the plan execute?
+> 1. **Sequential** (default) — one task at a time; the safest choice, and the
+>    right one when the work is one chain of dependent changes.
+> 2. **Parallel subagents** — independent tasks run at the same time, each in
+>    its own worktree, merged and checked together after each wave; faster
+>    when the work splits into parts that share no files.
+
+Recommend one: parallel only when you can already name two or more parts that
+share no file and do not consume each other's output; sequential otherwise.
+Parallel runs only in subagent mode on Claude Code. On a Codex host do not
+ask: the plan is sequential, and you say so in one line.
+
+Record the answer near the top of the spec, below its title, as
+`**Execution strategy:** parallel — <reason>` or
+`**Execution strategy:** sequential — <reason>`. The plan inherits it.
+
+When the answer is parallel, the design leans toward independence, because a
+part that shares nothing is a part that cannot break its sibling:
+
+- **Settle shared things first.** Types, interfaces, schemas, configuration
+  keys and file layout that several parts use belong to one foundation part
+  that runs before the others.
+- **Give every file one owner.** Registries, barrels and index files, route
+  tables, dependency manifests and lockfiles, migrations and version files are
+  where parallel work collides; assign each to exactly one part, or to the
+  foundation part.
+- **Keep risk alone.** Security, data-loss, migration and concurrency work
+  runs on its own, never beside a sibling.
+- **Isolate the tests.** Say how parts' tests avoid each other at run time —
+  ports, databases, fixed paths, global state — or that they share nothing.
+- Add a `## Parallel decomposition` section to the spec: the parts, the files
+  each owns, what each consumes from the foundation, and which parts may run
+  together. writing-plans turns it into waves.
+
+Never bend a design out of shape to make it parallel: a part that genuinely
+needs another's output waits for it.
+
+**Presenting the design:**
+
+- Once you believe you understand what you're building, present the design
+- Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
+- Ask after each section whether it looks right so far
+- Cover: architecture, components, data flow, error handling, testing
+- On Claude Code, when an option is genuinely clearer shown than described, present it visually with the Artifact tool
+- Be ready to go back and clarify if something doesn't make sense
+
+**Design for isolation and clarity:**
+
+- Break the system into smaller units that each have one clear purpose, communicate through well-defined interfaces, and can be understood and tested independently
+- For each unit, you should be able to answer: what does it do, how do you use it, and what does it depend on?
+- Can someone understand what a unit does without reading its internals? Can you change the internals without breaking consumers? If not, the boundaries need work.
+- Smaller, well-bounded units are also easier for you to work with - you reason better about code you can hold in context at once, and your edits are more reliable when files are focused. When a file grows large, that's often a signal that it's doing too much.
+
+**Working in existing codebases:**
+
+- Explore the current structure before proposing changes. Follow existing patterns.
+- Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
+- Don't propose unrelated refactoring. Stay focused on what serves the current goal.
+
+## After the Design (architectural path)
+
+**Documentation:**
+
+- Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+  - (User preferences for spec location override this default)
+- Use elements-of-style:writing-clearly-and-concisely skill if available
+- Commit the design document to git
+
+**Spec Self-Review:**
+After writing the spec document, look at it with fresh eyes. This round is
+required, and it is yours: run it once, never through a subagent.
+
+1. **Placeholder scan:** Any "TBD", "TODO", incomplete sections, or vague requirements? Fix them.
+2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
+3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
+4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
+5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output.
+
+Fix any issues inline, then post `Self-review (round 1 of 1):` with one line
+per item: clean, or what you fixed. Do not re-review after fixing.
+A revision your human partner asks for gets one new round.
+
+**User Review Gate:**
+After posting the self-review block, ask the user to review the written spec before proceeding:
+
+> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+
+Wait for the user's response. If they request changes, make them and run one new self-review round. Only proceed once the user approves.
+
+**Implementation:**
+
+- Run `scripts/context-size --plan` (see using-superpowers §Session Budget).
+  It measures against 150% of the task budget, capped at the final-phase
+  limit: writing the plan here costs less than a fresh session's baseline
+  and reload. On exit 5 (handoff), invoke dr-forge:handoff with
+  the spec as the draft and the next action "Write the implementation plan
+  with dr-forge:writing-plans." — the plan is written in a fresh session.
+- Otherwise invoke the writing-plans skill to create a detailed implementation plan.
+- Do NOT invoke any other skill. writing-plans is the next step — in this
+  session or, after a handoff, the next one.
