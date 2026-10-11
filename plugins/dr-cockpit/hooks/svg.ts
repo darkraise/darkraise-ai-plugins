@@ -508,3 +508,28 @@ export function gaugeTileSvg(tile: { dial: string; key: string; notes: readonly 
   }
   return svg(width, Math.ceil(y + 6), THEME + out)
 }
+
+/** One meter in the minimized band: a key, its figure, a bar with an optional tick, and a note. */
+export type BandMeter = { key: string; percent: number; share: number; color: string; tick: number | null; note: PanelRun[] }
+
+/**
+ * The minimized band's meters side by side, each column as wide as the
+ * others with a gap between; a narrow drawing drops the notes' tails.
+ */
+export function bandMetersSvg(meters: readonly BandMeter[], width: number): string {
+  nested = 0
+  const gap = 12
+  const column = (width - gap * Math.max(0, meters.length - 1)) / Math.max(1, meters.length)
+  let out = ''
+  for (const [index, meter] of meters.entries()) {
+    const x = index * (column + gap)
+    out += `<text x="${n(x)}" y="11" class="faint" font-family="${MONO}" font-size="10" font-weight="600" letter-spacing="0.8">${esc(meter.key.toUpperCase())}</text>`
+    out += `<text x="${n(x + column)}" y="11" text-anchor="end" font-family="${SANS}" font-size="${BODY}" font-weight="600" fill="${paint(meter.color)}">${esc(`${Math.round(meter.percent)}%`)}</text>`
+    out += place(meterSvg(meter.share, column, meter.color, meter.tick === null ? [] : [{ at: meter.tick }], 10), x, 16).svg
+    if (meter.note.length > 0) {
+      const runs = cut(meter.note, 11, column)
+      out += `<text x="${n(x)}" y="41" xml:space="preserve">${runs.map(run => tspan({ ...run, dim: run.color === undefined ? true : run.dim }, 11)).join('')}</text>`
+    }
+  }
+  return svg(width, meters.some(meter => meter.note.length > 0) ? 46 : 30, THEME + out)
+}

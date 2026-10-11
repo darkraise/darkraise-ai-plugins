@@ -121,7 +121,7 @@ export function bar(share: number, width: number): string {
   return '▰'.repeat(on) + '▱'.repeat(width - on)
 }
 
-/** The usage ramp dr-status uses: green, yellow, orange, then red. */
+/** The usage ramp: green, yellow, orange, then red. */
 export function rampColor(percent: number): string {
   if (percent >= 90) return 'error'
   if (percent >= 75) return '#ff8700'
@@ -264,41 +264,146 @@ export function windowElapsed(kind: string, resetsAt: number | null, now: number
 /** One stretch of text in the status strip, with how it is painted. */
 export type Run = { text: string; color?: string; bold?: boolean; dim?: boolean }
 
-/** What the status strip draws, read from the session as dr-status reads its payload. */
-export type StatusInput = {
+/** What the minimized cockpit's band draws. */
+export type BandInput = {
   cwd: string | null
   /** The repository's root, when the working directory is in one. */
   root: string | null
   home: string | null
   repo: RepoState | null
-  model: string | null
-  effort: string | null
-  context: { tokens: number; window: number } | null
-  /** The share of the last main request served from the prompt cache, 0 to 1. */
-  cache: number | null
-  usd: number | null
+  /** The context against the handoff budget, over the model's window. */
+  context: { tokens: number; limit: number; window: number } | null
+  turnsLeft: number | null
   limits: readonly { kind: string; percent: number; resetsAt: number | null }[]
+  agents: number
+  /** Background shells running, and how long the oldest has run. */
+  shells: { count: number; longest: number }
   now: number
-  /** The context against the handoff budget, shown once it nears it; null keeps it off the strip. */
-  handoff?: { tokens: number; limit: number; warnAt: number } | null
-  /** A dr-superpowers run's progress: tasks done of all, and the round in flight. */
-  run?: { done: number; total: number; round: number | null } | null
 }
 
-// dr-status' default palette.
 const DIR = 'blue'
 const GIT = 'magenta'
-const MODEL = 'cyan'
-const COST = '#af87ff'
-const EFFORT: Record<string, string> = { low: 'gray', medium: 'blue', high: 'cyan', xhigh: '#af87ff', max: 'magenta' }
-// Bar widths per tier, as dr-status narrows them; under 2 draws no bar.
-const METER_WIDTHS = [
-  { ctx: 10, cache: 10, limit: 8 },
-  { ctx: 6, cache: 6, limit: 5 },
-  { ctx: 4, cache: 4, limit: 3 },
-  { ctx: 0, cache: 0, limit: 0 },
+const AMBER_RUN = '#ff8700'
+// Bar widths per tier; 0 draws no bar.
+const BAND_WIDTHS = [
+  { ctx: 10, limit: 8 },
+  { ctx: 6, limit: 5 },
+  { ctx: 0, limit: 0 },
+  { ctx: 0, limit: 0 },
 ] as const
-export const STATUS_TIERS = METER_WIDTHS.length
+export const BAND_TIERS = BAND_WIDTHS.length
+
+/** A shell's age: seconds under a minute, then minutes, hours and days. */
+export function shellAge(ms: number): string {
+  return ms < 60_000 ? elapsed(ms) : duration(ms)
+}
+
+/** The band's two lines at one tier: 0 is the fullest, 3 the most compact. */
+export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
+  const sep: Run = { text: tier < 2 ? '  ·  ' : ' · ', dim: true }
+  const join = (segments: (Run[] | null)[]) =>
+    segments.filter((one): one is Run[] => one !== null && one.length > 0).flatMap((one, index) => (index === 0 ? one : [sep, ...one]))
+  const widths = BAND_WIDTHS[Math.min(tier, BAND_TIERS - 1)] ?? BAND_WIDTHS[0]
+  const meter = (parts: TrackPart[], color: string, marks: Record<string, string>): Run[] =>
+    parts.map(part => ({ text: part.text, color: part.kind === 'fill' ? color : part.kind === 'mark' ? (marks[part.mark ?? ''] ?? color) : undefined, dim: part.kind === 'empty', bold: part.kind === 'mark' }))
+
+  let ctx: Run[] | null = null
+  if (input.context !== null) {
+    const { tokens, limit, window } = input.context
+    const percent = (tokens / limit) * 100
+    const color = rampColor(percent)
+    const turns = input.turnsLeft
+    ctx = [
+      { text: 'ctx ', dim: true },
+      ...(widths.ctx > 0 ? [...meter(track(tokens / window, widths.ctx, [{ at: limit / window, glyph: '┃', name: 'handoff' }]), color, { handoff: color }), { text: ' ' }] : []),
+      { text: `${Math.round(percent)}%`, color, bold: true },
+      ...(turns === null || tier >= 3 ? [] : [{ text: tier < 2 ? ` · ≈${turns} ${turns === 1 ? 'turn' : 'turns'}` : ` ≈${turns}t`, color: turns <= 3 ? AMBER_RUN : undefined, dim: turns > 3 }]),
+    ]
+  }
+
+  const limits = input.limits.map((limit): Run[] => {
+    const color = rampColor(limit.percent)
+    const gone = windowElapsed(limit.kind, limit.resetsAt, input.now)
+    const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, input.now)
+    const pace: Run[] =
+      tier >= 3
+        ? []
+        : forecast === 'pace'
+          ? [{ text: tier < 2 ? ' on pace' : ' ✓', color: 'success' }]
+          : typeof forecast === 'number'
+            ? [{ text: tier < 2 ? ` out in ${duration(forecast) || '<1m'}` : ` ${duration(forecast) || '<1m'}`, color: AMBER_RUN }]
+            : []
+    const reset = tier === 0 && limit.resetsAt !== null && forecast !== null && typeof forecast !== 'number' ? [{ text: ` · ${duration(limit.resetsAt - input.now) || 'now'}`, dim: true }] : []
+    return [
+      { text: `${limitLabel(limit.kind)} `, dim: true },
+      ...(widths.limit > 0 ? [...meter(track(limit.percent / 100, widths.limit, gone === null ? [] : [{ at: gone, glyph: '┊', name: 'pace' }]), color, { pace: 'white' }), { text: ' ' }] : []),
+      { text: `${Math.round(limit.percent)}%`, color, bold: true },
+      ...pace,
+      ...reset,
+    ]
+  })
+
+  const agents: Run[] | null =
+    input.agents === 0 ? null : [{ text: '● ', color: 'cyan' }, { text: tier < 2 ? `${input.agents} ${input.agents === 1 ? 'agent' : 'agents'}` : `${input.agents}`, color: 'cyan' }]
+  const { count, longest } = input.shells
+  const shells: Run[] | null =
+    count === 0
+      ? null
+      : [
+          { text: '$ ', color: 'yellow', bold: true },
+          { text: tier < 2 ? `${count} ${count === 1 ? 'shell' : 'shells'}` : `${count}`, color: 'yellow' },
+          ...(tier >= 3 ? [] : [{ text: tier < 1 ? ' · longest ' : ' · ', dim: true }, { text: shellAge(longest), color: 'yellow' }]),
+        ]
+
+  let dir: Run[] | null = null
+  if (input.cwd !== null) {
+    const { lead, anchor, inner } = pathParts(input.cwd, input.root, input.home)
+    const parts = inner.split('/').filter(Boolean)
+    const leaf = parts[parts.length - 1] ?? anchor
+    dir = (
+      tier === 0
+        ? [{ text: lead, color: DIR, dim: true }, { text: anchor, color: DIR, bold: true }, { text: inner, color: DIR }]
+        : tier === 1
+          ? [{ text: anchor, color: DIR, bold: true }, { text: parts.length > 1 ? `/…/${leaf}` : inner, color: DIR }]
+          : [{ text: input.root === null ? leaf : anchor, color: DIR, bold: true }]
+    ).filter(run => run.text !== '')
+  }
+  let git: Run[] = []
+  if (input.repo !== null) {
+    const r = input.repo
+    const branch = tier >= 2 && r.branch.length > 16 ? `${r.branch.slice(0, 15)}…` : r.branch
+    const counters = [
+      r.ahead > 0 ? `↑${r.ahead}` : '',
+      tier < 3 && r.behind > 0 ? `↓${r.behind}` : '',
+      tier < 2 && r.changed > 0 ? `~${r.changed}` : '',
+      tier < 2 && r.untracked > 0 ? `?${r.untracked}` : '',
+    ].filter((text, index) => text !== '' && (tier < 3 || index === 0))
+    git = [
+      { text: ' ⎇ ', color: GIT },
+      { text: branch, color: GIT, bold: true },
+      ...(r.changed > 0 || r.untracked > 0 ? [{ text: '*', color: GIT }] : []),
+      ...(counters.length > 0 && tier < 3 ? [{ text: ` ${counters.join(' ')}`, color: GIT }] : []),
+    ]
+  }
+  const where = dir === null && git.length === 0 ? null : [...(dir ?? []), ...(dir === null ? git.map((run, index) => (index === 0 ? { ...run, text: '⎇ ' } : run)) : git)]
+
+  return [join([ctx, ...limits]), join([agents, shells, where])]
+}
+
+/**
+ * Each band line at the fullest tier that fits `width`, stepping down on its
+ * own; a line too wide even at the last tier is cut.
+ */
+export function fitBand(input: BandInput, width: number): [Run[], Run[]] {
+  const fit = (which: 0 | 1): Run[] => {
+    for (let tier = 0; tier < BAND_TIERS; tier++) {
+      const line = bandLines(input, tier)[which]
+      if (runsWidth(line) <= width) return line
+    }
+    return runsCut(bandLines(input, BAND_TIERS - 1)[which], width)
+  }
+  return [fit(0), fit(1)]
+}
 
 /** The cells a row of runs takes. */
 export function runsWidth(runs: readonly Run[]): number {
@@ -324,7 +429,7 @@ export function runsCut(runs: readonly Run[], width: number): Run[] {
   return out
 }
 
-/** A color from dr-status' config: a 256-color number becomes hex, orange its own hex, a name stays. */
+/** A terminal color: a 256-color number becomes hex, orange its own hex, a name stays. */
 export function termColor(name: string | null | undefined): string | undefined {
   if (name === null || name === undefined || name === '' || name === 'default') return undefined
   if (name === 'orange') return '#ff8700'
@@ -353,12 +458,22 @@ export function modelName(id: string, isShort = false): string {
   return isShort || version === '' ? name : `${name} ${version}`
 }
 
-/** The accounts key dr-status colors by: the config directory, "~"-relative under home. */
+/** The account's key: its config directory, "~"-relative under home. */
 export function accountKey(configDir: string, home: string): string {
   const dir = slashes(configDir)
   const base = slashes(home)
   if (dir === base) return '~'
   return base !== '' && dir.startsWith(`${base}/`) ? `~${dir.slice(base.length)}` : dir
+}
+
+// Frame colors that read on light and dark terminals alike.
+const ACCOUNT_COLORS = ['#af87ff', '#5fafff', '#5fd7af', '#ffaf5f', '#ff87af', '#87d75f', '#d787ff', '#5fd7ff']
+
+/** The account's frame color: one of eight, picked from its key, so each account keeps its own. */
+export function accountColor(key: string): string {
+  let hash = 0
+  for (const ch of key) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
+  return ACCOUNT_COLORS[hash % ACCOUNT_COLORS.length] ?? ACCOUNT_COLORS[0]
 }
 
 /** Claude's billing type, "stripe_subscription" → "subscription". */
@@ -377,7 +492,7 @@ function slashes(path: string): string {
 }
 
 /**
- * The working directory in dr-status' three tones: what leads to the
+ * The working directory in three tones: what leads to the
  * repository, the repository's name, and the path inside it.
  */
 export function pathParts(cwd: string, root: string | null, home: string | null): { lead: string; anchor: string; inner: string } {
@@ -411,7 +526,7 @@ export function repoName(remote: string | null, root: string): string {
   return top.slice(top.lastIndexOf('/') + 1) || top
 }
 
-/** The working folder as dr-status draws it: the way there dim, the repository bold, the rest plain. */
+/** The working folder: the way there dim, the repository bold, the rest plain. */
 export function folderRuns(cwd: string, root: string | null, home: string | null): Run[] {
   const { lead, anchor, inner } = pathParts(cwd, root, home)
   return [
@@ -419,101 +534,6 @@ export function folderRuns(cwd: string, root: string | null, home: string | null
     { text: anchor, color: DIR, bold: true },
     ...(inner === '' ? [] : [{ text: inner, color: DIR }]),
   ]
-}
-
-/** dr-status' two lines at one tier: 0 is the fullest, 3 the most compact. */
-export function statusLines(input: StatusInput, tier: number): [Run[], Run[]] {
-  const sep: Run = { text: tier < 2 ? '  ·  ' : ' · ', dim: true }
-  const join = (segments: (Run[] | null)[]) =>
-    segments.filter((one): one is Run[] => one !== null && one.length > 0).flatMap((one, index) => (index === 0 ? one : [sep, ...one]))
-  const widths = METER_WIDTHS[Math.min(tier, METER_WIDTHS.length - 1)] ?? METER_WIDTHS[0]
-  const extras = tier < 2
-
-  let dir: Run[] | null = null
-  if (input.cwd !== null) {
-    const { lead, anchor, inner } = pathParts(input.cwd, input.root, input.home)
-    const parts = inner.split('/').filter(Boolean)
-    const leaf = parts[parts.length - 1] ?? anchor
-    dir =
-      tier === 0
-        ? [{ text: lead, color: DIR, dim: true }, { text: anchor, color: DIR, bold: true }, { text: inner, color: DIR }]
-        : tier === 1
-          ? [{ text: anchor, color: DIR, bold: true }, { text: inner, color: DIR }]
-          : tier === 2
-            ? [{ text: anchor, color: DIR, bold: true }, { text: parts.length > 1 ? `/…/${leaf}` : inner, color: DIR }]
-            : [{ text: leaf, color: DIR, bold: true }]
-    dir = dir.filter(run => run.text !== '')
-  }
-
-  let git: Run[] | null = null
-  if (input.repo !== null) {
-    const r = input.repo
-    const branch = tier === 3 && r.branch.length > 16 ? `${r.branch.slice(0, 15)}…` : r.branch
-    const counters = [r.ahead > 0 ? `↑${r.ahead}` : '', r.behind > 0 ? `↓${r.behind}` : '', r.untracked > 0 ? `?${r.untracked}` : '']
-      .filter(Boolean)
-      .join(' ')
-    git = [
-      { text: branch, color: GIT, bold: true },
-      ...(r.changed > 0 ? [{ text: '*', color: GIT }] : []),
-      ...(tier < 2 && counters !== '' ? [{ text: ` ${counters}`, color: GIT }] : []),
-    ]
-  }
-
-  const model = input.model === null ? null : [{ text: modelName(input.model, tier >= 2), color: MODEL, bold: true }]
-  const effort = input.effort === null ? null : [{ text: input.effort, color: EFFORT[input.effort] ?? 'gray' }]
-  const run =
-    input.run == null || input.run.total === 0
-      ? null
-      : [{ text: `run ${input.run.done}/${input.run.total}${tier < 2 && input.run.round !== null ? ` r${input.run.round}` : ''}`, color: 'yellow' }]
-
-  const meter = (label: string, share: number, colorShare: number, width: number, extra: string): Run[] => {
-    const percent = Math.round(share * 100)
-    const color = rampColor(colorShare * 100)
-    return [
-      { text: `${label} ` },
-      ...(width >= 2 ? [{ text: `${bar(share, width)} `, color }] : []),
-      { text: `${percent}%`, color, bold: true },
-      ...(extras && extra !== '' ? [{ text: ` · ${extra}`, dim: true }] : []),
-    ]
-  }
-  const ctx =
-    input.context === null
-      ? null
-      : meter('ctx', input.context.tokens / input.context.window, input.context.tokens / input.context.window, widths.ctx, kTokens(input.context.tokens))
-  // A high hit rate is good news: the bar fills with the hits, the color reads the misses.
-  // The handoff reading joins the strip only once the context nears its budget.
-  const near = input.handoff == null ? null : levelOf(input.handoff.tokens, input.handoff.limit, input.handoff.warnAt)
-  const handoff =
-    input.handoff == null || near === null || near === 'quiet'
-      ? null
-      : [
-          { text: tier < 3 ? 'handoff ' : 'ho ' },
-          { text: `${Math.round((input.handoff.tokens / input.handoff.limit) * 100)}%`, color: near === 'handoff' ? 'error' : 'warning', bold: true },
-        ]
-  const cache = input.cache === null ? null : meter('cache', input.cache, 1 - input.cache, widths.cache, '')
-  const cost = input.usd === null ? null : [{ text: `$${input.usd.toFixed(2)}`, color: COST, bold: true }]
-  const limits = input.limits.map(limit =>
-    meter(limitLabel(limit.kind), limit.percent / 100, limit.percent / 100, widths.limit, limit.resetsAt === null ? '' : duration(limit.resetsAt - input.now)),
-  )
-
-  return [join([dir, git, model, effort, run]), join([ctx, handoff, cache, cost, ...limits])]
-}
-
-/**
- * Each line at the fullest tier that fits `width`, stepping down on its own;
- * a line too wide even at the last tier is cut.
- */
-export function fitStatus(input: StatusInput, width: number): { tiers: [number, number]; lines: [Run[], Run[]] } {
-  const fit = (which: 0 | 1): [number, Run[]] => {
-    for (let tier = 0; tier < STATUS_TIERS; tier++) {
-      const line = statusLines(input, tier)[which]
-      if (runsWidth(line) <= width) return [tier, line]
-    }
-    return [STATUS_TIERS - 1, runsCut(statusLines(input, STATUS_TIERS - 1)[which], width)]
-  }
-  const [oneTier, one] = fit(0)
-  const [twoTier, two] = fit(1)
-  return { tiers: [oneTier, twoTier], lines: [one, two] }
 }
 
 /**
@@ -711,28 +731,6 @@ export function nowLine(now: ActivityInput, at: number): Run[] {
   }
 }
 
-/** The Now row cut down for the strip's top rule; nothing while idle. */
-export function nowBadge(now: ActivityInput, at: number): Run[] {
-  switch (now.kind) {
-    case 'running':
-      return [
-        { text: '● ', color: 'cyan', bold: true },
-        { text: elapsed(at - (now.turnStartedAt ?? now.since)), color: 'cyan' },
-        ...(now.tool === null ? [] : [{ text: ` · ${now.tool}`, color: 'cyan' }]),
-      ]
-    case 'waiting':
-      return [{ text: `⏳ waiting ${elapsed(at - now.since)}`, color: AMBER, bold: true }]
-    case 'asking':
-      return [{ text: `❓ asking ${elapsed(at - now.since)}`, color: AMBER, bold: true }]
-    case 'failed':
-      return [{ text: '✗ failed', color: 'error', bold: true }]
-    case 'interrupted':
-      return [{ text: '■ interrupted', color: AMBER, bold: true }]
-    default:
-      return []
-  }
-}
-
 /** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */
 export function isAtLeast(base: string | undefined, least: string): boolean {
   const parts = (text: string) => text.split('-')[0]!.split('.').map(Number)
@@ -825,14 +823,3 @@ export function remoteRuns(clients: readonly { surface: string }[], setting: str
   return [{ text: '○ not connected', dim: true }]
 }
 
-/** What keeps running beside the turn, for the strip's bottom rule: shells and remote devices. */
-export function backgroundBadge(shells: number, clients: readonly { surface: string }[]): Run[] {
-  const runs: Run[] = []
-  if (shells > 0) runs.push({ text: '$ ', color: 'yellow', bold: true }, { text: `${shells} ${shells === 1 ? 'shell' : 'shells'}`, color: 'yellow' })
-  if (clients.length > 0) {
-    if (runs.length > 0) runs.push({ text: ' · ', dim: true })
-    const names = [...new Set(clients.map(one => deviceName(one.surface)))]
-    runs.push({ text: '● ', color: 'green', bold: true }, { text: clients.length === 1 || names.length === 1 ? names[0] : `${clients.length} devices`, color: 'green' })
-  }
-  return runs
-}
