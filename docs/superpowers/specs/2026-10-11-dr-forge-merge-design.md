@@ -78,7 +78,9 @@ content has moved.
   reference, scripts, tests, README and the cockpit's prompts.
 - `reference/legacy-names.md` adds `dr-superpowers:` as a legacy prefix; its
   tables resolve each suffix to `dr-forge:<suffix>`. It stays the only
-  maintained file allowed to spell a legacy prefix.
+  maintained document allowed to spell a legacy prefix; the cockpit's
+  `hooks/cockpit/lib.ts` and its test also spell `dr-superpowers:` to recognise
+  pre-2.0 sessions.
 - The cockpit treats a session as a workflow session when it loaded a skill or
   started an agent under either `dr-forge:` or `dr-superpowers:`. Seat names
   strip either prefix.
@@ -97,11 +99,13 @@ One resolver, implemented once in bash (`scripts/lib/forge-dir.sh`, function
 
 `state` maps to `.forge/` / `.superpowers/`; `docs` to `docs/forge/` /
 `docs/superpowers/`. Every script that builds either path calls the resolver.
-Skills keep naming the new paths (`.forge/…`, `docs/forge/…`) and
+Skills name the two directories `<state>` and `<docs>`, and
 `reference/project-state.md` states the fallback rule once; where a skill needs
 the actual path of an existing file it takes it from a script's output, never
-by spelling the old path. A worktree resolves against its primary checkout, as
-the cockpit does today.
+by spelling the old path: `scripts/forge-path state|docs [RELATIVE]` prints it.
+Each caller keeps the root it resolves under today (the primary checkout for
+handoff and budget files, the checkout at hand for a plan's workspace), so a
+worktree resolves where it did before.
 
 This repository's own `docs/superpowers/` stays put and is read through the
 fallback.
@@ -218,23 +222,27 @@ account to start wins, and another account's cockpit options are not merged.
 - `scripts/validate-repository.mjs`: the name lists; the Codex empty-hooks and
   no-dependencies rules move to `dr-forge`; `dr-forge:<name>` resolves against
   `plugins/dr-forge/skills` and `agents`; the legacy pattern adds
-  `dr-superpowers:`, allowed only in `plugins/dr-forge/reference/legacy-names.md`;
+  `dr-superpowers:`, allowed only in `plugins/dr-forge/reference/legacy-names.md`,
+  `plugins/dr-forge/hooks/cockpit/lib.ts` and `plugins/dr-forge/tests/cockpit.test.ts`;
   every schema key has `type`, `default`, `group`, `title` and `target`, and
   its default passes its own type.
-- `scripts/test-all.mjs`: runs `plugins/dr-forge/tests/*.test.sh` and the
-  cockpit test.
+- `scripts/test-all.mjs`: runs `plugins/dr-forge/tests/*.test.sh`, and the
+  cockpit test (`claude plugin test plugins/dr-forge`) when a `claude` CLI is
+  on PATH outside Windows; CI keeps its own pinned-CLI step for the mod.
 - `tests/repository-layout.test.mjs`, `tests/marketplace-smoke.ps1`,
   `docs/testing/dual-client-marketplace-validation.md`: the new plugin set.
 - `evals/tiers`: harness code and fixtures (`*.mjs`, `tests/`, `README.md`)
   take the new path and prefix. `results/` and `cases/` are recorded data and
-  are not edited; the harness maps the old prefix when it reads them.
+  are not edited. The harness needs no prefix mapping: it loads agents by file
+  name, and each replayed snapshot keeps `.superpowers/` under the path rule.
 
 ## Testing
 
 Sized like the neighbouring tests:
 
-- `tests/forge-dir.test.sh`: the four rows of the resolver table, and a
-  worktree resolving against its primary checkout.
+- `tests/forge-dir.test.sh`: the four rows of the resolver table and
+  `scripts/forge-path`; a worktree resolving under its own root is tested
+  with the scripts that resolve there (`tests/forge-state.test.sh`).
 - `tests/forge-config.test.sh`: precedence (environment, file, default); `set`
   then `get`; `unset`; an unknown key and an invalid value exit 2 and leave the
   file unchanged; the import from a fixture `settings.json` and a fixture
