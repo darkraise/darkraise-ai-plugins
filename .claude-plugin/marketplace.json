@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "darkraise",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Darkraise plugins for Claude Code and Codex.",
   "owner": {
     "name": "Darkraise",
@@ -9,9 +9,9 @@
   },
   "plugins": [
     {
-      "name": "dr-superpowers",
-      "source": "./plugins/dr-superpowers",
-      "description": "Standalone fork of superpowers 6.3.0: brainstorming, planning, and tiered subagent execution with task scoring, explicit model and effort assignment, criteria-based review, and a Claude-hosted external Codex executor.",
+      "name": "dr-forge",
+      "source": "./plugins/dr-forge",
+      "description": "Brainstorm, plan and execute with scored tasks, tiered implementers, criteria-based review and an external Codex executor; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard. A standalone fork of superpowers 6.3.0.",
       "category": "workflow",
       "keywords": [
         "superpowers",
@@ -22,23 +22,11 @@
         "verification",
         "code-review",
         "codex",
-        "external-executors"
-      ]
-    },
-    {
-      "name": "dr-cockpit",
-      "source": "./plugins/dr-cockpit",
-      "description": "A Claude Code mod for long sessions: a cockpit pane of what the session is doing, context against its handoff budget, usage limits with forecasts, subagents, the dr-superpowers run and the repo; Discord notifications when a turn needs you or ends; and a guard that keeps AI attribution out of commits and pull requests.",
-      "category": "productivity",
-      "keywords": [
+        "external-executors",
         "mod",
         "context-window",
         "handoff",
-        "subagents",
-        "token-usage",
-        "attribution",
         "rate-limits",
-        "git",
         "discord"
       ]
     },

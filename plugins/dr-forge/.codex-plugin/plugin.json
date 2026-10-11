@@ -1,7 +1,7 @@
 {
   "name": "dr-forge",
-  "version": "1.34.1",
-  "description": "Standalone fork of superpowers 6.3.0: brainstorming, planning, and tiered subagent execution with task scoring, explicit model and effort assignment, criteria-based review, and a Claude-hosted external Codex executor.",
+  "version": "2.0.0",
+  "description": "Brainstorm, plan and execute with scored tasks, tiered implementers, criteria-based review and an external Codex executor; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard. A standalone fork of superpowers 6.3.0.",
   "author": {
     "name": "Darkraise"
   },

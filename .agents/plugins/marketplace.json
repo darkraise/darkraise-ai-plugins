@@ -9,11 +9,11 @@
         "installation": "AVAILABLE",
         "authentication": "ON_USE"
       },
-      "name": "dr-superpowers",
+      "name": "dr-forge",
       "category": "Development",
       "source": {
         "source": "local",
-        "path": "./plugins/dr-superpowers"
+        "path": "./plugins/dr-forge"
       }
     },
     {

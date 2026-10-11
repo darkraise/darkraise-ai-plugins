@@ -2,8 +2,8 @@ import { readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const names = ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-cockpit', 'dr-status', 'dr-superpowers'];
-const claudeOnly = ['dr-cockpit', 'dr-status'];
+const names = ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-forge', 'dr-status'];
+const claudeOnly = ['dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 
 export function validateRepository(root) {
@@ -44,10 +44,10 @@ export function validateRepository(root) {
       if (client === 'codex') {
         if (entry.policy?.installation !== 'AVAILABLE') errors.push(`${entry.name}: installation must be AVAILABLE`);
         if (manifest.skills !== './skills/' || !existsSync(resolve(pluginRoot, 'skills'))) errors.push(`${entry.name}: skills path missing`);
-        if (entry.name === 'dr-superpowers' && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
+        if (entry.name === 'dr-forge' && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
       }
-      if (client === 'claude' && entry.name === 'dr-superpowers' && manifest.dependencies?.length) {
-        errors.push('dr-superpowers: standalone plugin must not declare dependencies');
+      if (client === 'claude' && entry.name === 'dr-forge' && manifest.dependencies?.length) {
+        errors.push('dr-forge: standalone plugin must not declare dependencies');
       }
     }
   }
@@ -85,8 +85,8 @@ export function validateRepository(root) {
     };
     visit(skillRoot);
   }
-  const legacyPattern = /(?<!dr-)superpowers:|dcc-superpower-companions:/;
-  const legacyAllowed = new Set(['plugins/dr-superpowers/reference/legacy-names.md']);
+  const legacyPattern = /(?:^|[^\w-])superpowers:|dr-superpowers:|dcc-superpower-companions:/;
+  const legacyAllowed = new Set(['plugins/dr-forge/reference/legacy-names.md']);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;
@@ -98,13 +98,13 @@ export function validateRepository(root) {
         if (legacyAllowed.has(rel)) continue;
         readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
           if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
-          for (const match of line.matchAll(/dr-superpowers:([a-z0-9-]+)/g)) {
+          for (const match of line.matchAll(/dr-forge:([a-z0-9-]+)/g)) {
             // A name followed by `<` is a template placeholder such as impl-<model>-<effort>.
             if (line[match.index + match[0].length] === '<') continue;
             const name = match[1];
-            if (!existsSync(resolve(root, 'plugins/dr-superpowers/skills', name)) &&
-                !existsSync(resolve(root, 'plugins/dr-superpowers/agents', `${name}.md`))) {
-              errors.push(`${rel}:${index + 1}: unresolved dr-superpowers reference ${name}`);
+            if (!existsSync(resolve(root, 'plugins/dr-forge/skills', name)) &&
+                !existsSync(resolve(root, 'plugins/dr-forge/agents', `${name}.md`))) {
+              errors.push(`${rel}:${index + 1}: unresolved dr-forge reference ${name}`);
             }
           }
         });

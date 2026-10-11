@@ -1,6 +1,6 @@
 # Legacy plugin names
 
-Plans, ledgers, and notes written before dr-superpowers 1.2.0 name skills and
+Plans, ledgers, and notes written before dr-forge 2.0.0 name skills and
 agents under older plugin prefixes. Resolve them with this table when you read
 them.
 
@@ -15,7 +15,7 @@ prefixes literally; `scripts/validate-repository.mjs` enforces that.
 - Log one ledger line per distinct name translated:
   `Ruling: translated <old> -> <new> — legacy plugin name — none`
 - A suffix not in the tables below is not a legacy name. It is an unknown name:
-  on an `**Implementer:**` line, dr-superpowers:subagent-driven-development
+  on an `**Implementer:**` line, dr-forge:subagent-driven-development
   handles it through its Dispatch rulings; anywhere else, treat it as absent,
   log `Ruling: unknown name <name> ignored — not in legacy-names.md — <cost if
   wrong>`, and carry on. A running plan never stops on a name.
@@ -24,23 +24,23 @@ prefixes literally; `scripts/validate-repository.mjs` enforces that.
 
 | Suffix | Resolves to |
 |---|---|
-| `using-superpowers` | `dr-superpowers:using-superpowers` |
-| `brainstorming` | `dr-superpowers:brainstorming` |
-| `selecting-approaches` | `dr-superpowers:selecting-approaches` |
-| `writing-plans` | `dr-superpowers:writing-plans` |
-| `executing-plans` | `dr-superpowers:executing-plans` |
-| `subagent-driven-development` | `dr-superpowers:subagent-driven-development` |
-| `test-driven-development` | `dr-superpowers:test-driven-development` |
-| `systematic-debugging` | `dr-superpowers:systematic-debugging` |
-| `verification-before-completion` | `dr-superpowers:verification-before-completion` |
-| `requesting-code-review` | `dr-superpowers:requesting-code-review` |
-| `receiving-code-review` | `dr-superpowers:receiving-code-review` |
-| `finishing-a-development-branch` | `dr-superpowers:finishing-a-development-branch` |
-| `using-git-worktrees` | `dr-superpowers:using-git-worktrees` |
-| `writing-skills` | `dr-superpowers:writing-skills` |
+| `using-superpowers` | `dr-forge:using-superpowers` |
+| `brainstorming` | `dr-forge:brainstorming` |
+| `selecting-approaches` | `dr-forge:selecting-approaches` |
+| `writing-plans` | `dr-forge:writing-plans` |
+| `executing-plans` | `dr-forge:executing-plans` |
+| `subagent-driven-development` | `dr-forge:subagent-driven-development` |
+| `test-driven-development` | `dr-forge:test-driven-development` |
+| `systematic-debugging` | `dr-forge:systematic-debugging` |
+| `verification-before-completion` | `dr-forge:verification-before-completion` |
+| `requesting-code-review` | `dr-forge:requesting-code-review` |
+| `receiving-code-review` | `dr-forge:receiving-code-review` |
+| `finishing-a-development-branch` | `dr-forge:finishing-a-development-branch` |
+| `using-git-worktrees` | `dr-forge:using-git-worktrees` |
+| `writing-skills` | `dr-forge:writing-skills` |
 | `dispatching-parallel-agents` | No skill. Dispatch independent agents in one message so they run concurrently |
-| `assigning-implementers` | `dr-superpowers:writing-plans`, section "Assign an implementer to every task" |
-| `dispatching-tiered-implementers` | `dr-superpowers:subagent-driven-development` |
+| `assigning-implementers` | `dr-forge:writing-plans`, section "Assign an implementer to every task" |
+| `dispatching-tiered-implementers` | `dr-forge:subagent-driven-development` |
 
 A plan header that says "REQUIRED SUB-SKILL: <old prefix>dispatching-tiered-implementers"
 therefore needs nothing extra: subagent-driven-development already reads the
@@ -48,7 +48,7 @@ therefore needs nothing extra: subagent-driven-development already reads the
 
 ## Agents
 
-Each suffix resolves to `dr-superpowers:` followed by the same suffix.
+Each suffix resolves to `dr-forge:` followed by the same suffix.
 
 | Suffix |
 |---|
