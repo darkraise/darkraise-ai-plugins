@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# forge-path state|docs [RELATIVE] — this repository's dr-forge directory, or a
+# path under it: .forge/ and docs/forge/, or the pre-2.0 .superpowers/ and
+# docs/superpowers/ where only those exist. Resolved under the checkout at hand.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/lib/forge-dir.sh"
+[ $# -ge 1 ] && [ $# -le 2 ] || { echo "usage: forge-path state|docs [RELATIVE]" >&2; exit 2; }
+root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+dir=$(forge_dir "$1" "$root") || exit 2
+if [ $# -eq 2 ]; then printf '%s/%s\n' "$dir" "$2"; else printf '%s\n' "$dir"; fi
