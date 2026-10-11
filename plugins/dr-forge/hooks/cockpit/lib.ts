@@ -108,6 +108,11 @@ export function isGitWriteTool(tool: string): boolean {
   return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
 }
 
+/** The repository's state directory name, as scripts/lib/forge-dir.sh picks it: .forge unless only .superpowers exists. */
+export function stateLeaf(names: ReadonlySet<string>): string {
+  return !names.has('.forge') && names.has('.superpowers') ? '.superpowers' : '.forge'
+}
+
 /** Whether a subagent type or skill name belongs to dr-forge, under its name or the pre-2.0 dr-superpowers. */
 export function isSuperpowers(name: string): boolean {
   return name.startsWith('dr-forge:') || name.startsWith('dr-superpowers:')

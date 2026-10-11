@@ -31,6 +31,7 @@ import {
   isFinishArmed,
   isGitWriteTool,
   isSuperpowers,
+  stateLeaf,
   kTokens,
   levelOf,
   limitForecast,
@@ -98,7 +99,9 @@ const MAX_BREAKDOWN_ROWS = 12
 const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-forge handoff skill. Start no new task.'
-const RESUME_PROMPT = 'Resume the work in .superpowers/handoff/latest.md with the dr-forge resume-execution skill.'
+function resumePrompt(): string {
+  return `Resume the work in ${S.stateLeaf}/handoff/latest.md with the dr-forge resume-execution skill.`
+}
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
 // The tools that wait on the person by their nature: their dialog is the question.
@@ -561,7 +564,7 @@ export const register: Register = on => {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       // The controller writes its ledger with its own tool calls.
-      if (/\.superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
+      if (/\.forge|\.superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
     }
 
     return ran
@@ -651,7 +654,7 @@ export const register: Register = on => {
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
         {canHandOff && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
-        {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: RESUME_PROMPT, asUser: true }), { hotkey: 'r', isMain: true })}
+        {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: resumePrompt(), asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
         {button('pane-settings', 'Settings', () => update($, view, () => 'settings'), { hotkey: 's' })}
         {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
@@ -1936,6 +1939,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 const S = {
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
+  // The state directory's name in the primary checkout, as last read.
+  stateLeaf: '.forge',
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,
@@ -2060,16 +2065,24 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
   await setActivity($, now => (now.kind === 'waiting' || now.kind === 'asking' ? { ...now, kind: 'running', detail: null, isSent: false } : now))
 }
 
+/** The state directory under a checkout: .forge, or the pre-2.0 .superpowers where only that exists. */
+async function stateDirOf($: EngineInterface, root: string): Promise<string> {
+  const names = new Set((await $.fs.list(root).catch(() => [])).map(entry => entry.name))
+  S.stateLeaf = stateLeaf(names)
+  return `${root}/${S.stateLeaf}`
+}
+
 // The run's ledger, its plan's tasks, and the newest handoff: read from the
-// primary checkout, S.where dr-forge keeps .superpowers/.
+// primary checkout, S.where dr-forge keeps .forge/ (.superpowers/ before 2.0).
 async function readRun($: EngineInterface) {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return
+  const state = await stateDirOf($, root)
   try {
-    const handoff = await $.fs.stat(`${root}/.superpowers/handoff/latest.md`).catch(() => null)
+    const handoff = await $.fs.stat(`${state}/handoff/latest.md`).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
     if ((await read($, handoffAt)) !== handoffTime) await update($, handoffAt, () => handoffTime)
-    const base = `${root}/.superpowers/sdd`
+    const base = `${state}/sdd`
     const entries = await $.fs.list(base).catch(() => [])
     let newest: { path: string; at: number } | null = null
     for (const entry of entries) {
@@ -2211,7 +2224,7 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
-  // A worktree's .superpowers/ lives in the primary checkout.
+  // A worktree's .forge/ (.superpowers/ before 2.0) lives in the primary checkout.
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   S.where.primary = common === null ? null : common.replace(/[\\/]\.git[\\/]?$/, '') || null
 }

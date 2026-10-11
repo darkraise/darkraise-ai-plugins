@@ -31,6 +31,7 @@ import {
   runsWidth,
   sectionsToggled,
   sparkline,
+  stateLeaf,
   stackedRuns,
   shellAge,
   stepped,
@@ -131,6 +132,7 @@ type World = {
   /** What the plugin writes, by path. */
   written?: Record<string, string>
   /** Each request the plugin sends through $.http.fetch. */
+  prompts?: string[]
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
@@ -179,7 +181,10 @@ function world(on: On, w: World) {
     if (w.version === undefined) throw new Error('no version')
     return { value: { version: w.version, base: w.version } }
   })
-  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  on('prompt.submit', (_$, e) => {
+    w.prompts?.push(e.text)
+    return { text: e.text }
+  })
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
   on('session.detach', (_$, e) => ({ clientId: e.clientId }))
   on('session.surfaces', () => ({ value: ['terminal'] }))
@@ -1734,6 +1739,12 @@ describe('discord', () => {
   })
 })
 
+test('the state directory is .forge unless only .superpowers exists', () => {
+  expect(stateLeaf(new Set())).toBe('.forge')
+  expect(stateLeaf(new Set(['.superpowers']))).toBe('.superpowers')
+  expect(stateLeaf(new Set(['.forge', '.superpowers']))).toBe('.forge')
+})
+
 describe('run card', () => {
   const LEDGER = [
     '# SDD ledger — plan: docs/plans/p.md',
@@ -1770,6 +1781,24 @@ describe('run card', () => {
 
   test('replaces the plan card in a dr-forge run', async ($, on) => {
     const files = runFiles(LEDGER)
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^1\/3$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /round 2\/5 · impl-sonnet-low/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
+  })
+
+  test('reads a ledger kept under .forge', async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
+    }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
     await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
@@ -1855,11 +1884,26 @@ describe('run card', () => {
 
   test('offers Resume when a recent handoff waits', async ($, on) => {
     const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
-    world(on, { ...SIGNED_IN, files })
+    const prompts: string[] = []
+    world(on, { ...SIGNED_IN, files, prompts })
     signedIn(on, files)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
+    await ui.press({ key: 'pane-resume' })
+    expect(prompts).toEqual([expect.stringContaining('.superpowers/handoff/latest.md')])
+  })
+
+  test('offers Resume for a handoff under .forge', async ($, on) => {
+    const files: World['files'] = { '/home/me/code/shop/.forge/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
+    const prompts: string[] = []
+    world(on, { ...SIGNED_IN, files, prompts })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
+    await ui.press({ key: 'pane-resume' })
+    expect(prompts).toEqual([expect.stringContaining('.forge/handoff/latest.md')])
   })
 })
 
