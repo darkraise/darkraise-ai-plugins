@@ -43,7 +43,7 @@ plugins/dr-forge/
   agents/ criteria/ reference/ skills/ scripts/ LICENSES/   from dr-superpowers
   hooks/hooks.json             modules + the three command hooks
   hooks/cockpit/               register.tsx lib.ts notify.ts svg.ts
-  config/schema.json           every setting
+  config/schema.mjs            every setting
   types/index.d.ts             from dr-cockpit
   tests/                       dr-superpowers tests, cockpit.test.ts, new tests
   README.md                    one document for workflow and cockpit
@@ -59,10 +59,10 @@ plugins/dr-forge/
 }
 ```
 
-`claude plugin validate` accepts `modules` and `hooks` in one file (probed
-2026-10-11). Loading both at runtime is confirmed by the manual check under
-Verification; if the engine loads only one, the command hooks move inline into
-`.claude-plugin/plugin.json` under `hooks`, and nothing else changes.
+`claude plugin validate` accepts `modules` and `hooks` in one file, and a
+headless `claude -p --plugin-dir` session on Claude Code 2.1.296 ran both a
+module's `session.start` hook and a command `SessionStart` hook from one such
+file (probed 2026-10-11).
 
 On Codex the manifest's `"hooks": {}` keeps both the mod and the command hooks
 out, as today. Codex gets the skills and scripts, and reads the same settings
@@ -124,7 +124,11 @@ Anything the plugin itself exports uses the new name only.
 
 ### Schema
 
-`config/schema.json` is an object keyed by setting name. Each entry has:
+`config/schema.mjs` default-exports an object keyed by setting name. It is an
+ES module rather than JSON because a mod imports only code files; the mod,
+`scripts/lib/forge-config.mjs` and `scripts/validate-repository.mjs` all import
+it directly (probed 2026-10-11 with `claude plugin validate` and
+`claude plugin test`). Each entry has:
 
 - `type`: `boolean`, `number` (with `min`/`max`), `enum` (with `values`) or
   `string`;
@@ -153,7 +157,9 @@ schema key: environment variable, then file, then schema default. A value that
 fails its type is ignored with one warning and the next source wins.
 
 The home directory is `~/.dr-forge/`. `scripts/lib/darkmem-config.mjs` reads
-its mapping from `~/.dr-forge/config.json`, and resolves the mirror
+its mapping from `~/.dr-forge/config.json`, or from
+`~/.dr-superpowers/config.json` while the new file does not exist (darkmem-sync
+may run before anything has imported), and resolves the mirror
 (`<home>/mirror/<project>/`) by the resolver table under Repository paths:
 `~/.dr-forge/mirror/<project>` when it exists or `~/.dr-superpowers/mirror/<project>`
 does not, else the old one. Its `docsRoot` and `workRoot` come from
