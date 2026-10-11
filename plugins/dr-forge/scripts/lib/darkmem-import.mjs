@@ -1,5 +1,5 @@
 // darkmem-sync import (darkmem mirror spec §3): the one-time move of a
-// repository's docs/superpowers/ and its local ledgers and handoff notes into
+// repository's docs directory and its local ledgers and handoff notes into
 // darkmem. It reads the repository, never the mirror, and finishes by pulling
 // everything it filed into a scratch directory with pull's own code and
 // comparing bytes. A pull afterwards fills the real mirror.
@@ -23,7 +23,7 @@ function readSources(roots) {
   for (const dir of unsupportedPlanDirs(roots.workRoot)) problems.push(`${dir}: not a usable workstream key`);
   for (const { file, uri } of listDocumentFiles(roots)) {
     if (!uri) {
-      problems.push(`${file}: docs/superpowers/handoff/ is reserved for handoff notes`);
+      problems.push(`${file}: the docs directory's handoff/ is reserved for handoff notes`);
       continue;
     }
     const buffer = fs.readFileSync(file);

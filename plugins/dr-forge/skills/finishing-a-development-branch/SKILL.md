@@ -242,8 +242,8 @@ for a confirmed discard, and never runs for Options 2 and 3.
 The two line forms:
 
 ```markdown
-- 2026-09-12 `docs/superpowers/plans/2026-09-12-example.md` — merged into `main` at 6a4619a
-- 2026-09-12 `docs/superpowers/plans/2026-09-12-example.md` — via PR
+- 2026-09-12 `docs/forge/plans/2026-09-12-example.md` — merged into `main` at 6a4619a
+- 2026-09-12 `docs/forge/plans/2026-09-12-example.md` — via PR
 ```
 
 | Path | When | Which form |

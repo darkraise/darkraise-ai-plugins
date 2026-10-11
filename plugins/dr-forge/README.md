@@ -708,11 +708,13 @@ the folder; they are not committed.
 
 ## Migrating from dr-superpowers and dr-cockpit
 
-dr-forge 2.0.0 replaces both plugins. Uninstall them and install dr-forge:
+dr-forge 2.0.0 replaces both plugins. Install dr-forge and start one session
+before you uninstall the old plugins, because the first session reads their
+saved settings:
 
+    /plugin install dr-forge@darkraise
     /plugin uninstall dr-superpowers@darkraise
     /plugin uninstall dr-cockpit@darkraise
-    /plugin install dr-forge@darkraise
 
 The first session imports the cockpit's options and the darkmem mapping into
 `~/.dr-forge/config.json`, and the cockpit's Discord webhook and mention into

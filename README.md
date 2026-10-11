@@ -53,7 +53,8 @@ The other plugins install the same way (`dr-status@darkraise`,
 session, or run `/reload-plugins`, after installing.
 
 Disable the upstream `superpowers`, `dcc-superpower-companions` and
-`andrej-karpathy-skills` plugins before you enable `dr-forge`.
+`andrej-karpathy-skills` plugins, and the earlier `dr-superpowers` and
+`dr-cockpit`, before you enable `dr-forge`.
 Same-named skills in two enabled plugins can trigger twice.
 
 An installed copy stays at the version it was installed at. To take a new
@@ -297,6 +298,9 @@ data when uninstalling; do not assume marketplace removal keeps installations.
 
 Disable the old Claude `dcc-statusline` and `dcc-superpower-companions` plugins
 before enabling `dr-status` and `dr-forge`, so their hooks do not run twice.
+`dr-forge` 2.0.0 replaces `dr-superpowers` and `dr-cockpit`: install it, start
+one session so it imports their settings, then uninstall both (see
+[Migrating from dr-superpowers and dr-cockpit](plugins/dr-forge/README.md#migrating-from-dr-superpowers-and-dr-cockpit)).
 Statusline script storage remains `~/.claude/dcc-statusline/`; a registry at
 `~/.claude/dcc-statusline-installations.json` remembers custom account destinations.
 Set `DCC_STATUSLINE_HOME` only when installing or intentionally moving a copy.

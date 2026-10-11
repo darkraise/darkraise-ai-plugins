@@ -37,7 +37,7 @@ An example entry, from `gotchas.md`:
 Cause: ripgrep is not on PATH in Git Bash on this machine; the suite assumes it
 Workaround: use the Grep tool, or `fd`; this one discovery failure is environmental
 Verified: 2026-09-11
-Source: docs/superpowers/notes/2026-09-11-test-env.md@e4f5a6b
+Source: docs/forge/notes/2026-09-11-test-env.md@e4f5a6b
 ```
 
 Every entry carries a `Source:` line: the file it came from and the short SHA of
