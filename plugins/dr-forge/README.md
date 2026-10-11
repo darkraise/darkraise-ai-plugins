@@ -246,7 +246,7 @@ usable Codex is still used only on a surface whose shipping gate passed,
 recorded per surface in `reference/codex-plugin.json`: the calibration replay
 opens the review seats, and the executor-lane smoke test opens the lane.
 
-**Project state.** `docs/superpowers/` holds what a project knows about
+**Project state.** `docs/forge/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
   gates in order, `plans/completed.md` indexes merged plans, and `distilled/`
   holds four durable files — constraints, gotchas, reference, rejected —
@@ -274,15 +274,16 @@ opens the review seats, and the executor-lane smoke test opens the lane.
 **darkmem mirror (optional).** `scripts/darkmem-sync` keeps a repository's
   planning documents and progress in a darkmem instance over its keyed REST
   routes. Map the repository's primary checkout in
-  `~/.dr-superpowers/config.json` —
+  `~/.dr-forge/config.json` —
   `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
   — and export a `dmk_` key in that variable, and the repository syncs a mirror
-  at `~/.dr-superpowers/mirror/<project>/`. The key needs the `read` and
-  `capture` scopes, and `import --replace` also `admin`. `pull` fetches what
-  changed;
+  at `~/.dr-forge/mirror/<project>/`. Before 2.0 these lived under
+  `~/.dr-superpowers/`, which is still read until the new file exists. The key
+  needs the `read` and `capture` scopes, and `import --replace` also `admin`.
+  `pull` fetches what changed;
   `push` sends documents under their last synced hash and ledgers as the bytes
   appended since the last push; `status` lists local changes and the last
-  run's conflicts; `import` moves an existing `docs/superpowers/` and its
+  run's conflicts; `import` moves an existing `docs/forge/` and its
   ledgers in once, verified byte for byte. A conflict is reported, never
   merged. Without a mapping every command but `import` prints one line and
   does nothing. The skills do not call it yet: they still read and write the
@@ -297,7 +298,7 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 frontmatter, and writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.superpowers/handoff/latest.md` pointing at it. Disable the
+action and keeps `.forge/handoff/latest.md` pointing at it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -337,7 +338,7 @@ clean, otherwise the `## Next session` block from `next-step`. Controllers,
 Sonnet especially, tend to summarize the run and stop instead. A
 `UserPromptSubmit` hook stamps the start of each turn under
 `~/.claude/dr-forge/sessions/turns/`, and a `Stop` hook checks whether
-that turn wrote a plan ledger (`.superpowers/sdd/*/progress.md`). If it did and
+that turn wrote a plan ledger (`.forge/sdd/*/progress.md`). If it did and
 the last message carries neither ending, the hook blocks the stop once and
 tells Claude which one is missing. The retry always passes, and without `jq`,
 a stamp or a ledger written this turn, the hook does nothing. While an agent or
@@ -358,13 +359,13 @@ ending.
 A run also asks one question before its first task: what finishing should do
 if its menu goes unanswered for 30 minutes (merge locally, push and open a pull
 request, keep the branch, or wait). `scripts/finish-choice` keeps the answer
-beside the ledger (`.superpowers/sdd/<plan>/finish.json`, or
-`.superpowers/sdd/finish.json` for work done without a plan). When finishing
+beside the ledger (`.forge/sdd/<plan>/finish.json`, or
+`.forge/sdd/finish.json` for work done without a plan). When finishing
 shows its menu, it arms that choice and schedules a one-shot wake with
 CronCreate; the menu's last line says what happens and when. An answer to the
 menu inside the 30 minutes disarms the wake and wins; otherwise the wake
 carries out the chosen option as if it had been picked, and stops wherever an
-attended finish would ask. The dr-cockpit Run card shows the choice and the
+attended finish would ask. The cockpit Run card shows the choice and the
 deadline. Codex has no scheduler, so there the menu names the choice and waits.
 See [reference/finish-preference.md](reference/finish-preference.md).
 
@@ -406,6 +407,288 @@ needs. dr-forge hands off instead.
   [session-budget.md](reference/session-budget.md) into your project's
   CLAUDE.md.
 
+## Cockpit
+
+Claude Code only. Built and tested against Claude Code 2.1.295 to 2.1.296; the
+mod API is early access and may change between releases.
+
+### What it does
+
+**Cockpit pane.** A pane with the session at a glance. It opens by itself when
+a session starts, once the terminal is 144 columns wide; `/cockpit` opens it at
+any width, and says why if Claude Code holds it back. In fullscreen at 110
+columns or more it docks beside the transcript; otherwise it sits above the
+prompt. In the full layout each section is a framed card in its own color, its
+headline on the title line, under one **Now** row that says what the
+session is doing:
+
+```
+● running 2m14s · step 18 · Bash in impl-sonnet-low
+╭ Account ──────────────────────────── subscription ╮
+│ ● you@example.com                                 │
+│   You · Acme (admin)                              │
+│   Opus 5.5 · xhigh effort                         │
+│   Remote ● connected · phone                      │
+│   config ~/.claude                                │
+╰───────────────────────────────────────────────────╯
+╭ Context ─────────────────── 68% of handoff · ≈7 turns ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱┃▱▱▱▱▱┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
+│ 412k of 1.0M ┃ handoff 604k ┊ compacts 744k      │
+│ trend ▁▂▃▃▄▄▅▆▆▇▇█ +23k                           │
+│ ██████████████████████████████████████▓▓▓▓▒▒▒░░  │
+│   ■ Messages              318k  78%               │
+│   ■ System tools           41k  10%               │
+│ ╭──────────╮ ╭─────────╮ ╭──────────╮             │
+│ │ Hand off │ │ Compact │ │ Settings │             │
+│ ╰──────────╯ ╰─────────╯ ╰──────────╯             │
+╰───────────────────────────────────────────────────╯
+╭ Usage ──────────────────────────── $4.85 · $2.35/h ╮
+│ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
+│     resets in 3h40m · on pace                     │
+╰───────────────────────────────────────────────────╯
+╭ Shells ─────────────────────────────── $ 1 running ╮
+│ $ npm run dev 12m04s                              │
+╰───────────────────────────────────────────────────╯
+╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
+│ ● impl-sonnet-low Task 4 4m17s                    │
+│ ✓ reviewer-opus Review task 3                     │
+│ Seats by input                                    │
+│   impl-sonnet-low ×1                              │
+│   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
+╰───────────────────────────────────────────────────╯
+╭ Run ──────────────────────────────── round 2 · 3/6 ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
+│ docs/plans/cockpit.md                             │
+│ ✓ Task 3: Draw the context section · clean        │
+│ ▸ Task 4: Draw usage and agents                   │
+│   round 2 · impl-sonnet-low                       │
+│ ○ Task 5: Track the plan and repo                 │
+╰───────────────────────────────────────────────────╯
+╭ Repo ─────────────────────────────────── ● dirty ╮
+│ repo darkraise/darkraise-ai-plugins               │
+│ dir  ~/code/darkraise-ai-plugins/plugins          │
+│ ⎇ feat/cockpit-pane-overhaul ↑3                   │
+│ ~2 changed ?1 untracked                           │
+╰───────────────────────────────────────────────────╯
+```
+
+The context track runs over the whole window: the fill is the reading, `┃` the
+handoff budget and `┊` where auto-compaction runs. The trend line is the
+session's recent readings. The colored bar splits the context by `/context`
+category, each color matching its row. On a usage-limit meter `┊` marks how far
+through its window the limit is, so a fill past it is spending faster than the
+window refills.
+
+In the Claude desktop app (its Code tab) the pane is laid out as a flight
+deck. The account comes first, then what Claude is doing, then three gauges:
+the context against its handoff budget with the turns left, and the 5-hour and
+7-day limits, each with a tick where its window has run to, its reset and its
+forecast. The gauges sit in framed tiles that span the same width as the
+panels; a narrow pane moves the context to its own row, then stacks every
+tile. Every other section follows as a softly filled panel with a colored
+lamp; the usage panel says how far each window has run. The desktop's own text
+has one size and spaces rows a whole line apart, so each panel's rows, chips
+and charts are drawn as one picture at their own sizes and gaps, its text in
+your system's light or dark tones (its words are in the picture's alt text).
+The buttons are the desktop's own. With **Show at start** on it opens once the
+desktop window joins the session, unless you closed it.
+
+- **Now** is the turn in flight: running with its time, step, tool and the
+  subagent calling it; waiting for your approval; Claude asking you something;
+  idle with the last turn's length; the last turn failed; or Esc
+  interrupted it, with the background shells and agents still running after
+  it (Esc stops the turn, not them). It adds
+  `Discord ✓` once a notification went out for what it shows.
+- **Account** is who the session runs as: the email, name, organization and
+  role from the account's `.claude.json` (under `CLAUDE_CONFIG_DIR` when set),
+  the billing type, the model and effort the last request used, Remote Control,
+  and the config directory. Remote reads `connected` with the devices attached
+  (a phone, the desktop app), `on · no device yet` when "Enable Remote Control
+  for all sessions" is on in `/config`, and `not connected` otherwise; a session
+  started with `/remote-control` reads `not connected` until a device joins. Its frame takes one of eight colors picked from the config
+  directory, so each account keeps its own.
+- **Context** is the main session against its handoff budget, the window and
+  where auto-compaction runs, and the largest `/context` categories, estimated
+  locally with no API calls. The title adds about how many turns are left to
+  the budget at the pace of the last few. **Hand off** appears in
+  `dr-forge` sessions; **Resume** (`r`) appears outside them when
+  `.forge/handoff/latest.md` is under three days old, and queues the
+  prompt that resumes it.
+- **Usage** is the account's 5-hour and 7-day limits with their resets, and the
+  session's cost and cost per hour. Once a window is ten minutes old each meter
+  says whether the limit lasts to its reset at the pace so far (`on pace`), or
+  when it runs out first, in amber.
+- **Shells** lists the background shells still running (a Bash call sent to
+  the background, by Claude or with Ctrl+B) with how long each has run, to the
+  second, until its notification or a stop ends it. The card shows only while
+  one runs.
+- **Agents** lists the subagents running, each timed to the second, and those
+  recently finished, then each subagent type (seat) with its runs, input
+  tokens, the share served from the prompt cache and output tokens. Use it to see where a plan's tokens go.
+- **Plan** follows the main session's todo list or task list, centred on the
+  item in progress. In a `dr-forge` run it becomes **Run**, read from the
+  run's ledger (`.forge/sdd/<run>/progress.md`) and its plan: the review
+  round in flight, the tasks done, which were reviewed clean, and a blocked
+  task in red with its reason. A run whose tasks were all done before the
+  session started is left out, so a new session starts without it. Its
+  **Finish** row shows what dr-forge will do if the finishing menu goes
+  unanswered (the option chosen before the run), then counts down the menu's
+  30 minutes (`⏱ Finish push and open a PR · in 23m`) and says once it was
+  carried out. It disappears when you answer the menu yourself. Work done
+  without a plan shows the row on the Plan card.
+- **Repo** names the repository (`owner/name` from its remote, else its folder)
+  and the working folder, then the branch, ahead and behind counts and changes.
+- **Guard** lists commits and pull requests the attribution guard refused.
+
+**Minimize** (`m`) closes the pane and draws the cockpit as a band directly
+above the prompt, across the transcript's width. **Expand** on the band's top
+rule opens the pane again, and so does `/cockpit`. Each saves the `layout`
+setting, so the next session opens the same way: a minimized cockpit starts
+with the band and no pane. `/cockpit settings` still opens the settings, and
+**Back** closes them again. Minimize is offered in the terminal and the desktop
+app, the two that draw above the prompt; elsewhere a minimized cockpit shows
+nothing until `/cockpit` opens it. The band is also what a pane that is not
+docked draws (`layout` `auto`, the default). Its frame takes the account's
+color, with the email, billing and Remote Control on the top rule. The first
+line has the
+context against the handoff budget with the turns left, and the 5-hour and
+7-day limits with their pace (`on pace`, or when the window runs out before
+it resets). The second has the subagents running, the background shells with
+how long the longest has run, and the folder with the branch, ahead and behind
+counts and changes. A blocked run task or a refused command adds a red line.
+
+```
+╭─ you@example.com · subscription · Remote ● connected ───────────────────────────────── Expand ─╮
+│ ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h │
+│ ● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1              │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+Each line shrinks a step at a time until it fits: the meters narrow and then
+show the percentage alone, the labels shorten, and the path keeps the
+repository's name. Below 48 columns the frame goes and the email sits beside
+**Expand**. The pane draws no Nerd Font icons. In the desktop app the band is
+one card with slim meters whose ticks mark how far each window has run.
+
+Each button sits in a rounded box, the letter of its hotkey underlined in the
+label as a desktop app marks one; the hotkey presses it while the pane has the
+keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s` **Settings**, `m` **Minimize**,
+and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
+draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
+that matters: **Hand off** once the context passes `warnAt`, **Resume**
+whenever it shows. In the settings view a switch reads `● On` or `○ Off`, the
+chosen option of a row takes the accent, and what is off is drawn dim.
+
+**Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
+mod's settings: whether it shows at session start, the layout, which sections
+show, the handoff budget, where Hand off takes the accent and the Discord limit
+message goes out, how many context rows to list, the note and guard switches, and the
+Discord notifications. Each press saves
+the setting to `~/.dr-forge/config.json`, and the pane redraws with it. **Back** (`b`)
+returns to the cockpit.
+
+The breakdown and the repo are read after each turn while the pane is open, and
+when it opens; nothing in the pane costs the model context.
+
+The cockpit never pops up a banner. Usage limits show in the gauges and the
+band, and a Discord message that fails to send shows in the settings view.
+
+**Handoff reading.** The handoff reading shows only in the cockpit: the
+Context card and the band. The main session re-reads its whole context on every request, so a session that
+runs past its budget pays for it on each turn after. In a session running
+`dr-forge` (one that has loaded one of its skills or started one of its
+agents), **Hand off** queues a prompt asking the controller to finish the task
+in flight and hand off with the `handoff` skill. Past the budget the mod also
+adds one note to the conversation saying the same, so a controller deep in a
+long turn sees it before its next task. A compaction clears the reading until
+the next response, and re-arms the note.
+
+**Discord notifications.** The mod can post to a Discord channel when the
+session needs you, which works the same over ssh and tmux. Create a webhook
+(channel settings → Integrations → Webhooks → copy URL) and paste it in the
+settings view's **Notifications** group, or run `/cockpit notify url <url>`.
+It is kept in the plugin's own store, not in `settings.json`, and only ever
+shows masked; `DR_FORGE_NOTIFY_URL` in the environment wins over it (`DR_COCKPIT_NOTIFY_URL` still read). **Send
+test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
+(**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
+that need you; everything else posts silently.
+
+| Event | When | Default | Pings |
+| --- | --- | --- | --- |
+| `ask` | A tool call waits for your approval past `notifyAskAfter`; the message is edited once you approve or deny it | on | yes |
+| `question` | Claude asks you something or has a plan ready, likewise | on | yes |
+| `done` | A turn ends after running at least `notifyAfter` seconds | on | no |
+| `error` | A turn fails | on | yes |
+| `blocked` | A `dr-forge` task is blocked | on | yes |
+| `budget` | The context crosses the handoff budget | on | no |
+| `limit` | A usage limit crosses `limitAlertAt` | on | no |
+| `task` | A run's task completes, or its final review is clean | off | no |
+| `session` | The session ends, with its resume command | off | no |
+| `agent` | A subagent finishes | off | no |
+
+Each message names the host, repository, branch, account and tmux session it
+came from. Command and answer excerpts are cut short and pass through a
+redactor that masks common tokens and `key=`/`token=`/`password=` values;
+`notifyDetail` `brief` leaves them out. A turn you interrupt sends nothing, and
+approvals are not watched when the session runs in `auto`, `bypassPermissions`
+or `dontAsk` mode.
+
+**Attribution guard.** Claude Code asks the model to add a `Co-Authored-By`
+trailer to commits and a "Generated with Claude Code" footer to pull requests.
+The mod blanks both where the engine composes them, and refuses a `git commit`,
+`gh pr create`/`edit` or GitHub pull-request tool call that still carries AI
+attribution (an AI `Co-Authored-By`, `Claude-Session`, "Generated with Claude
+Code" or a Claude session link). Human co-authors pass.
+
+### Settings
+
+Set these in the pane's settings view, with
+`bash <plugin-root>/scripts/forge-config set <key> <value>`, or in
+`~/.dr-forge/config.json`, then start a new session:
+
+```json
+{ "layout": "compact", "sections": "context,usage,plan", "warnAt": 70 }
+```
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `handoffTokens` | `0` | The handoff budget in tokens. `0` follows dr-forge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000 (465k at 650k, 604k on a 1M model with `autoCompactWindow` at 800k). Windows too small for that rule get a fifth of the window. `DR_FORGE_BUDGET` overrides it (`DR_SUPERPOWERS_BUDGET` still read). |
+| `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-forge` sessions. |
+| `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
+| `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
+| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
+| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. A list written before `shells` existed leaves it out until you add it. The band always draws its own lines. |
+| `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
+| `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
+| `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
+| `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. |
+| `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
+| `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
+| `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
+
+### Install
+
+```text
+/plugin marketplace add darkraise/darkraise-ai-plugins
+/plugin install dr-forge@darkraise
+```
+
+An installed copy stays at the version it was installed at. To take a new
+release, run `claude plugin update dr-forge@darkraise` and start a new session
+(or run `/reload-plugins`).
+
+### Development
+
+```text
+claude plugin validate plugins/dr-forge
+claude plugin test plugins/dr-forge
+claude --plugin-dir plugins/dr-forge
+```
+
+The last loads the working copy into a session and reloads it on save. The
+engine lays its type declarations under `.claude-plugin/types/` when it loads
+the folder; they are not committed.
+
 ## Migrating from 0.x
 
 1.0.0 is standalone and breaking. On a machine with the old setup:
@@ -422,6 +705,21 @@ needs. dr-forge hands off instead.
    here), `dcc-superpower-companions` (folded into this plugin), and
    `andrej-karpathy-skills` (its guidelines are folded into the skills where
    they fire).
+
+## Migrating from dr-superpowers and dr-cockpit
+
+dr-forge 2.0.0 replaces both plugins. Uninstall them and install dr-forge:
+
+    /plugin uninstall dr-superpowers@darkraise
+    /plugin uninstall dr-cockpit@darkraise
+    /plugin install dr-forge@darkraise
+
+The first session imports the cockpit's options and the darkmem mapping into
+`~/.dr-forge/config.json`, and the cockpit's Discord webhook and mention into
+dr-forge's own plugin store, once; the old files stay.
+Plans written for dr-superpowers, which name its agents and skills under the
+old plugin name, still run. A repository's `.superpowers/` and `docs/superpowers/` keep working
+until you move them to `.forge/` and `docs/forge/`.
 
 ## What a plan looks like
 
@@ -605,8 +903,9 @@ review, `codex-review-schema.json` for the Codex task seats, and
 A register is the list of source items a body of work must answer, and the
 authority on whether that work is finished. One file per incoming list —
 an owner's list, a review's findings, a batch — at
-`docs/superpowers/registers/YYYY-MM-DD-<slug>.md`, committed, and required
-whenever a request carries two or more distinct items.
+`docs/forge/registers/YYYY-MM-DD-<slug>.md` (`docs/superpowers/registers/`
+before 2.0), committed, and required whenever a request carries two or more
+distinct items.
 
 Each row carries an identifier, the requester's words, an assignment, an
 acceptance, a state and a note. The states are
@@ -632,7 +931,7 @@ surface behaves exactly as it did before.
 A project built from scratch spans many specs and many sessions, and what goes
 missing there is whole epics: decided once in prose, then forgotten when a later
 session calls the phase done. `planning-a-product` runs discovery first and
-writes `docs/superpowers/roadmap.md`, the milestones in order (by default M0
+writes `docs/forge/roadmap.md`, the milestones in order (by default M0
 Discovery, M1 Foundations, the feature milestones, Hardening, Release), each
 with exit criteria and one item register whose rows are its epics. Each epic's
 spec then gets its own register of requirements, which `plan-lint` already ties

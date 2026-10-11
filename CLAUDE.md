@@ -4,11 +4,12 @@ A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise
 
 ## Conventions
 
-- Claude's `.claude-plugin/marketplace.json` lists `dr-cockpit`, `dr-status`,
-  `dr-superpowers`, `dcc-darkraise-ui`, and `dcc-darkraise-win32ui`.
-- `dr-cockpit` and `dr-status` are Claude-only: no `.codex-plugin` manifest.
-  `dr-cockpit` is a mod (a hooks module); test it with `claude plugin test`.
-- Codex's `.agents/plugins/marketplace.json` lists only `dr-superpowers` and the
+- Claude's `.claude-plugin/marketplace.json` lists `dr-forge`, `dr-status`,
+  `dcc-darkraise-ui`, and `dcc-darkraise-win32ui`.
+- `dr-status` is Claude-only: no `.codex-plugin` manifest.
+- `dr-forge` carries a mod (`hooks/cockpit/`); test it with
+  `claude plugin test plugins/dr-forge`.
+- Codex's `.agents/plugins/marketplace.json` lists only `dr-forge` and the
   two UI plugins. Register the repository root to select this catalog.
 - Directory names, catalog entries, and client manifest names must agree.
 - Keep Claude and Codex manifest versions equal. Statusline's `scripts/VERSION`
@@ -25,5 +26,5 @@ A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise
 
 Run `node scripts/validate-repository.mjs`, the maintained test suites, and
 `claude plugin validate` on the marketplace and every Claude plugin, and
-`claude plugin test plugins/dr-cockpit`. Bound test
+`claude plugin test plugins/dr-forge`. Bound test
 and CLI execution and clean up all processes started by the validation run.
