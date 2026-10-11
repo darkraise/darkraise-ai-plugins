@@ -147,6 +147,7 @@ const turnTokens = atom({ plugin: 'dr-forge', key: 'turnTokens' } as const, [])
 const run = atom({ plugin: 'dr-forge', key: 'run' } as const, null)
 const finish = atom({ plugin: 'dr-forge', key: 'finish' } as const, null)
 const handoffAt = atom({ plugin: 'dr-forge', key: 'handoffAt' } as const, null)
+const settings = atom({ plugin: 'dr-forge', key: 'settings' } as const, null)
 const notifier = atom({ plugin: 'dr-forge', key: 'notifier' } as const, {
   url: null,
   isFromEnv: false,
@@ -175,14 +176,22 @@ type Options = {
 /** What the budget reading is judged by. */
 type Tuning = { handoffTokens: number; nudgeModel: boolean; warnAt: number }
 
-export const register: Register = (on, options) => {
+/** The options with their defaults filled in, and what the pane derives from them. */
+type Live = Omit<Options, 'layout'> & {
+  layout: 'auto' | 'full' | 'compact'
+  tuning: Tuning
+  shown: Section[]
+  isMinimized: boolean
+}
+
+function liveFrom(values: Partial<Options>): Live {
   const {
     handoffTokens = 0,
     nudgeModel = true,
     guardAttribution = true,
-    warnAt: warnPercent = 80,
+    warnAt = 80,
     layout: layoutSetting = 'auto',
-    sections: sectionList = '',
+    sections = '',
     breakdownRows = 6,
     openAtStart = true,
     limitAlertAt = 90,
@@ -190,21 +199,47 @@ export const register: Register = (on, options) => {
     notifyAfter = 60,
     notifyAskAfter = 20,
     notifyDetail = 'full',
-  } = options as Partial<Options>
-  // A plain string in the manifest (older validators refuse a picker), so
-  // anything but the three words reads as auto.
+  } = values
+  // Anything but the three words reads as auto.
   const layout = layoutSetting === 'full' || layoutSetting === 'compact' ? layoutSetting : 'auto'
-  const tuning: Tuning = { handoffTokens, nudgeModel, warnAt: warnShare(warnPercent) }
-  const shown = sectionsFrom(sectionList)
-  const paneArgs = paneFor(layout)
-  // Minimized, the pane is shut and the band sits above the prompt in its place.
-  const isMinimized = layout === 'compact'
+  return {
+    handoffTokens,
+    nudgeModel,
+    guardAttribution,
+    warnAt,
+    layout,
+    sections,
+    breakdownRows,
+    openAtStart,
+    limitAlertAt,
+    notifyOn,
+    notifyAfter,
+    notifyAskAfter,
+    notifyDetail,
+    tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt) },
+    shown: sectionsFrom(sections),
+    isMinimized: layout === 'compact',
+  }
+}
+
+/** The options in force now: the settings atom once written, else what Claude Code passed at load. */
+async function live($: EngineInterface): Promise<Live> {
+  return liveFrom(((await read($, settings)) ?? S.loaded) as Partial<Options>)
+}
+
+/** Points the notifier at the options' events, detail and wait. */
+function applyNotify(o: Live) {
+  S.kinds = o.notifyOn === 'none' ? [] : notifyKindsFrom(o.notifyOn)
+  S.isBrief = o.notifyDetail === 'brief'
+  S.notifyAskAfter = o.notifyAskAfter
+}
+
+export const register: Register = (on, options) => {
+  S.loaded = options as Partial<Options>
+  applyNotify(liveFrom(S.loaded))
   // The settings' autoCompactWindow, read at the start and after each main
   // turn rather than on every tool call.
   let compactWindow: number | undefined
-  S.kinds = notifyOn === 'none' ? [] : notifyKindsFrom(notifyOn)
-  S.isBrief = notifyDetail === 'brief'
-  S.notifyAskAfter = notifyAskAfter
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -212,8 +247,9 @@ export const register: Register = (on, options) => {
       description: 'Show context, usage, subagents, the plan and the repo in a pane',
       argumentHint: '[settings]',
     })
+    const o = await live($)
     compactWindow = await readCompactWindow($)
-    await onBudget($, await refresh($, tuning, compactWindow))
+    await onBudget($, await refresh($, o.tuning, compactWindow))
     await readAccount($)
     await readPlace($)
     await readEngine($)
@@ -226,14 +262,15 @@ export const register: Register = (on, options) => {
     // still be up here, and so can the settings a minimized cockpit is being
     // changed from. Unasked, the engine seats the pane from 144 columns and
     // holds it below.
-    if (isMinimized) {
+    if (o.isMinimized) {
       if ((await read($, view)) !== 'settings') await shutPane($)
-    } else if (openAtStart) void $.ui.open(paneArgs)
+    } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
 
     return next(e)
   })
 
   on('command.run', { command: 'cockpit' }, async ($, e) => {
+    const o = await live($)
     const words = e.args.trim().split(/\s+/)
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
@@ -242,9 +279,9 @@ export const register: Register = (on, options) => {
     // The settings take the keyboard and as many rows as they need.
     const opened = wantsSettings
       ? await $.ui.open({ id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, focus: true })
-      : isMinimized
+      : o.isMinimized
         ? await expand($, e.presentation.isFullscreen === true)
-        : await $.ui.open(paneArgs)
+        : await $.ui.open(paneFor(o.layout))
     await refreshDetail($)
 
     // A surface that seats no panes (an older desktop) holds it undrawn: say
@@ -254,6 +291,7 @@ export const register: Register = (on, options) => {
 
   on('session.measure', async ($, e, next) => {
     const done = await next(e)
+    const o = await live($)
     const now = await $.clock.now()
     const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage()).startedAt
     const reading: CockpitUsage = {
@@ -266,8 +304,8 @@ export const register: Register = (on, options) => {
       })),
     }
     await update($, usage, () => reading)
-    if (limitAlertAt > 0) {
-      for (const limit of await alertLimits($, reading, limitAlertAt)) {
+    if (o.limitAlertAt > 0) {
+      for (const limit of await alertLimits($, reading, o.limitAlertAt)) {
         await notify($, {
           kind: 'limit',
           title: `📊 ${limitLabel(limit.kind)} limit at ${Math.round(limit.percent)}%`,
@@ -276,7 +314,7 @@ export const register: Register = (on, options) => {
         })
       }
     }
-    if (isMinimized || (await isPaneUp($))) await refreshDetail($)
+    if (o.isMinimized || (await isPaneUp($))) await refreshDetail($)
 
     return done
   })
@@ -336,10 +374,11 @@ export const register: Register = (on, options) => {
   // Remote Control clients joining and leaving; the terminal raises neither.
   on('session.attach', async ($, e, next) => {
     const joined = await next(e)
+    const o = await live($)
     await update($, remote, now => ({ ...now, clients: [...now.clients.filter(one => one.id !== e.clientId), { id: e.clientId, surface: e.surface }] }))
     // A desktop session's start can come before its window joins: show the
     // pane once it has, unless the person closed it.
-    if (openAtStart && !isMinimized && e.surface === 'desktop' && !S.isClosedByPerson && !(await isPaneUp($))) void $.ui.open(paneArgs)
+    if (o.openAtStart && !o.isMinimized && e.surface === 'desktop' && !S.isClosedByPerson && !(await isPaneUp($))) void $.ui.open(paneFor(o.layout))
     return joined
   }).catch(($, e, next) => next(e))
 
@@ -420,7 +459,7 @@ export const register: Register = (on, options) => {
     const done = await next(e)
     if (e.agentId === undefined) {
       compactWindow = await readCompactWindow($)
-      await onBudget($, await refresh($, tuning, compactWindow))
+      await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       const turnUsage = e.usage as TurnUsage | undefined
       if (turnUsage !== undefined) {
         const cache = cacheOf(turnUsage)
@@ -451,7 +490,7 @@ export const register: Register = (on, options) => {
           fields: await turnFields($),
         })
         if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
-      } else if (e.reason === 'answer' && e.durationMs >= Math.max(0, notifyAfter) * 1000) {
+      } else if (e.reason === 'answer' && e.durationMs >= Math.max(0, (await live($)).notifyAfter) * 1000) {
         const messageId = await notify($, {
           kind: 'done',
           title: `✅ Done in ${elapsed(e.durationMs)}`,
@@ -480,17 +519,15 @@ export const register: Register = (on, options) => {
     return done
   })
 
-  if (guardAttribution) {
-    on('attribution.text', { kind: 'commit' }, () => ({ text: '' }))
-    on('attribution.text', { kind: 'pr' }, () => ({ text: '' }))
-  }
+  on('attribution.text', { kind: 'commit' }, async ($, e, next) => ((await live($)).guardAttribution ? { text: '' } : next(e)))
+  on('attribution.text', { kind: 'pr' }, async ($, e, next) => ((await live($)).guardAttribution ? { text: '' } : next(e)))
 
   // One hook for every tool: the attribution guard judges before anything
   // runs, and the main loop's budget and plan are read after each call, the
   // only point its context grows between turns.
   on('tool.call', async ($, e, next) => {
     const tool = String(e.tool)
-    const line = guardAttribution ? attributionLine(tool, e) : undefined
+    const line = (await live($)).guardAttribution ? attributionLine(tool, e) : undefined
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
       await update($, refusals, list => [...list, refusal].slice(-20))
@@ -524,18 +561,19 @@ export const register: Register = (on, options) => {
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
-      await onBudget($, await refresh($, tuning, compactWindow))
+      await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       // The controller writes its ledger with its own tool calls.
       if (/\.superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
     }
 
     return ran
-  }).catch(($, e, next) =>
-    next.called || !guardAttribution ? next(e) : { deny: 'dr-forge: its attribution guard failed.' },
+  }).catch(async ($, e, next) =>
+    next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dr-forge: its attribution guard failed.' },
   )
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const table = $.ui.resolve(e)
+    const o = await live($)
     const { Box, Button, Text } = table
     // The desktop draws vectors: its cards carry real meters and charts where
     // the terminal spells them in glyphs.
@@ -543,7 +581,7 @@ export const register: Register = (on, options) => {
     const isDesktop = Svg !== undefined
     const now = await $.clock.now()
     const room = e.props.bodyColumns
-    const isCompact = isMinimized || (layout === 'auto' && e.props.placement === 'inline')
+    const isCompact = o.isMinimized || (o.layout === 'auto' && e.props.placement === 'inline')
     // Only these two surfaces draw the band above the prompt.
     const canMinimize = e.surface === 'terminal' || e.surface === 'desktop'
     const minimize = async () => {
@@ -611,7 +649,7 @@ export const register: Register = (on, options) => {
         </Box>
       )
     }
-    const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, tuning.warnAt) !== 'quiet'
+    const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, o.tuning.warnAt) !== 'quiet'
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
         {canHandOff && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
@@ -723,16 +761,16 @@ export const register: Register = (on, options) => {
             {number(
               'notifyAfter',
               'Done after',
-              notifyAfter > 0 ? `${notifyAfter}s` : 'any',
-              () => set('notifyAfter', stepped(notifyAfter, notifyAfter > 60 ? -60 : -15, 0, 3600)),
-              () => set('notifyAfter', stepped(notifyAfter, notifyAfter >= 60 ? 60 : 15, 0, 3600)),
+              o.notifyAfter > 0 ? `${o.notifyAfter}s` : 'any',
+              () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter > 60 ? -60 : -15, 0, 3600)),
+              () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter >= 60 ? 60 : 15, 0, 3600)),
             )}
             {number(
               'notifyAskAfter',
               'Ask after',
-              `${notifyAskAfter}s`,
-              () => set('notifyAskAfter', stepped(notifyAskAfter, -10, 0, 600)),
-              () => set('notifyAskAfter', stepped(notifyAskAfter, 10, 0, 600)),
+              `${o.notifyAskAfter}s`,
+              () => set('notifyAskAfter', stepped(o.notifyAskAfter, -10, 0, 600)),
+              () => set('notifyAskAfter', stepped(o.notifyAskAfter, 10, 0, 600)),
             )}
             {choices('notifyDetail', 'Detail', ['full', 'brief'] as const, S.isBrief ? 'brief' : 'full')}
           </Box>
@@ -743,47 +781,47 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column">
           <Text bold>Settings</Text>
           <Box flexDirection="column" paddingLeft={INDENT}>
-            {toggle('openAtStart', 'Show at start', openAtStart)}
-            {choices('layout', 'Layout', ['auto', 'full', 'compact'] as const, layout)}
+            {toggle('openAtStart', 'Show at start', o.openAtStart)}
+            {choices('layout', 'Layout', ['auto', 'full', 'compact'] as const, o.layout)}
             <Text key="set-sections">Sections</Text>
             {/* Under their label, wrapping to the pane's width. */}
             {chips(
               'set-section',
               SECTIONS,
-              name => shown.includes(name as Section),
+              name => o.shown.includes(name as Section),
               name => name,
-              name => set('sections', sectionsToggled(shown, name as Section)),
+              name => set('sections', sectionsToggled(o.shown, name as Section)),
             )}
             {number(
               'handoffTokens',
               'Handoff budget',
-              handoffTokens > 0 ? kTokens(handoffTokens) : 'auto',
-              () => set('handoffTokens', stepped(handoffTokens, -HANDOFF_STEP, 0, MAX_HANDOFF)),
-              () => set('handoffTokens', stepped(handoffTokens, HANDOFF_STEP, 0, MAX_HANDOFF)),
+              o.handoffTokens > 0 ? kTokens(o.handoffTokens) : 'auto',
+              () => set('handoffTokens', stepped(o.handoffTokens, -HANDOFF_STEP, 0, MAX_HANDOFF)),
+              () => set('handoffTokens', stepped(o.handoffTokens, HANDOFF_STEP, 0, MAX_HANDOFF)),
             )}
             {number(
               'warnAt',
               'Warn at',
-              `${warnPercent}%`,
-              () => set('warnAt', stepped(warnPercent, -5, 5, 95)),
-              () => set('warnAt', stepped(warnPercent, 5, 5, 95)),
+              `${o.warnAt}%`,
+              () => set('warnAt', stepped(o.warnAt, -5, 5, 95)),
+              () => set('warnAt', stepped(o.warnAt, 5, 5, 95)),
             )}
             {number(
               'limitAlertAt',
               'Limit alert at',
-              limitAlertAt > 0 ? `${limitAlertAt}%` : 'off',
-              () => set('limitAlertAt', stepped(limitAlertAt, -5, 0, 100)),
-              () => set('limitAlertAt', stepped(limitAlertAt, 5, 0, 100)),
+              o.limitAlertAt > 0 ? `${o.limitAlertAt}%` : 'off',
+              () => set('limitAlertAt', stepped(o.limitAlertAt, -5, 0, 100)),
+              () => set('limitAlertAt', stepped(o.limitAlertAt, 5, 0, 100)),
             )}
             {number(
               'breakdownRows',
               'Context rows',
-              String(breakdownRows),
-              () => set('breakdownRows', stepped(breakdownRows, -1, 0, MAX_BREAKDOWN_ROWS)),
-              () => set('breakdownRows', stepped(breakdownRows, 1, 0, MAX_BREAKDOWN_ROWS)),
+              String(o.breakdownRows),
+              () => set('breakdownRows', stepped(o.breakdownRows, -1, 0, MAX_BREAKDOWN_ROWS)),
+              () => set('breakdownRows', stepped(o.breakdownRows, 1, 0, MAX_BREAKDOWN_ROWS)),
             )}
-            {toggle('nudgeModel', 'Handoff note', nudgeModel)}
-            {toggle('guardAttribution', 'Attr. guard', guardAttribution)}
+            {toggle('nudgeModel', 'Handoff note', o.nudgeModel)}
+            {toggle('guardAttribution', 'Attr. guard', o.guardAttribution)}
           </Box>
           {notifyRows}
           <Text dimColor>Saved to your user settings, like /config.</Text>
@@ -794,7 +832,7 @@ export const register: Register = (on, options) => {
               async () => {
                 await update($, view, () => 'cockpit')
                 // Minimized, the settings were all the pane was open for.
-                if (isMinimized) await $.ui.close({ id: PANE })
+                if (o.isMinimized) await $.ui.close({ id: PANE })
               },
               { hotkey: 'b' },
             )}
@@ -865,7 +903,7 @@ export const register: Register = (on, options) => {
     const shownItems = planWindow(items, 8)
     const sortedSeats = [...list].sort((a, b) => totalIn(b) - totalIn(a))
     const mostIn = Math.max(1, ...sortedSeats.map(totalIn))
-    const breakdownShown = (rows?.rows ?? []).slice(0, Math.max(0, Math.min(MAX_BREAKDOWN_ROWS, breakdownRows)))
+    const breakdownShown = (rows?.rows ?? []).slice(0, Math.max(0, Math.min(MAX_BREAKDOWN_ROWS, o.breakdownRows)))
     const readings = await read($, trend)
 
     // The context track runs over the whole window: filled to the reading,
@@ -1604,7 +1642,7 @@ export const register: Register = (on, options) => {
       }
       return (
         <Box flexDirection="column" rowGap={1}>
-          {shown.includes('account') && panels.account}
+          {o.shown.includes('account') && panels.account}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="now-box" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
@@ -1618,8 +1656,8 @@ export const register: Register = (on, options) => {
               {gaugeRows.map(gaugeRow)}
             </Box>
           )}
-          {shown.filter(name => name !== 'account').map(name => panels[name])}
-          {!shown.includes('context') && actions}
+          {o.shown.filter(name => name !== 'account').map(name => panels[name])}
+          {!o.shown.includes('context') && actions}
         </Box>
       )
     }
@@ -1629,16 +1667,17 @@ export const register: Register = (on, options) => {
         <Text key="now" wrap="truncate-end">
           {drawRuns('now', nowLine(actNow, now))}
         </Text>
-        {shown.map(name => byName[name])}
-        {!shown.includes('context') && actions}
+        {o.shown.map(name => byName[name])}
+        {!o.shown.includes('context') && actions}
       </Box>
     )
   })
 
   // Minimized, the band sits above the prompt in place of the pane.
-  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) =>
-    !isMinimized || e.props.hasSurvey ? next(e) : drawBand($, e, () => expand($, e.viewport?.isFullscreen === true)),
-  )
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const o = await live($)
+    return !o.isMinimized || e.props.hasSurvey ? next(e) : drawBand($, e, () => expand($, e.viewport?.isFullscreen === true))
+  })
 }
 
 const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
@@ -1857,6 +1896,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 // What the hooks share beyond $.state: settings read at load, facts read at
 // the start, and the timers and S.waits in flight. A reload starts it over.
 const S = {
+  // What Claude Code passed at load, until the settings atom is written.
+  loaded: {} as Partial<Options>,
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,

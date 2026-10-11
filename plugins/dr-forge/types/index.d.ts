@@ -211,6 +211,8 @@ export type CockpitNotifier = {
 declare module 'claude-code' {
   interface PluginState {
     'dr-forge': {
+      /** The settings in force, resolved from the settings file; null until read. */
+      settings: Record<string, boolean | number | string> | null
       budget: CockpitBudget | null
       usage: CockpitUsage | null
       breakdown: CockpitBreakdown | null
