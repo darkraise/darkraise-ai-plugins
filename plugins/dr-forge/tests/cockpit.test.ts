@@ -52,6 +52,8 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/cockpit/notify'
+import type { Schema } from '../hooks/cockpit/config'
+import { SCHEMA, importedSettings, isValidSetting, resolveSettings, settingProblems, settingWritten } from '../hooks/cockpit/config'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -1752,5 +1754,57 @@ describe('flight deck', () => {
     expect(await tileRows(80)).toEqual([['Context:0/1.35', '5h:0/1', '7d:0/1']])
     expect(await tileRows(46)).toEqual([['Context:0/1.35'], ['5h:0/1', '7d:0/1']])
     expect(await tileRows(30)).toEqual([['Context:0/1.35'], ['5h:0/1'], ['7d:0/1']])
+  })
+})
+
+describe('settings file', () => {
+  const FAKE: Schema = {
+    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', title: 'Layout', description: 'd', target: 'forge' },
+    warnAt: { type: 'number', default: 80, min: 1, max: 99, group: 'Context', title: 'Warn', description: 'd', target: 'forge' },
+    handoffTokens: { type: 'number', default: 0, min: 0, max: 2_000_000, env: 'DR_FORGE_BUDGET', group: 'Context', title: 'Budget', description: 'd', target: 'forge' },
+    nudgeModel: { type: 'boolean', default: true, group: 'Context', title: 'Nudge', description: 'd', target: 'forge' },
+  }
+
+  test('resolves the environment, then the file, then the default', () => {
+    expect(resolveSettings(FAKE, { layout: 'full', warnAt: 500, handoffTokens: 300_000 }, { DR_FORGE_BUDGET: '400000' })).toEqual({
+      layout: 'full',
+      warnAt: 80,
+      handoffTokens: 400_000,
+      nudgeModel: true,
+    })
+  })
+
+  test('ignores an environment value that does not fit', () => {
+    expect(resolveSettings(FAKE, { handoffTokens: 300_000 }, { DR_FORGE_BUDGET: 'junk' }).handoffTokens).toBe(300_000)
+  })
+
+  test('says which values it ignored', () => {
+    expect(settingProblems(FAKE, { warnAt: 500, layout: 'full' }, { DR_FORGE_BUDGET: 'junk' })).toEqual([
+      'warnAt in ~/.dr-forge/config.json is not valid; ignored',
+      'DR_FORGE_BUDGET=junk is not a valid handoffTokens; ignored',
+    ])
+    expect(settingProblems(FAKE, { layout: 'full' }, {})).toEqual([])
+  })
+
+  test('a saved value drops its default and keeps darkmem', () => {
+    const darkmem = { url: 'http://d.test', repos: {} }
+    expect(settingWritten(FAKE, { darkmem, warnAt: 70 }, 'warnAt', 80)).toEqual({ darkmem })
+    expect(settingWritten(FAKE, { darkmem }, 'layout', 'compact')).toEqual({ darkmem, layout: 'compact' })
+  })
+
+  test('refuses an unknown key and a value that does not fit', () => {
+    expect(() => settingWritten(FAKE, {}, 'nope', true)).toThrow('unknown setting nope')
+    expect(() => settingWritten(FAKE, {}, 'layout', 'tiles')).toThrow('tiles is not a valid layout')
+  })
+
+  test('imports dr-cockpit options that differ from their defaults, and the darkmem mapping', () => {
+    const claude = { pluginConfigs: { 'dr-cockpit@darkraise': { options: { layout: 'compact', warnAt: 80, nudgeModel: 'yes' } } } }
+    const darkmem = { url: 'http://d.test', api_key_env: 'DARKMEM_API_KEY', repos: {} }
+    expect(importedSettings(FAKE, claude, { darkmem })).toEqual({ layout: 'compact', darkmem })
+    expect(importedSettings(FAKE, {}, null)).toEqual({})
+  })
+
+  test('every default in the real schema fits its own type', () => {
+    for (const spec of Object.values(SCHEMA)) expect(isValidSetting(spec, spec.default)).toBe(true)
   })
 })
