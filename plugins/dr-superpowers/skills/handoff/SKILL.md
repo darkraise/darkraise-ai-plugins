@@ -37,17 +37,24 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 
 ## Steps
 
-0. **Nothing you started is still running.** List every background Bash
-   call, Monitor and Agent this session launched that has not reported back
-   (`/tasks` on Claude Code, `list_agents` on Codex, or the launch ids in your
-   transcript). For each, either wait for it, or stop it:
+0. **Nothing you started is still running.** On Claude Code run
+   `scripts/in-flight`: it lists every background shell and agent this session
+   launched that is still running, including an agent that sent its report
+   (`DONE`, `DONE_WITH_CONCERNS`, …) but left a shell or agent of its own
+   alive, which Claude Code keeps listing. A report is not the end of the
+   launch; the list is. Exit 0 means nothing is running; exit 3 means it could
+   not read this session, so list them by hand (`list_agents` on Codex, or the
+   launch ids in your transcript). `scripts/next-step` runs the same check and
+   prints no block while anything is listed. For each one, either wait for it,
+   or stop it:
    - Wait: on Claude Code, end the turn without the block; its notification
      starts the next turn, and you resume here. On Codex, `wait_agent` in
      bounded stretches, since completion mail does not wake an idle session.
    - Stop: `TaskStop` with its task id on Claude Code; on Codex, `kill` a
-     background shell's pid, or `close_agent` where your tools offer it. Then
-     append a ruling to the ledger naming the task it served and that its
-     result is void:
+     background shell's pid, or `close_agent` where your tools offer it. An
+     agent whose report you already have is stopped only to clear what it
+     left running; its report stands. Otherwise append a ruling to the ledger
+     naming the task it served and that its result is void:
      `Task <N>: Ruling: stopped <what> at handoff — its result is void — <cost if wrong>`.
 
    Only then continue. An assigned line is a resume point only when nothing

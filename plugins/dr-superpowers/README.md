@@ -347,6 +347,11 @@ session over it, with the next-step block or the finishing menu, is held once
 in any turn: a handoff there would invite ending a session whose work is still
 in flight. Work stopped with `TaskStop`, and work launched before the session
 last started or resumed, sends no notification and does not count as running.
+An agent that sent its report but left a shell or agent of its own alive still
+counts: Claude Code keeps listing it, and its notification says so.
+`scripts/in-flight` prints the same list on demand; handoff step 0 and the
+finishing menu run it, and `scripts/next-step` prints no block (exit 5) while
+anything is on it.
 When the turn wrote more than one ledger, each one must have its
 ending.
 

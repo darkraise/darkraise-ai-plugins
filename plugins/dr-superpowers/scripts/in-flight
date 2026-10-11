@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# List the background work this session started that is still running: shells
+# and agents with no finished notification, and agents that sent their report
+# but left work of their own running (Claude Code still lists those). Run it
+# before a handoff, the finishing menu, or a claim that the work is done;
+# scripts/next-step runs it before printing a block.
+#
+# Usage: in-flight
+# Exit: 0 nothing running; 1 something still running (listed on stdout);
+#       3 no transcript for this session (Codex, or no session record): check
+#       by hand; 2 usage.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/context.sh"
+. "$HERE/lib/in-flight.sh"
+
+[ $# -eq 0 ] || { echo "usage: in-flight" >&2; exit 2; }
+
+if ! ctx_have_jq || ! ctx_find_transcript || [ "$CTX_SOURCE" != record ]; then
+  echo "in-flight: unknown — no transcript recorded for this session; list your background shells and agents by hand"
+  exit 3
+fi
+# Claude Code names a transcript by its session id.
+sid=${CLAUDE_CODE_SESSION_ID:-$(basename "$CTX_TRANSCRIPT" .jsonl)}
+running=$(inflight_scan "$CTX_TRANSCRIPT" "$(inflight_since "$sid")")
+if [ -z "$running" ]; then
+  echo "in-flight: nothing this session started is still running"
+  exit 0
+fi
+printf 'in-flight: %s background launch(es) still running:\n' "$(grep -c . <<<"$running")"
+sed 's/^/- /' <<<"$running"
+cat <<'EOF'
+For each one: wait for it (end the turn; its notification starts the next one),
+or stop it with TaskStop <id>. An agent that already sent its report is still
+listed while work it started runs; stop it the same way, which clears it. If a
+stopped launch's result is not in hand, record a Ruling line in the ledger for
+the task it served. Then run this again.
+EOF
+exit 1

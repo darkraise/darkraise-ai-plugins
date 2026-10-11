@@ -25,7 +25,8 @@
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
-#       latest.md could not be written.
+#       latest.md could not be written; 5 background work this session started
+#       is still running (scripts/in-flight): nothing printed or written.
 set -euo pipefail
 
 # Failures print on stdout as well as stderr. A session that surfaces only
@@ -392,6 +393,16 @@ else
     if [ "$has_ledger" -eq 1 ]; then
       prompt="$prompt Progress ledger: \`$ledger_file\` — trust its \`Task N: complete\` lines."
     fi
+  fi
+fi
+
+# A block printed over running work invites ending the session it would die
+# with, so nothing is printed while this session still has background work
+# listed. Without a transcript (Codex, tests) there is nothing to check.
+if running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then :; else
+  if [ $? -eq 1 ]; then
+    printf '%s\n' "$running"
+    fail 5 "not printing the next-step block while background work runs; resolve the list above, then run next-step again"
   fi
 fi
 

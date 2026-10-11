@@ -145,6 +145,14 @@ launch toolu_agent2 $'Async agent launched successfully.\nagentId: a7 (internal 
 check "a running agent still holds" "$(decision "$(stop s-1 "$NEXT" false "$BG")")" "block"
 launch toolu_stop3 '{"message":"Successfully stopped task: a7","task_id":"a7"}'
 check "a stopped agent passes" "$(stop s-1 "$NEXT" false "$BG")" ""
+# An agent that reported but left work of its own running is still listed.
+launch toolu_agent3 $'Async agent launched successfully.\nagentId: a8' array
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -nc '{type:"attachment",attachment:{type:"queued_command",prompt:"<task-notification>\n<task-id>a8</task-id>\n<tool-use-id>toolu_agent3</tool-use-id>\n<output-file>/tmp/a8.output</output-file>\n<status>completed</status>\n<summary>Agent \"x\" finished</summary>\n<note>This agent stopped with background work of its own still running. It may resume on its own when that work completes or reports.</note>\n</task-notification>"}}' >> "$BG"
+out=$(stop s-1 "$NEXT" false "$BG")
+check "a reported agent with work still running: holds" "$(decision "$out")" "block"
+check "the hold names it" "$(jq -r .reason <<<"$out" | grep -c '^- agent a8 ')" "1"
+notify toolu_agent3 completed
+check "its final notification: passes" "$(stop s-1 "$NEXT" false "$BG")" ""
 
 # Work launched before the session last started or resumed died with that
 # process, so its missing notification does not count.
