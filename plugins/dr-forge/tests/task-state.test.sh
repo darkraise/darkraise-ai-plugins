@@ -55,6 +55,18 @@ printf '{broken' > "$DR_TASK_DIR/state.json"
 (dr_task_open "$fixture/work" task-1 "$fixture/scope.json") >/dev/null 2>&1
 check 'malformed state cannot become a fresh task' "$?" 2
 
+# A run started before 2.0 keeps its records under the git directory's dr-superpowers.
+git -C "$fixture/primary" worktree add -q -b legacy "$fixture/legacy"
+legacy_gitdir="$(git -C "$fixture/legacy" rev-parse --absolute-git-dir)"
+mkdir -p "$legacy_gitdir/dr-superpowers"
+dr_task_open "$fixture/legacy" task-1 "$fixture/scope.json"
+check 'an existing dr-superpowers task directory is kept' "$DR_TASK_ROOT" "$(dr_canonical "$legacy_gitdir")/dr-superpowers"
+dr_task_unlock
+mkdir -p "$legacy_gitdir/dr-forge"
+dr_task_open "$fixture/legacy" task-1 "$fixture/scope.json"
+check 'dr-forge wins when both task directories exist' "$DR_TASK_ROOT" "$(dr_canonical "$legacy_gitdir")/dr-forge"
+dr_task_unlock
+
 # Batched JSON serialization must preserve filenames and deleted entries.
 git -C "$fixture/primary" worktree add -q --detach "$fixture/encoding" HEAD
 odd="space [brackets] 'quote'.txt"

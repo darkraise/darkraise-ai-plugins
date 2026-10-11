@@ -153,6 +153,7 @@ dr_task_open() {
   common="$(dr_canonical "$common")" || return 2
   [ "$gitdir" != "$common" ] && [ -z "$(git -C "$DR_WORKTREE" rev-parse --show-superproject-working-tree)" ] || { dr_state_error 'an exclusively assigned linked worktree is required'; return 2; }
   DR_TASK_ROOT="$gitdir/dr-forge"
+  [ -d "$DR_TASK_ROOT" ] || [ ! -d "$gitdir/dr-superpowers" ] || DR_TASK_ROOT="$gitdir/dr-superpowers"
   key="$(printf '%s' "$task" | git -C "$DR_WORKTREE" hash-object --stdin)" || return 2
   DR_TASK_DIR="$DR_TASK_ROOT/tasks/$key"
   mkdir -p -- "$DR_TASK_ROOT" || return 2
