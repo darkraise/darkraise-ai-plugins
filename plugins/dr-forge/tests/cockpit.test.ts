@@ -111,6 +111,13 @@ const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractiv
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
 
+const CONFIG = '/home/me/.dr-forge/config.json'
+
+/** A settings file holding these values, as files for signedIn. */
+function configured(values: Record<string, unknown>): NonNullable<World['files']> {
+  return { [CONFIG]: { text: JSON.stringify(values) } }
+}
+
 type World = {
   tokens: number | undefined
   window?: number
@@ -137,13 +144,17 @@ type World = {
   remoteControl?: string
   /** Tools that answer in their own way, by name. */
   tools?: Record<string, () => Promise<{ result: unknown; text: string }> | { result: unknown; text: string }>
+  /** ~/.dr-forge/config.json's values; set, HOME is /home/me and world answers reads of the file. */
+  config?: Record<string, unknown>
+  /** Every write fails, as on a read-only file system. */
+  isReadOnly?: boolean
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
 // so a test moves it) in a 650k window, every tool call answered, every toast
 // and every row the plugin appends recorded in `w.notes`.
 function world(on: On, w: World) {
-  mock.env(on, w.env ?? {})
+  mock.env(on, { ...(w.config === undefined ? {} : { HOME: '/home/me' }), ...(w.env ?? {}) })
   const clock = mock.clock(on, { now: 1_000_000 })
   on('command.register', () => ({ value: undefined }) as never)
   on('session.start', (_$, e) => e as never)
@@ -210,9 +221,16 @@ function world(on: On, w: World) {
     return { value: [...names].map(name => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })) }
   })
   on('fs.write', (_$, e) => {
+    if (w.isReadOnly) throw new Error('EROFS: read-only file system')
     if (w.written !== undefined) w.written[e.path] = e.text
     return { value: undefined }
   })
+  if (w.config !== undefined) {
+    on('fs.read', (_$, e) => {
+      if (e.path === CONFIG) return { value: w.written?.[CONFIG] ?? JSON.stringify(w.config) }
+      throw new Error('ENOENT')
+    })
+  }
   on('http.fetch', (_$, e) => {
     w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(e.init?.body ?? '{}') as Record<string, unknown> })
     return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
@@ -364,8 +382,9 @@ describe('attribution guard', () => {
     expect(await ui.find({ type: 'Text', text: /✗ Bash: Claude-Session/ })).toBeDefined()
   })
 
-  test('is off when configured off', { options: { guardAttribution: false } }, async ($, on) => {
-    world(on, { tokens: 10_000 })
+  test('is off when configured off', async ($, on) => {
+    world(on, { tokens: 10_000, config: { guardAttribution: false } })
+    await $.session.start(START)
     const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Claude-Session: y"' })
     expect(ran.deny).toBeUndefined()
   })
@@ -572,15 +591,17 @@ describe('cockpit pane', () => {
 })
 
 describe('settings', () => {
-  test('warnAt moves where the strip shows the handoff', { options: { warnAt: 70 } }, async ($, on) => {
-    world(on, { tokens: 340_000 })
+  test('warnAt moves where the strip shows the handoff', async ($, on) => {
+    world(on, { tokens: 340_000, config: { warnAt: 70 } })
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
   })
 
-  test('sections picks and orders the pane', { options: { sections: 'plan, repo' } }, async ($, on) => {
-    world(on, { tokens: 50_000 })
+  test('sections picks and orders the pane', async ($, on) => {
+    world(on, { tokens: 50_000, config: { sections: 'plan, repo' } })
+    await $.session.start(START)
     await $.tool.call({
       tool: 'TodoWrite',
       todos: [{ content: 'Write the pane', status: 'in_progress', activeForm: 'Writing' }],
@@ -596,8 +617,9 @@ describe('settings', () => {
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
 
-  test('breakdownRows limits the context rows', { options: { breakdownRows: 1 } }, async ($, on) => {
-    world(on, { tokens: 284_000 })
+  test('breakdownRows limits the context rows', async ($, on) => {
+    world(on, { tokens: 284_000, config: { breakdownRows: 1 } })
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -615,11 +637,59 @@ describe('settings', () => {
     expect(toasts).toEqual([])
   })
 
-  test('limitAlertAt 0 stays quiet', { options: { limitAlertAt: 0 } }, async ($, on) => {
+  test('limitAlertAt 0 stays quiet', async ($, on) => {
     const toasts: string[] = []
-    world(on, { tokens: 50_000, toasts })
+    world(on, { tokens: 50_000, toasts, config: { limitAlertAt: 0 } })
+    await $.session.start(START)
     await $.session.measure({ ...MEASURE, rateLimits: [{ kind: 'five_hour', percentUsed: 99 }] })
     expect(toasts).toEqual([])
+  })
+
+  test('the first session opens the way the saved settings say', async ($, on) => {
+    const opened: string[] = []
+    world(on, { tokens: 284_000, opened, config: { layout: 'compact' } })
+    await $.session.start(START)
+    expect(opened).toEqual([])
+  })
+
+  test('a budget override above the schema maximum is ignored', async ($, on) => {
+    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '3000000' } })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
+  })
+
+  test('the pre-2.0 budget name sets the budget while DR_FORGE_BUDGET is unset', async ($, on) => {
+    world(on, { tokens: 340_000, config: {}, env: { DR_SUPERPOWERS_BUDGET: '400000' } })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^85%$/ })).toBeDefined()
+  })
+
+  test('the pre-2.0 budget name sets the budget while DR_FORGE_BUDGET is empty', async ($, on) => {
+    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '', DR_SUPERPOWERS_BUDGET: '400000' } })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^85%$/ })).toBeDefined()
+  })
+
+  test('DR_FORGE_BUDGET wins over the pre-2.0 budget name', async ($, on) => {
+    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '500000', DR_SUPERPOWERS_BUDGET: '400000' } })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^68%$/ })).toBeDefined()
+  })
+
+  test('the settings view says which saved values it ignored', async ($, on) => {
+    world(on, { tokens: 284_000, config: { warnAt: 500 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect(await ui.find({ type: 'Text', text: /warnAt in ~\/\.dr-forge\/config\.json is not valid; ignored/ })).toBeDefined()
   })
 })
 
@@ -670,8 +740,9 @@ describe('minimized band', () => {
     expect(await ui.find({ type: 'Text', text: /✗ 1 refused/ })).toBeDefined()
   })
 
-  test('is used docked too when minimized', { options: { layout: 'compact' } }, async ($, on) => {
-    world(on, { tokens: 284_000 })
+  test('is used docked too when minimized', async ($, on) => {
+    world(on, { tokens: 284_000, config: { layout: 'compact' } })
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
@@ -680,30 +751,25 @@ describe('minimized band', () => {
 
   for (const surface of SURFACES) {
     test(`Minimize closes the pane and saves the layout on ${surface}`, async ($, on) => {
-      const writes: [string, unknown][] = []
+      const written: Record<string, string> = {}
       const closed: string[] = []
-      world(on, { tokens: 284_000, closed })
-      on('config.set', (_$, e) => {
-        writes.push([e.key, e.value])
-        return { value: e.value }
-      })
+      world(on, { tokens: 284_000, closed, written, config: {} })
+      await $.session.start(START)
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       const full = await $.ui.mount({ ...PANE, surface })
       await full.press({ key: 'pane-minimize' })
       expect(closed).toEqual(['dr-forge'])
+      expect(JSON.parse(written[CONFIG] ?? '{}').layout).toBe('compact')
       await full.unmount()
       const inline = await $.ui.mount({ ...INLINE, surface })
       expect(await inline.find({ key: 'pane-minimize' })).toBeUndefined()
       await inline.press({ key: 'band-expand' })
-      expect(writes).toEqual([
-        ['dr-forge.layout', 'compact'],
-        ['dr-forge.layout', 'full'],
-      ])
+      expect(JSON.parse(written[CONFIG] ?? '{}').layout).toBe('full')
     })
 
-    test(`draws the band above the prompt when minimized on ${surface}`, { options: { layout: 'compact' } }, async ($, on) => {
+    test(`draws the band above the prompt when minimized on ${surface}`, async ($, on) => {
       world(on, SIGNED_IN)
-      signedIn(on)
+      signedIn(on, configured({ layout: 'compact' }))
       await $.session.start(START)
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       await $.session.measure(MEASURE)
@@ -714,14 +780,11 @@ describe('minimized band', () => {
       expect(drawn).toContain('5h')
     })
 
-    test(`Expand on the band above the prompt opens the pane on ${surface}`, { options: { layout: 'compact' } }, async ($, on) => {
-      const writes: [string, unknown][] = []
+    test(`Expand on the band above the prompt opens the pane on ${surface}`, async ($, on) => {
+      const written: Record<string, string> = {}
       const opened: string[] = []
-      world(on, { tokens: 284_000, opened })
-      on('config.set', (_$, e) => {
-        writes.push([e.key, e.value])
-        return { value: e.value }
-      })
+      world(on, { tokens: 284_000, opened, written, config: { layout: 'compact' } })
+      await $.session.start(START)
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       // Left on the settings view, as closing the settings pane by hand leaves it.
       await $.command.run({ ...COCKPIT, args: 'settings' })
@@ -729,16 +792,18 @@ describe('minimized band', () => {
       const docking = await $.ui.mount({ ...BAND, surface, viewport: { columns: 160, rows: 50, isFullscreen: true } })
       await docking.press({ key: 'band-expand' })
       expect(opened).toEqual(['dr-forge'])
+      // auto is the default, so saving it drops the key.
+      expect(JSON.parse(written[CONFIG] ?? '{"layout":"unwritten"}').layout).toBeUndefined()
       await docking.unmount()
       const pane = await $.ui.mount({ ...PANE, surface })
       expect(await pane.find({ type: 'Text', text: 'Settings' })).toBeUndefined()
       await pane.unmount()
+      // Minimized again for the next session, which reads the file afresh.
+      written[CONFIG] = JSON.stringify({ layout: 'compact' })
+      await $.session.start(START)
       const main = await $.ui.mount({ ...BAND, surface, viewport: { columns: 100, rows: 50, isFullscreen: false } })
       await main.press({ key: 'band-expand' })
-      expect(writes).toEqual([
-        ['dr-forge.layout', 'auto'],
-        ['dr-forge.layout', 'full'],
-      ])
+      expect(JSON.parse(written[CONFIG] ?? '{}').layout).toBe('full')
     })
 
     test(`draws nothing above the prompt while expanded on ${surface}`, async ($, on) => {
@@ -749,8 +814,9 @@ describe('minimized band', () => {
     })
   }
 
-  test('leaves the slot above the prompt to a survey', { options: { layout: 'compact' } }, async ($, on) => {
-    world(on, { tokens: 284_000 })
+  test('leaves the slot above the prompt to a survey', async ($, on) => {
+    world(on, { tokens: 284_000, config: { layout: 'compact' } })
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal' })
     expect(await band.find({ key: 'band-expand' })).toBeUndefined()
@@ -764,10 +830,10 @@ describe('minimized band', () => {
     expect(await ui.find({ key: 'pane-minimize' })).toBeUndefined()
   })
 
-  test('a minimized session opens no pane and closes one left up', { options: { layout: 'compact' } }, async ($, on) => {
+  test('a minimized session opens no pane and closes one left up', async ($, on) => {
     const opened: string[] = []
     const closed: string[] = []
-    world(on, { tokens: 284_000, opened, closed })
+    world(on, { tokens: 284_000, opened, closed, config: { layout: 'compact' } })
     await $.session.start(START)
     await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
     expect(opened).toEqual([])
@@ -775,53 +841,54 @@ describe('minimized band', () => {
   })
 
   // Saving a setting reloads the mod, which starts the session again.
-  test('a setting saved from a minimized cockpit keeps its settings open', { options: { layout: 'compact' } }, async ($, on) => {
+  test('a setting saved from a minimized cockpit keeps its settings open', async ($, on) => {
     const closed: string[] = []
-    world(on, { tokens: 284_000, closed })
+    world(on, { tokens: 284_000, closed, config: { layout: 'compact' } })
     await $.command.run({ ...COCKPIT, args: 'settings' })
     await $.session.start(START)
     expect(closed).toEqual([])
   })
 
-  test('a minimized session with no pane up closes nothing', { options: { layout: 'compact' } }, async ($, on) => {
+  test('a minimized session with no pane up closes nothing', async ($, on) => {
     const opened: string[] = []
     const closed: string[] = []
-    world(on, { tokens: 284_000, opened, closed, isPaneShut: true })
+    world(on, { tokens: 284_000, opened, closed, isPaneShut: true, config: { layout: 'compact' } })
     await $.session.start(START)
     await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
     expect(opened).toEqual([])
     expect(closed).toEqual([])
   })
 
-  test('keeps the repo reading fresh while minimized', { options: { layout: 'compact' } }, async ($, on) => {
+  test('keeps the repo reading fresh while minimized', async ($, on) => {
     world(on, { ...SIGNED_IN, isPaneShut: true })
-    signedIn(on)
+    signedIn(on, configured({ layout: 'compact' }))
     await $.session.start(START)
     await $.session.measure(MEASURE)
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     expect(await band.find({ type: 'Text', text: /⎇ feat\/pane\*/ })).toBeDefined()
   })
 
-  test('/cockpit expands a minimized cockpit', { options: { layout: 'compact' } }, async ($, on) => {
-    const writes: [string, unknown][] = []
+  test('/cockpit expands a minimized cockpit', async ($, on) => {
+    const written: Record<string, string> = {}
     const opened: string[] = []
-    world(on, { tokens: 284_000, opened })
-    on('config.set', (_$, e) => {
-      writes.push([e.key, e.value])
-      return { value: e.value }
-    })
+    world(on, { tokens: 284_000, opened, written, config: { layout: 'compact' } })
+    await $.session.start(START)
+    opened.length = 0
     await $.command.run(COCKPIT)
     expect(opened).toEqual(['dr-forge'])
-    expect(writes).toEqual([['dr-forge.layout', 'auto']])
+    // auto is the default, so saving it leaves an object without the key.
+    expect(JSON.parse(written[CONFIG] ?? '{"layout":"unwritten"}')).toEqual({})
   })
 
   for (const [layout, want] of [
     ['compact', ['dr-forge']],
     ['auto', []],
   ] as const) {
-    test(`Back from the settings ${want.length > 0 ? 'closes the pane' : 'keeps the pane'} with layout ${layout}`, { options: { layout } }, async ($, on) => {
+    test(`Back from the settings ${want.length > 0 ? 'closes the pane' : 'keeps the pane'} with layout ${layout}`, async ($, on) => {
       const closed: string[] = []
-      world(on, { tokens: 284_000, closed })
+      world(on, { tokens: 284_000, closed, config: { layout } })
+      await $.session.start(START)
+      closed.length = 0
       await $.command.run({ ...COCKPIT, args: 'settings' })
       const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
       await ui.press({ key: 'settings-back' })
@@ -829,15 +896,17 @@ describe('minimized band', () => {
     })
   }
 
-  test('full keeps the sections above the prompt', { options: { layout: 'full' } }, async ($, on) => {
-    world(on, { tokens: 284_000 })
+  test('full keeps the sections above the prompt', async ($, on) => {
+    world(on, { tokens: 284_000, config: { layout: 'full' } })
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
   })
 
-  test('an unknown layout reads as auto', { options: { layout: 'tiles' } }, async ($, on) => {
-    world(on, { tokens: 284_000 })
+  test('an unknown layout reads as auto', async ($, on) => {
+    world(on, { tokens: 284_000, config: { layout: 'tiles' } })
+    await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const docked = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await docked.find({ type: 'Text', text: 'Context' })).toBeDefined()
@@ -862,10 +931,10 @@ describe('/cockpit', () => {
 })
 
 describe('buttons', () => {
-  test('wear a rounded box, the accent on the one that matters', { options: { handoffTokens: 400_000 } }, async ($, on) => {
+  test('wear a rounded box, the accent on the one that matters', async ($, on) => {
     const w: World = { ...SIGNED_IN, tokens: 200_000 }
     world(on, w)
-    signedIn(on)
+    signedIn(on, configured({ handoffTokens: 400_000 }))
     await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
@@ -944,13 +1013,10 @@ describe('settings view', () => {
   })
 
   for (const surface of SURFACES) {
-    test(`writes each press through /config on ${surface}`, { options: { openAtStart: false, warnAt: 80 } }, async ($, on) => {
-      const writes: [string, unknown][] = []
-      world(on, { tokens: 284_000 })
-      on('config.set', (_$, e) => {
-        writes.push([e.key, e.value])
-        return { value: e.value }
-      })
+    test(`writes each press to the settings file on ${surface}`, async ($, on) => {
+      const written: Record<string, string> = {}
+      world(on, { tokens: 284_000, config: { openAtStart: false }, written })
+      await $.session.start(START)
       await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
       const ui = await $.ui.mount({ ...PANE, surface })
       await ui.press({ key: 'pane-settings' })
@@ -958,25 +1024,36 @@ describe('settings view', () => {
       await ui.press({ key: 'set-warnAt-more' })
       await ui.press({ key: 'set-layout-compact' })
       await ui.press({ key: 'set-section-guard' })
-      expect(writes).toEqual([
-        ['dr-forge.openAtStart', true],
-        ['dr-forge.warnAt', 85],
-        ['dr-forge.layout', 'compact'],
-        ['dr-forge.sections', 'account,context,usage,shells,agents,plan,repo'],
-      ])
+      expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({
+        warnAt: 85,
+        layout: 'compact',
+        sections: 'account,context,usage,shells,agents,plan,repo',
+      })
       await ui.press({ key: 'settings-back' })
-      expect(await ui.find({ key: 'pane-settings' })).toBeDefined()
+      // The layout saved above is compact, so Back returns to the band.
+      expect(await ui.find({ key: 'band-expand' })).toBeDefined()
     })
   }
 
   test('says when a setting is refused', async ($, on) => {
     const toasts: string[] = []
-    world(on, { tokens: 284_000, toasts })
-    on('config.set', () => ({ deny: 'managed settings own it' }))
+    world(on, { tokens: 284_000, toasts, config: {}, isReadOnly: true })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'set-guardAttribution-toggle' })
-    expect(toasts).toContain('dr-forge: guardAttribution not saved: managed settings own it')
+    expect(toasts.some(text => text.startsWith('dr-forge: guardAttribution not saved:'))).toBe(true)
+  })
+
+  test('a settings file that is not JSON is left alone', async ($, on) => {
+    const toasts: string[] = []
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, toasts, written, env: { HOME: '/home/me' } })
+    on('fs.read', (_$, e) => (e.path === CONFIG ? { value: 'not json' } : Promise.reject(new Error('ENOENT'))))
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'set-guardAttribution-toggle' })
+    expect(written[CONFIG]).toBeUndefined()
+    expect(toasts.some(text => text.startsWith('dr-forge: guardAttribution not saved:'))).toBe(true)
   })
 })
 
@@ -1095,9 +1172,10 @@ describe('desktop', () => {
     expect(opened).toEqual(['dr-forge'])
   })
 
-  test('leaves the pane shut on a desktop joining when Show at start is off', { options: { openAtStart: false } }, async ($, on) => {
+  test('leaves the pane shut on a desktop joining when Show at start is off', async ($, on) => {
     const opened: string[] = []
-    world(on, { tokens: 100_000, opened, isPaneShut: true })
+    world(on, { tokens: 100_000, opened, isPaneShut: true, config: { openAtStart: false } })
+    await $.session.start(START)
     await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
     expect(opened).toEqual([])
   })
@@ -1429,9 +1507,9 @@ describe('discord', () => {
     expect((quiet.embeds as Record<string, unknown>[])[0]?.description).toBeUndefined()
   })
 
-  test('sends a long turn\'s end, and nothing without a webhook', { options: { notifyAfter: 60 } }, async ($, on) => {
+  test('sends a long turn\'s end, and nothing without a webhook', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches })
+    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 60 } })
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.session.start(START)
     await $.turn.start({ text: 'go', turnId: 't1' })
@@ -1449,18 +1527,18 @@ describe('discord', () => {
     expect(await ui.find({ type: 'Text', text: /Discord ✓/ })).toBeUndefined()
   })
 
-  test('says nothing when no webhook is set', { options: { notifyAfter: 0 } }, async ($, on) => {
+  test('says nothing when no webhook is set', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches })
+    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 } })
     mock.store(on, {})
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
     expect(fetches).toEqual([])
   })
 
-  test('asks for an answer, then edits the message once it comes', { options: { notifyAskAfter: 0 } }, async ($, on) => {
+  test('asks for an answer, then edits the message once it comes', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches })
+    world(on, { tokens: 50_000, fetches, config: { notifyAskAfter: 0 } })
     mock.store(on, { notifyUrl: WEBHOOK, notifyMention: '42424242' })
     await $.session.start(START)
     await $.turn.start({ text: 'go', turnId: 't1' })
@@ -1505,9 +1583,9 @@ describe('discord', () => {
     expect(JSON.stringify(await ui.drawn())).not.toContain('abcDEF_token')
   })
 
-  test('sends to the webhook named by DR_FORGE_NOTIFY_URL alone', { options: { notifyAfter: 0 } }, async ($, on) => {
+  test('sends to the webhook named by DR_FORGE_NOTIFY_URL alone', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches, env: { DR_FORGE_NOTIFY_URL: WEBHOOK } })
+    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DR_FORGE_NOTIFY_URL: WEBHOOK } })
     mock.store(on, {})
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -1515,9 +1593,9 @@ describe('discord', () => {
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
   })
 
-  test('sends to the webhook named by DR_COCKPIT_NOTIFY_URL when DR_FORGE_NOTIFY_URL is unset', { options: { notifyAfter: 0 } }, async ($, on) => {
+  test('sends to the webhook named by DR_COCKPIT_NOTIFY_URL when DR_FORGE_NOTIFY_URL is unset', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches, env: { DR_COCKPIT_NOTIFY_URL: WEBHOOK } })
+    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DR_COCKPIT_NOTIFY_URL: WEBHOOK } })
     mock.store(on, {})
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -1525,9 +1603,9 @@ describe('discord', () => {
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
   })
 
-  test('prefers DR_FORGE_NOTIFY_URL over DR_COCKPIT_NOTIFY_URL', { options: { notifyAfter: 0 } }, async ($, on) => {
+  test('prefers DR_FORGE_NOTIFY_URL over DR_COCKPIT_NOTIFY_URL', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches, env: { DR_FORGE_NOTIFY_URL: WEBHOOK, DR_COCKPIT_NOTIFY_URL: 'https://discord.com/api/webhooks/2/old' } })
+    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DR_FORGE_NOTIFY_URL: WEBHOOK, DR_COCKPIT_NOTIFY_URL: 'https://discord.com/api/webhooks/2/old' } })
     mock.store(on, {})
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })

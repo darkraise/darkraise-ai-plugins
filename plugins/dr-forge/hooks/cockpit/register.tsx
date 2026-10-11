@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { ConfigValue, EngineInterface, Register, RenderChildren, RenderInput, Timer, TurnUsage } from 'claude-code'
+import type { EngineInterface, Register, RenderChildren, RenderInput, Timer, TurnUsage } from 'claude-code'
 
 import type {
   CockpitAccount,
@@ -66,6 +66,8 @@ import {
   writesGitText,
 } from './lib'
 import type { BandInput, Run, Section, TrackPart } from './lib'
+import { SCHEMA, resolveSettings, settingProblems, settingWritten } from './config'
+import type { SettingValue, SettingsFile } from './config'
 import {
   discordBody,
   excerpt,
@@ -222,9 +224,9 @@ function liveFrom(values: Partial<Options>): Live {
   }
 }
 
-/** The options in force now: the settings atom once written, else what Claude Code passed at load. */
+/** The options in force now: the settings atom once written, else the defaults. */
 async function live($: EngineInterface): Promise<Live> {
-  return liveFrom(((await read($, settings)) ?? S.loaded) as Partial<Options>)
+  return liveFrom(((await read($, settings)) ?? {}) as Partial<Options>)
 }
 
 /** Points the notifier at the options' events, detail and wait. */
@@ -234,9 +236,7 @@ function applyNotify(o: Live) {
   S.notifyAskAfter = o.notifyAskAfter
 }
 
-export const register: Register = (on, options) => {
-  S.loaded = options as Partial<Options>
-  applyNotify(liveFrom(S.loaded))
+export const register: Register = on => {
   // The settings' autoCompactWindow, read at the start and after each main
   // turn rather than on every tool call.
   let compactWindow: number | undefined
@@ -247,6 +247,7 @@ export const register: Register = (on, options) => {
       description: 'Show context, usage, subagents, the plan and the repo in a pane',
       argumentHint: '[settings]',
     })
+    await loadSettings($)
     const o = await live($)
     compactWindow = await readCompactWindow($)
     await onBudget($, await refresh($, o.tuning, compactWindow))
@@ -258,10 +259,6 @@ export const register: Register = (on, options) => {
     await readRun($)
     await readVersion($)
     await readRemote($)
-    // Saving a setting reloads the mod, so a pane minimized a moment ago can
-    // still be up here, and so can the settings a minimized cockpit is being
-    // changed from. Unasked, the engine seats the pane from 144 columns and
-    // holds it below.
     if (o.isMinimized) {
       if ((await read($, view)) !== 'settings') await shutPane($)
     } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
@@ -661,9 +658,8 @@ export const register: Register = (on, options) => {
     )
 
     if ((await read($, view)) === 'settings') {
-      // Each press writes the setting as /config would; Claude Code then
-      // reloads the mod with it, so the rows below always show what is saved.
-      const set = (key: keyof Options, value: ConfigValue) => setOption($, key, value)
+      // Each press saves to ~/.dr-forge/config.json and puts the value in force, so the rows below always show what is saved.
+      const set = (key: keyof Options, value: SettingValue) => setOption($, key, value)
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
           <Text>{label.padEnd(15)}</Text>
@@ -824,7 +820,8 @@ export const register: Register = (on, options) => {
             {toggle('guardAttribution', 'Attr. guard', o.guardAttribution)}
           </Box>
           {notifyRows}
-          <Text dimColor>Saved to your user settings, like /config.</Text>
+          <Text dimColor>Saved to ~/.dr-forge/config.json.</Text>
+          {S.settingProblems.map((problem, index) => <Text key={`set-problem-${index}`} color="yellow">⚠ {problem}</Text>)}
           <Box key="settings-actions">
             {button(
               'settings-back',
@@ -1896,8 +1893,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 // What the hooks share beyond $.state: settings read at load, facts read at
 // the start, and the timers and S.waits in flight. A reload starts it over.
 const S = {
-  // What Claude Code passed at load, until the settings atom is written.
-  loaded: {} as Partial<Options>,
+  // Saved or environment values the settings in force ignored, for the settings view.
+  settingProblems: [] as string[],
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,
@@ -2263,7 +2260,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   const tokens = figures.context.tokens
   if (tokens === undefined) return
   const window = figures.context.window
-  const limit = budgetFor(handoffTokens, (await $.env.get('DR_FORGE_BUDGET')) || (await $.env.get('DR_SUPERPOWERS_BUDGET')), window, compactWindow)
+  const limit = budgetFor(handoffTokens, undefined, window, compactWindow)
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -2315,11 +2312,58 @@ async function expand($: EngineInterface, isDocking: boolean) {
   return opened
 }
 
-/** Writes one of the mod's own settings as /config would, saying why if refused; resolves whether it was saved. */
-async function setOption($: EngineInterface, key: string, value: ConfigValue): Promise<boolean> {
-  const saved = await $.config.set({ key: `dr-forge.${key}`, value })
-  if (saved.deny !== undefined) $.ui.toast(`dr-forge: ${key} not saved: ${saved.deny}`)
-  return saved.deny === undefined
+/** ~/.dr-forge/config.json, or null when no home directory is set. */
+async function configFile($: EngineInterface): Promise<string | null> {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  return home ? `${home.replace(/[\\/]+$/, '')}/.dr-forge/config.json` : null
+}
+
+/** The settings file's object: {} when it does not exist, null when it exists but is not a JSON object. */
+async function readSettingsFile($: EngineInterface, path: string): Promise<SettingsFile | null> {
+  let text: string
+  try {
+    text = String(await $.fs.read(path))
+  } catch {
+    return (await $.fs.exists(path).catch(() => false)) ? null : {}
+  }
+  try {
+    const data: unknown = JSON.parse(text)
+    return data !== null && typeof data === 'object' && !Array.isArray(data) ? (data as SettingsFile) : null
+  } catch {
+    return null
+  }
+}
+
+/** Puts a settings file in force: the atom every hook reads through live(), and the notifier. */
+async function applySettings($: EngineInterface, file: SettingsFile) {
+  const budget = (await $.env.get('DR_FORGE_BUDGET')) || (await $.env.get('DR_SUPERPOWERS_BUDGET'))
+  const values = resolveSettings(SCHEMA, file, { DR_FORGE_BUDGET: budget })
+  S.settingProblems = settingProblems(SCHEMA, file, { DR_FORGE_BUDGET: budget })
+  await update($, settings, () => values)
+  applyNotify(liveFrom(values as Partial<Options>))
+}
+
+/** Reads ~/.dr-forge/config.json into force; a missing or unreadable file means the defaults. */
+async function loadSettings($: EngineInterface) {
+  const path = await configFile($)
+  await applySettings($, (path === null ? {} : await readSettingsFile($, path)) ?? {})
+}
+
+/** Saves one setting to ~/.dr-forge/config.json and puts it in force, saying why if it could not; resolves whether it was saved. */
+async function setOption($: EngineInterface, key: string, value: SettingValue): Promise<boolean> {
+  const path = await configFile($)
+  const file = path === null ? null : await readSettingsFile($, path)
+  try {
+    if (path === null) throw new Error('no home directory is set')
+    if (file === null) throw new Error(`${path} is not a JSON object; fix or remove it`)
+    const next = settingWritten(SCHEMA, file, key, value)
+    await $.fs.write(path, `${JSON.stringify(next, null, 2)}\n`)
+    await applySettings($, next)
+    return true
+  } catch (error) {
+    $.ui.toast(`dr-forge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
+    return false
+  }
 }
 
 async function refreshDetail($: EngineInterface) {
