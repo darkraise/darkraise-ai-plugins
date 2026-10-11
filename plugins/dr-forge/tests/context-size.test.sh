@@ -397,12 +397,12 @@ rm -rf "$CODEX_HOME"
 unset CODEX_HOME
 
 # --- the observation log ---
-# It lives inside .superpowers/sdd/, which self-ignores: an untracked file
+# It lives inside .forge/sdd/, which self-ignores: an untracked file
 # elsewhere in the checkout enters task-state.sh's review snapshot.
 export CODEX_HOME="$TMP/codex3"
 mkdir -p "$CODEX_HOME"
-LOG="$REPO/.superpowers/sdd/budget-log.tsv"
-rm -rf "$REPO/.superpowers/sdd"
+LOG="$REPO/.forge/sdd/budget-log.tsv"
+rm -rf "$REPO/.forge/sdd"
 mkroll2() { mkdir -p "$CODEX_HOME/sessions/2026/09/15"; { meta "$REPO_NATIVE"; usage_line "$1" 999999; } > "$CODEX_HOME/sessions/2026/09/15/rollout-log.jsonl"; }
 
 mkroll2 150000
@@ -412,7 +412,7 @@ check "log: the row has four fields" "$(awk -F'\t' 'NR==1 {print NF}' "$LOG")" "
 check "log: tokens land in field 2" "$(awk -F'\t' 'NR==1 {print $2}' "$LOG")" "150000"
 check "log: an unset caller writes direct" "$(awk -F'\t' 'NR==1 {print $3}' "$LOG")" "direct"
 check "log: the session id lands in field 4" "$(awk -F'\t' 'NR==1 {print $4}' "$LOG")" "01a0a58e-8e6c-72b0-92a3-b1586a8ca0ec"
-check "log: the directory self-ignores" "$(cat "$REPO/.superpowers/sdd/.gitignore")" "*"
+check "log: the directory self-ignores" "$(cat "$REPO/.forge/sdd/.gitignore")" "*"
 check "log: the checkout stays clean" "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)" ""
 
 DR_FORGE_BUDGET_CALLER=task-brief:3 run
@@ -441,8 +441,8 @@ check "log: a Claude measurement writes no row" "$([ -f "$LOG" ] && echo yes || 
 # --- reading the observations back ---
 # The growth between two briefs is one task's cost. A negative delta is a
 # compaction, which is the event phase two calibrates against, never data.
-mkdir -p "$REPO/.superpowers/sdd"
-LOG="$REPO/.superpowers/sdd/budget-log.tsv"
+mkdir -p "$REPO/.forge/sdd"
+LOG="$REPO/.forge/sdd/budget-log.tsv"
 { printf '2026-09-20T10:00:00Z\t40000\ttask-brief:1\tsess-a\n'
   printf '2026-09-20T10:05:00Z\t78000\ttask-brief:2\tsess-a\n'
   printf '2026-09-20T10:06:00Z\t79000\treview-package\tsess-a\n'

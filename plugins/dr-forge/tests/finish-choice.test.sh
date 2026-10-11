@@ -27,9 +27,9 @@ T0=1760000000
 
 # --- a plan run ---
 FINISH_CHOICE_NOW=$T0 fc set pr --base main --plan docs/plans/p.md >/dev/null
-file=".superpowers/sdd/p/finish.json"
+file=".forge/sdd/p/finish.json"
 check "set: beside the plan's ledger" "$(jq -r '[.action, .base, .chosenAt] | join(" ")' "$file")" "pr main $T0"
-check "set: git-ignored" "$(git status --porcelain --untracked-files=all | grep -c superpowers)" "0"
+check "set: git-ignored" "$(git status --porcelain --untracked-files=all | grep -c forge)" "0"
 fc set later --plan docs/plans/p.md >/dev/null 2>&1
 check "set: refuses an unknown action" "$?" "2"
 
@@ -60,7 +60,7 @@ check "arm: nothing to arm once answered" "$?" "3"
 
 # --- wait, and work without a plan ---
 fc set wait >/dev/null
-check "no plan: under .superpowers/sdd" "$(jq -r .action .superpowers/sdd/finish.json)" "wait"
+check "no plan: under .forge/sdd" "$(jq -r .action .forge/sdd/finish.json)" "wait"
 fc arm >/dev/null 2>&1
 check "arm: wait arms nothing" "$?" "3"
 fc clear

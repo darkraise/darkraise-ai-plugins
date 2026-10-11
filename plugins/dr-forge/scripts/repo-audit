@@ -52,7 +52,7 @@ echo
 echo "## Plans in flight"
 found=0
 while IFS= read -r wt; do
-  for ledger in "$wt"/.superpowers/sdd/*/progress.md; do
+  for ledger in "$(forge_dir state "$wt")"/sdd/*/progress.md; do
     [ -f "$ledger" ] || continue
     found=1
     plan_rel=$(ledger_plan "$ledger")
@@ -94,7 +94,7 @@ fi
 
 echo
 echo "## Handoff"
-latest="$primary/.superpowers/handoff/latest.md"
+latest="$(forge_dir state "$primary")/handoff/latest.md"
 if [ -f "$latest" ]; then
   echo "- \`$latest\`"
   tr -d '\r' < "$latest" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'

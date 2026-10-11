@@ -5,7 +5,8 @@
 # ends while its human is away and the menu would otherwise wait forever.
 #
 # One JSON file holds it: `<workspace>/finish.json` beside a plan's ledger, or
-# `.superpowers/sdd/finish.json` for work done without a plan. Both are
+# `.forge/sdd/finish.json` (`.superpowers/sdd/` in a pre-2.0 checkout) for work
+# done without a plan. Both are
 # git-ignored; the dr-cockpit Run card reads the file to show the choice.
 #
 # Usage: finish-choice <command> [--plan PLAN_FILE] [args]
@@ -26,6 +27,7 @@
 # FINISH_CHOICE_NOW (epoch seconds) stands in for the clock in tests.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/forge-dir.sh"
 
 usage() { sed -n '/^# Usage:/,/^# FINISH_CHOICE_NOW/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "finish-choice needs jq" >&2; exit 2; }
@@ -46,7 +48,7 @@ if [ -n "$plan" ]; then
   dir=$(bash "$HERE/sdd-workspace" "$plan")
 else
   root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "not inside a git repository" >&2; exit 2; }
-  dir="$root/.superpowers/sdd"
+  dir="$(forge_dir state "$root")/sdd"
   mkdir -p "$dir"
   printf '*\n' > "$dir/.gitignore"
 fi

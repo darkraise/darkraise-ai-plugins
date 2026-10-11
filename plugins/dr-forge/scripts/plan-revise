@@ -152,7 +152,7 @@ ledger_for() {
   roots=$(git -C "$(dirname "$1")" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
   while IFS= read -r wt; do
     [ -n "$wt" ] || continue
-    f="$wt/.superpowers/sdd/$slug/progress.md"
+    f="$(forge_dir state "$wt")/sdd/$slug/progress.md"
     [ -f "$f" ] || continue
     named=$(ledger_plan "$f")
     [ -n "$named" ] || continue

@@ -8,6 +8,7 @@
 # reference, and the injected entry point already takes about 4,800;
 # session-start.sh subtracts its measured length, so this is only the ceiling.
 
+. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plan.sh"
 
 SNAPSHOT_CAP=5500
@@ -17,7 +18,7 @@ SNAPSHOT_CAP=5500
 snapshot_latest() { # CWD — the Next session block of the primary checkout's latest.md
   local primary latest
   primary=$(plan_primary_root "$1") || return 0
-  latest="$primary/.superpowers/handoff/latest.md"
+  latest="$(forge_dir state "$primary")/handoff/latest.md"
   [ -f "$latest" ] || return 0
   echo "### From \`$latest\`"
   tr -d '\r' < "$latest" | awk '/^## Next session/ { f = 1; next } f && /^## / { exit } f'
@@ -27,7 +28,7 @@ snapshot_ledgers() { # CWD — every worktree's ledgers: last 8 lines, last 10 r
   local wt ledger plan_rel rulings
   git -C "$1" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
   while IFS= read -r wt; do
-    for ledger in "$wt"/.superpowers/sdd/*/progress.md; do
+    for ledger in "$(forge_dir state "$wt")"/sdd/*/progress.md; do
       [ -f "$ledger" ] || continue
       plan_rel=$(ledger_plan "$ledger")
       echo "### Ledger \`$ledger\` (plan \`${plan_rel:-unknown}\`)"

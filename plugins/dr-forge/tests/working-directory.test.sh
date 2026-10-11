@@ -35,8 +35,8 @@ run() { # run <dir> <script> <args...>; sets out, err and status
   out=$(cd "$1" && bash "$S/$2" "${@:3}" 2>"$TMP/err"); status=$?
   err=$(cat "$TMP/err")
 }
-state() { # state <dir> — yes when a .superpowers directory exists there
-  if [ -d "$1/.superpowers" ]; then echo yes; else echo no; fi
+state() { # state <dir> — yes when a .forge directory exists there
+  if [ -d "$1/.forge" ]; then echo yes; else echo no; fi
 }
 
 X="$TMP/x" Y="$TMP/y"
@@ -83,7 +83,7 @@ check "worktree: no state in the worktree" "$(state "$WT")" "no"
 check "worktree: no state in the primary checkout" "$(state "$X")" "no"
 run "$WT" sdd-workspace docs/plan.md
 check "worktree: its own plan passes" "$status" "0"
-has "worktree: the workspace is in the worktree" "$out" "/wt/.superpowers/sdd/plan"
+has "worktree: the workspace is in the worktree" "$out" "/wt/.forge/sdd/plan"
 git -C "$X" worktree remove --force "$WT" >/dev/null 2>&1
 
 # --- the same repository keeps working ---

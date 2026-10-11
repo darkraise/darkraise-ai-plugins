@@ -33,9 +33,9 @@ git init -q "$REPO"
 ROOT="$(git -C "$REPO" rev-parse --show-toplevel)"
 PLAN_REL="docs/plans/2026-01-01-demo.md"
 PLAN="$REPO/$PLAN_REL"
-LEDGER_DIR="$REPO/.superpowers/sdd/2026-01-01-demo"
-LEDGER_SHOWN="$ROOT/.superpowers/sdd/2026-01-01-demo/progress.md"
-HANDOFF="$REPO/.superpowers/handoff/latest.md"
+LEDGER_DIR="$REPO/.forge/sdd/2026-01-01-demo"
+LEDGER_SHOWN="$ROOT/.forge/sdd/2026-01-01-demo/progress.md"
+HANDOFF="$REPO/.forge/handoff/latest.md"
 mkdir -p "$REPO/docs/plans"
 
 write_plan() { # write_plan <file> <execution line> <program line or empty>
@@ -179,25 +179,25 @@ write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
 WT="$TMP/wt"
 git -C "$REPO" worktree add -q -b feat "$WT"
 WT_ROOT="$(git -C "$WT" rev-parse --show-toplevel)"
-mkdir -p "$WT/.superpowers/sdd/2026-01-01-demo"
-printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$WT/.superpowers/sdd/2026-01-01-demo/progress.md"
+mkdir -p "$WT/.forge/sdd/2026-01-01-demo"
+printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$WT/.forge/sdd/2026-01-01-demo/progress.md"
 rm -f "$HANDOFF"
 run "$WT" "$PLAN_REL"
 has "worktree: reads the worktree ledger" "$out" "1 of 3 tasks complete"
 has "worktree: prompt names the worktree" "$out" "First enter the existing worktree \`$WT_ROOT\`."
 has "worktree: launch dir is still the primary checkout" "$out" "Launch in \`$ROOT\`:"
 check "worktree: handoff written in the primary checkout" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
-check "worktree: no handoff inside the worktree" "$([ -f "$WT/.superpowers/handoff/latest.md" ] && echo yes || echo no)" "no"
+check "worktree: no handoff inside the worktree" "$([ -f "$WT/.forge/handoff/latest.md" ] && echo yes || echo no)" "no"
 
 # --- handoff write failure still prints the block ---
-rm -rf "$REPO/.superpowers/handoff"
-printf 'not a dir' > "$REPO/.superpowers/handoff"
+rm -rf "$REPO/.forge/handoff"
+printf 'not a dir' > "$REPO/.forge/handoff"
 run "$REPO" "$PLAN_REL"
 check "unwritable handoff: exits 4" "$status" "4"
 has "unwritable handoff: block still printed" "$out" "**Next:** Start at Task 1 (First thing)."
 has "unwritable handoff: says so on stderr" "$(cat "$TMP/stderr")" "could not write"
 has "unwritable handoff: says so on stdout" "$out" "next-step: could not write"
-rm -f "$REPO/.superpowers/handoff"
+rm -f "$REPO/.forge/handoff"
 
 # --- final review clean: finishing is next ---
 ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' 'Final review: clean (commits a1b2c3d..d4e5f6a)'
@@ -208,7 +208,7 @@ has "final review clean: prompt routes through resume-execution" "$out" "Resume 
 rm -rf "$LEDGER_DIR"
 
 # --- draft mode: a design phase hands off ---
-mkdir -p "$REPO/docs/specs" "$REPO/.superpowers/handoff"
+mkdir -p "$REPO/docs/specs" "$REPO/.forge/handoff"
 printf '# Draft\n' > "$REPO/docs/specs/draft.md"
 printf '# Handoff\n\n## State\nKeep me.\n\n## Next session\nOld block.\n' > "$HANDOFF"
 run "$REPO" --draft docs/specs/draft.md --next "Write the implementation plan with dr-forge:writing-plans"
@@ -216,7 +216,7 @@ check "draft: exits 0" "$status" "0"
 has "draft: status names the authority" "$out" "**Status:** Design in progress: \`docs/specs/draft.md\` is the authority."
 has "draft: next action gains a full stop" "$out" "**Next:** Write the implementation plan with dr-forge:writing-plans."
 has "draft: planning launch command" "$out" "claude --model opus --effort high"
-has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dr-forge:writing-plans. Read \`.superpowers/handoff/latest.md\` first."
+has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dr-forge:writing-plans. Read \`.forge/handoff/latest.md\` first."
 hand=$(cat "$HANDOFF")
 has "draft: handoff keeps the notes" "$hand" "Keep me."
 lacks "draft: handoff drops the stale block" "$hand" "Old block."
@@ -229,10 +229,10 @@ check "draft of a missing file: exits 2" "$status" "2"
 printf '# Handoff\n\n## State\nItem C unscoped.\n\n## Next session\nOld block.\n' > "$HANDOFF"
 run "$REPO" --adhoc --phase design --next "Scope item C with dr-forge:brainstorming"
 check "adhoc design: exits 0" "$status" "0"
-has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`.superpowers/handoff/latest.md\` are the authority."
+has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`.forge/handoff/latest.md\` are the authority."
 has "adhoc: next action gains a full stop" "$out" "**Next:** Scope item C with dr-forge:brainstorming."
 has "adhoc design: opus launch command" "$out" "claude --model opus --effort high"
-has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`.superpowers/handoff/latest.md\`: Scope item C with dr-forge:brainstorming."
+has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`.forge/handoff/latest.md\`: Scope item C with dr-forge:brainstorming."
 hand=$(cat "$HANDOFF")
 has "adhoc: handoff keeps the notes" "$hand" "Item C unscoped."
 lacks "adhoc: handoff drops the stale block" "$hand" "Old block."
@@ -302,7 +302,7 @@ cat > "$INL" <<'PLAN'
 
 ### Task 2: Second
 PLAN
-INL_LEDGER="$REPO/.superpowers/sdd/2026-01-01-inline"
+INL_LEDGER="$REPO/.forge/sdd/2026-01-01-inline"
 mkdir -p "$INL_LEDGER"
 {
   echo "# SDD ledger — plan: docs/plans/2026-01-01-inline.md"
@@ -360,7 +360,7 @@ cat > "$QUOTE" <<'PLAN'
 
 ### Task 1: First
 PLAN
-QUOTE_LEDGER="$REPO/.superpowers/sdd/2026-01-01-quote"
+QUOTE_LEDGER="$REPO/.forge/sdd/2026-01-01-quote"
 mkdir -p "$QUOTE_LEDGER"
 {
   echo "# SDD ledger — plan: docs/plans/2026-01-01-quote.md"
@@ -373,7 +373,7 @@ lacks "quoted clause: does not launch the subagent pair" "$out" "--effort high"
 lacks "quoted clause: does not say the plan escalated" "$out" "This plan escalated to subagent mode"
 
 # --- the ledger identity may carry an absolute or Windows-form path ---
-ABS_LEDGER="$REPO/.superpowers/sdd/2026-01-01-quote"
+ABS_LEDGER="$REPO/.forge/sdd/2026-01-01-quote"
 abs_plan="$(cd "$REPO" && pwd)/docs/plans/2026-01-01-quote.md"
 {
   echo "# SDD ledger — plan: $abs_plan"
@@ -436,7 +436,7 @@ cat > "$BLK" <<'PLAN'
 
 ### Task 3: Third
 PLAN
-BLK_LEDGER="$REPO/.superpowers/sdd/2026-01-01-blocked"
+BLK_LEDGER="$REPO/.forge/sdd/2026-01-01-blocked"
 mkdir -p "$BLK_LEDGER"
 {
   echo "# SDD ledger — plan: docs/plans/2026-01-01-blocked.md"
@@ -452,7 +452,7 @@ has "blocked: status names the task" "$out" "1 of 3 tasks complete; Task 2 is BL
 has "blocked: next carries the decision" "$out" "Your human partner decides: whether the export keeps the legacy field."
 lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
 lacks "blocked: no launch command" "$out" "Launch in"
-has "blocked: latest.md carries the block" "$(cat "$REPO/.superpowers/handoff/latest.md")" "Task 2 is BLOCKED"
+has "blocked: latest.md carries the block" "$(cat "$REPO/.forge/handoff/latest.md")" "Task 2 is BLOCKED"
 
 # --- Codex host: the launch command names the Codex client, not Claude ---
 # The session knows its host (native-codex.md identifies it from callable tool
@@ -483,7 +483,7 @@ check "--host without a value: exits 2" "$status" "2"
 # Claude plan's does. The header, not the flag, tells the plan path its host.
 CODEX_PLAN_REL="docs/plans/2026-01-01-codex.md"
 CODEX_PLAN="$REPO/$CODEX_PLAN_REL"
-CODEX_LEDGER_DIR="$REPO/.superpowers/sdd/2026-01-01-codex"
+CODEX_LEDGER_DIR="$REPO/.forge/sdd/2026-01-01-codex"
 EXEC_CODEX='**Host:** codex
 
 **Routing policy:** codex-v4
@@ -537,7 +537,7 @@ esac
 RREPO="$TMP/registers"
 git init -q -b main "$RREPO"
 mkdir -p "$RREPO/docs/superpowers/plans" "$RREPO/docs/superpowers/specs" "$RREPO/docs/superpowers/registers"
-printf '.superpowers/\n' > "$RREPO/.gitignore"
+printf '.forge/\n' > "$RREPO/.gitignore"
 : > "$RREPO/docs/superpowers/specs/prog-design.md"
 cat > "$RREPO/docs/superpowers/plans/c1.md" <<'PLAN'
 # C1
@@ -600,7 +600,7 @@ has "next-step: no register means no change" "$OUT" "Nothing — every sub-proje
 GREPO="$TMP/routing"
 git init -q -b main "$GREPO"
 mkdir -p "$GREPO/docs/superpowers/plans" "$GREPO/docs/superpowers/specs" "$GREPO/docs/superpowers/registers"
-printf '.superpowers/\n' > "$GREPO/.gitignore"
+printf '.forge/\n' > "$GREPO/.gitignore"
 : > "$GREPO/docs/superpowers/specs/lane-design.md"
 : > "$GREPO/docs/superpowers/specs/rev-design.md"
 for p in inc1 inc2 inc3; do
@@ -643,11 +643,11 @@ has "routing: launches the assigned plan's Execution pair" "$OUT" "claude --mode
 lacks "routing: never asks for a spec of a plan" "$OUT" "write its spec"
 has "routing: names rows left on finished plans" "$OUT" "Still assigned to a finished plan: #1, #6"
 
-mkdir -p "$GREPO/.superpowers/sdd/inc3"
-printf '# SDD ledger — plan: docs/superpowers/plans/inc3.md\n' > "$GREPO/.superpowers/sdd/inc3/progress.md"
+mkdir -p "$GREPO/.forge/sdd/inc3"
+printf '# SDD ledger — plan: docs/superpowers/plans/inc3.md\n' > "$GREPO/.forge/sdd/inc3/progress.md"
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: an assigned plan with a ledger resumes" "$OUT" "Resume \`docs/superpowers/plans/inc3.md\` with dr-forge:resume-execution."
-rm -rf "$GREPO/.superpowers/sdd/inc3"
+rm -rf "$GREPO/.forge/sdd/inc3"
 
 bash "$HERE/../scripts/register" set "$GREG" 5 planned --assigned docs/superpowers/specs/rev-design.md
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
@@ -673,7 +673,7 @@ MREPO="$TMP/roadmap"
 git init -q -b main "$MREPO"
 MD="$MREPO/docs/superpowers"
 mkdir -p "$MD/plans" "$MD/specs" "$MD/registers"
-printf '.superpowers/\n' > "$MREPO/.gitignore"
+printf '.forge/\n' > "$MREPO/.gitignore"
 : > "$MD/specs/shop-design.md"
 : > "$MD/specs/billing-design.md"
 cat > "$MD/plans/billing.md" <<'PLAN'

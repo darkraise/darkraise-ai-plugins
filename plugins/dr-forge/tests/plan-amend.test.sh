@@ -72,7 +72,7 @@ Print `hello NAME`.
 
 Print `hello NAME` twice.
 EOF
-WS="$REPO/.superpowers/sdd/plan"
+WS="$REPO/.forge/sdd/plan"
 LEDGER="$WS/amendments.md"
 
 entry() { # entry <file> <heading> <old> <new>
@@ -173,7 +173,7 @@ has "injected Execution line: names the rule" "$out" "New text adds a line that 
 # A linked worktree session must not amend the primary checkout's plan: the
 # worktree's task-brief would never see the amendment.
 git add -A && git commit -qm 'test: seed' && git worktree add -q "$TMP/wt"
-amendments="$REPO/.superpowers/sdd/plan/amendments.md"
+amendments="$REPO/.forge/sdd/plan/amendments.md"
 before_amend=$(cat "$amendments" 2>/dev/null)
 (cd "$TMP/wt" && bash "$AMEND" "$REPO/docs/plan.md" "$REPO/b1.md") >/dev/null 2>&1
 check "primary plan from a linked worktree: refused" "$?" "2"

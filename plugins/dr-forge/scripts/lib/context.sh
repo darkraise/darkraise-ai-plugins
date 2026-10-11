@@ -6,6 +6,8 @@
 # writes a system entry with subtype compact_boundary. A schema change must
 # degrade the verdict to unknown, never produce a wrong number.
 
+. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
+
 # Auto-compaction fires at about 93% of the effective window; the budget sits
 # one worst-case task's growth below that, so a task in flight always lands.
 # The final phase (final review, its one fix wave, finishing) grows far less
@@ -269,8 +271,9 @@ ctx_plan_budget() {
   echo "$plan"
 }
 
-# The primary checkout's root: a worktree's .superpowers lives with the
-# checkout that owns the repository, so every session logs to one file.
+# The primary checkout's root: a worktree's .forge/ (.superpowers/ in a pre-2.0
+# checkout) lives with the checkout that owns the repository, so every session
+# logs to one file.
 ctx_primary_root() {
   local common
   common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
@@ -280,15 +283,16 @@ ctx_primary_root() {
 # ctx_log_observation TOKENS — append one row, and never fail the caller: the
 # budget line is printed whether or not the observation is recorded.
 #
-# The log lives inside .superpowers/sdd/ because that directory self-ignores
-# (scripts/sdd-workspace writes * into its .gitignore). Only this repository's
-# root .gitignore lists .superpowers/, and an untracked-but-not-ignored file
+# The log lives inside .forge/sdd/ (.superpowers/sdd/ in a pre-2.0 checkout)
+# because that directory self-ignores (scripts/sdd-workspace writes * into its
+# .gitignore). Only this repository's root .gitignore lists the state
+# directory, and an untracked-but-not-ignored file
 # would enter scripts/lib/task-state.sh's review snapshot, invalidating a Codex
 # review, and would block initial execution's clean-worktree check.
 ctx_log_observation() {
   local primary base sid
   primary=$(ctx_primary_root) || return 0
-  base="$primary/.superpowers/sdd"
+  base="$(forge_dir state "$primary")/sdd"
   mkdir -p "$base" 2>/dev/null || return 0
   [ -f "$base/.gitignore" ] || printf '*\n' > "$base/.gitignore" 2>/dev/null || return 0
   sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
@@ -381,7 +385,7 @@ ctx_line() {
 ctx_observations() {
   local primary log
   primary=$(ctx_primary_root) || return 0
-  log="$primary/.superpowers/sdd/budget-log.tsv"
+  log="$(forge_dir state "$primary")/sdd/budget-log.tsv"
   [ -f "$log" ] || return 0
   tr -d '\r' < "$log" | sort -s -t $'\t' -k4,4 -k1,1 | awk -F'\t' '
     $3 ~ /^task-brief:[0-9]+$/ && $4 != "" {

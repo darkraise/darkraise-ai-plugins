@@ -3,7 +3,8 @@
 # finishing, next program sub-project or roadmap epic, a milestone audit, or
 # nothing; for a design draft: its
 # next step — as a "## Next session" block, and write the same block into the
-# primary checkout's .superpowers/handoff/latest.md.
+# primary checkout's .forge/handoff/latest.md (.superpowers/handoff/ in a
+# pre-2.0 checkout).
 #
 # Sessions end by pasting this block verbatim, so what comes next is computed
 # here rather than remembered by the model: small executors reliably forget to
@@ -139,10 +140,10 @@ fi
 
 if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
-  status_line="Unplanned work: the notes in \`.superpowers/handoff/latest.md\` are the authority."
+  status_line="Unplanned work: the notes in \`$(forge_dir_rel state "$primary")/handoff/latest.md\` are the authority."
   next_line=$next_action
   launch_cmd=$(launch_for "$phase")
-  prompt="Continue the unplanned work recorded in \`.superpowers/handoff/latest.md\`: $next_action"
+  prompt="Continue the unplanned work recorded in \`$(forge_dir_rel state "$primary")/handoff/latest.md\`: $next_action"
   if [ "$root" != "$primary" ]; then
     prompt="$prompt First enter the existing worktree \`$root\`."
   fi
@@ -151,7 +152,7 @@ elif [ "$draft" -eq 1 ]; then
   status_line="Design in progress: \`$rel\` is the authority."
   next_line=$next_action
   launch_cmd=$(launch_for design)
-  prompt="Continue from \`$rel\` (the authority): $next_action Read \`.superpowers/handoff/latest.md\` first."
+  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$(forge_dir_rel state "$primary")/handoff/latest.md\` first."
 else
   tasks=$(plan_tasks "$plan")
   [ -n "$tasks" ] || fail 3 "no tasks in ${plan} (no heading matching 'Task N')"
@@ -167,7 +168,7 @@ else
   launch_cmd=$(execution_launch "$execution")
   skill=$(execution_skill "$execution")
 
-  ledger_file="$root/.superpowers/sdd/$slug/progress.md"
+  ledger_file="$(forge_dir state "$root")/sdd/$slug/progress.md"
   ledger_note="no ledger at \`$ledger_file\`"
   ledger_text=""
   done_tasks=""
@@ -419,7 +420,7 @@ block=$(
 )
 printf '%s\n' "$block"
 
-handoff="$primary/.superpowers/handoff/latest.md"
+handoff="$(forge_dir state "$primary")/handoff/latest.md"
 today=$(date -u +%Y-%m-%d)
 write_handoff() {
   mkdir -p "$(dirname "$handoff")" || return 1

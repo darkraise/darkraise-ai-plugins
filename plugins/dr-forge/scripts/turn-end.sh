@@ -29,7 +29,9 @@ transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
 stamp="${HOME:-}/.claude/dr-forge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 [ -f "$stamp" ] || exit 0
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
-[ -d "$root/.superpowers/sdd" ] || exit 0
+. "${SCRIPT_DIR}/lib/forge-dir.sh"
+sdd="$(forge_dir state "$root")/sdd"
+[ -d "$sdd" ] || exit 0
 . "${SCRIPT_DIR}/lib/in-flight.sh"
 # Background work this session started that is still listed (lib/in-flight.sh):
 # no finished notification yet, or an agent that reported but left work of its
@@ -80,7 +82,7 @@ while IFS= read -r candidate; do
     ledger=$candidate clean=0
   fi
   break
-done < <(find "$root/.superpowers/sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
+done < <(find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
 [ -n "$ledger" ] || exit 0
 
 plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r')

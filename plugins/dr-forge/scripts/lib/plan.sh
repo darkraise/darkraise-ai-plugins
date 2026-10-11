@@ -2,6 +2,8 @@
 # and repo-audit, so every reader agrees on what a task, the header and an
 # amendment are. Sourced; defines functions only.
 
+. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
+
 _PLAN_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # CommonMark fence rule, the one scripts/validate-repository.mjs uses: a fence
@@ -321,7 +323,7 @@ plan_ledger() {
   local want top file named got
   want=$(plan_repo_canon "$1") || return 0
   top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || return 0
-  file="$top/.superpowers/sdd/$(basename "$1" .md)/progress.md"
+  file="$(forge_dir state "$top")/sdd/$(basename "$1" .md)/progress.md"
   [ -f "$file" ] || return 0
   named=$(ledger_plan "$file")
   [ -n "$named" ] || return 0
@@ -415,8 +417,8 @@ plan_amendments_file() {
   local root slug
   root=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || return 0
   slug=$(basename "$1" .md)
-  [ -s "$root/.superpowers/sdd/$slug/amendments.md" ] \
-    && printf '%s\n' "$root/.superpowers/sdd/$slug/amendments.md"
+  [ -s "$(forge_dir state "$root")/sdd/$slug/amendments.md" ] \
+    && printf '%s\n' "$(forge_dir state "$root")/sdd/$slug/amendments.md"
   return 0
 }
 
