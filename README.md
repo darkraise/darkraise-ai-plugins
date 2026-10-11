@@ -226,8 +226,9 @@ follows your system's light or dark theme.
 
 ### Minimize to a band
 
-**Minimize** (`m`) folds the cockpit into a two-line band, and **Expand** opens
-it again. The choice is saved, so the next session opens the same way. The band
+**Minimize** (`m`) closes the pane and draws the cockpit as a two-line band
+above the prompt, and **Expand** opens the pane again. The choice is saved, so
+the next session opens the same way. The band
 keeps the three readings with their pace, plus the agents, shells and branch.
 
 <p align="center">
@@ -252,7 +253,7 @@ keeps the three readings with their pace, plus the agents, shells and branch.
 | `r` | **Resume** | Outside a dr-superpowers session, queues the prompt that resumes a handoff under three days old. |
 | `c` | **Compact** | Runs a compaction. |
 | `s` | **Settings** | Opens the settings view; `b` goes back. |
-| `m` | **Minimize** | Folds the pane into the band. |
+| `m` | **Minimize** | Closes the pane for the band above the prompt. |
 
 The hotkeys work while the pane has the keyboard. From the prompt:
 

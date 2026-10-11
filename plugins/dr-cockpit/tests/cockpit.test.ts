@@ -125,6 +125,8 @@ type World = {
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
   opened?: string[]
+  /** Each pane the plugin closes, by id. */
+  closed?: string[]
   isPaneShut?: boolean
   /** The Claude Code release the engine reports; absent, `$.session.version()` fails. */
   version?: string
@@ -176,6 +178,10 @@ function world(on: On, w: World) {
   on('ui.open', (_$, e) => {
     w.opened?.push(e.id)
     return { value: w.open ?? { isPlaced: true } }
+  })
+  on('ui.close', (_$, e) => {
+    w.closed?.push(e.id)
+    return { value: undefined } as never
   })
   on('session.compact', (_$, e) => ({ messages: e.messages }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -664,9 +670,10 @@ describe('minimized band', () => {
   })
 
   for (const surface of SURFACES) {
-    test(`Minimize and Expand save the layout on ${surface}`, async ($, on) => {
+    test(`Minimize closes the pane and saves the layout on ${surface}`, async ($, on) => {
       const writes: [string, unknown][] = []
-      world(on, { tokens: 284_000 })
+      const closed: string[] = []
+      world(on, { tokens: 284_000, closed })
       on('config.set', (_$, e) => {
         writes.push([e.key, e.value])
         return { value: e.value }
@@ -674,6 +681,7 @@ describe('minimized band', () => {
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       const full = await $.ui.mount({ ...PANE, surface })
       await full.press({ key: 'pane-minimize' })
+      expect(closed).toEqual(['dr-cockpit'])
       await full.unmount()
       const inline = await $.ui.mount({ ...INLINE, surface })
       expect(await inline.find({ key: 'pane-minimize' })).toBeUndefined()
@@ -682,6 +690,133 @@ describe('minimized band', () => {
         ['dr-cockpit.layout', 'compact'],
         ['dr-cockpit.layout', 'full'],
       ])
+    })
+
+    test(`draws the band above the prompt when minimized on ${surface}`, { options: { layout: 'compact' } }, async ($, on) => {
+      world(on, SIGNED_IN)
+      signedIn(on)
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+      await $.session.measure(MEASURE)
+      const band = await $.ui.mount({ ...BAND, surface })
+      expect(await band.find({ key: 'band-expand' })).toBeDefined()
+      const drawn = JSON.stringify(await band.drawn())
+      expect(drawn).toContain('me@example.com')
+      expect(drawn).toContain('5h')
+    })
+
+    test(`Expand on the band above the prompt opens the pane on ${surface}`, { options: { layout: 'compact' } }, async ($, on) => {
+      const writes: [string, unknown][] = []
+      const opened: string[] = []
+      world(on, { tokens: 284_000, opened })
+      on('config.set', (_$, e) => {
+        writes.push([e.key, e.value])
+        return { value: e.value }
+      })
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+      // Left on the settings view, as closing the settings pane by hand leaves it.
+      await $.command.run({ ...COCKPIT, args: 'settings' })
+      opened.length = 0
+      const docking = await $.ui.mount({ ...BAND, surface, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+      await docking.press({ key: 'band-expand' })
+      expect(opened).toEqual(['dr-cockpit'])
+      await docking.unmount()
+      const pane = await $.ui.mount({ ...PANE, surface })
+      expect(await pane.find({ type: 'Text', text: 'Settings' })).toBeUndefined()
+      await pane.unmount()
+      const main = await $.ui.mount({ ...BAND, surface, viewport: { columns: 100, rows: 50, isFullscreen: false } })
+      await main.press({ key: 'band-expand' })
+      expect(writes).toEqual([
+        ['dr-cockpit.layout', 'auto'],
+        ['dr-cockpit.layout', 'full'],
+      ])
+    })
+
+    test(`draws nothing above the prompt while expanded on ${surface}`, async ($, on) => {
+      world(on, { tokens: 284_000 })
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+      const band = await $.ui.mount({ ...BAND, surface })
+      expect(await band.find({ key: 'band-expand' })).toBeUndefined()
+    })
+  }
+
+  test('leaves the slot above the prompt to a survey', { options: { layout: 'compact' } }, async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal' })
+    expect(await band.find({ key: 'band-expand' })).toBeUndefined()
+  })
+
+  test('offers no Minimize where no band is drawn above the prompt', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'mobile' })
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+    expect(await ui.find({ key: 'pane-minimize' })).toBeUndefined()
+  })
+
+  test('a minimized session opens no pane and closes one left up', { options: { layout: 'compact' } }, async ($, on) => {
+    const opened: string[] = []
+    const closed: string[] = []
+    world(on, { tokens: 284_000, opened, closed })
+    await $.session.start(START)
+    await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
+    expect(opened).toEqual([])
+    expect(closed).toEqual(['dr-cockpit'])
+  })
+
+  // Saving a setting reloads the mod, which starts the session again.
+  test('a setting saved from a minimized cockpit keeps its settings open', { options: { layout: 'compact' } }, async ($, on) => {
+    const closed: string[] = []
+    world(on, { tokens: 284_000, closed })
+    await $.command.run({ ...COCKPIT, args: 'settings' })
+    await $.session.start(START)
+    expect(closed).toEqual([])
+  })
+
+  test('a minimized session with no pane up closes nothing', { options: { layout: 'compact' } }, async ($, on) => {
+    const opened: string[] = []
+    const closed: string[] = []
+    world(on, { tokens: 284_000, opened, closed, isPaneShut: true })
+    await $.session.start(START)
+    await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
+    expect(opened).toEqual([])
+    expect(closed).toEqual([])
+  })
+
+  test('keeps the repo reading fresh while minimized', { options: { layout: 'compact' } }, async ($, on) => {
+    world(on, { ...SIGNED_IN, isPaneShut: true })
+    signedIn(on)
+    await $.session.start(START)
+    await $.session.measure(MEASURE)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /⎇ feat\/pane\*/ })).toBeDefined()
+  })
+
+  test('/cockpit expands a minimized cockpit', { options: { layout: 'compact' } }, async ($, on) => {
+    const writes: [string, unknown][] = []
+    const opened: string[] = []
+    world(on, { tokens: 284_000, opened })
+    on('config.set', (_$, e) => {
+      writes.push([e.key, e.value])
+      return { value: e.value }
+    })
+    await $.command.run(COCKPIT)
+    expect(opened).toEqual(['dr-cockpit'])
+    expect(writes).toEqual([['dr-cockpit.layout', 'auto']])
+  })
+
+  for (const [layout, want] of [
+    ['compact', ['dr-cockpit']],
+    ['auto', []],
+  ] as const) {
+    test(`Back from the settings ${want.length > 0 ? 'closes the pane' : 'keeps the pane'} with layout ${layout}`, { options: { layout } }, async ($, on) => {
+      const closed: string[] = []
+      world(on, { tokens: 284_000, closed })
+      await $.command.run({ ...COCKPIT, args: 'settings' })
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      await ui.press({ key: 'settings-back' })
+      expect(closed).toEqual([...want])
     })
   }
 
