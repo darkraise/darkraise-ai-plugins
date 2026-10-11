@@ -1,0 +1,181 @@
+// dr-forge's settings: their schema (config/schema.mjs), the values in
+// ~/.dr-forge/config.json, and the environment variable a key names, which wins
+// over both. The first command on a machine imports the pre-2.0 settings once.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import SCHEMA from "../../config/schema.mjs";
+
+export class SettingError extends Error {}
+
+// A pre-2.0 environment name still read when the new one is unset.
+const LEGACY_ENV = { DR_FORGE_BUDGET: "DR_SUPERPOWERS_BUDGET" };
+const USAGE = "usage: forge-config get KEY | get --json | set KEY VALUE | unset KEY";
+
+function homeOf(env) {
+  return env.HOME || os.homedir();
+}
+
+export function configPath(env = process.env) {
+  return path.join(homeOf(env), ".dr-forge", "config.json");
+}
+
+// A value as the file holds it: exactly the schema's type.
+export function isValid(spec, value) {
+  switch (spec.type) {
+    case "boolean": return typeof value === "boolean";
+    case "number": return typeof value === "number" && Number.isFinite(value)
+      && (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max);
+    case "enum": return typeof value === "string" && spec.values.includes(value);
+    case "string": return typeof value === "string";
+    default: return false;
+  }
+}
+
+// A value as a command line or an environment variable spells it; undefined when it does not fit.
+export function fromText(spec, text) {
+  const value = spec.type === "boolean" ? (text === "true" ? true : text === "false" ? false : undefined)
+    : spec.type === "number" ? (text.trim() === "" ? undefined : Number(text))
+    : text;
+  return value !== undefined && isValid(spec, value) ? value : undefined;
+}
+
+// The file's object, or null when it does not exist. Anything else unreadable throws.
+export function readFile(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`${file} is not valid JSON; fix or remove it`);
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error(`${file} must hold a JSON object`);
+  return data;
+}
+
+function writeFile(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`);
+  fs.renameSync(temp, file);
+}
+
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function need(key) {
+  if (!Object.hasOwn(SCHEMA, key)) throw new SettingError(`unknown setting ${key}`);
+  return SCHEMA[key];
+}
+
+export function resolve(env = process.env, warn = message => process.stderr.write(`forge-config: ${message}\n`)) {
+  const file = configPath(env);
+  const data = readFile(file) ?? {};
+  const values = {};
+  for (const [key, spec] of Object.entries(SCHEMA)) {
+    const name = spec.env === undefined ? undefined : env[spec.env] ? spec.env : LEGACY_ENV[spec.env];
+    const raw = name === undefined ? undefined : env[name];
+    if (raw !== undefined && raw !== "") {
+      const value = fromText(spec, raw);
+      if (value !== undefined) { values[key] = value; continue; }
+      warn(`${name}=${raw} is not a valid ${key}; ignored`);
+    }
+    if (key in data) {
+      if (isValid(spec, data[key])) { values[key] = data[key]; continue; }
+      warn(`${key} in ${file} is not valid; ignored`);
+    }
+    values[key] = spec.default;
+  }
+  return values;
+}
+
+export function setValue(key, text, env = process.env) {
+  const spec = need(key);
+  const value = fromText(spec, text);
+  if (value === undefined) throw new SettingError(`${text} is not a valid ${key}`);
+  const file = configPath(env);
+  const data = readFile(file) ?? {};
+  if (value === spec.default) delete data[key];
+  else data[key] = value;
+  writeFile(file, data);
+  return value;
+}
+
+export function unsetValue(key, env = process.env) {
+  need(key);
+  const file = configPath(env);
+  const data = readFile(file) ?? {};
+  delete data[key];
+  writeFile(file, data);
+}
+
+// Once per machine, while ~/.dr-forge/config.json does not exist: dr-cockpit's
+// options from the Claude settings file and the darkmem mapping from
+// ~/.dr-superpowers/config.json. The old files stay in place.
+export function importLegacy(env = process.env) {
+  const file = configPath(env);
+  if (fs.existsSync(file)) return false;
+  const data = {};
+  const claudeDir = env.CLAUDE_CONFIG_DIR || path.join(homeOf(env), ".claude");
+  const options = readJson(path.join(claudeDir, "settings.json"))?.pluginConfigs?.["dr-cockpit@darkraise"]?.options;
+  if (options && typeof options === "object") {
+    for (const [key, spec] of Object.entries(SCHEMA)) {
+      if (key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
+    }
+  }
+  const darkmem = readJson(path.join(homeOf(env), ".dr-superpowers", "config.json"))?.darkmem;
+  if (darkmem && typeof darkmem === "object" && !Array.isArray(darkmem)) data.darkmem = darkmem;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.import`;
+  fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`);
+  try {
+    // A hard link creates the file only if nobody did first, so of two first
+    // runs at once exactly one import lands, whole.
+    fs.linkSync(temp, file);
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  } finally {
+    fs.rmSync(temp, { force: true });
+  }
+}
+
+export function main(argv, env = process.env, out = process.stdout) {
+  const [command, ...rest] = argv;
+  try {
+    importLegacy(env);
+    if (command === "get" && rest.length === 1 && rest[0] === "--json") {
+      out.write(`${JSON.stringify(resolve(env))}\n`);
+      return 0;
+    }
+    if (command === "get" && rest.length === 1) {
+      need(rest[0]);
+      out.write(`${resolve(env)[rest[0]]}\n`);
+      return 0;
+    }
+    if (command === "set" && rest.length === 2) { setValue(rest[0], rest[1], env); return 0; }
+    if (command === "unset" && rest.length === 1) { unsetValue(rest[0], env); return 0; }
+    process.stderr.write(`${USAGE}\n`);
+    return 2;
+  } catch (error) {
+    process.stderr.write(`forge-config: ${error.message}\n`);
+    return error instanceof SettingError ? 2 : 1;
+  }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = main(process.argv.slice(2));
+}

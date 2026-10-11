@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# forge-config: environment over file over default, set/unset, refusals, and
+# the one-time import of the pre-2.0 settings.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CMD="$HERE/../scripts/forge-config"
+command -v node > /dev/null 2>&1 || { echo "forge-config tests: node is required but not on PATH" >&2; exit 2; }
+
+pass=0 fail=0
+check() { # check <name> <got> <want>
+  if [ "$2" = "$3" ]; then pass=$((pass + 1))
+  else printf 'FAIL - %s\n       got:  [%s]\n       want: [%s]\n' "$1" "$2" "$3"; fail=$((fail + 1)); fi
+}
+
+TMP="$(mktemp -d)"
+if command -v cygpath > /dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+trap 'rm -rf "$TMP"' EXIT
+unset CLAUDE_CONFIG_DIR DR_FORGE_BUDGET DR_SUPERPOWERS_BUDGET
+fc() { bash "$CMD" "$@" 2> "$TMP/stderr"; }
+fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dr-forge/config.json"; }
+
+# --- defaults, set, get, unset ---
+fresh a
+check "default" "$(fc get warnAt)" "80"
+check "first run writes the file" "$(cat "$FILE" | tr -d ' \n')" "{}"
+fc set warnAt 70; check "set: exit 0" "$?" "0"
+check "set then get" "$(fc get warnAt)" "70"
+fc set layout compact
+check "get --json" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.warnAt, v.layout, v.openAtStart)')" "70 compact true"
+fc set warnAt 80
+check "a default value is not stored" "$(node -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))).join(","))' "$FILE")" "layout"
+fc unset layout
+check "unset" "$(fc get layout)" "auto"
+
+# --- refusals leave the file unchanged ---
+before=$(cat "$FILE")
+fc set nope 1; check "unknown key: exit 2" "$?" "2"
+fc set warnAt 500; check "out of range: exit 2" "$?" "2"
+fc set layout tiles; check "not an option: exit 2" "$?" "2"
+fc set guardAttribution maybe; check "not a boolean: exit 2" "$?" "2"
+fc get; check "usage: exit 2" "$?" "2"
+fc get constructor; check "an inherited name is unknown: exit 2" "$?" "2"
+fc unset toString; check "unset of an inherited name: exit 2" "$?" "2"
+check "refusals change nothing" "$(cat "$FILE")" "$before"
+
+# --- environment over file ---
+fc set handoffTokens 300000
+check "file value" "$(fc get handoffTokens)" "300000"
+check "DR_FORGE_BUDGET wins" "$(DR_FORGE_BUDGET=400000 fc get handoffTokens)" "400000"
+check "pre-2.0 DR_SUPERPOWERS_BUDGET applies" "$(DR_SUPERPOWERS_BUDGET=450000 fc get handoffTokens)" "450000"
+check "an invalid override is ignored" "$(DR_FORGE_BUDGET=junk fc get handoffTokens)" "300000"
+check "and warned about" "$(grep -c 'DR_FORGE_BUDGET' "$TMP/stderr")" "1"
+
+# --- a file that is not JSON is refused, not overwritten ---
+printf 'not json' > "$FILE"
+fc set warnAt 70; check "bad file: exit 1" "$?" "1"
+check "bad file kept" "$(cat "$FILE")" "not json"
+
+# --- one-time import ---
+fresh b
+mkdir -p "$HOME/.claude" "$HOME/.dr-superpowers"
+printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"compact","warnAt":80,"breakdownRows":"x"}}}}' > "$HOME/.claude/settings.json"
+printf '%s' '{"darkmem":{"url":"http://d.test","api_key_env":"DM_KEY","repos":{"/r":{"project":"p"}}}}' > "$HOME/.dr-superpowers/config.json"
+fc get layout > /dev/null
+DM='{"url":"http://d.test","api_key_env":"DM_KEY","repos":{"/r":{"project":"p"}}}'
+check "import: options and darkmem" "$(node -e 'const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(JSON.stringify(v))' "$FILE")" "{\"layout\":\"compact\",\"darkmem\":$DM}"
+fc set warnAt 70
+fc unset warnAt
+fc set notifyDetail brief
+check "set and unset keep the darkmem mapping whole" "$(node -e 'console.log(JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).darkmem))' "$FILE")" "$DM"
+printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"full"}}}}' > "$HOME/.claude/settings.json"
+check "import runs once" "$(fc get layout)" "compact"
+
+# --- CLAUDE_CONFIG_DIR names the settings to import ---
+fresh c
+mkdir -p "$TMP/alt"
+printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"notifyDetail":"brief"}}}}' > "$TMP/alt/settings.json"
+check "import from CLAUDE_CONFIG_DIR" "$(CLAUDE_CONFIG_DIR="$TMP/alt" fc get notifyDetail)" "brief"
+
+# --- two first runs at once: exactly one import lands, whole ---
+fresh d
+mkdir -p "$TMP/c1" "$TMP/c2"
+printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"compact"}}}}' > "$TMP/c1/settings.json"
+printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"full","warnAt":70}}}}' > "$TMP/c2/settings.json"
+CLAUDE_CONFIG_DIR="$TMP/c1" bash "$CMD" get layout > /dev/null 2>&1 &
+p1=$!
+CLAUDE_CONFIG_DIR="$TMP/c2" bash "$CMD" get layout > /dev/null 2>&1 &
+p2=$!
+wait "$p1" "$p2"
+case $(tr -d ' \n' < "$FILE") in '{"layout":"compact"}'|'{"layout":"full","warnAt":70}') whole=yes ;; *) whole=no ;; esac
+check "concurrent first runs: one whole import" "$whole" "yes"
+check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dr-forge" | grep -c '\.import$')" "0"
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]
