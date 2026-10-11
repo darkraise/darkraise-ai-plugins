@@ -66,8 +66,8 @@ import {
   writesGitText,
 } from './lib'
 import type { BandInput, Run, Section, TrackPart } from './lib'
-import { SCHEMA, resolveSettings, settingProblems, settingWritten } from './config'
-import type { SettingValue, SettingsFile } from './config'
+import { SCHEMA, importedSettings, resolveSettings, schemaRows, settingProblems, settingWritten } from './config'
+import type { SettingRow, SettingValue, SettingsFile } from './config'
 import {
   discordBody,
   excerpt,
@@ -109,6 +109,7 @@ const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
 const STORE_MENTION = 'notifyMention'
+const STORE_IMPORTED = 'webhookImported'
 // How many context readings the trend line keeps.
 const TREND_LENGTH = 40
 // The colors the context breakdown cycles through, largest category first.
@@ -659,23 +660,23 @@ export const register: Register = on => {
 
     if ((await read($, view)) === 'settings') {
       // Each press saves to ~/.dr-forge/config.json and puts the value in force, so the rows below always show what is saved.
-      const set = (key: keyof Options, value: SettingValue) => setOption($, key, value)
+      const set = (key: string, value: SettingValue) => setOption($, key, value)
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
           <Text>{label.padEnd(15)}</Text>
           {controls}
         </Box>
       )
-      const toggle = (key: keyof Options, label: string, isOn: boolean) =>
+      const toggle = (key: string, label: string, isOn: boolean) =>
         row(`set-${key}`, label, button(`set-${key}-toggle`, isOn ? '● On' : '○ Off', () => set(key, !isOn), { isMain: isOn, isOff: !isOn }))
-      const choices = <T extends string>(key: keyof Options, label: string, all: readonly T[], chosen: T) =>
+      const choices = <T extends string>(key: string, label: string, all: readonly T[], chosen: T) =>
         row(`set-${key}`, label, ...all.map(choice => button(`set-${key}-${choice}`, choice, () => set(key, choice), { isMain: chosen === choice, isOff: chosen !== choice })))
       const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={INDENT}>
           {names.map(name => button(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
         </Box>
       )
-      const number = (key: keyof Options, label: string, value: string, onLess: () => unknown, onMore: () => unknown) =>
+      const number = (key: string, label: string, value: string, onLess: () => unknown, onMore: () => unknown) =>
         row(
           `set-${key}`,
           label,
@@ -711,74 +712,45 @@ export const register: Register = on => {
           </Box>
         )
       const edit = (key: 'url' | 'mention') => update($, notifier, now => ({ ...now, editing: key, error: null }))
-      const notifyRows = (
-        <Box key="set-notify" flexDirection="column">
-          <Text bold>
-            Notifications <Text dimColor>(Discord)</Text>
-          </Text>
-          <Box key="set-notify-rows" flexDirection="column" paddingLeft={INDENT}>
-            {notes.editing === 'url' && canType
-              ? row('set-notify-url', 'Webhook', field('url', 'https://discord.com/api/webhooks/…', value => saveWebhook($, value)))
-              : row(
-                  'set-notify-url',
-                  'Webhook',
-                  notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
-                  notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from the environment</Text>,
-                  notes.url !== null && button('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
-                  !notes.isFromEnv && canType && button('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
-                  !notes.isFromEnv && notes.url !== null && button('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
-                  !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it from a terminal: /cockpit notify url</Text>,
-                )}
-            {notes.last !== null && (
-              <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
-                {' '.repeat(16)}
-                {notes.last.isError ? '✗ ' : '✓ '}
-                {notes.last.text}
-              </Text>
-            )}
-            {notes.editing === 'mention' && canType
-              ? row('set-notify-mention', 'Mention', field('mention', 'your Discord user id', value => saveMention($, value)))
-              : row(
-                  'set-notify-mention',
-                  'Mention',
-                  <Text key="set-notify-mention-value" dimColor={notes.mention === null}>
-                    {notes.mention === null ? 'nobody ' : `${notes.mention.slice(0, 10)}… `}
-                  </Text>,
-                  canType && button('set-notify-mention-edit', notes.mention === null ? 'Set' : 'Change', () => edit('mention')),
-                )}
-            <Text key="set-notify-on">Send on</Text>
-            {chips(
-              'set-notify-kind',
-              NOTIFY_KINDS,
-              kind => S.kinds.includes(kind as NotifyKind),
-              kind => kindLabel(kind as NotifyKind),
-              kind => set('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
-            )}
-            {number(
-              'notifyAfter',
-              'Done after',
-              o.notifyAfter > 0 ? `${o.notifyAfter}s` : 'any',
-              () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter > 60 ? -60 : -15, 0, 3600)),
-              () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter >= 60 ? 60 : 15, 0, 3600)),
-            )}
-            {number(
-              'notifyAskAfter',
-              'Ask after',
-              `${o.notifyAskAfter}s`,
-              () => set('notifyAskAfter', stepped(o.notifyAskAfter, -10, 0, 600)),
-              () => set('notifyAskAfter', stepped(o.notifyAskAfter, 10, 0, 600)),
-            )}
-            {choices('notifyDetail', 'Detail', ['full', 'brief'] as const, S.isBrief ? 'brief' : 'full')}
-          </Box>
+      const webhookRows = (
+        <Box key="set-notify-webhook" flexDirection="column">
+          {notes.editing === 'url' && canType
+            ? row('set-notify-url', 'Webhook', field('url', 'https://discord.com/api/webhooks/…', value => saveWebhook($, value)))
+            : row(
+                'set-notify-url',
+                'Webhook',
+                notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
+                notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from the environment</Text>,
+                notes.url !== null && button('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
+                !notes.isFromEnv && canType && button('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
+                !notes.isFromEnv && notes.url !== null && button('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
+                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it from a terminal: /cockpit notify url</Text>,
+              )}
+          {notes.last !== null && (
+            <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
+              {' '.repeat(16)}
+              {notes.last.isError ? '✗ ' : '✓ '}
+              {notes.last.text}
+            </Text>
+          )}
+          {notes.editing === 'mention' && canType
+            ? row('set-notify-mention', 'Mention', field('mention', 'your Discord user id', value => saveMention($, value)))
+            : row(
+                'set-notify-mention',
+                'Mention',
+                <Text key="set-notify-mention-value" dimColor={notes.mention === null}>
+                  {notes.mention === null ? 'nobody ' : `${notes.mention.slice(0, 10)}… `}
+                </Text>,
+                canType && button('set-notify-mention-edit', notes.mention === null ? 'Set' : 'Change', () => edit('mention')),
+              )}
         </Box>
       )
 
-      return (
-        <Box flexDirection="column">
-          <Text bold>Settings</Text>
-          <Box flexDirection="column" paddingLeft={INDENT}>
-            {toggle('openAtStart', 'Show at start', o.openAtStart)}
-            {choices('layout', 'Layout', ['auto', 'full', 'compact'] as const, o.layout)}
+      const custom: Record<string, RenderChildren> = {
+        openAtStart: toggle('openAtStart', 'Show at start', o.openAtStart),
+        layout: choices('layout', 'Layout', ['auto', 'full', 'compact'] as const, o.layout),
+        sections: (
+          <Box key="set-sections-block" flexDirection="column">
             <Text key="set-sections">Sections</Text>
             {/* Under their label, wrapping to the pane's width. */}
             {chips(
@@ -788,40 +760,109 @@ export const register: Register = on => {
               name => name,
               name => set('sections', sectionsToggled(o.shown, name as Section)),
             )}
-            {number(
-              'handoffTokens',
-              'Handoff budget',
-              o.handoffTokens > 0 ? kTokens(o.handoffTokens) : 'auto',
-              () => set('handoffTokens', stepped(o.handoffTokens, -HANDOFF_STEP, 0, MAX_HANDOFF)),
-              () => set('handoffTokens', stepped(o.handoffTokens, HANDOFF_STEP, 0, MAX_HANDOFF)),
-            )}
-            {number(
-              'warnAt',
-              'Warn at',
-              `${o.warnAt}%`,
-              () => set('warnAt', stepped(o.warnAt, -5, 5, 95)),
-              () => set('warnAt', stepped(o.warnAt, 5, 5, 95)),
-            )}
-            {number(
-              'limitAlertAt',
-              'Limit alert at',
-              o.limitAlertAt > 0 ? `${o.limitAlertAt}%` : 'off',
-              () => set('limitAlertAt', stepped(o.limitAlertAt, -5, 0, 100)),
-              () => set('limitAlertAt', stepped(o.limitAlertAt, 5, 0, 100)),
-            )}
-            {number(
-              'breakdownRows',
-              'Context rows',
-              String(o.breakdownRows),
-              () => set('breakdownRows', stepped(o.breakdownRows, -1, 0, MAX_BREAKDOWN_ROWS)),
-              () => set('breakdownRows', stepped(o.breakdownRows, 1, 0, MAX_BREAKDOWN_ROWS)),
-            )}
-            {toggle('nudgeModel', 'Handoff note', o.nudgeModel)}
-            {toggle('guardAttribution', 'Attr. guard', o.guardAttribution)}
           </Box>
-          {notifyRows}
+        ),
+        breakdownRows: number(
+          'breakdownRows',
+          'Context rows',
+          String(o.breakdownRows),
+          () => set('breakdownRows', stepped(o.breakdownRows, -1, 0, MAX_BREAKDOWN_ROWS)),
+          () => set('breakdownRows', stepped(o.breakdownRows, 1, 0, MAX_BREAKDOWN_ROWS)),
+        ),
+        guardAttribution: toggle('guardAttribution', 'Attr. guard', o.guardAttribution),
+        handoffTokens: number(
+          'handoffTokens',
+          'Handoff budget',
+          o.handoffTokens > 0 ? kTokens(o.handoffTokens) : 'auto',
+          () => set('handoffTokens', stepped(o.handoffTokens, -HANDOFF_STEP, 0, MAX_HANDOFF)),
+          () => set('handoffTokens', stepped(o.handoffTokens, HANDOFF_STEP, 0, MAX_HANDOFF)),
+        ),
+        warnAt: number(
+          'warnAt',
+          'Warn at',
+          `${o.warnAt}%`,
+          () => set('warnAt', stepped(o.warnAt, -5, 5, 95)),
+          () => set('warnAt', stepped(o.warnAt, 5, 5, 95)),
+        ),
+        nudgeModel: toggle('nudgeModel', 'Handoff note', o.nudgeModel),
+        limitAlertAt: number(
+          'limitAlertAt',
+          'Limit alert at',
+          o.limitAlertAt > 0 ? `${o.limitAlertAt}%` : 'off',
+          () => set('limitAlertAt', stepped(o.limitAlertAt, -5, 0, 100)),
+          () => set('limitAlertAt', stepped(o.limitAlertAt, 5, 0, 100)),
+        ),
+        notifyOn: (
+          <Box key="set-notify-on-block" flexDirection="column">
+            <Text key="set-notify-on">Send on</Text>
+            {chips(
+              'set-notify-kind',
+              NOTIFY_KINDS,
+              kind => S.kinds.includes(kind as NotifyKind),
+              kind => kindLabel(kind as NotifyKind),
+              kind => set('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
+            )}
+          </Box>
+        ),
+        notifyAfter: number(
+          'notifyAfter',
+          'Done after',
+          o.notifyAfter > 0 ? `${o.notifyAfter}s` : 'any',
+          () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter > 60 ? -60 : -15, 0, 3600)),
+          () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter >= 60 ? 60 : 15, 0, 3600)),
+        ),
+        notifyAskAfter: number(
+          'notifyAskAfter',
+          'Ask after',
+          `${o.notifyAskAfter}s`,
+          () => set('notifyAskAfter', stepped(o.notifyAskAfter, -10, 0, 600)),
+          () => set('notifyAskAfter', stepped(o.notifyAskAfter, 10, 0, 600)),
+        ),
+        notifyDetail: choices('notifyDetail', 'Detail', ['full', 'brief'] as const, S.isBrief ? 'brief' : 'full'),
+      }
+      const typed = schemaRows(SCHEMA, (await read($, settings)) ?? {}, new Set(Object.keys(custom)))
+      const drawTyped = (one: SettingRow) =>
+        one.kind === 'toggle'
+          ? toggle(one.key, one.title, one.value === true)
+          : one.kind === 'choices'
+            ? choices(one.key, one.title, one.values, String(one.value))
+            : one.kind === 'stepper'
+              ? number(
+                  one.key,
+                  one.title,
+                  String(one.value),
+                  () => set(one.key, stepped(Number(one.value), -one.step, one.min, one.max)),
+                  () => set(one.key, stepped(Number(one.value), one.step, one.min, one.max)),
+                )
+              : row(`set-${one.key}`, one.title, <Text key={`set-${one.key}-value`} dimColor>{`${String(one.value) || '(empty)'} · forge-config set ${one.key}`}</Text>)
+      const groups = [...new Set(Object.values(SCHEMA).map(spec => spec.group))]
+
+      return (
+        <Box flexDirection="column">
+          <Text bold>Settings</Text>
+          {groups.map(group => (
+            <Box key={`set-group-${group}`} flexDirection="column">
+              {group === 'Notifications' ? (
+                <Text bold>
+                  Notifications <Text dimColor>(Discord)</Text>
+                </Text>
+              ) : (
+                <Text bold>{group}</Text>
+              )}
+              <Box key={`set-group-${group}-rows`} flexDirection="column" paddingLeft={INDENT}>
+                {group === 'Notifications' && webhookRows}
+                {Object.entries(SCHEMA)
+                  .filter(([, spec]) => spec.group === group)
+                  .map(([key]) => custom[key] ?? typed.filter(one => one.key === key).map(drawTyped))}
+              </Box>
+            </Box>
+          ))}
           <Text dimColor>Saved to ~/.dr-forge/config.json.</Text>
-          {S.settingProblems.map((problem, index) => <Text key={`set-problem-${index}`} color="yellow">⚠ {problem}</Text>)}
+          {S.settingProblems.map((problem, index) => (
+            <Text key={`set-problem-${index}`} color="yellow">
+              ⚠ {problem}
+            </Text>
+          ))}
           <Box key="settings-actions">
             {button(
               'settings-back',
@@ -2343,10 +2384,49 @@ async function applySettings($: EngineInterface, file: SettingsFile) {
   applyNotify(liveFrom(values as Partial<Options>))
 }
 
-/** Reads ~/.dr-forge/config.json into force; a missing or unreadable file means the defaults. */
+/** The first run: dr-cockpit's options and dr-superpowers' darkmem mapping, written to the new file. */
+async function importSettings($: EngineInterface, path: string): Promise<SettingsFile> {
+  const claude = await $.settings.read({ source: 'user' }).catch(() => ({}))
+  const home = path.slice(0, -'/.dr-forge/config.json'.length)
+  const old = await $.fs
+    .read(`${home}/.dr-superpowers/config.json`)
+    .then(text => JSON.parse(String(text)) as unknown)
+    .catch(() => null)
+  const file = importedSettings(SCHEMA, claude, old)
+  await $.fs.write(path, `${JSON.stringify(file, null, 2)}\n`).catch(() => undefined)
+  return file
+}
+
+/** Once per machine: dr-cockpit's Discord webhook and mention, from its store file into this plugin's store. */
+async function importWebhook($: EngineInterface) {
+  if ((await $.store.get(STORE_IMPORTED)) === true) return
+  await $.store.set(STORE_IMPORTED, true)
+  if ((await $.store.get(STORE_URL)) !== undefined) return
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home ? `${home.replace(/[\\/]+$/, '')}/.claude` : '')
+  if (!configDir) return
+  const dir = `${configDir}/plugins/store`
+  const entry = (await $.fs.list(dir).catch(() => [])).find(one => one.name.startsWith('dr-cockpit_darkraise-') && one.name.endsWith('.json'))
+  if (entry === undefined) return
+  const old = await $.fs
+    .read(`${dir}/${entry.name}`)
+    .then(text => JSON.parse(String(text)) as Record<string, unknown>)
+    .catch(() => null)
+  if (old === null) return
+  if (typeof old.notifyUrl === 'string' && isDiscordWebhook(old.notifyUrl)) await $.store.set(STORE_URL, old.notifyUrl)
+  if (typeof old.notifyMention === 'string') await $.store.set(STORE_MENTION, old.notifyMention)
+}
+
+/** Reads ~/.dr-forge/config.json into force, importing the pre-2.0 settings on the first run. */
 async function loadSettings($: EngineInterface) {
   const path = await configFile($)
-  await applySettings($, (path === null ? {} : await readSettingsFile($, path)) ?? {})
+  if (path === null) return applySettings($, {})
+  let file = await readSettingsFile($, path)
+  if (file !== null && Object.keys(file).length === 0 && !(await $.fs.exists(path).catch(() => false))) {
+    file = await importSettings($, path)
+  }
+  await applySettings($, file ?? {})
+  await importWebhook($).catch(() => undefined)
 }
 
 /** Saves one setting to ~/.dr-forge/config.json and puts it in force, saying why if it could not; resolves whether it was saved. */

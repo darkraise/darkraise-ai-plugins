@@ -120,6 +120,40 @@ export function importedSettings(schema: Schema, claudeSettings: unknown, oldFor
   return file
 }
 
+/** One settings-view row drawn from the schema. */
+export type SettingRow = {
+  key: string
+  group: string
+  title: string
+  kind: 'toggle' | 'choices' | 'stepper' | 'text'
+  value: SettingValue
+  values: readonly string[]
+  min: number
+  max: number
+  step: number
+}
+
+/** A row for each setting the view has no control of its own for, in schema order. */
+export function schemaRows(
+  schema: Schema,
+  values: Readonly<Record<string, SettingValue>>,
+  custom: ReadonlySet<string>,
+): SettingRow[] {
+  return Object.entries(schema)
+    .filter(([key]) => !custom.has(key))
+    .map(([key, spec]) => ({
+      key,
+      group: spec.group,
+      title: spec.title,
+      kind: spec.type === 'boolean' ? 'toggle' : spec.type === 'enum' ? 'choices' : spec.type === 'number' ? 'stepper' : 'text',
+      value: values[key] ?? spec.default,
+      values: spec.values ?? [],
+      min: spec.min ?? 0,
+      max: spec.max ?? Number.MAX_SAFE_INTEGER,
+      step: spec.step ?? 1,
+    }))
+}
+
 function objectAt(value: unknown, key: string): Record<string, unknown> | undefined {
   if (value === null || typeof value !== 'object') return undefined
   const inner = (value as Record<string, unknown>)[key]

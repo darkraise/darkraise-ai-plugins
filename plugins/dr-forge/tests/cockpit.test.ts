@@ -53,7 +53,7 @@ import {
   redact,
 } from '../hooks/cockpit/notify'
 import type { Schema } from '../hooks/cockpit/config'
-import { SCHEMA, importedSettings, isValidSetting, resolveSettings, settingProblems, settingWritten } from '../hooks/cockpit/config'
+import { SCHEMA, importedSettings, isValidSetting, resolveSettings, schemaRows, settingProblems, settingWritten } from '../hooks/cockpit/config'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -690,6 +690,115 @@ describe('settings', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     expect(await ui.find({ type: 'Text', text: /warnAt in ~\/\.dr-forge\/config\.json is not valid; ignored/ })).toBeDefined()
+  })
+
+  // The control each setting is drawn with; a schema key missing here, or a
+  // control the view stops drawing, fails the test.
+  const CONTROL: Record<string, string> = {
+    openAtStart: 'set-openAtStart-toggle',
+    layout: 'set-layout-auto',
+    sections: 'set-section-account',
+    breakdownRows: 'set-breakdownRows-more',
+    guardAttribution: 'set-guardAttribution-toggle',
+    handoffTokens: 'set-handoffTokens-more',
+    warnAt: 'set-warnAt-more',
+    nudgeModel: 'set-nudgeModel-toggle',
+    limitAlertAt: 'set-limitAlertAt-more',
+    notifyOn: 'set-notify-kind-ask',
+    notifyAfter: 'set-notifyAfter-more',
+    notifyAskAfter: 'set-notifyAskAfter-more',
+    notifyDetail: 'set-notifyDetail-full',
+  }
+
+  test('draws every setting under its schema group', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect(Object.keys(CONTROL).sort()).toEqual(Object.keys(SCHEMA).sort())
+    for (const key of Object.values(CONTROL)) expect(await ui.find({ key })).toBeDefined()
+    for (const group of ['Cockpit', 'Context']) expect(await ui.find({ type: 'Text', text: group })).toBeDefined()
+    expect(await ui.find({ key: 'set-group-Notifications' })).toBeDefined()
+  })
+
+  const STORE_FILE = '/home/me/.claude/plugins/store/dr-cockpit_darkraise-abc123.json'
+  const OLD_FORGE = '/home/me/.dr-superpowers/config.json'
+  const DARKMEM = { url: 'http://d.test', repos: {} }
+  const OLD_FILES = {
+    [STORE_FILE]: JSON.stringify({ notifyUrl: 'https://discord.com/api/webhooks/1/abc', notifyMention: '42' }),
+    [OLD_FORGE]: JSON.stringify({ darkmem: DARKMEM }),
+  }
+  /** A file system that keeps what the plugin writes, over these starting files. */
+  function disk(on: On, written: Record<string, string>, files: Record<string, string>) {
+    on('fs.read', (_$, e) => {
+      const text = written[e.path] ?? files[e.path]
+      if (text === undefined) throw new Error('ENOENT')
+      return { value: text }
+    })
+    on('fs.exists', (_$, e) => ({ value: e.path in written || e.path in files }))
+  }
+  /** The plugin's store, kept in memory where the test can read it; the test's own `$` has no store noun. */
+  function memory(on: On, entries: Record<string, unknown> = {}) {
+    const kept = new Map(Object.entries(entries))
+    on('store.get', (_$, e) => ({ value: kept.get(e.key) }))
+    on('store.set', (_$, e) => {
+      kept.set(e.key, e.value)
+      return { value: undefined }
+    })
+    on('store.delete', (_$, e) => {
+      kept.delete(e.key)
+      return { value: undefined }
+    })
+    on('store.keys', () => ({ value: [...kept.keys()] }))
+    return kept
+  }
+  const legacy = (warnAt: number) => ({ pluginConfigs: { 'dr-cockpit@darkraise': { options: { warnAt } } } })
+  // world's fs.list names the store file through `files`.
+  const LISTED = { [STORE_FILE]: { text: '' } }
+
+  test('the first session imports the cockpit options, darkmem and the webhook', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    disk(on, written, OLD_FILES)
+    const store = memory(on)
+    await $.session.start(START)
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70, darkmem: DARKMEM })
+    expect(store.get('notifyUrl')).toBe('https://discord.com/api/webhooks/1/abc')
+    expect(store.get('notifyMention')).toBe('42')
+  })
+
+  test('a later session imports nothing again', async ($, on) => {
+    const written: Record<string, string> = {}
+    const w: World = { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED }
+    world(on, w)
+    disk(on, written, OLD_FILES)
+    const store = memory(on)
+    await $.session.start(START)
+    w.settings = legacy(60)
+    store.delete('notifyUrl')
+    await $.session.start(START)
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70, darkmem: DARKMEM })
+    expect(store.get('notifyUrl')).toBeUndefined()
+  })
+
+  test('a webhook already set is kept', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    disk(on, written, OLD_FILES)
+    const store = memory(on)
+    store.set('notifyUrl', 'https://discord.com/api/webhooks/2/mine')
+    await $.session.start(START)
+    expect(store.get('notifyUrl')).toBe('https://discord.com/api/webhooks/2/mine')
+  })
+
+  test('a settings file forge-config wrote first is kept, and the webhook still comes over', async ($, on) => {
+    const written: Record<string, string> = { [CONFIG]: JSON.stringify({ layout: 'full' }) }
+    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    disk(on, written, OLD_FILES)
+    const store = memory(on)
+    await $.session.start(START)
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ layout: 'full' })
+    expect(store.get('notifyUrl')).toBe('https://discord.com/api/webhooks/1/abc')
   })
 })
 
@@ -1880,6 +1989,16 @@ describe('settings file', () => {
     const darkmem = { url: 'http://d.test', api_key_env: 'DARKMEM_API_KEY', repos: {} }
     expect(importedSettings(FAKE, claude, { darkmem })).toEqual({ layout: 'compact', darkmem })
     expect(importedSettings(FAKE, {}, null)).toEqual({})
+  })
+
+  test('a row for each setting without a control of its own, in schema order', () => {
+    const rows = schemaRows(FAKE, { layout: 'full', warnAt: 70 }, new Set(['layout']))
+    expect(rows.map(row => [row.key, row.kind, row.value])).toEqual([
+      ['warnAt', 'stepper', 70],
+      ['handoffTokens', 'stepper', 0],
+      ['nudgeModel', 'toggle', true],
+    ])
+    expect(rows[0]).toMatchObject({ group: 'Context', min: 1, max: 99, step: 1 })
   })
 
   test('every default in the real schema fits its own type', () => {
