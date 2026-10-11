@@ -15,3 +15,4 @@ One line per plan that landed, so project-status can tell a merged plan from one
 - 2026-09-30 `docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md` — merged into `main` at 40c28a1
 - 2026-10-02 `docs/superpowers/plans/2026-10-01-dr-superpowers-tier-eval.md` — merged into `main` at 8cc81d2
 - 2026-10-02 `docs/superpowers/plans/2026-10-02-dr-superpowers-ladder-update.md` — merged into `main` at 127bdc3
+- 2026-10-12 `docs/superpowers/plans/2026-10-11-dr-forge-merge.md` — merged into `main` at 69ea95d
