@@ -73,10 +73,19 @@ is edited by a human or by an approved bootstrap, never silently.
 
 ## Where `<state>` and `<docs>` are
 
-`<state>` is `.forge/` and `<docs>` is `docs/forge/`, except in a repository that
+`<state>` and `<docs>` are repository-relative names: `<state>` is `.forge/` and
+`<docs>` is `docs/forge/`, except in a repository that
 has `.superpowers/` or `docs/superpowers/` and not the new directory: there the
 old one stays in use, for writing as well as reading, so a pre-2.0 checkout never
 splits across both. Every script resolves its paths through
 `scripts/lib/forge-dir.sh`; a skill resolves them with
 `bash <plugin-root>/scripts/forge-path state|docs [RELATIVE]` before it reads or
 writes, never by spelling either path.
+
+`forge-path` prints the absolute path in the checkout it runs in. For a path
+written under another root, such as `<primary checkout>/<state>/…` or
+`<worktree>/<state>/…`, run it from that root:
+`(cd "<root>" && bash <plugin-root>/scripts/forge-path state handoff/latest.md)`.
+Where the path is written into a file or onto a command line (a roadmap `Spec`
+or `Register` cell, `.gitattributes`, a script argument), write the
+repository-relative form: the resolved path minus the checkout's root.
