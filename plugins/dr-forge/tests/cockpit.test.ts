@@ -137,6 +137,8 @@ type World = {
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
   opened?: string[]
+  /** The rows each pane open asked for; undefined asks for the full pane. */
+  openedRows?: (number | undefined)[]
   /** Each pane the plugin closes, by id. */
   closed?: string[]
   isPaneShut?: boolean
@@ -196,6 +198,7 @@ function world(on: On, w: World) {
   }) as never)
   on('ui.open', (_$, e) => {
     w.opened?.push(e.id)
+    w.openedRows?.push(e.rows)
     return { value: w.open ?? { isPlaced: true } }
   })
   on('ui.close', (_$, e) => {
@@ -867,7 +870,8 @@ describe('minimized band', () => {
     test(`Minimize closes the pane and saves the layout on ${surface}`, async ($, on) => {
       const written: Record<string, string> = {}
       const closed: string[] = []
-      world(on, { tokens: 284_000, closed, written, config: {} })
+      const openedRows: (number | undefined)[] = []
+      world(on, { tokens: 284_000, closed, written, openedRows, config: {} })
       await $.session.start(START)
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       const full = await $.ui.mount({ ...PANE, surface })
@@ -877,8 +881,11 @@ describe('minimized band', () => {
       await full.unmount()
       const inline = await $.ui.mount({ ...INLINE, surface })
       expect(await inline.find({ key: 'pane-minimize' })).toBeUndefined()
+      openedRows.length = 0
       await inline.press({ key: 'band-expand' })
       expect(JSON.parse(written[CONFIG] ?? '{}').layout).toBe('full')
+      // Saving does not reload the mod, so the pane opened for the band's rows is asked for the full one.
+      expect(openedRows).toEqual([undefined])
     })
 
     test(`draws the band above the prompt when minimized on ${surface}`, async ($, on) => {
@@ -954,7 +961,7 @@ describe('minimized band', () => {
     expect(closed).toEqual(['dr-forge'])
   })
 
-  // Saving a setting reloads the mod, which starts the session again.
+  // Saving a setting writes the file and updates the settings atom.
   test('a setting saved from a minimized cockpit keeps its settings open', async ($, on) => {
     const closed: string[] = []
     world(on, { tokens: 284_000, closed, config: { layout: 'compact' } })

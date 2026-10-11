@@ -667,7 +667,7 @@ export const register: Register = on => {
       const set = (key: string, value: SettingValue) => setOption($, key, value)
       const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) =>
         button(key, label, onPress, { ...look, isCompact: true })
-      const row =(key: string, label: string, ...controls: RenderChildren[]) => (
+      const row = (key: string, label: string, ...controls: RenderChildren[]) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
           <Text>{label.padEnd(15)}</Text>
           {controls}
@@ -907,7 +907,14 @@ export const register: Register = on => {
     // Minimize shuts the pane for the band above the prompt and Expand opens
     // it again; each writes the layout setting, so the next session opens the
     // same way. A band drawn in the pane itself only changes the layout.
-    if (isCompact) return drawBand($, e, () => setOption($, 'layout', e.props.placement === 'inline' ? 'full' : 'auto'))
+    // Saving the layout no longer reloads the mod, so an inline pane, opened for the
+    // band's rows, is asked again for the full pane.
+    if (isCompact) {
+      const isInline = e.props.placement === 'inline'
+      return drawBand($, e, async () => {
+        if ((await setOption($, 'layout', isInline ? 'full' : 'auto')) && isInline) await $.ui.open(paneFor('full'))
+      })
+    }
 
     // Each section is a card: a rounded frame in its own color, its title and
     // headline on the first line, its rows below, and a row's details two cells in.
@@ -2411,7 +2418,9 @@ async function importSettings($: EngineInterface, path: string): Promise<Setting
     .then(text => JSON.parse(String(text)) as unknown)
     .catch(() => null)
   const file = importedSettings(SCHEMA, claude, old)
-  await $.fs.write(path, `${JSON.stringify(file, null, 2)}\n`).catch(() => undefined)
+  // The mod has no exclusive create: a file saved while the reads above ran is kept.
+  if (await $.fs.exists(path).catch(() => false)) return (await readSettingsFile($, path)) ?? file
+  await $.fs.write(path,`${JSON.stringify(file, null, 2)}\n`).catch(() => undefined)
   return file
 }
 
