@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { ConfigValue, EngineInterface, Register, RenderChildren, Timer, TurnUsage } from 'claude-code'
+import type { ConfigValue, EngineInterface, Register, RenderChildren, RenderInput, Timer, TurnUsage } from 'claude-code'
 
 import type {
   CockpitAccount,
@@ -196,7 +196,9 @@ export const register: Register = (on, options) => {
   const layout = layoutSetting === 'full' || layoutSetting === 'compact' ? layoutSetting : 'auto'
   const tuning: Tuning = { handoffTokens, nudgeModel, warnAt: warnShare(warnPercent) }
   const shown = sectionsFrom(sectionList)
-  const paneArgs = { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, ...(layout === 'full' ? {} : { rows: COMPACT_ROWS }) }
+  const paneArgs = paneFor(layout)
+  // Minimized, the pane is shut and the band sits above the prompt in its place.
+  const isMinimized = layout === 'compact'
   // The settings' autoCompactWindow, read at the start and after each main
   // turn rather than on every tool call.
   let compactWindow: number | undefined
@@ -220,8 +222,13 @@ export const register: Register = (on, options) => {
     await readRun($)
     await readVersion($)
     await readRemote($)
-    // Unasked, the engine seats the pane from 144 columns and holds it below.
-    if (openAtStart) void $.ui.open(paneArgs)
+    // Saving a setting reloads the mod, so a pane minimized a moment ago can
+    // still be up here, and so can the settings a minimized cockpit is being
+    // changed from. Unasked, the engine seats the pane from 144 columns and
+    // holds it below.
+    if (isMinimized) {
+      if ((await read($, view)) !== 'settings') await shutPane($)
+    } else if (openAtStart) void $.ui.open(paneArgs)
 
     return next(e)
   })
@@ -233,7 +240,11 @@ export const register: Register = (on, options) => {
     await update($, view, () => (wantsSettings ? 'settings' : 'cockpit'))
     await readAccount($)
     // The settings take the keyboard and as many rows as they need.
-    const opened = await $.ui.open(wantsSettings ? { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, focus: true } : paneArgs)
+    const opened = wantsSettings
+      ? await $.ui.open({ id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, focus: true })
+      : isMinimized
+        ? await expand($, e.presentation.isFullscreen === true)
+        : await $.ui.open(paneArgs)
     await refreshDetail($)
 
     // A surface that seats no panes (an older desktop) holds it undrawn: say
@@ -265,7 +276,7 @@ export const register: Register = (on, options) => {
         })
       }
     }
-    if (await isPaneUp($)) await refreshDetail($)
+    if (isMinimized || (await isPaneUp($))) await refreshDetail($)
 
     return done
   })
@@ -328,7 +339,7 @@ export const register: Register = (on, options) => {
     await update($, remote, now => ({ ...now, clients: [...now.clients.filter(one => one.id !== e.clientId), { id: e.clientId, surface: e.surface }] }))
     // A desktop session's start can come before its window joins: show the
     // pane once it has, unless the person closed it.
-    if (openAtStart && e.surface === 'desktop' && !S.isClosedByPerson && !(await isPaneUp($))) void $.ui.open(paneArgs)
+    if (openAtStart && !isMinimized && e.surface === 'desktop' && !S.isClosedByPerson && !(await isPaneUp($))) void $.ui.open(paneArgs)
     return joined
   }).catch(($, e, next) => next(e))
 
@@ -532,7 +543,12 @@ export const register: Register = (on, options) => {
     const isDesktop = Svg !== undefined
     const now = await $.clock.now()
     const room = e.props.bodyColumns
-    const isCompact = layout === 'compact' || (layout === 'auto' && e.props.placement === 'inline')
+    const isCompact = isMinimized || (layout === 'auto' && e.props.placement === 'inline')
+    // Only these two surfaces draw the band above the prompt.
+    const canMinimize = e.surface === 'terminal' || e.surface === 'desktop'
+    const minimize = async () => {
+      if (await setOption($, 'layout', 'compact')) await $.ui.close({ id: PANE })
+    }
     const head = await read($, budget)
     const spend = await read($, usage)
     const rows = await read($, breakdown)
@@ -602,7 +618,7 @@ export const register: Register = (on, options) => {
         {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: RESUME_PROMPT, asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
         {button('pane-settings', 'Settings', () => update($, view, () => 'settings'), { hotkey: 's' })}
-        {!isDesktop && !isCompact && button('pane-minimize', 'Minimize', () => setOption($, 'layout', 'compact'), { hotkey: 'm' })}
+        {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
       </Box>
     )
 
@@ -772,7 +788,16 @@ export const register: Register = (on, options) => {
           {notifyRows}
           <Text dimColor>Saved to your user settings, like /config.</Text>
           <Box key="settings-actions">
-            {button('settings-back', 'Back', () => update($, view, () => 'cockpit'), { hotkey: 'b' })}
+            {button(
+              'settings-back',
+              'Back',
+              async () => {
+                await update($, view, () => 'cockpit')
+                // Minimized, the settings were all the pane was open for.
+                if (isMinimized) await $.ui.close({ id: PANE })
+              },
+              { hotkey: 'b' },
+            )}
           </Box>
         </Box>
       )
@@ -793,198 +818,12 @@ export const register: Register = (on, options) => {
     const who = await read($, account)
     const tint = termColor(who?.color)
     const billing = billingLabel(who?.billing ?? null)
-    const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
     const picture = (key: string, source: string, alt: string) => Svg !== undefined && <Svg key={key} source={source} alt={alt} />
 
-    // Minimize folds the pane into the band and Expand opens it again; each
-    // writes the layout setting, so the next session opens the same way.
-    const setLayout = (to: string) => setOption($, 'layout', to)
-    if (isCompact) {
-      // The band: the account on the top rule, then the readings with their
-      // pace, then what runs beside the turn and where. Each line shrinks on
-      // its own until it fits.
-      const where = await read($, place)
-      const turnsNow = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
-      const band: BandInput = {
-        cwd: where?.cwd ?? null,
-        root: where?.root ?? null,
-        home: where?.home ?? null,
-        repo: git,
-        context: head === null ? null : { tokens: head.tokens, limit: head.limit, window: head.window },
-        turnsLeft: turnsNow,
-        limits: GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind)),
-        agents: running.length,
-        shells: { count: background.length, longest: background.reduce((most, shell) => Math.max(most, now - shell.startedAt), 0) },
-        now,
-      }
-      const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
-      const warning: Run[] = [
-        ...(blocked.length === 0
-          ? []
-          : [{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]),
-        ...(blocked.length > 0 && refused.length > 0 ? [{ text: '  ·  ', dim: true }] : []),
-        ...(refused.length === 0 ? [] : [{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]),
-      ]
-      const remoteBand: Run[] =
-        remoteNow.clients.length > 0
-          ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
-          : remoteNow.setting === 'true'
-            ? [{ text: 'Remote ○ on', color: 'green' }]
-            : [{ text: 'Remote ○ off', dim: true }]
-      const expandTo = e.props.placement === 'inline' ? 'full' : 'auto'
-
-      if (isDesktop) {
-        const w = svgWidth(room - 4)
-        const meters: BandMeter[] = [
-          ...(head === null
-            ? []
-            : [
-                {
-                  key: 'Context',
-                  percent: (head.tokens / head.limit) * 100,
-                  share: head.tokens / head.window,
-                  color: rampColor((head.tokens / head.limit) * 100),
-                  tick: head.limit / head.window,
-                  note: turnsNow === null ? [] : [{ text: `≈${turnsNow} ${turnsNow === 1 ? 'turn' : 'turns'}`, color: turnsNow <= 3 ? 'warning' : undefined }],
-                },
-              ]),
-          ...band.limits.map((limit): BandMeter => {
-            const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
-            return {
-              key: limitLabel(limit.kind),
-              percent: limit.percent,
-              share: limit.percent / 100,
-              color: rampColor(limit.percent),
-              tick: windowElapsed(limit.kind, limit.resetsAt, now),
-              note:
-                forecast === 'pace'
-                  ? [{ text: 'on pace', color: 'green' }]
-                  : typeof forecast === 'number'
-                    ? [{ text: `out in ${duration(forecast) || '<1m'}`, color: 'yellow' }]
-                    : limit.resetsAt === null
-                      ? []
-                      : [{ text: `resets ${duration(limit.resetsAt - now) || 'now'}` }],
-            }
-          }),
-        ]
-        const facts: PanelRun[] = [
-          ...(running.length === 0 ? [] : [{ text: '● ', color: 'green' }, { text: `${running.length} ${running.length === 1 ? 'agent' : 'agents'} running` }, { text: '   ' }]),
-          ...(background.length === 0
-            ? []
-            : [{ text: '$ ', color: 'yellow', mono: true }, { text: `${background.length} ${background.length === 1 ? 'shell' : 'shells'}` }, { text: ` · longest ${shellAge(band.shells.longest)}`, dim: true }, { text: '   ' }]),
-          ...(where === null ? [] : [{ text: where.root === null ? (where.cwd.split(/[\\/]/).pop() ?? where.cwd) : repoName(where.remote ?? null, where.root), bold: true }]),
-        ]
-        const chips: PanelRun[] =
-          git === null
-            ? []
-            : [
-                pill(`⎇ ${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ''}${git.behind > 0 ? ` ↓${git.behind}` : ''}`, 'magenta'),
-                ...(git.changed > 0 ? [pill(`~${git.changed} changed`, 'yellow')] : []),
-                ...(git.untracked > 0 ? [pill(`?${git.untracked} untracked`)] : []),
-              ]
-        const head0: PanelLine[] = [
-          {
-            kind: 'text',
-            left: [
-              { text: who?.email ?? 'not signed in', bold: true },
-              ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]),
-              { text: '  ' },
-              pill(remoteBand.map(run => run.text).join(''), remoteNow.clients.length > 0 || remoteNow.setting === 'true' ? 'green' : undefined),
-            ],
-          },
-        ]
-        const rest: PanelLine[] = [
-          ...(facts.length > 0 ? [{ kind: 'text', left: facts } as PanelLine] : []),
-          ...(chips.length > 0 ? [{ kind: 'chips', chips } as PanelLine] : []),
-          ...(warning.length > 0 ? [{ kind: 'text', left: warning.map(run => ({ ...run, color: run.color === undefined ? undefined : 'red' })) } as PanelLine] : []),
-        ]
-        return (
-          <Box key="band" flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
-            <Box key="band-top" flexDirection="row" alignItems="center" columnGap={1}>
-              <Box key="band-who" flexGrow={1}>
-                {picture('band-who-line', panelSvg(head0, svgWidth(room - 16)), panelText(head0))}
-              </Box>
-              {button('band-expand', 'Expand', () => setLayout(expandTo), { hotkey: 'e' })}
-            </Box>
-            {meters.length > 0 && (
-              <Box key="band-meters" paddingX={1}>
-                {picture(
-                  'band-meters-line',
-                  bandMetersSvg(meters, w - 18),
-                  meters.map(meter => [`${meter.key} ${Math.round(meter.percent)}%`, ...meter.note.map(run => run.text)].join(', ')).join('\n'),
-                )}
-              </Box>
-            )}
-            {rest.length > 0 && picture('band-rest', panelSvg(rest, w), panelText(rest))}
-          </Box>
-        )
-      }
-
-      const isFramed = room >= FRAME_MIN_COLUMNS
-      const width = isFramed ? room - 4 : room
-      const [one, two] = fitBand(band, width)
-      const row = (key: string, runs: Run[]) =>
-        isFramed ? (
-          <Text key={key} wrap="truncate-end">
-            <Text color={tint}>{'│ '}</Text>
-            {drawRuns(key, runs)}
-            {' '.repeat(Math.max(0, width - runsWidth(runs)))}
-            <Text color={tint}>{' │'}</Text>
-          </Text>
-        ) : (
-          <Text key={key} wrap="truncate-end">
-            {drawRuns(key, runs)}
-          </Text>
-        )
-      // A bare button on the top rule, so the band keeps its height.
-      const expand = <Button key="band-expand" label="Expand" plain hover={{ bold: true }} onPress={() => setLayout(expandTo)} />
-      const email = who?.email ?? ''
-      // What rides on the top rule, dropped from the end while it does not fit.
-      const tops: Run[][] = [
-        [{ text: email, bold: true }, ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]), { text: ' · ', dim: true }, ...remoteBand],
-        [{ text: email, bold: true }, { text: ' · ', dim: true }, ...remoteBand],
-        [{ text: email, bold: true }],
-        [],
-      ]
-      // "╭─ " + top + " " + dashes + " Expand ─╮"
-      const room0 = room - 3 - 1 - 1 - 6 - 3
-      const top = tops.find(runs => runsWidth(runs) <= room0 - 1) ?? []
-      const dashes = Math.max(1, room0 - runsWidth(top) - (top.length > 0 ? 0 : -1))
-      const lines = [one, two].filter(line => line.length > 0)
-
-      return (
-        <Box flexDirection="column">
-          {isFramed ? (
-            <Box key="frame-top" flexDirection="row">
-              <Text key="frame-top-left" color={tint} wrap="truncate-end">
-                {top.length > 0 ? '╭─ ' : '╭─'}
-                {top.length > 0 && drawRuns('frame-top-runs', top)}
-                {top.length > 0 ? ' ' : ''}
-                {'─'.repeat(dashes)}{' '}
-              </Text>
-              {expand}
-              <Text key="frame-top-right" color={tint}>
-                {' ─╮'}
-              </Text>
-            </Box>
-          ) : (
-            <Box key="band-head" flexDirection="row" columnGap={1}>
-              <Text key="band-email" color={tint} bold wrap="truncate-end">
-                {email}
-              </Text>
-              {expand}
-            </Box>
-          )}
-          {lines.map((line, index) => row(`band-${index + 1}`, line))}
-          {warning.length > 0 && row('band-warning', warning)}
-          {isFramed && (
-            <Text key="frame-bottom" color={tint} wrap="truncate-end">
-              {'╰' + '─'.repeat(Math.max(0, room - 2)) + '╯'}
-            </Text>
-          )}
-        </Box>
-      )
-    }
+    // Minimize shuts the pane for the band above the prompt and Expand opens
+    // it again; each writes the layout setting, so the next session opens the
+    // same way. A band drawn in the pane itself only changes the layout.
+    if (isCompact) return drawBand($, e, () => setOption($, 'layout', e.props.placement === 'inline' ? 'full' : 'auto'))
 
     // Each section is a card: a rounded frame in its own color, its title and
     // headline on the first line, its rows below, and a row's details two cells in.
@@ -1333,7 +1172,7 @@ export const register: Register = (on, options) => {
               <Text color="yellow" bold>
                 ${' '}
               </Text>
-              <Text>{clip(shell.command.split('\n')[0], Math.max(10, inner - 10))}</Text>
+              <Text>{clip(shell.command.split('\n')[0]!, Math.max(10, inner - 10))}</Text>
               <Text color="yellow"> {elapsed(now - shell.startedAt)}</Text>
             </Text>
           )),
@@ -1550,7 +1389,7 @@ export const register: Register = (on, options) => {
             })
           }
           if (breakdownShown.length > 0) {
-            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]
+            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] ?? BREAKDOWN_COLORS[0]
             const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
             lines.push({ kind: 'picture', svg: stackSvg(breakdownShown.map(row => row.tokens), breakdownShown.map((_, index) => colorOf(index)), width, 8) })
             for (const [index, row] of breakdownShown.entries()) {
@@ -1772,7 +1611,7 @@ export const register: Register = (on, options) => {
                 {drawRuns('now', nowLine(actNow, now))}
               </Text>
             </Box>
-            {button('pane-minimize', 'Minimize', () => setOption($, 'layout', 'compact'), { hotkey: 'm' })}
+            {button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
           </Box>
           {tiles.length > 0 && (
             <Box key="gauges" flexDirection="column" rowGap={1}>
@@ -1795,6 +1634,224 @@ export const register: Register = (on, options) => {
       </Box>
     )
   })
+
+  // Minimized, the band sits above the prompt in place of the pane.
+  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) =>
+    !isMinimized || e.props.hasSurvey ? next(e) : drawBand($, e, () => expand($, e.viewport?.isFullscreen === true)),
+  )
+}
+
+const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
+
+/** The minimized cockpit's band, drawn in the pane or above the prompt. */
+async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt'>, onExpand: () => unknown) {
+  const table = $.ui.resolve(e)
+  const { Box, Button, Text } = table
+  const Svg = e.surface === 'desktop' && 'Svg' in table ? table.Svg : undefined
+  const isDesktop = Svg !== undefined
+  const now = await $.clock.now()
+  const room = e.props.bodyColumns
+  const head = await read($, budget)
+  const limits = (await read($, usage))?.limits ?? []
+  const running = (await read($, spawns)).filter(one => !one.isDone)
+  const background = await read($, shells)
+  const remoteNow = await read($, remote)
+  const git = await read($, repo)
+  const refused = await read($, refusals)
+  const summary = await read($, run)
+  const who = await read($, account)
+  const tint = termColor(who?.color)
+  const billing = billingLabel(who?.billing ?? null)
+  const drawRuns = (key: string, runs: Run[]) =>
+    runs.map((one, index) => (
+      <Text key={`${key}-${index}`} color={one.color} bold={one.bold} dimColor={one.dim}>
+        {one.text}
+      </Text>
+    ))
+  const picture = (key: string, source: string, alt: string) => Svg !== undefined && <Svg key={key} source={source} alt={alt} />
+  // The band: the account on the top rule, then the readings with their
+  // pace, then what runs beside the turn and where. Each line shrinks on
+  // its own until it fits.
+  const where = await read($, place)
+  const turnsNow = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
+  const band: BandInput = {
+    cwd: where?.cwd ?? null,
+    root: where?.root ?? null,
+    home: where?.home ?? null,
+    repo: git,
+    context: head === null ? null : { tokens: head.tokens, limit: head.limit, window: head.window },
+    turnsLeft: turnsNow,
+    limits: GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind)),
+    agents: running.length,
+    shells: { count: background.length, longest: background.reduce((most, shell) => Math.max(most, now - shell.startedAt), 0) },
+    now,
+  }
+  const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
+  const warning: Run[] = [
+    ...(blocked.length === 0
+      ? []
+      : [{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]),
+    ...(blocked.length > 0 && refused.length > 0 ? [{ text: '  ·  ', dim: true }] : []),
+    ...(refused.length === 0 ? [] : [{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]),
+  ]
+  const remoteBand: Run[] =
+    remoteNow.clients.length > 0
+      ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
+      : remoteNow.setting === 'true'
+        ? [{ text: 'Remote ○ on', color: 'green' }]
+        : [{ text: 'Remote ○ off', dim: true }]
+
+  if (isDesktop) {
+    const w = svgWidth(room - 4)
+    const meters: BandMeter[] = [
+      ...(head === null
+        ? []
+        : [
+            {
+              key: 'Context',
+              percent: (head.tokens / head.limit) * 100,
+              share: head.tokens / head.window,
+              color: rampColor((head.tokens / head.limit) * 100),
+              tick: head.limit / head.window,
+              note: turnsNow === null ? [] : [{ text: `≈${turnsNow} ${turnsNow === 1 ? 'turn' : 'turns'}`, color: turnsNow <= 3 ? 'warning' : undefined }],
+            },
+          ]),
+      ...band.limits.map((limit): BandMeter => {
+        const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
+        return {
+          key: limitLabel(limit.kind),
+          percent: limit.percent,
+          share: limit.percent / 100,
+          color: rampColor(limit.percent),
+          tick: windowElapsed(limit.kind, limit.resetsAt, now),
+          note:
+            forecast === 'pace'
+              ? [{ text: 'on pace', color: 'green' }]
+              : typeof forecast === 'number'
+                ? [{ text: `out in ${duration(forecast) || '<1m'}`, color: 'yellow' }]
+                : limit.resetsAt === null
+                  ? []
+                  : [{ text: `resets ${duration(limit.resetsAt - now) || 'now'}` }],
+        }
+      }),
+    ]
+    const facts: PanelRun[] = [
+      ...(running.length === 0 ? [] : [{ text: '● ', color: 'green' }, { text: `${running.length} ${running.length === 1 ? 'agent' : 'agents'} running` }, { text: '   ' }]),
+      ...(background.length === 0
+        ? []
+        : [{ text: '$ ', color: 'yellow', mono: true }, { text: `${background.length} ${background.length === 1 ? 'shell' : 'shells'}` }, { text: ` · longest ${shellAge(band.shells.longest)}`, dim: true }, { text: '   ' }]),
+      ...(where === null ? [] : [{ text: where.root === null ? (where.cwd.split(/[\\/]/).pop() ?? where.cwd) : repoName(where.remote ?? null, where.root), bold: true }]),
+    ]
+    const chips: PanelRun[] =
+      git === null
+        ? []
+        : [
+            pill(`⎇ ${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ''}${git.behind > 0 ? ` ↓${git.behind}` : ''}`, 'magenta'),
+            ...(git.changed > 0 ? [pill(`~${git.changed} changed`, 'yellow')] : []),
+            ...(git.untracked > 0 ? [pill(`?${git.untracked} untracked`)] : []),
+          ]
+    const head0: PanelLine[] = [
+      {
+        kind: 'text',
+        left: [
+          { text: who?.email ?? 'not signed in', bold: true },
+          ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]),
+          { text: '  ' },
+          pill(remoteBand.map(run => run.text).join(''), remoteNow.clients.length > 0 || remoteNow.setting === 'true' ? 'green' : undefined),
+        ],
+      },
+    ]
+    const rest: PanelLine[] = [
+      ...(facts.length > 0 ? [{ kind: 'text', left: facts } as PanelLine] : []),
+      ...(chips.length > 0 ? [{ kind: 'chips', chips } as PanelLine] : []),
+      ...(warning.length > 0 ? [{ kind: 'text', left: warning.map(run => ({ ...run, color: run.color === undefined ? undefined : 'red' })) } as PanelLine] : []),
+    ]
+    return (
+      <Box key="band" flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
+        <Box key="band-top" flexDirection="row" alignItems="center" columnGap={1}>
+          <Box key="band-who" flexGrow={1}>
+            {picture('band-who-line', panelSvg(head0, svgWidth(room - 16)), panelText(head0))}
+          </Box>
+          <Button key="band-expand" label="Expand" hotkey="e" onPress={onExpand} />
+        </Box>
+        {meters.length > 0 && (
+          <Box key="band-meters" paddingX={1}>
+            {picture(
+              'band-meters-line',
+              bandMetersSvg(meters, w - 18),
+              meters.map(meter => [`${meter.key} ${Math.round(meter.percent)}%`, ...meter.note.map(run => run.text)].join(', ')).join('\n'),
+            )}
+          </Box>
+        )}
+        {rest.length > 0 && picture('band-rest', panelSvg(rest, w), panelText(rest))}
+      </Box>
+    )
+  }
+
+  const isFramed = room >= FRAME_MIN_COLUMNS
+  const width = isFramed ? room - 4 : room
+  const [one, two] = fitBand(band, width)
+  const row = (key: string, runs: Run[]) =>
+    isFramed ? (
+      <Text key={key} wrap="truncate-end">
+        <Text color={tint}>{'│ '}</Text>
+        {drawRuns(key, runs)}
+        {' '.repeat(Math.max(0, width - runsWidth(runs)))}
+        <Text color={tint}>{' │'}</Text>
+      </Text>
+    ) : (
+      <Text key={key} wrap="truncate-end">
+        {drawRuns(key, runs)}
+      </Text>
+    )
+  // A bare button on the top rule, so the band keeps its height.
+  const expand = <Button key="band-expand" label="Expand" plain hover={{ bold: true }} onPress={onExpand} />
+  const email = who?.email ?? ''
+  // What rides on the top rule, dropped from the end while it does not fit.
+  const tops: Run[][] = [
+    [{ text: email, bold: true }, ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]), { text: ' · ', dim: true }, ...remoteBand],
+    [{ text: email, bold: true }, { text: ' · ', dim: true }, ...remoteBand],
+    [{ text: email, bold: true }],
+    [],
+  ]
+  // "╭─ " + top + " " + dashes + " Expand ─╮"
+  const room0 = room - 3 - 1 - 1 - 6 - 3
+  const top = tops.find(runs => runsWidth(runs) <= room0 - 1) ?? []
+  const dashes = Math.max(1, room0 - runsWidth(top) - (top.length > 0 ? 0 : -1))
+  const lines = [one, two].filter(line => line.length > 0)
+
+  return (
+    <Box flexDirection="column">
+      {isFramed ? (
+        <Box key="frame-top" flexDirection="row">
+          <Text key="frame-top-left" color={tint} wrap="truncate-end">
+            {top.length > 0 ? '╭─ ' : '╭─'}
+            {top.length > 0 && drawRuns('frame-top-runs', top)}
+            {top.length > 0 ? ' ' : ''}
+            {'─'.repeat(dashes)}{' '}
+          </Text>
+          {expand}
+          <Text key="frame-top-right" color={tint}>
+            {' ─╮'}
+          </Text>
+        </Box>
+      ) : (
+        <Box key="band-head" flexDirection="row" columnGap={1}>
+          <Text key="band-email" color={tint} bold wrap="truncate-end">
+            {email}
+          </Text>
+          {expand}
+        </Box>
+      )}
+      {lines.map((line, index) => row(`band-${index + 1}`, line))}
+      {warning.length > 0 && row('band-warning', warning)}
+      {isFramed && (
+        <Text key="frame-bottom" color={tint} wrap="truncate-end">
+          {'╰' + '─'.repeat(Math.max(0, room - 2)) + '╯'}
+        </Text>
+      )}
+    </Box>
+  )
 }
 
 // What the hooks share beyond $.state: settings read at load, facts read at
@@ -2200,10 +2257,28 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
 
 // The pane's slower readings: the /context breakdown, estimated locally, and
 // the working tree's git state. Read while the pane is up, never per tool call.
-/** Writes one of the mod's own settings as /config would, saying why if refused. */
-async function setOption($: EngineInterface, key: string, value: ConfigValue) {
+/** What the pane asks the surface for under a layout: the band's rows unless it is full. */
+function paneFor(layout: string) {
+  return { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, ...(layout === 'full' ? {} : { rows: COMPACT_ROWS }) }
+}
+
+/**
+ * Opens the pane from the minimized band. Called from the person's press or
+ * command and before the setting is written, so the pane seats at any width.
+ */
+async function expand($: EngineInterface, isDocking: boolean) {
+  const to = isDocking ? 'auto' : 'full'
+  await update($, view, () => 'cockpit')
+  const opened = await $.ui.open(paneFor(to))
+  await setOption($, 'layout', to)
+  return opened
+}
+
+/** Writes one of the mod's own settings as /config would, saying why if refused; resolves whether it was saved. */
+async function setOption($: EngineInterface, key: string, value: ConfigValue): Promise<boolean> {
   const saved = await $.config.set({ key: `dr-cockpit.${key}`, value })
   if (saved.deny !== undefined) $.ui.toast(`dr-cockpit: ${key} not saved: ${saved.deny}`)
+  return saved.deny === undefined
 }
 
 async function refreshDetail($: EngineInterface) {
@@ -2331,6 +2406,15 @@ async function isPaneUp($: EngineInterface): Promise<boolean> {
     return (await $.ui.panes()).some(pane => pane.id === PANE && pane.isPlaced)
   } catch {
     return false
+  }
+}
+
+/** Closes the pane when it is open, drawn or still waiting for room. */
+async function shutPane($: EngineInterface) {
+  try {
+    if ((await $.ui.panes()).some(pane => pane.id === PANE)) await $.ui.close({ id: PANE })
+  } catch {
+    // No pane to close on this host.
   }
 }
 

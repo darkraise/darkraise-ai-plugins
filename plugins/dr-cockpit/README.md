@@ -135,11 +135,17 @@ desktop window joins the session, unless you closed it.
   and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
-**Minimize** (`m`) folds the cockpit into a band, and **Expand** on the band's
-top rule opens it again. Each saves the `layout` setting, so the next session
-opens the same way. The band is also what the pane draws above the prompt
-(`layout` `auto`, the default). Its frame takes the account's color, with the
-email, billing and Remote Control on the top rule. The first line has the
+**Minimize** (`m`) closes the pane and draws the cockpit as a band directly
+above the prompt, across the transcript's width. **Expand** on the band's top
+rule opens the pane again, and so does `/cockpit`. Each saves the `layout`
+setting, so the next session opens the same way: a minimized cockpit starts
+with the band and no pane. `/cockpit settings` still opens the settings, and
+**Back** closes them again. Minimize is offered in the terminal and the desktop
+app, the two that draw above the prompt; elsewhere a minimized cockpit shows
+nothing until `/cockpit` opens it. The band is also what a pane that is not
+docked draws (`layout` `auto`, the default). Its frame takes the account's
+color, with the email, billing and Remote Control on the top rule. The first
+line has the
 context against the handoff budget with the turns left, and the 5-hour and
 7-day limits with their pace (`on pace`, or when the window runs out before
 it resets). The second has the subagents running, the background shells with
@@ -253,7 +259,7 @@ in your user settings
 | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-superpowers` sessions. |
 | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
-| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band above the prompt. `full` or `compact`: always that one. **Minimize** sets `compact`, **Expand** sets `auto` (`full` above the prompt). |
+| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. A list written before `shells` existed leaves it out until you add it. The band always draws its own lines. |
 | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
