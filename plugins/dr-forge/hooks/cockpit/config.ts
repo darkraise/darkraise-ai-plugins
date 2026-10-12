@@ -208,7 +208,8 @@ export function shownValue(spec: SettingSpec, value: SettingValue): string {
 /** A number typed into a row: whole, with a trailing k for thousands; undefined when it does not fit the setting. */
 export function typedNumber(spec: SettingSpec, text: string): number | undefined {
   const typed = text.trim().toLowerCase()
-  const value = /^\d+(\.\d+)?k$/.test(typed) ? Number(typed.slice(0, -1)) * 1000 : /^\d+$/.test(typed) ? Number(typed) : Number.NaN
+  // At most three significant decimals before k, so rounding only removes floating-point error (1.1 * 1000 is 1100.0000000000002).
+  const value = /^\d+(\.\d{1,3}0*)?k$/.test(typed) ? Math.round(Number(typed.slice(0, -1)) * 1000) : /^\d+$/.test(typed) ? Number(typed) : Number.NaN
   return Number.isInteger(value) && isValidSetting(spec, value) ? value : undefined
 }
 

@@ -2123,6 +2123,8 @@ describe('settings rows', () => {
     expect(typedNumber(spec('warnAt'), 'many')).toBeUndefined()
     expect(typedNumber(spec('budget'), '465k')).toBe(465_000)
     expect(typedNumber(spec('budget'), '0.5K')).toBe(500)
+    expect(typedNumber(spec('budget'), '1.1k')).toBe(1_100)
+    expect(typedNumber(spec('budget'), '1.0005k')).toBeUndefined()
     expect(typedNumber(spec('compactAt'), '0')).toBe(0)
     expect(typedNumber(spec('compactAt'), '50000')).toBeUndefined()
     expect(typedNumber(spec('compactAt'), '100k')).toBe(100_000)
