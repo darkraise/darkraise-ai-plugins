@@ -18,6 +18,9 @@ has() { # has <name> <haystack> <needle>
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# finish-choice reads ~/.dr-forge/config.json; a temporary home keeps the real one out.
+export HOME="$TMP/home"
+mkdir -p "$HOME"
 export GIT_CONFIG_NOSYSTEM=1 TZ=UTC
 git init -q "$TMP/repo"
 cd "$TMP/repo"
@@ -68,6 +71,31 @@ fc get >/dev/null 2>&1
 check "clear: nothing chosen" "$?" "3"
 fc due >/dev/null 2>&1
 check "due: nothing chosen does nothing" "$?" "3"
+
+# --- the finishAction and finishTimeout settings ---
+mkdir -p "$HOME/.dr-forge" docs/plans
+for name in s r a w; do printf '# Plan\n' > "docs/plans/$name.md"; done
+fc get --plan docs/plans/s.md >/dev/null 2>&1
+check "setting ask: nothing chosen still exits 3" "$?" "3"
+printf '{"finishAction":"merge","finishTimeout":45}\n' > "$HOME/.dr-forge/config.json"
+out=$(FINISH_CHOICE_NOW=$T0 fc get --plan docs/plans/s.md)
+check "setting: get exits 0" "$?" "0"
+check "setting: get records the configured action" \
+  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .forge/sdd/s/finish.json)" "merge null setting $T0"
+has "setting: get prints the choice" "$out" '"action": "merge"'
+FINISH_CHOICE_NOW=$T0 fc arm --plan docs/plans/s.md >/dev/null
+check "setting: arm waits finishTimeout minutes" "$(jq -r '.dueAt - .armedAt' .forge/sdd/s/finish.json)" "2700"
+FINISH_CHOICE_NOW=$T0 fc arm --minutes 10 --plan docs/plans/s.md >/dev/null
+check "setting: --minutes still overrides" "$(jq -r '.dueAt - .armedAt' .forge/sdd/s/finish.json)" "600"
+fc set keep --plan docs/plans/r.md >/dev/null
+check "a recorded choice wins over the setting" "$(fc get --plan docs/plans/r.md | jq -r '[.action, (.source // "asked")] | join(" ")')" "keep asked"
+FINISH_CHOICE_NOW=$T0 fc arm --plan docs/plans/a.md >/dev/null
+check "arm with nothing chosen records the setting first" "$(jq -r '[.action, .source] | join(" ")' .forge/sdd/a/finish.json)" "merge setting"
+printf '{"finishAction":"wait"}\n' > "$HOME/.dr-forge/config.json"
+check "setting wait: recorded" "$(fc get --plan docs/plans/w.md | jq -r .action)" "wait"
+fc arm --plan docs/plans/w.md >/dev/null 2>&1
+check "setting wait: nothing to arm" "$?" "3"
+rm -f "$HOME/.dr-forge/config.json"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

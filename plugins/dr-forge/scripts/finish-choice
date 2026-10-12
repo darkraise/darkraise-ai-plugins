@@ -11,9 +11,12 @@
 #
 # Usage: finish-choice <command> [--plan PLAN_FILE] [args]
 #   set ACTION [--base BRANCH]  record the choice: merge | pr | keep | wait
-#   get                         print the file; exit 3 when nothing is chosen
-#   arm [--minutes N]           start the clock as the menu is shown (default
-#                               30); print the cron line, the due time and the
+#   get                         print the file; exit 3 when nothing is chosen.
+#                               With nothing chosen and the finishAction setting
+#                               at anything but ask, record that action first.
+#   arm [--minutes N]           start the clock as the menu is shown (default:
+#                               the finishTimeout setting, 30 unless changed);
+#                               print the cron line, the due time and the
 #                               wake prompt. Exit 3 when no action is armed:
 #                               nothing chosen, `wait`, or already answered.
 #   job ID                      record the scheduler's job id
@@ -28,6 +31,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/forge-dir.sh"
+. "$HERE/lib/forge-env.sh"
 
 usage() { sed -n '/^# Usage:/,/^# FINISH_CHOICE_NOW/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "finish-choice needs jq" >&2; exit 2; }
@@ -65,6 +69,18 @@ write() { # write <jq filter> [jq args...]: rewrite the file through the filter
   jq "$@" "$filter" <<<"$current" > "$file.tmp" && mv "$file.tmp" "$file"
 }
 need_file() { [ -s "$file" ] || { echo "no finish action chosen" >&2; exit 3; }; }
+# With nothing chosen, the finishAction setting stands in for the answer
+# (anything but ask). It is recorded like an answer, so the run keeps one
+# choice even if the setting changes while it runs; the base branch is left
+# for finishing to determine.
+from_setting() {
+  [ ! -s "$file" ] || return 0
+  local action
+  action=$(forge_setting finishAction ask)
+  valid_action "$action" || return 0
+  jq -n --arg action "$action" --argjson now "$now" \
+    '{action: $action, base: null, chosenAt: $now, source: "setting"}' > "$file"
+}
 
 case $cmd in
   set)
@@ -78,12 +94,15 @@ case $cmd in
     cat "$file"
     ;;
   get)
+    from_setting
     need_file
     cat "$file"
     ;;
   arm)
+    from_setting
     need_file
-    minutes=30
+    minutes=$(forge_setting finishTimeout 30)
+    [[ $minutes =~ ^[1-9][0-9]*$ ]] || minutes=30
     if [ $# -ge 2 ] && [ "$1" = "--minutes" ]; then minutes=$2; shift 2; fi
     [ $# -eq 0 ] && [[ $minutes =~ ^[1-9][0-9]*$ ]] || usage
     action=$(jq -r '.action' "$file")
