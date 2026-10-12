@@ -2161,8 +2161,12 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
       if ('skip' in done && typeof done.skip === 'string') throw new Error(done.skip)
       await update($, budget, () => null)
       await update($, isNudged, () => false)
-      // The compaction happened: never repeat it, even if booking it failed.
-      await autoRunCall($, bound, ['compacted'])
+      // The compaction happened: never repeat it. Unbooked, pending stays
+      // compact and no later stage would run, so stop the run instead.
+      if ((await autoRunCall($, bound, ['compacted'])) !== 0) {
+        await endUnboundRun($, bound, 'the cockpit compacted but could not book it')
+        return
+      }
       at = 'continue'
     }
     if (at === 'continue') {
@@ -2174,7 +2178,7 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
       const cleared = await $.session.id()
       if ((await autoRunCall($, cleared, ['rebind', '--to', cleared])) !== 0) {
         // The run is still bound to the session /clear ended: stop it from there.
-        await endUnboundRun($, bound)
+        await endUnboundRun($, bound, 'the cleared session could not be bound')
         return
       }
       bound = cleared
@@ -2198,6 +2202,8 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
     const code = await autoRunCall($, bound, ['failure', '--reason', `the cockpit could not ${action}: ${why}`])
     if (code === 0) scheduleAutoAct($, at, AUTO_RETRY_MS)
     else if (code === 5) await endStoppedRun($)
+    // Unbooked, nothing would retry the stage: stop rather than stall unseen.
+    else await endUnboundRun($, bound, `the cockpit could not ${action} and could not book the failure (exit ${code})`)
   }
 }
 
@@ -2209,11 +2215,10 @@ async function endStoppedRun($: EngineInterface) {
   await $.prompt.submit({ text: `The auto run stopped: ${reason}. End as reference/auto-run.md §Stopping says.`, asUser: true }).catch(() => undefined)
 }
 
-// /clear went through but the cleared session could not be bound, so the
-// state file no longer reads as this session's: stop the run as the session
-// that owned it, and say so here.
-async function endUnboundRun($: EngineInterface, owner: string) {
-  const reason = 'the cleared session could not be bound'
+// The state file cannot be trusted to record the stop (the run moved to
+// another session, or the script failed): stop the run as the session that
+// owned it, best effort, and say so here without reading the file back.
+async function endUnboundRun($: EngineInterface, owner: string, reason: string) {
   await autoRunCall($, owner, ['stop', '--reason', reason])
   await update($, autoRun, () => null)
   await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: reason, isPlain: true })

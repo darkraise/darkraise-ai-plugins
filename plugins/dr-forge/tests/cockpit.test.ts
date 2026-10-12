@@ -2719,6 +2719,24 @@ describe('auto run', () => {
     expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
   })
 
+  test('stops the run when a failure cannot be booked', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, fetches, autoRuns: [], prompts: [], isCompactVetoed: true, autoRunExits: { failure: 1 }, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.prompts?.filter(text => /could not book/.test(text))).toHaveLength(1)
+    const titles = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
+    expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
+    expect(w.autoRuns?.some(call => call.includes(' stop --reason '))).toBe(true)
+  })
+
   test('books a compaction the engine made', async ($, on) => {
     const w: World = { ...SIGNED_IN, autoRuns: [] }
     world(on, w)
