@@ -9,6 +9,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+# The gate reads ~/.dr-forge/config.json; a temporary home keeps the real one out.
+export HOME="$TMP/home"
+mkdir -p "$HOME"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -209,6 +212,34 @@ check "a connect that throws is off" "$out" \
 fresh; GATE_MS=1500 gate hang
 check "a hung connect times out" "$out" \
   "codex-gate usable=false reason=timeout review=false lane=false resets_at=- source=probe"
+
+# --- the settings switch either surface off ----------------------------------
+# codexReview and codexLane come from ~/.dr-forge/config.json. With both off
+# nothing may use Codex, so the gate answers without starting a client.
+mkdir -p "$HOME/.dr-forge"
+setting() { printf '%s\n' "$1" > "$HOME/.dr-forge/config.json"; }
+jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+setting '{"codexLane":false}'
+fresh; gate usable
+check "codexLane off closes the lane only" "$out" \
+  "codex-gate usable=true reason=ok review=true lane=false resets_at=- source=probe"
+check "the session file carries the closed lane" "$(field review)/$(field lane)" "true/false"
+setting '{"codexReview":false}'
+gate usable
+check "codexReview off closes the review seats only, from the cache too" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=true resets_at=- source=cache"
+setting '{"codexLane":false,"codexReview":false}'
+fresh; gate usable
+check "both off answers without a probe" "$out" \
+  "codex-gate usable=false reason=setting review=false lane=false resets_at=- source=setting"
+check "both off starts no client" "$(cat "$TMP/log" 2>/dev/null | grep -c connect)" "0"
+check "both off is written for the readers" "$(field usable)/$(field reason)" "false/setting"
+setting '{}'
+gate usable
+check "switching Codex back on probes again" "$out" \
+  "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=probe"
+cp "$TMP/policy.bak" "$POLICY"
+rm -f "$HOME/.dr-forge/config.json"
 
 # The quota answer is cached only until its reset time.
 fresh; gate quota

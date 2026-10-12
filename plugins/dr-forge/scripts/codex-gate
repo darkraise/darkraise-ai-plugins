@@ -11,7 +11,11 @@
 # per session; a quota answer is probed again once its reset time has passed.
 #
 # Usage: codex-gate [--refresh]
-# Output: codex-gate usable=<bool> reason=<r> review=<bool> lane=<bool> resets_at=<iso|-> source=<probe|cache>
+# Output: codex-gate usable=<bool> reason=<r> review=<bool> lane=<bool> resets_at=<iso|-> source=<probe|cache|setting>
+#
+# The codexReview and codexLane settings (scripts/forge-config) switch a surface
+# off whatever the probe says; with both off the gate answers `reason=setting`
+# without probing.
 # Exit: 0 answered, either way; 2 usage error or missing jq or node.
 set -uo pipefail
 
@@ -19,6 +23,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 POLICY="${DR_CODEX_POLICY:-$HERE/../reference/codex-plugin.json}"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
+. "$HERE/lib/forge-env.sh"
 
 die() { printf 'codex-gate: %s\n' "$1" >&2; exit 2; }
 
@@ -32,9 +37,15 @@ command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
+want_review=$(forge_setting codexReview true)
+want_lane=$(forge_setting codexLane true)
+
 usable="" reason="" resets="" epoch="" version="" source=probe
 file=$(executor_session_file codex) || file=""
-if [ "$refresh" -eq 0 ] && [ -n "$file" ] && [ -r "$file" ]; then
+if [ "$want_review" = false ] && [ "$want_lane" = false ]; then
+  usable=false reason=setting source=setting
+fi
+if [ "$source" = probe ] && [ "$refresh" -eq 0 ] && [ -n "$file" ] && [ -r "$file" ]; then
   # A unit separator, not a tab: read collapses runs of whitespace separators,
   # which would shift every field after an empty one.
   cached=$(jq -r '[(.usable | tostring), (.reason // ""), (.resets_at // ""),
@@ -45,8 +56,10 @@ if [ "$refresh" -eq 0 ] && [ -n "$file" ] && [ -r "$file" ]; then
   # expression expected" to stderr; 0 is never in the future, so it reads as
   # stale exactly as the error did.
   case "$c_epoch" in *[!0-9]*) c_epoch=0 ;; esac
-  if [ "$c_usable" = true ] \
-     || { [ "$c_usable" = false ] && { [ -z "$c_epoch" ] || [ "$c_epoch" -gt "$(date -u +%s)" ]; }; }; then
+  # An answer the settings forced says nothing about Codex itself, so it is
+  # never reused once a switch is back on.
+  if [ "$c_reason" != setting ] && { [ "$c_usable" = true ] \
+     || { [ "$c_usable" = false ] && { [ -z "$c_epoch" ] || [ "$c_epoch" -gt "$(date -u +%s)" ]; }; }; }; then
     usable=$c_usable reason=$c_reason resets=$c_resets epoch=$c_epoch version=$c_version source=cache
   fi
 fi
@@ -84,6 +97,8 @@ if [ "$usable" = true ] && [ -n "$file" ]; then
   [ "$(trust calibration)" = true ] && review=true
   [ "$(trust smoke)" = true ] && lane=true
 fi
+[ "$want_review" = true ] || review=false
+[ "$want_lane" = true ] || lane=false
 
 if [ -n "$file" ]; then
   executor_session_write codex "$(jq -cn --arg sid "$(executor_session_id)" \
