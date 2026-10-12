@@ -76,7 +76,7 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
     }
     if (model.editing === row.key && Input !== undefined) {
       return [
-        <Input key={`set-${row.key}-input`} value={String(row.value)} submitLabel="save" autoFocus onSubmit={(text: string) => act.submit(row.key, text)} />,
+        <Input key={`set-${row.key}-input`} placeholder={String(row.value)} submitLabel="save" autoFocus onSubmit={(text: string) => act.submit(row.key, text)} />,
         press(`set-${row.key}-cancel`, 'Cancel', () => act.edit(null)),
       ]
     }

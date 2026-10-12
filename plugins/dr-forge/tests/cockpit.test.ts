@@ -1256,6 +1256,10 @@ describe('settings view', () => {
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Context' })
     await ui.press({ key: 'set-warnAt-edit' })
+    // The field starts empty, so what is typed replaces the value instead of following it.
+    const field = await ui.find({ key: 'set-warnAt-input' })
+    expect(field?.props.value).toBeUndefined()
+    expect(field?.props.placeholder).toBe('80')
     await ui.input({ key: 'set-warnAt-input', text: '500', kind: 'submit' })
     expect(await ui.find({ type: 'Text', text: /Enter a whole number from 1 to 99/ })).toBeDefined()
     expect(written[CONFIG]).toBeUndefined()

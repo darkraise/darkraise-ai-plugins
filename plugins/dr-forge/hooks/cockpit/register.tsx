@@ -733,7 +733,7 @@ export const register: Register = on => {
             </Box>
           </Box>
         )
-      const edit = (key: 'url' | 'mention') => update($, notifier, now => ({ ...now, editing: key, error: null }))
+      const edit = (key: 'url' | 'mention') => openField($, `set-notify-${key}-input`, () => update($, notifier, now => ({ ...now, editing: key, error: null })))
       const webhookRows = (
         <Box key="set-notify-webhook" flexDirection="column">
           {notes.editing === 'url' && canType
@@ -831,7 +831,7 @@ export const register: Register = on => {
             const spec = SCHEMA[key]
             return spec === undefined ? undefined : save(key, steppedSetting(spec, Number(values[key] ?? spec.default), direction))
           },
-          edit: key => show({ editing: key }),
+          edit: key => (key === null ? show({ editing: null }) : openField($, `set-${key}-input`, () => show({ editing: key }))),
           submit: async (key, text) => {
             const spec = SCHEMA[key]
             if (spec === undefined) return
@@ -2486,6 +2486,17 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
     $.ui.toast(`dr-forge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
     return false
   }
+}
+
+/**
+ * Draws a field in place of the pressed button and moves the keyboard into it.
+ * autoFocus acts only when the pane takes the keys, so without the move typing
+ * reaches the prompt. The move is asked first: it waits for the field's drawing.
+ */
+async function openField($: EngineInterface, key: string, open: () => Promise<unknown>) {
+  const focusing = $.ui.focus({ requestId: PANE, key }).catch(() => undefined)
+  await open()
+  await focusing
 }
 
 /** Tells the model, once, which skill-enforced settings changed; outside a dr-forge session the change waits for one. */
