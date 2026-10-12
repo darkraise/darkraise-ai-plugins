@@ -25,6 +25,7 @@ CTX_TAIL_TASKS=2
 CTX_PLAN_PCT=150
 
 . "$(dirname "${BASH_SOURCE[0]}")/forge-env.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/auto-run.sh"
 
 ctx_jq() { "${DR_FORGE_JQ:-jq}" "$@"; }
 ctx_have_jq() { command -v "${DR_FORGE_JQ:-jq}" >/dev/null 2>&1; }
@@ -316,6 +317,29 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
+# ctx_auto_line TOKENS MODEL WIDTH — the budget line while an auto run is bound
+# to this session (reference/auto-run.md): the run's rule replaces the task
+# budget, the tail, the final-phase limit and relaxed mode. Returns 0 ok,
+# 6 compact, 5 handoff, 3 when the run cannot be read.
+ctx_auto_line() {
+  local tokens=$1 task window out verdict limit regime label
+  task=$(ctx_pinned_budget)
+  [ -n "$task" ] || task=$(ctx_budget "$2")
+  window=$(ctx_window "$2")
+  out=$(ar_verdict "$tokens" "$task" "$window" "$3") || return 3
+  read -r verdict limit regime <<<"$out"
+  label="budget (auto"
+  [ "$regime" = high ] && label="$label, high"
+  [ "$3" -gt 1 ] && label="$label, wave of $3"
+  label="$label)"
+  echo "$label: $(( (tokens + 500) / 1000 ))k of $(( (limit + 500) / 1000 ))k ($(( tokens * 100 / limit ))%) — $verdict — source: $CTX_SOURCE"
+  case $verdict in
+    compact) return 6 ;;
+    handoff) return 5 ;;
+  esac
+  return 0
+}
+
 # ctx_line [final | tail R | plan | wave W] — print the budget line; return 0 ok, 5
 # handoff, 3 unknown. With final, measure against the final-phase limit instead
 # of the task budget; tail R does the same before one of a plan's last R tasks
@@ -329,7 +353,7 @@ ctx_log_observation() {
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
   local label=budget extra=0
-  local limit=task
+  local limit=task auto=0 width=1
   [ "${1:-}" = final ] && label="budget (final)" limit=final
   if [ "${1:-}" = tail ]; then
     limit=final
@@ -339,6 +363,12 @@ ctx_line() {
   if [ "${1:-}" = wave ]; then
     label="budget (wave of ${2:-1})"
     extra=$(( (${2:-1} - 1) * CTX_TASK_MARGIN ))
+  fi
+  [ "${1:-}" = wave ] && width=${2:-1}
+  # An auto run bound to this session replaces every limit but the plan's.
+  if [ "${1:-}" != plan ]; then
+    AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
+    ar_bound && auto=1
   fi
   if [ "$limit" = task ] && [ "$(forge_setting handoffMode strict)" = relaxed ]; then
     limit=relaxed
@@ -388,6 +418,10 @@ ctx_line() {
   if [ "$found" -eq 0 ]; then echo "$label: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
   if ! tokens=$(ctx_measure "$CTX_TRANSCRIPT"); then
     echo "$label: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
+  fi
+  if [ "$auto" = 1 ]; then
+    ctx_auto_line "$tokens" "$model" "$width"
+    return
   fi
   tk=$(( (tokens + 500) / 1000 ))
   pct=$(( tokens * 100 / budget ))

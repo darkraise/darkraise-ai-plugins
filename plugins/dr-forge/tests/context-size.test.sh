@@ -529,5 +529,42 @@ check "codex only: measured line" "$out" "budget: 150k measured — unknown — 
 check "codex only: exit 3" "$status" "3"
 rm -rf "$CODEX_HOME"; unset CODEX_HOME
 
+# --- an auto run bound to this session ---
+AUTO_T="$PROJ/auto-1.jsonl"
+settings 800000
+asst 300000 > "$AUTO_T"; record auto-1 "$AUTO_T"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md >/dev/null)
+export CLAUDE_CODE_SESSION_ID=auto-1
+unset DR_FORGE_BUDGET
+run
+check "auto, unpinned: the derived budget at an 800k window" "$status:$out" "0:budget (auto): 300k of 604k (49%) — ok — source: record"
+export DR_FORGE_BUDGET=465000
+run
+check "auto: ok, exit 0" "$status:$out" "0:budget (auto): 300k of 465k (64%) — ok — source: record"
+run --plan
+check "auto: --plan keeps its own limit" "$out" "budget (plan): 300k of 680k (44%) — ok — source: record"
+run --wave 2
+check "auto: a wave reserves a task" "$out" "budget (auto, wave of 2): 300k of 325k (92%) — ok — source: record"
+asst 470000 > "$AUTO_T"
+run
+check "auto: compact, exit 6" "$status:$out" "6:budget (auto): 470k of 465k (101%) — compact — source: record"
+run --final
+check "auto: --final follows the run's rule" "$out" "budget (auto): 470k of 465k (101%) — compact — source: record"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 compacted)
+asst 400000 > "$AUTO_T"
+run
+check "auto: the first reading after a compaction settles the regime" "$out" "budget (auto, high): 400k of 720k (55%) — ok — source: record"
+asst 725000 > "$AUTO_T"
+run
+check "auto, high: compact at 90% of the window" "$status:$out" "6:budget (auto, high): 725k of 720k (100%) — compact — source: record"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 compacted)
+asst 690000 > "$AUTO_T"
+run
+check "auto: a compaction that left 85% of the window hands off" "$status:$out" "5:budget (auto, high): 690k of 720k (95%) — handoff — source: record"
+CLAUDE_CODE_SESSION_ID=auto-2 run
+check "auto: another session keeps the task budget" "$status:$out" "5:budget: 690k of 465k (148%) — handoff — source: record?"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 stop)
+unset DR_FORGE_BUDGET CLAUDE_CODE_SESSION_ID
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
