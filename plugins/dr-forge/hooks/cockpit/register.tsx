@@ -19,6 +19,7 @@ import type {
 } from '../../types'
 import {
   accountColor,
+  autoLimitFor,
   autoRunFor,
   accountKey,
   attributionIn,
@@ -606,6 +607,8 @@ export const register: Register = on => {
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
+      // A run starts, stops and changes regime through the model's own calls.
+      await trackAutoRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       // The controller writes its ledger with its own tool calls.
       if (/\.forge|\.superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
@@ -696,8 +699,15 @@ export const register: Register = on => {
       )
     }
     const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, o.tuning.warnAt) !== 'quiet'
+    const autoNow = await read($, autoRun)
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {autoNow?.active && (
+          <Text key="auto-line" color="magenta">
+            {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} compactions · ${autoNow.resumes} resumes`}
+          </Text>
+        )}
+        {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($), { hotkey: 'x' })}
         {canHandOff && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
         {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: resumePrompt(), asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
@@ -2233,6 +2243,11 @@ async function bookAutoCompaction($: EngineInterface) {
   await autoRunCall($, await $.session.id(), ['compacted'])
 }
 
+async function stopAutoRun($: EngineInterface) {
+  await autoRunCall($, await $.session.id(), ['stop', '--reason', 'owner pressed Stop auto'])
+  await trackAutoRun($)
+}
+
 // The run's ledger, its plan's tasks, and the newest handoff: read from the
 // primary checkout, S.where dr-forge keeps .forge/ (.superpowers/ before 2.0).
 async function readRun($: EngineInterface) {
@@ -2393,6 +2408,7 @@ async function readWhere($: EngineInterface) {
 // The context crossed its handoff budget: said once per crossing.
 async function onBudget($: EngineInterface, reading: { now: CockpitBudget; isPast: boolean } | undefined) {
   if (reading === undefined) return
+  if ((await read($, autoRun))?.active) return
   const { now, isPast } = reading
   if (!isPast) {
     S.isBudgetSent = false
@@ -2475,7 +2491,13 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   const tokens = figures.context.tokens
   if (tokens === undefined) return
   const window = figures.context.window
-  const limit = tuning.isRelaxed ? finalLimitFor(window, compactWindow) : budgetFor(handoffTokens, undefined, window, compactWindow)
+  const auto = await read($, autoRun)
+  const isAuto = auto !== null && auto.active
+  const limit = isAuto
+    ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
+    : tuning.isRelaxed
+      ? finalLimitFor(window, compactWindow)
+      : budgetFor(handoffTokens, undefined, window, compactWindow)
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -2496,7 +2518,8 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
     if (await read($, isNudged)) await update($, isNudged, () => false)
     return reading
   }
-  if (!nudgeModel || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
+  // An auto run compacts at its limit rather than handing off: no note.
+  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
   await update($, isNudged, () => true)
   const note = `dr-forge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
   try {

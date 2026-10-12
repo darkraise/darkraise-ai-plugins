@@ -870,3 +870,13 @@ export function endsOnSentinel(answer: string, pending: string | null): boolean 
   const lines = answer.split('\n').map(line => line.trimEnd()).filter(line => line !== '')
   return lines[lines.length - 1] === sentinel
 }
+
+/**
+ * An auto run's compaction point (reference/auto-run.md): the task budget, or
+ * 90% of min(autoCompactWindow, window) in the high regime.
+ */
+export function autoLimitFor(regime: string, configured: number, window: number, compactWindow?: number): number {
+  if (regime !== 'high') return budgetFor(configured, undefined, window, compactWindow)
+  const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
+  return Math.floor(room * 0.9)
+}

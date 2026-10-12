@@ -4,6 +4,7 @@ import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMe
 import {
   accountColor,
   accountKey,
+  autoLimitFor,
   autoRunFor,
   isAbsolutePath,
   isSuperpowers,
@@ -2766,5 +2767,47 @@ describe('auto run', () => {
     expect(endsOnSentinel('Auto run: clearing', 'compact')).toBe(false)
     expect(endsOnSentinel('Auto run: clearing', 'clear')).toBe(true)
     expect(endsOnSentinel('Auto run: compacting', null)).toBe(false)
+  })
+})
+
+describe('auto run in the pane', () => {
+  test('the limit follows the regime', () => {
+    expect(autoLimitFor('normal', 465_000, 1_000_000, 800_000)).toBe(465_000)
+    expect(autoLimitFor('normal', 0, 1_000_000, 800_000)).toBe(604_000)
+    expect(autoLimitFor('high', 465_000, 1_000_000, 800_000)).toBe(720_000)
+    expect(autoLimitFor('high', 0, 650_000)).toBe(585_000)
+  })
+
+  test('shows the run and stops it from the pane', async ($, on) => {
+    const files = autoFiles({ pending: null, compactions: 2 })
+    const w: World = { ...SIGNED_IN, autoRuns: [], autoFile: files[AUTO] }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 2 compactions · 0 resumes/ })).toBeDefined()
+    await ui.press({ key: 'pane-stop-auto' })
+    expect(w.autoRuns).toContain('--session sess-1 stop --reason owner pressed Stop auto')
+  })
+
+  test('picks up a run started during the turn, and mutes the handoff note', async ($, on) => {
+    const notes: string[] = []
+    world(on, { ...SIGNED_IN, tokens: 470_000, notes })
+    const files: NonNullable<World['files']> = {}
+    signedIn(on, files)
+    await $.session.start(START)
+    files[AUTO] = autoFiles({ pending: null })[AUTO]!
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(notes).toEqual([])
+  })
+
+  test('measures against the high regime', async ($, on) => {
+    world(on, { ...SIGNED_IN, tokens: 470_000 })
+    signedIn(on, autoFiles({ pending: null, regime: 'high' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /80% of handoff/ })).toBeDefined()
   })
 })
