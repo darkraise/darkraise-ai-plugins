@@ -119,5 +119,32 @@ finishAction ask merge discard
 finishTimeout 30 45 3
 ROWS
 
+# --- the workflow line: the skill-enforced keys that differ from their defaults ---
+fresh x
+check "workflow: nothing at the defaults" "$(fc workflow)" ""
+fc workflow > /dev/null; check "workflow: exit 0" "$?" "0"
+fc set designApproval whole; fc set worktree always; fc set codexLane false; fc set finishAction merge
+check "workflow: only skill keys, in schema order" "$(fc workflow)" \
+  "dr-forge settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole"
+fc workflow extra; check "workflow takes no argument: exit 2" "$?" "2"
+
+# --- forge_setting: the value in force, or the default when the command cannot answer ---
+. "$HERE/../scripts/lib/forge-env.sh"
+check "forge_setting reads the file" "$(forge_setting worktree ask)" "always"
+check "forge_setting: an unknown key gives the default" "$(forge_setting nope fallback)" "fallback"
+printf 'not json' > "$FILE"
+check "forge_setting: a broken file gives the default" "$(forge_setting worktree ask)" "ask"
+forge_setting worktree ask > /dev/null; check "forge_setting never fails" "$?" "0"
+fresh y
+check "forge_setting: a first read answers the default" "$(forge_setting worktree ask)" "ask"
+check "forge_setting: a read never creates the settings file" "$([ -e "$FILE" ] && echo created || echo absent)" "absent"
+fc set worktree never
+check "DR_FORGE_NO_SETTINGS answers the default" "$(DR_FORGE_NO_SETTINGS=1 forge_setting worktree ask)" "ask"
+# Git Bash with path conversion off hands node the module path as written.
+check "the command runs with path conversion off" "$(MSYS_NO_PATHCONV=1 fc get worktree)" "never"
+# A number setting is a whole number.
+fc set finishTimeout 5.5; check "a fraction: exit 2" "$?" "2"
+fc set warnAt 72.5; check "a fraction of an older key: exit 2" "$?" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# dr-forge's settings: forge-config get KEY | get --json | set KEY VALUE | unset KEY
+# dr-forge's settings: forge-config get KEY | get --json | set KEY VALUE | unset KEY | workflow
 # The schema is config/schema.mjs; values live in ~/.dr-forge/config.json.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v node > /dev/null 2>&1 || { echo "forge-config: node is required but not on PATH" >&2; exit 2; }
-exec node "$HERE/lib/forge-config.mjs" "$@"
+. "$HERE/lib/native-path.sh"
+# With path conversion off (MSYS_NO_PATHCONV=1, as the budget tests export), Git
+# Bash would hand node a POSIX module path that Windows cannot resolve.
+exec node "$(dr_native_path "$HERE/lib/forge-config.mjs")" "$@"

@@ -11,7 +11,7 @@ export class SettingError extends Error {}
 
 // A pre-2.0 environment name still read when the new one is unset.
 const LEGACY_ENV = { DR_FORGE_BUDGET: "DR_SUPERPOWERS_BUDGET" };
-const USAGE = "usage: forge-config get KEY | get --json | set KEY VALUE | unset KEY";
+const USAGE = "usage: forge-config get KEY | get --json | set KEY VALUE | unset KEY | workflow";
 
 function homeOf(env) {
   return env.HOME || os.homedir();
@@ -25,7 +25,7 @@ export function configPath(env = process.env) {
 export function isValid(spec, value) {
   switch (spec.type) {
     case "boolean": return typeof value === "boolean";
-    case "number": return typeof value === "number" && Number.isFinite(value)
+    case "number": return typeof value === "number" && Number.isInteger(value)
       && (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max);
     case "enum": return typeof value === "string" && spec.values.includes(value);
     case "string": return typeof value === "string";
@@ -101,6 +101,16 @@ export function resolve(env = process.env, warn = message => process.stderr.writ
   return values;
 }
 
+// One line naming the skill-enforced keys that differ from their defaults, for
+// the session-start hook and the skills; empty when every one is at its default.
+export function workflowLine(env = process.env) {
+  const values = resolve(env, () => {});
+  const parts = Object.entries(SCHEMA)
+    .filter(([key, spec]) => spec.enforcedBy === "skill" && values[key] !== spec.default)
+    .map(([key]) => `${key}=${values[key]}`);
+  return parts.length === 0 ? "" : `dr-forge settings in force (each replaces the matching question or default in the skills): ${parts.join("; ")}`;
+}
+
 export function setValue(key, text, env = process.env) {
   const spec = need(key);
   const value = fromText(spec, text);
@@ -156,7 +166,8 @@ export function importLegacy(env = process.env) {
 export function main(argv, env = process.env, out = process.stdout) {
   const [command, ...rest] = argv;
   try {
-    importLegacy(env);
+    // A script reading one setting must not be what creates the settings file.
+    if (!env.DR_FORGE_NO_IMPORT) importLegacy(env);
     if (command === "get" && rest.length === 1 && rest[0] === "--json") {
       out.write(`${JSON.stringify(resolve(env))}\n`);
       return 0;
@@ -168,6 +179,11 @@ export function main(argv, env = process.env, out = process.stdout) {
     }
     if (command === "set" && rest.length === 2) { setValue(rest[0], rest[1], env); return 0; }
     if (command === "unset" && rest.length === 1) { unsetValue(rest[0], env); return 0; }
+    if (command === "workflow" && rest.length === 0) {
+      const line = workflowLine(env);
+      if (line) out.write(`${line}\n`);
+      return 0;
+    }
     process.stderr.write(`${USAGE}\n`);
     return 2;
   } catch (error) {
