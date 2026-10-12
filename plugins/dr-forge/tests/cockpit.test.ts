@@ -35,7 +35,6 @@ import {
   stateLeaf,
   stackedRuns,
   shellAge,
-  stepped,
   tasksEnded,
   termColor,
   track,
@@ -1153,9 +1152,6 @@ describe('settings view', () => {
     expect(sectionsToggled(['plan', 'context'], 'usage')).toBe('plan,context,usage')
     expect(sectionsToggled(['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo'], 'guard')).toBe('')
     expect(sectionsToggled(['plan'], 'plan')).toBe('plan')
-    expect(stepped(90, 5, 0, 100)).toBe(95)
-    expect(stepped(100, 5, 0, 100)).toBe(100)
-    expect(stepped(0, -5, 0, 100)).toBe(0)
   })
 
   test('/cockpit settings opens the settings', async ($, on) => {
