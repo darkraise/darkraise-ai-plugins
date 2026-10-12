@@ -11,6 +11,7 @@ import type {
   CockpitRefusal,
   CockpitRun,
   CockpitSeat,
+  CockpitSettingsView,
   CockpitShell,
   CockpitSpawn,
   CockpitUsage,
@@ -57,7 +58,6 @@ import {
   sectionsToggled,
   sparkline,
   stackedRuns,
-  stepped,
   tasksEnded,
   termColor,
   track,
@@ -67,8 +67,9 @@ import {
   writesGitText,
 } from './lib'
 import type { BandInput, Run, Section, TrackPart } from './lib'
-import { SCHEMA, importedSettings, resolveSettings, schemaRows, settingProblems, settingWritten } from './config'
-import type { SettingRow, SettingValue, SettingsFile } from './config'
+import { SCHEMA, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
+import type { SettingValue, SettingsFile } from './config'
+import { drawSettings } from './settings-view'
 import {
   discordBody,
   excerpt,
@@ -124,9 +125,6 @@ const GAUGED: readonly string[] = ['five_hour', 'seven_day']
 // the light theme and the dark alike.
 const CARD = '#8080800f'
 const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
-// The handoff budget's step and ceiling in the settings view.
-const HANDOFF_STEP = 50_000
-const MAX_HANDOFF = 2_000_000
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
 const budget = atom({ plugin: 'dr-forge', key: 'budget' } as const, null)
@@ -154,6 +152,8 @@ const run = atom({ plugin: 'dr-forge', key: 'run' } as const, null)
 const finish = atom({ plugin: 'dr-forge', key: 'finish' } as const, null)
 const handoffAt = atom({ plugin: 'dr-forge', key: 'handoffAt' } as const, null)
 const settings = atom({ plugin: 'dr-forge', key: 'settings' } as const, null)
+const SETTINGS_VIEW: CockpitSettingsView = { tab: '', isHelpShown: true, editing: null, error: null, isConfirmingReset: false }
+const settingsView = atom({ plugin: 'dr-forge', key: 'settingsView' } as const, SETTINGS_VIEW)
 const notifier = atom({ plugin: 'dr-forge', key: 'notifier' } as const, {
   url: null,
   isFromEnv: false,
@@ -275,7 +275,8 @@ export const register: Register = on => {
     const words = e.args.trim().split(/\s+/)
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
-    await update($, view, () => (wantsSettings ? 'settings' : 'cockpit'))
+    if (wantsSettings) await showSettings($)
+    else await update($, view, () => 'cockpit')
     await readAccount($)
     // The settings take the keyboard and as many rows as they need.
     const opened = wantsSettings
@@ -657,7 +658,7 @@ export const register: Register = on => {
         {canHandOff && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
         {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: resumePrompt(), asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
-        {button('pane-settings', 'Settings', () => update($, view, () => 'settings'), { hotkey: 's' })}
+        {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's' })}
         {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
       </Box>
     )
@@ -666,33 +667,26 @@ export const register: Register = on => {
       // Each press saves to ~/.dr-forge/config.json and puts the value in force, so the rows below always show what is saved.
       const set = (key: string, value: SettingValue) => setOption($, key, value)
       const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) =>
-        button(key, label, onPress, { ...look, isCompact: true })
+        button(
+          key,
+          label,
+          async () => {
+            if (state.editing !== null || state.isConfirmingReset) await show({})
+            return onPress()
+          },
+          { ...look, isCompact: true },
+        )
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
-          <Text>{label.padEnd(15)}</Text>
+          <Text>{label.padEnd(16)}</Text>
           {controls}
         </Box>
       )
-      const toggle = (key: string, label: string, isOn: boolean) =>
-        row(`set-${key}`, label, compact(`set-${key}-toggle`, isOn ? '● On' : '○ Off', () => set(key, !isOn), { isMain: isOn, isOff: !isOn }))
-      const choices = <T extends string>(key: string, label: string, all: readonly T[], chosen: T) =>
-        row(`set-${key}`, label, ...all.map(choice => compact(`set-${key}-${choice}`, choice, () => set(key, choice), { isMain: chosen === choice, isOff: chosen !== choice })))
       const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
         <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={INDENT}>
           {names.map(name => compact(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
         </Box>
       )
-      const number = (key: string, label: string, value: string, onLess: () => unknown, onMore: () => unknown) =>
-        row(
-          `set-${key}`,
-          label,
-          <Text key={`set-${key}-value`} bold>
-            {value.padEnd(6)}
-          </Text>,
-          compact(`set-${key}-less`, '−', onLess),
-          compact(`set-${key}-more`, '+', onMore),
-        )
-
       // A surface without text fields (the mobile app) sets the webhook from a terminal.
       const elements = $.ui.resolve(e)
       const Input = 'Input' in elements ? elements.Input : undefined
@@ -734,7 +728,7 @@ export const register: Register = on => {
               )}
           {notes.last !== null && (
             <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
-              {' '.repeat(16)}
+              {' '.repeat(17)}
               {notes.last.isError ? '✗ ' : '✓ '}
               {notes.last.text}
             </Text>
@@ -752,138 +746,101 @@ export const register: Register = on => {
         </Box>
       )
 
+      const state = await read($, settingsView)
+      const values = (await read($, settings)) ?? {}
+      const tabs = tabsOf(SCHEMA)
+      const tab = tabs.includes(state.tab) ? state.tab : (tabs[0] ?? '')
+      const rows = rowsOf(SCHEMA, values, tab)
+      // Every press but the one that asked for it ends an edit or a pending reset.
+      const show = (change: Partial<CockpitSettingsView>) =>
+        update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false, ...change }))
+      const save = async (key: string, value: SettingValue) => {
+        if (state.editing !== null || state.isConfirmingReset) await show({})
+        return set(key, value)
+      }
       const custom: Record<string, RenderChildren> = {
-        openAtStart: toggle('openAtStart', 'Show at start', o.openAtStart),
-        layout: choices('layout', 'Layout', ['auto', 'full', 'compact'] as const, o.layout),
         sections: (
-          <Box key="set-sections-block" flexDirection="column">
-            <Text key="set-sections">Sections</Text>
+          <Box key="set-sections-chips" flexDirection="column">
+            <Box key="set-sections-label"><Text>Sections</Text></Box>
             {/* Under their label, wrapping to the pane's width. */}
             {chips(
               'set-section',
               SECTIONS,
               name => o.shown.includes(name as Section),
               name => name,
-              name => set('sections', sectionsToggled(o.shown, name as Section)),
+              name => save('sections', sectionsToggled(o.shown, name as Section)),
             )}
           </Box>
         ),
-        breakdownRows: number(
-          'breakdownRows',
-          'Context rows',
-          String(o.breakdownRows),
-          () => set('breakdownRows', stepped(o.breakdownRows, -1, 0, MAX_BREAKDOWN_ROWS)),
-          () => set('breakdownRows', stepped(o.breakdownRows, 1, 0, MAX_BREAKDOWN_ROWS)),
-        ),
-        guardAttribution: toggle('guardAttribution', 'Attr. guard', o.guardAttribution),
-        handoffTokens: number(
-          'handoffTokens',
-          'Handoff budget',
-          o.handoffTokens > 0 ? kTokens(o.handoffTokens) : 'auto',
-          () => set('handoffTokens', stepped(o.handoffTokens, -HANDOFF_STEP, 0, MAX_HANDOFF)),
-          () => set('handoffTokens', stepped(o.handoffTokens, HANDOFF_STEP, 0, MAX_HANDOFF)),
-        ),
-        warnAt: number(
-          'warnAt',
-          'Warn at',
-          `${o.warnAt}%`,
-          () => set('warnAt', stepped(o.warnAt, -5, 5, 95)),
-          () => set('warnAt', stepped(o.warnAt, 5, 5, 95)),
-        ),
-        nudgeModel: toggle('nudgeModel', 'Handoff note', o.nudgeModel),
-        limitAlertAt: number(
-          'limitAlertAt',
-          'Limit alert at',
-          o.limitAlertAt > 0 ? `${o.limitAlertAt}%` : 'off',
-          () => set('limitAlertAt', stepped(o.limitAlertAt, -5, 0, 100)),
-          () => set('limitAlertAt', stepped(o.limitAlertAt, 5, 0, 100)),
-        ),
         notifyOn: (
-          <Box key="set-notify-on-block" flexDirection="column">
-            <Text key="set-notify-on">Send on</Text>
+          <Box key="set-notifyOn-chips" flexDirection="column">
+            <Box key="set-notifyOn-label"><Text>Send on</Text></Box>
             {chips(
               'set-notify-kind',
               NOTIFY_KINDS,
               kind => S.kinds.includes(kind as NotifyKind),
               kind => kindLabel(kind as NotifyKind),
-              kind => set('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
+              kind => save('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
             )}
           </Box>
         ),
-        notifyAfter: number(
-          'notifyAfter',
-          'Done after',
-          o.notifyAfter > 0 ? `${o.notifyAfter}s` : 'any',
-          () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter > 60 ? -60 : -15, 0, 3600)),
-          () => set('notifyAfter', stepped(o.notifyAfter, o.notifyAfter >= 60 ? 60 : 15, 0, 3600)),
-        ),
-        notifyAskAfter: number(
-          'notifyAskAfter',
-          'Ask after',
-          `${o.notifyAskAfter}s`,
-          () => set('notifyAskAfter', stepped(o.notifyAskAfter, -10, 0, 600)),
-          () => set('notifyAskAfter', stepped(o.notifyAskAfter, 10, 0, 600)),
-        ),
-        notifyDetail: choices('notifyDetail', 'Detail', ['full', 'brief'] as const, S.isBrief ? 'brief' : 'full'),
       }
-      const typed = schemaRows(SCHEMA, (await read($, settings)) ?? {}, new Set(Object.keys(custom)))
-      const drawTyped = (one: SettingRow) =>
-        one.kind === 'toggle'
-          ? toggle(one.key, one.title, one.value === true)
-          : one.kind === 'choices'
-            ? choices(one.key, one.title, one.values, String(one.value))
-            : one.kind === 'stepper'
-              ? number(
-                  one.key,
-                  one.title,
-                  String(one.value),
-                  () => set(one.key, stepped(Number(one.value), -one.step, one.min, one.max)),
-                  () => set(one.key, stepped(Number(one.value), one.step, one.min, one.max)),
-                )
-              : row(`set-${one.key}`, one.title, <Text key={`set-${one.key}-value`} dimColor>{`${String(one.value) || '(empty)'} · forge-config set ${one.key}`}</Text>)
-      const groups = [...new Set(Object.values(SCHEMA).map(spec => spec.group))]
 
-      return (
-        <Box flexDirection="column">
-          <Text bold>Settings</Text>
-          {groups.map(group => (
-            <Box key={`set-group-${group}`} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
-              {group === 'Notifications' ? (
-                <Text bold color={BUTTON_MAIN}>
-                  Notifications <Text dimColor>(Discord)</Text>
-                </Text>
-              ) : (
-                <Text bold color={BUTTON_MAIN}>
-                  {group}
-                </Text>
-              )}
-              <Box key={`set-group-${group}-rows`} flexDirection="column">
-                {group === 'Notifications' && webhookRows}
-                {Object.entries(SCHEMA)
-                  .filter(([, spec]) => spec.group === group)
-                  .map(([key]) => custom[key] ?? typed.filter(one => one.key === key).map(drawTyped))}
-              </Box>
-            </Box>
-          ))}
-          <Text dimColor>Saved to ~/.dr-forge/config.json.</Text>
-          {S.settingProblems.map((problem, index) => (
-            <Text key={`set-problem-${index}`} color="yellow">
-              ⚠ {problem}
-            </Text>
-          ))}
-          <Box key="settings-actions">
-            {compact(
-              'settings-back',
-              'Back',
-              async () => {
-                await update($, view, () => 'cockpit')
-                // Minimized, the settings were all the pane was open for.
-                if (o.isMinimized) await $.ui.close({ id: PANE })
-              },
-              { hotkey: 'b' },
-            )}
-          </Box>
-        </Box>
+      return drawSettings(
+        elements,
+        {
+          tabs,
+          tab,
+          hint: tab === 'Notifications' ? '(Discord)' : null,
+          rows,
+          isHelpShown: state.isHelpShown,
+          editing: state.editing,
+          error: state.error,
+          isConfirmingReset: state.isConfirmingReset,
+          canType,
+          problems: S.settingProblems,
+          custom,
+          top: tab === 'Notifications' ? webhookRows : null,
+        },
+        {
+          openTab: next => show({ tab: next }),
+          set: save,
+          step: (key, direction) => {
+            const spec = SCHEMA[key]
+            return spec === undefined ? undefined : save(key, steppedSetting(spec, Number(values[key] ?? spec.default), direction))
+          },
+          edit: key => show({ editing: key }),
+          submit: async (key, text) => {
+            const spec = SCHEMA[key]
+            if (spec === undefined) return
+            const value = spec.type === 'number' ? typedNumber(spec, text) : text
+            if (value === undefined) {
+              await update($, settingsView, now => ({ ...now, error: rangeText(spec) }))
+              return
+            }
+            if (await set(key, value)) await show({})
+          },
+          reset: key => {
+            const spec = SCHEMA[key]
+            return spec === undefined ? undefined : save(key, spec.default)
+          },
+          toggleHelp: () => show({ isHelpShown: !state.isHelpShown }),
+          askResetGroup: () => show({ isConfirmingReset: true }),
+          resetGroup: async () => {
+            for (const one of rows) {
+              const spec = SCHEMA[one.key]
+              if (one.isChanged && spec !== undefined) await set(one.key, spec.default)
+            }
+            await show({})
+          },
+          cancelReset: () => show({}),
+          back: async () => {
+            await show({})
+            await update($, view, () => 'cockpit')
+            // Minimized, the settings were all the pane was open for.
+            if (o.isMinimized) await $.ui.close({ id: PANE })
+          },
+        },
       )
     }
     const running = all.filter(one => !one.isDone)
@@ -2376,6 +2333,12 @@ async function expand($: EngineInterface, isDocking: boolean) {
   const opened = await $.ui.open(paneFor(to))
   await setOption($, 'layout', to)
   return opened
+}
+
+/** Opens the settings afresh: no half-typed value or pending reset survives a close. */
+async function showSettings($: EngineInterface) {
+  await update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false }))
+  await update($, view, () => 'settings')
 }
 
 /** ~/.dr-forge/config.json, or null when no home directory is set. */

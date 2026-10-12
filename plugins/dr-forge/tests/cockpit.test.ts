@@ -64,7 +64,6 @@ import {
   resolveSettings,
   rowOf,
   rowsOf,
-  schemaRows,
   settingProblems,
   settingWritten,
   shownValue,
@@ -251,6 +250,7 @@ function world(on: On, w: World) {
     return { value: undefined }
   })
   if (w.config !== undefined) {
+    on('fs.exists', (_$, e) => ({ value: e.path === CONFIG || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
     on('fs.read', (_$, e) => {
       if (e.path === CONFIG) return { value: w.written?.[CONFIG] ?? JSON.stringify(w.config) }
       throw new Error('ENOENT')
@@ -717,47 +717,17 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /warnAt in ~\/\.dr-forge\/config\.json is not valid; ignored/ })).toBeDefined()
   })
 
-  // The control each setting is drawn with; a schema key missing here, or a
-  // control the view stops drawing, fails the test.
-  const CONTROL: Record<string, string> = {
-    openAtStart: 'set-openAtStart-toggle',
-    layout: 'set-layout-auto',
-    sections: 'set-section-account',
-    breakdownRows: 'set-breakdownRows-more',
-    guardAttribution: 'set-guardAttribution-toggle',
-    handoffTokens: 'set-handoffTokens-more',
-    warnAt: 'set-warnAt-more',
-    nudgeModel: 'set-nudgeModel-toggle',
-    limitAlertAt: 'set-limitAlertAt-more',
-    notifyOn: 'set-notify-kind-ask',
-    notifyAfter: 'set-notifyAfter-more',
-    notifyAskAfter: 'set-notifyAskAfter-more',
-    notifyDetail: 'set-notifyDetail-full',
-    handoffMode: 'set-handoffMode-strict',
-    codexLane: 'set-codexLane-toggle',
-    codexReview: 'set-codexReview-toggle',
-    executionStrategy: 'set-executionStrategy-ask',
-    executionMode: 'set-executionMode-auto',
-    worktree: 'set-worktree-ask',
-    processBias: 'set-processBias-standard',
-    designApproval: 'set-designApproval-sections',
-    specReview: 'set-specReview-toggle',
-    questionStyle: 'set-questionStyle-single',
-    finishAction: 'set-finishAction-ask',
-    finishTimeout: 'set-finishTimeout-more',
-    autoCompactWindow: 'set-autoCompactWindow-more',
-    autoCompactEnabled: 'set-autoCompactEnabled-toggle',
-  }
-
-  test('draws every setting under its schema group', async ($, on) => {
+  test('every setting has a row in exactly one tab', async ($, on) => {
     world(on, { tokens: 284_000, config: {} })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    expect(Object.keys(CONTROL).sort()).toEqual(Object.keys(SCHEMA).sort())
-    for (const key of Object.values(CONTROL)) expect(await ui.find({ key })).toBeDefined()
-    for (const group of ['Cockpit', 'Context']) expect(await ui.find({ type: 'Text', text: group })).toBeDefined()
-    expect(await ui.find({ key: 'set-group-Notifications' })).toBeDefined()
+    const seen: string[] = []
+    for (const tab of tabsOf(SCHEMA)) {
+      await ui.press({ key: `settings-tab-${tab}` })
+      for (const key of Object.keys(SCHEMA)) if ((await ui.find({ key: `set-${key}-label` })) !== undefined) seen.push(key)
+    }
+    expect(seen.sort()).toEqual(Object.keys(SCHEMA).sort())
   })
 
   const STORE_FILE = '/home/me/.claude/plugins/store/dr-cockpit_darkraise-abc123.json'
@@ -1143,6 +1113,7 @@ describe('buttons', () => {
     expect(await ui.find({ key: 'set-layout-auto-box' })).toBeUndefined()
     expect((await ui.find({ key: 'set-layout-full' }))?.props.dimColor).toBe(true)
     expect((await ui.find({ key: 'set-openAtStart-toggle' }))?.props.label).toBe('● On')
+    await ui.press({ key: 'settings-tab-Notifications' })
     expect((await ui.find({ key: 'set-notify-kind-task' }))?.props).toMatchObject({ label: '○ task', dimColor: true })
     expect((await ui.find({ key: 'settings-back' }))?.props.hotkey).toBe('b')
   })
@@ -1176,9 +1147,10 @@ describe('settings view', () => {
       const ui = await $.ui.mount({ ...PANE, surface })
       await ui.press({ key: 'pane-settings' })
       await ui.press({ key: 'set-openAtStart-toggle' })
-      await ui.press({ key: 'set-warnAt-more' })
       await ui.press({ key: 'set-layout-compact' })
       await ui.press({ key: 'set-section-guard' })
+      await ui.press({ key: 'settings-tab-Context' })
+      await ui.press({ key: 'set-warnAt-more' })
       expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({
         warnAt: 85,
         layout: 'compact',
@@ -1210,6 +1182,98 @@ describe('settings view', () => {
     expect(written[CONFIG]).toBeUndefined()
     expect(toasts.some(text => text.startsWith('dr-forge: guardAttribution not saved:'))).toBe(true)
   })
+
+  test('shows one group at a time and switches with the tabs', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect(await ui.find({ key: 'set-openAtStart-toggle' })).toBeDefined()
+    expect(await ui.find({ key: 'set-warnAt-more' })).toBeUndefined()
+    expect((await ui.find({ key: 'settings-tab-Cockpit' }))?.props).toMatchObject({ variant: 'primary', hotkey: '1' })
+    expect(await ui.find({ type: 'Text', text: 'all defaults' })).toBeDefined()
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ key: 'set-warnAt-more' })).toBeDefined()
+    expect(await ui.find({ key: 'set-openAtStart-toggle' })).toBeUndefined()
+    expect((await ui.find({ key: 'settings-tab-Context' }))?.props).toMatchObject({ variant: 'primary', hotkey: '2' })
+  })
+
+  test('describes each setting until help is hidden', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts\./ })).toBeDefined()
+    await ui.press({ key: 'settings-help' })
+    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts\./ })).toBeUndefined()
+    expect((await ui.find({ key: 'settings-help' }))?.props).toMatchObject({ label: 'Show help', hotkey: 'i' })
+  })
+
+  test('a changed row shows its default and resets', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: { warnAt: 70 }, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: '1 changed' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'default 80%' })).toBeDefined()
+    await ui.press({ key: 'set-warnAt-reset' })
+    expect(JSON.parse(written[CONFIG] ?? 'null')).toEqual({})
+    expect(await ui.find({ key: 'set-warnAt-reset' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: 'all defaults' })).toBeDefined()
+  })
+
+  test('a typed number is saved, and one out of range is refused', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-warnAt-edit' })
+    await ui.input({ key: 'set-warnAt-input', text: '500', kind: 'submit' })
+    expect(await ui.find({ type: 'Text', text: /Enter a whole number from 1 to 99/ })).toBeDefined()
+    expect(written[CONFIG]).toBeUndefined()
+    await ui.input({ key: 'set-warnAt-input', text: '65', kind: 'submit' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 65 })
+    expect(await ui.find({ key: 'set-warnAt-input' })).toBeUndefined()
+  })
+
+  test('a group resets only after a second press', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: { warnAt: 70, nudgeModel: false, layout: 'full' }, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'settings-reset' })
+    expect(written[CONFIG]).toBeUndefined()
+    await ui.press({ key: 'settings-reset-cancel' })
+    expect(await ui.find({ key: 'settings-reset-confirm' })).toBeUndefined()
+    await ui.press({ key: 'settings-reset' })
+    await ui.press({ key: 'settings-reset-confirm' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ layout: 'full' })
+    expect(await ui.find({ key: 'settings-reset' })).toBeUndefined()
+  })
+
+  test('a changed chip list is marked, and any other press or a reopening ends a pending reset', async ($, on) => {
+    world(on, { tokens: 284_000, config: { sections: 'plan,repo' }, written: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect(await ui.find({ key: 'set-sections-mark' })).toBeDefined()
+    expect(await ui.find({ key: 'set-layout-mark' })).toBeUndefined()
+    await ui.press({ key: 'settings-reset' })
+    expect(await ui.find({ key: 'settings-reset-confirm' })).toBeDefined()
+    await ui.press({ key: 'set-section-usage' })
+    expect(await ui.find({ key: 'settings-reset-confirm' })).toBeUndefined()
+    await ui.press({ key: 'settings-reset' })
+    await $.command.run({ ...COCKPIT, args: 'settings' })
+    expect(await ui.find({ key: 'settings-reset-confirm' })).toBeUndefined()
+    expect(await ui.find({ key: 'settings-reset' })).toBeDefined()
+  })
+
 })
 
 describe('desktop', () => {
@@ -1727,6 +1791,7 @@ describe('discord', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Notifications' })
     expect(await ui.find({ type: 'Text', text: /not set/ })).toBeDefined()
     await ui.press({ key: 'set-notify-url-edit' })
     await ui.input({ key: 'set-notify-url-input', text: 'https://example.com/hook', kind: 'submit' })
@@ -2074,16 +2139,6 @@ describe('settings file', () => {
     const darkmem = { url: 'http://d.test', api_key_env: 'DARKMEM_API_KEY', repos: {} }
     expect(importedSettings(FAKE, claude, { darkmem })).toEqual({ layout: 'compact', darkmem })
     expect(importedSettings(FAKE, {}, null)).toEqual({})
-  })
-
-  test('a row for each setting without a control of its own, in schema order', () => {
-    const rows = schemaRows(FAKE, { layout: 'full', warnAt: 70 }, new Set(['layout']))
-    expect(rows.map(row => [row.key, row.kind, row.value])).toEqual([
-      ['warnAt', 'stepper', 70],
-      ['handoffTokens', 'stepper', 0],
-      ['nudgeModel', 'toggle', true],
-    ])
-    expect(rows[0]).toMatchObject({ group: 'Context', min: 1, max: 99, step: 1 })
   })
 
   test('every default in the real schema fits its own type', () => {

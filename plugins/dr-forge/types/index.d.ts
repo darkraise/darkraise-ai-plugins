@@ -208,6 +208,18 @@ export type CockpitNotifier = {
   last: { at: number; text: string; isError: boolean } | null
 }
 
+/** The settings view's own state: the open tab, and what is being typed or confirmed. */
+export type CockpitSettingsView = {
+  /** The open group; empty opens the first. */
+  tab: string
+  isHelpShown: boolean
+  /** The key whose value is being typed. */
+  editing: string | null
+  /** Why the typed value was refused. */
+  error: string | null
+  isConfirmingReset: boolean
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'dr-forge': {
@@ -232,6 +244,7 @@ declare module 'claude-code' {
       trend: number[]
       /** Whether the pane shows the cockpit or its settings. */
       view: 'cockpit' | 'settings'
+      settingsView: CockpitSettingsView
       activity: CockpitActivity
       /** The main session's context at the end of each turn, oldest first, for the forecast. */
       turnTokens: number[]
