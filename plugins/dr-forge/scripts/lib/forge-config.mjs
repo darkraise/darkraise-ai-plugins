@@ -1,6 +1,8 @@
 // dr-forge's settings: their schema (config/schema.mjs), the values in
 // ~/.dr-forge/config.json, and the environment variable a key names, which wins
-// over both. The first command on a machine imports the pre-2.0 settings once.
+// over both. A key whose target is `claude` lives in Claude's own user settings
+// file instead, and this module is its only writer. The first command on a
+// machine imports the pre-2.0 settings once.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,8 +27,11 @@ export function configPath(env = process.env) {
 export function isValid(spec, value) {
   switch (spec.type) {
     case "boolean": return typeof value === "boolean";
-    case "number": return typeof value === "number" && Number.isInteger(value)
-      && (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max);
+    case "number":
+      if (typeof value !== "number" || !Number.isInteger(value)) return false;
+      // A floor leaves 0 as the one value below it: "unset".
+      if (spec.floor !== undefined) return value === 0 || (value >= spec.floor && (spec.max === undefined || value <= spec.max));
+      return (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max);
     case "enum": return typeof value === "string" && spec.values.includes(value);
     case "string": return typeof value === "string";
     default: return false;
@@ -60,11 +65,74 @@ export function readFile(file) {
   return data;
 }
 
+// Replaces a file in one rename, keeping the mode it had: Claude's settings
+// file may be private, and a temporary file would otherwise take the umask's.
 function writeFile(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  let mode;
+  try {
+    mode = fs.statSync(file).mode & 0o777;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   const temp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`);
-  fs.renameSync(temp, file);
+  try {
+    // Created with the mode it will keep, so the contents are never readable
+    // more widely than the file they replace; chmod then undoes the umask.
+    fs.rmSync(temp, { force: true });
+    fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`, mode === undefined ? undefined : { mode });
+    if (mode !== undefined) fs.chmodSync(temp, mode);
+    fs.renameSync(temp, file);
+  } catch (error) {
+    fs.rmSync(temp, { force: true });
+    throw error;
+  }
+}
+
+function claudeDir(env) {
+  return env.CLAUDE_CONFIG_DIR || path.join(homeOf(env), ".claude");
+}
+
+export function claudeSettingsPath(env = process.env) {
+  return path.join(claudeDir(env), "settings.json");
+}
+
+// Claude's user settings as far as they can be read: a file that cannot be
+// parsed is warned about and read as empty, so the forge keys still resolve.
+function claudeValues(env, warn) {
+  try {
+    return readFile(claudeSettingsPath(env)) ?? {};
+  } catch (error) {
+    warn(error.message);
+    return {};
+  }
+}
+
+// The file a write lands on: where a symlink points, even when that
+// destination does not exist yet, so a rename never replaces the link itself.
+function realTarget(file) {
+  try {
+    return fs.realpathSync(file);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  try {
+    return path.resolve(path.dirname(file), fs.readlinkSync(file));
+  } catch {
+    return file;
+  }
+}
+
+// Changes one key of Claude's user settings and nothing else; `undefined`
+// removes it. The write goes to the file a symlink points at, so a settings
+// file kept in a dotfiles repository stays a link. A file that is not a JSON
+// object throws before anything is written.
+function writeClaude(env, key, value) {
+  const file = realTarget(claudeSettingsPath(env));
+  const data = readFile(file) ?? {};
+  if (value === undefined) delete data[key];
+  else data[key] = value;
+  writeFile(file, data);
 }
 
 function readJson(file) {
@@ -83,8 +151,18 @@ function need(key) {
 export function resolve(env = process.env, warn = message => process.stderr.write(`forge-config: ${message}\n`)) {
   const file = configPath(env);
   const data = readFile(file) ?? {};
+  let claude;
   const values = {};
   for (const [key, spec] of Object.entries(SCHEMA)) {
+    if (spec.target === "claude") {
+      claude ??= claudeValues(env, warn);
+      if (Object.hasOwn(claude, key)) {
+        if (isValid(spec, claude[key])) { values[key] = claude[key]; continue; }
+        warn(`${key} in ${claudeSettingsPath(env)} is not valid; ignored`);
+      }
+      values[key] = spec.default;
+      continue;
+    }
     const name = spec.env === undefined ? undefined : env[spec.env] ? spec.env : LEGACY_ENV[spec.env];
     const raw = name === undefined ? undefined : env[name];
     if (raw !== undefined && raw !== "") {
@@ -115,6 +193,12 @@ export function setValue(key, text, env = process.env) {
   const spec = need(key);
   const value = fromText(spec, text);
   if (value === undefined) throw new SettingError(`${text} is not a valid ${key}`);
+  if (spec.target === "claude") {
+    // 0 on a floored key means "unset"; any other value is written as given,
+    // a default included, because Claude's own default is not ours to assume.
+    writeClaude(env, key, spec.floor !== undefined && value === 0 ? undefined : value);
+    return value;
+  }
   const file = configPath(env);
   const data = readFile(file) ?? {};
   if (value === spec.default) delete data[key];
@@ -124,7 +208,8 @@ export function setValue(key, text, env = process.env) {
 }
 
 export function unsetValue(key, env = process.env) {
-  need(key);
+  const spec = need(key);
+  if (spec.target === "claude") { writeClaude(env, key, undefined); return; }
   const file = configPath(env);
   const data = readFile(file) ?? {};
   delete data[key];
@@ -138,11 +223,10 @@ export function importLegacy(env = process.env) {
   const file = configPath(env);
   if (fs.existsSync(file)) return false;
   const data = {};
-  const claudeDir = env.CLAUDE_CONFIG_DIR || path.join(homeOf(env), ".claude");
-  const options = readJson(path.join(claudeDir, "settings.json"))?.pluginConfigs?.["dr-cockpit@darkraise"]?.options;
+  const options = readJson(claudeSettingsPath(env))?.pluginConfigs?.["dr-cockpit@darkraise"]?.options;
   if (options && typeof options === "object") {
     for (const [key, spec] of Object.entries(SCHEMA)) {
-      if (key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
+      if (spec.target === "forge" && key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
     }
   }
   const darkmem = readJson(path.join(homeOf(env), ".dr-superpowers", "config.json"))?.darkmem;

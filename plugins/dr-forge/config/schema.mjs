@@ -55,6 +55,16 @@ export default {
     label: 'Handoff note', title: 'Tell the model at the budget',
     description: 'In a session running dr-forge, add one note to the conversation when the main session crosses its handoff budget.',
   },
+  autoCompactWindow: {
+    type: 'number', default: 0, min: 0, floor: 100_000, max: 1_000_000, step: 50_000, unit: 'k', zero: 'unset', group: 'Context', target: 'claude',
+    label: 'Auto-compact at', title: "Claude's auto-compaction window (tokens)",
+    description: "Claude's autoCompactWindow: 0 leaves it unset, else 100,000 to 1,000,000. Stored in Claude's settings file; applies from the next session.",
+  },
+  autoCompactEnabled: {
+    type: 'boolean', default: true, group: 'Context', target: 'claude',
+    label: 'Auto-compact', title: "Claude's auto-compaction",
+    description: "Claude's autoCompactEnabled. Stored in Claude's settings file; applies from the next session.",
+  },
   codexLane: {
     type: 'boolean', default: true, enforcedBy: 'script', group: 'Workflow', target: 'forge',
     label: 'Codex tasks', title: 'Give tasks to Codex',

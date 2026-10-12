@@ -119,6 +119,82 @@ finishAction ask merge discard
 finishTimeout 30 45 3
 ROWS
 
+# --- Claude's own settings file: one key changed, everything else kept ---
+fresh k
+keys() { node -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))).join(","))' "$1"; }
+at() { node -e 'console.log(JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[process.argv[2]]))' "$1" "$2"; }
+mkdir -p "$HOME/.claude"
+CS="$HOME/.claude/settings.json"
+check "claude: defaults with no file" "$(fc get autoCompactWindow) $(fc get autoCompactEnabled)" "0 true"
+printf '%s\n' '{"permissions":{"allow":["Bash(ls:*)"]},"autoCompactWindow":650000,"hooks":{}}' > "$CS"
+check "claude: read from the settings file" "$(fc get autoCompactWindow)" "650000"
+fc set autoCompactWindow 800000; check "claude set: exit 0" "$?" "0"
+check "claude set: the value" "$(at "$CS" autoCompactWindow)" "800000"
+check "claude set: every other key and the order kept" "$(keys "$CS")" "permissions,autoCompactWindow,hooks"
+check "claude set: the permissions untouched" "$(at "$CS" permissions)" '{"allow":["Bash(ls:*)"]}'
+check "claude set: nothing in the forge file" "$(keys "$FILE")" ""
+fc set autoCompactWindow 50000; check "claude: below the floor: exit 2" "$?" "2"
+fc set autoCompactWindow 1050000; check "claude: above the maximum: exit 2" "$?" "2"
+check "claude: a refusal changes nothing" "$(at "$CS" autoCompactWindow)" "800000"
+fc set autoCompactEnabled false
+check "claude: a new key goes last" "$(keys "$CS")" "permissions,autoCompactWindow,hooks,autoCompactEnabled"
+fc set autoCompactEnabled true
+check "claude: the default boolean is written, not dropped" "$(at "$CS" autoCompactEnabled)" "true"
+fc set autoCompactWindow 0
+check "claude: 0 removes the key" "$(keys "$CS")" "permissions,hooks,autoCompactEnabled"
+fc unset autoCompactEnabled
+check "claude: unset removes the key" "$(keys "$CS")" "permissions,hooks"
+check "claude: get --json carries both" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.autoCompactWindow, v.autoCompactEnabled, v.warnAt)')" "0 true 80"
+
+# A file that cannot be parsed is never replaced, and the forge keys still resolve.
+printf 'not json' > "$CS"
+fc set autoCompactWindow 800000; check "claude: an unparseable file: exit 1" "$?" "1"
+check "claude: an unparseable file is left byte-identical" "$(cat "$CS")" "not json"
+check "claude: the file is named" "$(grep -c 'settings.json is not valid JSON' "$TMP/stderr")" "1"
+check "claude: forge keys still resolve" "$(fc get warnAt)" "80"
+check "claude: the unreadable file reads as the default" "$(fc get autoCompactWindow)" "0"
+rm -f "$CS"
+fc set autoCompactWindow 800000
+check "claude: a missing file is created with the one key" "$(tr -d ' \n' < "$CS")" '{"autoCompactWindow":800000}'
+check "claude: no temporary file left" "$(ls "$HOME/.claude" | grep -c '\.tmp$')" "0"
+
+# CLAUDE_CONFIG_DIR names the file.
+mkdir -p "$TMP/alt-k"
+printf '%s\n' '{"model":"opus"}' > "$TMP/alt-k/settings.json"
+CLAUDE_CONFIG_DIR="$TMP/alt-k" fc set autoCompactWindow 500000
+check "claude: CLAUDE_CONFIG_DIR is written" "$(keys "$TMP/alt-k/settings.json")" "model,autoCompactWindow"
+check "claude: the home file is left alone" "$(at "$CS" autoCompactWindow)" "800000"
+
+# A symlinked settings file stays a symlink, and its mode is kept. Neither holds on Windows.
+if ! command -v cygpath > /dev/null 2>&1; then
+  mkdir -p "$TMP/dotfiles"
+  printf '%s\n' '{"model":"opus"}' > "$TMP/dotfiles/settings.json"
+  chmod 600 "$TMP/dotfiles/settings.json"
+  rm -f "$CS"; ln -s "$TMP/dotfiles/settings.json" "$CS"
+  fc set autoCompactWindow 700000
+  check "claude: a symlink stays a symlink" "$([ -L "$CS" ] && echo yes || echo no)" "yes"
+  check "claude: the real file is written" "$(keys "$TMP/dotfiles/settings.json")" "model,autoCompactWindow"
+  check "claude: the mode is kept" "$(node -e 'console.log((require("fs").statSync(process.argv[1]).mode & 0o777).toString(8))' "$TMP/dotfiles/settings.json")" "600"
+  # A link whose destination does not exist yet is written through, not replaced.
+  rm -f "$CS"; ln -s "$TMP/dotfiles/later.json" "$CS"
+  fc set autoCompactWindow 600000
+  check "claude: a dangling symlink stays a symlink" "$([ -L "$CS" ] && echo yes || echo no)" "yes"
+  check "claude: its destination is created" "$(tr -d ' \n' < "$TMP/dotfiles/later.json")" '{"autoCompactWindow":600000}'
+fi
+
+# Each Claude key: its default, a value it accepts, and one it refuses.
+while read -r key default valid invalid; do
+  fresh "m-$key"
+  check "$key: default" "$(fc get "$key")" "$default"
+  fc set "$key" "$valid"; check "$key: a valid value: exit 0" "$?" "0"
+  check "$key: the value is read back" "$(fc get "$key")" "$valid"
+  fc set "$key" "$invalid"; check "$key: an invalid value: exit 2" "$?" "2"
+  check "$key: a refusal keeps the value" "$(fc get "$key")" "$valid"
+done <<'ROWS'
+autoCompactWindow 0 100000 99999
+autoCompactEnabled true false maybe
+ROWS
+
 # --- the workflow line: the skill-enforced keys that differ from their defaults ---
 fresh x
 check "workflow: nothing at the defaults" "$(fc workflow)" ""

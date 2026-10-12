@@ -728,6 +728,8 @@ describe('settings', () => {
     questionStyle: 'set-questionStyle-single',
     finishAction: 'set-finishAction-ask',
     finishTimeout: 'set-finishTimeout-more',
+    autoCompactWindow: 'set-autoCompactWindow-more',
+    autoCompactEnabled: 'set-autoCompactEnabled-toggle',
   }
 
   test('draws every setting under its schema group', async ($, on) => {
