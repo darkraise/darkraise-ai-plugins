@@ -78,6 +78,8 @@ setting, and no setting removes the approval gate.
   and when `executionMode=inline`, which makes the plan sequential.
 - `specReview=false`: after the spec self-review block, skip the User Review
   Gate and go on to Implementation.
+- `autoRun=off`: never offer an auto run (see After the Design). `ask`, the
+  default, offers it once on the architectural path.
 
 ## Anti-Pattern: "Too Simple To Need Approval"
 
@@ -130,10 +132,11 @@ your path and complete them in order.
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Ask the execution strategy** — parallel subagent waves or sequential execution, one question (see Choosing the execution strategy)
 6. **Present design** — in sections scaled to their complexity, get user approval after each section
-7. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
-8. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
-9. **User reviews written spec** — ask user to review the spec file before proceeding
-10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+7. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the last section is approved (see After the Design)
+8. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
+9. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
+10. **User reviews written spec** — ask user to review the spec file before proceeding (an auto run has Fable review it instead)
+11. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
@@ -327,6 +330,33 @@ needs another's output waits for it.
 
 ## After the Design (architectural path)
 
+**Offering an auto run:**
+
+Unless `autoRun=off` (see Settings) or this is a Codex host, ask this once, as
+its own message, right after your human partner approves the last design
+section and before you write the spec. `<finish>` follows the `finishAction`
+setting (`scripts/forge-config get finishAction`): `merge` reads "merge to
+<the current branch>", `pr` reads "open a pull request", and `keep`, `ask` and
+`wait` read "keep the branch".
+
+```
+Run the rest unattended? Spec → Fable spec review → plan → execution →
+final review → finish (<finish>).
+I won't ask anything else: undecided items go to Opus, then to Fable in
+batches, and what neither settles goes on the deferred list.
+
+1. Yes, run unattended
+2. No, keep the normal stops
+
+Which option?
+```
+
+On yes, run `scripts/auto-run start --spec <the spec's path>` (add
+`--register <path>` when an item register is open) from this checkout, before
+writing the spec, and follow [auto-run.md](../../reference/auto-run.md) from
+here to the finished branch. On exit 2 or 4, say why in one line and continue
+without an auto run. On no, continue as below.
+
 **Documentation:**
 
 - Write the validated design (spec) to `<docs>/specs/YYYY-MM-DD-<topic>-design.md`
@@ -349,6 +379,9 @@ per item: clean, or what you fixed. Do not re-review after fixing.
 A revision your human partner asks for gets one new round.
 
 **User Review Gate:**
+In an auto run (`scripts/auto-run status` exits 0), skip this gate: run the
+Fable spec review in [auto-run.md](../../reference/auto-run.md) §The spec, then
+go to Implementation.
 With `specReview=false` (see Settings), skip this gate and go to Implementation. Otherwise, after posting the self-review block, ask the user to review the written spec before proceeding:
 
 > "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
@@ -362,7 +395,9 @@ Wait for the user's response. If they request changes, make them and run one new
   limit: writing the plan here costs less than a fresh session's baseline
   and reload. On exit 5 (handoff), invoke dr-forge:handoff with
   the spec as the draft and the next action "Write the implementation plan
-  with dr-forge:writing-plans." — the plan is written in a fresh session.
+  with dr-forge:writing-plans." — the plan is written in a fresh session. In
+  an auto run this step owns the clear: run `scripts/auto-run clear --phase`
+  and end as [auto-run.md](../../reference/auto-run.md) §Clears says.
 - Otherwise invoke the writing-plans skill to create a detailed implementation plan.
 - Do NOT invoke any other skill. writing-plans is the next step — in this
   session or, after a handoff, the next one.

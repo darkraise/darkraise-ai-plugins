@@ -90,6 +90,11 @@ export default {
     label: 'Worktree', title: 'Worktree',
     description: 'Whether work is isolated in a git worktree before it starts. ask keeps the consent question.',
   },
+  autoRun: {
+    type: 'enum', values: ['ask', 'off'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'forge',
+    label: 'Auto run', title: 'Offer an unattended run',
+    description: 'ask offers, once the design is approved, to run the spec, plan, execution, review and finish unattended (Claude Code only). off never offers it.',
+  },
   processBias: {
     type: 'enum', values: ['standard', 'lighter', 'heavier'], default: 'standard', enforcedBy: 'skill', group: 'Process', target: 'forge',
     label: 'Path bias', title: 'Path bias',
