@@ -234,13 +234,18 @@ ar_after() {
 }
 
 # ar_settle P BUDGET WINDOW — apply the after-compaction rule to the run: set
-# the regime, clear pending, print continue or handoff.
+# the regime, clear pending, print continue; a handoff keeps the regime and
+# stays pending until clear.
 ar_settle() {
-  local result regime
+  local result
   result=$(ar_after "$1" "$2" "$3")
-  if [ "$result" = handoff ]; then regime=$(ar_get regime); else regime=$result; fi
-  ar_update '.regime = $r | .pending = null' --arg r "${regime:-normal}" || return 1
-  if [ "$result" = handoff ]; then echo handoff; else echo continue; fi
+  if [ "$result" = handoff ]; then
+    ar_update '.pending = "handoff"' || return 1
+    echo handoff
+    return
+  fi
+  ar_update '.regime = $r | .pending = null' --arg r "$result" || return 1
+  echo continue
 }
 
 # ar_verdict TOKENS BUDGET WINDOW [N] — prints "<ok|compact|handoff> <limit>

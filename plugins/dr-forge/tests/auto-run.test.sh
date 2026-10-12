@@ -213,6 +213,9 @@ check "after a small compaction: back to normal" "$out" "ok 465000 normal"
 ar --session s-1 compacted
 out=$(verdict --tokens 680000); status=$?
 check "after a compaction at 85% of the window: handoff" "$status:${out%% *}" "5:handoff"
+check "a handoff stays pending" "$(field pending)" "handoff"
+out=$(verdict --tokens 10000); status=$?
+check "a re-probe before clear still hands off" "$status:${out%% *}" "5:handoff"
 ar --session s-1 clear --phase
 out=$(verdict --tokens 10000); status=$?
 check "a pending clear answers handoff" "$status:${out%% *}" "5:handoff"
@@ -241,6 +244,7 @@ ar --session s-1 compacted
 asst 700000 > "$T"
 out=$(after); status=$?
 check "after-compact: 85% of the window hands off" "$status:${out%% *}" "5:handoff"
+check "after-compact: the handoff stays pending" "$(field pending)" "handoff"
 ar --session s-1 compacted
 printf '{}\n' > "$T"
 out=$(after); status=$?
