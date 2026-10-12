@@ -394,6 +394,16 @@ export const register: Register = on => {
     return joined
   }).catch(($, e, next) => next(e))
 
+  // A skill typed as a slash command makes no Skill tool call; its prompt is expanded on every path.
+  on('skill.prompt', async ($, e, next) => {
+    const expanded = await next(e)
+    if (isSuperpowers(e.skill)) {
+      await update($, isPlanSession, () => true)
+      await flushSettingNote($)
+    }
+    return expanded
+  }).catch(($, e, next) => next(e))
+
   on('ui.close', { id: PANE }, async ($, e, next) => {
     if (e.origin.kind === 'person') S.isClosedByPerson = true
     await flushSettingNote($)

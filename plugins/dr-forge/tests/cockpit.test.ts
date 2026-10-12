@@ -2448,4 +2448,27 @@ describe('settings held outside the file', () => {
       'dr-forge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
     ])
   })
+
+  test('a dr-forge skill started as a slash command marks the session and sends the waiting note', async ($, on) => {
+    const notes: string[] = []
+    world(on, { tokens: 50_000, config: {}, notes, written: {} })
+    on('skill.prompt', ($, e) => ({ text: e.text }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Process' })
+    await ui.press({ key: 'set-designApproval-whole' })
+    await ui.press({ key: 'settings-back' })
+    expect(await $.skill.prompt({ skill: 'commit', text: 'Commit.' })).toEqual({ text: 'Commit.' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
+    expect(await $.skill.prompt({ skill: 'dr-forge:brainstorming', text: 'Brainstorm.' })).toEqual({ text: 'Brainstorm.' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
+      'dr-forge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
+    ])
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Workflow' })
+    await ui.press({ key: 'set-worktree-never' })
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(2)
+  })
 })
