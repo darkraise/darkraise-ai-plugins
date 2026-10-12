@@ -2387,8 +2387,11 @@ async function applySettings($: EngineInterface, file: SettingsFile) {
   const forge = await $.env.get('DR_FORGE_BUDGET')
   const legacy = await $.env.get('DR_SUPERPOWERS_BUDGET')
   const env = { DR_FORGE_BUDGET: forge || legacy }
-  const merged = { ...(((await $.settings.read().catch(() => ({}))) ?? {}) as Record<string, unknown>), ...S.claudeSaved }
-  const user = { ...(((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>), ...S.claudeSaved }
+  const engineUser = ((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>
+  // The engine's snapshot can predate a save: until it shows the saved value the merged read is overlaid too, then a project or managed override shows through.
+  const awaited = Object.fromEntries(Object.entries(S.claudeSaved).filter(([key, saved]) => engineUser[key] !== saved))
+  const merged = { ...(((await $.settings.read().catch(() => ({}))) ?? {}) as Record<string, unknown>), ...awaited }
+  const user = { ...engineUser, ...S.claudeSaved }
   const values = resolveSettings(SCHEMA, file, env, merged)
   S.settingProblems = settingProblems(SCHEMA, file, env)
   const locks = { ...envLocks(SCHEMA, env), ...claudeLocks(SCHEMA, merged, user) }

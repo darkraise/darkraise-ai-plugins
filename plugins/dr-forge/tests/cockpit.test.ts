@@ -2348,6 +2348,24 @@ describe('settings held outside the file', () => {
     expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
   })
 
+  test('a Claude key stays locked after a save while a project file forces another value', async ($, on) => {
+    const w: World = { tokens: 284_000, config: {}, settings: { autoCompactWindow: 650_000 }, userSettings: { autoCompactWindow: 650_000 } }
+    world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeDefined()
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    expect(await ui.find({ type: 'Text', text: /^700k/ })).toBeDefined()
+    // The engine now reports the user file as saved; the project file still wins the merged read.
+    w.userSettings = { autoCompactWindow: 700_000 }
+    await ui.press({ key: 'set-autoCompactEnabled-toggle' })
+    expect(await ui.find({ type: 'Text', text: 'set by a project or managed settings file' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
+    expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
+  })
+
   test('a changed skill setting is told to the model once, when the settings close', async ($, on) => {
     const notes: string[] = []
     world(on, { tokens: 50_000, config: {}, notes, written: {} })
