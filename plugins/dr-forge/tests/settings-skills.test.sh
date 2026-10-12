@@ -50,6 +50,19 @@ names "finish-preference: finishAction" "$F" 'finishAction'
 names "finish-preference: finishTimeout" "$F" 'finishTimeout'
 names "finish-preference: a setting's choice has no base branch" "$F" '`base` is null'
 
+# The auto run (reference/auto-run.md) where each skill would otherwise ask.
+names "brainstorming: autoRun" "$B" '`autoRun=off`: never offer an auto run'
+names "brainstorming offers the auto run" "$B" 'Run the rest unattended?'
+names "brainstorming: the review gate gives way to the Fable review" "$B" 'In an auto run (`scripts/auto-run status` exits 0), skip this gate'
+names "writing-plans: an auto run asks nothing" "$W" 'nothing in this skill waits on your human partner'
+names "writing-plans: planning choices go to Opus first" "$W" '`dr-forge:judge-opus` first, then the ladder'
+names "writing-plans: the plan step owns the clear" "$W" '`scripts/auto-run clear --phase`'
+names "using-git-worktrees: an auto run creates the worktree" "$G" 'In an auto run (`scripts/auto-run status` exits 0), create the worktree without asking'
+names "handoff: the caller owns the clear" "$P/skills/handoff/SKILL.md" 'never runs `scripts/auto-run clear` itself'
+names "resume-execution: an auto run stops before asking" "$P/skills/resume-execution/SKILL.md" 'scripts/auto-run stop --reason'
+names "finishing: an auto run shows no menu" "$P/skills/finishing-a-development-branch/SKILL.md" '**Step 4 shows no menu.**'
+names "finishing: the run's base" "$P/skills/finishing-a-development-branch/SKILL.md" 'the base `scripts/auto-run status` names'
+
 # Every skill-enforced key in the schema is named by at least one skill.
 keys=$(node -e 'const { pathToFileURL } = require("url"); import(pathToFileURL(process.argv[1]).href).then(m => console.log(Object.entries(m.default).filter(([, spec]) => spec.enforcedBy === "skill").map(([key]) => key).join(" ")))' "$P/config/schema.mjs")
 check "the schema has skill-enforced keys" "$([ -n "$keys" ] && echo yes || echo no)" "yes"

@@ -11,6 +11,26 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
+## Auto run
+
+When `scripts/auto-run status` exits 0
+([auto-run.md](../../reference/auto-run.md)), run
+`scripts/auto-run phase finish`, then follow this skill with these changes:
+
+- **Step 3** asks nothing: the base branch is the base `scripts/auto-run status` names.
+- **Step 4 shows no menu.** Read `scripts/forge-config get finishAction`:
+  `merge` carries out Option 1 into that base and `pr` Option 2, as if your
+  human partner had chosen it; `keep`, `ask` and `wait`, and `merge` when the
+  base is `none`, carry out Option 3. Never discard. Arm no wake.
+- **Where an unattended finish stops** (a merged result failing its tests, a
+  rejected push, a refused worktree removal), run
+  `scripts/auto-run stop --reason "<what stopped it>"` first, then stop as
+  [finish-preference.md](../../reference/finish-preference.md) says.
+- **The rulings** printed at Step 3 also include every line of
+  `scripts/auto-run ruling list`, and Step 7's final message lists every
+  deferred row the run added to its register (`scripts/auto-run status` names
+  it). Run `scripts/auto-run stop` before printing the next-step block.
+
 ## Step 1: Verify Tests
 
 When the project declares `<docs>/gates.md`, run

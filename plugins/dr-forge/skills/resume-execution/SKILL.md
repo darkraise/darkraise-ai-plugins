@@ -56,6 +56,16 @@ session from memory or from a summary.
      the same [final-review.md](../../reference/final-review.md).
    - Run finishing: invoke dr-forge:finishing-a-development-branch.
 
+## Auto run
+
+When `scripts/auto-run status` exits 0
+([auto-run.md](../../reference/auto-run.md)), the cockpit started this session
+after a clear, and nobody is watching. Run every step as above. Where step 2
+would stop and ask (the worktree and its branch are gone), run
+`scripts/auto-run stop --reason "the worktree and its branch are gone"`
+first, then ask. After a compaction an auto run does not come here: it
+follows the execution skill's After compaction steps.
+
 ## Red Flags
 
 | Thought | Reality |

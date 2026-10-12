@@ -20,6 +20,26 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 **Save plans to:** `<docs>/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
 
+## Auto run
+
+When `scripts/auto-run status` exits 0, this plan is written unattended
+([auto-run.md](../../reference/auto-run.md)). Run `scripts/auto-run phase plan`
+first. Then nothing in this skill waits on your human partner:
+
+- **The execution strategy:** take the spec's `**Execution strategy:**` line;
+  with none, write `sequential`.
+- **An approach or planning choice** you would ask about goes to
+  `dr-forge:judge-opus` first, then the ladder in auto-run.md §Rulings.
+  dr-forge:selecting-approaches runs as usual otherwise.
+- **The executor offer:** tick only what a constraint ticks without asking;
+  start no timed question.
+- **At the review cap,** a Critical finding or a score of 8 or below goes on
+  the pending list, and the Fable batch rules on it with the rest.
+- **Once the plan is reviewed:** `scripts/auto-run attach --plan PLAN_FILE`,
+  the Fable batch when `scripts/auto-run decision list` prints anything, then
+  Execution Handoff. This step owns the clear: after dr-forge:handoff, run
+  `scripts/auto-run clear --phase` and end as auto-run.md §Clears says.
+
 ## Scope Check
 
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
@@ -486,7 +506,8 @@ If you find issues, fix them inline. If you find a spec requirement with no task
 
 ## Execution Handoff
 
-A saved, reviewed plan is a hard stop: execution starts in a fresh session.
+A saved, reviewed plan is a hard stop: execution starts in a fresh session (in
+an auto run the cockpit starts it; see Auto run).
 Invoke dr-forge:handoff. It commits the plan and the spec, writes
 `<state>/handoff/latest.md`, runs `scripts/next-step PLAN_FILE`, and ends
 your message with the resume guide — the launch command from the Execution

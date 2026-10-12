@@ -30,6 +30,12 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.
+- An auto run ([auto-run.md](../../reference/auto-run.md)) hands off for a
+  compaction that left too much, for a saved plan, and for the spec-to-plan
+  limit. The steps below run as always, but the turn does not end on the
+  next-step block: return to the step that invoked this skill, which runs
+  `scripts/auto-run clear` and ends the turn (auto-run.md §Clears). This skill
+  never runs `scripts/auto-run clear` itself.
 - Your human partner says they are stepping away for more than an hour, or
   asks you to stop. Reconcile live children first, exactly as step 0 says:
   wait for them, or stop them and record a Ruling. Tell your partner which you
