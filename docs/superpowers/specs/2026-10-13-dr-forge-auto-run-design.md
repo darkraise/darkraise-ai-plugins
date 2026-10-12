@@ -241,7 +241,8 @@ into the register.
 ## Compaction loop
 
 *B* is the task budget: `DR_FORGE_BUDGET`, else `handoffTokens`, else the
-derived rule (465,000 at an 800,000 window). An auto run ignores
+derived rule (604,000 at an 800,000 window; the owner pins 465,000 with
+`DR_FORGE_BUDGET`). An auto run ignores
 `handoffMode`. *W* is min(`autoCompactWindow`, model window), 800,000 on the
 owner's machine. *M* is the per-task margin, 140,000.
 
