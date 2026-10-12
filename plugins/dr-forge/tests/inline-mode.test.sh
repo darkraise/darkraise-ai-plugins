@@ -17,6 +17,9 @@ FINAL="$P/reference/final-review.md"
 # newest file, and every brief below would otherwise append a junk row to the
 # developer's own budget log.
 export CODEX_HOME="$HERE/no-such-codex-home"
+# The budget lines asserted here are the defaults'; the suite keeps the real
+# home, so the settings in it are kept out by name.
+export DR_FORGE_NO_SETTINGS=1
 
 pass=0 fail=0
 check() { # check <name> <got> <want>

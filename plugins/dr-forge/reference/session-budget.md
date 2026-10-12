@@ -12,8 +12,9 @@ never earlier.
 
 | Item | Value | Source |
 |------|-------|--------|
-| Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_FORGE_BUDGET` overrides | Owner ruling, 2026-09-19 |
+| Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_FORGE_BUDGET` overrides, then the `handoffTokens` setting | Owner ruling, 2026-09-19 |
 | Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DR_FORGE_BUDGET` does not move it | Owner ruling, 2026-10-02 |
+| Relaxed handoff | With the `handoffMode` setting at `relaxed`, a plain task and a wave are measured against the final-phase limit (a wave less 140,000 per extra task) and the line reads `budget (relaxed)`; the pinned budget then has no effect. A worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on | Owner ruling, 2026-10-12 |
 | Plan after the spec | 150% of the task budget (`DR_FORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
 | Tail | The last 2 tasks are measured against the final-phase limit; finishing is never measured | Owner ruling, 2026-10-10 |
 | Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
@@ -44,6 +45,7 @@ transcript, so the budget follows either when they change.
 budget: 312k of 465k (67%) — ok — source: record
 budget: 470k of 465k (101%) — handoff — source: record
 budget: unknown of 465k — unknown — no transcript found
+budget (relaxed): 512k of 680k (75%) — ok — source: record
 ```
 
 On a Codex host the line reports a measured number and no verdict:

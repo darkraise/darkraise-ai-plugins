@@ -85,6 +85,20 @@ check "task-brief: past the tail limit: exit unchanged" "$status" "0"
 rm -f "$L"
 printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
 
+# --- relaxed handoff: a task brief measures against the final-phase limit ---
+mkdir -p "$HOME/.dr-forge"
+printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dr-forge/config.json"
+out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
+check "task-brief: relaxed measures against the final-phase limit" "$(tail -n 1 <<<"$out")" \
+  "budget (relaxed): 500k of 553k (90%) — ok — source: record"
+# 680k at an 800k window: the figure the cockpit's finalLimitFor asserts too.
+printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"
+out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
+check "task-brief: relaxed at an 800k window" "$(tail -n 1 <<<"$out")" \
+  "budget (relaxed): 500k of 680k (73%) — ok — source: record"
+printf '{"autoCompactWindow": 650000}\n' > "$HOME/.claude/settings.json"
+rm -f "$HOME/.dr-forge/config.json"
+
 # --- a missing task still fails the way it did ---
 bash "$P/scripts/task-brief" docs/plan.md 9 >/dev/null 2>&1; status=$?
 check "task-brief: missing task still exits 3" "$status" "3"

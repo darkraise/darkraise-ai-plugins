@@ -230,6 +230,45 @@ check "final: no jq: line" "$out" "budget (final): unknown of 553k — unknown �
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
 
+# --- the handoffMode and handoffTokens settings ---
+# Relaxed measures a plain task and a wave against the final-phase limit (553k
+# is 85% of the 650k window); the final, tail and plan checks do not move.
+cp "$T" "$TMP/t.keep"; cp "$SESS/$KEY.json" "$TMP/record.keep"
+settings 650000
+mkdir -p "$HOME/.dr-forge"
+printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dr-forge/config.json"
+asst 500000 > "$T"; record s-1 "$T"
+run
+check "relaxed: exit 0 under the final-phase limit" "$status" "0"
+check "relaxed: line" "$out" "budget (relaxed): 500k of 553k (90%) — ok — source: record"
+run --wave 2
+check "relaxed wave: exit 5" "$status" "5"
+check "relaxed wave: one task margin reserved" "$out" "budget (relaxed, wave of 2): 500k of 413k (121%) — handoff — source: record"
+run --final
+check "relaxed: the final check is unchanged" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
+run --tail 1
+check "relaxed: the tail check is unchanged" "$out" "budget (last task): 500k of 553k (90%) — ok — source: record"
+run --plan
+check "relaxed: the plan check is unchanged" "$out" "budget (plan): 500k of 553k (90%) — ok — source: record"
+asst 560000 > "$T"
+run
+check "relaxed: past the final-phase limit: exit 5" "$status" "5"
+check "relaxed: past the final-phase limit: line" "$out" "budget (relaxed): 560k of 553k (101%) — handoff — source: record"
+# The handoffTokens setting pins the task budget; DR_FORGE_BUDGET still wins.
+printf '{"handoffTokens":300000}\n' > "$HOME/.dr-forge/config.json"
+asst 285000 > "$T"
+run
+check "handoffTokens pins the task budget" "$out" "budget: 285k of 300k (95%) — ok — source: record"
+export DR_FORGE_BUDGET=600000
+run
+check "DR_FORGE_BUDGET wins over the setting" "$out" "budget: 285k of 600k (47%) — ok — source: record"
+unset DR_FORGE_BUDGET
+printf 'not json' > "$HOME/.dr-forge/config.json"
+run
+check "a broken settings file falls back to the rule" "$out" "budget: 285k of 465k (61%) — ok — source: record"
+rm -f "$HOME/.dr-forge/config.json"
+cp "$TMP/t.keep" "$T"; cp "$TMP/record.keep" "$SESS/$KEY.json"
+
 # --- two sessions in one checkout: each measures its own transcript ---
 # The cwd record is last writer wins; the by-id record is the session's own.
 TA="$PROJ/s-a.jsonl" TB="$PROJ/s-b.jsonl"

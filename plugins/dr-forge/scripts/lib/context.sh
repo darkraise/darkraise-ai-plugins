@@ -255,15 +255,29 @@ ctx_final_budget() {
   echo $(( $(ctx_window "$1") * CTX_FINAL_PCT / 100 ))
 }
 
+# ctx_pinned_budget — the task budget someone pinned: DR_FORGE_BUDGET, else the
+# handoffTokens setting; empty when neither names a positive number. The
+# environment is read here, not through the setting, so a machine without Node
+# keeps its override.
+ctx_pinned_budget() {
+  local pinned
+  case ${DR_FORGE_BUDGET:-} in
+    ''|*[!0-9]*) pinned="" ;;
+    *) pinned=$DR_FORGE_BUDGET; [ "$pinned" -gt 0 ] || pinned="" ;;
+  esac
+  if [ -z "$pinned" ]; then
+    pinned=$(forge_setting handoffTokens 0)
+    case $pinned in ''|*[!0-9]*|0) pinned="" ;; esac
+  fi
+  printf '%s' "$pinned"
+}
+
 # ctx_plan_budget MODEL — the limit for writing the plan after the spec:
 # CTX_PLAN_PCT of the task budget (DR_FORGE_BUDGET included), never above
 # the final-phase limit.
 ctx_plan_budget() {
   local task final plan
-  case ${DR_FORGE_BUDGET:-} in
-    ''|*[!0-9]*) task="" ;;
-    *) task=$DR_FORGE_BUDGET; [ "$task" -gt 0 ] || task="" ;;
-  esac
+  task=$(ctx_pinned_budget)
   [ -n "$task" ] || task=$(ctx_budget "$1")
   final=$(ctx_final_budget "$1")
   plan=$(( task * CTX_PLAN_PCT / 100 ))
@@ -309,7 +323,9 @@ ctx_log_observation() {
 # With wave W, reserve one task's worst growth for each of the W - 1
 # tasks that run beside the first, so a parallel wave that starts under its
 # budget lands before compaction just as one task does
-# (reference/parallel-waves.md).
+# (reference/parallel-waves.md). With the handoffMode setting at relaxed, a
+# plain task and a wave measure against the final-phase limit too, and the
+# label says so.
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
   local label=budget extra=0
@@ -323,6 +339,10 @@ ctx_line() {
   if [ "${1:-}" = wave ]; then
     label="budget (wave of ${2:-1})"
     extra=$(( (${2:-1} - 1) * CTX_TASK_MARGIN ))
+  fi
+  if [ "$limit" = task ] && [ "$(forge_setting handoffMode strict)" = relaxed ]; then
+    limit=relaxed
+    if [ "${1:-}" = wave ]; then label="budget (relaxed, wave of ${2:-1})"; else label="budget (relaxed)"; fi
   fi
   if ctx_have_jq; then
     if ctx_find_transcript; then claude=$CTX_TRANSCRIPT; fi
@@ -354,11 +374,11 @@ ctx_line() {
     budget=$(ctx_final_budget "$model")
   elif [ "$limit" = plan ]; then
     budget=$(ctx_plan_budget "$model")
+  elif [ "$limit" = relaxed ]; then
+    budget=$(( $(ctx_final_budget "$model") - extra ))
+    [ "$budget" -gt 0 ] || budget=1
   else
-    case ${DR_FORGE_BUDGET:-} in
-      ''|*[!0-9]*) ;;
-      *) [ "$DR_FORGE_BUDGET" -gt 0 ] && budget=$DR_FORGE_BUDGET ;;
-    esac
+    budget=$(ctx_pinned_budget)
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
     budget=$(( budget - extra ))
     [ "$budget" -gt 0 ] || budget=1
