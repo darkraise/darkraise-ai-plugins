@@ -1,4 +1,4 @@
-import type { CockpitFinish } from '../../types'
+import type { CockpitAutoRun, CockpitFinish } from '../../types'
 
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
@@ -830,4 +830,43 @@ export function remoteRuns(clients: readonly { surface: string }[], setting: str
   }
   if (setting === 'true') return [{ text: '○ ', color: 'green' }, { text: 'on', color: 'green' }, { text: ' · no device yet', dim: true }]
   return [{ text: '○ not connected', dim: true }]
+}
+
+/** The run in an auto-run state file when it is bound to `sessionId`, active or not; else null. */
+export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const s = parsed as Record<string, unknown>
+  if (s.session !== sessionId) return null
+  const word = (value: unknown) => (typeof value === 'string' ? value : null)
+  const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+  const launch = (typeof s.launch === 'object' && s.launch !== null ? s.launch : {}) as Record<string, unknown>
+  return {
+    active: s.active === true,
+    phase: word(s.phase) ?? 'spec',
+    regime: word(s.regime) ?? 'normal',
+    pending: word(s.pending),
+    plan: word(s.plan),
+    compactions: count(s.compactions),
+    resumes: count(s.resumes),
+    stopped: word(s.stopped),
+    resumePrompt: word(s.resumePrompt),
+    launch: typeof launch.model === 'string' && typeof launch.effort === 'string' ? { model: launch.model, effort: launch.effort } : null,
+  }
+}
+
+/** The line an auto run's turn ends on, by the pending action it answers. */
+export const AUTO_SENTINELS: Readonly<Record<string, string>> = { compact: 'Auto run: compacting', clear: 'Auto run: clearing' }
+
+/** Whether `answer`'s last non-blank line is the sentinel for `pending`. */
+export function endsOnSentinel(answer: string, pending: string | null): boolean {
+  const sentinel = pending === null ? undefined : AUTO_SENTINELS[pending]
+  if (sentinel === undefined) return false
+  const lines = answer.split('\n').map(line => line.trimEnd()).filter(line => line !== '')
+  return lines[lines.length - 1] === sentinel
 }

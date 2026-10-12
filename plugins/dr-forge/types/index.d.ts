@@ -193,6 +193,25 @@ export type CockpitFinish = {
   firedAt: number | null
 }
 
+/** An auto run as its state file says (reference/auto-run.md), for the session it is bound to. */
+export type CockpitAutoRun = {
+  active: boolean
+  phase: string
+  regime: string
+  /** `compact`, `after-compact`, `clear`, `resume`, or null. */
+  pending: string | null
+  /** The plan's repository-relative path, once attached. */
+  plan: string | null
+  compactions: number
+  resumes: number
+  /** Why the run stopped; null while it runs or once it finished. */
+  stopped: string | null
+  /** The first prompt of the session a clear starts. */
+  resumePrompt: string | null
+  /** The model and effort that session runs on. */
+  launch: { model: string; effort: string } | null
+}
+
 /** The Discord webhook's state, as the settings view shows it. */
 export type CockpitNotifier = {
   /** The webhook URL; never drawn, only masked. */
@@ -255,6 +274,8 @@ declare module 'claude-code' {
       notifier: CockpitNotifier
       isNudged: boolean
       isPlanSession: boolean
+      /** The auto run bound to this session, as last read; null without one. */
+      autoRun: CockpitAutoRun | null
     }
   }
 }

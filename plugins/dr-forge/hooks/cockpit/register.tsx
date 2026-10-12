@@ -4,6 +4,7 @@ import type { EngineInterface, Register, RenderChildren, RenderInput, Timer, Tur
 import type {
   CockpitAccount,
   CockpitActivity,
+  CockpitAutoRun,
   CockpitBreakdown,
   CockpitBudget,
   CockpitFinish,
@@ -18,6 +19,7 @@ import type {
 } from '../../types'
 import {
   accountColor,
+  autoRunFor,
   accountKey,
   attributionIn,
   bar,
@@ -25,6 +27,7 @@ import {
   budgetFor,
   duration,
   elapsed,
+  endsOnSentinel,
   finalLimitFor,
   finishLine,
   fitBand,
@@ -106,6 +109,18 @@ function resumePrompt(): string {
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
+// What an auto run's compaction keeps (reference/auto-run.md).
+const AUTO_COMPACT_INSTRUCTIONS =
+  'Preserve verbatim: the worktree path; the plan, ledger, handoff and auto-run state file paths; the current HEAD; every Ruling: line; and the auto run pending decisions. Name the task in progress and its fix round.'
+// A failed stage is tried again after this long; a live turn or background work defers it as long.
+const AUTO_RETRY_MS = 5_000
+type AutoStage = 'compact' | 'continue' | 'clear' | 'resume'
+// The pending action the state file holds while each stage is due.
+const AUTO_STAGE_PENDING: Record<AutoStage, string> = { compact: 'compact', continue: 'after-compact', clear: 'clear', resume: 'resume' }
+function autoContinuePrompt(root: string, plan: string | null): string {
+  const where = plan === null ? '' : ` for plan ${plan}, through the After compaction steps of the execution skill its Execution line names`
+  return `Continue the auto run: run \`bash ${root}/scripts/auto-run after-compact\` first, then continue the phase \`bash ${root}/scripts/auto-run status\` names${where}, as reference/auto-run.md §After a compaction says.`
+}
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
@@ -140,6 +155,7 @@ const repo = atom({ plugin: 'dr-forge', key: 'repo' } as const, null)
 const refusals = atom({ plugin: 'dr-forge', key: 'refusals' } as const, [])
 const isNudged = atom({ plugin: 'dr-forge', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dr-forge', key: 'isPlanSession' } as const, false)
+const autoRun = atom({ plugin: 'dr-forge', key: 'autoRun' } as const, null)
 const alerted = atom({ plugin: 'dr-forge', key: 'alerted' } as const, [])
 const trend = atom({ plugin: 'dr-forge', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dr-forge', key: 'view' } as const, 'cockpit')
@@ -265,6 +281,7 @@ export const register: Register = on => {
     await readWhere($)
     await readNotifier($)
     await readRun($)
+    await trackAutoRun($)
     await readVersion($)
     await readRemote($)
     if (o.isMinimized) {
@@ -357,6 +374,8 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      // The engine's or the person's compaction: the run's rule still applies after it.
+      if (e.trigger === 'auto' || e.trigger === 'manual') await bookAutoCompaction($)
     }
 
     return done
@@ -481,6 +500,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined) {
+      await trackAutoRun($)
       compactWindow = await readCompactWindow($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       const turnUsage = e.usage as TurnUsage | undefined
@@ -522,6 +542,7 @@ export const register: Register = on => {
         })
         if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
       }
+      if (e.reason === 'answer') await armAutoRun($, e.answer)
       return done
     }
     const agentId = e.agentId
@@ -1965,6 +1986,8 @@ const S = {
   canUnderline: null as boolean | null,
   // The person closed the pane this session: a desktop joining reopens nothing.
   isClosedByPerson: false,
+  // The auto run's scheduled stage, at most one.
+  autoTimer: null as Timer | null,
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2072,6 +2095,142 @@ async function stateDirOf($: EngineInterface, root: string): Promise<string> {
   const names = new Set((await $.fs.list(root).catch(() => [])).map(entry => entry.name))
   S.stateLeaf = stateLeaf(names)
   return `${root}/${S.stateLeaf}`
+}
+
+// The auto run state file in the primary checkout, as the run bound to this
+// session; null when there is none or another session owns it.
+async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
+  const root = S.where.primary ?? (await read($, place))?.root ?? null
+  if (root === null) return null
+  const state = await stateDirOf($, root)
+  const text = await $.fs.read(`${state}/sdd/auto-run.json`).catch(() => null)
+  if (typeof text !== 'string') return null
+  return autoRunFor(text, await $.session.id())
+}
+
+// Runs scripts/auto-run as `sessionId`; resolves its exit code, 1 when it could not run.
+async function autoRunCall($: EngineInterface, sessionId: string, args: string[]): Promise<number> {
+  const ran = await $.process.run(['bash', `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args], { timeoutMs: 15_000 }).catch(() => null)
+  return ran?.exitCode ?? 1
+}
+
+// Keeps the pane's copy of the bound run, and says once on Discord when the
+// run stopped with a reason.
+async function trackAutoRun($: EngineInterface) {
+  const now = await readAutoRun($)
+  const before = await read($, autoRun)
+  if (JSON.stringify(now) === JSON.stringify(before)) return
+  await update($, autoRun, () => now)
+  if (before?.active === true && now !== null && !now.active && now.stopped !== null) {
+    await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: now.stopped, isPlain: true })
+  }
+}
+
+// A main turn of the bound run ended on the sentinel its pending action asks
+// for: schedule the stage from a timer, so it never runs inside this hook
+// (compact and /clear refuse there).
+async function armAutoRun($: EngineInterface, answer: string) {
+  const auto = await readAutoRun($)
+  if (auto === null || !auto.active || !endsOnSentinel(answer, auto.pending)) return
+  scheduleAutoAct($, auto.pending === 'clear' ? 'clear' : 'compact', 0)
+}
+
+function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
+  S.autoTimer?.cancel()
+  S.autoTimer = $.clock.after(ms, () => void autoAct($, stage))
+}
+
+// Carries the bound run through its pending stages: compact, then the
+// continue prompt; or clear, rebind, model and effort, then the first prompt.
+// Each attempt first re-checks that the stage is still due and the session
+// idle. A failure is booked and the failed stage tried again; the script stops
+// the run at the second (exit 5).
+async function autoAct($: EngineInterface, stage: AutoStage) {
+  S.autoTimer = null
+  const auto = await readAutoRun($)
+  if (auto === null || !auto.active || auto.pending !== AUTO_STAGE_PENDING[stage]) return
+  if (S.isTurnLive || (await read($, spawns)).some(one => !one.isDone) || (await read($, shells)).length > 0) {
+    scheduleAutoAct($, stage, AUTO_RETRY_MS)
+    return
+  }
+  let bound = await $.session.id()
+  let at: AutoStage = stage
+  try {
+    if (at === 'compact') {
+      const done = await $.session.compact({ instructions: AUTO_COMPACT_INSTRUCTIONS })
+      if ('skip' in done && typeof done.skip === 'string') throw new Error(done.skip)
+      await update($, budget, () => null)
+      await update($, isNudged, () => false)
+      // The compaction happened: never repeat it. Unbooked, pending stays
+      // compact and no later stage would run, so stop the run instead.
+      if ((await autoRunCall($, bound, ['compacted'])) !== 0) {
+        await endUnboundRun($, bound, 'the cockpit compacted but could not book it')
+        return
+      }
+      at = 'continue'
+    }
+    if (at === 'continue') {
+      await $.prompt.submit({ text: autoContinuePrompt($.plugin.root, auto.plan), asUser: true })
+      return
+    }
+    if (at === 'clear') {
+      await $.command.run({ command: 'clear' })
+      const cleared = await $.session.id()
+      if ((await autoRunCall($, cleared, ['rebind', '--to', cleared])) !== 0) {
+        // The run is still bound to the session /clear ended: stop it from there.
+        await endUnboundRun($, bound, 'the cleared session could not be bound')
+        return
+      }
+      bound = cleared
+      at = 'resume'
+    }
+    const refused: string[] = []
+    if (auto.launch !== null) {
+      for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
+        await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
+      }
+    }
+    const note =
+      refused.length === 0
+        ? ''
+        : `\n\nThe cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}. Record that with scripts/auto-run ruling add.`
+    await $.prompt.submit({ text: `${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
+    await autoRunCall($, bound, ['resumed'])
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error)
+    const action = at === 'compact' || at === 'continue' ? 'compact' : 'clear'
+    const code = await autoRunCall($, bound, ['failure', '--reason', `the cockpit could not ${action}: ${why}`])
+    if (code === 0) scheduleAutoAct($, at, AUTO_RETRY_MS)
+    else if (code === 5) await endStoppedRun($)
+    // Unbooked, nothing would retry the stage: stop rather than stall unseen.
+    else await endUnboundRun($, bound, `the cockpit could not ${action} and could not book the failure (exit ${code})`)
+  }
+}
+
+// The run stopped while the session was idle: record it, and give the model a
+// turn to end the run as the attended flow would.
+async function endStoppedRun($: EngineInterface) {
+  await trackAutoRun($)
+  const reason = (await read($, autoRun))?.stopped ?? 'the cockpit could not act'
+  await $.prompt.submit({ text: `The auto run stopped: ${reason}. End as reference/auto-run.md §Stopping says.`, asUser: true }).catch(() => undefined)
+}
+
+// The state file cannot be trusted to record the stop (the run moved to
+// another session, or the script failed): stop the run as the session that
+// owned it, best effort, and say so here without reading the file back.
+async function endUnboundRun($: EngineInterface, owner: string, reason: string) {
+  await autoRunCall($, owner, ['stop', '--reason', reason])
+  await update($, autoRun, () => null)
+  await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: reason, isPlain: true })
+  await $.prompt.submit({ text: `The auto run stopped: ${reason}. End as reference/auto-run.md §Stopping says.`, asUser: true }).catch(() => undefined)
+}
+
+// A compaction the cockpit did not make, booked so the run's rule applies after it.
+async function bookAutoCompaction($: EngineInterface) {
+  const auto = await readAutoRun($)
+  // A pending clear supersedes the compaction: booking it would drop the clear.
+  if (auto === null || !auto.active || auto.pending === 'clear') return
+  await autoRunCall($, await $.session.id(), ['compacted'])
 }
 
 // The run's ledger, its plan's tasks, and the newest handoff: read from the
