@@ -22,6 +22,39 @@ back. Before anything else:
    line is an agent-named assigned line or `fix round R/5`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
 
+## Auto run
+
+When `scripts/auto-run status` exits 0, this run is unattended
+([auto-run.md](../../reference/auto-run.md)); read that file once per session.
+What changes here:
+
+- **After a compaction**, the cockpit's prompt has you run
+  `scripts/auto-run after-compact` before step 1 above. On `handoff` (exit 5),
+  invoke dr-forge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
+- **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`.
+- **Nothing stops for your human partner.** A ruling-seat or exhausted
+  `BLOCKED` goes on the pending list and one Fable batch runs at once. An
+  irreversible, security-sensitive or outside-the-worktree action is never performed.
+  A task Fable gives no ruling for, or whose action is never performed, is
+  deferred, and every task that depends on it: write
+  `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
+  and a deferred register row for each. Other tasks keep running.
+- **Each task:** right after its `Task N: complete` line, run
+  `scripts/auto-run task-complete`. After each wave, or each task in
+  sequential mode, run the Fable batch when `scripts/auto-run decision list`
+  prints anything.
+- **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
+  the task in flight, then end the turn with
+  `Auto run: compacting` as its last line. On `handoff`, invoke
+  dr-forge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
+  The tail rule and the final-phase limit do not apply;
+  `scripts/context-size --final` prints the auto line too.
+- **Final review:** run `scripts/auto-run phase final` and, when the pending
+  list is not empty, the Fable batch first; the review's findings take the
+  same ladder.
+- **A turn ends** only on one of the two auto-run lines, or after
+  `scripts/auto-run stop --reason "<why>"` when the run must stop.
+
 ## Select the host first
 
 On Codex, the ruling seat is a native judge at Astra high or above
@@ -85,7 +118,8 @@ them.
 Four things stop you, and only these: an irreversible or destructive operation;
 a security-sensitive action; a side effect outside this worktree that norms say
 you ask about first (a merge, a push to a shared branch, a publish); and a
-ruling-seat `BLOCKED` verdict. For those, stop and ask.
+ruling-seat `BLOCKED` verdict. For those, stop and ask — except in an auto run,
+which asks nothing (see Auto run).
 
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished - one of those four stops, a context-budget handoff, a
