@@ -87,13 +87,22 @@ if [ -n "$roadmap_root" ] && [ -f "$(forge_dir docs "$roadmap_root")/roadmap.md"
   fi
 fi
 
+# The workflow settings that differ from their defaults, as one line the skills
+# read where they would otherwise ask (scripts/forge-config workflow). Without
+# Node, or with a settings file that cannot be read, nothing is added.
+settings_line=$(bash "${SCRIPT_DIR}/forge-config" workflow 2>/dev/null \
+  | head -n 1 | tr -d '\001-\010\013\014\016-\037\r' || true)
+if [ -n "$settings_line" ]; then
+  context="${context}\n\n$(escape_for_json "$settings_line")"
+fi
+
 # The compact source is detected without jq, so a machine without jq still
 # gets the handoff and ledger sections. Hook output over 10,000 characters is
 # replaced by a file reference, so the snapshot gets only the room the entry
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with

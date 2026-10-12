@@ -141,6 +141,28 @@ check "roadmap: survives compaction alongside the snapshot" "$(grep -c '^Roadmap
 check "roadmap: still under the 10,000-character hook cap" "$([ "${#rm_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
 check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" "0"
 
+# --- workflow settings ride in every session as one line ---
+if command -v node >/dev/null 2>&1; then
+  HOME_S="$TMP/s"; mkdir -p "$HOME_S/.dr-forge"
+  s_ctx=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+  check "settings: nothing injected at the defaults" "$(grep -c '^dr-forge settings in force' <<<"$s_ctx")" "0"
+  printf '{"worktree":"always","designApproval":"whole","codexLane":false}\n' > "$HOME_S/.dr-forge/config.json"
+  s_out=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null)
+  check "settings: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$s_out" && echo yes || echo no)" "yes"
+  check "settings: the changed skill keys are injected" \
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dr-forge settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole$')" "1"
+  s_ctx=$(compact_payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+  check "settings: the line survives compaction" "$(grep -c '^dr-forge settings in force' <<<"$s_ctx")" "1"
+  check "settings: still under the 10,000-character hook cap" "$([ "${#s_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
+  printf 'not json' > "$HOME_S/.dr-forge/config.json"
+  s_out=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null); status=$?
+  check "settings: a broken file still exits 0" "$status" "0"
+  check "settings: a broken file injects no line" \
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dr-forge settings in force')" "0"
+  check "settings: a broken file keeps the entry point" \
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dr-forge:using-superpowers')" "1"
+fi
+
 # --- hooks.json wiring ---
 check "hooks.json is valid JSON" \
   "$(jq -e . "$HOOKS" >/dev/null 2>&1 && echo yes || echo no)" "yes"
