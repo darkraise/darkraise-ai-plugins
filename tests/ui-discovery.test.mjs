@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 const readSkill = name => readFileSync(new URL(`../plugins/dcc-${name}/skills/${name}/SKILL.md`, import.meta.url), 'utf8');
-test('documented Win32 discovery finds centrally managed versions', () => {
+// The documented command needs a ripgrep binary on PATH.
+const hasRg = spawnSync(process.env.DR_TEST_BASH ?? 'bash', ['-c', 'command -v rg'], { stdio: 'ignore', timeout: 10000 }).status === 0;
+test('documented Win32 discovery finds centrally managed versions', { skip: !hasRg && 'rg is not installed' }, () => {
   const skill = readSkill('darkraise-win32ui');
   const section = skill.split('## Current Project Context')[1];
   const command = section.match(/```(?:bash)?\r?\n([\s\S]*?)```/)[1].trim().replace(/^!`|`$/g, '');
