@@ -4,6 +4,7 @@ import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMe
 import {
   accountColor,
   accountKey,
+  autoRunFor,
   isAbsolutePath,
   isSuperpowers,
   attributionIn,
@@ -12,6 +13,7 @@ import {
   budgetFor,
   duration,
   elapsed,
+  endsOnSentinel,
   finalLimitFor,
   finishLine,
   bandLines,
@@ -176,6 +178,24 @@ type World = {
   config?: Record<string, unknown>
   /** Every write fails, as on a read-only file system. */
   isReadOnly?: boolean
+  /** The session id `$.session.id()` answers; `sess-1` unless said. A /clear sets `sess-2`. */
+  sessionId?: string
+  /** Each compaction the engine runs, as `<trigger>:<instructions>`. */
+  compacts?: string[]
+  /** Every compaction is vetoed, as a PreCompact hook would. */
+  isCompactVetoed?: boolean
+  /** Each slash command the plugin runs, as typed. */
+  commands?: string[]
+  /** Slash commands that refuse to run, by name. */
+  refusedCommands?: string[]
+  /** How many prompt submissions fail before one goes through. */
+  submitFailures?: number
+  /** Each scripts/auto-run call, after the script's path. */
+  autoRuns?: string[]
+  /** The exit code of an auto-run command, by its command word; 0 unless said. */
+  autoRunExits?: Record<string, number>
+  /** The auto-run state file the fake script updates, as the real one would. */
+  autoFile?: { text: string }
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -208,6 +228,10 @@ function world(on: On, w: World) {
     return { value: { version: w.version, base: w.version } }
   })
   on('prompt.submit', (_$, e) => {
+    if ((w.submitFailures ?? 0) > 0) {
+      w.submitFailures = (w.submitFailures ?? 1) - 1
+      throw new Error('busy')
+    }
     w.prompts?.push(e.text)
     return { text: e.text }
   })
@@ -229,10 +253,37 @@ function world(on: On, w: World) {
     w.closed?.push(e.id)
     return { value: undefined } as never
   })
-  on('session.compact', (_$, e) => ({ messages: e.messages }))
+  on('session.compact', (_$, e) => {
+    w.compacts?.push(`${e.trigger}:${(e as { instructions?: string }).instructions ?? ''}`)
+    return w.isCompactVetoed ? ({ skip: 'vetoed' } as never) : { messages: e.messages ?? [SUMMARY] }
+  })
+  on('command.run', (_$, e) => {
+    if (w.refusedCommands?.includes(e.command)) throw new Error(`/${e.command} refused`)
+    w.commands?.push(e.args === '' ? `/${e.command}` : `/${e.command} ${e.args}`)
+    if (e.command === 'clear') w.sessionId = 'sess-2'
+    return { text: '' } as never
+  })
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
+    const script = '/scripts/auto-run '
+    if (argv.includes(script)) {
+      const call = argv.slice(argv.indexOf(script) + script.length)
+      w.autoRuns?.push(call)
+      const words = call.split(' ')
+      const word = words[2] ?? ''
+      const exitCode = w.autoRunExits?.[word] ?? 0
+      if (w.autoFile !== undefined) {
+        const state = JSON.parse(w.autoFile.text) as Record<string, unknown>
+        if (exitCode === 0 && word === 'compacted') state.pending = 'after-compact'
+        if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume' })
+        if (exitCode === 0 && word === 'resumed') state.pending = null
+        if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
+        if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
+        w.autoFile.text = JSON.stringify(state)
+      }
+      return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (argv.includes('/scripts/lib/forge-config.mjs ')) {
       w.runs?.push(argv)
       const stderr = w.isForgeConfigRefusing ? 'forge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
@@ -241,7 +292,7 @@ function world(on: On, w: World) {
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? '/home/me/code/shop/.git\n' : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  on('session.id', () => ({ value: 'sess-1' }))
+  on('session.id', () => ({ value: w.sessionId ?? 'sess-1' }))
   on('fs.stat', (_$, e) => {
     const file = w.files?.[e.path]
     if (file === undefined) throw new Error('ENOENT')
@@ -2474,5 +2525,228 @@ describe('settings held outside the file', () => {
     await ui.press({ key: 'set-worktree-never' })
     await ui.press({ key: 'settings-back' })
     expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(2)
+  })
+})
+
+// An auto run's state file in the primary checkout the world names.
+const AUTO = '/home/me/code/shop/.forge/sdd/auto-run.json'
+const SENTINEL = 'Task 3: complete.\n\nAuto run: compacting'
+function autoFiles(fields: Record<string, unknown> = {}): NonNullable<World['files']> {
+  return {
+    [AUTO]: {
+      text: JSON.stringify({
+        active: true,
+        session: 'sess-1',
+        phase: 'execute',
+        regime: 'normal',
+        pending: 'compact',
+        plan: 'docs/plan.md',
+        compactions: 0,
+        resumes: 0,
+        stopped: null,
+        resumePrompt: null,
+        launch: null,
+        ...fields,
+      }),
+    },
+  }
+}
+/** Lets timers at the current instant fire and their work finish. */
+async function settle(clock: ReturnType<typeof world>) {
+  for (let i = 0; i < 10; i++) await clock.advance(1)
+}
+const pendingOf = (files: NonNullable<World['files']>) => (JSON.parse(files[AUTO]!.text) as { pending: unknown }).pending
+
+describe('auto run', () => {
+  test('compacts on the sentinel, books it and submits the continue prompt', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.compacts?.[0]).toMatch(/Ruling: line/)
+    expect(w.autoRuns).toContain('--session sess-1 compacted')
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/scripts\/auto-run after-compact/)
+    expect(w.prompts?.[0]).toMatch(/docs\/plan\.md/)
+    expect(pendingOf(files)).toBe('after-compact')
+  })
+
+  test('stays still without the sentinel, on an interrupted turn, or for another session', async ($, on) => {
+    const w: World = { ...SIGNED_IN, compacts: [], prompts: [] }
+    const clock = world(on, w)
+    const files = autoFiles()
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' })
+    files[AUTO] = autoFiles({ session: 'another' })[AUTO]!
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toEqual([])
+    expect(w.prompts).toEqual([])
+  })
+
+  test('waits while a subagent runs', async ($, on) => {
+    const w: World = { ...SIGNED_IN, compacts: [] }
+    const clock = world(on, w)
+    signedIn(on, autoFiles())
+    await $.session.start(START)
+    await $.agent.spawn({
+      tool_use_id: 'toolu_1',
+      prompt: 'Implement task 4',
+      description: 'Task 4',
+      subagentType: 'dr-forge:impl-sonnet-low',
+      provider: { plugin: 'dr-forge', tier: 'user' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+      fork: false,
+    })
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toEqual([])
+  })
+
+  test('waits for a turn that started first, then compacts', async ($, on) => {
+    const w: World = { ...SIGNED_IN, compacts: [] }
+    const clock = world(on, w)
+    signedIn(on, autoFiles())
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.start({ text: 'How is it going?', turnId: 't2' })
+    await settle(clock)
+    expect(w.compacts).toEqual([])
+    await $.turn.complete({ answer: 'Going well.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+  })
+
+  test('clears, binds the cleared session, sets its model and submits its first prompt', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
+    expect(w.autoRuns).toContain('--session sess-2 resumed')
+    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
+    expect(pendingOf(files)).toBeNull()
+  })
+
+  test('tells the cleared session when its model was refused', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO], refusedCommands: ['model'] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/could not run \/model sonnet/)
+    expect(w.prompts?.[0]).toMatch(/auto-run ruling add/)
+  })
+
+  test('stops the run when the cleared session cannot be bound', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.' })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { rebind: 1 } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.autoRuns).toContain('--session sess-1 stop --reason the cleared session could not be bound')
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/could not be bound/)
+  })
+
+  test('retries the stage that failed', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], submitFailures: 1 }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts).toEqual([])
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toHaveLength(1)
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/after-compact/)
+  })
+
+  test('books a refused compaction and retries it once', async ($, on) => {
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], isCompactVetoed: true }
+    const clock = world(on, w)
+    signedIn(on, autoFiles())
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toHaveLength(1)
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(2)
+    expect(w.prompts).toEqual([])
+  })
+
+  test('at the second failure, says so once and asks for the ending', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, fetches, compacts: [], prompts: [], isCompactVetoed: true, autoRunExits: { failure: 5 }, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/auto run stopped/i)
+    const titles = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
+    expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
+  })
+
+  test('books a compaction the engine made', async ($, on) => {
+    const w: World = { ...SIGNED_IN, autoRuns: [] }
+    world(on, w)
+    signedIn(on, autoFiles({ pending: null }))
+    await $.session.start(START)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
+    expect(w.autoRuns).toContain('--session sess-1 compacted')
+  })
+
+  test('books nothing without a run', async ($, on) => {
+    const w: World = { ...SIGNED_IN, autoRuns: [] }
+    world(on, w)
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
+    expect(w.autoRuns).toEqual([])
+  })
+
+  test('reads a run only for its session, and its sentinel only as the last line', () => {
+    const text = autoFiles({ session: 'b', launch: { model: 'sonnet', effort: 'high' } })[AUTO]!.text
+    expect(autoRunFor(text, 'b')?.launch).toEqual({ model: 'sonnet', effort: 'high' })
+    expect(autoRunFor(text, 'b')?.plan).toBe('docs/plan.md')
+    expect(autoRunFor(text, 'a')).toBeNull()
+    expect(autoRunFor('not json', 'b')).toBeNull()
+    expect(endsOnSentinel('x\n\nAuto run: compacting  \n\n', 'compact')).toBe(true)
+    expect(endsOnSentinel('Auto run: compacting\nmore', 'compact')).toBe(false)
+    expect(endsOnSentinel('Auto run: clearing', 'compact')).toBe(false)
+    expect(endsOnSentinel('Auto run: clearing', 'clear')).toBe(true)
+    expect(endsOnSentinel('Auto run: compacting', null)).toBe(false)
   })
 })
