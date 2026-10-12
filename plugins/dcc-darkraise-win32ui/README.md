@@ -50,6 +50,13 @@ prerequisite result. Install `dcc-darkraise-win32ui@darkraise` from the reposito
 root marketplace in either client. The slash examples above describe Claude Code;
 Codex can select or explicitly invoke the bundled skill.
 
+In Claude Code:
+
+```text
+/plugin marketplace add darkraise/darkraise-ai-plugins
+/plugin install dcc-darkraise-win32ui@darkraise
+```
+
 ## Contents
 
 | File | Covers |

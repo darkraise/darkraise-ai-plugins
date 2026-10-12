@@ -44,6 +44,13 @@ preprocessing is not needed. Install `dcc-darkraise-ui@darkraise` from the root
 marketplace in either client; use the client's skill picker or explicit skill
 invocation. The slash examples above describe Claude Code.
 
+In Claude Code:
+
+```text
+/plugin marketplace add darkraise/darkraise-ai-plugins
+/plugin install dcc-darkraise-ui@darkraise
+```
+
 ## Contents
 
 | File | Covers |

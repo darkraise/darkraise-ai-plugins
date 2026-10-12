@@ -128,6 +128,13 @@ present.
 
 ## Install
 
+Add the plugin, then install the status line:
+
+```text
+/plugin marketplace add darkraise/darkraise-ai-plugins
+/plugin install dr-status@darkraise
+```
+
 ```
 /dr-status install        # the account you are running now
 /dr-status install --all  # every account on this machine
