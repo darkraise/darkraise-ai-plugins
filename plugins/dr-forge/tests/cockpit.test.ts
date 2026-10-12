@@ -12,6 +12,7 @@ import {
   budgetFor,
   duration,
   elapsed,
+  finalLimitFor,
   finishLine,
   bandLines,
   fitBand,
@@ -622,6 +623,19 @@ describe('settings', () => {
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
+  })
+
+  test('relaxed handoff measures the context against the final-phase limit', async ($, on) => {
+    // The same worked figure tests/budget-line.test.sh asserts for the scripts.
+    expect(finalLimitFor(1_000_000, 800_000)).toBe(680_000)
+    expect(finalLimitFor(650_000)).toBe(552_500)
+    expect(finalLimitFor(650_000, 0)).toBe(552_500)
+    // 276,250 is half of 85% of the 650k window; strict would read 59%.
+    world(on, { tokens: 276_250, config: { handoffMode: 'relaxed' } })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^50%$/ })).toBeDefined()
   })
 
   test('sections picks and orders the pane', async ($, on) => {

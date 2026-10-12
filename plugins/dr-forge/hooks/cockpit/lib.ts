@@ -19,6 +19,15 @@ export function budgetFor(configured: number, env: string | undefined, window: n
   return Math.max(Math.floor(room * 0.93) - 140_000, Math.floor(room / 5))
 }
 
+/**
+ * The final-phase limit (reference/session-budget.md): 85% of min(autoCompactWindow, window).
+ * Relaxed handoff measures every task against it.
+ */
+export function finalLimitFor(window: number, compactWindow?: number): number {
+  const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
+  return Math.floor(room * 0.85)
+}
+
 /** A positive whole number from a settings value, else undefined. */
 export function positive(value: unknown): number | undefined {
   const n = Number(value)
@@ -827,4 +836,3 @@ export function remoteRuns(clients: readonly { surface: string }[], setting: str
   if (setting === 'true') return [{ text: '○ ', color: 'green' }, { text: 'on', color: 'green' }, { text: ' · no device yet', dim: true }]
   return [{ text: '○ not connected', dim: true }]
 }
-

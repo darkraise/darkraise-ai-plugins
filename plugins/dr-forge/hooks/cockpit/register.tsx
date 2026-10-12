@@ -25,6 +25,7 @@ import {
   budgetFor,
   duration,
   elapsed,
+  finalLimitFor,
   finishLine,
   fitBand,
   folderRuns,
@@ -165,6 +166,7 @@ const notifier = atom({ plugin: 'dr-forge', key: 'notifier' } as const, {
 
 type Options = {
   handoffTokens: number
+  handoffMode: string
   nudgeModel: boolean
   guardAttribution: boolean
   warnAt: number
@@ -180,7 +182,7 @@ type Options = {
 }
 
 /** What the budget reading is judged by. */
-type Tuning = { handoffTokens: number; nudgeModel: boolean; warnAt: number }
+type Tuning = { handoffTokens: number; nudgeModel: boolean; warnAt: number; isRelaxed: boolean }
 
 /** The options with their defaults filled in, and what the pane derives from them. */
 type Live = Omit<Options, 'layout'> & {
@@ -193,6 +195,7 @@ type Live = Omit<Options, 'layout'> & {
 function liveFrom(values: Partial<Options>): Live {
   const {
     handoffTokens = 0,
+    handoffMode = 'strict',
     nudgeModel = true,
     guardAttribution = true,
     warnAt = 80,
@@ -210,6 +213,7 @@ function liveFrom(values: Partial<Options>): Live {
   const layout = layoutSetting === 'full' || layoutSetting === 'compact' ? layoutSetting : 'auto'
   return {
     handoffTokens,
+    handoffMode,
     nudgeModel,
     guardAttribution,
     warnAt,
@@ -222,7 +226,7 @@ function liveFrom(values: Partial<Options>): Live {
     notifyAfter,
     notifyAskAfter,
     notifyDetail,
-    tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt) },
+    tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt), isRelaxed: handoffMode === 'relaxed' },
     shown: sectionsFrom(sections),
     isMinimized: layout === 'compact',
   }
@@ -2283,7 +2287,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   const tokens = figures.context.tokens
   if (tokens === undefined) return
   const window = figures.context.window
-  const limit = budgetFor(handoffTokens, undefined, window, compactWindow)
+  const limit = tuning.isRelaxed ? finalLimitFor(window, compactWindow) : budgetFor(handoffTokens, undefined, window, compactWindow)
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
