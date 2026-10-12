@@ -185,7 +185,7 @@ export type CockpitRun = {
 export type CockpitFinish = {
   action: 'merge' | 'pr' | 'keep' | 'wait'
   base: string | null
-  /** When the menu's 30 minutes run out, once finishing armed the choice. */
+  /** When the menu's wait runs out, once finishing armed the choice. */
   dueAt: number | null
   /** Your own answer to the menu, which overrides the choice. */
   answer: string | null

@@ -1301,7 +1301,6 @@ describe('settings view', () => {
     expect(await ui.find({ key: 'settings-reset-confirm' })).toBeUndefined()
     expect(await ui.find({ key: 'settings-reset' })).toBeDefined()
   })
-
 })
 
 describe('desktop', () => {

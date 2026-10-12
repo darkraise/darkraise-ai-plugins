@@ -357,10 +357,11 @@ When the turn wrote more than one ledger, each one must have its
 ending.
 
 A run also asks one question before its first task: what finishing should do
-if its menu goes unanswered for the configured wait, 30 minutes by default (merge locally, push and open a pull
-request, keep the branch, or wait). `scripts/finish-choice` keeps the answer
-beside the ledger (`.forge/sdd/<plan>/finish.json`, or
-`.forge/sdd/finish.json` for work done without a plan). When finishing
+if its menu goes unanswered for the configured wait, 30 minutes by default
+(merge locally, push and open a pull request, keep the branch, or wait).
+`scripts/finish-choice` keeps the answer beside the ledger
+(`.forge/sdd/<plan>/finish.json`, or `.forge/sdd/finish.json` for work done
+without a plan). When finishing
 shows its menu, it arms that choice and schedules a one-shot wake with
 CronCreate; the menu's last line says what happens and when. An answer to the
 menu inside that wait disarms the wake and wins; otherwise the wake
@@ -371,6 +372,7 @@ deadline. Codex has no scheduler, so there the menu names the choice and waits.
 With the `finishAction` setting at `merge`, `pr`, `keep` or `wait`, the run does
 not ask that question: `scripts/finish-choice` records the configured action
 the first time it is read, and `finishTimeout` sets the wait.
+
 See [reference/finish-preference.md](reference/finish-preference.md).
 
 Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
