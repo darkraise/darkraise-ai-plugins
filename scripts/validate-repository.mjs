@@ -119,7 +119,9 @@ export function validateRepository(root) {
   return errors;
 }
 
-const GROUPS = ['Cockpit', 'Context', 'Notifications', 'Workflow'];
+const GROUPS = ['Cockpit', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications'];
+const UNITS = ['k', '%', 's', 'min'];
+const ZEROS = ['auto', 'off', 'any', 'hidden', 'unset'];
 
 export async function validateSchema(root) {
   const rel = 'plugins/dr-forge/config/schema.mjs';
@@ -138,11 +140,18 @@ export async function validateSchema(root) {
     if (!['forge', 'claude'].includes(spec.target)) errors.push(`${at}: target must be forge or claude`);
     if (spec.env !== undefined && !/^[A-Z][A-Z0-9_]*$/.test(spec.env)) errors.push(`${at}: env must name an environment variable`);
     if (spec.step !== undefined && !(typeof spec.step === 'number' && spec.step > 0)) errors.push(`${at}: step must be a positive number`);
+    if (typeof spec.label !== 'string' || !spec.label || spec.label.length > 16) errors.push(`${at}: label is required, at most 16 characters`);
+    if (spec.unit !== undefined && !(spec.type === 'number' && UNITS.includes(spec.unit))) errors.push(`${at}: unit must be one of ${UNITS.join(', ')}, on a number`);
+    if (spec.zero !== undefined && !(spec.type === 'number' && ZEROS.includes(spec.zero))) errors.push(`${at}: zero must be one of ${ZEROS.join(', ')}, on a number`);
+    if (spec.enforcedBy !== undefined && !['script', 'skill'].includes(spec.enforcedBy)) errors.push(`${at}: enforcedBy must be script or skill`);
+    if (spec.floor !== undefined && !(spec.type === 'number' && spec.min === 0 && Number.isFinite(spec.floor) && spec.floor >= 1 && (spec.max === undefined || spec.floor <= spec.max))) errors.push(`${at}: floor must lie between 1 and max, on a number whose min is 0`);
     const fits = spec.type === 'boolean' ? typeof spec.default === 'boolean'
       : spec.type === 'number' ? Number.isFinite(spec.default) && (spec.min === undefined || (Number.isFinite(spec.min) && spec.default >= spec.min)) && (spec.max === undefined || (Number.isFinite(spec.max) && spec.default <= spec.max))
       : spec.type === 'enum' ? Array.isArray(spec.values) && spec.values.length > 0 && spec.values.includes(spec.default)
       : typeof spec.default === 'string';
-    if (!fits) errors.push(`${at}: default does not fit its type`);
+    // A number setting is whole, and a floored one has no values between 0 and its floor.
+    const whole = spec.type !== 'number' || (Number.isInteger(spec.default) && (spec.floor === undefined || spec.default === 0 || spec.default >= spec.floor));
+    if (!fits || !whole) errors.push(`${at}: default does not fit its type`);
   }
   return errors;
 }

@@ -92,5 +92,32 @@ case $(tr -d ' \n' < "$FILE") in '{"layout":"compact"}'|'{"layout":"full","warnA
 check "concurrent first runs: one whole import" "$whole" "yes"
 check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dr-forge" | grep -c '\.import$')" "0"
 
+# --- the workflow keys: defaults and refusals ---
+fresh w
+check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.finishTimeout].join(" "))')" \
+  "strict true true ask auto ask standard sections true single ask 30"
+# Each key: its default, a value it accepts, and one it refuses.
+while read -r key default valid invalid; do
+  fresh "m-$key"
+  check "$key: default" "$(fc get "$key")" "$default"
+  fc set "$key" "$valid"; check "$key: a valid value: exit 0" "$?" "0"
+  check "$key: the value is read back" "$(fc get "$key")" "$valid"
+  fc set "$key" "$invalid"; check "$key: an invalid value: exit 2" "$?" "2"
+  check "$key: a refusal keeps the value" "$(fc get "$key")" "$valid"
+done <<'ROWS'
+handoffMode strict relaxed loose
+codexLane true false maybe
+codexReview true false 0
+executionStrategy ask parallel fast
+executionMode auto subagent agent
+worktree ask always sometimes
+processBias standard heavier heavy
+designApproval sections whole none
+specReview true false no
+questionStyle single batched many
+finishAction ask merge discard
+finishTimeout 30 45 3
+ROWS
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

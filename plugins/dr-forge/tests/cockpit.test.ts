@@ -716,6 +716,18 @@ describe('settings', () => {
     notifyAfter: 'set-notifyAfter-more',
     notifyAskAfter: 'set-notifyAskAfter-more',
     notifyDetail: 'set-notifyDetail-full',
+    handoffMode: 'set-handoffMode-strict',
+    codexLane: 'set-codexLane-toggle',
+    codexReview: 'set-codexReview-toggle',
+    executionStrategy: 'set-executionStrategy-ask',
+    executionMode: 'set-executionMode-auto',
+    worktree: 'set-worktree-ask',
+    processBias: 'set-processBias-standard',
+    designApproval: 'set-designApproval-sections',
+    specReview: 'set-specReview-toggle',
+    questionStyle: 'set-questionStyle-single',
+    finishAction: 'set-finishAction-ask',
+    finishTimeout: 'set-finishTimeout-more',
   }
 
   test('draws every setting under its schema group', async ($, on) => {
