@@ -53,8 +53,25 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/cockpit/notify'
-import type { Schema } from '../hooks/cockpit/config'
-import { SCHEMA, importedSettings, isValidSetting, resolveSettings, schemaRows, settingProblems, settingWritten } from '../hooks/cockpit/config'
+import type { Schema, SettingSpec } from '../hooks/cockpit/config'
+import {
+  SCHEMA,
+  claudeLocks,
+  envLocks,
+  importedSettings,
+  isValidSetting,
+  rangeText,
+  resolveSettings,
+  rowOf,
+  rowsOf,
+  schemaRows,
+  settingProblems,
+  settingWritten,
+  shownValue,
+  steppedSetting,
+  tabsOf,
+  typedNumber,
+} from '../hooks/cockpit/config'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -2014,10 +2031,10 @@ describe('flight deck', () => {
 
 describe('settings file', () => {
   const FAKE: Schema = {
-    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', title: 'Layout', description: 'd', target: 'forge' },
-    warnAt: { type: 'number', default: 80, min: 1, max: 99, group: 'Context', title: 'Warn', description: 'd', target: 'forge' },
-    handoffTokens: { type: 'number', default: 0, min: 0, max: 2_000_000, env: 'DR_FORGE_BUDGET', group: 'Context', title: 'Budget', description: 'd', target: 'forge' },
-    nudgeModel: { type: 'boolean', default: true, group: 'Context', title: 'Nudge', description: 'd', target: 'forge' },
+    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', label: 'Layout', title: 'Layout', description: 'd', target: 'forge' },
+    warnAt: { type: 'number', default: 80, min: 1, max: 99, group: 'Context', label: 'Warn at', title: 'Warn', description: 'd', target: 'forge' },
+    handoffTokens: { type: 'number', default: 0, min: 0, max: 2_000_000, env: 'DR_FORGE_BUDGET', group: 'Context', label: 'Handoff budget', title: 'Budget', description: 'd', target: 'forge' },
+    nudgeModel: { type: 'boolean', default: true, group: 'Context', label: 'Handoff note', title: 'Nudge', description: 'd', target: 'forge' },
   }
 
   test('resolves the environment, then the file, then the default', () => {
@@ -2071,5 +2088,103 @@ describe('settings file', () => {
 
   test('every default in the real schema fits its own type', () => {
     for (const spec of Object.values(SCHEMA)) expect(isValidSetting(spec, spec.default)).toBe(true)
+  })
+})
+
+describe('settings rows', () => {
+  const ROWS: Schema = {
+    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', label: 'Layout', title: 'Layout', description: 'd', target: 'forge' },
+    warnAt: { type: 'number', default: 80, min: 1, max: 99, step: 5, unit: '%', group: 'Context', label: 'Warn at', title: 'Warn', description: 'd', target: 'forge' },
+    budget: { type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DR_FORGE_BUDGET', group: 'Context', label: 'Handoff budget', title: 'Budget', description: 'd', target: 'forge' },
+    note: { type: 'boolean', default: true, group: 'Context', label: 'Handoff note', title: 'Note', description: 'd', target: 'forge' },
+    compactAt: { type: 'number', default: 0, min: 0, floor: 100_000, max: 1_000_000, step: 50_000, unit: 'k', zero: 'unset', group: 'Context', label: 'Auto-compact at', title: 'Compact', description: 'd', target: 'claude' },
+    wait: { type: 'number', default: 30, min: 5, max: 240, step: 5, unit: 'min', group: 'Finish', label: 'Menu waits', title: 'Wait', description: 'd', target: 'forge' },
+  }
+  const spec = (key: string) => ROWS[key] as SettingSpec
+
+  test('the tabs are the groups in schema order', () => {
+    expect(tabsOf(ROWS)).toEqual(['Cockpit', 'Context', 'Finish'])
+    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications'])
+  })
+
+  test('a value reads through its unit and zero word', () => {
+    expect(shownValue(spec('warnAt'), 70)).toBe('70%')
+    expect(shownValue(spec('budget'), 0)).toBe('auto')
+    expect(shownValue(spec('budget'), 465_000)).toBe('465k')
+    expect(shownValue(spec('wait'), 45)).toBe('45 min')
+    expect(shownValue(spec('note'), false)).toBe('off')
+    expect(shownValue(spec('layout'), 'full')).toBe('full')
+  })
+
+  test('a typed number is whole, in range, and may end in k', () => {
+    expect(typedNumber(spec('warnAt'), ' 65 ')).toBe(65)
+    expect(typedNumber(spec('warnAt'), '500')).toBeUndefined()
+    expect(typedNumber(spec('warnAt'), '6.5')).toBeUndefined()
+    expect(typedNumber(spec('warnAt'), 'many')).toBeUndefined()
+    expect(typedNumber(spec('budget'), '465k')).toBe(465_000)
+    expect(typedNumber(spec('budget'), '0.5K')).toBe(500)
+    expect(typedNumber(spec('compactAt'), '0')).toBe(0)
+    expect(typedNumber(spec('compactAt'), '50000')).toBeUndefined()
+    expect(typedNumber(spec('compactAt'), '100k')).toBe(100_000)
+    expect(rangeText(spec('warnAt'))).toBe('Enter a whole number from 1 to 99')
+    expect(rangeText(spec('compactAt'))).toBe('Enter 0 or a whole number from 100,000 to 1,000,000')
+  })
+
+  test('a step moves to the next multiple, stays in range, and jumps a floor', () => {
+    expect(steppedSetting(spec('warnAt'), 80, 1)).toBe(85)
+    expect(steppedSetting(spec('warnAt'), 97, 1)).toBe(99)
+    expect(steppedSetting(spec('warnAt'), 99, -1)).toBe(95)
+    expect(steppedSetting(spec('warnAt'), 1, -1)).toBe(1)
+    expect(steppedSetting(spec('warnAt'), 1, 1)).toBe(5)
+    expect(steppedSetting(spec('compactAt'), 0, 1)).toBe(100_000)
+    expect(steppedSetting(spec('compactAt'), 0, -1)).toBe(0)
+    expect(steppedSetting(spec('compactAt'), 100_000, -1)).toBe(0)
+    expect(steppedSetting(spec('compactAt'), 100_000, 1)).toBe(150_000)
+    expect(steppedSetting(spec('compactAt'), 1_000_000, 1)).toBe(1_000_000)
+  })
+
+  test('a row carries what the view draws', () => {
+    expect(rowOf('warnAt', spec('warnAt'), 70)).toEqual({
+      key: 'warnAt',
+      group: 'Context',
+      label: 'Warn at',
+      description: 'd',
+      kind: 'stepper',
+      value: 70,
+      shown: '70%',
+      shownDefault: '80%',
+      values: [],
+      isChanged: true,
+      lockedBy: null,
+    })
+    expect(rowOf('layout', spec('layout'), 'auto')).toMatchObject({ kind: 'choices', values: ['auto', 'full', 'compact'], isChanged: false })
+    expect(rowOf('budget', spec('budget'), 465_000, 'set by DR_FORGE_BUDGET')).toMatchObject({ shown: '465k', isChanged: false, lockedBy: 'set by DR_FORGE_BUDGET' })
+    expect(rowsOf(ROWS, { warnAt: 70 }, 'Context', { budget: 'set by DR_FORGE_BUDGET' }).map(row => [row.key, row.isChanged, row.lockedBy])).toEqual([
+      ['warnAt', true, null],
+      ['budget', false, 'set by DR_FORGE_BUDGET'],
+      ['note', false, null],
+      ['compactAt', false, null],
+    ])
+  })
+
+  test('says which keys something outside the file forces', () => {
+    expect(envLocks(ROWS, { DR_FORGE_BUDGET: '400000' })).toEqual({ budget: 'set by DR_FORGE_BUDGET' })
+    expect(envLocks(ROWS, { DR_FORGE_BUDGET: 'junk' })).toEqual({})
+    expect(envLocks(ROWS, {})).toEqual({})
+    expect(claudeLocks(ROWS, { compactAt: 500_000 }, { compactAt: 650_000 })).toEqual({ compactAt: 'set by a project or managed settings file' })
+    expect(claudeLocks(ROWS, { compactAt: 650_000 }, { compactAt: 650_000 })).toEqual({})
+    expect(claudeLocks(ROWS, {}, {})).toEqual({})
+  })
+
+  test('a Claude key resolves from the Claude settings and never enters the forge file', () => {
+    expect(resolveSettings(ROWS, { compactAt: 300_000 }, {}, { compactAt: 650_000 }).compactAt).toBe(650_000)
+    expect(resolveSettings(ROWS, { compactAt: 300_000 }, {}, { compactAt: 50_000 }).compactAt).toBe(0)
+    expect(resolveSettings(ROWS, { compactAt: 300_000 }, {}).compactAt).toBe(0)
+    expect(settingProblems(ROWS, { compactAt: 'x' }, {})).toEqual([])
+    expect(() => settingWritten(ROWS, {}, 'compactAt', 650_000)).toThrow("compactAt is stored in Claude's settings file")
+    expect(importedSettings(ROWS, { pluginConfigs: { 'dr-cockpit@darkraise': { options: { compactAt: 650_000, warnAt: 70 } } } }, null)).toEqual({ warnAt: 70 })
+    expect(isValidSetting(spec('compactAt'), 0)).toBe(true)
+    expect(isValidSetting(spec('compactAt'), 99_999)).toBe(false)
+    expect(isValidSetting(spec('wait'), 5.5)).toBe(false)
   })
 })
