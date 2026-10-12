@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# An auto run's state (reference/auto-run.md).
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/auto-run.sh"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: auto-run [--session ID] start --spec P [--register R] [--force]
+       auto-run [--session ID] status | pending | task-complete | compacted | resumed
+       auto-run [--session ID] attach --plan P
+       auto-run [--session ID] phase spec|plan|execute|final|finish
+       auto-run [--session ID] clear [--phase]
+       auto-run [--session ID] rebind --to ID
+       auto-run [--session ID] failure [--reason TEXT]
+       auto-run [--session ID] decision add --id ID --question Q [--options O] [--opus-reason R] [--task N]
+       auto-run [--session ID] decision list | decision clear [--id ID]
+       auto-run [--session ID] ruling add TEXT | ruling list
+       auto-run [--session ID] stop [--reason TEXT]
+Exit: 0 done; 2 usage; 3 no run bound to this session; 4 refused; 5 the run stopped.
+EOF
+  exit 2
+}
+
+command -v "${DR_FORGE_JQ:-jq}" >/dev/null 2>&1 || { echo "auto-run: jq is required" >&2; exit 2; }
+
+AR_SESSION=${CLAUDE_CODE_SESSION_ID:-}
+if [ "${1:-}" = --session ]; then
+  [ $# -ge 2 ] && [ -n "$2" ] || usage
+  AR_SESSION=$2
+  shift 2
+fi
+export AR_SESSION
+[ $# -ge 1 ] || usage
+cmd=$1
+shift
+
+bound() { ar_bound || { echo "auto-run: no auto run is bound to this session" >&2; exit 3; }; }
+reason_arg() { # sets reason from [--reason TEXT]
+  reason=""
+  if [ "${1:-}" = --reason ]; then
+    [ $# -eq 2 ] || usage
+    reason=$2
+  else
+    [ $# -eq 0 ] || usage
+  fi
+}
+
+case $cmd in
+  start)
+    spec="" register="" force=0
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --spec) [ $# -ge 2 ] || usage; spec=$2; shift 2 ;;
+        --register) [ $# -ge 2 ] || usage; register=$2; shift 2 ;;
+        --force) force=1; shift ;;
+        *) usage ;;
+      esac
+    done
+    [ -n "$spec" ] || usage
+    [ -n "$AR_SESSION" ] || { echo "auto-run: no session id; CLAUDE_CODE_SESSION_ID is unset and no --session was given" >&2; exit 2; }
+    ar_start "$spec" "$register" "$force"
+    ;;
+  status) [ $# -eq 0 ] || usage; bound; ar_status ;;
+  pending) [ $# -eq 0 ] || usage; bound; ar_pending ;;
+  attach)
+    [ $# -eq 2 ] && [ "$1" = --plan ] && [ -n "$2" ] || usage
+    bound; ar_update '.plan = $p' --arg p "$2"
+    ;;
+  phase)
+    [ $# -eq 1 ] || usage
+    case $1 in spec|plan|execute|final|finish) ;; *) usage ;; esac
+    bound; ar_update '.phase = $p' --arg p "$1"
+    ;;
+  task-complete) [ $# -eq 0 ] || usage; bound; ar_update '.resumes = 0' ;;
+  clear)
+    case "$#:${1:-}" in
+      0:) bound; ar_clear 0 ;;
+      1:--phase) bound; ar_clear 1 ;;
+      *) usage ;;
+    esac
+    ;;
+  rebind)
+    [ $# -eq 2 ] && [ "$1" = --to ] && [ -n "$2" ] || usage
+    ar_rebind "$2"
+    ;;
+  resumed) [ $# -eq 0 ] || usage; bound; ar_resumed ;;
+  compacted) [ $# -eq 0 ] || usage; bound; ar_compacted ;;
+  failure) reason_arg "$@"; bound; ar_failure "$reason" ;;
+  decision)
+    [ $# -ge 1 ] || usage
+    sub=$1
+    shift
+    case $sub in
+      add)
+        id="" question="" options="" opus="" task=""
+        while [ $# -gt 0 ]; do
+          [ $# -ge 2 ] || usage
+          case $1 in
+            --id) id=$2 ;;
+            --question) question=$2 ;;
+            --options) options=$2 ;;
+            --opus-reason) opus=$2 ;;
+            --task) task=$2 ;;
+            *) usage ;;
+          esac
+          shift 2
+        done
+        [ -n "$id" ] && [ -n "$question" ] || usage
+        bound; ar_decision_add "$id" "$question" "$options" "$opus" "$task"
+        ;;
+      list) [ $# -eq 0 ] || usage; bound; ar_decision_list ;;
+      clear)
+        case "$#:${1:-}" in
+          0:) bound; ar_decision_clear ;;
+          2:--id) bound; ar_decision_clear "$2" ;;
+          *) usage ;;
+        esac
+        ;;
+      *) usage ;;
+    esac
+    ;;
+  ruling)
+    case "$#:${1:-}" in
+      2:add) [ -n "$2" ] || usage; bound; ar_ruling_add "$2" ;;
+      1:list) bound; ar_ruling_list ;;
+      *) usage ;;
+    esac
+    ;;
+  stop) reason_arg "$@"; bound; ar_stop "$reason" ;;
+  *) usage ;;
+esac
