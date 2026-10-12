@@ -196,5 +196,38 @@ for s in subagent-driven-development executing-plans; do
     "$(grep -c 'Finishing is a Skill tool call in this same turn' "$HERE/../skills/$s/SKILL.md")" "1"
 done
 
+# --- an auto run bound to the session ends its turns only on the sentinel ---
+AR="$HERE/../scripts/auto-run"
+unset CLAUDE_CODE_SESSION_ID
+git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
+(cd "$REPO" && bash "$AR" --session s-1 start --spec docs/s.md --register docs/r.md >/dev/null)
+STATE="$REPO/.superpowers/sdd/auto-run.json"
+pend() { jq --arg p "$1" '.pending = $p' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
+stop_in() { # stop_in <cwd> <session> <last message>
+  jq -n --arg cwd "$1" --arg sid "$2" --arg msg "$3" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:"",stop_hook_active:false,last_assistant_message:$msg}' | bash "$END"
+}
+sleep 1; prompt s-1
+out=$(stop s-1 'Task 2 is done. Everything looks good.')
+check "auto run: a summary is held" "$(decision "$out")" "block"
+check "auto run: the reason names the sentinel" "$(jq -r .reason <<<"$out" | grep -c 'Auto run: compacting')" "1"
+check "auto run: the retry passes" "$(stop s-1 'Task 2 is done.' true)" ""
+pend compact
+check "auto run: the compacting line passes" "$(stop s-1 $'Task 2 is done.\n\nAuto run: compacting\n')" ""
+check "auto run: the clearing line does not answer compact" "$(decision "$(stop s-1 $'Done.\n\nAuto run: clearing')")" "block"
+check "auto run: the sentinel must be the last line" "$(decision "$(stop s-1 $'Auto run: compacting\n\nMore words.')")" "block"
+pend clear
+check "auto run: the clearing line passes a clear" "$(stop s-1 $'Handed off.\n\nAuto run: clearing')" ""
+pend after-compact
+check "auto run: after a booked compaction the hold says to settle it" "$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting' | jq -r .reason | grep -c 'auto-run after-compact')" "1"
+sleep 1; prompt s-2
+check "auto run: another session is not held" "$(stop s-2 'Here is the answer.')" ""
+git -C "$REPO" worktree add -q -b wt "$TMP/wt"
+pend compact
+check "auto run: found from a worktree" "$(stop_in "$TMP/wt" s-1 $'Done.\n\nAuto run: compacting')" ""
+check "auto run: held from a worktree" "$(decision "$(stop_in "$TMP/wt" s-1 'Done.')")" "block"
+(cd "$REPO" && bash "$AR" --session s-1 stop)
+check "a stopped run: back to the plain rules" "$(stop s-1 'Here is the answer.')" ""
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -31,7 +31,12 @@ stamp="${HOME:-}/.claude/dr-forge/sessions/turns/$(printf '%s' "$session_id" | t
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 . "${SCRIPT_DIR}/lib/forge-dir.sh"
 sdd="$(forge_dir state "$root")/sdd"
-[ -d "$sdd" ] || exit 0
+# An auto run bound to this session (reference/auto-run.md) lives in the
+# primary checkout, whichever worktree the turn ran in: its pending action.
+auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
+[ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
+root_shown=$PLUGIN_ROOT
+if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 . "${SCRIPT_DIR}/lib/in-flight.sh"
 # Background work this session started that is still listed (lib/in-flight.sh):
 # no finished notification yet, or an agent that reported but left work of its
@@ -63,6 +68,22 @@ An agent that already sent its report is still running when work it started is a
   exit 0
 fi
 
+# A turn of an auto run ends only on the sentinel line that answers its pending
+# action; the cockpit compacts or clears on that line. Any other ending is held
+# once.
+if [ -n "$auto_pending" ]; then
+  final_line=$(printf '%s\n' "$last" | sed -e 's/[[:space:]]*$//' -e '/^$/d' | tail -n 1)
+  case "$auto_pending:$final_line" in
+    'compact:Auto run: compacting' | 'clear:Auto run: clearing') exit 0 ;;
+  esac
+  reason="An auto run is bound to this session (pending: ${auto_pending}; see reference/auto-run.md), so its turns end only on a sentinel line. Do not stop: continue the run. When a budget line said compact, finish the task in flight, then end your message with the line \`Auto run: compacting\`. After \`auto-run clear\` exits 0, end with \`Auto run: clearing\`. If the run must stop (your human partner asked, or a stop the reference names), run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
+  if [ "$auto_pending" = after-compact ]; then
+    reason="An auto run is bound to this session and a compaction already ran (pending: after-compact; see reference/auto-run.md), so no sentinel ends this turn. Do not stop: run \`bash ${root_shown}/scripts/auto-run after-compact\` now and follow what it prints (continue with the next task, or hand off and clear). If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
+  fi
+  jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
+  exit 0
+fi
+
 # Every ledger written this turn must have its ending, since two plans can be
 # active in one checkout. A plan whose final review is clean ends on the
 # finishing menu, one of finishing's own stops (failing tests, a discard or
@@ -87,8 +108,6 @@ done < <(find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2
 
 plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r')
 [ -n "$plan" ] || plan="PLAN_FILE"
-root_shown=$PLUGIN_ROOT
-if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 
 if [ "$clean" = 1 ]; then
   reason="This turn advanced plan ${plan} and its final review is clean, but your message ends without the finishing menu. Invoke dr-forge:finishing-a-development-branch with the Skill tool now and follow it: tests, the rulings and amendments, then the integration menu as the last thing in your message."
