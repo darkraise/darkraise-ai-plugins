@@ -68,7 +68,7 @@ import {
   writesGitText,
 } from './lib'
 import type { BandInput, Run, Section, TrackPart } from './lib'
-import { SCHEMA, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
+import { SCHEMA, claudeLocks, envLocks, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
 import type { SettingValue, SettingsFile } from './config'
 import { drawSettings } from './settings-view'
 import {
@@ -362,7 +362,10 @@ export const register: Register = on => {
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.deny !== undefined || started.agentId === undefined) return started
-    if (isSuperpowers(e.subagentType)) await update($, isPlanSession, () => true)
+    if (isSuperpowers(e.subagentType)) {
+      await update($, isPlanSession, () => true)
+      await flushSettingNote($)
+    }
     const spawn: CockpitSpawn = {
       agentId: started.agentId,
       seat: e.subagentType,
@@ -390,6 +393,7 @@ export const register: Register = on => {
 
   on('ui.close', { id: PANE }, async ($, e, next) => {
     if (e.origin.kind === 'person') S.isClosedByPerson = true
+    await flushSettingNote($)
     return next(e)
   })
 
@@ -563,6 +567,7 @@ export const register: Register = on => {
     if ((await read($, activity)).tool === tool) await setActivity($, now => (now.kind === 'running' ? { ...now, tool: null, agent: null } : now))
     if (tool === 'Skill' && isSuperpowers(String((e as { skill?: unknown }).skill ?? ''))) {
       await update($, isPlanSession, () => true)
+      await flushSettingNote($)
     }
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
     if (e.agentId === undefined) {
@@ -754,7 +759,7 @@ export const register: Register = on => {
       const values = (await read($, settings)) ?? {}
       const tabs = tabsOf(SCHEMA)
       const tab = tabs.includes(state.tab) ? state.tab : (tabs[0] ?? '')
-      const rows = rowsOf(SCHEMA, values, tab)
+      const rows = rowsOf(SCHEMA, values, tab, S.locks)
       // Every press but the one that asked for it ends an edit or a pending reset.
       const show = (change: Partial<CockpitSettingsView>) =>
         update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false, ...change }))
@@ -840,6 +845,7 @@ export const register: Register = on => {
           cancelReset: () => show({}),
           back: async () => {
             await show({})
+            await flushSettingNote($)
             await update($, view, () => 'cockpit')
             // Minimized, the settings were all the pane was open for.
             if (o.isMinimized) await $.ui.close({ id: PANE })
@@ -1912,6 +1918,12 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 const S = {
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
+  // Keys something outside the settings file forces, with the words their rows show.
+  locks: {} as Record<string, string>,
+  // Skill-enforced settings changed since the model was last told, with their new values.
+  changed: {} as Record<string, SettingValue>,
+  // Claude keys this session saved: the engine's settings snapshot may not show another process's write at once.
+  claudeSaved: {} as Record<string, SettingValue>,
   // The state directory's name in the primary checkout, as last read.
   stateLeaf: '.forge',
   kinds: [] as NotifyKind[],
@@ -2367,11 +2379,18 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
   }
 }
 
-/** Puts a settings file in force: the atom every hook reads through live(), and the notifier. */
+/** Puts a settings file in force: the atom every hook reads through live(), the locked rows, and the notifier. */
 async function applySettings($: EngineInterface, file: SettingsFile) {
-  const budget = (await $.env.get('DR_FORGE_BUDGET')) || (await $.env.get('DR_SUPERPOWERS_BUDGET'))
-  const values = resolveSettings(SCHEMA, file, { DR_FORGE_BUDGET: budget })
-  S.settingProblems = settingProblems(SCHEMA, file, { DR_FORGE_BUDGET: budget })
+  const forge = await $.env.get('DR_FORGE_BUDGET')
+  const legacy = await $.env.get('DR_SUPERPOWERS_BUDGET')
+  const env = { DR_FORGE_BUDGET: forge || legacy }
+  const merged = { ...(((await $.settings.read().catch(() => ({}))) ?? {}) as Record<string, unknown>), ...S.claudeSaved }
+  const user = { ...(((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>), ...S.claudeSaved }
+  const values = resolveSettings(SCHEMA, file, env, merged)
+  S.settingProblems = settingProblems(SCHEMA, file, env)
+  const locks = { ...envLocks(SCHEMA, env), ...claudeLocks(SCHEMA, merged, user) }
+  if (!forge && legacy && locks.handoffTokens !== undefined) locks.handoffTokens = 'set by DR_SUPERPOWERS_BUDGET'
+  S.locks = locks
   await update($, settings, () => values)
   applyNotify(liveFrom(values as Partial<Options>))
 }
@@ -2413,6 +2432,7 @@ async function importWebhook($: EngineInterface) {
 
 /** Reads ~/.dr-forge/config.json into force, importing the pre-2.0 settings on the first run. */
 async function loadSettings($: EngineInterface) {
+  S.claudeSaved = {}
   const path = await configFile($)
   if (path === null) return applySettings($, {})
   let file = await readSettingsFile($, path)
@@ -2423,21 +2443,48 @@ async function loadSettings($: EngineInterface) {
   await importWebhook($).catch(() => undefined)
 }
 
-/** Saves one setting to ~/.dr-forge/config.json and puts it in force, saying why if it could not; resolves whether it was saved. */
+/** Saves one setting and puts it in force, saying why if it could not; resolves whether it was saved. */
 async function setOption($: EngineInterface, key: string, value: SettingValue): Promise<boolean> {
+  const spec = SCHEMA[key]
   const path = await configFile($)
   const file = path === null ? null : await readSettingsFile($, path)
   try {
+    if (spec?.target === 'claude') {
+      // Claude's settings file holds far more than these keys, so only forge-config, which rewrites it in one rename, writes it.
+      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/forge-config.mjs`, 'set', key, String(value)])
+      if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^forge-config: /, '') || `forge-config exited ${ran.exitCode}`)
+      S.claudeSaved[key] = value
+      await applySettings($, file ?? {})
+      return true
+    }
     if (path === null) throw new Error('no home directory is set')
     if (file === null) throw new Error(`${path} is not a JSON object; fix or remove it`)
     const next = settingWritten(SCHEMA, file, key, value)
     await $.fs.write(path, `${JSON.stringify(next, null, 2)}\n`)
     await applySettings($, next)
+    if (spec?.enforcedBy === 'skill') S.changed[key] = value
     return true
   } catch (error) {
     $.ui.toast(`dr-forge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
     return false
   }
+}
+
+/** Tells the model, once, which skill-enforced settings changed; outside a dr-forge session the change waits for one. */
+async function flushSettingNote($: EngineInterface) {
+  const sent = { ...S.changed }
+  const keys = Object.keys(sent)
+  if (keys.length === 0 || !(await read($, isPlanSession))) return
+  const note = `dr-forge settings changed: ${keys.map(key => `${key}=${String(sent[key])}`).join('; ')}. Each replaces the matching question or default in the skills.`
+  try {
+    const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
+    if (appended.deny !== undefined) return
+  } catch {
+    // The host would not take the row: the changes stay pending for the next close.
+    return
+  }
+  // A key changed again while the row was being appended stays pending.
+  for (const key of keys) if (S.changed[key] === sent[key]) delete S.changed[key]
 }
 
 async function refreshDetail($: EngineInterface) {

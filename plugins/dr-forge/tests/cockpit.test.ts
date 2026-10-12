@@ -141,6 +141,14 @@ type World = {
   window?: number
   startedAt?: number
   settings?: Record<string, unknown>
+  /** What the user's own Claude settings file holds, when it differs from the merged `settings`. */
+  userSettings?: Record<string, unknown>
+  /** Each forge-config command the plugin runs, as one line. */
+  runs?: string[]
+  /** forge-config refuses, as on a Claude settings file it cannot parse. */
+  isForgeConfigRefusing?: boolean
+  /** The session refuses every row the plugin appends. */
+  isAppendFailing?: boolean
   toasts?: string[]
   notes?: string[]
   env?: Record<string, string>
@@ -191,7 +199,7 @@ function world(on: On, w: World) {
       cost: { usd: 1.5 },
     },
   }))
-  on('settings.read', () => ({ value: w.settings ?? {} }))
+  on('settings.read', (_$, e) => ({ value: e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {}) }))
   on('tool.call', (_$, e) => w.tools?.[String(e.tool)]?.() ?? { result: 'ok', text: 'ok' })
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
@@ -226,6 +234,11 @@ function world(on: On, w: World) {
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
+    if (argv.includes('/scripts/lib/forge-config.mjs ')) {
+      w.runs?.push(argv)
+      const stderr = w.isForgeConfigRefusing ? 'forge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
+      return { value: { exitCode: w.isForgeConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? '/home/me/code/shop/.git\n' : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -263,6 +276,7 @@ function world(on: On, w: World) {
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dr-forge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
   on('session.append', (_$, e, next) => {
+    if (w.isAppendFailing) return { deny: 'append refused' }
     const part = (e.message as { content?: { text?: string }[] }).content?.[0]
     if (part?.text !== undefined) w.notes?.push(part.text)
     return next(e)
@@ -2257,5 +2271,137 @@ describe('settings rows', () => {
     expect(isValidSetting(spec('compactAt'), 0)).toBe(true)
     expect(isValidSetting(spec('compactAt'), 99_999)).toBe(false)
     expect(isValidSetting(spec('wait'), 5.5)).toBe(false)
+  })
+})
+
+describe('settings held outside the file', () => {
+  const NOTE = 'dr-forge settings changed'
+
+  test('a value the environment forces shows locked, and a group reset leaves it alone', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: { warnAt: 70, handoffTokens: 300_000 }, written, env: { DR_FORGE_BUDGET: '465000' } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: 'set by DR_FORGE_BUDGET' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^465k/ })).toBeDefined()
+    expect(await ui.find({ key: 'set-handoffTokens-more' })).toBeUndefined()
+    expect(await ui.find({ key: 'set-warnAt-more' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '1 changed' })).toBeDefined()
+    await ui.press({ key: 'settings-reset' })
+    await ui.press({ key: 'settings-reset-confirm' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ handoffTokens: 300_000 })
+  })
+
+  test('the pre-2.0 variable is named when it is the one set', async ($, on) => {
+    world(on, { tokens: 284_000, config: {}, env: { DR_SUPERPOWERS_BUDGET: '465000' } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: 'set by DR_SUPERPOWERS_BUDGET' })).toBeDefined()
+  })
+
+  test('a Claude key is saved through forge-config, never into the forge file', async ($, on) => {
+    const written: Record<string, string> = {}
+    const runs: string[] = []
+    world(on, { tokens: 284_000, config: {}, written, runs, settings: { autoCompactWindow: 650_000 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toMatch(/^node .*\/scripts\/lib\/forge-config\.mjs set autoCompactWindow 700000$/)
+    // The row shows what was saved, and the next step starts from it.
+    expect(await ui.find({ type: 'Text', text: /^700k/ })).toBeDefined()
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    expect(runs[1]).toMatch(/ set autoCompactWindow 750000$/)
+    await ui.press({ key: 'set-autoCompactWindow-reset' })
+    expect(runs[2]).toMatch(/ set autoCompactWindow 0$/)
+    expect(await ui.find({ type: 'Text', text: /^unset/ })).toBeDefined()
+    await ui.press({ key: 'set-autoCompactEnabled-toggle' })
+    expect(runs[3]).toMatch(/ set autoCompactEnabled false$/)
+    expect(written[CONFIG]).toBeUndefined()
+  })
+
+  test('says why a Claude key was not saved', async ($, on) => {
+    const toasts: string[] = []
+    world(on, { tokens: 284_000, config: {}, toasts, isForgeConfigRefusing: true })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    expect(toasts).toContain('dr-forge: autoCompactWindow not saved: /home/me/.claude/settings.json is not valid JSON; fix or remove it')
+  })
+
+  test('a Claude key a project or managed file overrides shows locked', async ($, on) => {
+    world(on, { tokens: 284_000, config: {}, settings: { autoCompactWindow: 500_000 }, userSettings: { autoCompactWindow: 650_000 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: 'set by a project or managed settings file' })).toBeDefined()
+    expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
+  })
+
+  test('a changed skill setting is told to the model once, when the settings close', async ($, on) => {
+    const notes: string[] = []
+    world(on, { tokens: 50_000, config: {}, notes, written: {} })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Workflow' })
+    await ui.press({ key: 'set-worktree-always' })
+    await ui.press({ key: 'set-worktree-never' })
+    await ui.press({ key: 'set-codexLane-toggle' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
+      'dr-forge settings changed: worktree=never. Each replaces the matching question or default in the skills.',
+    ])
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
+  })
+
+  test('a note the session refuses is sent at the next close', async ($, on) => {
+    const notes: string[] = []
+    const w: World = { tokens: 50_000, config: {}, notes, written: {}, isAppendFailing: true }
+    world(on, w)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Workflow' })
+    await ui.press({ key: 'set-worktree-always' })
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
+    w.isAppendFailing = false
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
+      'dr-forge settings changed: worktree=always. Each replaces the matching question or default in the skills.',
+    ])
+  })
+
+  test('outside a dr-forge session the note waits for one', async ($, on) => {
+    const notes: string[] = []
+    world(on, { tokens: 50_000, config: {}, notes, written: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Process' })
+    await ui.press({ key: 'set-designApproval-whole' })
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:brainstorming' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
+      'dr-forge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
+    ])
   })
 })
