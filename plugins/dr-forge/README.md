@@ -357,16 +357,20 @@ When the turn wrote more than one ledger, each one must have its
 ending.
 
 A run also asks one question before its first task: what finishing should do
-if its menu goes unanswered for 30 minutes (merge locally, push and open a pull
+if its menu goes unanswered for the configured wait, 30 minutes by default (merge locally, push and open a pull
 request, keep the branch, or wait). `scripts/finish-choice` keeps the answer
 beside the ledger (`.forge/sdd/<plan>/finish.json`, or
 `.forge/sdd/finish.json` for work done without a plan). When finishing
 shows its menu, it arms that choice and schedules a one-shot wake with
 CronCreate; the menu's last line says what happens and when. An answer to the
-menu inside the 30 minutes disarms the wake and wins; otherwise the wake
+menu inside that wait disarms the wake and wins; otherwise the wake
 carries out the chosen option as if it had been picked, and stops wherever an
 attended finish would ask. The cockpit Run card shows the choice and the
 deadline. Codex has no scheduler, so there the menu names the choice and waits.
+
+With the `finishAction` setting at `merge`, `pr`, `keep` or `wait`, the run does
+not ask that question: `scripts/finish-choice` records the configured action
+the first time it is read, and `finishTimeout` sets the wait.
 See [reference/finish-preference.md](reference/finish-preference.md).
 
 Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
@@ -533,7 +537,7 @@ desktop window joins the session, unless you closed it.
   session started is left out, so a new session starts without it. Its
   **Finish** row shows what dr-forge will do if the finishing menu goes
   unanswered (the option chosen before the run), then counts down the menu's
-  30 minutes (`⏱ Finish push and open a PR · in 23m`) and says once it was
+  wait (`⏱ Finish push and open a PR · in 23m`) and says once it was
   carried out. It disappears when you answer the menu yourself. Work done
   without a plan shows the row on the Plan card.
 - **Repo** names the repository (`owner/name` from its remote, else its folder)
@@ -642,29 +646,64 @@ Code" or a Claude session link). Human co-authors pass.
 
 ### Settings
 
-Set these in the pane's settings view, with
-`bash <plugin-root>/scripts/forge-config set <key> <value>`, or in
-`~/.dr-forge/config.json`, then start a new session:
+Open the settings with **Settings** in the pane or `/cockpit settings`. They are
+one tab per group: press `1` to `6` to switch, `i` to hide or show each
+setting's description, and `b` to go back. A row whose value differs from its
+default is marked `*` and shows the default with a **Reset**; `r` resets the
+whole tab after a second press. Numbers step with `−` and `+` or take a typed
+value with **Edit**. A value forced from outside (an environment variable, or
+a project or managed Claude settings file) shows what forces it and no
+controls.
+
+The same settings can be set with
+`bash <plugin-root>/scripts/forge-config set <key> <value>` or by editing
+`~/.dr-forge/config.json`:
 
 ```json
-{ "layout": "compact", "sections": "context,usage,plan", "warnAt": 70 }
+{ "layout": "compact", "handoffMode": "relaxed", "finishAction": "pr" }
 ```
 
-| Option | Default | Effect |
-| --- | --- | --- |
-| `handoffTokens` | `0` | The handoff budget in tokens. `0` follows dr-forge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000 (465k at 650k, 604k on a 1M model with `autoCompactWindow` at 800k). Windows too small for that rule get a fifth of the window. `DR_FORGE_BUDGET` overrides it (`DR_SUPERPOWERS_BUDGET` still read). |
-| `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-forge` sessions. |
-| `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
-| `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
-| `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
-| `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. A list written before `shells` existed leaves it out until you add it. The band always draws its own lines. |
-| `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
-| `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
-| `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
-| `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. |
-| `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
-| `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
-| `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
+`forge-config get --json` prints every value in force, and
+`forge-config workflow` prints the line the skills read.
+
+| Tab | Option | Default | Effect |
+| --- | --- | --- | --- |
+| Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
+| Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
+| Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band always draws its own lines. |
+| Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
+| Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
+| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dr-forge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000. `DR_FORGE_BUDGET` overrides it (`DR_SUPERPOWERS_BUDGET` still read). |
+| Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
+| Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
+| Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-forge` sessions. |
+| Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |
+| Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
+| Workflow | `codexLane` | `true` | Give plan tasks to Codex when its gate passes. `false` makes `scripts/codex-gate` report `lane=false`. |
+| Workflow | `codexReview` | `true` | Let Codex take review seats when its gate passes. `false` makes the gate report `review=false`; with both off it does not probe Codex at all. |
+| Workflow | `executionStrategy` | `ask` | `sequential` or `parallel` answers the "how should the plan execute" question. `parallel` still falls back to sequential when the parts share files, and on Codex. |
+| Workflow | `executionMode` | `auto` | `auto` follows the planner's rule; `inline` and `subagent` fix the plan's Execution line, and `inline` also makes the plan sequential. |
+| Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
+| Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
+| Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. |
+| Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. |
+| Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |
+| Finish | `finishAction` | `ask` | What happens when the finish menu goes unanswered. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs after the wait; `wait` skips it and never acts. |
+| Finish | `finishTimeout` | `30` | Minutes the finish menu waits before that action runs (5-240). |
+| Notifications | `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
+| Notifications | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. |
+| Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
+| Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
+| Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
+
+The cockpit settings (Cockpit, Context, Notifications) apply at once, except
+the two Claude keys, which Claude reads at its next session start. A
+Workflow or Process setting reaches the skills through one line injected at
+session start; when you change one mid-session, the cockpit adds a note to the
+conversation as the settings close. The Codex switches, the handoff mode and
+the finish settings are read by the scripts each time they run. Your own
+instructions always outrank a setting, and no setting removes the approval
+before implementation.
 
 ### Install
 
