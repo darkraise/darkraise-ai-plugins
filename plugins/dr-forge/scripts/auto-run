@@ -3,6 +3,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/context.sh"
 . "$HERE/lib/auto-run.sh"
 
 usage() {
@@ -18,7 +19,9 @@ usage: auto-run [--session ID] start --spec P [--register R] [--force]
        auto-run [--session ID] decision list | decision clear [--id ID]
        auto-run [--session ID] ruling add TEXT | ruling list
        auto-run [--session ID] stop [--reason TEXT]
-Exit: 0 done; 2 usage; 3 no run bound to this session; 4 refused; 5 the run stopped.
+       auto-run [--session ID] verdict --tokens T --budget B --window W [--wave N]
+       auto-run [--session ID] after-compact
+Exit: 0 done; 2 usage; 3 no run bound to this session; 4 refused; 5 the run stopped, or handoff; 6 compact.
 EOF
   exit 2
 }
@@ -127,6 +130,48 @@ case $cmd in
       1:list) bound; ar_ruling_list ;;
       *) usage ;;
     esac
+    ;;
+  verdict)
+    tokens="" budget="" window="" n=1
+    while [ $# -gt 0 ]; do
+      [ $# -ge 2 ] || usage
+      case $1 in
+        --tokens) tokens=$2 ;;
+        --budget) budget=$2 ;;
+        --window) window=$2 ;;
+        --wave) n=$2 ;;
+        *) usage ;;
+      esac
+      shift 2
+    done
+    for v in "$tokens" "$budget" "$window" "$n"; do [[ $v =~ ^[0-9]+$ ]] || usage; done
+    [ "$n" -ge 1 ] || usage
+    bound
+    out=$(ar_verdict "$tokens" "$budget" "$window" "$n") || exit 1
+    echo "$out"
+    case ${out%% *} in compact) exit 6 ;; handoff) exit 5 ;; esac
+    ;;
+  after-compact)
+    [ $# -eq 0 ] || usage
+    bound
+    # Measure the session the run is bound to, whatever the environment says.
+    export CLAUDE_CODE_SESSION_ID=$AR_SESSION
+    model="" tokens=""
+    if ctx_have_jq && ctx_find_transcript; then
+      model=$(ctx_model "$CTX_TRANSCRIPT")
+      tokens=$(ctx_measure "$CTX_TRANSCRIPT") || tokens=""
+    fi
+    budget=$(ctx_pinned_budget)
+    [ -n "$budget" ] || budget=$(ctx_budget "$model")
+    window=$(ctx_window "$model")
+    if [ -z "$tokens" ]; then
+      ar_update '.pending = null'
+      echo "continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop"
+      exit 0
+    fi
+    result=$(ar_settle "$tokens" "$budget" "$window") || exit 1
+    echo "$result — $(( (tokens + 500) / 1000 ))k after compaction; regime $(ar_get regime)"
+    [ "$result" = continue ] || exit 5
     ;;
   stop) reason_arg "$@"; bound; ar_stop "$reason" ;;
   *) usage ;;

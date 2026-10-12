@@ -181,5 +181,71 @@ check "a stopped run never blocks a start" "$status" "0"
 ar --session s-1 stop
 check "stop without a reason: finished" "$(field stopped)" "null"
 
+# --- the rules (reference/auto-run.md §The budget line) ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+verdict() { ar --session s-1 verdict --budget 465000 --window 800000 "$@"; }
+out=$(verdict --tokens 464999); status=$?
+check "normal: under the budget" "$status:$out" "0:ok 465000 normal"
+check "normal: ok leaves nothing pending" "$(field pending)" "null"
+out=$(verdict --tokens 465000); status=$?
+check "normal: at the budget, compact" "$status:$out" "6:compact 465000 normal"
+check "compact is pending" "$(field pending)" "compact"
+out=$(verdict --tokens 185000 --wave 3); status=$?
+check "a wave of three reserves two tasks" "$status:$out" "6:compact 185000 normal"
+out=$(verdict --tokens 184999 --wave 3)
+check "a narrower probe that fits cancels the compaction" "$out:$(field pending)" "ok 185000 normal:null"
+ar --session s-1 compacted
+out=$(verdict --tokens 395249)
+check "after a compaction under 85% of the budget: normal" "$out:$(field pending)" "ok 465000 normal:null"
+ar --session s-1 compacted
+out=$(verdict --tokens 395250)
+check "after a compaction at 85% of the budget: high" "$out" "ok 720000 high"
+out=$(verdict --tokens 719999)
+check "high: under 90% of the window" "$out" "ok 720000 high"
+out=$(verdict --tokens 720000); status=$?
+check "high: at 90% of the window, compact" "$status:$out" "6:compact 720000 high"
+ar --session s-1 compacted
+out=$(verdict --tokens 679999)
+check "after a compaction under 85% of the window: high stays" "$out" "ok 720000 high"
+ar --session s-1 compacted
+out=$(verdict --tokens 100000)
+check "after a small compaction: back to normal" "$out" "ok 465000 normal"
+ar --session s-1 compacted
+out=$(verdict --tokens 680000); status=$?
+check "after a compaction at 85% of the window: handoff" "$status:${out%% *}" "5:handoff"
+ar --session s-1 clear --phase
+out=$(verdict --tokens 10000); status=$?
+check "a pending clear answers handoff" "$status:${out%% *}" "5:handoff"
+ar --session s-1 rebind --to s-1
+ar --session s-1 compacted
+out=$(ar --session s-1 verdict --tokens 260000 --budget 300000 --window 400000)
+check "another budget and window" "$out" "ok 360000 high"
+ar --session s-x verdict --tokens 1 --budget 1 --window 1 >/dev/null 2>&1; status=$?
+check "verdict for another session: exit 3" "$status" "3"
+ar --session s-1 verdict --tokens 1 --budget 1 >/dev/null 2>&1; status=$?
+check "verdict without a window: exit 2" "$status" "2"
+
+# --- after-compact measures the session it names ---
+mkdir -p "$HOME/.claude"
+printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"
+live s-1
+T="$HOME/.claude/projects/p/s-1.jsonl"
+asst() { printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' "$1"; }
+after() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-other DR_FORGE_BUDGET=465000 bash "$AR" --session s-1 after-compact); }
+ar --session s-1 compacted
+asst 30000 > "$T"
+out=$(after); status=$?
+check "after-compact: a small context continues" "$status:$out" "0:continue — 30k after compaction; regime normal"
+check "after-compact: nothing pending" "$(field pending)" "null"
+ar --session s-1 compacted
+asst 700000 > "$T"
+out=$(after); status=$?
+check "after-compact: 85% of the window hands off" "$status:${out%% *}" "5:handoff"
+ar --session s-1 compacted
+printf '{}\n' > "$T"
+out=$(after); status=$?
+check "after-compact: an unknown size continues and says to record it" "$status:${out%%;*}" "0:continue — the size after compaction is unknown"
+check "after-compact: unknown leaves nothing pending" "$(field pending)" "null"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

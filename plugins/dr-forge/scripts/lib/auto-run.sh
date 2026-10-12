@@ -208,3 +208,61 @@ ar_decision_clear() { # ar_decision_clear [ID]
 ar_ruling_add() { ar_update '.rulings = ((.rulings // []) + [$t])' --arg t "$1"; }
 
 ar_ruling_list() { ar_state | ar_jq -r '(.rulings // [])[]'; }
+
+AR_TASK_MARGIN=140000
+AR_HIGH_PCT=90
+AR_AFTER_HANDOFF_PCT=85
+AR_AFTER_HIGH_PCT=85
+
+# ar_limit BUDGET WINDOW N REGIME — where a checkpoint covering N tasks
+# compacts: the task budget, or AR_HIGH_PCT of the window in the high regime,
+# less one task's worst growth for each task beside the first.
+ar_limit() {
+  local limit
+  if [ "$4" = high ]; then limit=$(( $2 * AR_HIGH_PCT / 100 )); else limit=$1; fi
+  limit=$(( limit - ($3 - 1) * AR_TASK_MARGIN ))
+  [ "$limit" -gt 0 ] || limit=1
+  echo "$limit"
+}
+
+# ar_after P BUDGET WINDOW — the after-compaction rule: handoff, high or normal.
+ar_after() {
+  if [ $(( $1 * 100 )) -ge $(( $3 * AR_AFTER_HANDOFF_PCT )) ]; then echo handoff
+  elif [ $(( $1 * 100 )) -ge $(( $2 * AR_AFTER_HIGH_PCT )) ]; then echo high
+  else echo normal
+  fi
+}
+
+# ar_settle P BUDGET WINDOW — apply the after-compaction rule to the run: set
+# the regime, clear pending, print continue or handoff.
+ar_settle() {
+  local result regime
+  result=$(ar_after "$1" "$2" "$3")
+  if [ "$result" = handoff ]; then regime=$(ar_get regime); else regime=$result; fi
+  ar_update '.regime = $r | .pending = null' --arg r "${regime:-normal}" || return 1
+  if [ "$result" = handoff ]; then echo handoff; else echo continue; fi
+}
+
+# ar_verdict TOKENS BUDGET WINDOW [N] — prints "<ok|compact|handoff> <limit>
+# <regime>". A compaction not yet measured is settled first with TOKENS as its
+# size; a pending clear is a handoff in progress. An ok clears a compaction a
+# wider wave probe requested.
+ar_verdict() {
+  local tokens=$1 budget=$2 window=$3 n=${4:-1} pending regime limit
+  pending=$(ar_get pending)
+  if [ "$pending" = after-compact ] && [ "$(ar_settle "$tokens" "$budget" "$window")" = handoff ]; then
+    pending=handoff
+  fi
+  regime=$(ar_get regime)
+  regime=${regime:-normal}
+  limit=$(ar_limit "$budget" "$window" "$n" "$regime")
+  if [ "$pending" = handoff ] || [ "$pending" = clear ]; then
+    echo "handoff $limit $regime"
+  elif [ "$tokens" -ge "$limit" ]; then
+    ar_update '.pending = "compact"' || return 1
+    echo "compact $limit $regime"
+  else
+    if [ "$pending" = compact ]; then ar_update '.pending = null' || return 1; fi
+    echo "ok $limit $regime"
+  fi
+}
