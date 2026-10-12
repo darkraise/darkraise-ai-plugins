@@ -699,9 +699,13 @@ export const register: Register = on => {
           { ...look, isCompact: true },
         )
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
-        <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
-          <Text>{label.padEnd(16)}</Text>
-          {controls}
+        <Box key={key} flexDirection="row" columnGap={1}>
+          <Box key={`${key}-label`} width={16} flexShrink={0}>
+            <Text>{label}</Text>
+          </Box>
+          <Box key={`${key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} flexShrink={1}>
+            {controls}
+          </Box>
         </Box>
       )
       const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
@@ -741,7 +745,7 @@ export const register: Register = on => {
             : row(
                 'set-notify-url',
                 'Webhook',
-                notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
+                notes.url === null ? <Text key="set-notify-url-none" dimColor>not set </Text> : <Text key="set-notify-url-set" wrap="truncate-end"><Text color="green">✓ </Text>{maskWebhook(notes.url)} </Text>,
                 notes.isFromEnv && <Text key="set-notify-url-env" dimColor>from the environment</Text>,
                 notes.url !== null && compact('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
                 !notes.isFromEnv && canType && compact('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),

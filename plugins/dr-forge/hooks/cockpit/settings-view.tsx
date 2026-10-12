@@ -134,12 +134,15 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
           {mark(row)}
         </Box>
       ) : (
-        <Box key={`set-${row.key}`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1}>
-          <Box key={`set-${row.key}-label`}>
-            <Text>{row.label.padEnd(LABEL_WIDTH)}</Text>
+        // Controls that overflow wrap in the value column, not under the label.
+        <Box key={`set-${row.key}`} flexDirection="row" columnGap={1}>
+          <Box key={`set-${row.key}-label`} width={LABEL_WIDTH} flexShrink={0}>
+            <Text>{row.label}</Text>
           </Box>
-          {control(row)}
-          {mark(row)}
+          <Box key={`set-${row.key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} flexShrink={1}>
+            {control(row)}
+            {mark(row)}
+          </Box>
         </Box>
       )}
       {model.editing === row.key && model.error !== null && (
