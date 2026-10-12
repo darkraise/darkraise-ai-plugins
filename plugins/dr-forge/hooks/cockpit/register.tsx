@@ -280,7 +280,10 @@ export const register: Register = on => {
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     if (wantsSettings) await showSettings($)
-    else await update($, view, () => 'cockpit')
+    else {
+      await flushSettingNote($)
+      await update($, view, () => 'cockpit')
+    }
     await readAccount($)
     // The settings take the keyboard and as many rows as they need.
     const opened = wantsSettings
@@ -378,7 +381,7 @@ export const register: Register = on => {
     await syncTicker($)
 
     return started
-  })
+  }).catch(($, e, next) => next(e))
 
   // Remote Control clients joining and leaving; the terminal raises neither.
   on('session.attach', async ($, e, next) => {
@@ -395,7 +398,7 @@ export const register: Register = on => {
     if (e.origin.kind === 'person') S.isClosedByPerson = true
     await flushSettingNote($)
     return next(e)
-  })
+  }).catch(($, e, next) => next(e))
 
   on('session.detach', async ($, e, next) => {
     const left = await next(e)
@@ -2433,6 +2436,7 @@ async function importWebhook($: EngineInterface) {
 /** Reads ~/.dr-forge/config.json into force, importing the pre-2.0 settings on the first run. */
 async function loadSettings($: EngineInterface) {
   S.claudeSaved = {}
+  S.changed = {}
   const path = await configFile($)
   if (path === null) return applySettings($, {})
   let file = await readSettingsFile($, path)

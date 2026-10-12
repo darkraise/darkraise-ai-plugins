@@ -2369,6 +2369,22 @@ describe('settings held outside the file', () => {
     expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
   })
 
+  test('leaving the settings through /cockpit tells the model too', async ($, on) => {
+    const notes: string[] = []
+    world(on, { tokens: 50_000, config: {}, notes, written: {} })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Workflow' })
+    await ui.press({ key: 'set-worktree-always' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
+    await $.command.run({ ...COCKPIT, args: '' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
+      'dr-forge settings changed: worktree=always. Each replaces the matching question or default in the skills.',
+    ])
+  })
+
   test('a note the session refuses is sent at the next close', async ($, on) => {
     const notes: string[] = []
     const w: World = { tokens: 50_000, config: {}, notes, written: {}, isAppendFailing: true }
