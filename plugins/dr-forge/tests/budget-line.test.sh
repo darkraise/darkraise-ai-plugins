@@ -99,6 +99,25 @@ check "task-brief: relaxed at an 800k window" "$(tail -n 1 <<<"$out")" \
 printf '{"autoCompactWindow": 650000}\n' > "$HOME/.claude/settings.json"
 rm -f "$HOME/.dr-forge/config.json"
 
+# --- an auto run bound to this session: its own rule replaces the budget ---
+bash "$P/scripts/auto-run" --session s-1 start --spec docs/spec.md --register docs/reg.md >/dev/null
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null); status=$?
+check "task-brief: an auto run says compact" "$(tail -n 1 <<<"$out")" \
+  "budget (auto): 500k of 465k (107%) — compact — source: record"
+check "task-brief: exit unchanged under an auto run" "$status" "0"
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null)
+check "review-package: an auto run says compact" "$(tail -n 1 <<<"$out")" \
+  "budget (auto): 500k of 465k (107%) — compact — source: record"
+printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commit abc1234)\nTask 2: complete (commit abc1235)\n' > "$L"
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null)
+check "task-brief: an auto run replaces the tail limit" "$(tail -n 1 <<<"$out")" \
+  "budget (auto): 500k of 465k (107%) — compact — source: record"
+rm -f "$L"
+out=$(CLAUDE_CODE_SESSION_ID=s-2 bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
+check "task-brief: another session keeps the task budget" "$(tail -n 1 <<<"$out")" \
+  "budget: 500k of 465k (107%) — handoff — source: record?"
+bash "$P/scripts/auto-run" --session s-1 stop >/dev/null
+
 # --- a missing task still fails the way it did ---
 bash "$P/scripts/task-brief" docs/plan.md 9 >/dev/null 2>&1; status=$?
 check "task-brief: missing task still exits 3" "$status" "3"
