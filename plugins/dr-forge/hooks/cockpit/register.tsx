@@ -1926,7 +1926,7 @@ const S = {
   // Skill-enforced settings changed since the model was last told, with their new values.
   changed: {} as Record<string, SettingValue>,
   // Claude keys this session saved: the engine's settings snapshot may not show another process's write at once.
-  claudeSaved: {} as Record<string, SettingValue>,
+  claudeSaved: {} as Record<string, SettingValue | undefined>,
   // The state directory's name in the primary checkout, as last read.
   stateLeaf: '.forge',
   kinds: [] as NotifyKind[],
@@ -2460,7 +2460,8 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
       // Claude's settings file holds far more than these keys, so only forge-config, which rewrites it in one rename, writes it.
       const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/forge-config.mjs`, 'set', key, String(value)])
       if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^forge-config: /, '') || `forge-config exited ${ran.exitCode}`)
-      S.claudeSaved[key] = value
+      // forge-config removes a floored key saved as 0, so the user file then lacks it.
+      S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
       await applySettings($, file ?? {})
       return true
     }

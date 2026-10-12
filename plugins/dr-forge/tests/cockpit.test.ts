@@ -2361,6 +2361,21 @@ describe('settings held outside the file', () => {
     expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
   })
 
+  test('a reset Claude key shows a project file that sets the same key once the engine sees the removal', async ($, on) => {
+    const w: World = { tokens: 284_000, config: {}, settings: { autoCompactWindow: 650_000 }, userSettings: { autoCompactWindow: 650_000 } }
+    world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-reset' })
+    // forge-config removed the key from the user file; the project file still sets it.
+    w.userSettings = {}
+    await ui.press({ key: 'set-autoCompactEnabled-toggle' })
+    expect(await ui.find({ type: 'Text', text: 'set by a project or managed settings file' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
+  })
+
   test('a changed skill setting is told to the model once, when the settings close', async ($, on) => {
     const notes: string[] = []
     world(on, { tokens: 50_000, config: {}, notes, written: {} })
