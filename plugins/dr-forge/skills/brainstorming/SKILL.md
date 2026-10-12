@@ -49,9 +49,35 @@ a chat design; or your human partner asked for a spec.
   full process: questions, approaches, sectioned
   design, written spec, then the writing-plans skill.
 
-Doubt means check the trigger list, not jump to the heavier path. The
+Doubt means check the trigger list, not jump to the heavier path
+(`processBias` moves where doubt lands; see Settings). The
 ratchet is one-way: a trigger discovered mid-task upgrades the path —
 stop, say so, and step up. Nothing downgrades mid-task.
+
+## Settings
+
+The workflow settings in force arrive as one line at session start, `dr-forge
+settings in force (…): key=value; …`. With no such line in context, run
+`scripts/forge-config workflow` once before your first question; it prints the
+same line, or nothing when every setting is at its default. A key the line does
+not name is at its default. Your human partner's own instructions outrank a
+setting, and no setting removes the approval gate.
+
+- `processBias=lighter`: take the architectural path only when a trigger
+  plainly holds; doubt resolves to bounded. `processBias=heavier`: doubt
+  resolves to architectural. A request for a spec and the irreducible-risk
+  trigger hold under either.
+- `questionStyle=batched`: ask all the clarifying questions in one message
+  instead of one per message.
+- `designApproval=whole`: present every design section in one message and ask
+  for approval once, instead of after each section.
+- `executionStrategy=sequential` or `executionStrategy=parallel`: do not ask
+  the execution-strategy question; record the value as the answer. `parallel`
+  still becomes sequential when you cannot name two parts that share no file,
+  on a Codex host,
+  and when `executionMode=inline`, which makes the plan sequential.
+- `specReview=false`: after the spec self-review block, skip the User Review
+  Gate and go on to Implementation.
 
 ## Anti-Pattern: "Too Simple To Need Approval"
 
@@ -190,7 +216,7 @@ and its self-review is the whole process.
 - When `<docs>/roadmap.md` exists, this spec is an epic. Find its row with `scripts/roadmap status`, set the row's Assigned cell to this spec's path once the spec is written (`scripts/register set <milestone register> <id> doing --assigned <spec path>`), and open the spec's requirement register below even when the request was one sentence: the roadmap is the list the requirements came from.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
 - Prefer multiple choice questions when possible, but open-ended is fine too
-- Only one question per message - if a topic needs more exploration, break it into multiple questions
+- Only one question per message - if a topic needs more exploration, break it into multiple questions (`questionStyle=batched` asks them all in one message; see Settings)
 - Focus on understanding: purpose, constraints, success criteria
 
 **Opening an item register:**
@@ -235,8 +261,10 @@ A revision your human partner asks for gets one new round.
 
 **Choosing the execution strategy:**
 
-Once the approach is settled and before you present the design, ask your human
-partner one multiple-choice question, on its own:
+When `executionStrategy` is `sequential` or `parallel` (see Settings), skip the
+question and record that value. Otherwise, once the approach is settled and
+before you present the design, ask your human partner one multiple-choice
+question, on its own:
 
 > How should the plan execute?
 > 1. **Sequential** (default) — one task at a time; the safest choice, and the
@@ -279,7 +307,7 @@ needs another's output waits for it.
 
 - Once you believe you understand what you're building, present the design
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
-- Ask after each section whether it looks right so far
+- Ask after each section whether it looks right so far; with `designApproval=whole`, present every section in one message and ask once (see Settings)
 - Cover: architecture, components, data flow, error handling, testing
 - On Claude Code, when an option is genuinely clearer shown than described, present it visually with the Artifact tool
 - Be ready to go back and clarify if something doesn't make sense
@@ -321,7 +349,7 @@ per item: clean, or what you fixed. Do not re-review after fixing.
 A revision your human partner asks for gets one new round.
 
 **User Review Gate:**
-After posting the self-review block, ask the user to review the written spec before proceeding:
+With `specReview=false` (see Settings), skip this gate and go to Implementation. Otherwise, after posting the self-review block, ask the user to review the written spec before proceeding:
 
 > "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
 

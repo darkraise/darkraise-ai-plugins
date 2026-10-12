@@ -78,7 +78,7 @@ while IFS= read -r candidate; do
               'Must fix before completing' 'Worktree removal refused' && continue
     ledger=$candidate clean=1
   else
-    ends_with '## Next session' 'If it gets none within 30 minutes' && continue
+    ends_with '## Next session' 'If it gets none within ' && continue
     ledger=$candidate clean=0
   fi
   break

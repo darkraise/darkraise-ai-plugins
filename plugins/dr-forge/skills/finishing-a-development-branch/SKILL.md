@@ -397,7 +397,7 @@ plan file, end with: "No plan file — no follow-on work recorded."
 | Excuse | Reality |
 |--------|---------|
 | "Tests passed earlier this session" | Run the suite on the tree you are about to integrate. A green run only proves the tree it ran on. |
-| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait; only the choice they made before the run acts for them, and only after 30 minutes unanswered. |
+| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait; only the choice they made before the run acts for them, and only after the configured wait goes unanswered. |
 | "The wake fired, but they replied a minute ago — the timer still says merge" | Their reply wins. `scripts/finish-choice answer` disarms the timer; a wake after it finds nothing due. |
 | "I'll ask for the merge in prose" | A request buried in a long report goes unseen. The three-option menu, verbatim, is the last thing in the message. |
 | "The open findings are in my report" | The report scrolls away and Step 6 deletes the ledger. Commit them in the followups note. |

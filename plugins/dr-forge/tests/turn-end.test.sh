@@ -57,6 +57,7 @@ check "mid-plan summary: names next-step and the plan" \
 check "retry with stop_hook_active: passes" "$(stop s-1 'Task 1 is done.' true)" ""
 check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
 check "finish-preference question: passes" "$(stop s-1 $'Before I start: when the implementation is done, the finish menu waits for\nyour answer. If it gets none within 30 minutes, what should I do?\n\nWhich option?')" ""
+check "finish-preference question at a configured wait: passes" "$(stop s-1 $'Before I start: when the implementation is done, the finish menu waits for\nyour answer. If it gets none within 45 minutes, what should I do?\n\nWhich option?')" ""
 
 # --- final review clean, summary instead of finishing ---
 write_ledger $'Task 1: complete (commits a..b, review clean)\nFinal review: clean (commits a1b2c3d..f0e1d2c)'

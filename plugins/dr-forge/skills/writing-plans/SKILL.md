@@ -127,6 +127,14 @@ That pair runs the main session for the whole plan. A subagent plan names
 highest weighted routing score. `scripts/plan-lint` warns on any other pair,
 and errors on an inline pair below that score.
 
+**Read the settings first.** Two workflow settings shape a plan,
+`executionMode` and `executionStrategy`. They arrive in the session-start line
+`dr-forge settings in force (…)`. With no such line in context,
+run `scripts/forge-config workflow` before you choose the Execution line
+or ask the strategy question; it prints nothing when both are at their
+defaults. A key the line does not name is at its default, and your human partner's
+own instructions outrank a setting.
+
 **Choosing the Execution line.** The plan decides its execution mode:
 
 A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
@@ -151,13 +159,23 @@ per-task review. The tasks not delegated are the **self-implemented** tasks.
 - Your human partner may override the line; `plan-lint` checks its grammar,
   warns when it disputes the majority rule, and lists the delegated tasks with
   their reasons.
+- The `executionMode` setting fixes the
+  line when it is `inline` or `subagent`, in place of the majority rule.
+  `inline` also makes the plan sequential, whatever the spec's
+  `**Execution strategy:**` line or the `executionStrategy` setting says,
+  because an inline session implements every task itself: write
+  `**Parallelism:** sequential — executionMode is inline`
+  and group no waves. An inline plan still delegates its heavy tasks and every
+  task carrying an `**Executor:**` line.
 
 ## Parallel waves
 
 **Ask first.** Read the spec's `**Execution strategy:**` line. When the spec has
 none — it predates the question, or there is no spec — ask your human partner
 the question in dr-forge:brainstorming §Choosing the execution strategy
-before you draft any task, and wait for the answer. On a Codex host do not ask:
+before you draft any task, and wait for the answer; when the `executionStrategy`
+setting is `sequential` or `parallel` (dr-forge:brainstorming §Settings), take
+that value and do not ask. On a Codex host do not ask:
 the plan is sequential. Sequential writes
 `**Parallelism:** sequential — <why>` and nothing below applies.
 

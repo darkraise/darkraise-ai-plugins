@@ -4,12 +4,26 @@ A run ends while its human is away more often than not. Without this, the
 finishing menu waits forever and the finished branch sits unintegrated. So the
 finish action is asked once, before the first task, and
 dr-forge:finishing-a-development-branch carries it out when its menu goes
-unanswered for 30 minutes. An answer to the menu inside those 30 minutes always
+unanswered for the configured wait. An answer to the menu inside that wait always
 wins over the choice made here.
 
 `scripts/finish-choice` keeps the choice (see using-superpowers §Session
 Budget). Pass `--plan PLAN_FILE` in a plan run; leave it out for work done
 without a plan.
+
+## The settings
+
+Two settings (`scripts/forge-config`, or the cockpit's Finish tab) shape this:
+
+- `finishAction`: `ask`, the default, keeps the question below. With `merge`,
+  `pr`, `keep` or `wait`, `scripts/finish-choice get` records and prints that
+  action whenever nothing is chosen yet, so the question is never asked: the
+  "skip the question when `get` prints a choice" rule already covers it. A
+  choice recorded this way has no base branch (`base` is null): determine it
+  when the wake fires, as finishing Step 3 does.
+- `finishTimeout`: how many minutes the menu waits, 30 minutes by default.
+  `scripts/finish-choice arm` uses it; wherever this file says `<N> minutes`,
+  N is `bash <plugin-root>/scripts/forge-config get finishTimeout`.
 
 ## When to ask
 
@@ -32,7 +46,7 @@ exactly this, as the last thing in the message:
 
 ```
 Before I start: when the implementation is done, the finish menu waits for
-your answer. If it gets none within 30 minutes, what should I do?
+your answer. If it gets none within <N> minutes, what should I do?
 
 1. Merge back to <base-branch> locally
 2. Push and create a Pull Request
@@ -83,7 +97,7 @@ another.` on that line instead, and wait.
 
 ## When your human partner answers
 
-Any answer to the menu inside the 30 minutes, whichever option it names, is
+Any answer to the menu inside the wait, whichever option it names, is
 theirs: run `scripts/finish-choice answer <merge|pr|keep|discard> [--plan
 PLAN_FILE]` before acting on it. It prints the wake's job id when there is one;
 cancel it with the CronDelete tool. Then carry out their choice.
@@ -103,5 +117,5 @@ that fails its tests, a rejected push, a worktree whose removal is refused.
 Leave everything in place, report what stopped it, and end with the menu
 again without arming it; never pick a destructive answer for your human
 partner. Open the final
-message with `No answer within 30 minutes, so I went with <option>, as chosen
+message with `No answer within <N> minutes, so I went with <option>, as chosen
 before the run.`

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# A skill-enforced setting is only as good as the skill text that names it:
+# each key must be named where its decision is made, and no skill may still
+# state the finish menu's wait as a fixed number.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+P="$HERE/.."
+command -v node > /dev/null 2>&1 || { echo "settings-skills tests: node is required but not on PATH" >&2; exit 2; }
+
+pass=0 fail=0
+check() { # check <name> <got> <want>
+  if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+names() { # names <label> <file> <text>
+  check "$1" "$(grep -qF -- "$3" "$2" && echo yes || echo no)" "yes"
+}
+
+B="$P/skills/brainstorming/SKILL.md"
+W="$P/skills/writing-plans/SKILL.md"
+G="$P/skills/using-git-worktrees/SKILL.md"
+F="$P/reference/finish-preference.md"
+
+# Each check is a whole instruction, not a keyword: where the settings come
+# from, what outranks them, and what each value changes at its decision point.
+names "brainstorming has a Settings section" "$B" '## Settings'
+names "brainstorming loads the settings when no line is in context" "$B" '`scripts/forge-config workflow` once before your first question'
+names "brainstorming: instructions outrank a setting, and the gate stays" "$B" 'setting, and no setting removes the approval gate.'
+names "brainstorming: processBias" "$B" 'plainly holds; doubt resolves to bounded.'
+names "brainstorming: questionStyle" "$B" '`questionStyle=batched`: ask all the clarifying questions in one message'
+names "brainstorming: designApproval" "$B" '`designApproval=whole`: present every design section in one message and ask'
+names "brainstorming: executionStrategy" "$B" 'the execution-strategy question; record the value as the answer.'
+names "brainstorming: an inline plan is sequential" "$B" 'and when `executionMode=inline`, which makes the plan sequential.'
+names "brainstorming: specReview" "$B" '`specReview=false`: after the spec self-review block, skip the User Review'
+names "brainstorming: the path rule points at processBias" "$B" '(`processBias` moves where doubt lands; see Settings). The'
+names "brainstorming: the question rule points at questionStyle" "$B" '(`questionStyle=batched` asks them all in one message; see Settings)'
+names "brainstorming: the strategy question is skipped by the setting" "$B" 'When `executionStrategy` is `sequential` or `parallel` (see Settings), skip the'
+names "brainstorming: the section rule points at designApproval" "$B" 'with `designApproval=whole`, present every section in one message and ask once (see Settings)'
+names "brainstorming: the review gate is skipped by the setting" "$B" 'With `specReview=false` (see Settings), skip this gate and go to Implementation.'
+names "writing-plans loads the settings when no line is in context" "$W" 'run `scripts/forge-config workflow` before you choose the Execution line'
+names "writing-plans: instructions outrank a setting" "$W" 'own instructions outrank a setting.'
+names "writing-plans: executionMode fixes the line" "$W" 'line when it is `inline` or `subagent`, in place of the majority rule.'
+names "writing-plans: an inline plan is sequential" "$W" '`**Parallelism:** sequential — executionMode is inline`'
+names "writing-plans: executionStrategy answers the question" "$W" 'that value and do not ask. On a Codex host do not ask:'
+names "using-git-worktrees loads the settings when no line is in context" "$G" 'run `scripts/forge-config workflow` when no such line is in context'
+names "using-git-worktrees: what each value does" "$G" '`worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2'
+names "using-git-worktrees: the setting decides only when no preference was stated" "$G" 'If not, the `worktree` setting decides'
+names "finish-preference: finishAction" "$F" 'finishAction'
+names "finish-preference: finishTimeout" "$F" 'finishTimeout'
+names "finish-preference: a setting's choice has no base branch" "$F" '`base` is null'
+
+# Every skill-enforced key in the schema is named by at least one skill.
+keys=$(node -e 'const { pathToFileURL } = require("url"); import(pathToFileURL(process.argv[1]).href).then(m => console.log(Object.entries(m.default).filter(([, spec]) => spec.enforcedBy === "skill").map(([key]) => key).join(" ")))' "$P/config/schema.mjs")
+check "the schema has skill-enforced keys" "$([ -n "$keys" ] && echo yes || echo no)" "yes"
+for key in $keys; do
+  check "a skill names $key" "$(grep -lF -- "$key" "$P"/skills/*/SKILL.md | head -n 1 | grep -c .)" "1"
+done
+
+# The finish menu's wait is a setting now: 30 minutes may appear only as its default.
+for file in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md" "$G" \
+  "$P/skills/finishing-a-development-branch/SKILL.md" "$F"; do
+  check "${file#"$P"/} states no fixed finish wait" "$(grep '30 minutes' "$file" | grep -vc 'by default')" "0"
+done
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]
