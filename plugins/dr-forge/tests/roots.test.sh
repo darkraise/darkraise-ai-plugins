@@ -102,6 +102,25 @@ check "name spellings: the docs directory itself" \
   "$(forge_name_spellings ./docs/forge | tr '\n' '|')" "docs/forge|docs/superpowers|"
 check "name spellings: any other name" "$(forge_name_spellings .forge/x.md | tr '\n' '|')" ".forge/x.md|"
 
+# --- the mapped project, from roots.sh and from forge-path ---
+FP="$HERE/../scripts/forge-path"
+MIRROR=$(stores_home "$HOME" "$REPO" superpowers local local)
+check "project: mapped, from a worktree" "$(cd "$WT" && forge_project)" "superpowers"
+check "project: forge-path" "$(cd "$WT" && bash "$FP" project)" "superpowers"
+OTHER="$TMP/other"
+git init -q -b main "$OTHER"
+git -C "$OTHER" commit -q --allow-empty -m init
+(cd "$OTHER" && forge_project > "$TMP/project-out")
+check "project: unmapped is status 1" "$?" "1"
+check "project: unmapped prints nothing" "$(cat "$TMP/project-out")" ""
+(cd "$OTHER" && bash "$FP" project > "$TMP/project-out")
+check "project: forge-path unmapped exits 1" "$?" "1"
+check "project: forge-path unmapped prints nothing" "$(cat "$TMP/project-out")" ""
+(cd "$TMP" && forge_project > /dev/null)
+check "project: outside git is status 1" "$?" "1"
+(cd "$WT" && bash "$FP" project extra > /dev/null 2>&1)
+check "project: forge-path takes no argument" "$?" "2"
+
 # --- a --mode run that prints nothing stops the script ---
 mkdir -p "$TMP/fakebin"
 printf '#!/bin/sh\nexit 0\n' > "$TMP/fakebin/node"

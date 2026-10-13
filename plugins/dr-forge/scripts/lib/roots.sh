@@ -14,7 +14,7 @@
 _ROOTS_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 _FORGE_KEY="" _FORGE_TOP="" _FORGE_DOCS_STORE="" _FORGE_DOCS_ROOT=""
-_FORGE_PROGRESS_STORE="" _FORGE_LEDGER_ROOT="" _FORGE_LATEST=""
+_FORGE_PROGRESS_STORE="" _FORGE_LEDGER_ROOT="" _FORGE_LATEST="" _FORGE_PROJECT=""
 
 # Node prints native paths; Git Bash compares them in git's C:/… form.
 _forge_path() {
@@ -36,6 +36,7 @@ _forge_local() { # DIR TOP
   _FORGE_PROGRESS_STORE=local
   _FORGE_LEDGER_ROOT="$(forge_dir state "$base")/sdd"
   _FORGE_LATEST="$(forge_dir state "$primary")/handoff/latest.md"
+  _FORGE_PROJECT=""
 }
 
 forge_stores_init() { # [DIR]
@@ -53,7 +54,7 @@ forge_stores_init() { # [DIR]
     printf '%s\n' "$out" >&2
     exit 2
   fi
-  _FORGE_DOCS_STORE="" _FORGE_DOCS_ROOT="" _FORGE_PROGRESS_STORE="" _FORGE_LEDGER_ROOT="" _FORGE_LATEST=""
+  _FORGE_DOCS_STORE="" _FORGE_DOCS_ROOT="" _FORGE_PROGRESS_STORE="" _FORGE_LEDGER_ROOT="" _FORGE_LATEST="" _FORGE_PROJECT=""
   while IFS=$'\t' read -r kind store root extra; do
     case $kind in
       documents) _FORGE_DOCS_STORE=$store _FORGE_DOCS_ROOT=$(_forge_path "$root") ;;
@@ -61,6 +62,7 @@ forge_stores_init() { # [DIR]
         _FORGE_PROGRESS_STORE=$store _FORGE_LEDGER_ROOT=$(_forge_path "$root")
         _FORGE_LATEST=$(_forge_path "$extra")
         ;;
+      project) _FORGE_PROJECT=$store ;;
     esac
   done <<<"$out"
   # A run that exits 0 without both lines (node's main-module check fails when
@@ -80,6 +82,10 @@ forge_progress_store() { forge_stores_init "${1:-}"; printf '%s\n' "$_FORGE_PROG
 forge_ledger_root() { forge_stores_init "${1:-}"; printf '%s\n' "$_FORGE_LEDGER_ROOT"; }
 forge_latest_file() { forge_stores_init "${1:-}"; printf '%s\n' "$_FORGE_LATEST"; }
 forge_ledger_dir() { forge_stores_init "${2:-}"; printf '%s/%s\n' "$_FORGE_LEDGER_ROOT" "$1"; } # SLUG [DIR]
+
+# forge_project [DIR] — the darkmem project the repository is mapped to;
+# status 1 with nothing printed when it is unmapped, outside git or without node.
+forge_project() { forge_stores_init "${1:-}"; [ -n "$_FORGE_PROJECT" ] || return 1; printf '%s\n' "$_FORGE_PROJECT"; }
 
 forge_workspace() { # SLUG [DIR]
   forge_stores_init "${2:-}"

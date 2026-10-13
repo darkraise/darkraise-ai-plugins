@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# forge-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG | latest | store | name PATH
+# forge-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG | latest | store | name PATH | project
 # Where this repository's dr-forge files live: the state directory (.forge/,
 # or the pre-2.0 .superpowers/; always in the checkout), the docs root and a
 # plan's ledger directory and latest.md (in the checkout or in the darkmem
 # mirror, as documentStore and progressSource apply them), each family's
-# applied store, or the repository-relative name of a path.
+# applied store, the repository-relative name of a path, or the darkmem
+# project the repository is mapped to (exit 1 when it is unmapped).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/roots.sh"
-usage() { echo "usage: forge-path state|docs [RELATIVE] | ledger SLUG | latest | store | name PATH" >&2; exit 2; }
+usage() { echo "usage: forge-path state|docs [RELATIVE] | ledger SLUG | latest | store | name PATH | project" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 [ "$1" = state ] || forge_stores_init
 case $1 in
@@ -21,6 +22,7 @@ case $1 in
   latest) [ $# -eq 1 ] || usage; forge_latest_file; exit 0 ;;
   store) [ $# -eq 1 ] || usage; printf 'documents %s\nprogress %s\n' "$(forge_docs_store)" "$(forge_progress_store)"; exit 0 ;;
   name) [ $# -eq 2 ] || usage; forge_name "$2"; exit 0 ;;
+  project) [ $# -eq 1 ] || usage; forge_project; exit $? ;;
   *) usage ;;
 esac
 if [ $# -eq 2 ]; then printf '%s/%s\n' "$dir" "$2"; else printf '%s\n' "$dir"; fi
