@@ -47,7 +47,7 @@ function readSources(roots) {
   return { problems, documents, ledgers };
 }
 
-async function importLedger({ cfg, client, report }, roots, ledger) {
+export async function importLedger({ cfg, client, report }, roots, ledger) {
   const pieces = splitAtBlankLines(ledger.text).flatMap(piece => splitAtLimit(piece));
   const properties = { ...propertiesFor(roots, ledger.slug, ledgerPlanPath(ledger.text)), imported_mtime: ledger.mtime };
   for (let i = 0; i < pieces.length; i += MAX_ENTRIES_PER_APPEND) {
