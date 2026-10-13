@@ -273,6 +273,9 @@ The two line forms:
 - 2026-09-12 `docs/forge/plans/2026-09-12-example.md` — via PR
 ```
 
+Either prefix names the same document: an entry spelled `docs/superpowers/<rest>`
+already records the plan `docs/forge/<rest>`, so never add a second line for it.
+
 | Path | When | Which form |
 |---|---|---|
 | Option 1, merge locally | On the base branch, as its own commit, after Step 5's merged-result verification passes | the `merged into` form |

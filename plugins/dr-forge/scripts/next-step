@@ -86,11 +86,16 @@ execution_launch() {
 
 # plan_finished ROOT NAME — true when the completed.md beside the plan NAME
 # records it. Matched on the backticked name, as plan-revise does, so one
-# plan's name that is a substring of another's cannot claim its outcome.
+# plan's name that is a substring of another's cannot claim its outcome; an
+# entry under either docs prefix counts.
 plan_finished() {
-  local f
+  local f s
   f="$(dirname "$(forge_resolve "$2" "$1")")/completed.md"
-  [ -f "$f" ] && grep -qF "\`$2\`" "$f"
+  [ -f "$f" ] || return 1
+  while IFS= read -r s; do
+    grep -qF "\`$s\`" "$f" && return 0
+  done < <(forge_name_spellings "$2")
+  return 1
 }
 
 execution_skill() { # execution_skill EXECUTION_LINE
@@ -189,7 +194,7 @@ else
     if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
       ledger_plan_path=$(cygpath -m "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
     fi
-    if [ -n "$ledger_plan_path" ] && [ "$(forge_name "$ledger_plan_path")" = "$rel" ]; then
+    if [ -n "$ledger_plan_path" ] && [ "$(forge_name_key "$(forge_name "$ledger_plan_path")")" = "$(forge_name_key "$rel")" ]; then
       has_ledger=1
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
@@ -274,7 +279,7 @@ else
           waiting="${waiting:+$waiting, }#$rid"; continue
         elif [ -z "$a" ] || [ "$a" = "-" ]; then
           r=4 k=rule
-        elif [ "$a" = "$rel" ] || plan_finished "$root" "$a"; then
+        elif [ "$(forge_name_key "$a")" = "$(forge_name_key "$rel")" ] || plan_finished "$root" "$a"; then
           stale="${stale:+$stale, }#$rid"; continue
         elif [ -f "$(forge_resolve "$a")" ]; then
           if [ -n "$(plan_tasks "$(forge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi

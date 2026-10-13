@@ -643,10 +643,24 @@ has "routing: launches the assigned plan's Execution pair" "$OUT" "claude --mode
 lacks "routing: never asks for a spec of a plan" "$OUT" "write its spec"
 has "routing: names rows left on finished plans" "$OUT" "Still assigned to a finished plan: #1, #6"
 
+# Either docs prefix names the same plan (spec §7.1): a completed.md entry and
+# an Assigned cell spelled docs/forge/ match the docs/superpowers/ plan.
+printf '# Completed plans\n\n- 2026-01-01 `docs/forge/plans/inc1.md` — merged into `main` at abc1234\n' \
+  > "$GREPO/docs/superpowers/plans/completed.md"
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/forge/plans/inc2.md >/dev/null
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: either prefix names a finished plan" "$OUT" "Still assigned to a finished plan: #1, #6"
+printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — merged into `main` at abc1234\n' \
+  > "$GREPO/docs/superpowers/plans/completed.md"
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
+
 mkdir -p "$GREPO/.forge/sdd/inc3"
 printf '# SDD ledger — plan: docs/superpowers/plans/inc3.md\n' > "$GREPO/.forge/sdd/inc3/progress.md"
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: an assigned plan with a ledger resumes" "$OUT" "Resume \`docs/superpowers/plans/inc3.md\` with dr-forge:resume-execution."
+printf '# SDD ledger — plan: docs/forge/plans/inc3.md\nTask 1: complete (x)\n' > "$GREPO/.forge/sdd/inc3/progress.md"
+OUT=$(cd "$GREPO" && bash "$SCRIPT" docs/superpowers/plans/inc3.md 2>&1)
+has "ledger check: an identity line under the other prefix is this plan's" "$OUT" "all 1 tasks complete."
 rm -rf "$GREPO/.forge/sdd/inc3"
 
 bash "$HERE/../scripts/register" set "$GREG" 5 planned --assigned docs/superpowers/specs/rev-design.md

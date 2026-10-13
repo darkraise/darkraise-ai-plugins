@@ -38,6 +38,8 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
      answers whether the branch landed, not whether the work is finished: an
      item register answers that. A ledger showing every task complete is not a
      completion signal either — the work may be unmerged.
+     Either prefix names the same document: `docs/superpowers/<rest>` in a
+     ledger, a `completed.md` entry or a register cell matches `docs/forge/<rest>`.
    - **Not started** — neither, and only when `completed.md` exists. "No ledger"
      never means "never ran": dr-forge:finishing-a-development-branch
      deletes the workspace on integration.

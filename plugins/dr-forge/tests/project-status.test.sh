@@ -105,6 +105,7 @@ SKILL="$P/skills/project-status/SKILL.md"
 present "status: names the registers directory" "$SKILL" "<docs>/registers/"
 present "status: completed.md is no longer the only completion signal" "$SKILL" \
   "not whether the work is finished"
+present "status: either docs prefix names one document" "$SKILL" "Either prefix names the same document"
 present "status: a register can veto done" "$SKILL" \
   "Never report work complete while a covering register has an unresolved row"
 present "status: the report has an open-items section" "$SKILL" "**Open items**"
@@ -147,6 +148,7 @@ present "finishing: an unresolved register changes the line" "$FIN" \
   "After integration: <n> register rows are still open"
 present "finishing: rows are resolved through the script" "$FIN" "scripts/register set"
 present "finishing: discovered work becomes a row" "$FIN" "scripts/register add"
+present "finishing: either docs prefix names one document" "$FIN" "Either prefix names the same document"
 present "finishing: verify is the owner's state" "$FIN" \
   "a check only your human partner can perform"
 
