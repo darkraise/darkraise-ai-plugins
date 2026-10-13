@@ -280,14 +280,21 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   at `~/.dr-forge/mirror/<project>/`. Before 2.0 these lived under
   `~/.dr-superpowers/`, which is still read until the new file exists. The key
   needs the `read` and `capture` scopes, and `import --replace` also `admin`.
-  `pull` fetches what changed;
-  `push` sends documents under their last synced hash and ledgers as the bytes
-  appended since the last push; `status` lists local changes and the last
-  run's conflicts; `import` moves an existing `docs/forge/` and its
-  ledgers in once, verified byte for byte. A conflict is reported, never
-  merged. Without a mapping every command but `import` prints one line and
-  does nothing. The skills do not call it yet: they still read and write the
-  repository's own paths.
+  Two settings choose each family's store: `documentStore` (specs, plans,
+  registers, notes) and `progressSource` (ledgers and handoffs), `local` or
+  `darkmem`; a mapping entry may override either, for example
+  `{"project": "plugins", "documentStore": "local"}`. `~/.dr-forge/stores.json`
+  records where each family actually lives, and the scripts and skills read
+  and write there through `scripts/lib/roots.sh` and `scripts/forge-path`.
+  `pull` fetches what changed; `push` sends documents under their last synced
+  hash and each new ledger line as its own entry, with `task`, `state` and
+  `commit` properties a progress board can read; `status` lists each family's
+  store and local changes; `import` moves an existing `docs/forge/` and its
+  ledgers in once, verified byte for byte, and records the families configured
+  `darkmem` as living there. A conflict is reported, never merged. Without the
+  key the mirror still works offline and `pull` and `push` say why they
+  skipped. Without a mapping every command but `import` prints one line and
+  does nothing.
 
 ## Requirements
 

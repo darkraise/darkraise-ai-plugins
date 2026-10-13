@@ -71,21 +71,44 @@ outside `<docs>/notes/` and `<docs>/findings/`. `gates.md`
 is edited by a human or by an approved bootstrap, never silently.
 `completed.md` is append-only.
 
-## Where `<state>` and `<docs>` are
+## Where `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` are
 
-`<state>` and `<docs>` are repository-relative names: `<state>` is `.forge/` and
-`<docs>` is `docs/forge/`, except in a repository that
-has `.superpowers/` or `docs/superpowers/` and not the new directory: there the
-old one stays in use, for writing as well as reading, so a pre-2.0 checkout never
-splits across both. Every script resolves its paths through
-`scripts/lib/forge-dir.sh`; a skill resolves them with
-`bash <plugin-root>/scripts/forge-path state|docs [RELATIVE]` before it reads or
-writes, never by spelling either path.
+`<state>` is `.forge/` and `<docs>` is `docs/forge/`, except in a repository
+that has `.superpowers/` or `docs/superpowers/` and not the new directory:
+there the old one stays in use, for writing as well as reading, so a pre-2.0
+checkout never splits across both.
 
-`forge-path` prints the absolute path in the checkout it runs in. For a path
-written under another root, such as `<primary checkout>/<state>/…` or
+A repository mapped to darkmem may keep each family in the darkmem mirror
+instead (`documentStore`, `progressSource`; `bash <plugin-root>/scripts/forge-path store`
+prints which):
+
+| Token | Local | darkmem |
+|---|---|---|
+| `<docs>` | `<worktree>/docs/forge` | `~/.dr-forge/mirror/<project>/superpowers` |
+| `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` | `~/.dr-forge/mirror/<project>/work/sdd/<plan-basename>` |
+| `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` | `~/.dr-forge/mirror/<project>/work/handoff/latest.md` |
+
+`<state>` and a plan's workspace (`scripts/sdd-workspace`: briefs, reports,
+review packages, `amendments.md`) stay in the checkout either way. A plan's
+ledger is `<ledger dir>/progress.md` and its handoff note
+`<ledger dir>/handoff.md`.
+
+Every script resolves these through `scripts/lib/roots.sh`; a skill resolves
+them with `bash <plugin-root>/scripts/forge-path state|docs [RELATIVE] | ledger <plan-basename> | latest`
+before it reads or writes, never by spelling a path. `forge-path` answers for
+the checkout it runs in; for a path written under another root, such as
 `<worktree>/<state>/…`, run it from that root:
-`(cd "<root>" && bash <plugin-root>/scripts/forge-path state handoff/latest.md)`.
-Where the path is written into a file or onto a command line (a roadmap `Spec`
-or `Register` cell, `.gitattributes`, a script argument), write the
-repository-relative form: the resolved path minus the checkout's root.
+`(cd "<root>" && bash <plugin-root>/scripts/forge-path state sdd)`.
+
+Where a path is written into a file or onto a command line (a ledger's
+identity line, a roadmap `Spec` or `Register` cell, a `**Spec:**` line,
+`.gitattributes`, a script argument), write its name:
+`bash <plugin-root>/scripts/forge-path name <path>`. A document's name is
+`docs/forge/<rest>` (`docs/superpowers/<rest>` in a pre-2.0 repository) in both
+stores, so a ledger in darkmem can name a plan in the checkout and the reverse;
+every script accepts a name where it takes a path.
+
+While `forge-path store` prints `documents darkmem`, a step that commits a
+spec, plan, register, roadmap or `completed.md` line runs
+`bash <plugin-root>/scripts/darkmem-sync push` instead. Code commits are
+unchanged.

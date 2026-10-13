@@ -298,7 +298,8 @@ with this first line; do not backfill plans whose outcome you cannot verify.
 The date is the date the plan landed, which is today's date when you write the
 line — not the plan file's own date. Commit an Option 1 index line as
 `docs(plans): complete <slug>`, which fits the 50-character subject limit where
-a full basename would not.
+a full basename would not. While documents live in darkmem, `completed.md` is
+in the mirror: push it instead of committing it (see project-state.md).
 
 **Carry open findings with it.** The ledger is the only record of what the run
 left open, and Step 6 deletes it.
@@ -338,8 +339,8 @@ main repo root — worktree removal must run from outside the worktree —
 and use the `GIT_DIR`/`GIT_COMMON`/`WORKTREE_PATH` values captured in
 Step 2, from before that directory change.
 
-A plan's workspace (`<state>/sdd/<plan>/`: ledger, briefs, reports,
-`handoff.md`) is git-ignored and lives in the worktree, so it goes with it —
+A plan's workspace (`<state>/sdd/<plan>/`: briefs, reports, and the ledger
+and `handoff.md` while progress is local) is git-ignored and lives in the worktree, so it goes with it —
 `git worktree remove` deletes ignored files without `--force`. Options 2 and 3
 keep it for the next session.
 
@@ -403,7 +404,7 @@ the next program sub-project or roadmap epic with its launch command and
 first prompt, the milestone audit when the current milestone has nothing open,
 or that the program or roadmap is complete, or that the plan records no
 follow-on work. It
-also rewrites the primary checkout's `<state>/handoff/latest.md` to
+also rewrites `<latest.md>` to
 match, so a fresh session finds the same answer. If it exits 4, say the
 handoff file could not be written.
 

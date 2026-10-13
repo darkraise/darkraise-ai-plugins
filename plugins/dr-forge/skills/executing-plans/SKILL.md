@@ -129,8 +129,8 @@ for them, or `TaskStop` them and record a Ruling. Tell your partner which you
 did. Then run `scripts/next-step PLAN_FILE` (see using-superpowers §Session
 Budget) as your last action. The
 last thing in your final message is the block it prints, verbatim. It also
-rewrites the `## Next session` section of the primary checkout's
-`<state>/handoff/latest.md`; if it exits 4, say the handoff file could not
+rewrites the `## Next session` section of
+`<latest.md>`; if it exits 4, say the handoff file could not
 be written. When the plan finishes,
 dr-forge:finishing-a-development-branch runs it instead.
 
@@ -156,21 +156,22 @@ file, not only in todos.
 - Each plan owns a workspace: run `scripts/sdd-workspace PLAN_FILE`
   (see using-superpowers §Session Budget), and it prints the plan's git-ignored directory
   (`<repo-root>/<state>/sdd/<plan-basename>/`), home to every artifact for
-  THIS plan. Another plan's directory is never yours to read or write.
-- This plan's ledger is `<workspace>/progress.md`. If its first line names your
+  THIS plan except its ledger and handoff note, which live in `<ledger dir>`.
+  Another plan's directory is never yours to read or write.
+- This plan's ledger is `<ledger dir>/progress.md`. If its first line names your
   plan file, recover each task's state with the Recovery table under The
   Ledger. A ledger whose first line names a different plan - or a stray ledger
   at the old flat path `<state>/sdd/progress.md` - is another plan's
   progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
-  `# SDD ledger — plan: <plan file path>` — the path exactly as you pass it to
-  the scripts (checkout-relative or absolute; `next-step` resolves both).
+  `# SDD ledger — plan: <plan name>` — `bash <plugin-root>/scripts/forge-path name PLAN_FILE`,
+  so the ledger names the plan in either store.
 - When a register covers this plan's spec, mark the rows this plan carries as
   in flight once, at the start of the run, skipping any row already at `verify`
   or `done`: `scripts/register set <register> <id> doing`. The register is read by
   `next-step`, `repo-audit` and dr-forge:project-status, so a run that
   never says it started reads as unscheduled work everywhere else.
-- Create `<workspace>/handoff.md` from the template in dr-forge:handoff
+- Create `<ledger dir>/handoff.md` from the template in dr-forge:handoff
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes.
 - Read `<docs>/distilled/constraints.md` when the project has one. Its

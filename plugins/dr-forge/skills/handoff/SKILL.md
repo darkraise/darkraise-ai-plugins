@@ -73,18 +73,17 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    - Execution: the ledger's last line records where you are (a
      `Task N: complete`, a fix-round line, or an assigned line whose run is
      over, per step 0). Update
-     `<workspace>/handoff.md` (below); `<workspace>` is the directory
-     `scripts/sdd-workspace PLAN_FILE` prints.
+     `<ledger dir>/handoff.md` (below; `<ledger dir>` per
+     using-superpowers §Session Budget).
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
      file. It is the authority.
    - Unplanned work (a change designed in chat, or a punch list, with no plan
      or draft file): the notes in `latest.md` are the authority, so step 3's
      `State` must carry every item.
 2. **Commit the plan and the spec** if either has uncommitted changes, in a
-   `docs(<scope>): …` commit of their own. Never commit `<state>/`.
-3. **Write the notes sections of `latest.md`** at
-   `<primary checkout>/<state>/handoff/latest.md`. The primary checkout is
-   `git -C "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" rev-parse --show-toplevel`.
+   `docs(<scope>): …` commit of their own (push instead while documents live in
+   darkmem; see project-state.md). Never commit `<state>/`.
+3. **Write the notes sections of `latest.md`** at `<latest.md>`.
    Replace everything above `## Next session` with exactly these sections,
    each under 15 lines:
 
@@ -93,7 +92,7 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 
    ## State
    - Worktree: `<absolute worktree path>` (branch `<branch>`, HEAD `<sha7>`)
-   - Plan: `<plan path>`; ledger: `<workspace>/progress.md`; handoff: `<workspace>/handoff.md`
+   - Plan: `<plan name>`; ledger: `<ledger dir>/progress.md`; handoff: `<ledger dir>/handoff.md`
    - <one line on where the work stands>
 
    ## Gotchas
@@ -127,7 +126,7 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 
 ## handoff.md
 
-`<workspace>/handoff.md` holds what the ledger cannot, in under 40 lines:
+`<ledger dir>/handoff.md` holds what the ledger cannot, in under 40 lines:
 
 ```markdown
 # Handoff notes — <plan path>

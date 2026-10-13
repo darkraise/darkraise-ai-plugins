@@ -60,7 +60,7 @@ Prefer an indexed code tool (e.g. darkmem `code_search`) over Explore subagents.
 - The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok` means continue at any percentage; `handoff` means finish the task in flight, then use dr-forge:handoff. See [session-budget.md](../../reference/session-budget.md).
 - Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dr-forge:resume-execution.
 - After compaction, trust the snapshot, ledger and `git log` over the summary.
-- `<state>` and `<docs>` in these skills are repository-relative: `.forge/` and `docs/forge/`, or `.superpowers/` and `docs/superpowers/` where only those exist. `bash <plugin-root>/scripts/forge-path state|docs [RELATIVE]` prints the absolute path in the checkout it runs in; run it from the checkout a path names ([project-state.md](../../reference/project-state.md)).
+- `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/forge-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` or `progressSource` keeps it ([project-state.md](../../reference/project-state.md)).
 
 ## Platform and Precedence
 

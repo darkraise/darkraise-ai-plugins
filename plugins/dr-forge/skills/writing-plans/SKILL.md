@@ -508,8 +508,8 @@ If you find issues, fix them inline. If you find a spec requirement with no task
 
 A saved, reviewed plan is a hard stop: execution starts in a fresh session (in
 an auto run the cockpit starts it; see Auto run).
-Invoke dr-forge:handoff. It commits the plan and the spec, writes
-`<state>/handoff/latest.md`, runs `scripts/next-step PLAN_FILE`, and ends
+Invoke dr-forge:handoff. It commits (or pushes) the plan and the spec, writes
+`<latest.md>`, runs `scripts/next-step PLAN_FILE`, and ends
 your message with the resume guide — the launch command from the Execution
 line and the first prompt for the skill that line names. Offer no execution
 choice: the Execution line already made it.

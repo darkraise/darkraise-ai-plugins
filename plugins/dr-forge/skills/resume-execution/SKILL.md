@@ -14,7 +14,7 @@ session from memory or from a summary.
 ## Steps
 
 1. **Orient in one call.** Run `scripts/repo-audit` (see using-superpowers §Session Budget). Read
-   `<primary checkout>/<state>/handoff/latest.md`; the audit prints its path.
+   `<latest.md>`; the audit prints its path.
 2. **Verify the worktree** named in latest.md's `## State` against
    `git worktree list --porcelain`. Normalise both paths before comparing:
    forward slashes, lowercase drive letter, no trailing slash
@@ -34,7 +34,7 @@ session from memory or from a summary.
    history was rewritten after the handoff: log
    `Ruling: HEAD no longer descends from <sha> — history rewritten after the handoff — tasks re-verified from git log`
    and continue from the ledger plus `git log`.
-4. **Reload** `<workspace>/handoff.md`, the plan's header (run
+4. **Reload** `<ledger dir>/handoff.md`, the plan's header (run
    `scripts/task-brief --header PLAN_FILE` and read the file it prints), and
    the ledger. The owner constraints and do-nots in
    `handoff.md` bind you as if your human partner had just said them. When the

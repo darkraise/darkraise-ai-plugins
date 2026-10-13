@@ -51,7 +51,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    human partner's approval, set each `verify` epic row to `done` with
    `scripts/register set`, then run
    `scripts/roadmap close M<n> --note "audit <date> <sha7>: <k> MET, <d> deferred"`,
-   and commit the registers and the roadmap together.
+   and commit the registers and the roadmap together (or push them, while documents live in darkmem).
 8. **Next.** Run `scripts/roadmap status` and name the next milestone's first
    open epic, or say the roadmap is complete.
 

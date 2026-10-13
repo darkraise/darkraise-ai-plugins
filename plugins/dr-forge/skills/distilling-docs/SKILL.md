@@ -71,7 +71,7 @@ Three conditions, checked per file, all required:
    the content you actually distilled went unrecoverable. Commit it first, or
    leave it out of the wave.
 3. **Unreferenced** — `git grep` over tracked files outside those two
-   directories, plus the primary checkout's `<state>/handoff/latest.md`,
+   directories, plus `<latest.md>`,
    finds neither the file's path, nor its basename, nor any **ancestor**
    directory path beneath those roots. The ancestor check matters: a plan naming
    a capture directory references every file in it without naming one.

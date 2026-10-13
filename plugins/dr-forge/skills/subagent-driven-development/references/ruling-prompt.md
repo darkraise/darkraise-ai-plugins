@@ -119,7 +119,7 @@ Subagent ([JUDGE]):
 - `[N]`, `[POINT]` — the item count and the decision point, for the description.
 - `[SPEC_FILE]`, `[PLAN_FILE]` — REQUIRED: absolute paths.
 - `[AMENDMENTS_FILE]`, `[LEDGER_FILE]` — REQUIRED: `<workspace>/amendments.md`
-  and `<workspace>/progress.md`.
+  and `<ledger dir>/progress.md`.
 - `[PROVISIONAL_NOTE]` — when the plan's Spec path is unreachable, "The spec is
   unreachable. Mark every Ruling (provisional)."; otherwise delete the line.
 - `[CONFIRM_NOTE]` — only for a Header amendment's confirmation: "Another seat
