@@ -84,11 +84,12 @@ execution_launch() {
   printf '%s' "$cmd"
 }
 
-# plan_finished ROOT REL — true when the completed.md beside REL records it.
-# Matched on the backticked repository-relative path, as plan-revise does, so
-# one plan's path that is a substring of another's cannot claim its outcome.
+# plan_finished ROOT NAME — true when the completed.md beside the plan NAME
+# records it. Matched on the backticked name, as plan-revise does, so one
+# plan's name that is a substring of another's cannot claim its outcome.
 plan_finished() {
-  local f="$1/$(dirname "$2")/completed.md"
+  local f
+  f="$(dirname "$(forge_resolve "$2" "$1")")/completed.md"
   [ -f "$f" ] && grep -qF "\`$2\`" "$f"
 }
 
@@ -133,17 +134,23 @@ else
   primary=$(plan_primary_root "$root")
   dir=$primary
 
-  plan_canon=$(plan_repo_canon "$plan") || fail 2 "not inside a git repository"
-  rel=${plan_canon#"$root"/}
+  forge_stores_init "$root"
+  rel=$(forge_name "$plan")
   slug=$(basename "$plan" .md)
 fi
 
+forge_stores_init "$root"
+# Shown repository-relative while progress is local, as before; the mirror's
+# path otherwise, which no checkout-relative name can reach.
+if [ "$(forge_progress_store)" = darkmem ]; then latest_shown=$(forge_latest_file)
+else latest_shown="$(forge_dir_rel state "$primary")/handoff/latest.md"; fi
+
 if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
-  status_line="Unplanned work: the notes in \`$(forge_dir_rel state "$primary")/handoff/latest.md\` are the authority."
+  status_line="Unplanned work: the notes in \`$latest_shown\` are the authority."
   next_line=$next_action
   launch_cmd=$(launch_for "$phase")
-  prompt="Continue the unplanned work recorded in \`$(forge_dir_rel state "$primary")/handoff/latest.md\`: $next_action"
+  prompt="Continue the unplanned work recorded in \`$latest_shown\`: $next_action"
   if [ "$root" != "$primary" ]; then
     prompt="$prompt First enter the existing worktree \`$root\`."
   fi
@@ -152,7 +159,7 @@ elif [ "$draft" -eq 1 ]; then
   status_line="Design in progress: \`$rel\` is the authority."
   next_line=$next_action
   launch_cmd=$(launch_for design)
-  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$(forge_dir_rel state "$primary")/handoff/latest.md\` first."
+  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$latest_shown\` first."
 else
   tasks=$(plan_tasks "$plan")
   [ -n "$tasks" ] || fail 3 "no tasks in ${plan} (no heading matching 'Task N')"
@@ -168,7 +175,7 @@ else
   launch_cmd=$(execution_launch "$execution")
   skill=$(execution_skill "$execution")
 
-  ledger_file="$(forge_dir state "$root")/sdd/$slug/progress.md"
+  ledger_file="$(forge_ledger_dir "$slug")/progress.md"
   ledger_note="no ledger at \`$ledger_file\`"
   ledger_text=""
   done_tasks=""
@@ -180,10 +187,9 @@ else
     # to the checkout, absolute, or in Windows form. Compare resolved paths.
     ledger_plan_path=$(ledger_plan "$ledger_file")
     if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
-      ledger_plan_path=$(cygpath -u "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
+      ledger_plan_path=$(cygpath -m "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
     fi
-    case $ledger_plan_path in /*) ;; *) ledger_plan_path="$root/$ledger_plan_path" ;; esac
-    if [ "$(plan_repo_canon "$ledger_plan_path" 2>/dev/null)" = "$plan_canon" ]; then
+    if [ -n "$ledger_plan_path" ] && [ "$(forge_name "$ledger_plan_path")" = "$rel" ]; then
       has_ledger=1
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
@@ -236,13 +242,13 @@ else
       [ -n "$rows" ] || continue
       # Several registers may cover one spec; every one that has open rows is
       # named, so the count is never attributed to the wrong file.
-      reg_list="${reg_list:+$reg_list, }\`${reg_file#"$root"/}\`"
+      reg_list="${reg_list:+$reg_list, }\`$(forge_name "$reg_file")\`"
       open_rows="${open_rows}${rows}
 "
     done < <(
       { [ ${#reg_specs[@]} -eq 0 ] || register_for_spec "$root" "${reg_specs[@]}"
         if [ -n "$current_ms" ]; then
-          roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | sed "s|^|$root/|"
+          roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | while IFS= read -r r; do forge_resolve "$r"; done
         fi
       } | awk '!seen[$0]++'
     )
@@ -270,8 +276,8 @@ else
           r=4 k=rule
         elif [ "$a" = "$rel" ] || plan_finished "$root" "$a"; then
           stale="${stale:+$stale, }#$rid"; continue
-        elif [ -f "$root/$a" ]; then
-          if [ -n "$(plan_tasks "$root/$a")" ]; then r=1 k=plan; else r=2 k=spec; fi
+        elif [ -f "$(forge_resolve "$a")" ]; then
+          if [ -n "$(plan_tasks "$(forge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
         elif [[ $a == *.md ]]; then
           elsewhere="${elsewhere:+$elsewhere, }#$rid"; continue
         else
@@ -285,8 +291,8 @@ else
       launch_cmd=$(launch_for design)
       case $kind in
         plan)
-          target_exec=$(plan_header_line "$root/$target" Execution)
-          if [ -n "$(plan_ledger "$root/$target")" ]; then
+          target_exec=$(plan_header_line "$(forge_resolve "$target")" Execution)
+          if [ -n "$(plan_ledger "$(forge_resolve "$target")")" ]; then
             action="Resume \`$target\` with dr-forge:resume-execution."
           else
             action="Continue \`$target\` with dr-forge:$(execution_skill "$target_exec")."
@@ -316,10 +322,10 @@ else
         ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
         next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dr-forge:closing-a-milestone."
         launch_cmd=$(launch_for design)
-        prompt="Close milestone $ms_id ($ms_name) of \`$(forge_dir_rel docs "$root")/roadmap.md\` with dr-forge:closing-a-milestone."
+        prompt="Close milestone $ms_id ($ms_name) of \`$(forge_name "$(forge_docs_root)")/roadmap.md\` with dr-forge:closing-a-milestone."
         launch=1
       else
-        next_line="Nothing — every milestone in \`$(forge_dir_rel docs "$root")/roadmap.md\` is closed."
+        next_line="Nothing — every milestone in \`$(forge_name "$(forge_docs_root)")/roadmap.md\` is closed."
       fi
     elif [ -z "$program" ]; then
       status_line="Plan \`$rel\` is complete."
@@ -420,7 +426,7 @@ block=$(
 )
 printf '%s\n' "$block"
 
-handoff="$(forge_dir state "$primary")/handoff/latest.md"
+handoff=$(forge_latest_file)
 today=$(date -u +%Y-%m-%d)
 write_handoff() {
   mkdir -p "$(dirname "$handoff")" || return 1
