@@ -96,8 +96,13 @@ fi
 # before its first task. The first ledger without its ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
 ledger="" clean=0
+ws="$(forge_dir state "$root")/sdd"
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
+  # While progress is darkmem every worktree shares the mirror's work/sdd, and a
+  # plan's workspace is always local: a ledger without one here is another
+  # session's.
+  [ -d "$ws/$(basename "$(dirname "$candidate")")" ] || continue
   if grep -q '^Final review: clean' "$candidate"; then
     ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
               'Must fix before completing' 'Worktree removal refused' && continue
