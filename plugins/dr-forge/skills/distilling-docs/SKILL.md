@@ -156,7 +156,7 @@ having checked it.
 ## Documents in darkmem
 
 While `bash <plugin-root>/scripts/forge-path store` prints `documents darkmem`,
-`<docs>` is the darkmem mirror, which git does not track. Four rules above
+`<docs>` is the darkmem mirror, which git does not track. Five rules above
 change; everything else stands.
 
 - **Eligible** replaces tracked and clean: `bash <plugin-root>/scripts/darkmem-sync revision <name>`
@@ -177,10 +177,13 @@ change; everything else stands.
   `git revert`.
 - **Rewrites** of an earlier wave's entries need the exact text of each
   source their `Source:` lines cite, where local mode uses `git show`.
-  `darkmem-sync restore <name>` brings the archived copy back into the mirror;
-  it is the cited revision, because only a synced, unchanged file was
-  eligible. Quote it in the judge's `[REWRITES]`, and delete it again in this
-  wave's removal push.
+  `darkmem-sync restore <name>` brings the newest archived copy back into the
+  mirror, which is not necessarily the cited revision. Run
+  `darkmem-sync revision <name>` on the restored file: quote the copy in the
+  judge's `[REWRITES]` only when the `@r<id>` it prints equals the cited one.
+  When it differs, stop and tell your human partner that the cited text is not
+  recoverable by name. Delete the restored copy again in this wave's removal
+  push.
 
 ## An external memory store
 
