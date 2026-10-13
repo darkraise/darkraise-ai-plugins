@@ -22,11 +22,13 @@ When `scripts/auto-run status` exits 0
   carry out the matching option as if your human partner had chosen it, by
   name, since the detached-HEAD menu renumbers them: `merge` is Merge Locally
   into that base, `pr` is Push and Create PR, and `keep`, `ask` and `wait` are
-  Keep As-Is. Never discard. Arm no wake. Two cases override this: on a
+  Keep As-Is. Never discard. Arm no wake. Three cases override this: on a
   detached HEAD (Step 2) there is no merge, so `merge` keeps and `pr` pushes a
   new branch (`git push origin HEAD:refs/heads/<new-branch>`); when the base is
   `none`, `merge` keeps and `pr` opens its request against the forge's default
-  branch.
+  branch; and `merge` keeps when the ledger holds a
+  `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
+  partial commits never reach the base unreviewed.
 - **Where an unattended finish stops** (failing tests at Step 1, a merged
   result failing its tests, a rejected push, a refused worktree removal), run
   `scripts/auto-run stop --reason "<what stopped it>"` first, then stop as

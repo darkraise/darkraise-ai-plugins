@@ -38,5 +38,7 @@ names "subagent-driven-development: a deferred task is not merged" "$P/skills/su
 R="$P/reference/auto-run.md"
 names "auto-run.md: an unwritten handoff stops the run" "$R" 'If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`'
 names "auto-run.md: Stopping lists it" "$R" '`scripts/next-step` exits 4 during a clear (see Clears).'
+names "auto-run.md: a deferred task keeps the branch" "$R" 'also keeps the branch when the ledger holds a'
+names "finishing: a deferred task keeps the branch" "$P/skills/finishing-a-development-branch/SKILL.md" '`merge` keeps when the ledger holds a'
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

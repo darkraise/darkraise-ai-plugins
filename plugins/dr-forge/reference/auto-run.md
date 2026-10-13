@@ -208,9 +208,13 @@ sends one Discord `blocked` notice when a run stops with a reason.
 
 Finishing carries out the `finishAction` setting at once, into the base
 `scripts/auto-run status` names: `merge` and `pr` as named; `keep`, `ask` and
-`wait` keep the branch, and so does `merge` when the base is `none`. On a
+`wait` keep the branch, and so does `merge` when the base is `none`. `merge`
+also keeps the branch when the ledger holds a
+`Task <N>: complete (deferred by the auto run)` line, so a deferred task's
+partial commits reach the base only after a person has looked at them. On a
 detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
 branch from the detached HEAD. A `pr` with base `none` opens its request
-against the forge's default branch. No menu, no wake. Its final message lists every `Ruling:` ledger line, every line of
-`scripts/auto-run ruling list` and every deferred row the run added, and it
-runs `scripts/auto-run stop` before the next-step block.
+against the forge's default branch. No menu, no wake. Its final message lists
+every `Ruling:` ledger line, every line of `scripts/auto-run ruling list` and
+every deferred row the run added, and it runs `scripts/auto-run stop` before
+the next-step block.
