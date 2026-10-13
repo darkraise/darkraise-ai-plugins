@@ -301,7 +301,35 @@ async function documentsToLocal(context) {
   const unverified = files.filter(item => remote.get(item.uri) !== item.hash).map(item => (remote.has(item.uri)
     ? `${item.uri}: the mirror's copy differs from darkmem's; push or discard it first`
     : `${item.uri}: not on darkmem; push or discard it first`));
+  // listDocumentFiles lists regular files only, so a link or directory where
+  // darkmem holds a document would otherwise be left behind unnoticed.
+  const covered = new Set(files.map(item => item.uri));
+  for (const uri of remote.keys()) {
+    if (covered.has(uri)) continue;
+    const held = path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"));
+    if (fs.lstatSync(held, { throwIfNoEntry: false })) {
+      unverified.push(`${uri}: the mirror holds a symbolic link or other non-file here, which the move cannot copy; make it a regular file`);
+    }
+  }
   if (unverified.length) return { moved: false, reason: "the mirror does not match darkmem; nothing was copied", details: unverified };
+  // Copies and equality reads must not follow a link out of the repository.
+  const checked = new Set(["docs", DOCS]);
+  for (const { dest } of files) {
+    const parts = slash(path.relative(cfg.repoRoot, dest)).split("/");
+    for (let end = 1; end <= parts.length; end += 1) checked.add(parts.slice(0, end).join("/"));
+  }
+  const links = [];
+  for (const rel of [...checked].sort()) {
+    if (links.some(link => rel.startsWith(`${link}/`))) continue;
+    if (fs.lstatSync(path.join(cfg.repoRoot, ...rel.split("/")), { throwIfNoEntry: false })?.isSymbolicLink()) links.push(rel);
+  }
+  if (links.length) {
+    return {
+      moved: false,
+      reason: "docs/forge is reached through symbolic links; nothing was copied",
+      details: links.map(rel => `${rel}: a symbolic link, which the move will not write through`),
+    };
+  }
   // A killed earlier run may have copied some files: equal ones are fine.
   const differing = files
     .filter(({ file, dest }) => fs.existsSync(dest) && !fs.readFileSync(dest).equals(fs.readFileSync(file)))
@@ -311,6 +339,7 @@ async function documentsToLocal(context) {
   // Asked before anything is copied so a git failure (exit above 1) can still refuse.
   const ignored = runGit(cfg.repoRoot, ["check-ignore", "--stdin"], files.map(({ name }) => name).join("\n"));
   if (ignored.status !== 0 && ignored.status !== 1) return { moved: false, reason: `git check-ignore failed: ${ignored.stderr.trim()}`, details: [] };
+  fs.mkdirSync(target, { recursive: true });
   for (const { file, dest } of files) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(file, dest);
@@ -329,8 +358,9 @@ async function documentsToLocal(context) {
   let attributes = "";
   try {
     attributes = fs.readFileSync(path.join(cfg.repoRoot, ".gitattributes"), "utf8");
-  } catch {
-    // No .gitattributes; nothing names the old prefix.
+  } catch (error) {
+    // No .gitattributes means nothing names the old prefix; any other failure is named.
+    if (error.code !== "ENOENT") details.push(`.gitattributes could not be read (${error.code}); check it for lines naming docs/superpowers/`);
   }
   attributes.split(/\r?\n/).forEach((line, index) => {
     if (line.includes("docs/superpowers/")) details.push(`.gitattributes line ${index + 1} still names docs/superpowers/: ${line}`);

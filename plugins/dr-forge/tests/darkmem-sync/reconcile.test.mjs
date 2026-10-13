@@ -380,14 +380,16 @@ for (const { arg, reason } of [
 }
 
 // Documents applied darkmem and configured local, darkmem holding two of them.
-async function darkmemDocs(t) {
+async function darkmemDocs(t, { seeded = true } = {}) {
   const stub = await startStub();
   t.after(() => stub.close());
   const repo = makeRepo();
   const home = mapped(repo, { url: stub.url, entry: { documentStore: "local", progressSource: "local" }, stores: { documents: "darkmem", progress: "local" } });
   const seed = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
-  await seed.putDocument({ project: "proj", uri: "superpowers/specs/a.md", content: "# A\n" });
-  await seed.putDocument({ project: "proj", uri: "superpowers/plans/p.md", content: "# P\n" });
+  if (seeded) {
+    await seed.putDocument({ project: "proj", uri: "superpowers/specs/a.md", content: "# A\n" });
+    await seed.putDocument({ project: "proj", uri: "superpowers/plans/p.md", content: "# P\n" });
+  }
   return {
     stub, repo, seed, ...home,
     stores: () => storesOf(home.home, repo),
@@ -488,4 +490,81 @@ test("a deletion the mirror has not pushed refuses the move until a push archive
   assert.equal(moved.code, 0, moved.stdout + moved.stderr);
   assert.ok(moved.stdout.includes("  copied 1 files into docs/forge, untracked; commit them\n"), moved.stdout);
   assert.equal(fs.existsSync(path.join(s.repo, "docs", "forge", "specs", "a.md")), false);
+});
+
+test("a move with no documents still creates docs/forge and leaves a legacy directory untouched", async t => {
+  const s = await darkmemDocs(t, { seeded: false });
+  write(path.join(s.repo, "docs", "superpowers", "old.md"), "old\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local$/m);
+  assert.ok(result.stdout.includes("  copied 0 files into docs/forge, untracked; commit them\n"), result.stdout);
+  assert.ok(result.stdout.includes(`  ${path.join(s.repo, "docs", "superpowers")} is a legacy docs directory and is not read; documents now live in docs/forge\n`), result.stdout);
+  assert.ok(fs.statSync(path.join(s.repo, "docs", "forge")).isDirectory());
+  assert.equal(read(path.join(s.repo, "docs", "superpowers", "old.md")), "old\n");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
+test("a mirror link where darkmem holds a document refuses the move", { skip: process.platform === "win32" }, async t => {
+  const s = await darkmemDocs(t);
+  assert.equal((await s.pull()).code, 0);
+  const outside = path.join(scratch("dms-link-"), "a.md");
+  fs.writeFileSync(outside, "# A\n");
+  fs.rmSync(path.join(s.docsRoot, "specs", "a.md"));
+  fs.symlinkSync(outside, path.join(s.docsRoot, "specs", "a.md"));
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: documents stay darkmem (configured local): the mirror does not match darkmem; nothing was copied\n"), result.stdout);
+  assert.ok(result.stdout.includes("  superpowers/specs/a.md: the mirror holds a symbolic link or other non-file here, which the move cannot copy; make it a regular file\n"), result.stdout);
+  assert.equal(fs.existsSync(path.join(s.repo, "docs", "forge")), false);
+  assert.equal(fs.existsSync(s.docsRoot), true);
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+});
+
+test("a .gitattributes that cannot be read is named after the move", async t => {
+  const s = await darkmemDocs(t);
+  fs.mkdirSync(path.join(s.repo, ".gitattributes"));
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local$/m);
+  assert.ok(result.stdout.includes("  .gitattributes could not be read (EISDIR); check it for lines naming docs/superpowers/\n"), result.stdout);
+});
+
+test("docs/forge reached through a symbolic link refuses the move and writes nothing through it", { skip: process.platform === "win32" }, async t => {
+  const s = await darkmemDocs(t);
+  const outside = scratch("dms-link-");
+  fs.mkdirSync(path.join(s.repo, "docs"), { recursive: true });
+  fs.symlinkSync(outside, path.join(s.repo, "docs", "forge"));
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("documents stay darkmem (configured local): docs/forge is reached through symbolic links; nothing was copied\n"), result.stdout);
+  assert.ok(result.stdout.includes("  docs/forge: a symbolic link, which the move will not write through\n"), result.stdout);
+  assert.deepEqual(fs.readdirSync(outside), []);
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+  assert.equal(fs.existsSync(s.docsRoot), true);
+});
+
+test("a dangling link at a destination file refuses the move and is not written through", { skip: process.platform === "win32" }, async t => {
+  const s = await darkmemDocs(t);
+  const outside = path.join(scratch("dms-link-"), "created.md");
+  fs.mkdirSync(path.join(s.repo, "docs", "forge", "plans"), { recursive: true });
+  fs.symlinkSync(outside, path.join(s.repo, "docs", "forge", "plans", "p.md"));
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("  docs/forge/plans/p.md: a symbolic link, which the move will not write through\n"), result.stdout);
+  assert.equal(fs.existsSync(outside), false);
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+});
+
+test("documents stay darkmem when git check-ignore fails", { skip: process.platform === "win32" }, async t => {
+  const s = await darkmemDocs(t);
+  const realGit = process.env.PATH.split(path.delimiter).map(dir => path.join(dir, "git")).find(file => fs.existsSync(file));
+  const bin = scratch("dms-git-");
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "check-ignore" ] && { echo "fatal: refused by the test" >&2; exit 128; }; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: documents stay darkmem (configured local): git check-ignore failed: fatal: refused by the test\n"), result.stdout);
+  assert.equal(fs.existsSync(path.join(s.repo, "docs", "forge")), false);
+  assert.equal(fs.existsSync(s.docsRoot), true);
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
 });
