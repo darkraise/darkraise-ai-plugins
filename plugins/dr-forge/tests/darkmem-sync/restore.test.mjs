@@ -113,6 +113,24 @@ test("restore moves the newest archived copy back under its hash and pulls it", 
   assert.deepEqual(patch.body, { uri: "superpowers/specs/a.md", expected_hash: sha("one\n") });
 });
 
+test("restore brings the document back even when the sync state still holds the hash of the archived one", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "specs", "a.md"), "one\n");
+  await s.sync("push");
+  fs.rmSync(path.join(s.docsRoot, "specs", "a.md"));
+  await s.sync("push");
+  const statePath = path.join(s.mirror, ".sync-state.json");
+  const state = JSON.parse(read(statePath));
+  state.documents["superpowers/specs/a.md"] = sha("one\n");
+  fs.writeFileSync(statePath, JSON.stringify(state));
+  const result = await s.sync("restore", "docs/forge/specs/a.md");
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "one\n");
+  const again = await s.sync("push");
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.ok(s.stub.db.documents.has("proj\u0000superpowers/specs/a.md"), "the next push does not archive it again");
+});
+
 test("restore refuses an occupied uri or a name with no archived copy, and needs documents applied darkmem", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "live\n" });

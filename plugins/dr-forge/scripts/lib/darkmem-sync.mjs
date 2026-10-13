@@ -71,7 +71,7 @@ function documentUri(name) {
 // archived copy's hash, then pulls documents (wiring spec §2). main refuses it
 // before this runs when documents are not applied darkmem.
 async function restore(context) {
-  const { cfg, roots, client, report, args, out } = context;
+  const { cfg, roots, client, report, args, out, state, persist } = context;
   const [name] = args;
   const uri = documentUri(name);
   if (!uri) throw new UsageError(`${name} does not name a document`);
@@ -96,6 +96,10 @@ async function restore(context) {
   }
   out(`restored: ${uri} from ${newest.uri}`);
   report.counts.documents = 0;
+  // A hash left by an archive whose response was lost would make the pull read
+  // the missing file as a pending deletion and skip the restored document.
+  delete state.documents[uri];
+  persist();
   await pullDocuments({ ...context, roots: { ...roots, families: { documents: true, progress: false } } });
 }
 
