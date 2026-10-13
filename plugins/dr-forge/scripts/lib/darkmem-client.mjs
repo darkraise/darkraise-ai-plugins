@@ -1,7 +1,7 @@
 // The keyed REST surface darkmem serves a mirror (work-log lane spec §2): the
-// work-log routes, POST /documents, GET /documents/by-uri and the manifest.
-// Every call carries the API key, names this client, and gives up after a
-// bounded timeout.
+// work-log routes, POST /documents, GET /documents/by-uri, the manifest, and a
+// document's move (PATCH /documents/{id}) and revisions. Every call carries the
+// API key, names this client, and gives up after a bounded timeout.
 export class TransportError extends Error {}
 
 export class HttpError extends Error {
@@ -87,6 +87,14 @@ export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl
       const body = { project, uri, content };
       if (expectedHash) body.expected_hash = expectedHash;
       return call("POST", "/api/v1/documents", { body });
+    },
+    moveDocument(documentId, { uri, expectedHash }) {
+      const body = { uri };
+      if (expectedHash) body.expected_hash = expectedHash;
+      return call("PATCH", `/api/v1/documents/${encodeURIComponent(documentId)}`, { body });
+    },
+    revisions(documentId, { limit, before } = {}) {
+      return call("GET", `/api/v1/documents/${encodeURIComponent(documentId)}/revisions`, { query: { limit, before } });
     },
     append({ project, workstream, entries, properties, expectedLastSeq }) {
       const body = { project, workstream, run_key: runKey, client: CLIENT, entries };

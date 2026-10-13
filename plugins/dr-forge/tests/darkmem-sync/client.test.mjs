@@ -112,6 +112,36 @@ test("an append with expected_last_seq writes only when it names the newest seq 
   assert.equal(stub.db.workstreams[0].entries.length, 5);
 }));
 
+test("a document moves to a free uri under its hash; a stale hash or a taken uri is a 409, an unknown id a 404", () => withStub({}, async (stub, client) => {
+  const a = await client.putDocument({ project: "p", uri: "superpowers/a.md", content: "a" });
+  await client.putDocument({ project: "p", uri: "superpowers/b.md", content: "b" });
+  const status = promise => promise.then(() => 200, error => (error instanceof HttpError ? error.status : -1));
+  assert.equal(await status(client.moveDocument(a.document_id, { uri: "superpowers/x.md", expectedHash: "0".repeat(64) })), 409);
+  assert.equal(await status(client.moveDocument(a.document_id, { uri: "superpowers/b.md", expectedHash: a.content_hash })), 409);
+  assert.equal(await status(client.moveDocument("no-such-id", { uri: "superpowers/x.md" })), 404);
+  const archived = "superpowers/archive/20261013T091502Z/a.md";
+  assert.deepEqual(await client.moveDocument(a.document_id, { uri: archived, expectedHash: a.content_hash }), { document_id: a.document_id });
+  const [unknown, moved] = stub.db.requests.slice(-2);
+  assert.equal("expected_hash" in unknown.body, false);
+  assert.equal(moved.method, "PATCH");
+  assert.equal(moved.path, `/api/v1/documents/${a.document_id}`);
+  assert.deepEqual(moved.body, { uri: archived, expected_hash: a.content_hash });
+  assert.deepEqual((await client.manifest("p", "superpowers")).map(i => i.uri), [archived, "superpowers/b.md"]);
+}));
+
+test("revisions list a document's content writes newest first, one page at a time", () => withStub({}, async (stub, client) => {
+  const first = await client.putDocument({ project: "p", uri: "superpowers/a.md", content: "one" });
+  await client.putDocument({ project: "p", uri: "superpowers/a.md", content: "one" });
+  const second = await client.putDocument({ project: "p", uri: "superpowers/a.md", content: "two" });
+  const page = await client.revisions(first.document_id, { limit: 1 });
+  assert.equal(page.document_id, first.document_id);
+  assert.deepEqual(page.items.map(r => r.content_hash), [second.content_hash]);
+  const rest = await client.revisions(first.document_id, { limit: 1, before: page.next_before });
+  assert.deepEqual(rest.items.map(r => r.content_hash), [first.content_hash]);
+  assert.deepEqual(Object.keys(rest.items[0]).sort(), ["actor", "api_key_id", "content_hash", "created_at", "id"]);
+  assert.equal((await client.revisions(first.document_id)).items.length, 2, "an unchanged put records no revision");
+}));
+
 test("failItem records any darkmem answer but a 401 as one item's failure and rethrows everything else", () => {
   const report = { failures: [] };
   failItem(report, "superpowers/a.md", new HttpError("GET", "/x", 503, "busy"));

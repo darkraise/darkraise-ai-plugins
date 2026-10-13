@@ -5,9 +5,13 @@
 // with expected_last_seq writes nothing unless it names the seq of the
 // workstream's newest entry of the call's one kind (0 for none), answering 409
 // otherwise; a by-uri read of a uri nothing is filed at answers darkmem's own
-// 404 text; every list is keyset-paged. db.failures injects answers: {method, path,
-// status, detail, commit}, where commit: true applies the request first and
-// then answers the failure, which is what a lost response looks like.
+// 404 text; a document PATCH moves it to a free uri, under expected_hash when
+// given (409 on a stale hash or a taken uri, 404 on an unknown id, 422 on an
+// unknown field or nothing to change); every content write records a revision,
+// listed newest first; every list is keyset-paged. db.failures injects answers:
+// {method, path, status, detail, commit}, where commit: true applies the
+// request first and then answers the failure, which is what a lost response
+// looks like.
 import crypto from "node:crypto";
 import http from "node:http";
 
@@ -25,7 +29,7 @@ export function storedDocument(project, uri, content) {
 // onRequest(request, db) runs before each authenticated request is answered,
 // to simulate another client or a local edit landing mid-sync.
 export async function startStub({ pageSize, transformContent, onRequest } = {}) {
-  const db = { documents: new Map(), workstreams: [], requests: [], failures: [], nextSeq: 1, clock: Date.now() };
+  const db = { documents: new Map(), workstreams: [], requests: [], failures: [], nextSeq: 1, nextRevision: 1, clock: Date.now() };
   const tick = () => new Date((db.clock += 1000)).toISOString();
   const docKey = (project, uri) => `${project}\u0000${uri}`;
   const limitOf = (url, fallback) => {
@@ -76,12 +80,42 @@ export async function startStub({ pageSize, transformContent, onRequest } = {}) 
       }
       const outcome = !existing ? "created" : existing.content_hash === hash ? "unchanged" : "updated";
       const doc = existing ?? { id: crypto.randomUUID(), project: body.project, uri: body.uri };
-      if (outcome !== "unchanged") Object.assign(doc, { content, content_hash: hash, updated_at: tick() });
+      if (outcome !== "unchanged") {
+        Object.assign(doc, { content, content_hash: hash, updated_at: tick() });
+        doc.revisions = [...(doc.revisions ?? []), { id: db.nextRevision++, content_hash: hash, actor: "stub", api_key_id: null, created_at: doc.updated_at }];
+      }
       db.documents.set(key, doc);
       return send(201, {
         document_id: doc.id, outcome, blocks_filed: 0, blocks_embedded: 0, title_applied: outcome !== "unchanged",
         oversized_blocks: null, largest_block_chars: null, content_hash: doc.content_hash,
       });
+    }
+    if (method === "GET" && (m = p.match(/^\/api\/v1\/documents\/([^/]+)\/revisions$/))) {
+      const doc = [...db.documents.values()].find(d => d.id === m[1]);
+      if (!doc) return send(404, { detail: `no document with id '${m[1]}'` });
+      const limit = limitOf(url, 50);
+      const before = q.get("before") === null ? Infinity : Number(q.get("before"));
+      const items = (doc.revisions ?? []).filter(r => r.id < before).reverse().slice(0, limit);
+      return send(200, { document_id: doc.id, items, next_before: items.length === limit ? items.at(-1).id : null });
+    }
+    if (method === "PATCH" && (m = p.match(/^\/api\/v1\/documents\/([^/]+)$/))) {
+      const doc = [...db.documents.values()].find(d => d.id === m[1]);
+      if (!doc) return send(404, { detail: `no document with id '${m[1]}'` });
+      const unknown = Object.keys(body ?? {}).filter(k => !["uri", "title", "pinned", "tags", "expected_hash"].includes(k));
+      if (unknown.length) return send(422, { detail: `unknown fields: ${unknown.join(", ")}` });
+      if (!["uri", "title", "pinned", "tags"].some(k => body?.[k] !== undefined)) return send(422, { detail: "nothing to change" });
+      if (body.expected_hash !== undefined && body.expected_hash !== null && body.expected_hash !== doc.content_hash) {
+        return send(409, { detail: `expected_hash ${body.expected_hash} does not match the document's current content_hash ${doc.content_hash}` });
+      }
+      if (body.uri !== undefined && body.uri !== doc.uri) {
+        if (db.documents.has(docKey(doc.project, body.uri))) return send(409, { detail: `uri '${body.uri}' is taken in project '${doc.project}'` });
+        db.documents.delete(docKey(doc.project, doc.uri));
+        doc.uri = body.uri;
+        db.documents.set(docKey(doc.project, doc.uri), doc);
+      }
+      for (const k of ["title", "pinned", "tags"]) if (body[k] !== undefined) doc[k] = body[k];
+      doc.updated_at = tick();
+      return send(200, { document_id: doc.id });
     }
     if (method === "POST" && p === "/api/v1/worklog/entries") {
       if (!body?.run_key) return send(422, { detail: "a work-log entry needs a declared agent-run identity" });
