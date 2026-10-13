@@ -357,5 +357,43 @@ check "plan_delegated: an unsplit plan is unchanged by the fix" \
 check "plan_executors: unchanged by the fix" \
   "$(plan_executors "$TMP/exec.md" | tr '\t\n' ' |')" "1 codex|"
 
+# --- the plan functions follow the roots ---
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+SR="$TMP/stores-repo"
+git init -q "$SR"
+git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
+STOP=$(git -C "$SR" rev-parse --show-toplevel)
+M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+mkdir -p "$M/superpowers/plans" "$M/work/sdd/mp"
+printf '# MP\n' > "$M/superpowers/plans/mp.md"
+printf '# SDD ledger — plan: docs/forge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+check "plan_ledger: a mirror plan finds its mirror ledger by name" \
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/superpowers/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+printf '# SDD ledger — plan: %s\n' "$M/superpowers/plans/mp.md" > "$M/work/sdd/mp/progress.md"
+check "plan_ledger: an absolute mirror path names it too" \
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/superpowers/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+check "plan_locate: a document name finds the mirror's copy" \
+  "$(cd "$SR" && HOME=$SH plan_locate docs/forge/plans/mp.md)" "$M/superpowers/plans/mp.md"
+check "plan_locate: an existing file stays" "$(cd "$REPO" && plan_locate docs/demo.md)" "docs/demo.md"
+check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/forge/plans/none.md)" "docs/forge/plans/none.md"
+mkdir -p "$STOP/.forge/sdd/mp"
+printf '## A1 — Task 1\n' > "$STOP/.forge/sdd/mp/amendments.md"
+check "amendments_file: a mirror plan's workspace stays in the checkout" \
+  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/superpowers/plans/mp.md")" "$STOP/.forge/sdd/mp/amendments.md"
+(cd "$SR" && HOME=$SH plan_require_same_project "$M/superpowers/plans/mp.md" 2>/dev/null)
+check "same project: a mirror plan while documents are in darkmem" "$?" "0"
+(cd "$SR" && HOME=$SH plan_require_same_project "$REPO/docs/demo.md" 2>/dev/null)
+check "same project: another checkout's plan is refused" "$?" "2"
+M=$(stores_home "$SH" "$SR" proj local darkmem)
+mkdir -p "$STOP/docs/forge/plans"
+printf '# LP\n' > "$STOP/docs/forge/plans/lp.md"
+mkdir -p "$M/work/sdd/lp"
+printf '# SDD ledger — plan: docs/forge/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
+check "plan_ledger: a checkout plan finds its mirror ledger" \
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/forge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
+(cd "$SR" && HOME=$SH plan_require_same_project "$M/superpowers/plans/mp.md" 2>/dev/null)
+check "same project: a mirror plan while documents are local is refused" "$?" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

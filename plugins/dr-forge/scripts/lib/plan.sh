@@ -2,7 +2,7 @@
 # and repo-audit, so every reader agrees on what a task, the header and an
 # amendment are. Sourced; defines functions only.
 
-. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/roots.sh"
 
 _PLAN_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -317,22 +317,39 @@ plan_repo_canon() {
   printf '%s/%s%s\n' "$top" "$prefix" "$(basename "$1")"
 }
 
+# _plan_ctx PLAN — the directory whose checkout a plan belongs to: its own
+# directory inside a git repository, else the working directory (a plan in
+# the darkmem mirror belongs to the checkout it is worked from).
+_plan_ctx() {
+  if git -C "$(dirname "$1")" rev-parse --show-toplevel >/dev/null 2>&1; then dirname "$1"; else printf '%s\n' "$PWD"; fi
+}
+
+# plan_locate PLAN — PLAN when it is a file; otherwise the file its name
+# resolves to, so docs/forge/plans/x.md finds the mirror's copy while
+# documents live in darkmem; otherwise PLAN, for the caller's own message.
+plan_locate() {
+  local found
+  if [ -f "$1" ]; then printf '%s\n' "$1"; return 0; fi
+  found=$(forge_resolve "$1")
+  if [ -f "$found" ]; then printf '%s\n' "$found"; else printf '%s\n' "$1"; fi
+}
+
 # plan_ledger PLAN — the plan's ledger file when it exists and its identity line
 # names PLAN; nothing otherwise. A stale ledger under the same slug is ignored.
+# Plan and identity are compared as names, so a ledger in darkmem can name a
+# plan in the checkout and the reverse.
 plan_ledger() {
-  local want top file named got
-  want=$(plan_repo_canon "$1") || return 0
-  top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || return 0
-  file="$(forge_dir state "$top")/sdd/$(basename "$1" .md)/progress.md"
+  local ctx want file named
+  ctx=$(_plan_ctx "$1")
+  want=$(forge_name "$1" "$ctx")
+  file="$(forge_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
   [ -f "$file" ] || return 0
   named=$(ledger_plan "$file")
   [ -n "$named" ] || return 0
   if command -v cygpath >/dev/null 2>&1; then
-    named=$(cygpath -u "$named" 2>/dev/null || printf '%s' "$named")
+    named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
   fi
-  case $named in /*) ;; *) named="$top/$named" ;; esac
-  got=$(plan_repo_canon "$named") || return 0
-  [ "$got" != "$want" ] || printf '%s\n' "$file"
+  [ "$(forge_name "$named" "$ctx")" != "$want" ] || printf '%s\n' "$file"
   return 0
 }
 
@@ -410,15 +427,15 @@ plan_apply_amendments() {
   ' "$2" "$1"
 }
 
-# plan_amendments_file PLAN — <workspace>/amendments.md when PLAN is inside a
-# git repository and that file is non-empty; otherwise nothing. Computed, not
+# plan_amendments_file PLAN — <workspace>/amendments.md when PLAN belongs to a
+# git checkout and that file is non-empty; otherwise nothing. Computed, not
 # created: readers never bring the workspace into being.
 plan_amendments_file() {
-  local root slug
-  root=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || return 0
-  slug=$(basename "$1" .md)
-  [ -s "$(forge_dir state "$root")/sdd/$slug/amendments.md" ] \
-    && printf '%s\n' "$(forge_dir state "$root")/sdd/$slug/amendments.md"
+  local ctx file
+  ctx=$(_plan_ctx "$1")
+  git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
+  file="$(forge_workspace "$(basename "$1" .md)" "$ctx")/amendments.md"
+  [ -s "$file" ] && printf '%s\n' "$file"
   return 0
 }
 
@@ -439,5 +456,33 @@ plan_require_same_repo() {
   [ "$plan_top" != "$cwd_top" ] || return 0
   printf "%s: %s is in %s, but the working directory is in %s; run from inside the plan's worktree\n" \
     "$me" "$1" "$plan_top" "$cwd_top" >&2
+  exit 2
+}
+
+# plan_require_same_project FILE — return when FILE belongs to the working
+# directory's checkout: inside its top level, or under the darkmem mirror's
+# docs root while documents are applied darkmem. Otherwise name both on stderr
+# and exit 2. Scripts find the repository from the working directory, but the
+# plan functions resolve from the plan's location, so a plan in another
+# checkout would split one plan's state across two. A linked worktree and its
+# primary checkout have different top levels, so a worktree session given the
+# primary checkout's plan path is refused as well.
+plan_require_same_project() {
+  local me cwd_top plan_top dir docs
+  me=$(basename "$0")
+  cwd_top=$(git rev-parse --show-toplevel 2>/dev/null) \
+    || { printf '%s: not inside a git repository\n' "$me" >&2; exit 2; }
+  plan_top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || plan_top=""
+  [ "$plan_top" != "$cwd_top" ] || return 0
+  forge_stores_init
+  if [ "$_FORGE_DOCS_STORE" = darkmem ]; then
+    dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || dir=""
+    docs=$(cd "$_FORGE_DOCS_ROOT" 2>/dev/null && pwd -P) || docs=""
+    if [ -n "$dir" ] && [ -n "$docs" ]; then
+      case "$dir/" in "$docs"/*) return 0 ;; esac
+    fi
+  fi
+  printf "%s: %s is in %s, but the working directory is in %s; run from inside the plan's worktree\n" \
+    "$me" "$1" "${plan_top:-no git repository}" "$cwd_top" >&2
   exit 2
 }
