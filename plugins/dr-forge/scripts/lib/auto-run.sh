@@ -9,6 +9,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
 
 AR_STALE_MINUTES=60
+AR_LOCK_TENTHS=100
 AR_RESUME_CAP=3
 AR_FAILURE_CAP=2
 
@@ -42,15 +43,36 @@ ar_bound() {
 }
 
 # ar_update FILTER [jq options…] — apply a jq filter to the state atomically.
-# Where flock exists, concurrent updates (a Stop auto press beside a ruling add)
-# queue instead of each reading the file the other is about to replace.
+# Concurrent updates (a Stop auto press beside a ruling add) queue instead of
+# each reading the file the other is about to replace.
 ar_update() {
-  local path
+  local path status
   path=$(ar_path) || return 1
-  (
-    if command -v flock >/dev/null 2>&1; then flock -w 10 9 || exit 1; fi
-    ar_write "$path" "$@"
-  ) 9>>"$path.lock"
+  if command -v "${DR_FORGE_FLOCK:-flock}" >/dev/null 2>&1; then
+    (
+      "${DR_FORGE_FLOCK:-flock}" -w 10 9 || exit 1
+      ar_write "$path" "$@"
+    ) 9>>"$path.lock"
+    return
+  fi
+  ar_lock_dir "$path.lockd" || return 1
+  ar_write "$path" "$@"
+  status=$?
+  rmdir "$path.lockd" 2>/dev/null
+  return $status
+}
+
+# ar_lock_dir DIR — mkdir as the lock where flock is missing (macOS, some Git
+# Bash builds). A write holds it for milliseconds, so a lock still held after
+# AR_LOCK_TENTHS tenths of a second belongs to a process that died: take it.
+ar_lock_dir() {
+  local i
+  for ((i = 0; i < AR_LOCK_TENTHS; i++)); do
+    mkdir "$1" 2>/dev/null && return 0
+    sleep 0.1
+  done
+  rmdir "$1" 2>/dev/null
+  mkdir "$1" 2>/dev/null
 }
 
 ar_write() { # ar_write PATH FILTER [jq options…]
@@ -170,19 +192,18 @@ ar_clear() {
   if [[ $launch =~ claude\ --model\ ([^ ]+)\ --effort\ ([^ ]+) ]]; then
     model=${BASH_REMATCH[1]} effort=${BASH_REMATCH[2]}
   fi
-  resumes=$(ar_get resumes)
-  resumes=${resumes:-0}
   if [ "$is_phase" != 1 ]; then
-    resumes=$((resumes + 1))
-    if [ "$resumes" -ge "$AR_RESUME_CAP" ]; then
+    ar_update '.resumes = ((.resumes // 0) + 1)' || return 1
+    resumes=$(ar_get resumes)
+    if [ "${resumes:-0}" -ge "$AR_RESUME_CAP" ]; then
       ar_stop "three self-resumes without a completed task" || return 1
       echo "auto-run: stopped — $AR_RESUME_CAP self-resumes in a row without a completed task" >&2
       return 5
     fi
   fi
-  ar_update '.pending = "clear" | .rebind = true | .resumes = ($r | tonumber) | .resumePrompt = $p
+  ar_update '.pending = "clear" | .rebind = true | .resumePrompt = $p
     | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
-    --arg r "$resumes" --arg p "$prompt" --arg m "$model" --arg e "$effort"
+    --arg p "$prompt" --arg m "$model" --arg e "$effort"
 }
 
 ar_rebind() { # ar_rebind ID
@@ -197,13 +218,12 @@ ar_compacted() { ar_update '.compactions += 1 | .failures = 0 | .pending = "afte
 
 ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the run
   local n
+  ar_update '.failures = ((.failures // 0) + 1)' || return 1
   n=$(ar_get failures)
-  n=$(( ${n:-0} + 1 ))
-  if [ "$n" -ge "$AR_FAILURE_CAP" ]; then
+  if [ "${n:-0}" -ge "$AR_FAILURE_CAP" ]; then
     ar_stop "${1:-the cockpit could not compact or clear}" || return 1
     return 5
   fi
-  ar_update '.failures = ($n | tonumber)' --arg n "$n"
 }
 
 ar_decision_add() { # ar_decision_add ID QUESTION OPTIONS REASON TASK

@@ -20,7 +20,7 @@ export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1 DR_FORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DR_FORGE_BUDGET DR_FORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID
+unset DR_FORGE_BUDGET DR_FORGE_JQ DR_FORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
@@ -176,6 +176,30 @@ ar --session s-1 compacted
 check "a compaction resets the failures" "$(field failures)" "0"
 ar --session s-1 failure; ar --session s-1 failure --reason "refused twice"; status=$?
 check "a second failure in a row stops the run" "$status:$(field active):$(field stopped)" "5:false:refused twice"
+
+# --- concurrent counts: each increment is read and written under one lock ---
+# The wrapper slows every read of a count, so two callers that read before
+# they write both see the old value.
+SLOW_JQ="$TMP/slow-jq"
+printf '#!/usr/bin/env bash\ncase " $* " in *" f failures "*|*" f resumes "*) sleep 1 ;; esac\nexec jq "$@"\n' > "$SLOW_JQ"
+chmod +x "$SLOW_JQ"
+for lock in flock no-such-flock; do
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
+  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
+  wait
+  check "$lock: two failures at once stop the run" "$(field failures):$(field active)" "2:false"
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
+  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
+  wait
+  check "$lock: two clears at once count two self-resumes" "$(field resumes):$(field pending)" "2:clear"
+done
+check "no flock: the lock directory is gone" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
+mkdir "$STATE.lockd"
+DR_FORGE_FLOCK=no-such-flock ar --session s-1 task-complete; status=$?
+check "no flock: a lock its holder left behind is taken after the wait" "$status:$(field resumes)" "0:0"
+check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 
 # --- stop ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
