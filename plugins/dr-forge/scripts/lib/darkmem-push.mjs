@@ -8,9 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, caseGroups, checkpointTarget, decodeUtf8,
-  familiesOf, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs,
-  uriProblem, utf8Fault, validKey,
+  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointTarget, decodeUtf8,
+  familiesOf, isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit,
+  unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
 
@@ -108,6 +108,61 @@ async function pushDocument(context, { uri, buffer, local, recorded }, remote) {
   await linkHandoff(context, uri);
 }
 
+// Every synced document whose mirror file is gone moves on darkmem to
+// superpowers/archive/<stamp>/<rest> under its recorded hash, so an edit made
+// on darkmem since the last sync is never archived unseen; restore moves it
+// back. A missing docs root archives nothing: a lost mirror is not a request
+// to archive every document.
+async function archiveDeleted(context) {
+  const { cfg, client, roots, state, persist, report } = context;
+  const gone = Object.keys(state.documents).sort().filter(uri => {
+    if (uriFamily(uri) !== "documents" || isArchiveUri(uri)) return false;
+    const file = uriToLocal(roots, uri);
+    return file !== null && !fs.existsSync(file);
+  });
+  if (!gone.length) return;
+  if (!fs.existsSync(roots.docsRoot)) {
+    report.notes.push(`${gone.length} synced documents are missing because ${roots.docsRoot} is gone; none archived — pull to bring them back`);
+    return;
+  }
+  let remote;
+  try {
+    remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item]));
+  } catch (error) {
+    failItem(report, "document manifest", error, "; no document archived");
+    return;
+  }
+  const stamp = utcStamp();
+  for (const uri of gone) {
+    const recorded = state.documents[uri];
+    const item = remote.get(uri);
+    if (!item) {
+      // Gone from darkmem too, perhaps by this mirror's own move whose answer
+      // was lost: nothing is left to archive.
+      delete state.documents[uri];
+      persist();
+      continue;
+    }
+    if (item.content_hash !== recorded) {
+      report.conflicts.push(`${uri}: deleted locally and changed on darkmem; pull to bring darkmem's copy back`);
+      continue;
+    }
+    try {
+      await client.moveDocument(item.id, { uri: archiveUri(uri, stamp), expectedHash: recorded });
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 409) {
+        report.conflicts.push(`${uri}: deleted locally, but darkmem refused to archive it (darkmem said: ${error.detail}); pull, then delete it again`);
+        continue;
+      }
+      failItem(report, uri, error);
+      continue;
+    }
+    delete state.documents[uri];
+    persist();
+    report.counts.archived = (report.counts.archived ?? 0) + 1;
+  }
+}
+
 async function pushDocuments(context) {
   const { cfg, client, roots, state, report } = context;
   const files = listDocumentFiles(roots);
@@ -119,7 +174,8 @@ async function pushDocuments(context) {
   const changed = [];
   for (const { file, uri } of files) {
     if (!uri) {
-      report.notes.push(`${path.relative(roots.docsRoot, file).split(path.sep).join("/")}: the docs root's handoff/ directory is reserved, not pushed`);
+      const rel = path.relative(roots.docsRoot, file).split(path.sep).join("/");
+      report.notes.push(`${rel}: the docs root's ${rel.split("/")[0]}/ directory is reserved, not pushed`);
       continue;
     }
     if (held.has(uri)) continue;
@@ -347,6 +403,7 @@ export async function push(context) {
   Object.assign(context.report.counts, { documents: 0, "ledger entries": 0, checkpoints: 0 });
   if (families.progress) for (const uri of [...context.state.pendingLinks]) await linkHandoff(context, uri);
   await pushDocuments(context);
+  if (families.documents) await archiveDeleted(context);
   if (!families.progress) return;
   await pushLedgers(context);
   await pushCheckpoint(context, named);

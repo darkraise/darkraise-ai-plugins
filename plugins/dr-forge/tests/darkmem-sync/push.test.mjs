@@ -571,3 +571,83 @@ test("push sends only the applied families, a plan's handoff.md with progress, a
   assert.deepEqual(uris(), ["superpowers/handoff/p1.md", "superpowers/specs/a.md"]);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n"]);
 });
+
+test("a synced document deleted from the mirror is archived under its recorded hash and its record dropped", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "specs", "a.md"), "# A\n");
+  write(path.join(s.docsRoot, "specs", "b.md"), "# B\n");
+  assert.equal((await s.push()).code, 0);
+  fs.rmSync(path.join(s.docsRoot, "specs", "a.md"));
+  assert.match((await run(["status"], { cwd: s.repo, env: s.env })).stdout, /^deleted: superpowers\/specs\/a\.md$/m);
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /darkmem-sync push: 0 documents, 0 ledger entries, 0 checkpoints, 1 archived; 0 conflicts, 0 failures/);
+  const patch = s.stub.db.requests.find(r => r.method === "PATCH");
+  assert.equal(patch.body.expected_hash, sha("# A\n"));
+  assert.match(patch.body.uri, /^superpowers\/archive\/\d{8}T\d{6}Z\/specs\/a\.md$/);
+  assert.deepEqual([...s.stub.db.documents.values()].map(d => d.uri).sort(), [patch.body.uri, "superpowers/specs/b.md"]);
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), ["superpowers/specs/b.md"]);
+  assert.doesNotMatch((await run(["status"], { cwd: s.repo, env: s.env })).stdout, /deleted:/);
+  assert.doesNotMatch((await s.push()).stdout, /archived/, "nothing is archived twice");
+});
+
+test("a deleted document darkmem changed is a conflict that keeps its record; one darkmem no longer holds is dropped", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  write(path.join(s.docsRoot, "b.md"), "b\n");
+  await s.push();
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "remote\n", expectedHash: sha("a\n") });
+  s.stub.db.documents.delete("proj\u0000superpowers/b.md");
+  fs.rmSync(path.join(s.docsRoot, "a.md"));
+  fs.rmSync(path.join(s.docsRoot, "b.md"));
+  const result = await s.push();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^conflict: superpowers\/a\.md: deleted locally and changed on darkmem; pull to bring darkmem's copy back$/m);
+  assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), ["superpowers/a.md"]);
+});
+
+test("a refused move is a conflict that keeps the record; a move whose answer was lost is settled by the next push", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  write(path.join(s.docsRoot, "b.md"), "b\n");
+  await s.push();
+  fs.rmSync(path.join(s.docsRoot, "a.md"));
+  fs.rmSync(path.join(s.docsRoot, "b.md"));
+  s.stub.db.failures.push({ method: "PATCH", path: "/api/v1/documents/", status: 409, detail: "uri is taken" });
+  s.stub.db.failures.push({ method: "PATCH", path: "/api/v1/documents/", status: 503, detail: "busy", commit: true });
+  const first = await s.push();
+  assert.equal(first.code, 1);
+  assert.match(first.stdout, /^conflict: superpowers\/a\.md: deleted locally, but darkmem refused to archive it \(darkmem said: uri is taken\); pull, then delete it again$/m);
+  assert.match(first.stdout, /^failed: superpowers\/b\.md: darkmem answered 503: busy$/m);
+  const second = await s.push();
+  assert.equal(second.code, 0, second.stdout + second.stderr);
+  assert.match(second.stdout, /, 1 archived;/);
+  assert.equal(s.stub.db.requests.filter(r => r.method === "PATCH").length, 3, "the lost move is not sent again");
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), []);
+});
+
+test("a missing docs root, documents applied local, or a deleted handoff note archive nothing", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  write(path.join(s.workRoot, "sdd", "p1", "handoff.md"), "h\n");
+  await s.push();
+  fs.rmSync(path.join(s.workRoot, "sdd", "p1", "handoff.md"));
+  fs.rmSync(s.docsRoot, { recursive: true });
+  const gone = await s.push();
+  assert.equal(gone.code, 0, gone.stdout + gone.stderr);
+  assert.match(gone.stdout, /^note: 1 synced documents are missing because .*superpowers is gone; none archived — pull to bring them back$/m);
+  write(path.join(s.docsRoot, "b.md"), "b\n");
+  fs.writeFileSync(path.join(s.home, ".dr-forge", "stores.json"), JSON.stringify({ [s.repo]: { documents: "local", progress: "darkmem" } }));
+  assert.equal((await s.push()).code, 0);
+  assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
+});
+
+test("a file under the docs root's archive/ is a reserved note and never pushed", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "archive", "20261013T091502Z", "a.md"), "old\n");
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /note: archive\/20261013T091502Z\/a\.md: the docs root's archive\/ directory is reserved, not pushed/);
+  assert.equal([...s.stub.db.documents.keys()].some(key => key.includes("archive")), false);
+});
