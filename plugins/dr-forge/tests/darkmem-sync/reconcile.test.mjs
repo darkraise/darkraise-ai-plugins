@@ -175,6 +175,15 @@ test("an active auto run is in progress", () => {
   assert.equal(inProgressReason({ cfg: cfgFor(repo, env) }), null);
 });
 
+test("an unreadable ledger is in progress, and a slug without a ledger is not", () => {
+  const repo = makeRepo();
+  const { env } = mapped(repo, { entry: { documentStore: "local", progressSource: "local" } });
+  const ledger = path.join(repo, ".forge", "sdd", "bad", "progress.md");
+  fs.mkdirSync(ledger, { recursive: true });
+  fs.mkdirSync(path.join(repo, ".forge", "sdd", "empty"), { recursive: true });
+  assert.deepEqual(inProgressReason({ cfg: cfgFor(repo, env) }), { reason: `a plan is in progress: ${ledger}`, details: [] });
+});
+
 test("a docs directory left in the checkout while documents are applied darkmem is named as not read", async () => {
   const repo = makeRepo();
   const { env } = mapped(repo, { entry: { progressSource: "local" }, stores: { documents: "darkmem", progress: "local" } });

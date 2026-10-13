@@ -129,7 +129,9 @@ export function inProgress(cfg) {
       let text;
       try {
         text = fs.readFileSync(ledger, "utf8");
-      } catch {
+      } catch (error) {
+        if (error.code === "ENOENT") continue;
+        found.push(ledger);
         continue;
       }
       const name = ledgerPlanPath(text);
