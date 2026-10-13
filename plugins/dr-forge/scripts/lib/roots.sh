@@ -136,14 +136,22 @@ _forge_name_of() { # ABSOLUTE — its name when it lies under a root; status 1 o
 }
 
 # forge_name FILE [DIR] — the inverse of forge_resolve, computed from the roots.
-# A path spelled through a symbolic link is retried in its physical form.
+# A relative FILE that exists from a subdirectory of the checkout is made
+# absolute first; a path spelled through a symbolic link is retried in its
+# physical form, and a Git Bash /c/… path in git's C:/… form.
 forge_name() {
   local file=${1//\\//} physical
   forge_stores_init "${2:-}"
   case $file in
     /*|[A-Za-z]:/*) ;;
-    *) printf '%s\n' "${file#./}"; return 0 ;;
+    *)
+      if [ -n "$_FORGE_TOP" ] && [ "$PWD" != "$_FORGE_TOP" ] && [ -e "$file" ]; then
+        file="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
+      else
+        printf '%s\n' "${file#./}"; return 0
+      fi ;;
   esac
+  if command -v cygpath >/dev/null 2>&1; then file=$(cygpath -m "$file" 2>/dev/null || printf '%s' "$file"); fi
   _forge_name_of "$file" && return 0
   physical="$(cd "$(dirname "$file")" 2>/dev/null && pwd -P)/$(basename "$file")"
   [ "$physical" != "/$(basename "$file")" ] && [ "$physical" != "$file" ] && _forge_name_of "$physical" && return 0

@@ -83,6 +83,11 @@ mkdir -p "$WT/docs/superpowers/plans"
 check "pre-2.0: the docs root" "$(cd "$WT" && forge_docs_root)" "$WT/docs/superpowers"
 check "pre-2.0: the name" "$(cd "$WT" && forge_name "$WT/docs/superpowers/plans/p.md")" "docs/superpowers/plans/p.md"
 
+# --- a relative file spelled from a subdirectory is named from the checkout ---
+printf 'p\n' > "$WT/docs/superpowers/plans/p.md"
+check "subdirectory: a relative file" "$(cd "$WT/docs/superpowers/plans" && forge_name p.md)" "docs/superpowers/plans/p.md"
+check "subdirectory: a name that is no file here stays" "$(cd "$WT/docs/superpowers/plans" && forge_name docs/superpowers/plans/p.md)" "docs/superpowers/plans/p.md"
+
 # --- a --mode run that prints nothing stops the script ---
 mkdir -p "$TMP/fakebin"
 printf '#!/bin/sh\nexit 0\n' > "$TMP/fakebin/node"
