@@ -80,6 +80,9 @@ if [ -n "$auto_pending" ]; then
   if [ "$auto_pending" = after-compact ]; then
     reason="An auto run is bound to this session and a compaction already ran (pending: after-compact; see reference/auto-run.md), so no sentinel ends this turn. Do not stop: run \`bash ${root_shown}/scripts/auto-run after-compact\` now and follow what it prints (continue with the next task, or hand off and clear). If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
   fi
+  if [ "$auto_pending" = handoff ]; then
+    reason="An auto run is bound to this session and a compaction left too much behind (pending: handoff; see reference/auto-run.md §Clears), so this turn ends only on the clearing line, after the clear. Do not stop: finish the task in flight, run dr-forge:handoff, then \`bash ${root_shown}/scripts/auto-run clear\` and end with the line \`Auto run: clearing\`. If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
+  fi
   jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
   exit 0
 fi

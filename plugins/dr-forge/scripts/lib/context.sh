@@ -326,7 +326,10 @@ ctx_auto_line() {
   task=$(ctx_pinned_budget)
   [ -n "$task" ] || task=$(ctx_budget "$2")
   window=$(ctx_window "$2")
-  out=$(ar_verdict "$tokens" "$task" "$window" "$3") || return 3
+  if ! out=$(ar_verdict "$tokens" "$task" "$window" "$3"); then
+    echo "budget (auto): unknown — unknown — the run's state could not be updated"
+    return 3
+  fi
   read -r verdict limit regime <<<"$out"
   label="budget (auto"
   [ "$regime" = high ] && label="$label, high"
@@ -368,7 +371,12 @@ ctx_line() {
   # An auto run bound to this session replaces every limit but the plan's.
   if [ "${1:-}" != plan ]; then
     AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
-    ar_bound && auto=1
+    if ar_bound; then
+      auto=1
+      label="budget (auto"
+      [ "$width" -gt 1 ] && label="$label, wave of $width"
+      label="$label)"
+    fi
   fi
   if [ "$limit" = task ] && [ "$(forge_setting handoffMode strict)" = relaxed ]; then
     limit=relaxed

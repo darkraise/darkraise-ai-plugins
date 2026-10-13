@@ -1,6 +1,7 @@
 # Sourced. An auto run's state (reference/auto-run.md): one JSON file in the
 # primary checkout's self-ignoring sdd/ directory, bound to one session.
-# Defines functions only; scripts/auto-run is the command line.
+# Defines functions only; scripts/auto-run is the command line. The limits use
+# CTX_TASK_MARGIN, so scripts/lib/context.sh is sourced first.
 #
 # AR_SESSION names the caller. A caller whose session the run is not bound to
 # sees no run, so another session in the same repository never acts on it.
@@ -41,10 +42,20 @@ ar_bound() {
 }
 
 # ar_update FILTER [jq options…] — apply a jq filter to the state atomically.
+# Where flock exists, concurrent updates (a Stop auto press beside a ruling add)
+# queue instead of each reading the file the other is about to replace.
 ar_update() {
-  local path tmp filter=$1
-  shift
+  local path
   path=$(ar_path) || return 1
+  (
+    if command -v flock >/dev/null 2>&1; then flock -w 10 9 || exit 1; fi
+    ar_write "$path" "$@"
+  ) 9>>"$path.lock"
+}
+
+ar_write() { # ar_write PATH FILTER [jq options…]
+  local path=$1 filter=$2 tmp
+  shift 2
   tmp=$(mktemp "$path.XXXXXX") || return 1
   if ar_jq "$@" "$filter" < "$path" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
     mv -f "$tmp" "$path"
@@ -88,7 +99,7 @@ ar_is_stale() {
 # ar_start SPEC REGISTER FORCE — prints the register path. A register it
 # creates goes in the checkout the run starts from, where its path resolves.
 ar_start() {
-  local spec=$1 register=$2 force=$3 path top slug base
+  local spec=$1 register=$2 force=$3 path top slug base tmp
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   if [ "$force" != 1 ] && ar_state | ar_jq -e '.active == true' >/dev/null 2>&1 && ! ar_is_stale; then
     echo "auto-run: an auto run is already active ($(ar_state | ar_jq -r '.spec')); stop it with auto-run stop, or pass --force" >&2
@@ -109,13 +120,18 @@ ar_start() {
   base=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
   mkdir -p "$(dirname "$path")" || return 1
   [ -f "$(dirname "$path")/.gitignore" ] || printf '*\n' > "$(dirname "$path")/.gitignore"
-  ar_jq -n --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
+  tmp=$(mktemp "$path.XXXXXX") || return 1
+  if ! ar_jq -n --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: []
-  }' > "$path" || return 1
+  }' > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$path" || return 1
   printf '%s\n' "$register"
 }
 
@@ -159,7 +175,7 @@ ar_clear() {
   if [ "$is_phase" != 1 ]; then
     resumes=$((resumes + 1))
     if [ "$resumes" -ge "$AR_RESUME_CAP" ]; then
-      ar_stop "three self-resumes without a completed task"
+      ar_stop "three self-resumes without a completed task" || return 1
       echo "auto-run: stopped — $AR_RESUME_CAP self-resumes in a row without a completed task" >&2
       return 5
     fi
@@ -175,7 +191,7 @@ ar_rebind() { # ar_rebind ID
   ar_update '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$1"
 }
 
-ar_resumed() { ar_update 'if .pending == "resume" then .pending = null else . end'; }
+ar_resumed() { ar_update '.failures = 0 | if .pending == "resume" then .pending = null else . end'; }
 
 ar_compacted() { ar_update '.compactions += 1 | .failures = 0 | .pending = "after-compact"'; }
 
@@ -184,7 +200,7 @@ ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the ru
   n=$(ar_get failures)
   n=$(( ${n:-0} + 1 ))
   if [ "$n" -ge "$AR_FAILURE_CAP" ]; then
-    ar_stop "${1:-the cockpit could not compact or clear}"
+    ar_stop "${1:-the cockpit could not compact or clear}" || return 1
     return 5
   fi
   ar_update '.failures = ($n | tonumber)' --arg n "$n"
@@ -209,7 +225,6 @@ ar_ruling_add() { ar_update '.rulings = ((.rulings // []) + [$t])' --arg t "$1";
 
 ar_ruling_list() { ar_state | ar_jq -r '(.rulings // [])[]'; }
 
-AR_TASK_MARGIN=140000
 AR_HIGH_PCT=90
 AR_AFTER_HANDOFF_PCT=85
 AR_AFTER_HIGH_PCT=85
@@ -220,7 +235,7 @@ AR_AFTER_HIGH_PCT=85
 ar_limit() {
   local limit
   if [ "$4" = high ]; then limit=$(( $2 * AR_HIGH_PCT / 100 )); else limit=$1; fi
-  limit=$(( limit - ($3 - 1) * AR_TASK_MARGIN ))
+  limit=$(( limit - ($3 - 1) * CTX_TASK_MARGIN ))
   [ "$limit" -gt 0 ] || limit=1
   echo "$limit"
 }
@@ -253,10 +268,11 @@ ar_settle() {
 # size; a pending clear is a handoff in progress. An ok clears a compaction a
 # wider wave probe requested.
 ar_verdict() {
-  local tokens=$1 budget=$2 window=$3 n=${4:-1} pending regime limit
+  local tokens=$1 budget=$2 window=$3 n=${4:-1} pending regime limit settled
   pending=$(ar_get pending)
-  if [ "$pending" = after-compact ] && [ "$(ar_settle "$tokens" "$budget" "$window")" = handoff ]; then
-    pending=handoff
+  if [ "$pending" = after-compact ]; then
+    settled=$(ar_settle "$tokens" "$budget" "$window") || return 1
+    [ "$settled" != handoff ] || pending=handoff
   fi
   regime=$(ar_get regime)
   regime=${regime:-normal}

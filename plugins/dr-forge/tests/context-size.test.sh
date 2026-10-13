@@ -563,6 +563,11 @@ run
 check "auto: a compaction that left 85% of the window hands off" "$status:$out" "5:budget (auto, high): 690k of 720k (95%) — handoff — source: record"
 CLAUDE_CODE_SESSION_ID=auto-2 run
 check "auto: another session keeps the task budget" "$status:$out" "5:budget: 690k of 465k (148%) — handoff — source: record?"
+printf '{}\n' > "$AUTO_T"
+run
+has "auto: an unreadable size keeps the auto label" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"
+run --wave 2
+has "auto: an unreadable size in a wave keeps the auto label" "$out" "budget (auto, wave of 2): unknown of 325k — unknown — no usage entry in"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 stop)
 unset DR_FORGE_BUDGET CLAUDE_CODE_SESSION_ID
 

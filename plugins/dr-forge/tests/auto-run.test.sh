@@ -251,5 +251,48 @@ out=$(after); status=$?
 check "after-compact: an unknown size continues and says to record it" "$status:${out%%;*}" "0:continue — the size after compaction is unknown"
 check "after-compact: unknown leaves nothing pending" "$(field pending)" "null"
 
+# --- concurrent updates ---
+if command -v flock >/dev/null 2>&1; then
+  ar --session s-1 stop
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  for i in $(seq 1 12); do ar --session s-1 ruling add "r$i" & done
+  wait
+  check "concurrent updates all land" "$(ar --session s-1 ruling list | grep -c .)" "12"
+fi
+
+# --- after-compact never overwrites a pending action it did not book ---
+asst 30000 > "$T"
+ar --session s-1 clear --phase
+out=$(after); status=$?
+check "after-compact: a pending clear is a handoff in progress" "$status:${out%% *}:$(field pending):$(field rebind)" "5:handoff:clear:true"
+printf '{}\n' > "$T"
+out=$(after); status=$?
+check "after-compact: a pending clear hands off when the size is unknown too" "$status:${out%% *}:$(field pending)" "5:handoff:clear"
+ar --session s-1 rebind --to s-1
+asst 30000 > "$T"
+out=$(after); status=$?
+check "after-compact: a pending resume is measured, not written" "$status:${out%% *}:$(field pending)" "0:continue:resume"
+asst 700000 > "$T"
+out=$(after); status=$?
+check "after-compact: a large size with a pending resume hands off without writing" "$status:${out%% *}:$(field pending)" "5:handoff:resume"
+ar --session s-1 resumed
+asst 30000 > "$T"
+out=$(after); status=$?
+check "after-compact: with nothing pending it only measures" "$status:${out%% *}:$(field pending)" "0:continue:null"
+ar --session s-1 compacted
+asst 700000 > "$T"
+after >/dev/null
+asst 30000 > "$T"
+out=$(after); status=$?
+check "after-compact: a pending handoff stays a handoff" "$status:${out%% *}:$(field pending)" "5:handoff:handoff"
+
+# --- resumed ends the failure count ---
+ar --session s-1 clear --phase
+ar --session s-1 rebind --to s-1
+ar --session s-1 failure --reason "model refused"
+check "a failure after a rebind is counted" "$(field failures)" "1"
+ar --session s-1 resumed
+check "resumed resets the failures" "$(field failures):$(field pending)" "0:null"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

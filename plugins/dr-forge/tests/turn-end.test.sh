@@ -18,6 +18,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DR_FORGE_BUDGET
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -198,7 +199,6 @@ done
 
 # --- an auto run bound to the session ends its turns only on the sentinel ---
 AR="$HERE/../scripts/auto-run"
-unset CLAUDE_CODE_SESSION_ID
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
 (cd "$REPO" && bash "$AR" --session s-1 start --spec docs/s.md --register docs/r.md >/dev/null)
 STATE="$REPO/.superpowers/sdd/auto-run.json"
@@ -220,6 +220,14 @@ pend clear
 check "auto run: the clearing line passes a clear" "$(stop s-1 $'Handed off.\n\nAuto run: clearing')" ""
 pend after-compact
 check "auto run: after a booked compaction the hold says to settle it" "$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting' | jq -r .reason | grep -c 'auto-run after-compact')" "1"
+pend handoff
+out=$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting')
+check "auto run: a pending handoff is held" "$(decision "$out")" "block"
+check "auto run: the hold says to hand off and clear" "$(jq -r .reason <<<"$out" | grep -c 'run dr-forge:handoff')" "1"
+check "auto run: the clearing line does not answer a handoff" "$(decision "$(stop s-1 $'Handed off.\n\nAuto run: clearing')")" "block"
+pend resume
+check "auto run: a pending resume is held without a sentinel" "$(decision "$(stop s-1 'Resumed.')")" "block"
+check "auto run: a pending resume does not pass the compacting line" "$(decision "$(stop s-1 $'Done.\n\nAuto run: compacting')")" "block"
 sleep 1; prompt s-2
 check "auto run: another session is not held" "$(stop s-2 'Here is the answer.')" ""
 git -C "$REPO" worktree add -q -b wt "$TMP/wt"
