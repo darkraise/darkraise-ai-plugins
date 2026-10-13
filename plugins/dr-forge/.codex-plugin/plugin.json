@@ -1,6 +1,6 @@
 {
   "name": "dr-forge",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Brainstorm, plan and execute with scored tasks, tiered implementers, criteria-based review and an external Codex executor; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard. A standalone fork of superpowers 6.3.0.",
   "author": {
     "name": "Darkraise"

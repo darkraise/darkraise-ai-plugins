@@ -289,13 +289,26 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   `pull` fetches what changed; `push` sends documents under their last synced
   hash and each new ledger line as its own entry, with `task`, `state` and
   `commit` properties a progress board can read; `status` lists each family's
-  store and local changes; `import` moves an existing `docs/forge/` and its
-  ledgers in once, verified byte for byte, and records the documents as living
-  in darkmem when `documentStore` is `darkmem`; progress stays local until the
-  move that plan 2 delivers. A conflict is reported, never merged. Without the
-  key the mirror still works offline and `pull` and `push` say why they
-  skipped. Without a mapping every command but `import` prints one line and
-  does nothing.
+  store and local changes;
+  `import` files an existing `docs/forge/` and its ledgers once, verified byte
+  for byte. A changed `documentStore` or `progressSource` moves its family at
+  the next session start: `reconcile` copies the files across, verifies every
+  hash, records the new store in `stores.json`, and leaves documents leaving
+  the repository as a staged `git rm` for you to commit. It refuses, naming
+  the reason, while a plan is in progress, while darkmem is unreachable or the
+  key is unset, or when a file cannot be carried (a dotfile, a symbolic link,
+  an empty or non-UTF-8 file, a name some platform cannot hold, a case twin,
+  an ignored file); it never overwrites a different darkmem copy, and moved
+  progress files are kept under a dated `moved-<stamp>` backup. Session start
+  runs `reconcile` and `pull`; the Stop hook and the skills' stop points run
+  `push`. A document deleted from the mirror is archived on darkmem under
+  `superpowers/archive/<stamp>/` and `restore <name>` brings it back;
+  `revision <name>` prints the `<name>@r<id>` a distilled `Source:` line
+  cites. `docs/superpowers/<rest>` and `docs/forge/<rest>` name the same
+  document everywhere names are compared. A conflict is reported, never
+  merged. Without the key the mirror still works offline and `pull` and
+  `push` say why they skipped. Without a mapping every command but `import`
+  prints one line and does nothing.
 
 ## Requirements
 
