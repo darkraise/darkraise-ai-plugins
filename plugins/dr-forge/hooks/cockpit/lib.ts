@@ -1,4 +1,4 @@
-import type { CockpitAutoRun, CockpitFinish } from '../../types'
+import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
 
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
@@ -769,6 +769,25 @@ export function parseFinish(text: string): CockpitFinish | null {
   } catch {
     return null
   }
+}
+
+/**
+ * The roots `darkmem-config.mjs --mode` prints (darkmem store options spec
+ * §7.3): a documents and a progress line, then a project line when the
+ * repository is mapped. Null when either family's line is missing.
+ */
+export function parseModeLines(text: string): CockpitRoots | null {
+  let docs: CockpitRoots['docs'] | null = null
+  let progress: CockpitRoots['progress'] | null = null
+  let project: string | null = null
+  for (const line of text.split(/\r?\n/)) {
+    const [kind, store, root, extra] = line.split('\t')
+    if (kind === 'project' && store) project = store
+    if (store !== 'local' && store !== 'darkmem') continue
+    if (kind === 'documents' && root) docs = { store, root }
+    if (kind === 'progress' && root && extra) progress = { store, ledgerRoot: root, latestFile: extra }
+  }
+  return docs === null || progress === null ? null : { docs, progress, project }
 }
 
 /** Whether the finish choice counts down: armed, unanswered, not yet carried out. */

@@ -27,6 +27,7 @@ import {
   nowLine,
   parseFinish,
   parseLedger,
+  parseModeLines,
   planTasks,
   planWithUpdate,
   remoteRuns,
@@ -199,6 +200,12 @@ type World = {
   autoRunExits?: Record<string, number>
   /** The auto-run state file the fake script updates, as the real one would. */
   autoFile?: { text: string }
+  /** What `darkmem-config.mjs --mode` answers; `missing` rejects as a missing node does. Git porcelain with exit 0 unless said. */
+  modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing'
+  /** The directory each `--mode` call names. */
+  modeRuns?: string[]
+  /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
+  primary?: string
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -308,7 +315,13 @@ function world(on: On, w: World) {
       const stderr = w.isForgeConfigRefusing ? 'forge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
       return { value: { exitCode: w.isForgeConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? '/home/me/code/shop/.git\n' : PORCELAIN
+    if (argv.includes('/scripts/lib/darkmem-config.mjs ')) {
+      w.modeRuns?.push(e.argv[e.argv.length - 1] ?? '')
+      if (w.modeOut === 'missing') throw new Error('spawn node ENOENT')
+      const out = w.modeOut ?? { exitCode: 0, stdout: PORCELAIN, stderr: '' }
+      return { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${w.primary ?? '/home/me/code/shop'}/.git\n` : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('session.id', () => ({ value: w.sessionId ?? 'sess-1' }))
@@ -2107,6 +2120,87 @@ describe('run card', () => {
     expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
     await ui.press({ key: 'pane-resume' })
     expect(prompts).toEqual([expect.stringContaining('.forge/handoff/latest.md')])
+  })
+})
+
+describe('cockpit roots', () => {
+  const MIRROR = '/home/me/.dr-forge/mirror/shop'
+  const MODE = [
+    `documents\tdarkmem\t${MIRROR}/superpowers`,
+    `progress\tdarkmem\t${MIRROR}/work/sdd\t${MIRROR}/work/handoff/latest.md`,
+    'project\tshop',
+    '',
+  ].join('\n')
+  const LEDGER = '# SDD ledger — plan: docs/superpowers/plans/p.md\nTask 1: implementer dr-forge:impl-sonnet-low (assigned; base abc1234)\n'
+  const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
+  const checkoutFiles = (): NonNullable<World['files']> => ({
+    '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+    '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
+  })
+
+  test('reads the roots --mode prints', () => {
+    expect(parseModeLines(MODE)).toEqual({
+      docs: { store: 'darkmem', root: `${MIRROR}/superpowers` },
+      progress: { store: 'darkmem', ledgerRoot: `${MIRROR}/work/sdd`, latestFile: `${MIRROR}/work/handoff/latest.md` },
+      project: 'shop',
+    })
+    expect(parseModeLines('documents\tlocal\t/r/docs/forge\nprogress\tlocal\t/r/.forge/sdd\t/r/.forge/handoff/latest.md\n')?.project).toBeNull()
+    expect(parseModeLines(PORCELAIN)).toBeNull()
+    expect(parseModeLines('documents\tlocal\t/r/docs/forge\n')).toBeNull()
+    expect(parseModeLines('documents\telsewhere\t/r\nprogress\tlocal\t/a\t/b\n')).toBeNull()
+  })
+
+  test('a failing --mode keeps the checkout paths and says why', async ($, on) => {
+    const files = checkoutFiles()
+    const stderr = 'darkmem-config: /home/me/.dr-forge/stores.json is not valid JSON: Unexpected token\nat line 2\n'
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 2, stdout: '', stderr } })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^darkmem-config: \/home\/me\/\.dr-forge\/stores\.json is not valid JSON: Unexpected token$/ })).toBeDefined()
+    await ui.unmount()
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(JSON.stringify(await desk.drawn())).toContain('stores.json is not valid JSON')
+  })
+
+  test('without node the checkout paths stay silently', async ($, on) => {
+    const files = checkoutFiles()
+    world(on, { ...SIGNED_IN, files, modeOut: 'missing' })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
+  })
+
+  test('a run that prints no mode lines keeps the checkout paths silently', async ($, on) => {
+    const files = checkoutFiles()
+    const modeRuns: string[] = []
+    world(on, { ...SIGNED_IN, files, modeRuns })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(modeRuns).toEqual(['/home/me/code/shop'])
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
+  })
+
+  test('reads the roots once per stores.json change, re-read from a mirror path', async ($, on) => {
+    const files: NonNullable<World['files']> = { ...checkoutFiles(), '/home/me/.dr-forge/stores.json': { text: '{}', mtimeMs: 1 } }
+    const modeRuns: string[] = []
+    world(on, { ...SIGNED_IN, files, modeRuns })
+    signedIn(on, files)
+    await $.session.start(START)
+    expect(modeRuns).toEqual(['/home/me/code/shop'])
+    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dr-forge/mirror/shop/work/sdd/p/progress.md' })
+    expect(modeRuns).toHaveLength(1)
+    files['/home/me/.dr-forge/stores.json']!.mtimeMs = 2
+    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dr-forge/mirror/shop/work/sdd/p/progress.md' })
+    expect(modeRuns).toEqual(['/home/me/code/shop', '/home/me/code/shop'])
   })
 })
 

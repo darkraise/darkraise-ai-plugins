@@ -193,6 +193,14 @@ export type CockpitFinish = {
   firedAt: number | null
 }
 
+/** Where a repository's documents and progress live, as `darkmem-config.mjs --mode` prints them. */
+export type CockpitRoots = {
+  docs: { store: 'local' | 'darkmem'; root: string }
+  progress: { store: 'local' | 'darkmem'; ledgerRoot: string; latestFile: string }
+  /** The darkmem project the repository is mapped to; null when it is not. */
+  project: string | null
+}
+
 /** An auto run as its state file says (reference/auto-run.md), for the session it is bound to. */
 export type CockpitAutoRun = {
   active: boolean
@@ -271,6 +279,8 @@ declare module 'claude-code' {
       finish: CockpitFinish | null
       /** When the newest handoff note was written, in milliseconds since the epoch. */
       handoffAt: number | null
+      /** Why the plan section reads checkout paths, not the roots `--mode` names: its first line of stderr; null otherwise. */
+      rootsNote: string | null
       notifier: CockpitNotifier
       isNudged: boolean
       isPlanSession: boolean

@@ -10,6 +10,7 @@ import type {
   CockpitFinish,
   CockpitPlanItem,
   CockpitRefusal,
+  CockpitRoots,
   CockpitRun,
   CockpitSeat,
   CockpitSettingsView,
@@ -46,6 +47,7 @@ import {
   nowLine,
   parseFinish,
   parseLedger,
+  parseModeLines,
   planTasks,
   planFromTodos,
   planWithUpdate,
@@ -174,6 +176,7 @@ const turnTokens = atom({ plugin: 'dr-forge', key: 'turnTokens' } as const, [])
 const run = atom({ plugin: 'dr-forge', key: 'run' } as const, null)
 const finish = atom({ plugin: 'dr-forge', key: 'finish' } as const, null)
 const handoffAt = atom({ plugin: 'dr-forge', key: 'handoffAt' } as const, null)
+const rootsNote = atom({ plugin: 'dr-forge', key: 'rootsNote' } as const, null)
 const settings = atom({ plugin: 'dr-forge', key: 'settings' } as const, null)
 const SETTINGS_VIEW: CockpitSettingsView = { tab: '', isHelpShown: true, editing: null, error: null, isConfirmingReset: false }
 const settingsView = atom({ plugin: 'dr-forge', key: 'settingsView' } as const, SETTINGS_VIEW)
@@ -616,7 +619,7 @@ export const register: Register = on => {
       await trackAutoRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       // The controller writes its ledger with its own tool calls.
-      if (/\.forge|\.superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
+      if (/\.forge|\.superpowers|\.dr-forge|\.dr-superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
     }
 
     return ran
@@ -656,6 +659,7 @@ export const register: Register = on => {
     const summary = await read($, run)
     const finishNow = await read($, finish)
     const handoffTime = await read($, handoffAt)
+    const rootsNow = await read($, rootsNote)
     const canResume = !canHandOff && handoffTime !== null && now - handoffTime < RESUME_WITHIN
     const drawRuns = (key: string, runs: Run[]) =>
       runs.map((one, index) => (
@@ -1048,6 +1052,12 @@ export const register: Register = on => {
 
     const engineNow = await read($, engine)
     const turnsLeft = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
+    // Why the plan section reads checkout paths rather than the roots.
+    const rootsLine = rootsNow !== null && (
+      <Text key="plan-roots" color="red" wrap="truncate-end">
+        {rootsNow}
+      </Text>
+    )
     const runCard = () => {
       if (summary === null) return null
       const blocked = summary.tasks.filter(task => task.state === 'blocked')
@@ -1078,6 +1088,7 @@ export const register: Register = on => {
             plan {summary.plan}
           </Text>
         ),
+        rootsLine,
         finishNow !== null && finishLine(finishNow, now).length > 0 && (
           <Text key="plan-finish" wrap="truncate-end">
             {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
@@ -1342,7 +1353,7 @@ export const register: Register = on => {
       plan:
         summary !== null && summary.total > 0 ? (
           runCard()
-        ) : items.length > 0 &&
+        ) : items.length > 0 ? (
         section(
           'plan',
           'Plan',
@@ -1368,6 +1379,19 @@ export const register: Register = on => {
               {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
             </Text>
           ),
+          rootsLine,
+        )
+        ) : (
+          rootsLine !== false &&
+          section(
+            'plan',
+            'Plan',
+            'red',
+            <Text key="plan-head" dimColor>
+              checkout paths
+            </Text>,
+            rootsLine,
+          )
         ),
       repo:
         git !== null &&
@@ -1577,6 +1601,7 @@ export const register: Register = on => {
             const round = runRound(summary)
             const lines: PanelLine[] = [{ kind: 'picture', svg: segmentsSvg(summary.tasks.map(task => RUN_SEGMENTS[task.state] ?? 'todo'), width, 6) }]
             if (summary.plan !== null) lines.push({ kind: 'text', small: true, left: [{ text: summary.plan, mono: true, dim: true }] })
+            if (rootsNow !== null) lines.push({ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] })
             if (finishNow !== null && finishLine(finishNow, now).length > 0) lines.push({ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] })
             for (const task of runWindow(summary.tasks, 6)) {
               const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
@@ -1609,7 +1634,7 @@ export const register: Register = on => {
               lines,
             )
           }
-          if (items.length === 0) return false
+          if (items.length === 0) return rootsNow !== null && panel('plan', 'Plan', 'red', [{ text: 'checkout paths' }], [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] }])
           return panel('plan', 'Plan', 'yellow', [{ text: `${doneCount}/${items.length}` }], [
             { kind: 'picture', svg: segmentsSvg(items.map(item => (item.status === 'completed' ? 'done' : item.status === 'in_progress' ? 'active' : 'todo')), width, 6) },
             ...shownItems.map(
@@ -1622,6 +1647,7 @@ export const register: Register = on => {
               }),
             ),
             ...(finishNow !== null && finishLine(finishNow, now).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] } as PanelLine] : []),
+            ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
           ])
         })(),
         repo:
@@ -2003,6 +2029,9 @@ const S = {
   isClosedByPerson: false,
   // The auto run's scheduled stage, at most one.
   autoTimer: null as Timer | null,
+  // The roots --mode last named, and the primary checkout and stores.json
+  // modification time they were read for.
+  roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2288,12 +2317,38 @@ async function stopAutoRun($: EngineInterface) {
   await trackAutoRun($)
 }
 
+// The roots darkmem-config.mjs --mode names for the primary checkout (store
+// options spec §7.3). Read again when the checkout or ~/.dr-forge/stores.json
+// changes, so the session that ran a move sees the new roots. Null keeps the
+// checkout paths: silently without node or mode lines, with a note in the
+// pane when the run fails or outruns its 5 seconds.
+async function readRoots($: EngineInterface, primary: string): Promise<CockpitRoots | null> {
+  const home = (await read($, place))?.home ?? null
+  const stores = home === null ? null : await $.fs.stat(`${home}/.dr-forge/stores.json`).catch(() => null)
+  const key = `${primary}|${stores?.mtimeMs ?? 'none'}`
+  if (S.roots.key === key) return S.roots.value
+  let value: CockpitRoots | null = null
+  let note: string | null = null
+  try {
+    const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', primary], { timeoutMs: 5000 })
+    if (ran.exitCode === 0) value = parseModeLines(ran.stdout)
+    else note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
+  } catch (error) {
+    // The run could not start (no node) or outran its timeout.
+    if (!/ENOENT/.test(String(error))) note = 'darkmem-config.mjs --mode gave no answer within 5 seconds'
+  }
+  S.roots = { key, value }
+  if ((await read($, rootsNote)) !== note) await update($, rootsNote, () => note)
+  return value
+}
+
 // The run's ledger, its plan's tasks, and the newest handoff: read from the
 // primary checkout, S.where dr-forge keeps .forge/ (.superpowers/ before 2.0).
 async function readRun($: EngineInterface) {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return
   const state = await stateDirOf($, root)
+  await readRoots($, root)
   try {
     const handoff = await $.fs.stat(`${state}/handoff/latest.md`).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
