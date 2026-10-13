@@ -8,7 +8,8 @@ Supersedes: §1 of `docs/superpowers/specs/2026-09-23-darkmem-mirror-design.md`
 the two roots). Both specs' other sections stand as amended in §5 below.
 Register: `docs/superpowers/registers/2026-09-24-darkmem-mirror.md` rows 2, 3,
 4, 5, 16, 17 and 18; `docs/superpowers/registers/2026-10-11-dr-forge.md` row 13.
-Amended 2026-10-13 by §7 (owner rulings on rows 5, 17 and 18).
+Amended 2026-10-13 by §7 (owner rulings on rows 5, 17 and 18, revised after an
+independent review) and the matching §4 refusals.
 
 **Execution strategy:** sequential — the options feed the roots, the roots feed
 the rewiring and the sync, and the move and triggers build on all of them.
@@ -217,17 +218,25 @@ lives, the configured store and the reason.
 
 **Refusals.** No move runs while:
 
-- a plan is in progress in the source location (the definition `repo-audit`
-  uses), or an auto run is active;
+- a plan is in progress: any ledger in the progress family's source location
+  (every worktree's when local, the mirror's when darkmem) whose plan has no
+  `completed.md` entry (`plan_finished`, compared by §7.1's key); or an auto
+  run is active;
 - darkmem is unreachable or the key is missing;
 - another process holds the mirror lock (the move takes it);
 - for documents leaving the repository, the docs directory has uncommitted
   changes;
 - for documents entering darkmem, darkmem holds a different version at any of
-  their uris; the note lists those uris and nothing is overwritten.
+  their uris; the note lists those uris and nothing is overwritten;
+- for documents entering darkmem, the docs directory holds a file the move
+  cannot carry (§7.2); the note names each one.
 
-**Documents, repository → darkmem.** Import the primary checkout's docs
-directory (`darkmem-import.mjs`'s document half), pull into the mirror, and
+**Documents, repository → darkmem.** Run §7.2's checks, then read darkmem's
+document manifest and compare its hashes with the local files: import puts
+documents without a hash precondition (`darkmem-import.mjs`), so this check is
+what keeps darkmem's copies, and the window between it and the import is
+accepted. Then import the primary checkout's docs directory
+(`darkmem-import.mjs`'s document half), pull into the mirror, and
 compare every file's hash with its mirror copy. Only then run
 `git rm -r -q <docs dir>` in the primary checkout and leave the deletion
 staged; the note asks the owner to commit it.
@@ -236,18 +245,22 @@ staged; the note asks the owner to commit it.
 the primary checkout's `docs/forge` (§7.1: the prefix the repository used
 before does not matter) untracked, compare hashes, and drop the documents'
 sync state; darkmem keeps its copy. The note asks the owner to commit the
-files.
+files, names any of them `git check-ignore` reports as ignored (a repository
+moved under the parent spec's §6 ignored its docs directory), and names a
+`.gitattributes` line that still points at `docs/superpowers/` (the
+`completed.md merge=union` line).
 
 **Progress, either direction.** Local ledgers live in each worktree, so going
 to darkmem reads the primary checkout and every linked worktree `git worktree
-list` names: import (`darkmem-import.mjs`'s ledger and checkpoint half), pull,
-then compare hashes. Coming back, pull and copy the ledgers and `latest.md`
+list` names: import (`darkmem-import.mjs`'s ledger half, which today reads
+only the primary checkout's ledgers; Plan 2 adds the linked worktrees and
+`latest.md`, which it reads neither of), pull, then compare hashes. Coming back, pull and copy the ledgers and `latest.md`
 into the primary checkout, then compare hashes. The files are gitignored, so
 the source copies are moved to a dated backup rather than deleted:
 `<checkout>/.forge/moved-<stamp>/` in each checkout read going to darkmem,
 `<mirror>/work-moved-<stamp>/` coming back. `<stamp>` is UTC
 `YYYYMMDDTHHMMSSZ`. Import closes the workstreams it files, which is correct
-here because no plan is in progress.
+here because every ledger it reads belongs to a plan `completed.md` records.
 
 **Leftovers.** When documents are applied darkmem and the working directory's
 checkout still has a docs directory (a branch cut before the move, or a merge
@@ -295,18 +308,40 @@ that brought files back), session start warns that those files are not read.
 
 `docs/superpowers/<rest>` and `docs/forge/<rest>` name the same document.
 Today `forge_name` takes the prefix from whichever docs directory exists in
-the checkout, so once §4's move removes `docs/superpowers`, new names come out
-as `docs/forge/<rest>` while existing ledgers and `completed.md` lines keep
-`docs/superpowers/<rest>`.
+the worktree (`forge_dir` prefers `docs/forge`), so the prefix already differs
+between worktrees on different branches and between machines; and once §4's
+move removes `docs/superpowers`, new names come out as `docs/forge/<rest>`
+while existing ledgers, `completed.md` lines, register cells and plan headers
+keep `docs/superpowers/<rest>`.
 
-`roots.sh` gains `forge_name_key NAME`: the name with a leading
-`docs/superpowers` replaced by `docs/forge`, any other name unchanged. Every
-comparison of two document names compares their keys, and every search for a
-name in `completed.md` accepts either spelling. Known sites: `plan_ledger`'s
-identity check (`scripts/lib/plan.sh`), `plan_finished` (`next-step`) and
-`completed_form` (`plan-revise`); the plan re-inventories the rest against the
-tree. Names are still written as `forge_name` prints them; nothing on disk or
-on darkmem is rewritten.
+`roots.sh` gains `forge_name_key NAME`: after a leading `./` is stripped, a
+`/`-separated name that is exactly `docs/superpowers` or begins
+`docs/superpowers/` has that segment replaced by `docs/forge`; any other name,
+`docs/superpowersx` included, is unchanged. Every comparison of two document
+names compares their keys. A search for a name in `completed.md` runs
+`grep -F` once per spelling and accepts either.
+
+The sites, found by the 2026-10-13 review; the plan re-checks the tree for
+others:
+
+| Site | Compares |
+|---|---|
+| `scripts/lib/plan.sh` `plan_ledger` | a ledger's identity line with the plan |
+| `next-step`, its own ledger check | a ledger's identity line with the plan |
+| `next-step` `plan_finished` | the plan's name in `completed.md` |
+| `next-step`, the register-row loop | a row's Assigned cell with the plan |
+| `plan-revise` `ledger_for` | a ledger's identity line with the plan |
+| `plan-revise` `completed_form` | the plan's name in `completed.md` |
+| `plan-lint`, the register-row checks | a row's Assigned cell with the plan |
+| `scripts/lib/register.sh` `register_for_spec` | a register's `**Covers:**` with a plan's `**Spec:**` or `**Program:**` |
+| `scripts/lib/roadmap.sh`, `roadmap` | register names and Assigned cells with a spec |
+
+The project-status and finishing-a-development-branch skills match a plan's
+path by reading it; each gains one sentence that either prefix names the same
+document. `pathToUri` already strips either prefix and the cockpit resolves
+names rather than comparing them, so no JavaScript needs the key. Names are
+still written as `forge_name` prints them; nothing on disk or on darkmem is
+rewritten.
 
 Chosen over recording the prefix in `stores.json`, which is per machine: a
 second machine whose checkout no longer has `docs/superpowers` would name
@@ -315,43 +350,83 @@ over a marker file in the mirror, which adds a synced file for no gain.
 
 ### 7.2 Files the move cannot carry, and citations (row 5)
 
-The mirror never syncs a dotfile, a symbolic link, or a file under the docs
-directory's own `handoff/` (`listDocumentFiles`), so §4's hash comparison never
-sees them and `git rm -r` would delete them. §4 gains one refusal: for
-documents entering darkmem, the docs directory holds a tracked file of one of
-those kinds; the note names each one.
+Before anything is sent, documents entering darkmem refuse the move, naming
+each file, when the docs directory holds:
+
+- a tracked file the mirror never syncs (`listDocumentFiles`): one whose own
+  name, or the name of any directory between it and the docs directory, starts
+  with a dot; a symbolic link, or anything reached through one; a file under
+  the docs directory's own `handoff/`;
+- a tracked file import refuses (`darkmem-import.mjs`): an empty file, or one
+  that is not UTF-8;
+- a tracked file whose uri `uriProblem` rejects, or that is a case twin of
+  another (`caseGroups`): push and pull refuse these but import does not, and
+  darkmem has no delete route to remove one once filed;
+- an ignored file (`git status --porcelain --ignored -- <docs dir>`): the
+  mirror walks the filesystem, so import would upload it, and `git rm -r`
+  would leave it behind.
+
+Tracked is the test for the first three because `git rm -r` deletes only
+tracked paths; an untracked file that is not ignored already refuses through
+§4's uncommitted-changes check.
 
 Citations do not refuse the move. After documents move to darkmem, the note
 lists the tracked files outside the docs directory whose text contains
-`docs/superpowers/` or `docs/forge/` (for example darkmem's `CLAUDE.md`) and
-asks the owner to rewrite them before committing the staged deletion. This
-replaces the parent spec §6's "rewrite the `CLAUDE.md` citations first".
+`docs/superpowers/` or `docs/forge/` (`git grep -I -l`, which skips binary
+files), the first 20 followed by a count of the rest, and asks the owner to
+rewrite them before committing the staged deletion. This replaces the parent
+spec §6's "rewrite the `CLAUDE.md` citations first".
 
 ### 7.3 The cockpit reads through the roots (row 17)
 
 `readRun` in `hooks/cockpit/register.tsx` reads `latest.md`, the ledgers and
 the plan from the primary checkout only, so with progress applied darkmem its
-plan section shows nothing. It takes the ledger root, `latest.md` and the docs
-root from one `darkmem-config.mjs --mode` call per place change, the call
-`roots.sh` makes, run in the primary checkout it reads today; when that call
-fails it keeps today's checkout paths. The
-plan named by the ledger resolves as `forge_resolve` does: a document name
-under the docs root (either prefix), any other relative name under the
-checkout. `finish.json` stays in the plan's workspace in the checkout, so it is
-read at `<state>/sdd/<slug>/finish.json` for the newest ledger's slug, not
-beside the ledger.
+plan section shows nothing.
+
+- **Roots.** `darkmem-config.mjs --mode` gains an optional directory argument
+  (`resolveStores` already takes a `cwd`), because a mod's process call sets no
+  working directory. The cockpit passes the primary checkout and takes the
+  ledger root, `latest.md` and the docs root from the output. It calls it when
+  the place changes and again whenever `~/.dr-forge/stores.json`'s
+  modification time changes, so the session that runs §4's move sees the new
+  roots; the call has a 5-second timeout. The reader is a top-level function
+  taking `$`.
+- **Failure.** On a non-zero exit or a timeout the cockpit keeps today's
+  checkout paths and shows the first line of stderr as one note in the pane.
+  With no `node`, it keeps the checkout paths silently, as `roots.sh` does.
+- **The plan.** With documents applied local, a relative plan name is tried
+  under the session's checkout first, then the primary, as today. With
+  documents applied darkmem, a document name under either prefix resolves
+  under the docs root.
+- **`finish.json`.** It stays in the workspace of the worktree that ran the
+  plan (`forge_workspace`, §2), so the cockpit reads
+  `<state>/sdd/<slug>/finish.json` for the newest ledger's slug in the
+  session's checkout first, then the primary; the no-plan
+  `<state>/sdd/finish.json` is read in the same order.
+- **The newest ledger.** A pull rewrites a changed mirror ledger, so progress
+  pulled from another machine, or the first pull after a move, can make a
+  ledger newer than the session's start and show it in the pane. This is
+  intended: the pane shows the project's most recent progress.
 
 ### 7.4 Testing
 
-- `forge_name_key`: both prefixes, a non-document name; `plan_ledger`,
-  `plan_finished` and `completed_form` match a ledger or `completed.md` line
-  spelled with the other prefix.
-- `reconcile`: each uncarried kind (a dotfile at depth, a symbolic link, a
-  file under `handoff/`) refuses and is named; a citing `CLAUDE.md` is listed
-  and the move still runs.
+- `forge_name_key`: both prefixes, a bare `docs/superpowers`, a leading `./`,
+  `docs/superpowersx`, a name outside the docs directory. Each site in §7.1's
+  table matches a ledger line, `completed.md` entry, register cell or plan
+  header spelled with the other prefix.
+- `reconcile`: each kind in §7.2 (a dotfile at depth, a dot directory, a
+  symbolic link, a file under `handoff/`, an empty file, a non-UTF-8 file, a
+  name `uriProblem` rejects, a case twin, an ignored file) refuses, is named,
+  and sends nothing to the stub server; a darkmem copy with a different hash
+  refuses before import; a ledger whose plan has no `completed.md` entry
+  refuses and one with an entry does not; a citing `CLAUDE.md` is listed, the
+  list is capped, and the move runs; the darkmem-to-repository note names an
+  ignored copy and a stale `.gitattributes` line.
 - Cockpit: the plan section reads a ledger, `latest.md` and a plan from a
-  mirror when progress and documents are applied darkmem, and from the
-  checkout when the `--mode` call fails.
+  mirror when both families are applied darkmem; a failing `--mode` keeps the
+  checkout paths and shows its reason; `finish.json` and a local plan are read
+  from the session's linked worktree before the primary; a changed
+  `stores.json` re-reads the roots.
 
 ## Delivery
 
