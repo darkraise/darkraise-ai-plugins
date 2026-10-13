@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { HttpError } from "./darkmem-client.mjs";
-import { forgeDir } from "./darkmem-config.mjs";
+import { forgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
 import {
   MAX_ENTRIES_PER_APPEND, decodeUtf8, emptyState, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor,
   splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriToLocal,
@@ -109,9 +109,9 @@ async function verify(context, roots, snapshot) {
 }
 
 export async function importRepository(context) {
-  const { cfg, client, report, options } = context;
+  const { cfg, client, report, options, env } = context;
   Object.assign(report.counts, { documents: 0, workstreams: 0 });
-  const roots = { docsRoot: forgeDir("docs", cfg.repoRoot), workRoot: forgeDir("state", cfg.repoRoot) };
+  const roots = { docsRoot: forgeDir("docs", cfg.repoRoot), workRoot: forgeDir("state", cfg.repoRoot), worktreeRoot: cfg.repoRoot };
   const snapshot = readSources(roots);
   if (snapshot.problems.length) {
     report.failures.push(...snapshot.problems);
@@ -142,4 +142,11 @@ export async function importRepository(context) {
   }
   for (const ledger of snapshot.ledgers) await importLedger(context, roots, ledger);
   await verify(context, roots, snapshot);
+  // Only a clean, verified import moves a family's applied store; a family
+  // configured local stays local even though its files were filed.
+  if (report.failures.length || report.conflicts.length) return;
+  const families = ["documents", "progress"].filter(family => cfg[family].configured === "darkmem");
+  if (!families.length) return;
+  writeApplied(env, cfg.repoRoot, Object.fromEntries(families.map(family => [family, "darkmem"])));
+  report.notes.push(`recorded ${families.join(" and ")} as applied darkmem in ${storesPath(env)}`);
 }

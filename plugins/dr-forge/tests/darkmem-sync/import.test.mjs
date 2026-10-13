@@ -134,3 +134,30 @@ test("import in local mode is exit 2", async () => {
   assert.equal(result.code, 2);
   assert.match(result.stdout, /^darkmem-sync: local mode/);
 });
+
+test("a verified import records each family configured darkmem as applied darkmem", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  const config = { documentStore: "local", darkmem: { url: stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project: "proj" } } } };
+  const home = makeHome({ repo, config, stores: null });
+  write(path.join(repo, "docs", "forge", "specs", "s.md"), "# Spec\n");
+  write(path.join(repo, ".forge", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: complete\n");
+  const result = await run(["import"], { cwd: repo, env: home.env });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const record = JSON.parse(fs.readFileSync(path.join(home.home, ".dr-forge", "stores.json"), "utf8"));
+  assert.deepEqual(record, { [repo]: { progress: "darkmem" } });
+  assert.match(result.stdout, /^note: recorded progress as applied darkmem in .*stores\.json$/m);
+});
+
+test("an import with a refused document records nothing", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  const home = makeHome({ repo, url: stub.url, stores: null });
+  write(path.join(repo, "docs", "forge", "specs", "s.md"), "# Spec\n");
+  stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 422, detail: "refused" });
+  const result = await run(["import"], { cwd: repo, env: home.env });
+  assert.equal(result.code, 1, result.stdout);
+  assert.equal(fs.existsSync(path.join(home.home, ".dr-forge", "stores.json")), false);
+});
