@@ -303,3 +303,52 @@ test("pull writes only the applied families, a handoff note with progress", asyn
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
   assert.equal(fs.existsSync(path.join(s.docsRoot, "specs", "a.md")), false);
 });
+
+test("pull never writes an archived copy", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/archive/20261013T091502Z/specs/a.md", content: "old\n" });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/specs/b.md", content: "b\n" });
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "archive")), false);
+  assert.deepEqual(Object.keys(s.state().documents), ["superpowers/specs/b.md"]);
+});
+
+test("a document archived elsewhere is removed when unchanged and kept as a conflict when edited", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "a\n" });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/b.md", content: "b\n" });
+  await s.pull();
+  const id = uri => s.stub.db.documents.get(`proj\u0000${uri}`).id;
+  await s.seed.moveDocument(id("superpowers/a.md"), { uri: "superpowers/archive/20261013T091502Z/a.md" });
+  await s.seed.moveDocument(id("superpowers/b.md"), { uri: "superpowers/archive/20261013T091502Z/b.md" });
+  write(path.join(s.docsRoot, "b.md"), "edited\n");
+  const result = await s.pull();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^conflict: superpowers\/b\.md: archived or deleted on darkmem, and changed locally; the local file stays — push it under a new name, or delete it$/m);
+  assert.match(result.stdout, /darkmem-sync pull: 0 documents, 0 ledgers, 0 checkpoints, 1 removed; 1 conflicts, 0 failures/);
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "a.md")), false);
+  assert.equal(read(path.join(s.docsRoot, "b.md")), "edited\n");
+  assert.deepEqual(Object.keys(s.state().documents), ["superpowers/b.md"]);
+});
+
+test("a local deletion waits for push while darkmem is unchanged; a changed copy or a lost docs root comes back", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "one\n" });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/b.md", content: "b\n" });
+  await s.pull();
+  fs.rmSync(path.join(s.docsRoot, "a.md"));
+  const before = fetches(s.stub);
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "a.md")), false);
+  assert.equal(fetches(s.stub), before, "nothing is fetched for a deletion push will archive");
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "two\n", expectedHash: sha("one\n") });
+  const changed = await s.pull();
+  assert.equal(changed.code, 0, changed.stdout + changed.stderr);
+  assert.match(changed.stdout, /^note: superpowers\/a\.md: deleted locally but changed on darkmem; darkmem's copy pulled back$/m);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "two\n");
+  fs.rmSync(s.docsRoot, { recursive: true });
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "two\n");
+  assert.equal(read(path.join(s.docsRoot, "b.md")), "b\n");
+});

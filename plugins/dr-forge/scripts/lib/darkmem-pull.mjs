@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, caseGroups, familiesOf, isoMicros, sha256, uriFamily, uriProblem, uriToLocal, validKey, writeFileAtomic,
+  DOC_PREFIX, caseGroups, familiesOf, isArchiveUri, isoMicros, sha256, uriFamily, uriProblem, uriToLocal, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 
 const RESOLVE = "move the local file aside, pull, and re-apply your change";
@@ -22,8 +22,9 @@ export async function remoteLedger(client, workstreamId) {
 
 // One manifest item whose hash differs from the mirror's copy. The local file
 // is hashed again after the fetch, because an edit can land while the request
-// is out.
-async function pullDocument({ cfg, client, roots, state, persist, report }, item) {
+// is out. keepDeletions leaves a synced document deleted from the mirror to
+// push, which archives it, while darkmem still holds the copy that was deleted.
+async function pullDocument({ cfg, client, roots, state, persist, report }, item, keepDeletions) {
   // Checked before the mapping, which refuses some of these names on its own
   // (a handoff uri needs a workstream key) and would only note them.
   const problem = uriProblem(item.uri);
@@ -41,6 +42,8 @@ async function pullDocument({ cfg, client, roots, state, persist, report }, item
     state.documents[item.uri] = local;
     return;
   }
+  const deleted = keepDeletions && local === null && state.documents[item.uri] !== undefined && uriFamily(item.uri) === "documents";
+  if (deleted && item.content_hash === state.documents[item.uri]) return;
   // darkmem has not moved since the last sync: a local edit is push's to
   // send, not a conflict.
   if (local !== null && item.content_hash === state.documents[item.uri]) return;
@@ -61,12 +64,36 @@ async function pullDocument({ cfg, client, roots, state, persist, report }, item
   state.documents[item.uri] = doc.content_hash;
   persist();
   report.counts.documents += 1;
+  if (deleted) report.notes.push(`${item.uri}: deleted locally but changed on darkmem; darkmem's copy pulled back`);
 }
 
-// Every document under superpowers/. Uris that differ only in case are one
-// file on a case-insensitive file system, so none of them is written.
+// A synced document darkmem no longer holds was archived or deleted
+// elsewhere: an unchanged local copy goes with it, an edited one stays.
+function removeVanished({ roots, state, persist, report }, filed) {
+  for (const uri of Object.keys(state.documents).sort()) {
+    if (filed.has(uri) || uriFamily(uri) !== "documents" || isArchiveUri(uri)) continue;
+    const file = uriToLocal(roots, uri);
+    if (!file) continue;
+    const local = localHash(file);
+    if (local !== null && local !== state.documents[uri]) {
+      report.conflicts.push(`${uri}: archived or deleted on darkmem, and changed locally; the local file stays — push it under a new name, or delete it`);
+      continue;
+    }
+    if (local !== null) {
+      fs.rmSync(file);
+      report.counts.removed = (report.counts.removed ?? 0) + 1;
+    }
+    delete state.documents[uri];
+    persist();
+  }
+}
+
+// Every document under superpowers/ but the archives. Uris that differ only
+// in case are one file on a case-insensitive file system, so none of them is
+// written. A docs root that is gone entirely is a lost mirror, not a set of
+// deletions, so every document is pulled back into it.
 export async function pullDocuments(context) {
-  const { cfg, client, report } = context;
+  const { cfg, client, roots, report } = context;
   let items;
   try {
     items = await client.manifest(cfg.project, DOC_PREFIX);
@@ -74,8 +101,10 @@ export async function pullDocuments(context) {
     failItem(report, "document manifest", error, "; no document pulled");
     return;
   }
-  const families = familiesOf(context.roots);
-  items = items.filter(item => families[uriFamily(item.uri)]);
+  const families = familiesOf(roots);
+  const keepDeletions = families.documents && fs.existsSync(roots.docsRoot);
+  const filed = new Set(items.map(item => item.uri));
+  items = items.filter(item => !isArchiveUri(item.uri) && families[uriFamily(item.uri)]);
   const twins = caseGroups(items.map(item => item.uri));
   for (const group of twins) {
     report.conflicts.push(`${group.join(", ")}: differ only in case, which a case-insensitive file system holds as one file; none of them pulled — rename or delete all but one on darkmem by hand (the sync has no rename or delete route)`);
@@ -84,11 +113,12 @@ export async function pullDocuments(context) {
   for (const item of items) {
     if (!item.content_hash || held.has(item.uri)) continue;
     try {
-      await pullDocument(context, item);
+      await pullDocument(context, item, keepDeletions);
     } catch (error) {
       failItem(report, item.uri, error);
     }
   }
+  if (families.documents) removeVanished(context, filed);
 }
 
 // Render each workstream's ledger entries into work/sdd/<key>/progress.md.
