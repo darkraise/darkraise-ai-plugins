@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
-import { makeHome, makeRepo, run, write } from "./helpers.mjs";
+import { makeHome, makeRepo, read, run, write } from "./helpers.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile\n";
 
@@ -94,4 +94,54 @@ test("a missing or extra argument is a usage error", async t => {
     assert.equal(result.code, 2, args.join(" "));
     assert.equal(result.stderr, USAGE);
   }
+});
+
+test("restore moves the newest archived copy back under its hash and pulls it", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "specs", "a.md"), "one\n");
+  await s.sync("push");
+  fs.rmSync(path.join(s.docsRoot, "specs", "a.md"));
+  await s.sync("push");
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/archive/20000101T000000Z/specs/a.md", content: "ancient\n" });
+  const result = await s.sync("restore", "docs/superpowers/specs/a.md");
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^restored: superpowers\/specs\/a\.md from superpowers\/archive\/\d{8}T\d{6}Z\/specs\/a\.md$/m);
+  assert.doesNotMatch(result.stdout, /20000101T000000Z/);
+  assert.match(result.stdout, /^darkmem-sync restore: 1 documents; 0 conflicts, 0 failures$/m);
+  assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "one\n");
+  const patch = s.stub.db.requests.filter(r => r.method === "PATCH").at(-1);
+  assert.deepEqual(patch.body, { uri: "superpowers/specs/a.md", expected_hash: sha("one\n") });
+});
+
+test("restore refuses an occupied uri or a name with no archived copy, and needs documents applied darkmem", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "live\n" });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/archive/20261013T091502Z/a.md", content: "old\n" });
+  const occupied = await s.sync("restore", "docs/forge/a.md");
+  assert.equal(occupied.code, 1);
+  assert.match(occupied.stdout, /^refused: superpowers\/a\.md is occupied on darkmem; move or rename that document first$/m);
+  const none = await s.sync("restore", "docs/forge/b.md");
+  assert.equal(none.code, 1);
+  assert.match(none.stdout, /^refused: no archived copy of superpowers\/b\.md on darkmem$/m);
+  assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
+  fs.writeFileSync(path.join(s.home, ".dr-forge", "stores.json"), JSON.stringify({ [s.repo]: { documents: "local", progress: "darkmem" } }));
+  const local = await s.sync("restore", "docs/forge/a.md");
+  assert.equal(local.code, 2);
+  assert.equal(local.stderr, "darkmem-sync: restore needs documents applied darkmem\n");
+});
+
+test("restore takes only a document name and refuses in an unmapped repository", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/archive/20261013T091502Z/a.md", content: "old\n" });
+  for (const name of [path.join(s.docsRoot, "a.md"), "a.md", "docs/forge/../a.md", "docs/forge/./a.md", "docs/forge/handoff/p1.md", "docs/forge/archive/20261013T091502Z/a.md"]) {
+    const result = await s.sync("restore", name);
+    assert.equal(result.code, 2, name);
+    assert.equal(result.stderr, `darkmem-sync: ${name} does not name a document\n`);
+  }
+  assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
+  const repo = makeRepo();
+  const { env } = makeHome({ repo, config: null });
+  const unmapped = await run(["restore", "docs/forge/a.md"], { cwd: repo, env });
+  assert.equal(unmapped.code, 2);
+  assert.equal(unmapped.stderr, "darkmem-sync: restore needs documents applied darkmem\n");
 });

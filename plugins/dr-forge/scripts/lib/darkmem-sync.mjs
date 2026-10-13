@@ -7,11 +7,11 @@ import path from "node:path";
 import { ConfigError, resolveStores, runKey } from "./darkmem-config.mjs";
 import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
 import {
-  StateError, UsageError, acquireLock, isArchiveUri, loadState, localChanges, lockOwner, pathToUri, saveState, sha256, uriFamily,
-  uriToLocal,
+  ARCHIVE_PREFIX, DOC_PREFIX, StateError, UsageError, acquireLock, isArchiveUri, loadState, localChanges, lockOwner, pathToUri,
+  saveState, sha256, uriFamily, uriToLocal,
 } from "./darkmem-mirror.mjs";
 import { importRepository } from "./darkmem-import.mjs";
-import { pull } from "./darkmem-pull.mjs";
+import { pull, pullDocuments } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
@@ -56,6 +56,48 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
   out(`${name}@r${String(newest.id)}`);
 }
 
+// A document name as ledgers and plans write it, docs/forge/<rest> or the
+// pre-2.0 docs/superpowers/<rest>, as its uri superpowers/<rest>; null for a
+// path, a handoff note, an archived copy, or a name that climbs.
+function documentUri(name) {
+  const match = /^(?:\.\/)?docs\/(?:forge|superpowers)\/(.+)$/.exec(name);
+  if (!match || match[1].split("/").some(segment => segment === "" || segment === "." || segment === "..")) return null;
+  const uri = `${DOC_PREFIX}/${match[1]}`;
+  return uriFamily(uri) === "documents" && !isArchiveUri(uri) ? uri : null;
+}
+
+// Moves the newest archived copy of a document back to its uri, under the
+// archived copy's hash, then pulls documents (wiring spec §2). main refuses it
+// before this runs when documents are not applied darkmem.
+async function restore(context) {
+  const { cfg, roots, client, report, args, out } = context;
+  const [name] = args;
+  const uri = documentUri(name);
+  if (!uri) throw new UsageError(`${name} does not name a document`);
+  const refuse = reason => {
+    out(`refused: ${reason}`);
+    report.refused += 1;
+  };
+  const rest = uri.slice(DOC_PREFIX.length + 1);
+  const items = await client.manifest(cfg.project, DOC_PREFIX);
+  if (items.some(item => item.uri === uri)) return refuse(`${uri} is occupied on darkmem; move or rename that document first`);
+  // superpowers/archive/<stamp>/<rest>: a stamp sorts by time.
+  const newest = items
+    .filter(item => isArchiveUri(item.uri) && item.uri.slice(ARCHIVE_PREFIX.length + 1).replace(/^[^/]+\//, "") === rest)
+    .sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0))
+    .at(-1);
+  if (!newest) return refuse(`no archived copy of ${uri} on darkmem`);
+  try {
+    await client.moveDocument(newest.id, { uri, expectedHash: newest.content_hash });
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 409) return refuse(`darkmem refused to move ${newest.uri} back: ${error.detail}`);
+    throw error;
+  }
+  out(`restored: ${uri} from ${newest.uri}`);
+  report.counts.documents = 0;
+  await pullDocuments({ ...context, roots: { ...roots, families: { documents: true, progress: false } } });
+}
+
 // options maps each accepted flag to whether it takes a value; positional is
 // how many arguments follow the command. needsKey skips the command when the
 // API key is unset, since the mirror stays usable offline; syncsFamilies makes
@@ -69,6 +111,13 @@ const COMMANDS = {
   pull: { options: {}, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: pull },
   push: { options: { "--workstream": true }, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: push },
   import: { options: { "--replace": false }, positional: 0, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: true, run: importRepository },
+  restore: {
+    options: {}, positional: 1, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: true, run: restore,
+    refuseLocal: ({ err }) => {
+      err("darkmem-sync: restore needs documents applied darkmem");
+      return 2;
+    },
+  },
   revision: {
     options: {}, positional: 1, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: false, run: revision,
     refuseLocal: ({ args, reason, out }) => {
