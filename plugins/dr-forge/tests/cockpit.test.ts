@@ -276,8 +276,8 @@ function world(on: On, w: World) {
       const exitCode = w.autoRunExits?.[word] ?? 0
       if (w.autoFile !== undefined) {
         const state = JSON.parse(w.autoFile.text) as Record<string, unknown>
-        if (exitCode === 0 && word === 'compacted') state.pending = 'after-compact'
-        if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume' })
+        if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: 'after-compact', compactions: Number(state.compactions) + 1 })
+        if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume', regime: 'normal' })
         if (exitCode === 0 && word === 'resumed') state.pending = null
         if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
         if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
@@ -2643,6 +2643,31 @@ describe('auto run', () => {
     expect(pendingOf(files)).toBeNull()
   })
 
+  test('shows the cleared session\'s run at once', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', regime: 'high', resumePrompt: 'Execute docs/plan.md.' })
+    const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute · high/ })).toBeDefined()
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal/ })).toBeDefined()
+  })
+
+  test('shows the compaction at once', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compactions/ })).toBeDefined()
+  })
+
   test('tells the cleared session when its model was refused', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
     const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO], refusedCommands: ['model'] }
@@ -2788,6 +2813,45 @@ describe('auto run in the pane', () => {
     expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 2 compactions · 0 resumes/ })).toBeDefined()
     await ui.press({ key: 'pane-stop-auto' })
     expect(w.autoRuns).toContain('--session sess-1 stop --reason owner pressed Stop auto')
+  })
+
+  test('hides Hand off while a run is active and brings it back when the run stops', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, tokens: 470_000, autoRuns: [], autoFile: files[AUTO] }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'pane-stop-auto' })).toBeDefined()
+    expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
+    await ui.press({ key: 'pane-stop-auto' })
+    expect(await ui.find({ key: 'pane-stop-auto' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /Auto run ·/ })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
+  })
+
+  test('says the handoff budget again after a run that stopped', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const w: World = { tokens: 100_000, env: { HOME: '/home/me' }, fetches }
+    world(on, w)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    const files: NonNullable<World['files']> = {}
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    w.tokens = 470_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const sent = () => fetches.filter(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title === '🔶 Handoff budget reached').length
+    expect(sent()).toBe(1)
+    files[AUTO] = autoFiles({ pending: null })[AUTO]!
+    w.tokens = 100_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    files[AUTO] = autoFiles({ pending: null, active: false })[AUTO]!
+    w.tokens = 470_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(sent()).toBe(2)
   })
 
   test('picks up a run started during the turn, and mutes the handoff note', async ($, on) => {

@@ -19,10 +19,10 @@ import type {
 } from '../../types'
 import {
   accountColor,
-  autoLimitFor,
-  autoRunFor,
   accountKey,
   attributionIn,
+  autoLimitFor,
+  autoRunFor,
   bar,
   billingLabel,
   budgetFor,
@@ -707,8 +707,8 @@ export const register: Register = on => {
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} compactions · ${autoNow.resumes} resumes`}
           </Text>
         )}
-        {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($), { hotkey: 'x' })}
-        {canHandOff && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
+        {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($))}
+        {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
         {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: resumePrompt(), asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
         {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's' })}
@@ -2177,6 +2177,7 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
         await endUnboundRun($, bound, 'the cockpit compacted but could not book it')
         return
       }
+      await trackAutoRun($)
       at = 'continue'
     }
     if (at === 'continue') {
@@ -2206,6 +2207,7 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
         : `\n\nThe cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}. Record that with scripts/auto-run ruling add.`
     await $.prompt.submit({ text: `${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
     await autoRunCall($, bound, ['resumed'])
+    await trackAutoRun($)
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error)
     const action = at === 'compact' || at === 'continue' ? 'compact' : 'clear'
@@ -2408,7 +2410,11 @@ async function readWhere($: EngineInterface) {
 // The context crossed its handoff budget: said once per crossing.
 async function onBudget($: EngineInterface, reading: { now: CockpitBudget; isPast: boolean } | undefined) {
   if (reading === undefined) return
-  if ((await read($, autoRun))?.active) return
+  if ((await read($, autoRun))?.active) {
+    // A run compacts at its own limit: the crossing it passes does not count.
+    S.isBudgetSent = false
+    return
+  }
   const { now, isPast } = reading
   if (!isPast) {
     S.isBudgetSent = false
