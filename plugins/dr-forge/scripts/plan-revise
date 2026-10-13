@@ -140,15 +140,16 @@ plan_units() {
 # ledger_for PLAN — "<where>\t<ledger>" for the ledger whose identity line
 # names PLAN: every worktree's ledgers while progress is local (execution may
 # run in a linked worktree while the plan is read from the primary checkout),
-# the mirror's while it is darkmem. Identities compare as names; an absolute
-# local identity is stripped of the longest worktree root it lies under, since
+# the mirror's while it is darkmem. Identities compare as name keys, so either
+# docs prefix matches; an absolute local identity is stripped of the longest
+# worktree root it lies under, since
 # a worktree created inside the primary checkout has the primary root as a
 # prefix of its own.
 ledger_for() {
   local ctx slug want ledger where named best wt roots
   ctx=$(_plan_ctx "$1")
   slug=$(basename "$1" .md)
-  want=$(forge_name "$1" "$ctx")
+  want=$(forge_name_key "$(forge_name "$1" "$ctx")")
   roots=$(git -C "$ctx" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
   while IFS=$'\t' read -r ledger where; do
     [ -n "$ledger" ] || continue
@@ -163,24 +164,24 @@ ledger_for() {
       done <<<"$roots"
       if [ -n "$best" ]; then named=${named#"$best"/}; else named=$(forge_name "$named" "$ctx"); fi ;;
     esac
-    [ "$named" = "$want" ] || continue
+    [ "$(forge_name_key "$named")" = "$want" ] || continue
     printf '%s\t%s\n' "$where" "$ledger"
     return 0
   done < <(forge_ledger_files "$ctx")
 }
 
 # completed_form PLAN — "merged", "pr" or nothing, from the completed.md beside
-# the plan. The entry is matched on the plan's name, not a basename substring:
-# "docs/scored.md" is a substring of "docs/unscored.md" and would otherwise
-# claim another plan's outcome. Merged outranks via PR whatever their order,
-# because finishing-a-development-branch writes the via-PR line before the
-# push and the merged line after the merge.
+# the plan. The entry is matched on the plan's name under either docs prefix,
+# not a basename substring: "docs/scored.md" is a substring of
+# "docs/unscored.md" and would otherwise claim another plan's outcome. Merged
+# outranks via PR whatever their order, because finishing-a-development-branch
+# writes the via-PR line before the push and the merged line after the merge.
 completed_form() {
-  local f rel hits
+  local f rel hits s
   f="$(cd "$(dirname "$1")" && pwd)/completed.md"
   [ -f "$f" ] || return 0
   rel=$(forge_name "$1" "$(_plan_ctx "$1")")
-  hits=$(grep -F "\`$rel\`" "$f" 2>/dev/null) || return 0
+  hits=$(while IFS= read -r s; do grep -F "\`$s\`" "$f" 2>/dev/null; done < <(forge_name_spellings "$rel"))
   [ -n "$hits" ] || return 0
   if grep -qF 'merged into' <<<"$hits"; then printf 'merged\n'
   elif grep -qF 'via PR' <<<"$hits"; then printf 'pr\n'

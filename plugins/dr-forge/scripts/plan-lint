@@ -115,6 +115,7 @@ reg_specs=()
 [ -z "${ppath:-}" ] || [ "${ppath:-}" = "${spec_path:-}" ] || reg_specs+=("$ppath")
 if [ ${#reg_specs[@]} -gt 0 ]; then
   plan_rel=$(forge_name "$plan" "$root")
+  plan_key=$(forge_name_key "$plan_rel")
   : > "$TMP/reg-ids"
   : > "$TMP/reg-open"
   while IFS= read -r reg_file; do
@@ -137,7 +138,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
       || say WARN header "a register covers this plan's spec but no task carries an **Items:** line"
 
     while IFS=$'\t' read -r rid ritem rassigned _ _ _; do
-      [ "$rassigned" = "$plan_rel" ] || continue
+      [ "$(forge_name_key "$rassigned")" = "$plan_key" ] || continue
       grep -qx "$rid" <<<"$cited" \
         || say ERROR header "register row #$rid is assigned to this plan but no task cites it"
     done < "$TMP/reg-open"
@@ -148,7 +149,10 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
     done
 
     if grep -qE "$SEP"'last[ \t]*$' <<<"$program"; then
-      others=$(awk -F'\t' -v p="$plan_rel" '$3 != p { printf "%s#%s", (c++ ? ", " : ""), $1 }' "$TMP/reg-open")
+      others=""
+      while IFS=$'\t' read -r rid _ rassigned _; do
+        [ "$(forge_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }#$rid"
+      done < "$TMP/reg-open"
       [ -z "$others" ] \
         || say ERROR header "Program line says 'last' while register rows are open: $others"
     fi

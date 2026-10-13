@@ -345,5 +345,13 @@ row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/superpowers/plans" | grep
 check "darkmem survey: live" "$(field live "$row")" "yes"
 check "darkmem survey: the evidence names the mirror" "$(grep -c 'ledger in mirror' <<<"$row")" "1"
 
+printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/superpowers/plans" | grep '^plan  mp\.md')
+check "darkmem survey: a ledger under the other prefix is live" "$(field live "$row")" "yes"
+rm -f "$M/work/sdd/mp/progress.md"
+printf -- '- 2026-10-13 `docs/superpowers/plans/mp.md` — merged into `main` at abc1234\n' > "$M/superpowers/plans/completed.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/superpowers/plans" | grep '^plan  mp\.md')
+check "darkmem survey: a completed entry under the other prefix" "$(field live "$row")" "no"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
