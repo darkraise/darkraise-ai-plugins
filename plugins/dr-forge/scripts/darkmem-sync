@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Keep this repository's dr-forge documents and progress in darkmem.
 #
-# A repository mapped in ~/.dr-forge/config.json (~/.dr-superpowers/ before 2.0),
-# with the API key in the environment variable that file names, syncs a mirror
-# at ~/.dr-forge/mirror/<project>/ (~/.dr-superpowers/ before 2.0): superpowers/
-# (specs, plans, registers, notes), work/sdd/<plan>/{progress.md,handoff.md},
-# work/handoff/latest.md.
-# Anything else is local mode: every command except import prints one line
-# and does nothing.
+# A repository mapped in ~/.dr-forge/config.json (~/.dr-superpowers/ before 2.0)
+# syncs a mirror at ~/.dr-forge/mirror/<project>/ (~/.dr-superpowers/ before
+# 2.0): superpowers/ (specs, plans, registers, notes) while its documents are
+# applied darkmem, work/sdd/<plan>/{progress.md,handoff.md} and
+# work/handoff/latest.md while its progress is. ~/.dr-forge/stores.json records
+# the applied stores; documentStore and progressSource choose them. An
+# unmapped repository is local mode: every command except import prints one
+# line and does nothing.
 #
 # Usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace]
-# Exit: 0 done; 1 conflicts, refused or failed items, or another sync holds the
-#       mirror; 2 usage, a malformed config or state file, or import in local
-#       mode; 3 darkmem unreachable, or an answer that stopped the command;
-#       4 an unexpected error (a bug)
+# Exit: 0 done, or no family applied darkmem; 1 conflicts, refused or failed
+#       items, or another sync holds the mirror; 2 usage, a malformed config,
+#       stores or state file, or import in local mode; 3 darkmem unreachable,
+#       the API key unset (pull, push, import), or an answer that stopped the
+#       command; 4 an unexpected error (a bug)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

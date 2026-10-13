@@ -1,9 +1,9 @@
 // darkmem-sync's entry point, run by scripts/darkmem-sync: argument parsing,
-// mode, lock, state and exit codes. The commands live in darkmem-pull.mjs,
+// the stores, lock, state and exit codes. The commands live in darkmem-pull.mjs,
 // darkmem-push.mjs and darkmem-import.mjs; scripts/darkmem-sync documents the
 // usage and exit codes.
 import path from "node:path";
-import { ConfigError, resolveMode, runKey } from "./darkmem-config.mjs";
+import { ConfigError, resolveStores, runKey } from "./darkmem-config.mjs";
 import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
 import { StateError, UsageError, acquireLock, loadState, localChanges, lockOwner, saveState } from "./darkmem-mirror.mjs";
 import { importRepository } from "./darkmem-import.mjs";
@@ -12,20 +12,25 @@ import { push } from "./darkmem-push.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace]";
 
+const familyLine = (name, family) => `${name}: configured ${family.configured}, applied ${family.applied}${family.applied === "darkmem" ? "" : ", not synced"}`;
+
 async function status({ cfg, roots, state, report, out }) {
-  out(`darkmem-sync: darkmem mode — project ${cfg.project} at ${cfg.url}; mirror ${cfg.mirror}`);
+  out(`darkmem-sync: project ${cfg.project} at ${cfg.url}; mirror ${cfg.mirror}`);
+  out(familyLine("documents", cfg.documents));
+  out(familyLine("progress", cfg.progress));
   for (const line of localChanges(roots, state)) out(line);
   report.conflicts.push(...(state.conflicts ?? []));
 }
 
-// options maps each accepted flag to whether it takes a value. needsDarkmem
-// makes local mode a usage error; recordsConflicts keeps this run's conflicts
-// in the state file for `status`.
+// options maps each accepted flag to whether it takes a value. needsKey skips
+// the command when the API key is unset, since the mirror stays usable
+// offline; syncsFamilies makes it a no-op when no family is applied darkmem;
+// recordsConflicts keeps this run's conflicts in the state file for `status`.
 const COMMANDS = {
-  status: { options: {}, needsDarkmem: false, recordsConflicts: false, run: status },
-  pull: { options: {}, needsDarkmem: false, recordsConflicts: true, run: pull },
-  push: { options: { "--workstream": true }, needsDarkmem: false, recordsConflicts: true, run: push },
-  import: { options: { "--replace": false }, needsDarkmem: true, recordsConflicts: false, run: importRepository },
+  status: { options: {}, needsKey: false, syncsFamilies: false, recordsConflicts: false, run: status },
+  pull: { options: {}, needsKey: true, syncsFamilies: true, recordsConflicts: true, run: pull },
+  push: { options: { "--workstream": true }, needsKey: true, syncsFamilies: true, recordsConflicts: true, run: push },
+  import: { options: { "--replace": false }, needsKey: true, syncsFamilies: false, recordsConflicts: false, run: importRepository },
 };
 
 function parse(argv) {
@@ -64,17 +69,27 @@ async function main(argv, {
     err(USAGE);
     return 2;
   }
-  let cfg;
+  let stores;
   try {
-    cfg = resolveMode({ cwd, env });
+    stores = resolveStores({ cwd, env });
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     err(`darkmem-sync: ${error.message}`);
     return 2;
   }
-  if (cfg.mode === "local") {
-    out(`darkmem-sync: local mode — ${cfg.reason}`);
-    return parsed.command.needsDarkmem ? 2 : 0;
+  if (!stores.sync) {
+    out(`darkmem-sync: local mode — ${stores.reason}`);
+    return parsed.name === "import" ? 2 : 0;
+  }
+  const cfg = { ...stores.sync, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress };
+  const families = { documents: cfg.documents.applied === "darkmem", progress: cfg.progress.applied === "darkmem" };
+  if (parsed.command.syncsFamilies && !families.documents && !families.progress) {
+    out(`darkmem-sync: nothing to ${parsed.name}: documents and progress are both applied local`);
+    return 0;
+  }
+  if (parsed.command.needsKey && !cfg.apiKey) {
+    err(`darkmem-sync: ${parsed.name} skipped: ${cfg.keyEnv} is not set; working offline from the mirror`);
+    return 3;
   }
   const release = acquireLock(cfg.mirror);
   if (!release) {
@@ -95,8 +110,8 @@ async function main(argv, {
       runKey: runKey({ cwd, env }),
       timeoutMs: Number(env.DARKMEM_SYNC_TIMEOUT_MS) || 10000,
     });
-    const roots = { docsRoot: cfg.docsRoot, workRoot: cfg.workRoot };
-    await parsed.command.run({ cfg, roots, state, persist, client, report, options: parsed.options, out });
+    const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
+    await parsed.command.run({ cfg, roots, state, persist, client, report, options: parsed.options, out, env });
   } catch (error) {
     if (error instanceof TransportError || error instanceof HttpError) {
       err(`darkmem-sync: ${parsed.name} failed: ${error.message}`);

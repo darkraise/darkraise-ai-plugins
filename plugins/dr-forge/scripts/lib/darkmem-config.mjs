@@ -1,8 +1,9 @@
-// dr-forge's darkmem mode for one repository (darkmem mirror spec §1): the
-// mapping in ~/.dr-forge/config.json (the pre-2.0 ~/.dr-superpowers/config.json
-// until the new file exists), the API key from the environment variable the
-// file names, the mirror's two roots, and the run key a sync declares. No
-// mapping, or no key, is local mode.
+// dr-forge's darkmem stores for one repository (darkmem store options spec
+// §1): the mapping in ~/.dr-forge/config.json (the pre-2.0
+// ~/.dr-superpowers/config.json until the new file exists), each family's
+// configured store and its applied store from ~/.dr-forge/stores.json, the
+// mirror, the API key's variable, and the run key a sync declares. An
+// unmapped repository keeps both families local.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -216,57 +217,6 @@ export function modeLines(stores) {
     `documents\t${stores.documents.applied}\t${stores.documents.root}`,
     `progress\t${stores.progress.applied}\t${stores.progress.ledgerRoot}\t${stores.progress.latestFile}`,
   ];
-}
-
-export function resolveMode({ cwd = process.cwd(), env = process.env } = {}) {
-  const repoRoot = primaryRoot(cwd);
-  const local = reason => ({
-    mode: "local",
-    reason,
-    repoRoot,
-    docsRoot: repoRoot ? forgeDir("docs", repoRoot) : null,
-    workRoot: repoRoot ? forgeDir("state", repoRoot) : null,
-  });
-  if (!repoRoot) return local("not inside a git repository");
-  const file = preferNew(path.join(forgeHome(env), "config.json"), path.join(legacyHome(env), "config.json"));
-  if (!fs.existsSync(file)) return local(`no ${file}`);
-  let config;
-  try {
-    config = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (error) {
-    throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
-  }
-  const darkmem = config?.darkmem;
-  if (darkmem === undefined) return local(`${file} has no darkmem section`);
-  if (!darkmem || typeof darkmem !== "object") throw new ConfigError(`${file}: darkmem must be an object`);
-  const mapping = Object.entries(darkmem.repos ?? {}).find(([key]) => samePath(key, repoRoot));
-  if (!mapping) return local(`no darkmem mapping for ${repoRoot}`);
-  const project = mapping[1]?.project;
-  if (typeof project !== "string" || !PROJECT.test(project)) {
-    throw new ConfigError(`${file}: the mapping for ${repoRoot} needs a project made of letters, digits, '.', '_' or '-'`);
-  }
-  if (typeof darkmem.url !== "string" || !/^https?:\/\/\S+$/.test(darkmem.url)) {
-    throw new ConfigError(`${file}: darkmem.url must be an http or https URL`);
-  }
-  const keyEnv = darkmem.api_key_env ?? "DARKMEM_API_KEY";
-  if (typeof keyEnv !== "string" || !keyEnv) {
-    throw new ConfigError(`${file}: darkmem.api_key_env must name an environment variable`);
-  }
-  const apiKey = env[keyEnv];
-  if (!apiKey) return local(`${keyEnv} is not set`);
-  const mirror = preferNew(path.join(forgeHome(env), "mirror", project), path.join(legacyHome(env), "mirror", project));
-  return {
-    mode: "darkmem",
-    reason: `project ${project}`,
-    repoRoot,
-    project,
-    url: darkmem.url.replace(/\/+$/, ""),
-    apiKey,
-    mirror,
-    docsRoot: path.join(mirror, "superpowers"),
-    workRoot: path.join(mirror, "work"),
-    statePath: path.join(mirror, ".sync-state.json"),
-  };
 }
 
 // The run a sync declares; darkmem refuses an undeclared one.

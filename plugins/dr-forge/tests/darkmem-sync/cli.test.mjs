@@ -38,7 +38,9 @@ test("status in darkmem mode names the mirror and its local changes", async () =
   const result = await run(["status"], { cwd: repo, env });
   assert.equal(result.code, 0, result.stderr);
   assert.equal(result.stdout, [
-    `darkmem-sync: darkmem mode — project proj at http://127.0.0.1:9; mirror ${mirror}`,
+    `darkmem-sync: project proj at http://127.0.0.1:9; mirror ${mirror}`,
+    "documents: configured darkmem, applied darkmem",
+    "progress: configured darkmem, applied darkmem",
     "new: superpowers/specs/a.md",
     "unpushed: sdd/p1/progress.md (52 bytes, never synced)",
     "",
@@ -71,4 +73,40 @@ test("the lock is released even when the state file cannot be saved", async () =
   assert.equal(fs.existsSync(path.join(mirror, ".sync.lock")), false);
   fs.rmdirSync(path.join(mirror, "..sync-state.json.tmp"));
   assert.equal((await run(["status"], { cwd: repo, env })).code, 0);
+});
+
+test("status names a local family as not synced and leaves its files out", async () => {
+  const repo = makeRepo();
+  const { env, docsRoot, workRoot } = makeHome({ repo, stores: { documents: "darkmem", progress: "local" } });
+  write(path.join(docsRoot, "specs", "a.md"), "# A\n");
+  write(path.join(workRoot, "sdd", "p1", "progress.md"), "one\n");
+  const result = await run(["status"], { cwd: repo, env });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^documents: configured darkmem, applied darkmem$/m);
+  assert.match(result.stdout, /^progress: configured darkmem, applied local, not synced$/m);
+  assert.match(result.stdout, /^new: superpowers\/specs\/a\.md$/m);
+  assert.doesNotMatch(result.stdout, /sdd\/p1/);
+});
+
+test("without the key status still runs, and pull and push skip with exit 3", async () => {
+  const repo = makeRepo();
+  const { env, mirror } = makeHome({ repo });
+  delete env.DARKMEM_API_KEY;
+  assert.equal((await run(["status"], { cwd: repo, env })).code, 0);
+  for (const command of ["pull", "push"]) {
+    const result = await run([command], { cwd: repo, env });
+    assert.equal(result.code, 3, command);
+    assert.equal(result.stderr, `darkmem-sync: ${command} skipped: DARKMEM_API_KEY is not set; working offline from the mirror\n`);
+  }
+  assert.equal(fs.existsSync(path.join(mirror, ".sync.lock")), false);
+});
+
+test("a mapped repository with both families local has nothing to pull or push", async () => {
+  const repo = makeRepo();
+  const { env } = makeHome({ repo, stores: { documents: "local", progress: "local" } });
+  for (const command of ["pull", "push"]) {
+    const result = await run([command], { cwd: repo, env });
+    assert.equal(result.code, 0, command);
+    assert.equal(result.stdout, `darkmem-sync: nothing to ${command}: documents and progress are both applied local\n`);
+  }
 });

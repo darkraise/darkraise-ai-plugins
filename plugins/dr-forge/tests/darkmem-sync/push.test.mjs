@@ -128,7 +128,7 @@ test("a document put whose answer was lost is recorded on the next push, not rep
   const retry = await s.push();
   assert.equal(retry.code, 0, retry.stdout);
   assert.equal(s.stub.db.documents.get("proj\u0000superpowers/a.md").content, "two\n");
-  assert.equal((await run(["status"], { cwd: s.repo, env: s.env })).stdout.split("\n").filter(Boolean).length, 1);
+  assert.equal((await run(["status"], { cwd: s.repo, env: s.env })).stdout.split("\n").filter(Boolean).length, 3);
 });
 
 test("a ledger goes up as the appended bytes, one entry per push, and darkmem's concatenation is the file", async t => {
@@ -279,7 +279,7 @@ test("status is clean after a push and names an edit made after it", async t => 
   write(path.join(s.docsRoot, "a.md"), "a\n");
   await s.push();
   const clean = await run(["status"], { cwd: s.repo, env: s.env });
-  assert.equal(clean.stdout.split("\n").filter(Boolean).length, 1);
+  assert.equal(clean.stdout.split("\n").filter(Boolean).length, 3);
   write(path.join(s.docsRoot, "a.md"), "b\n");
   const dirty = await run(["status"], { cwd: s.repo, env: s.env });
   assert.match(dirty.stdout, /^modified: superpowers\/a\.md$/m);
