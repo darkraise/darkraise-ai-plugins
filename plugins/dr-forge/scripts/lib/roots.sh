@@ -108,6 +108,32 @@ forge_ledger_files() {
   return 0
 }
 
+# forge_name_key NAME — the one name both docs prefixes share (store options
+# spec §7.1): docs/superpowers/<rest> is docs/forge/<rest>. A checkout's prefix
+# differs between branches and machines, and a move to darkmem changes it, so
+# every comparison of two document names compares their keys.
+forge_name_key() {
+  local name=${1#./}
+  case $name in
+    docs/superpowers) printf 'docs/forge\n' ;;
+    docs/superpowers/*) printf 'docs/forge/%s\n' "${name#docs/superpowers/}" ;;
+    *) printf '%s\n' "$name" ;;
+  esac
+}
+
+# forge_name_spellings NAME — the key, then for a document name the same name
+# under docs/superpowers. completed.md and register cells keep the spelling
+# they were written with, so a search runs once per line and accepts either.
+forge_name_spellings() {
+  local key
+  key=$(forge_name_key "$1")
+  printf '%s\n' "$key"
+  case $key in
+    docs/forge) printf 'docs/superpowers\n' ;;
+    docs/forge/*) printf 'docs/superpowers/%s\n' "${key#docs/forge/}" ;;
+  esac
+}
+
 # forge_resolve NAME [DIR] — a document name (docs/forge/… or the pre-2.0
 # docs/superpowers/…) under the docs root, any other relative name under the
 # worktree, an absolute path unchanged.

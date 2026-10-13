@@ -88,6 +88,20 @@ printf 'p\n' > "$WT/docs/superpowers/plans/p.md"
 check "subdirectory: a relative file" "$(cd "$WT/docs/superpowers/plans" && forge_name p.md)" "docs/superpowers/plans/p.md"
 check "subdirectory: a name that is no file here stays" "$(cd "$WT/docs/superpowers/plans" && forge_name docs/superpowers/plans/p.md)" "docs/superpowers/plans/p.md"
 
+# --- one name under either docs prefix (spec §7.1) ---
+check "name key: the pre-2.0 prefix" "$(forge_name_key docs/superpowers/plans/p.md)" "docs/forge/plans/p.md"
+check "name key: the dr-forge prefix" "$(forge_name_key docs/forge/plans/p.md)" "docs/forge/plans/p.md"
+check "name key: a bare docs/superpowers" "$(forge_name_key docs/superpowers)" "docs/forge"
+check "name key: a leading ./" "$(forge_name_key ./docs/superpowers/specs/s.md)" "docs/forge/specs/s.md"
+check "name key: docs/superpowersx is another name" "$(forge_name_key docs/superpowersx/a.md)" "docs/superpowersx/a.md"
+check "name key: a name outside the docs directory" "$(forge_name_key .forge/sdd/p/progress.md)" ".forge/sdd/p/progress.md"
+check "name key: an absolute path stays" "$(forge_name_key /x/docs/superpowers/a.md)" "/x/docs/superpowers/a.md"
+check "name spellings: a document name" \
+  "$(forge_name_spellings docs/superpowers/plans/p.md | tr '\n' '|')" "docs/forge/plans/p.md|docs/superpowers/plans/p.md|"
+check "name spellings: the docs directory itself" \
+  "$(forge_name_spellings ./docs/forge | tr '\n' '|')" "docs/forge|docs/superpowers|"
+check "name spellings: any other name" "$(forge_name_spellings .forge/x.md | tr '\n' '|')" ".forge/x.md|"
+
 # --- a --mode run that prints nothing stops the script ---
 mkdir -p "$TMP/fakebin"
 printf '#!/bin/sh\nexit 0\n' > "$TMP/fakebin/node"
