@@ -141,6 +141,17 @@ To give the final phase more room without lengthening task sessions, raise
 Tasks then still hand off at 465k, the final phase continues below 680k, and
 compaction fires at about 744k.
 
+## Auto run
+
+While an auto run is bound to the session ([auto-run.md](auto-run.md)), every
+budget line but `context-size --plan` prints the run's own verdict,
+`budget (auto…)`, and `context-size` exits 6 on `compact`. The run compacts at
+the task budget, or at 90% of the compaction window once a compaction has left
+85% of the task budget or more, less 140k per extra task of a wave; a
+compaction that leaves 85% of the window or more hands off, and the cockpit
+clears and resumes the session. The tail rule, the final-phase limit and
+relaxed mode do not apply to it.
+
 ## Idle
 
 After more than an hour idle the one-hour prompt cache is cold: the next

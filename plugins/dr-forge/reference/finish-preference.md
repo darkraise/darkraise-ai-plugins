@@ -11,6 +11,13 @@ wins over the choice made here.
 Budget). Pass `--plan PLAN_FILE` in a plan run; leave it out for work done
 without a plan.
 
+## Auto run
+
+An auto run ([auto-run.md](auto-run.md)) never asks the question below:
+finishing carries out `finishAction` at once into the run's recorded base
+(`merge` or `pr`), and keeps the branch under `keep`, `ask` or `wait`, or when
+there is no base, with no menu and no wake.
+
 ## The settings
 
 Two settings (`scripts/forge-config`, or the cockpit's Finish tab) shape this:

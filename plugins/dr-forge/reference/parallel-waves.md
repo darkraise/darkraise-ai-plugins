@@ -24,7 +24,7 @@ Serialize the rest of a wave, logging `Wave <k>: serialized — <reason>` and a
   such option (a Codex host never reaches this file: plan-lint refuses waves
   there);
 - the integration check fails on the wave's base (§1);
-- `scripts/context-size --wave 2` says `handoff` (§1);
+- `scripts/context-size --wave 2` says `handoff`, or `compact` in an auto run (§1);
 - your human partner says so.
 
 Tasks already running in worktrees finish and merge as below; the tasks not
@@ -63,7 +63,7 @@ At a wave boundary — every earlier task complete, every earlier wave
    output's summary in the Ruling, so the next wave's check is not blamed on
    it.
 3. **Size it.** `c` starts at the smaller of the wave's width and 3. Run
-   `scripts/context-size --wave <c>` and lower `c` while it exits 5; it
+   `scripts/context-size --wave <c>` and lower `c` while it exits 5 (or 6, an auto run's `compact`); it
    reserves one task's worst growth for every task beside the first. `c = 1`
    serializes the wave, and `scripts/context-size` alone then decides between
    the next task and a handoff, exactly as in sequential mode: within the
@@ -243,3 +243,11 @@ says.
 | "Four tasks are ready, I'll start all four" | At most three run at once, and only as many as `context-size --wave` allows. |
 | "The budget says handoff, but the other tasks are nearly done" | Finish what is dispatched, integrate, then hand off. Start nothing new. |
 | "Serializing wastes the plan's waves" | Serializing is always correct; a wrong parallel run is a bug that every later wave builds on. |
+
+## Auto run
+
+In an auto run ([auto-run.md](auto-run.md)) `--wave` prints the run's verdict.
+Lower the width while it says `compact`, as on `handoff`; a narrower width that
+fits cancels the compaction. At width 1 a `compact` verdict means finishing
+the task in flight and ending the turn with `Auto run: compacting`. A task the
+run defers is not merged.

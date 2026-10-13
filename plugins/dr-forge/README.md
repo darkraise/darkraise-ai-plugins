@@ -413,6 +413,18 @@ needs. dr-forge hands off instead.
   [session-budget.md](reference/session-budget.md) into your project's
   CLAUDE.md.
 
+### Auto run
+
+After you approve a design, brainstorming can offer to run the rest
+unattended. Fable reviews the spec, the plan is written and reviewed, the plan
+executes in its recorded strategy, and the branch is finished by
+`finishAction` into the branch the run started from (kept under `ask` or
+`wait`), with no question to you. What Opus cannot rule goes to Fable in one
+batch; what Fable cannot rule is deferred on the run's register. Instead of
+handing off, the session compacts at the handoff budget, and the cockpit
+clears and resumes it when a compaction leaves too much. The pane shows the
+run and a **Stop auto** button. See [auto-run.md](reference/auto-run.md).
+
 ## Cockpit
 
 Claude Code only. Built and tested against Claude Code 2.1.295 to 2.1.296; the
@@ -686,6 +698,7 @@ The same settings can be set with
 | Workflow | `executionStrategy` | `ask` | `sequential` or `parallel` answers the "how should the plan execute" question. `parallel` still falls back to sequential when the parts share files, and on Codex. |
 | Workflow | `executionMode` | `auto` | `auto` follows the planner's rule; `inline` and `subagent` fix the plan's Execution line, and `inline` also makes the plan sequential. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
+| Workflow | `autoRun` | `ask` | `ask` offers, once the design is approved, to run the spec, plan, execution, review and finish unattended (Claude Code only); `off` never offers it. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
 | Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. |
 | Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. |
