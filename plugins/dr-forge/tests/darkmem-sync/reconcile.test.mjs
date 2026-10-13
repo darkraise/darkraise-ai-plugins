@@ -360,3 +360,21 @@ test("a plan that starts during the pull stops the move before the deletion is s
   assert.equal(read(at(s.repo, "docs/forge/specs/a.md")), "# A\n");
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
 });
+
+for (const { arg, reason } of [
+  { arg: "ls-files", reason: "git ls-files failed: fatal: refused by the test" },
+  { arg: "--ignored=matching", reason: "git status failed: fatal: refused by the test" },
+]) {
+  test(`documents stay local when git ${arg} fails`, { skip: process.platform === "win32" }, async t => {
+    const s = await docsRepo(t);
+    const realGit = process.env.PATH.split(path.delimiter).map(dir => path.join(dir, "git")).find(file => fs.existsSync(file));
+    const bin = scratch("dms-git-");
+    fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "${arg}" ] && { echo "fatal: refused by the test" >&2; exit 128; }; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+    const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes(`darkmem-sync reconcile: documents stay local (configured darkmem): ${reason}\n`), result.stdout);
+    assert.deepEqual(writes(s.stub), []);
+    assert.equal(s.stub.db.documents.size, 0);
+    assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+  });
+}

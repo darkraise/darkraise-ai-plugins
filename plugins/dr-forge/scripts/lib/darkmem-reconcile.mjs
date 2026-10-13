@@ -174,6 +174,7 @@ function carriedDocuments(repoRoot, docsDir, rel) {
   const problems = [];
   const documents = [];
   const listed = runGit(repoRoot, ["ls-files", "-z", "--", rel]);
+  if (listed.status !== 0) return { failed: `git ls-files failed: ${listed.stderr.trim()}`, problems: [], documents: [] };
   for (const file of listed.stdout.split("\0").filter(Boolean)) {
     const parts = file.slice(rel.length + 1).split("/");
     const why = uncarried(docsDir, parts);
@@ -202,6 +203,7 @@ function carriedDocuments(repoRoot, docsDir, rel) {
   // The mirror walks the filesystem, so it would carry an ignored file, and
   // git rm -r would leave it behind.
   const ignored = runGit(repoRoot, ["status", "--porcelain", "-z", "--ignored=matching", "--untracked-files=all", "--", rel]);
+  if (ignored.status !== 0) return { failed: `git status failed: ${ignored.stderr.trim()}`, problems: [], documents: [] };
   for (const item of ignored.stdout.split("\0")) {
     if (item.startsWith("!! ")) problems.push(`${item.slice(3)}: ignored by git, so the mirror would carry it and git rm would leave it behind`);
   }
@@ -219,7 +221,8 @@ async function documentsToDarkmem(context) {
   const dirty = runGit(cfg.repoRoot, ["status", "--porcelain", "--untracked-files=all", "--", rel]);
   if (dirty.status !== 0) return { moved: false, reason: `git status failed: ${dirty.stderr.trim()}`, details: [] };
   if (dirty.stdout.trim()) return { moved: false, reason: `${rel} has uncommitted changes`, details: dirty.stdout.split("\n").filter(Boolean) };
-  const { problems, documents } = carriedDocuments(cfg.repoRoot, docsDir, rel);
+  const { failed, problems, documents } = carriedDocuments(cfg.repoRoot, docsDir, rel);
+  if (failed) return { moved: false, reason: failed, details: [] };
   if (problems.length) return { moved: false, reason: `${rel} holds files the move cannot carry`, details: problems };
   // Import puts without a hash precondition, so this check is what keeps
   // darkmem's copies; the window between it and the puts is accepted.
