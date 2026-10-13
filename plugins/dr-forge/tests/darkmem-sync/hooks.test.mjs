@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -116,4 +117,42 @@ test("the quiet push prints nothing and declares the session it was given", asyn
   const append = s.stub.db.requests.find(r => r.method === "POST" && r.path === "/api/v1/worklog/entries");
   assert.ok(append, "push appended the ledger");
   assert.equal(append.body.run_key, "sid-hook");
+});
+
+const SCRIPTS = fileURLToPath(new URL("../../scripts/", import.meta.url));
+const HOOKS_JSON = fileURLToPath(new URL("../../hooks/hooks.json", import.meta.url));
+const hasJq = spawnSync("jq", ["--version"]).status === 0;
+const runHook = (name, payload, options) => bash([path.join(SCRIPTS, name)], { ...options, input: JSON.stringify(payload) });
+
+test("the hooks are bounded: SessionStart 300 seconds, Stop 120", () => {
+  const hooks = JSON.parse(fs.readFileSync(HOOKS_JSON, "utf8")).hooks;
+  assert.equal(hooks.SessionStart[0].hooks[0].timeout, 300);
+  assert.equal(hooks.Stop[0].hooks[0].timeout, 120);
+});
+
+test("session start adds the darkmem lines on every source, compaction included", { skip: !hasJq && "jq is not on PATH" }, async t => {
+  const s = await setup(t);
+  const payload = source => ({ hook_event_name: "SessionStart", session_id: "sid-start", transcript_path: "", cwd: s.repo, source });
+  for (const [source, uri] of [["startup", "superpowers/specs/a.md"], ["compact", "superpowers/specs/b.md"]]) {
+    await s.seed.putDocument({ project: "proj", uri, content: `# ${uri}\n` });
+    const result = await runHook("session-start.sh", payload(source), { cwd: s.repo, env: s.env });
+    assert.equal(result.code, 0, result.stderr);
+    const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
+    assert.match(context, /darkmem-sync pull: 1 documents, 0 ledgers, 0 checkpoints; 0 conflicts, 0 failures/, source);
+    assert.match(context, /dr-forge:using-superpowers/, source);
+  }
+});
+
+test("the Stop hook pushes under its session id, a retried stop too, and prints nothing", { skip: !hasJq && "jq is not on PATH" }, async t => {
+  const s = await setup(t);
+  const ledger = path.join(s.home.workRoot, "sdd", "p1", "progress.md");
+  write(ledger, "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: a\n");
+  const payload = active => ({ hook_event_name: "Stop", session_id: "sid-stop", cwd: s.repo, transcript_path: "", stop_hook_active: active });
+  const appends = () => s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries");
+  assert.deepEqual(await runHook("turn-end.sh", payload(false), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
+  assert.equal(appends().length, 1, "the Stop hook pushed the ledger");
+  fs.appendFileSync(ledger, "Task 1: complete (commits abc1234..def5678, review clean)\n");
+  assert.deepEqual(await runHook("turn-end.sh", payload(true), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
+  assert.equal(appends().length, 2, "a retried stop pushes the lines written since");
+  assert.ok(appends().every(r => r.body.run_key === "sid-stop"));
 });

@@ -96,13 +96,30 @@ if [ -n "$settings_line" ]; then
   context="${context}\n\n$(escape_for_json "$settings_line")"
 fi
 
+# darkmem's reconcile and pull (darkmem store options spec §5), on every
+# source: a line per moved or refused family and the pull's result, fitted to
+# the room the hook's 10,000-character cap leaves the entry point. A
+# compaction's snapshot gets what remains after them. Under 100 characters of
+# room the closing line alone would not fit, so nothing is run.
+darkmem_lines=""
+if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
+  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} ))
+  if [ "$room" -ge 100 ]; then
+    darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" \
+      | tr -d '\001-\010\013\014\016-\037')
+  fi
+  if [ -n "$darkmem_lines" ]; then
+    context="${context}\n\n$(escape_for_json "$darkmem_lines")"
+  fi
+fi
+
 # The compact source is detected without jq, so a machine without jq still
 # gets the handoff and ledger sections. Hook output over 10,000 characters is
 # replaced by a file reference, so the snapshot gets only the room the entry
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#darkmem_lines} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with
