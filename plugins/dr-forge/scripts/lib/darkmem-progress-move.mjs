@@ -11,9 +11,9 @@ import { forgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
   DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerFiles, listDocumentFiles, propertiesFor, sha256, unsupportedPlanDirs,
-  utcStamp, writeFileAtomic,
+  uriFamily, utcStamp, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
-import { remoteLedger } from "./darkmem-pull.mjs";
+import { pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason } from "./darkmem-reconcile.mjs";
 
 const local = (base, rel) => path.join(base, ...rel.split("/"));
@@ -297,4 +297,137 @@ export async function progressToDarkmem(context) {
       ...[...backups].map(dir => `sources moved to ${dir}`),
     ],
   };
+}
+
+// The latest.md file for `newest`, unless the mirror's copy is newer or holds
+// a local edit; pull's rule, applied across every workstream.
+function renderCheckpoint({ state, persist, report }, workRoot, newest) {
+  if (!newest || (state.checkpointAt && isoMicros(newest.created_at) <= isoMicros(state.checkpointAt))) return;
+  const file = path.join(workRoot, "handoff", "latest.md");
+  const remote = Buffer.from(newest.body, "utf8");
+  const hash = sha256(remote);
+  let current = null;
+  try {
+    current = sha256(fs.readFileSync(file));
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      report.failures.push(`handoff/latest.md: could not be read (${error.code})`);
+      return;
+    }
+  }
+  if (current !== null && current !== hash && current !== state.checkpoint) {
+    report.conflicts.push("handoff/latest.md: changed locally, and darkmem holds a newer checkpoint");
+    return;
+  }
+  if (current !== hash) writeFileAtomic(file, remote);
+  state.checkpoint = hash;
+  state.checkpointAt = newest.created_at;
+  persist();
+}
+
+// The symbolic links at or below `stateRel` on the way to each rel, as
+// checkout-relative paths; only the outermost link on a path is named.
+function linksBelow(checkout, stateRel, rels) {
+  const checked = new Set([stateRel]);
+  for (const rel of rels) {
+    const parts = `${stateRel}/${rel}`.split("/");
+    for (let end = 1; end <= parts.length; end += 1) checked.add(parts.slice(0, end).join("/"));
+  }
+  const links = [];
+  for (const rel of [...checked].sort()) {
+    if (links.some(link => rel.startsWith(`${link}/`))) continue;
+    let stat;
+    try {
+      stat = fs.lstatSync(path.join(checkout, ...rel.split("/")), { throwIfNoEntry: false });
+    } catch {
+      // A file where a directory belongs; the target read names it.
+      continue;
+    }
+    if (stat?.isSymbolicLink()) links.push(rel);
+  }
+  return links;
+}
+
+// The mirror is brought up to darkmem first. A pull renders only open
+// workstreams, and every imported ledger is closed, so this renders every
+// workstream's ledger and the newest checkpoint across all of them; darkmem
+// keeps its copy.
+export async function progressToLocal(context) {
+  const { cfg, client, state, persist } = context;
+  const workRoot = path.join(cfg.mirror, "work");
+  const roots = { docsRoot: path.join(cfg.mirror, DOC_PREFIX), workRoot, worktreeRoot: cfg.repoRoot, families: { documents: false, progress: true } };
+  const report = scratchReport();
+  try {
+    const pulling = { ...context, roots, report };
+    await pullDocuments(pulling);
+    const every = await client.workstreams(cfg.project);
+    await pullLedgers(pulling, every);
+    renderCheckpoint(pulling, workRoot, await newestCheckpoint(context, every));
+  } catch (error) {
+    return darkmemRefusal(error);
+  }
+  const unclean = [...report.conflicts.map(line => `conflict: ${line}`), ...report.failures.map(line => `failed: ${line}`)];
+  if (unclean.length) return refuse("the pull into the mirror did not finish cleanly", unclean);
+  // The pull can bring a workstream another machine opened since this
+  // mirror's last pull, which reconcile's own check never saw.
+  const busy = inProgressReason(context);
+  if (busy) return refuse(busy.reason, busy.details);
+  const stateDir = forgeDir("state", cfg.repoRoot);
+  const problems = unsupportedPlanDirs(workRoot).map(dir => `${dir}: not a usable workstream key`);
+  const sources = [
+    ...ledgerFiles(workRoot).map(({ slug, file }) => ({ file, rel: `sdd/${slug}/progress.md` })),
+    ...listDocumentFiles(roots).map(({ file }) => ({ file, rel: `sdd/${path.basename(path.dirname(file))}/handoff.md` })),
+  ];
+  const latest = path.join(workRoot, "handoff", "latest.md");
+  if (fs.existsSync(latest)) sources.push({ file: latest, rel: "handoff/latest.md" });
+  // Copies and equality reads must not follow a link out of the checkout.
+  const stateRel = path.relative(cfg.repoRoot, stateDir).split(path.sep).join("/");
+  const links = linksBelow(cfg.repoRoot, stateRel, sources.map(item => item.rel));
+  if (links.length) {
+    return refuse(
+      `${stateRel} is reached through symbolic links; nothing was copied`,
+      links.map(rel => `${rel}: a symbolic link, which the move will not write through`),
+    );
+  }
+  for (const item of sources) {
+    item.target = local(stateDir, item.rel);
+    try {
+      item.buffer = fs.readFileSync(item.file);
+    } catch (error) {
+      problems.push(`${item.file}: could not be read (${error.code})`);
+      continue;
+    }
+    let held;
+    try {
+      held = fs.readFileSync(item.target);
+    } catch (error) {
+      if (error.code !== "ENOENT") problems.push(`${item.target}: could not be read (${error.code})`);
+      continue;
+    }
+    if (!held.equals(item.buffer)) problems.push(`${item.target}: differs from the mirror's ${item.rel}`);
+  }
+  if (problems.length) return refuse("the primary checkout cannot take the mirror's progress", problems);
+  for (const item of sources) {
+    fs.mkdirSync(path.dirname(item.target), { recursive: true });
+    fs.copyFileSync(item.file, item.target);
+  }
+  const differing = sources.filter(item => !fs.readFileSync(item.target).equals(item.buffer)).map(item => `${item.target}: the copy reads back different`);
+  if (differing.length) return refuse("a copy into the primary checkout reads back different", differing);
+  const details = [`${sources.length} files copied into ${stateDir}`];
+  // Moved, not deleted: left in place, these copies would meet a later move
+  // back to darkmem as differing files.
+  if (fs.existsSync(workRoot)) {
+    const aside = path.join(cfg.mirror, `work-moved-${utcStamp()}`);
+    fs.renameSync(workRoot, aside);
+    details.push(`the mirror's copies moved to ${aside}`);
+  }
+  state.ledgers = Object.create(null);
+  state.checkpoint = null;
+  state.checkpointAt = null;
+  state.pendingLinks = [];
+  for (const uri of Object.keys(state.documents)) {
+    if (uriFamily(uri) === "progress") delete state.documents[uri];
+  }
+  persist();
+  return { moved: true, details };
 }

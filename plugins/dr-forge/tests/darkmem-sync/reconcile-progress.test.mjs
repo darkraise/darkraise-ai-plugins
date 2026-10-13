@@ -325,3 +325,87 @@ test("a plan directory that is a symbolic link stays local, and nothing is sent 
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.worktree), []);
 });
+
+test("progress moves back into the primary checkout from closed and open workstreams, and darkmem keeps its copy", async t => {
+  const s = await setup(t, "local");
+  const { workstream } = await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: LATEST }] });
+  await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: LEDGER("p2") }] });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/handoff/p1.md", content: "# Handoff p1\n" });
+  assert.equal(fs.existsSync(s.mirror), false, "the mirror starts empty");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
+  const stateDir = path.join(s.repo, ".forge");
+  assert.equal(read(path.join(stateDir, "sdd", "p1", "progress.md")), LEDGER("p1"), "a closed workstream's ledger comes back");
+  assert.equal(read(path.join(stateDir, "sdd", "p2", "progress.md")), LEDGER("p2"));
+  assert.equal(read(path.join(stateDir, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
+  assert.equal(read(path.join(stateDir, "handoff", "latest.md")), LATEST);
+  assert.equal(fs.existsSync(s.workRoot), false);
+  const [aside] = fs.readdirSync(s.mirror).filter(name => /^work-moved-\d{8}T\d{6}Z$/.test(name));
+  assert.equal(read(path.join(s.mirror, aside, "sdd", "p1", "progress.md")), LEDGER("p1"));
+  const after = s.state();
+  assert.deepEqual(after.ledgers, {});
+  assert.equal(after.checkpoint, null);
+  assert.equal(after.checkpointAt, null);
+  assert.deepEqual(after.pendingLinks, []);
+  assert.equal("superpowers/handoff/p1.md" in after.documents, false);
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+  assert.equal(s.stub.db.workstreams.length, 2);
+  assert.equal(s.stub.db.documents.has("proj\u0000superpowers/handoff/p1.md"), true);
+  const again = await s.reconcile();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.equal(again.stdout, "");
+});
+
+test("progress stays in darkmem when the primary checkout holds a different file", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), "a local ledger\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): /m);
+  assert.match(result.stdout, /^ {2}.+sdd[\\/]p1[\\/]progress\.md: differs from the mirror's sdd\/p1\/progress\.md$/m);
+  assert.equal(read(path.join(s.repo, ".forge", "sdd", "p1", "progress.md")), "a local ledger\n");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), LEDGER("p1"));
+  assert.equal(s.stores().progress, "darkmem");
+});
+
+test("a workstream opened on darkmem since the mirror's last pull, for an unfinished plan, keeps progress in darkmem", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "ledger", body: "# SDD ledger — plan: docs/forge/plans/p3.md\nTask 1: implementer x (assigned)\n" }] });
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): a plan is in progress: /m);
+  assert.equal(fs.existsSync(path.join(s.repo, ".forge", "sdd", "p3")), false, "nothing is copied");
+  assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p3", "progress.md")), true, "the mirror keeps the pulled ledger");
+  assert.equal(s.stores().progress, "darkmem");
+});
+
+test("a primary state directory reached through a symbolic link keeps progress in darkmem, and nothing is copied", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  const outside = scratch("dms-link-");
+  fs.mkdirSync(path.join(s.repo, ".forge"), { recursive: true });
+  fs.symlinkSync(outside, path.join(s.repo, ".forge", "sdd"));
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay darkmem (configured local): .forge is reached through symbolic links; nothing was copied\n"), result.stdout);
+  assert.ok(result.stdout.includes("  .forge/sdd: a symbolic link, which the move will not write through\n"), result.stdout);
+  assert.deepEqual(fs.readdirSync(outside), []);
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), LEDGER("p1"));
+  assert.equal(s.stores().progress, "darkmem");
+});
+
+test("a primary checkout file that cannot be read keeps progress in darkmem, not a crash", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  const target = path.join(s.repo, ".forge", "sdd", "p1", "progress.md");
+  fs.mkdirSync(target, { recursive: true });
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the primary checkout cannot take the mirror's progress$/m);
+  assert.ok(result.stdout.includes(`  ${target}: could not be read (EISDIR)\n`), result.stdout);
+  assert.equal(s.stores().progress, "darkmem");
+});

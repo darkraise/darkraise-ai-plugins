@@ -9,7 +9,7 @@ import { forgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
-import { progressToDarkmem } from "./darkmem-progress-move.mjs";
+import { progressToDarkmem, progressToLocal } from "./darkmem-progress-move.mjs";
 import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
@@ -22,6 +22,7 @@ const MOVES = {
   "documents:darkmem": documentsToDarkmem,
   "documents:local": documentsToLocal,
   "progress:darkmem": progressToDarkmem,
+  "progress:local": progressToLocal,
 };
 
 function runGit(cwd, args, input) {
