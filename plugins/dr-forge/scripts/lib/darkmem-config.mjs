@@ -142,7 +142,7 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
         : worktreeRoot && path.join(forgeDir("state", worktreeRoot), "sdd"),
       latestFile: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "handoff", "latest.md")
-        : repoRoot && path.join(forgeDir("state", repoRoot), "handoff", "latest.md"),
+        : (repoRoot ?? worktreeRoot) && path.join(forgeDir("state", repoRoot ?? worktreeRoot), "handoff", "latest.md"),
     },
     sync,
   });
@@ -239,8 +239,18 @@ export function runKey({ cwd = process.cwd(), env = process.env, now = new Date(
   return `codex:${os.hostname()}:${now.toISOString().slice(0, 10)}`;
 }
 
+// Node resolves a module's symbolic links, argv[1] is not, so compare real paths.
+function isMain() {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
 // `node darkmem-config.mjs --mode`, which scripts/lib/roots.sh reads.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain()) {
   if (process.argv.length !== 3 || process.argv[2] !== "--mode") {
     process.stderr.write("usage: darkmem-config.mjs --mode\n");
     process.exitCode = 2;

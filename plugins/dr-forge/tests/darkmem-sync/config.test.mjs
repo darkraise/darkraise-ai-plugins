@@ -179,6 +179,26 @@ test("--mode prints each family's applied store and roots; a ConfigError exits 2
   assert.equal(mode(repo, env, []).status, 2);
 });
 
+test("--mode runs through a symlinked plugin path", () => {
+  const repo = makeRepo();
+  const { env } = makeHome({ repo });
+  const link = path.join(scratch("dms-link-"), "lib");
+  fs.symlinkSync(path.dirname(MODULE), link, "dir");
+  const result = spawnSync(process.execPath, [path.join(link, "darkmem-config.mjs"), "--mode"], { cwd: repo, env, encoding: "utf8", timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^documents\t/);
+});
+
+test("--mode in a submodule falls back to the worktree for latest.md", () => {
+  const outer = makeRepo();
+  const inner = makeRepo();
+  git(outer, "-c", "protocol.file.allow=always", "submodule", "add", "-q", inner, "sub");
+  const sub = path.join(outer, "sub");
+  const result = spawnSync(process.execPath, [MODULE, "--mode"], { cwd: sub, env: makeHome({ repo: sub }).env, encoding: "utf8", timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.split("\n")[1].split("\t")[3], path.join(sub, ".forge", "handoff", "latest.md"));
+});
+
 test("the run key prefers the declared id, then the session record, then a day key", () => {
   const repo = makeRepo();
   const { home, env } = makeHome({ repo });
