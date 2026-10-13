@@ -565,9 +565,24 @@ CLAUDE_CODE_SESSION_ID=auto-2 run
 check "auto: another session keeps the task budget" "$status:$out" "5:budget: 690k of 465k (148%) — handoff — source: record?"
 printf '{}\n' > "$AUTO_T"
 run
-has "auto: an unreadable size keeps the auto label" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"
+has "auto: an unreadable size names the run's limit" "$out" "budget (auto, high): unknown of 720k — unknown — no usage entry in"
 run --wave 2
-has "auto: an unreadable size in a wave keeps the auto label" "$out" "budget (auto, wave of 2): unknown of 325k — unknown — no usage entry in"
+has "auto: an unreadable size in a wave names the run's limit" "$out" "budget (auto, high, wave of 2): unknown of 580k — unknown — no usage entry in"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
+run
+has "auto, normal: an unreadable size names the task budget" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"
+# A state the run cannot write: the lock file is a directory.
+AUTO_STATE="$REPO/.forge/sdd/auto-run.json"
+asst 470000 > "$AUTO_T"
+rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"
+run
+check "auto: a compact it cannot book is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
+rmdir "$AUTO_STATE.lock"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 compacted)
+rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"
+run
+check "auto: a compaction it cannot settle is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
+rmdir "$AUTO_STATE.lock"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 stop)
 unset DR_FORGE_BUDGET CLAUDE_CODE_SESSION_ID
 

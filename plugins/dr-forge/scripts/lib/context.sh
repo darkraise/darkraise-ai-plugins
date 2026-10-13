@@ -317,6 +317,13 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
+ctx_auto_label() { # ctx_auto_label REGIME WIDTH
+  local label="budget (auto"
+  [ "$1" = high ] && label="$label, high"
+  [ "$2" -gt 1 ] && label="$label, wave of $2"
+  printf '%s)' "$label"
+}
+
 # ctx_auto_line TOKENS MODEL WIDTH — the budget line while an auto run is bound
 # to this session (reference/auto-run.md): the run's rule replaces the task
 # budget, the tail, the final-phase limit and relaxed mode. Returns 0 ok,
@@ -331,10 +338,7 @@ ctx_auto_line() {
     return 3
   fi
   read -r verdict limit regime <<<"$out"
-  label="budget (auto"
-  [ "$regime" = high ] && label="$label, high"
-  [ "$3" -gt 1 ] && label="$label, wave of $3"
-  label="$label)"
+  label=$(ctx_auto_label "$regime" "$3")
   echo "$label: $(( (tokens + 500) / 1000 ))k of $(( (limit + 500) / 1000 ))k ($(( tokens * 100 / limit ))%) — $verdict — source: $CTX_SOURCE"
   case $verdict in
     compact) return 6 ;;
@@ -356,7 +360,7 @@ ctx_auto_line() {
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
   local label=budget extra=0
-  local limit=task auto=0 width=1
+  local limit=task auto=0 width=1 regime
   [ "${1:-}" = final ] && label="budget (final)" limit=final
   if [ "${1:-}" = tail ]; then
     limit=final
@@ -373,9 +377,7 @@ ctx_line() {
     AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
     if ar_bound; then
       auto=1
-      label="budget (auto"
-      [ "$width" -gt 1 ] && label="$label, wave of $width"
-      label="$label)"
+      label=$(ctx_auto_label normal "$width")
     fi
   fi
   if [ "$limit" = task ] && [ "$(forge_setting handoffMode strict)" = relaxed ]; then
@@ -420,6 +422,15 @@ ctx_line() {
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
     budget=$(( budget - extra ))
     [ "$budget" -gt 0 ] || budget=1
+  fi
+  # A size that cannot be read still names the run's own limit.
+  if [ "$auto" = 1 ]; then
+    regime=$(ar_get regime)
+    regime=${regime:-normal}
+    budget=$(ctx_pinned_budget)
+    [ -n "$budget" ] || budget=$(ctx_budget "$model")
+    budget=$(ar_limit "$budget" "$(ctx_window "$model")" "$width" "$regime")
+    label=$(ctx_auto_label "$regime" "$width")
   fi
   bk=$(( (budget + 500) / 1000 ))
   if ! ctx_have_jq; then echo "$label: unknown of ${bk}k — unknown — no jq"; return 3; fi
