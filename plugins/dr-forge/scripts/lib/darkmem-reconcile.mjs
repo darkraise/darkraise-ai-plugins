@@ -6,7 +6,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
 import { forgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
-import { DOC_PREFIX, caseGroups, decodeUtf8, ledgerPlanPath, sha256, uriProblem } from "./darkmem-mirror.mjs";
+import {
+  DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
+} from "./darkmem-mirror.mjs";
 import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
@@ -17,6 +19,7 @@ const DOCS = "docs/forge";
 // { moved: true, details } or { moved: false, reason, details }.
 const MOVES = {
   "documents:darkmem": documentsToDarkmem,
+  "documents:local": documentsToLocal,
 };
 
 function runGit(cwd, args, input) {
@@ -261,6 +264,77 @@ async function documentsToDarkmem(context) {
     details.push(...citing.slice(0, 20).map(file => `  ${file}`));
     if (citing.length > 20) details.push(`and ${citing.length - 20} more`);
   }
+  return { moved: true, details };
+}
+
+// Documents, darkmem -> repository (spec §4): the mirror, brought up to
+// darkmem and matching darkmem's hashes, is copied into docs/forge untracked;
+// darkmem keeps its copy, and the mirror tree is set aside so a later move
+// back cannot meet stale files. A legacy docs/superpowers is left alone:
+// docs/forge outranks it once it exists.
+async function documentsToLocal(context) {
+  const { cfg, client, state, persist } = context;
+  const mirror = mirrorRoots(cfg, "documents");
+  const pulled = pullReport();
+  await pullDocuments({ ...context, roots: mirror, report: pulled });
+  if (pulled.conflicts.length || pulled.failures.length) {
+    return { moved: false, reason: "the mirror could not be brought up to darkmem", details: [...pulled.conflicts, ...pulled.failures] };
+  }
+  const busy = inProgressReason(context);
+  if (busy) return { moved: false, ...busy };
+  // A deletion push has not archived yet: copied out now it would never be
+  // archived, and a later move back would pull darkmem's copy in again.
+  const unpushed = Object.keys(state.documents).sort().filter(uri => uriFamily(uri) === "documents" && !isArchiveUri(uri)
+    && !fs.existsSync(path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"))));
+  if (unpushed.length) return { moved: false, reason: "the mirror holds deletions not yet pushed; push first", details: unpushed };
+  const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX))
+    .filter(item => uriFamily(item.uri) === "documents" && !isArchiveUri(item.uri))
+    .map(item => [item.uri, item.content_hash]));
+  const target = path.join(cfg.repoRoot, "docs", "forge");
+  // A file under the docs root's handoff/ or archive/ has uri null: never synced, not carried.
+  const files = listDocumentFiles(mirror).filter(item => item.uri).map(({ file, uri }) => {
+    const dest = path.join(target, path.relative(mirror.docsRoot, file));
+    return { file, uri, dest, name: slash(path.relative(cfg.repoRoot, dest)), hash: fileHash(file) };
+  });
+  // Only what darkmem holds is carried, so an unpushed or damaged mirror
+  // copy never lands in the repository as if it were darkmem's.
+  const unverified = files.filter(item => remote.get(item.uri) !== item.hash).map(item => (remote.has(item.uri)
+    ? `${item.uri}: the mirror's copy differs from darkmem's; push or discard it first`
+    : `${item.uri}: not on darkmem; push or discard it first`));
+  if (unverified.length) return { moved: false, reason: "the mirror does not match darkmem; nothing was copied", details: unverified };
+  // A killed earlier run may have copied some files: equal ones are fine.
+  const differing = files
+    .filter(({ file, dest }) => fs.existsSync(dest) && !fs.readFileSync(dest).equals(fs.readFileSync(file)))
+    .map(({ name }) => `${name}: already exists with different content`);
+  if (differing.length) return { moved: false, reason: "docs/forge already holds different copies; nothing was copied", details: differing };
+  // A repository moved under the parent spec's §6 ignored its docs directory.
+  // Asked before anything is copied so a git failure (exit above 1) can still refuse.
+  const ignored = runGit(cfg.repoRoot, ["check-ignore", "--stdin"], files.map(({ name }) => name).join("\n"));
+  if (ignored.status !== 0 && ignored.status !== 1) return { moved: false, reason: `git check-ignore failed: ${ignored.stderr.trim()}`, details: [] };
+  for (const { file, dest } of files) {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(file, dest);
+  }
+  const mismatched = files.filter(({ dest, hash }) => fileHash(dest) !== hash).map(({ name }) => `${name}: differs from the mirror's copy`);
+  if (mismatched.length) return { moved: false, reason: "a copied file differs from the mirror's", details: mismatched };
+  for (const uri of Object.keys(state.documents)) {
+    if (uriFamily(uri) === "documents") delete state.documents[uri];
+  }
+  persist();
+  if (fs.existsSync(mirror.docsRoot)) fs.renameSync(mirror.docsRoot, path.join(cfg.mirror, `superpowers-moved-${utcStamp()}`));
+  const details = [`copied ${files.length} files into docs/forge, untracked; commit them`];
+  const legacy = path.join(cfg.repoRoot, "docs", "superpowers");
+  if (fs.existsSync(legacy)) details.push(`${legacy} is a legacy docs directory and is not read; documents now live in docs/forge`);
+  for (const name of ignored.stdout.split("\n").filter(Boolean)) details.push(`${name}: ignored by git, so a commit would leave it out`);
+  let attributes = "";
+  try {
+    attributes = fs.readFileSync(path.join(cfg.repoRoot, ".gitattributes"), "utf8");
+  } catch {
+    // No .gitattributes; nothing names the old prefix.
+  }
+  attributes.split(/\r?\n/).forEach((line, index) => {
+    if (line.includes("docs/superpowers/")) details.push(`.gitattributes line ${index + 1} still names docs/superpowers/: ${line}`);
+  });
   return { moved: true, details };
 }
 
