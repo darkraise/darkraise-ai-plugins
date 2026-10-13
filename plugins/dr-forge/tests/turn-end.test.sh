@@ -237,5 +237,17 @@ check "auto run: held from a worktree" "$(decision "$(stop_in "$TMP/wt" s-1 'Don
 (cd "$REPO" && bash "$AR" --session s-1 stop)
 check "a stopped run: back to the plain rules" "$(stop s-1 'Here is the answer.')" ""
 
+# --- progress kept in darkmem: the mirror's ledgers are the ones read ---
+. "$HERE/fixtures/darkmem-stores.sh"
+M=$(stores_home "$HOME" "$REPO" proj local darkmem)
+mkdir -p "$M/work/sdd/2026-10-10-mirror"
+sleep 1; prompt s-2; sleep 1
+printf '# SDD ledger — plan: docs/forge/plans/2026-10-10-mirror.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-10-mirror/progress.md"
+out=$(stop s-2 'Task 1 is done.')
+check "darkmem progress: a mirror ledger blocks a bare summary" "$(decision "$out")" "block"
+check "darkmem progress: names the plan" \
+  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/forge/plans/2026-10-10-mirror.md')" "1"
+rm -f "$HOME/.dr-forge/config.json" "$HOME/.dr-forge/stores.json"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

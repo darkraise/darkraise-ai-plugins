@@ -6,7 +6,7 @@
 # AR_SESSION names the caller. A caller whose session the run is not bound to
 # sees no run, so another session in the same repository never acts on it.
 
-. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/roots.sh"
 
 AR_STALE_MINUTES=60
 AR_LOCK_TENTHS=100
@@ -121,7 +121,7 @@ ar_is_stale() {
 # ar_start SPEC REGISTER FORCE — prints the register path. A register it
 # creates goes in the checkout the run starts from, where its path resolves.
 ar_start() {
-  local spec=$1 register=$2 force=$3 path top slug base tmp
+  local spec=$1 register=$2 force=$3 path top slug base tmp regfile
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   if [ "$force" != 1 ] && ar_state | ar_jq -e '.active == true' >/dev/null 2>&1 && ! ar_is_stale; then
     echo "auto-run: an auto run is already active ($(ar_state | ar_jq -r '.spec')); stop it with auto-run stop, or pass --force" >&2
@@ -132,11 +132,12 @@ ar_start() {
     slug=$(basename "$spec" .md)
     slug=${slug%-design}
     slug=$(sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}-//' <<<"$slug")
-    register="$(forge_dir_rel docs "$top")/registers/$(date +%Y-%m-%d)-$slug-auto.md"
-    if [ ! -f "$top/$register" ]; then
-      mkdir -p "$(dirname "$top/$register")" || return 1
+    register="$(forge_name "$(forge_docs_root "$top")" "$top")/registers/$(date +%Y-%m-%d)-$slug-auto.md"
+    regfile=$(forge_resolve "$register" "$top")
+    if [ ! -f "$regfile" ]; then
+      mkdir -p "$(dirname "$regfile")" || return 1
       printf '# Auto run: %s\n\n**Source:** items the auto run for `%s` deferred\n**Covers:** %s\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' \
-        "$slug" "$spec" "$spec" > "$top/$register" || return 1
+        "$slug" "$spec" "$spec" > "$regfile" || return 1
     fi
   fi
   base=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
@@ -185,7 +186,7 @@ ar_fenced() {
 ar_clear() {
   local is_phase=$1 primary latest prompt="" launch model="" effort="" resumes
   primary=$(ar_primary_root) || return 1
-  latest="$(forge_dir state "$primary")/handoff/latest.md"
+  latest=$(forge_latest_file "$primary")
   [ -f "$latest" ] && prompt=$(ar_fenced "$latest" 'Paste as the first prompt:')
   [ -n "$prompt" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
   launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)

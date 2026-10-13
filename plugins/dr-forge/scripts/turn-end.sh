@@ -29,8 +29,9 @@ transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
 stamp="${HOME:-}/.claude/dr-forge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 [ -f "$stamp" ] || exit 0
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
-. "${SCRIPT_DIR}/lib/forge-dir.sh"
-sdd="$(forge_dir state "$root")/sdd"
+. "${SCRIPT_DIR}/lib/roots.sh"
+# In a subshell, so a malformed config costs only this check, never the hook.
+sdd=$(forge_ledger_root "$root") || sdd=""
 # An auto run bound to this session (reference/auto-run.md) lives in the
 # primary checkout, whichever worktree the turn ran in: its pending action.
 auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""

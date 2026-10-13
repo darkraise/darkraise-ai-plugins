@@ -8,38 +8,32 @@
 # reference, and the injected entry point already takes about 4,800;
 # session-start.sh subtracts its measured length, so this is only the ceiling.
 
-. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plan.sh"
 
 SNAPSHOT_CAP=5500
 
 . "$(dirname "${BASH_SOURCE[0]}")/forge-env.sh"
 
-snapshot_latest() { # CWD — the Next session block of the primary checkout's latest.md
-  local primary latest
-  primary=$(plan_primary_root "$1") || return 0
-  latest="$(forge_dir state "$primary")/handoff/latest.md"
+snapshot_latest() { # CWD — the Next session block of this repository's latest.md
+  local latest
+  latest=$(forge_latest_file "$1") || return 0
   [ -f "$latest" ] || return 0
   echo "### From \`$latest\`"
   tr -d '\r' < "$latest" | awk '/^## Next session/ { f = 1; next } f && /^## / { exit } f'
 }
 
-snapshot_ledgers() { # CWD — every worktree's ledgers: last 8 lines, last 10 rulings
-  local wt ledger plan_rel rulings
-  git -C "$1" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
-  while IFS= read -r wt; do
-    for ledger in "$(forge_dir state "$wt")"/sdd/*/progress.md; do
-      [ -f "$ledger" ] || continue
-      plan_rel=$(ledger_plan "$ledger")
-      echo "### Ledger \`$ledger\` (plan \`${plan_rel:-unknown}\`)"
-      echo "Last lines:"
-      tr -d '\r' < "$ledger" | grep -v '^[[:space:]]*$' | tail -n 8 | sed 's/^/    /'
-      rulings=$(tr -d '\r' < "$ledger" | grep 'Ruling:' | tail -n 10)
-      if [ -n "$rulings" ]; then
-        echo "Rulings (most recent 10):"
-        printf '%s\n' "$rulings" | sed 's/^/    /'
-      fi
-    done
+snapshot_ledgers() { # CWD — every ledger forge_ledger_files lists: last 8 lines, last 10 rulings
+  local ledger _where plan_rel rulings
+  forge_ledger_files "$1" | while IFS=$'\t' read -r ledger _where; do
+    plan_rel=$(ledger_plan "$ledger")
+    echo "### Ledger \`$ledger\` (plan \`${plan_rel:-unknown}\`)"
+    echo "Last lines:"
+    tr -d '\r' < "$ledger" | grep -v '^[[:space:]]*$' | tail -n 8 | sed 's/^/    /'
+    rulings=$(tr -d '\r' < "$ledger" | grep 'Ruling:' | tail -n 10)
+    if [ -n "$rulings" ]; then
+      echo "Rulings (most recent 10):"
+      printf '%s\n' "$rulings" | sed 's/^/    /'
+    fi
   done
 }
 
