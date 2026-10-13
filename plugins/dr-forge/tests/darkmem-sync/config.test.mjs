@@ -161,7 +161,7 @@ test("a malformed config file, a climbing project or a bad url is a ConfigError"
   assert.throws(() => resolveStores({ cwd: repo, env: makeHome({ repo, url: "darkmem.test" }).env }), /darkmem\.url/);
 });
 
-test("--mode prints each family's applied store and roots; a ConfigError exits 2 and no repository 3", () => {
+test("--mode prints each family's applied store and roots and the project; a ConfigError exits 2 and no repository 3", () => {
   const repo = makeRepo();
   const { env, mirror } = makeHome({ repo, stores: { documents: "local", progress: "darkmem" } });
   const mode = (cwd, environment, args = ["--mode"]) => spawnSync(process.execPath, [MODULE, ...args], { cwd, env: environment, encoding: "utf8", timeout: 10000 });
@@ -170,6 +170,7 @@ test("--mode prints each family's applied store and roots; a ConfigError exits 2
   assert.equal(result.stdout, [
     `documents\tlocal\t${path.join(repo, "docs", "forge")}`,
     `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff", "latest.md")}`,
+    "project\tproj",
     "",
   ].join("\n"));
   const broken = mode(repo, makeHome({ repo, config: "{nope" }).env);
@@ -177,6 +178,29 @@ test("--mode prints each family's applied store and roots; a ConfigError exits 2
   assert.match(broken.stderr, /^darkmem-config: .*not valid JSON/);
   assert.equal(mode(scratch("dms-plain-"), env).status, 3);
   assert.equal(mode(repo, env, []).status, 2);
+});
+
+test("--mode DIR resolves that checkout from anywhere; an unmapped one prints no project line", () => {
+  const repo = makeRepo();
+  const { env, mirror } = makeHome({ repo });
+  const mode = (cwd, args) => spawnSync(process.execPath, [MODULE, ...args], { cwd, env, encoding: "utf8", timeout: 10000 });
+  const elsewhere = scratch("dms-plain-");
+  const result = mode(elsewhere, ["--mode", repo]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, [
+    `documents\tdarkmem\t${path.join(mirror, "superpowers")}`,
+    `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff", "latest.md")}`,
+    "project\tproj",
+    "",
+  ].join("\n"));
+  assert.equal(mode(path.dirname(repo), ["--mode", path.basename(repo)]).stdout, result.stdout, "a relative DIR resolves against the working directory");
+  const unmapped = mode(elsewhere, ["--mode", makeRepo()]);
+  assert.equal(unmapped.status, 0, unmapped.stderr);
+  assert.doesNotMatch(unmapped.stdout, /^project\t/m);
+  assert.equal(mode(elsewhere, ["--mode", elsewhere]).status, 3);
+  const extra = mode(elsewhere, ["--mode", repo, "extra"]);
+  assert.equal(extra.status, 2);
+  assert.equal(extra.stderr, "usage: darkmem-config.mjs --mode [DIR]\n");
 });
 
 test("--mode runs through a symlinked plugin path", () => {

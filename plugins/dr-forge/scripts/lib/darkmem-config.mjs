@@ -213,10 +213,12 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
 }
 
 export function modeLines(stores) {
-  return [
+  const lines = [
     `documents\t${stores.documents.applied}\t${stores.documents.root}`,
     `progress\t${stores.progress.applied}\t${stores.progress.ledgerRoot}\t${stores.progress.latestFile}`,
   ];
+  if (stores.sync) lines.push(`project\t${stores.sync.project}`);
+  return lines;
 }
 
 // The run a sync declares; darkmem refuses an undeclared one.
@@ -249,14 +251,17 @@ function isMain() {
   }
 }
 
-// `node darkmem-config.mjs --mode`, which scripts/lib/roots.sh reads.
+// `node darkmem-config.mjs --mode [DIR]`, which scripts/lib/roots.sh reads.
+// DIR names the checkout for a caller that cannot set the working directory:
+// a mod's process call sets none.
 if (isMain()) {
-  if (process.argv.length !== 3 || process.argv[2] !== "--mode") {
-    process.stderr.write("usage: darkmem-config.mjs --mode\n");
+  const [flag, dir, ...extra] = process.argv.slice(2);
+  if (flag !== "--mode" || extra.length) {
+    process.stderr.write("usage: darkmem-config.mjs --mode [DIR]\n");
     process.exitCode = 2;
   } else {
     try {
-      const stores = resolveStores();
+      const stores = resolveStores({ cwd: dir === undefined ? process.cwd() : path.resolve(dir) });
       if (stores.worktreeRoot) {
         process.stdout.write(`${modeLines(stores).join("\n")}\n`);
       } else {
