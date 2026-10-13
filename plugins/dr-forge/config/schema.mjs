@@ -150,4 +150,14 @@ export default {
     label: 'Detail', title: 'Discord: detail',
     description: 'full sends command, question and answer excerpts (secrets masked); brief sends titles and figures only.',
   },
+  documentStore: {
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', env: 'DR_FORGE_DOCUMENT_STORE', group: 'darkmem', target: 'forge',
+    label: 'Documents', title: 'Document store',
+    description: 'Where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
+  },
+  progressSource: {
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', env: 'DR_FORGE_PROGRESS_SOURCE', group: 'darkmem', target: 'forge',
+    label: 'Progress', title: 'Progress tracking source',
+    description: 'Where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
+  },
 };

@@ -117,6 +117,8 @@ specReview true false no
 questionStyle single batched many
 finishAction ask merge discard
 finishTimeout 30 45 3
+documentStore darkmem local remote
+progressSource darkmem local remote
 ROWS
 
 # --- Claude's own settings file: one key changed, everything else kept ---

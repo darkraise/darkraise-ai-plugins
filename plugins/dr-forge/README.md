@@ -710,6 +710,8 @@ The same settings can be set with
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
+| darkmem | `documentStore` | `darkmem` | Where a repository mapped to darkmem keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it and `DR_FORGE_DOCUMENT_STORE`; an unmapped repository is always local. |
+| darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it and `DR_FORGE_PROGRESS_SOURCE`. |
 
 The cockpit settings (Cockpit, Context, Notifications) apply at once, except
 the two Claude keys, which Claude reads at its next session start. A
