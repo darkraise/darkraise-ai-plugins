@@ -18,14 +18,19 @@ When `scripts/auto-run status` exits 0
 `scripts/auto-run phase finish`, then follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is the base `scripts/auto-run status` names.
-- **Step 4 shows no menu.** Read `scripts/forge-config get finishAction`:
-  `merge` carries out Option 1 into that base and `pr` Option 2, as if your
-  human partner had chosen it; `keep`, `ask` and `wait`, and `merge` when the
-  base is `none`, carry out Option 3. Never discard. Arm no wake.
-- **Where an unattended finish stops** (a merged result failing its tests, a
-  rejected push, a refused worktree removal), run
+- **Step 4 shows no menu.** Read `scripts/forge-config get finishAction` and
+  carry out the matching option as if your human partner had chosen it, by
+  name, since the detached-HEAD menu renumbers them: `merge` is Merge Locally
+  into that base, `pr` is Push and Create PR, and `keep`, `ask` and `wait` are
+  Keep As-Is. Never discard. Arm no wake. Two cases override this: on a
+  detached HEAD (Step 2) there is no merge, so `merge` keeps and `pr` pushes a
+  new branch (`git push origin HEAD:refs/heads/<new-branch>`); when the base is
+  `none`, `merge` keeps and `pr` opens its request against the forge's default
+  branch.
+- **Where an unattended finish stops** (failing tests at Step 1, a merged
+  result failing its tests, a rejected push, a refused worktree removal), run
   `scripts/auto-run stop --reason "<what stopped it>"` first, then stop as
-  [finish-preference.md](../../reference/finish-preference.md) says.
+  Step 1 or [finish-preference.md](../../reference/finish-preference.md) says.
 - **The rulings** printed at Step 3 also include every line of
   `scripts/auto-run ruling list`, and Step 7's final message lists every
   deferred row the run added to its register (`scripts/auto-run status` names

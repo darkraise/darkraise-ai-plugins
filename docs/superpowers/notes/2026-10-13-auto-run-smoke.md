@@ -27,8 +27,8 @@ the session under test must run this branch's dr-forge build.
 | 3 | The cockpit compacts on its own | a compaction, then a prompt naming `auto-run after-compact` | |
 | 4 | The compaction snapshot | the SessionStart `compact` snapshot is in context after the cockpit's compaction | |
 | 5 | `auto-run after-compact` | `continue — …k after compaction; regime …` | |
-| 6 | A self-resume by hand: run `scripts/next-step <plan>`, then `scripts/auto-run clear`, and end a turn with `Auto run: clearing` | the cockpit runs `/clear`, then `/model` and `/effort` from the launch line, then submits the first prompt | |
-| 7 | In the cleared session, `echo $CLAUDE_CODE_SESSION_ID` | the cleared session's own id, equal to the run's `session` after `rebind` | |
+| 6 | A self-resume by hand: run `scripts/next-step <plan>`, which writes `<state>/handoff/latest.md` with its launch and first-prompt blocks (`scripts/auto-run clear` reads them and exits 1 without), then `scripts/auto-run clear`, and end a turn with `Auto run: clearing` | the cockpit runs `/clear`, then `/model` and `/effort` from the launch line, then submits the first prompt | |
+| 7 | In the cleared session, `echo $CLAUDE_CODE_SESSION_ID`, and the `session` field of `<state>/sdd/auto-run.json` in the primary checkout (`status` does not print it) | the cleared session's own id, equal to the run's `session` after `rebind` | |
 | 8 | In the cleared session, the SessionStart `clear` hook | a fresh record under `~/.claude/dr-forge/sessions/by-id/` for the new id | |
 | 9 | The plan finishes | final review, then finishing by `finishAction`, no question asked | |
 | 10 | Over the whole run | at least two cockpit compactions (`auto-run status` counts them) | |
@@ -37,6 +37,9 @@ the session under test must run this branch's dr-forge build.
 
 ## Afterwards
 
-Fill the Observed column. When every row matches, set rows 5, 8 and 9 of the
-register to `done`. A row that does not match is a bug against the design:
-file it as a new register row before anything is changed.
+Fill the Observed column. Register row 5 (compact at the budget) rests on rows
+1, 2, 3, 5 and 10 here, row 8 (the compaction loop until finish) on rows 2, 3,
+9 and 10, and row 9 (a compaction that leaves 85% of the window hands off) on
+rows 6, 7, 8 and 12. When every row a register row rests on matches, set it to
+`done`. A row that does not match is a bug against the design: file it as a new
+register row before anything is changed.

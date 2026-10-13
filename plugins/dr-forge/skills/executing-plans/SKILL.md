@@ -34,19 +34,19 @@ What changes here:
 - **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
-  irreversible, security-sensitive or outside-the-worktree action is never performed.
+  irreversible, security-sensitive or outside-the-worktree action is never
+  performed (the finish action is the one exception).
   A task Fable gives no ruling for, or whose action is never performed, is
   deferred, and every task that depends on it: write
   `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
   and a deferred register row for each. Other tasks keep running.
 - **Each task:** right after its `Task N: complete` line, run
-  `scripts/auto-run task-complete`. After each wave, or each task in
-  sequential mode, run the Fable batch when `scripts/auto-run decision list`
-  prints anything.
+  `scripts/auto-run task-complete`. After each task, run the Fable batch when
+  `scripts/auto-run decision list` prints anything.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight, then end the turn with
-  `Auto run: compacting` as its last line. On `handoff`, invoke
-  dr-forge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
+  `Auto run: compacting` as its last line. On `handoff`, finish the task in
+  flight, then invoke dr-forge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
 - **Final review:** run `scripts/auto-run phase final` and, when the pending

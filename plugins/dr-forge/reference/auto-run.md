@@ -26,7 +26,11 @@ session cannot be bound: say so in one line and continue without an auto run.
 ## While a run is bound to this session
 
 `scripts/auto-run status` exits 0 and names the phase, the regime, the pending
-action, the plan, the base and the register. Then:
+action, the plan, the base and the register. Every `scripts/auto-run` command
+exits 0 when done, 1 when it failed (no handoff file to read, or `jq` or
+`mktemp` failed), 2 on bad usage, 3 when no run is bound to this session, 4
+when refused, 5 when the run stopped (`handoff` for `verdict` and
+`after-compact`) and 6 for `compact`. Then:
 
 - **Ask nothing.** No clarifying question, approval or menu. What you would
   have asked goes to the ladder under Rulings.
@@ -140,6 +144,11 @@ A run's turn ends only with one of two lines as the last line of the message:
 - `Auto run: compacting` when `scripts/auto-run pending` says `compact`;
 - `Auto run: clearing` after `scripts/auto-run clear` exits 0.
 
+`scripts/auto-run pending` prints `compact`, `after-compact`, `handoff`,
+`clear`, `resume` or `none`. `handoff` is a compaction that left too much
+behind; it stays until `scripts/auto-run clear` turns it into `clear`, and the
+Stop hook holds a turn that tries to end before that.
+
 Nothing you started may still run in the background. The Stop hook holds any
 other ending once. The cockpit then compacts, or clears the session and binds
 the new one, and submits the next prompt itself.
@@ -147,7 +156,9 @@ the new one, and submits the next prompt itself.
 ## After a compaction
 
 The cockpit's prompt asks you to run `scripts/auto-run after-compact` first.
-It prints `continue` (exit 0) or `handoff` (exit 5).
+It prints `continue` (exit 0) or `handoff` (exit 5). It settles only a
+compaction that was booked (`pending` is `after-compact`): while a `clear` or
+`handoff` is pending it prints `handoff` and changes nothing.
 
 - `continue`: carry on with the phase `scripts/auto-run status` names. In
   `execute` and `final`, follow the After compaction steps of the execution
@@ -180,8 +191,8 @@ ends as finished. Run it, then end as the attended flow would, when:
 - your human partner asks you to stop;
 - dr-forge:resume-execution would stop to ask (a worktree whose branch is
   gone);
-- finishing hits one of its unattended stops (failing tests on the merged
-  result, a rejected push, a refused worktree removal).
+- finishing hits one of its unattended stops (failing tests at its first
+  step or on the merged result, a rejected push, a refused worktree removal).
 
 When `scripts/auto-run clear` exits 5, or the cockpit's prompt says the run
 stopped, it has already stopped: end with the next-step block. The cockpit
@@ -191,7 +202,9 @@ sends one Discord `blocked` notice when a run stops with a reason.
 
 Finishing carries out the `finishAction` setting at once, into the base
 `scripts/auto-run status` names: `merge` and `pr` as named; `keep`, `ask` and
-`wait` keep the branch, and so does `merge` when the base is `none`. No menu,
-no wake. Its final message lists every `Ruling:` ledger line, every line of
+`wait` keep the branch, and so does `merge` when the base is `none`. On a
+detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
+branch from the detached HEAD. A `pr` with base `none` opens its request
+against the forge's default branch. No menu, no wake. Its final message lists every `Ruling:` ledger line, every line of
 `scripts/auto-run ruling list` and every deferred row the run added, and it
 runs `scripts/auto-run stop` before the next-step block.

@@ -155,6 +155,7 @@ digraph brainstorming {
     "Ask execution strategy\n(parallel or sequential)" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
+    "Offer an auto run\n(once, unless autoRun=off)" [shape=box];
     "Write design doc" [shape=box];
     "Spec self-review\n(one round, shown)" [shape=box];
     "User reviews spec?" [shape=diamond];
@@ -176,7 +177,8 @@ digraph brainstorming {
     "Ask execution strategy\n(parallel or sequential)" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
+    "User approves design?" -> "Offer an auto run\n(once, unless autoRun=off)" [label="yes"];
+    "Offer an auto run\n(once, unless autoRun=off)" -> "Write design doc";
     "Write design doc" -> "Spec self-review\n(one round, shown)";
     "Spec self-review\n(one round, shown)" -> "User reviews spec?";
     "User reviews spec?" -> "Write design doc" [label="changes requested"];

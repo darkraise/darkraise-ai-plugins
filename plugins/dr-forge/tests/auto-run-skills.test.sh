@@ -5,6 +5,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DR_FORGE_BUDGET
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -24,9 +25,11 @@ for skill in subagent-driven-development executing-plans; do
   names "$skill: the deferred line" "$F" 'Task <N>: complete (deferred by the auto run)'
   names "$skill: dependents are deferred too" "$F" 'and every task that depends on it'
   names "$skill: never performed" "$F" 'is never performed'
-  names "$skill: each task resets the count" "$F" '`scripts/auto-run task-complete`. After each wave'
+  names "$skill: each task resets the count" "$F" '`scripts/auto-run task-complete`. After each'
   names "$skill: compact ends the turn" "$F" '`Auto run: compacting` as its last line'
   names "$skill: the step owns the clear" "$F" 'then run `scripts/auto-run clear` and end as auto-run.md §Clears says'
+  names "$skill: a handoff line waits for the task in flight" "$F" 'On `handoff`, finish the task in'
+  names "$skill: the finish is the one outside action" "$F" '(the finish action is the one exception)'
   names "$skill: final review" "$F" 'run `scripts/auto-run phase final`'
   names "$skill: the four stops give way" "$F" 'except in an auto run'
 done

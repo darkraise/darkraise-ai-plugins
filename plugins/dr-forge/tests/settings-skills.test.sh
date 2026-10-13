@@ -62,6 +62,8 @@ names "handoff: the caller owns the clear" "$P/skills/handoff/SKILL.md" 'never r
 names "resume-execution: an auto run stops before asking" "$P/skills/resume-execution/SKILL.md" 'scripts/auto-run stop --reason'
 names "finishing: an auto run shows no menu" "$P/skills/finishing-a-development-branch/SKILL.md" '**Step 4 shows no menu.**'
 names "finishing: the run's base" "$P/skills/finishing-a-development-branch/SKILL.md" 'the base `scripts/auto-run status` names'
+names "finishing: a detached HEAD never merges in an auto run" "$P/skills/finishing-a-development-branch/SKILL.md" 'there is no merge, so `merge` keeps'
+names "finishing: failing tests at Step 1 stop the run" "$P/skills/finishing-a-development-branch/SKILL.md" '(failing tests at Step 1, a merged'
 
 # Every skill-enforced key in the schema is named by at least one skill.
 keys=$(node -e 'const { pathToFileURL } = require("url"); import(pathToFileURL(process.argv[1]).href).then(m => console.log(Object.entries(m.default).filter(([, spec]) => spec.enforcedBy === "skill").map(([key]) => key).join(" ")))' "$P/config/schema.mjs")
