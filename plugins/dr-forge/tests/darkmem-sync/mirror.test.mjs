@@ -6,8 +6,8 @@ import path from "node:path";
 import test from "node:test";
 import {
   EMPTY_SHA, StateError, acquireLock, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf, isoMicros,
-  ledgerFiles, ledgerPlanPath, listDocumentFiles, loadState, localChanges, pathToUri, propertiesFor, saveState, sha256,
-  splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utf8Fault,
+  ledgerEntries, ledgerFiles, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges, pathToUri,
+  propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utf8Fault,
 } from "../../scripts/lib/darkmem-mirror.mjs";
 import { scratch, write } from "./helpers.mjs";
 
@@ -65,6 +65,27 @@ test("splitAtBlankLines keeps each blank line at the end of its piece", () => {
   const pieces = splitAtBlankLines(text);
   assert.equal(pieces.join(""), text);
   assert.deepEqual(pieces, ["# L\n\n", "Task 1: a\nmore\n\n", "\n", "Task 2: b\r\n\r\n", "tail"]);
+});
+
+test("a ledger line yields its task, state and commit; a blank line joins the entry before it", () => {
+  const rows = [
+    ["Task 3: complete (commits a1b2c3d..f0e1d2c, review clean) — done: x\n", { task: 3, state: "done", commit: "f0e1d2c" }],
+    ["Task 4: BLOCKED — impl-opus-high exhausted — decide\n", { task: 4, state: "blocked" }],
+    ["Task 5: fix round 2/5 (1 addressed, 0 open — x; commits 1234567..89abcde; resumed)\n", { task: 5, state: "review", commit: "89abcde" }],
+    ["Task 6: implementer dr-forge:impl-sonnet-low (assigned; base 1a2b3c4)\n", { task: 6, state: "wip" }],
+    ["Task 7: implementer (assigned)\n", { task: 7 }],
+    ["Task 8: minor (deferred): complete (later)\n", { task: 8 }],
+    ["Group 1-2: review round 1/5 (commits a..b)\n", {}],
+    ["# SDD ledger — plan: docs/forge/plans/p.md\n", {}],
+  ];
+  for (const [line, want] of rows) assert.deepEqual(lineProperties(line), want, line);
+  assert.deepEqual(ledgerEntries("# L\n\nTask 1: complete (x)\n\n\nTask 2: BLOCKED — y\r\n"), [
+    { body: "# L\n\n", properties: {} },
+    { body: "Task 1: complete (x)\n\n\n", properties: { task: 1, state: "done" } },
+    { body: "Task 2: BLOCKED — y\r\n", properties: { task: 2, state: "blocked" } },
+  ]);
+  assert.deepEqual(ledgerEntries("\nTask 1: x\n"), [{ body: "\nTask 1: x\n", properties: { task: 1 } }]);
+  assert.deepEqual(ledgerEntries("\n\n"), [{ body: "\n\n", properties: {} }]);
 });
 
 test("decodeUtf8 refuses invalid bytes and keeps a byte order mark", () => {

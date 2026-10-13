@@ -9,7 +9,7 @@ import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
   DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, caseGroups, checkpointTarget, decodeUtf8,
-  familiesOf, isoMicros, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs,
+  familiesOf, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs,
   uriProblem, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
@@ -200,15 +200,23 @@ async function pushLedger(context, slug, file) {
   let reconciled = false;
   sending: while (buffer.length > record.offset) {
     const rest = buffer.subarray(record.offset);
-    const appended = decodeUtf8(rest);
-    if (appended === null) {
-      const fault = utf8Fault(rest);
-      if (fault.partial) report.notes.push(`${label}: the appended bytes end inside a character; push again once the write finishes`);
-      else report.failures.push(`${label}: byte ${record.offset + fault.offset} is not UTF-8 text; not pushed`);
+    const fault = utf8Fault(rest);
+    if (fault && !fault.partial) {
+      report.failures.push(`${label}: byte ${record.offset + fault.offset} is not UTF-8 text; not pushed`);
       return;
     }
+    // Only complete lines go up, so the offset advances past whole lines; a
+    // character cut short can only follow the last newline.
+    const end = rest.lastIndexOf(0x0a) + 1;
+    if (end === 0) {
+      report.notes.push(`${label}: the last line has no newline yet; it is held until the next push`);
+      return;
+    }
+    const appended = decodeUtf8(rest.subarray(0, end));
     const properties = propertiesFor(roots, slug, ledgerPlanPath(buffer.toString("utf8")));
-    const pieces = splitAtLimit(appended);
+    const pieces = ledgerEntries(appended).flatMap(entry => splitAtLimit(entry.body).map(body => (
+      Object.keys(entry.properties).length ? { kind: "ledger", body, properties: entry.properties } : { kind: "ledger", body }
+    )));
     for (let i = 0; i < pieces.length; i += MAX_ENTRIES_PER_APPEND) {
       const group = pieces.slice(i, i + MAX_ENTRIES_PER_APPEND);
       // Marked before the call: if the answer is lost, or this process dies
@@ -220,7 +228,7 @@ async function pushLedger(context, slug, file) {
       try {
         answer = await client.append({
           project: cfg.project, workstream: slug, properties, expectedLastSeq: record.lastSeq,
-          entries: group.map(body => ({ kind: "ledger", body })),
+          entries: group,
         });
       } catch (error) {
         if (!(error instanceof HttpError && (error.status === 409 || error.status === 422))) throw error;
@@ -248,7 +256,7 @@ async function pushLedger(context, slug, file) {
         persist();
         continue sending;
       }
-      const offset = record.offset + Buffer.byteLength(group.join(""), "utf8");
+      const offset = record.offset + Buffer.byteLength(group.map(entry => entry.body).join(""), "utf8");
       record = { offset, prefix: sha256(buffer.subarray(0, offset)), lastSeq: answer.last_seq };
       state.ledgers[slug] = record;
       persist();

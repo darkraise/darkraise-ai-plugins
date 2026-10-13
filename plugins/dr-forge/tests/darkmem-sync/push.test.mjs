@@ -131,24 +131,32 @@ test("a document put whose answer was lost is recorded on the next push, not rep
   assert.equal((await run(["status"], { cwd: s.repo, env: s.env })).stdout.split("\n").filter(Boolean).length, 3);
 });
 
-test("a ledger goes up as the appended bytes, one entry per push, and darkmem's concatenation is the file", async t => {
+test("a ledger goes up one entry per complete line, with the line's properties, and darkmem's concatenation is the file", async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "plans", "p1.md"), "# P1\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
   const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
-  write(file, "# SDD ledger — plan: docs/superpowers/plans/p1.md\n\nTask 1: implementer (assigned)\n");
+  write(file, "# SDD ledger — plan: docs/superpowers/plans/p1.md\n\nTask 1: implementer dr-forge:impl-sonnet-low (assigned; base 1a2b3c4)\n");
   assert.equal((await s.push()).code, 0);
-  fs.appendFileSync(file, "Task 1: complete\n\n| a | b |\n|---|---|\n");
+  fs.appendFileSync(file, "Task 1: complete (commits 1a2b3c4..5d6e7f8, review clean)\n\n| a | b |\n|---|---|\nTask 2: held");
   const second = await s.push();
-  assert.match(second.stdout, /0 documents, 1 ledger entries/);
+  assert.match(second.stdout, /0 documents, 3 ledger entries/);
+  assert.match(second.stdout, /^note: sdd\/p1\/progress\.md: the last line has no newline yet; it is held until the next push$/m);
   const entries = await s.ledger("p1");
-  assert.equal(entries.length, 2);
-  assert.equal(entries[1].body, "Task 1: complete\n\n| a | b |\n|---|---|\n");
-  assert.equal(entries.map(e => e.body).join(""), read(file));
+  assert.deepEqual(entries.map(e => [e.body, e.properties]), [
+    ["# SDD ledger — plan: docs/superpowers/plans/p1.md\n\n", {}],
+    ["Task 1: implementer dr-forge:impl-sonnet-low (assigned; base 1a2b3c4)\n", { task: 1, state: "wip" }],
+    ["Task 1: complete (commits 1a2b3c4..5d6e7f8, review clean)\n\n", { task: 1, state: "done", commit: "5d6e7f8" }],
+    ["| a | b |\n", {}],
+    ["|---|---|\n", {}],
+  ]);
   assert.equal(entries[0].run_key, "sess-1");
   const ws = s.stub.db.workstreams.find(w => w.key === "p1");
   assert.deepEqual(ws.properties, { plan_uri: "superpowers/plans/p1.md", spec_uri: "superpowers/specs/s.md" });
+  fs.appendFileSync(file, "\n");
   assert.equal((await s.push()).code, 0);
-  assert.equal((await s.ledger("p1")).length, 2, "nothing new, nothing sent");
+  assert.equal((await s.ledger("p1")).map(e => e.body).join(""), read(file));
+  assert.equal((await s.push()).code, 0);
+  assert.equal((await s.ledger("p1")).length, 6, "nothing new, nothing sent");
 });
 
 test("a rewritten ledger is refused and nothing is sent", async t => {
@@ -160,17 +168,28 @@ test("a rewritten ledger is refused and nothing is sent", async t => {
   const result = await s.push();
   assert.equal(result.code, 1);
   assert.match(result.stdout, /conflict: sdd\/p1\/progress\.md: rewritten rather than appended to/);
-  assert.equal((await s.ledger("p1")).length, 1);
+  assert.equal((await s.ledger("p1")).length, 2);
 });
 
-test("an append longer than one entry is split at a newline and still concatenates exactly", async t => {
+test("a ledger line longer than one entry is split and every piece carries the line's properties", async t => {
+  const s = await setup(t);
+  const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  write(file, `Task 1: complete (commits 1a2b3c4..5d6e7f8, review clean) — ${"x".repeat(70000)}\n`);
+  assert.equal((await s.push()).code, 0);
+  const entries = await s.ledger("p1");
+  assert.equal(entries.length, 2);
+  for (const entry of entries) assert.deepEqual(entry.properties, { task: 1, state: "done", commit: "5d6e7f8" });
+  assert.equal(entries.map(e => e.body).join(""), read(file));
+});
+
+test("an append of many lines goes up one entry per line and still concatenates exactly", async t => {
   const s = await setup(t);
   const file = path.join(s.workRoot, "sdd", "big", "progress.md");
   const line = `${"x".repeat(999)}\n`;
   write(file, line.repeat(70));
   assert.equal((await s.push()).code, 0);
   const entries = await s.ledger("big");
-  assert.equal(entries.length, 2);
+  assert.equal(entries.length, 70);
   assert.ok(entries.every(e => e.body.length <= 65536 && e.body.endsWith("\n")));
   assert.equal(entries.map(e => e.body).join(""), line.repeat(70));
 });
@@ -349,7 +368,7 @@ test("a ledger with a byte that is not UTF-8 fails with its offset; a character 
   fs.appendFileSync(file, Buffer.from([0xe2, 0x82]));
   const partial = await s.push();
   assert.equal(partial.code, 0, partial.stdout);
-  assert.match(partial.stdout, /^note: sdd\/p1\/progress\.md: the appended bytes end inside a character; push again once the write finishes$/m);
+  assert.match(partial.stdout, /^note: sdd\/p1\/progress\.md: the last line has no newline yet; it is held until the next push$/m);
   fs.appendFileSync(file, Buffer.from([0xac, 0x0a]));
   assert.equal((await s.push()).code, 0);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "€\n"]);

@@ -460,6 +460,43 @@ export function splitAtBlankLines(text) {
   return text.split(/(?<=\n\r?\n)/).filter(piece => piece.length > 0);
 }
 
+// What a darkmem progress board reads from one ledger line without parsing
+// markdown (darkmem store options spec §3). Only a `Task N:` line yields any.
+export function lineProperties(line) {
+  const head = /^Task (\d+): /.exec(line);
+  if (!head) return {};
+  const properties = { task: Number(head[1]) };
+  const rest = line.slice(head[0].length);
+  const state = /^complete \(/.test(rest) ? "done"
+    : /^BLOCKED/.test(rest) ? "blocked"
+    : /^fix round /.test(rest) ? "review"
+    : /^implementer \S+ \(assigned/.test(rest) ? "wip"
+    : null;
+  if (state) properties.state = state;
+  const commits = /\bcommits [0-9a-f]{4,40}\.\.([0-9a-f]{4,40})\b/.exec(rest);
+  if (commits) properties.commit = commits[1];
+  return properties;
+}
+
+// One entry per line of `text`, which holds complete lines only. A blank line
+// joins the entry before it, or the next one when it leads, so no entry is
+// blank unless the text is.
+export function ledgerEntries(text) {
+  const entries = [];
+  let lead = "";
+  for (const line of text.split(/(?<=\n)/)) {
+    if (/^[ \t]*\r?\n$/.test(line)) {
+      if (entries.length) entries.at(-1).body += line;
+      else lead += line;
+      continue;
+    }
+    entries.push({ body: lead + line, properties: lineProperties(line) });
+    lead = "";
+  }
+  if (lead) entries.push({ body: lead, properties: {} });
+  return entries;
+}
+
 // The darkmem uri a document's name or path stands for: a name under
 // docs/forge/ or docs/superpowers/ (as a ledger or a **Spec:** line writes
 // it), or an absolute path under the docs root or the worktree's docs
