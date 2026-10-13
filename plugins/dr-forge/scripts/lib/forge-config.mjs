@@ -13,7 +13,7 @@ export class SettingError extends Error {}
 
 // A pre-2.0 environment name still read when the new one is unset.
 const LEGACY_ENV = { DR_FORGE_BUDGET: "DR_SUPERPOWERS_BUDGET" };
-const USAGE = "usage: forge-config get KEY | get --json | set KEY VALUE | unset KEY | workflow";
+const USAGE = "usage: forge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
 
 function homeOf(env) {
   return env.HOME || os.homedir();
@@ -128,11 +128,39 @@ function realTarget(file) {
 // file kept in a dotfiles repository stays a link. A file that is not a JSON
 // object throws before anything is written.
 function writeClaude(env, key, value) {
+  writeClaudeKeys(env, [[key, value]]);
+}
+
+function writeClaudeKeys(env, entries) {
   const file = realTarget(claudeSettingsPath(env));
   const data = readFile(file) ?? {};
-  if (value === undefined) delete data[key];
-  else data[key] = value;
+  for (const [key, value] of entries) {
+    if (value === undefined) delete data[key];
+    else data[key] = value;
+  }
   writeFile(file, data);
+}
+
+// What /model and /effort save as the user's defaults. An auto run's cleared
+// session runs both, and the cockpit puts the saved values back afterwards.
+const RESTORABLE = ["model", "modelSettings"];
+
+// claude-restore JSON — sets each named key of Claude's user settings to its
+// value, removing a key whose value is null, in one write.
+export function restoreClaude(text, env = process.env) {
+  let values;
+  try {
+    values = JSON.parse(text);
+  } catch {
+    throw new SettingError("claude-restore takes a JSON object");
+  }
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new SettingError("claude-restore takes a JSON object");
+  }
+  for (const key of Object.keys(values)) {
+    if (!RESTORABLE.includes(key)) throw new SettingError(`claude-restore restores only ${RESTORABLE.join(" and ")}, not ${key}`);
+  }
+  writeClaudeKeys(env, Object.entries(values).map(([key, value]) => [key, value === null ? undefined : value]));
 }
 
 function readJson(file) {
@@ -263,6 +291,7 @@ export function main(argv, env = process.env, out = process.stdout) {
     }
     if (command === "set" && rest.length === 2) { setValue(rest[0], rest[1], env); return 0; }
     if (command === "unset" && rest.length === 1) { unsetValue(rest[0], env); return 0; }
+    if (command === "claude-restore" && rest.length === 1) { restoreClaude(rest[0], env); return 0; }
     if (command === "workflow" && rest.length === 0) {
       const line = workflowLine(env);
       if (line) out.write(`${line}\n`);

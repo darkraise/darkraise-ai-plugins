@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dr-forge's settings: forge-config get KEY | get --json | set KEY VALUE | unset KEY | workflow
+# dr-forge's settings: forge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow
 # The schema is config/schema.mjs; values live in ~/.dr-forge/config.json.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

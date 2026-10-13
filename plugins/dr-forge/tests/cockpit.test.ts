@@ -2643,6 +2643,58 @@ describe('auto run', () => {
     expect(pendingOf(files)).toBeNull()
   })
 
+  test('puts back the default model and effort that /model and /effort save', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const userSettings = { model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, theme: 'dark' }
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([
+      expect.stringContaining(`claude-restore ${JSON.stringify({ model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } } })}`),
+    ])
+    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
+  })
+
+  test('removes the defaults /model and /effort added where none were set', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: {}, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('claude-restore {"model":null,"modelSettings":null}')])
+  })
+
+  test('restores nothing when the clear sets no model', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
+  })
+
+  test('tells the cleared session when its default model could not be put back', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isForgeConfigRefusing: true, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
+    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
+    expect(w.prompts?.[0]).toMatch(/scripts\/auto-run ruling add/)
+  })
+
   test('shows the cleared session\'s run at once', async ($, on) => {
     const files = autoFiles({ pending: 'clear', regime: 'high', resumePrompt: 'Execute docs/plan.md.' })
     const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO] }

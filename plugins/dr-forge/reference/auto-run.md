@@ -184,9 +184,10 @@ If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`: the
 
 When `scripts/auto-run clear` exits 0, end the turn with `Auto run: clearing`
 as the last line, below the next-step block. The cleared session runs on the
-launch command's model and effort. On exit 5 the run has stopped (the third
-self-resume in a row without a completed task): end with the next-step block
-alone, as Stopping says.
+launch command's model and effort; the cockpit then puts back the default model
+and effort that its `/model` and `/effort` saved in the user settings. On exit
+5 the run has stopped (the third self-resume in a row without a completed
+task): end with the next-step block alone, as Stopping says.
 
 ## Stopping
 

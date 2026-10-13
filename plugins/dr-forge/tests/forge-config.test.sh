@@ -182,6 +182,23 @@ if ! command -v cygpath > /dev/null 2>&1; then
   check "claude: its destination is created" "$(tr -d ' \n' < "$TMP/dotfiles/later.json")" '{"autoCompactWindow":600000}'
 fi
 
+# claude-restore puts back what /model and /effort save, and touches nothing else.
+mkdir -p "$TMP/alt-r"
+RS="$TMP/alt-r/settings.json"
+printf '%s\n' '{"permissions":{"allow":[]},"model":"sonnet","modelSettings":{"claude-sonnet-5-5":{"effortLevel":"high"}},"hooks":{}}' > "$RS"
+CLAUDE_CONFIG_DIR="$TMP/alt-r" fc claude-restore '{"model":"opus[1m]","modelSettings":null}'
+check "claude-restore: exit 0" "$?" "0"
+check "claude-restore: the model is put back" "$(at "$RS" model)" '"opus[1m]"'
+check "claude-restore: null removes a key, the others keep their order" "$(keys "$RS")" "permissions,model,hooks"
+CLAUDE_CONFIG_DIR="$TMP/alt-r" fc claude-restore '{"model":null,"modelSettings":{"claude-opus-5-5":{"effortLevel":"max"}}}'
+check "claude-restore: an object value is written" "$(at "$RS" modelSettings)" '{"claude-opus-5-5":{"effortLevel":"max"}}'
+check "claude-restore: the model removed" "$(keys "$RS")" "permissions,hooks,modelSettings"
+before=$(cat "$RS")
+CLAUDE_CONFIG_DIR="$TMP/alt-r" fc claude-restore '{"permissions":null}'; check "claude-restore: another key: exit 2" "$?" "2"
+CLAUDE_CONFIG_DIR="$TMP/alt-r" fc claude-restore '["model"]'; check "claude-restore: not an object: exit 2" "$?" "2"
+CLAUDE_CONFIG_DIR="$TMP/alt-r" fc claude-restore 'nope'; check "claude-restore: not JSON: exit 2" "$?" "2"
+check "claude-restore: a refusal changes nothing" "$(cat "$RS")" "$before"
+
 # Each Claude key: its default, a value it accepts, and one it refuses.
 while read -r key default valid invalid; do
   fresh "m-$key"

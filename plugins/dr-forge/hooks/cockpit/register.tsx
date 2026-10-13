@@ -2198,15 +2198,18 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
       at = 'resume'
     }
     const refused: string[] = []
+    let isRestored = true
     if (auto.launch !== null) {
+      const saved = await userDefaults($)
       for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
         await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
       }
+      isRestored = saved !== null && (await restoreUserDefaults($, saved))
     }
-    const note =
-      refused.length === 0
-        ? ''
-        : `\n\nThe cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}. Record that with scripts/auto-run ruling add.`
+    const notes: string[] = []
+    if (refused.length > 0) notes.push(`The cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}.`)
+    if (!isRestored) notes.push('The cockpit could not put back the default model and effort that /model and /effort saved in your user settings.')
+    const note = notes.length === 0 ? '' : `\n\n${notes.join(' ')} Record that with scripts/auto-run ruling add.`
     await $.prompt.submit({ text: `${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
     await autoRunCall($, bound, ['resumed'])
     await trackAutoRun($)
@@ -2219,6 +2222,23 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
     // Unbooked, nothing would retry the stage: stop rather than stall unseen.
     else await endUnboundRun($, bound, `the cockpit could not ${action} and could not book the failure (exit ${code})`)
   }
+}
+
+// What /model and /effort save as the user's defaults, read before they run;
+// null when the settings cannot be read, so nothing is restored from a guess.
+async function userDefaults($: EngineInterface): Promise<{ model: unknown; modelSettings: unknown } | null> {
+  const user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
+  if (user === null) return null
+  return { model: user.model ?? null, modelSettings: user.modelSettings ?? null }
+}
+
+// /model and /effort save their values as the user's defaults for every new
+// session; the cleared session keeps running on them after the file is put back.
+async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; modelSettings: unknown }): Promise<boolean> {
+  const ran = await $.process
+    .run(['node', `${$.plugin.root}/scripts/lib/forge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
+    .catch(() => null)
+  return ran?.exitCode === 0
 }
 
 // The run stopped while the session was idle: record it, and give the model a
