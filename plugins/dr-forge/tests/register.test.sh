@@ -231,5 +231,16 @@ check "register check: Covers names resolve in the mirror" "$(tail -n 1 <<<"$out
 out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" open --spec docs/superpowers/specs/a-design.md 2>&1)
 check "register open: the register is named, not pathed" "$out" "docs/forge/registers/r.md: #1 One — planned, assigned -"
 
+# --- a ConfigError stops register instead of reporting nothing open ---
+BH="$TMP/bad-home"; mkdir -p "$BH/.dr-forge"
+BR="$TMP/bad-repo"; git init -q "$BR"
+printf '{"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"p","documentStore":"bogus"}}}}\n' \
+  "$(git -C "$BR" rev-parse --show-toplevel)" > "$BH/.dr-forge/config.json"
+(cd "$BR" && HOME=$BH bash "$HERE/../scripts/register" open --spec docs/x.md >/dev/null 2>&1)
+check "register open: a ConfigError exits 2" "$?" "2"
+reg "$BR/r.md" '| 1 | One | - | - | planned | - |'
+(cd "$BR" && HOME=$BH bash "$HERE/../scripts/register" check "$BR/r.md" >/dev/null 2>&1)
+check "register check: a ConfigError exits 2" "$?" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

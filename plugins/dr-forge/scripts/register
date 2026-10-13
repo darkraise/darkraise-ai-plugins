@@ -43,6 +43,7 @@ cmd_check() {
   local file=$1 errors=0 root covers line n id item assigned acceptance state note seen=""
   need_file "$file"
   root=$(git -C "$(dirname "$file")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
+  forge_stores_init "$root"
 
   if [ -z "$(register_field "$file" Source)" ]; then
     echo "ERROR 1: missing **Source:** line"
@@ -109,6 +110,7 @@ cmd_open() {
     [ -n "$file" ] || usage
     need_file "$file"
   fi
+  [ -z "$root" ] || forge_stores_init "$root"
 
   while IFS= read -r f; do
     [ -n "$f" ] || continue

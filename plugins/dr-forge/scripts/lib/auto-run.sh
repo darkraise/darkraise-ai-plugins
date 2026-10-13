@@ -128,6 +128,7 @@ ar_start() {
     return 4
   fi
   top=$(git rev-parse --show-toplevel)
+  forge_stores_init "$top"
   if [ -z "$register" ]; then
     slug=$(basename "$spec" .md)
     slug=${slug%-design}
@@ -186,6 +187,7 @@ ar_fenced() {
 ar_clear() {
   local is_phase=$1 primary latest prompt="" launch model="" effort="" resumes
   primary=$(ar_primary_root) || return 1
+  forge_stores_init "$primary"
   latest=$(forge_latest_file "$primary")
   [ -f "$latest" ] && prompt=$(ar_fenced "$latest" 'Paste as the first prompt:')
   [ -n "$prompt" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
