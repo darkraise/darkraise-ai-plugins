@@ -95,7 +95,7 @@ test("decodeUtf8 refuses invalid bytes and keeps a byte order mark", () => {
 
 test("paths name their uris; plans and drafts name their properties; a handoff note names its target", () => {
   const { roots } = mirror();
-  // A checkout and a project both named superpowers: the uri comes from the
+  // A checkout and a project both named superpowers; the uri comes from the
   // roots, never from the leftmost superpowers/ segment.
   const named = {
     docsRoot: "/home/u/.dr-forge/mirror/superpowers/superpowers",
