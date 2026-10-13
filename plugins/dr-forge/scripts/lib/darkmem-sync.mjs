@@ -13,6 +13,7 @@ import {
 import { importRepository } from "./darkmem-import.mjs";
 import { pull, pullDocuments } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
+import { leftoverLines, pendingFamilies, reconcile, stayLine } from "./darkmem-reconcile.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
 
@@ -111,6 +112,7 @@ const COMMANDS = {
   pull: { options: {}, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: pull },
   push: { options: { "--workstream": true }, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: push },
   import: { options: { "--replace": false }, positional: 0, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: true, run: importRepository },
+  reconcile: { options: {}, positional: 0, needsKey: false, syncsFamilies: false, recordsConflicts: false, summary: false, run: reconcile },
   restore: {
     options: {}, positional: 1, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: true, run: restore,
     refuseLocal: ({ err }) => {
@@ -192,11 +194,21 @@ async function main(argv, {
     out(`darkmem-sync: nothing to ${parsed.name}: documents and progress are both applied local`);
     return 0;
   }
+  // Nothing to move takes no lock and calls nothing; the leftover warning
+  // still prints, since session start runs reconcile every time.
+  if (parsed.name === "reconcile" && !pendingFamilies(cfg).length) {
+    for (const line of leftoverLines(cfg)) out(line);
+    return 0;
+  }
   if (parsed.command.needsKey && !cfg.apiKey) {
     err(`darkmem-sync: ${parsed.name} skipped: ${cfg.keyEnv} is not set; working offline from the mirror`);
     return 3;
   }
   const release = acquireLock(cfg.mirror);
+  if (!release && parsed.name === "reconcile") {
+    for (const family of pendingFamilies(cfg)) out(stayLine(cfg, family, "another darkmem-sync holds the mirror lock"));
+    return 1;
+  }
   if (!release) {
     const owner = lockOwner(cfg.mirror);
     const holder = owner ? `pid ${owner.pid} on ${owner.host}` : "an unknown process";
