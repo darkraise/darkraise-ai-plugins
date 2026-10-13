@@ -921,5 +921,18 @@ lint waves-inline.md --no-probe
 has "waves: inline is refused" "$out" "ERROR header: parallel waves need a subagent Execution line"
 has "waves: the integration check is required" "$out" "ERROR header: a waves plan needs its **Integration check:** line"
 
+# --- documents kept in darkmem: Spec paths resolve in the mirror ---
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+SR="$TMP/stores-repo"; git init -q "$SR"
+M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+mkdir -p "$M/superpowers/specs" "$M/superpowers/plans"
+printf '# Spec\n' > "$M/superpowers/specs/s.md"
+printf '# P\n\n**Spec:** docs/forge/specs/s.md\n\n### Task 1: One\n' > "$M/superpowers/plans/p.md"
+out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/forge/plans/p.md --no-probe 2>&1)
+lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
+lacks "darkmem: the plan is found by name" "$out" "no such plan file"
+has "darkmem: the lint ran to its summary" "$out" " errors, "
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -331,5 +331,19 @@ present "the skill leaves a thin task unscored" "$SK" "A guessed score is worse 
 present "the skill allows the split Rule S requires" "$SK" "Splitting a task Rule S rejects is part of this skill"
 present "the routing table lists the skill" "$HERE/../skills/using-superpowers/SKILL.md" "dr-forge:revising-plans"
 
+# --- documents and progress kept in darkmem: the survey finds the mirror's ledger ---
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+SR="$TMP/stores-repo"
+git init -q "$SR"
+git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
+M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+mkdir -p "$M/superpowers/plans" "$M/work/sdd/mp"
+printf '**Goal:** demo\n\n### Task 1: One\n' > "$M/superpowers/plans/mp.md"
+printf '# SDD ledger — plan: docs/forge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/superpowers/plans" | grep '^plan  mp\.md')
+check "darkmem survey: live" "$(field live "$row")" "yes"
+check "darkmem survey: the evidence names the mirror" "$(grep -c 'ledger in mirror' <<<"$row")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

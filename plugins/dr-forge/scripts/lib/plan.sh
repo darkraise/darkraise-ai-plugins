@@ -306,17 +306,6 @@ plan_task_depends() {
   grep -oE '[0-9]+' <<<"$line" || true
 }
 
-# Git reports the top level in one form (C:/… under Git Bash) whichever way the
-# path was spelled, so comparing <top level>/<prefix><name> is stable where pwd
-# output is not: /tmp and /c/Users/…/Temp name the same directory.
-plan_repo_canon() {
-  local dir top prefix
-  dir=$(dirname "$1")
-  top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || return 1
-  prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || return 1
-  printf '%s/%s%s\n' "$top" "$prefix" "$(basename "$1")"
-}
-
 # _plan_ctx PLAN — the directory whose checkout a plan belongs to: its own
 # directory inside a git repository, else the working directory (a plan in
 # the darkmem mirror belongs to the checkout it is worked from).

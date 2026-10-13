@@ -45,7 +45,8 @@ if ! plan_apply_amendments "$plan" "$amend" > "$src" 2> "$TMP/amend.err"; then
   tr -d '\r' < "$plan" > "$src"
 fi
 
-root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || pwd)
+root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
+forge_stores_init "$root"
 SEP='( — | – | - | -- )'
 header=$(plan_header "$src")
 
@@ -92,7 +93,7 @@ done
 spec_line=$(header_line Spec)
 if [ -n "$spec_line" ]; then
   spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$spec_line")
-  [ -f "$root/$spec_path" ] || say ERROR header "Spec path does not exist: $spec_path"
+  [ -f "$(forge_resolve "$spec_path" "$root")" ] || say ERROR header "Spec path does not exist: $spec_path"
 fi
 
 program=$(header_line Program)
@@ -100,7 +101,7 @@ if [ -n "$program" ]; then
   if [[ "$program" =~ ^\*\*Program:\*\*\ \`?([^\`\ ]+)\`?$SEP"sub-project "([0-9]+)" of "([0-9]+)$SEP(next:\ .+|last)$ ]]; then
     ppath=${BASH_REMATCH[1]} k=${BASH_REMATCH[3]} n=${BASH_REMATCH[4]}
     [ "$k" -le "$n" ] || say ERROR header "Program line: sub-project $k of $n"
-    [ -f "$root/$ppath" ] || say ERROR header "Program path does not exist: $ppath"
+    [ -f "$(forge_resolve "$ppath" "$root")" ] || say ERROR header "Program path does not exist: $ppath"
   else
     say ERROR header "Program line does not match '**Program:** <path> — sub-project <k> of <n> — next: <title>' or '… — last'"
   fi
@@ -113,10 +114,7 @@ reg_specs=()
 [ -z "${spec_path:-}" ] || reg_specs+=("$spec_path")
 [ -z "${ppath:-}" ] || [ "${ppath:-}" = "${spec_path:-}" ] || reg_specs+=("$ppath")
 if [ ${#reg_specs[@]} -gt 0 ]; then
-  # git prints the top level as D:/… under Git Bash where pwd prints /d/…, so
-  # the path is canonicalised the way lib/plan.sh already does before stripping.
-  plan_rel=$(plan_repo_canon "$plan" 2>/dev/null || printf '%s' "$plan")
-  plan_rel=${plan_rel#"$root"/}
+  plan_rel=$(forge_name "$plan" "$root")
   : > "$TMP/reg-ids"
   : > "$TMP/reg-open"
   while IFS= read -r reg_file; do

@@ -137,56 +137,49 @@ plan_units() {
   done < <(plan_tasks "$1")
 }
 
-# ledger_for PLAN — the ledger whose identity line names PLAN, searched across
-# every worktree of the plan's repository, because execution may run in a linked
-# worktree while the plan is read from the primary checkout. Each worktree holds
-# its own copy of the plan at the same repository-relative path, so the identity
-# is compared inside the worktree being searched — plan_repo_canon embeds the
-# worktree root, and comparing across roots never matches.
+# ledger_for PLAN — "<where>\t<ledger>" for the ledger whose identity line
+# names PLAN: every worktree's ledgers while progress is local (execution may
+# run in a linked worktree while the plan is read from the primary checkout),
+# the mirror's while it is darkmem. Identities compare as names; an absolute
+# local identity is stripped of the longest worktree root it lies under, since
+# a worktree created inside the primary checkout has the primary root as a
+# prefix of its own.
 ledger_for() {
-  local slug rel wt f named
+  local ctx slug want ledger where named best wt roots
+  ctx=$(_plan_ctx "$1")
   slug=$(basename "$1" .md)
-  rel=$(git -C "$(dirname "$1")" rev-parse --show-prefix 2>/dev/null)$(basename "$1")
-  [ -n "$rel" ] || return 0
-  local roots root best
-  roots=$(git -C "$(dirname "$1")" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
-  while IFS= read -r wt; do
-    [ -n "$wt" ] || continue
-    f="$(forge_dir state "$wt")/sdd/$slug/progress.md"
-    [ -f "$f" ] || continue
-    named=$(ledger_plan "$f")
+  want=$(forge_name "$1" "$ctx")
+  roots=$(git -C "$ctx" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+  while IFS=$'\t' read -r ledger where; do
+    [ -n "$ledger" ] || continue
+    [ "$(basename "$(dirname "$ledger")")" = "$slug" ] || continue
+    named=$(ledger_plan "$ledger")
     [ -n "$named" ] || continue
-    # An absolute path may name any worktree's root, not just this one, so
-    # every root is stripped rather than only the one being searched.
     case $named in /*)
-      # A worktree created inside the primary checkout has the primary root as
-      # a prefix of its own, so the longest matching root is the right one.
       best=""
-      while IFS= read -r root; do
-        [ -n "$root" ] || continue
-        case $named in "$root"/*)
-          [ "${#root}" -gt "${#best}" ] && best=$root ;;
-        esac
+      while IFS= read -r wt; do
+        [ -n "$wt" ] || continue
+        case $named in "$wt"/*) [ "${#wt}" -gt "${#best}" ] && best=$wt ;; esac
       done <<<"$roots"
-      [ -n "$best" ] && named=${named#"$best"/} ;;
+      if [ -n "$best" ]; then named=${named#"$best"/}; else named=$(forge_name "$named" "$ctx"); fi ;;
     esac
-    [ "$named" = "$rel" ] || continue
-    printf '%s\t%s\n' "$wt" "$f"
+    [ "$named" = "$want" ] || continue
+    printf '%s\t%s\n' "$where" "$ledger"
     return 0
-  done <<<"$roots"
+  done < <(forge_ledger_files "$ctx")
 }
 
 # completed_form PLAN — "merged", "pr" or nothing, from the completed.md beside
-# the plan. The entry is matched on the plan's recorded repository-relative
-# path, not a basename substring: "docs/scored.md" is a substring of
-# "docs/unscored.md" and would otherwise claim another plan's outcome. Merged
-# outranks via PR whatever their order, because finishing-a-development-branch
-# writes the via-PR line before the push and the merged line after the merge.
+# the plan. The entry is matched on the plan's name, not a basename substring:
+# "docs/scored.md" is a substring of "docs/unscored.md" and would otherwise
+# claim another plan's outcome. Merged outranks via PR whatever their order,
+# because finishing-a-development-branch writes the via-PR line before the
+# push and the merged line after the merge.
 completed_form() {
   local f rel hits
   f="$(cd "$(dirname "$1")" && pwd)/completed.md"
   [ -f "$f" ] || return 0
-  rel=$(git -C "$(dirname "$1")" rev-parse --show-prefix 2>/dev/null)$(basename "$1")
+  rel=$(forge_name "$1" "$(_plan_ctx "$1")")
   hits=$(grep -F "\`$rel\`" "$f" 2>/dev/null) || return 0
   [ -n "$hits" ] || return 0
   if grep -qF 'merged into' <<<"$hits"; then printf 'merged\n'
@@ -208,6 +201,7 @@ steps() {
 survey() {
   local dir=$1 f rows=0 a score risk fl sp cp
   local tasks scored unparsed eligible live evidence lf form execution exec_mode ok
+  forge_stores_init "$(_plan_ctx "$dir/x")"
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
     tasks=$(plan_tasks "$f" | grep -c .)
