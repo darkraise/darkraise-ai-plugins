@@ -251,6 +251,9 @@ Ruling: <what> — <why> — <cost if wrong>
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
 
+- After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
+  at `complete`, also promote the task's durable facts
+  ([project-state.md](../../reference/project-state.md) §darkmem sync points).
 - `implementer inline` is this mode's assigned line. You are the implementer,
   so the agent slot says so, and `base` is `git rev-parse --short HEAD` taken
   before you change anything.

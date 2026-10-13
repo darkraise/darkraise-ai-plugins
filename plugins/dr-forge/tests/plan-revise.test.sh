@@ -330,6 +330,7 @@ present "the skill reconciles an existing Executor line" "$SK" "replace it with 
 present "the skill leaves a thin task unscored" "$SK" "A guessed score is worse than a visible gap"
 present "the skill allows the split Rule S requires" "$SK" "Splitting a task Rule S rejects is part of this skill"
 present "the routing table lists the skill" "$HERE/../skills/using-superpowers/SKILL.md" "dr-forge:revising-plans"
+present "the skill pushes the revised plan" "$SK" '10. **Push the revised plan.** Run `bash <plugin-root>/scripts/darkmem-sync push`'
 
 # --- documents and progress kept in darkmem: the survey finds the mirror's ledger ---
 . "$HERE/fixtures/darkmem-stores.sh"

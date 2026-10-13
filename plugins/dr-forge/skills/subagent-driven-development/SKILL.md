@@ -343,6 +343,9 @@ Final fix: implementer <agent> (assigned; base <sha7>)
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
 
+- After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
+  at `complete`, also promote the task's durable facts
+  ([project-state.md](../../reference/project-state.md) §darkmem sync points).
 - Every task gets its own assigned line and its own complete line, including
   tasks reviewed as a batch. Batches are contiguous task ranges so
   `Group <a>-<b>` names them; only a batch's review rounds log on its Group

@@ -112,3 +112,20 @@ While `forge-path store` prints `documents darkmem`, a step that commits a
 spec, plan, register, roadmap or `completed.md` line runs
 `bash <plugin-root>/scripts/darkmem-sync push` instead. Code commits are
 unchanged.
+
+## darkmem sync points
+
+Run `bash <plugin-root>/scripts/darkmem-sync push` at each stop point: after
+every `Task <N>: complete` and fix-round ledger line, after a spec or plan is
+saved, and at handoff once `scripts/next-step` has written `<latest.md>`. In a
+repository that is not mapped to darkmem it prints one line and exits 0, so no
+check comes first. On Claude Code the SessionStart hook runs `darkmem-sync reconcile`, then `pull`,
+and the Stop hook pushes as a safety net. Codex has no hooks, so there these
+steps and the session-start step in
+`skills/using-superpowers/references/codex-tools.md` are the only triggers.
+
+**Promotion to memory.** At each `Task <N>: complete` line and at handoff,
+when `forge-path project` prints a project and the darkmem MCP tools are
+available, record the durable facts the work established (decisions and
+their reasons, root causes and fixes, constraints) with `memory_add`, one fact per call, tagged `project/<project>`.
+Ledger lines, progress and commit hashes stay in the work log.

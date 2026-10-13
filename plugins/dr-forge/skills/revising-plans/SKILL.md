@@ -123,6 +123,10 @@ the scores, so scoring cannot follow the executor question.
    `0 errors`, and a final `plan-revise` run shows every unit either `gate=fail`
    or `executor=<id>` matching its `rungs=`, with the header's `execution`
    matching the `recommend` row.
+10. **Push the revised plan.** Run `bash <plugin-root>/scripts/darkmem-sync push`
+   once the plan is saved, so a plan kept in darkmem carries the revision
+   ([project-state.md](../../reference/project-state.md) §darkmem sync points).
+   In a repository not mapped to darkmem it prints one line and changes nothing.
 
 ## When a task cannot be scored honestly
 

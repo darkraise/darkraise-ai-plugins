@@ -193,5 +193,16 @@ present "brainstorming: a register with no Covers line is still read" "$BRAIN" \
 present "brainstorming: the Covers line is filled once the spec exists" "$BRAIN" \
   "set the register's \`**Covers:**\` line"
 
+# darkmem's stop points and promotion (store options spec §5): one rule in the
+# shared reference, cited from both execution modes' ledger sections.
+present "project-state: the sync points section" "$STATE" "## darkmem sync points"
+present "project-state: stop points push" "$STATE" 'Run `bash <plugin-root>/scripts/darkmem-sync push` at each stop point'
+present "project-state: the hooks reconcile, pull and push" "$STATE" 'runs `darkmem-sync reconcile`, then `pull`'
+present "project-state: promotion uses memory_add" "$STATE" 'with `memory_add`, one fact per call, tagged `project/<project>`'
+present "project-state: promotion keys on the mapping" "$STATE" 'when `forge-path project` prints a project'
+for skill in subagent-driven-development executing-plans; do
+  present "$skill: pushes after each ledger line" "$P/skills/$skill/SKILL.md" '§darkmem sync points'
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
