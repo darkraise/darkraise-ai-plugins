@@ -11,6 +11,10 @@ export const MAX_ENTRY_CHARS = 65536;
 export const MAX_ENTRIES_PER_APPEND = 100;
 export const EMPTY_SHA = sha256(Buffer.alloc(0));
 const HANDOFF_DIR = "handoff";
+export const ARCHIVE_PREFIX = `${DOC_PREFIX}/archive`;
+// Top-level directories of the docs root whose files are never documents:
+// their uri spaces hold the plans' handoff notes and the archived documents.
+export const RESERVED_DIRS = { handoff: "handoff notes", archive: "archived documents" };
 const KEY = /^[A-Za-z0-9._-]{1,200}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const REBUILD = "move it aside to rebuild it from darkmem";
@@ -55,6 +59,21 @@ export function uriFamily(uri) {
   return parts.length === 3 && parts[0] === DOC_PREFIX && parts[1] === HANDOFF_DIR ? "progress" : "documents";
 }
 
+export function isArchiveUri(uri) {
+  return uri === ARCHIVE_PREFIX || String(uri).startsWith(`${ARCHIVE_PREFIX}/`);
+}
+
+// UTC as YYYYMMDDTHHMMSSZ: archive stamps and the moves' backup directories.
+export function utcStamp(date = new Date()) {
+  return date.toISOString().replace(/\.\d+Z$/, "Z").replace(/[-:]/g, "");
+}
+
+// Where a deleted document is archived: superpowers/<rest> becomes
+// superpowers/archive/<stamp>/<rest>, so a name deleted twice never collides.
+export function archiveUri(uri, stamp) {
+  return `${ARCHIVE_PREFIX}/${stamp}/${String(uri).slice(DOC_PREFIX.length + 1)}`;
+}
+
 // A missing directory is empty; any other failure to read one is an error,
 // because a silently empty listing would read as "nothing to sync".
 function sortedEntries(dir) {
@@ -87,8 +106,9 @@ export function unsupportedPlanDirs(workRoot) {
 
 // Every document file the mirror syncs, with its uri: files under the docs
 // root when documents sync, then each plan's handoff.md when progress does.
-// Dotfiles are never synced. A file under the docs root's handoff/ directory
-// gets uri null: that uri space belongs to the handoff notes.
+// Dotfiles are never synced. A file under the docs root's handoff/ or
+// archive/ directory gets uri null: those uri spaces belong to the handoff
+// notes and the archived documents.
 export function listDocumentFiles(roots) {
   const families = familiesOf(roots);
   const found = [];
@@ -98,7 +118,7 @@ export function listDocumentFiles(roots) {
       const file = path.join(dir, entry.name);
       const next = [...rel, entry.name];
       if (entry.isDirectory()) walk(file, next);
-      else if (entry.isFile()) found.push({ file, uri: next[0] === HANDOFF_DIR ? null : `${DOC_PREFIX}/${next.join("/")}` });
+      else if (entry.isFile()) found.push({ file, uri: Object.hasOwn(RESERVED_DIRS, next[0]) ? null : `${DOC_PREFIX}/${next.join("/")}` });
     }
   };
   if (families.documents) walk(roots.docsRoot, []);
@@ -565,12 +585,21 @@ export function localChanges(roots, state) {
   const lines = [];
   for (const { file, uri } of listDocumentFiles(roots)) {
     if (!uri) {
-      lines.push(`reserved: ${path.relative(roots.docsRoot, file)} (the docs root's handoff/ directory is not synced)`);
+      const rel = path.relative(roots.docsRoot, file);
+      lines.push(`reserved: ${rel} (the docs root's ${rel.split(path.sep)[0]}/ directory is not synced)`);
       continue;
     }
     const recorded = state.documents[uri];
     if (recorded === undefined) lines.push(`new: ${uri}`);
     else if (sha256(fs.readFileSync(file)) !== recorded) lines.push(`modified: ${uri}`);
+  }
+  // Synced documents whose mirror file is gone: push archives them.
+  if (familiesOf(roots).documents) {
+    for (const uri of Object.keys(state.documents).sort()) {
+      if (uriFamily(uri) !== "documents" || isArchiveUri(uri)) continue;
+      const file = uriToLocal(roots, uri);
+      if (file && !fs.existsSync(file)) lines.push(`deleted: ${uri}`);
+    }
   }
   if (!familiesOf(roots).progress) return lines;
   for (const { slug, file } of ledgerFiles(roots.workRoot)) {

@@ -5,9 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  EMPTY_SHA, StateError, acquireLock, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf, isoMicros,
-  ledgerEntries, ledgerFiles, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges, pathToUri,
-  propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utf8Fault,
+  EMPTY_SHA, StateError, acquireLock, archiveUri, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
+  isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges,
+  pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal,
+  utcStamp, utf8Fault,
 } from "../../scripts/lib/darkmem-mirror.mjs";
 import { scratch, write } from "./helpers.mjs";
 
@@ -28,17 +29,41 @@ test("uris map to the docs root, handoff uris to the plan's directory, and nothi
   }
 });
 
-test("document files list docs and handoff notes, skip dotfiles, and reserve docs/handoff", () => {
+test("document files list docs and handoff notes, skip dotfiles, and reserve docs/handoff and docs/archive", () => {
   const { roots } = mirror();
   write(path.join(roots.docsRoot, "specs", "a.md"), "a");
   write(path.join(roots.docsRoot, ".hidden"), "h");
   write(path.join(roots.docsRoot, "handoff", "x.md"), "x");
+  write(path.join(roots.docsRoot, "archive", "20261013T091502Z", "a.md"), "old");
   write(path.join(roots.workRoot, "sdd", "p1", "handoff.md"), "h");
   write(path.join(roots.workRoot, "sdd", "p1", "progress.md"), "l");
   write(path.join(roots.workRoot, "sdd", "bad name", "progress.md"), "l");
-  assert.deepEqual(listDocumentFiles(roots).map(f => f.uri), [null, "superpowers/specs/a.md", "superpowers/handoff/p1.md"]);
+  assert.deepEqual(listDocumentFiles(roots).map(f => f.uri), [null, null, "superpowers/specs/a.md", "superpowers/handoff/p1.md"]);
   assert.deepEqual(ledgerFiles(roots.workRoot).map(f => f.slug), ["p1"]);
   assert.deepEqual(unsupportedPlanDirs(roots.workRoot), [path.join(roots.workRoot, "sdd", "bad name")]);
+});
+
+test("archive uris carry a UTC stamp under superpowers/archive/", () => {
+  assert.equal(utcStamp(new Date("2026-10-13T09:15:02.789Z")), "20261013T091502Z");
+  assert.match(utcStamp(), /^\d{8}T\d{6}Z$/);
+  assert.equal(archiveUri("superpowers/specs/a.md", "20261013T091502Z"), "superpowers/archive/20261013T091502Z/specs/a.md");
+  for (const uri of ["superpowers/archive", "superpowers/archive/20261013T091502Z/specs/a.md"]) assert.equal(isArchiveUri(uri), true, uri);
+  for (const uri of ["superpowers/archives/a.md", "superpowers/specs/archive/a.md", "superpowers/a.md"]) assert.equal(isArchiveUri(uri), false, uri);
+});
+
+test("localChanges names a synced document deleted from the mirror, only while documents sync", () => {
+  const { roots } = mirror();
+  const state = emptyState();
+  write(path.join(roots.docsRoot, "kept.md"), "k");
+  state.documents["superpowers/kept.md"] = sha256("k");
+  state.documents["superpowers/specs/gone.md"] = sha256("g");
+  state.documents["superpowers/handoff/p1.md"] = sha256("h");
+  write(path.join(roots.docsRoot, "archive", "x.md"), "x");
+  assert.deepEqual(localChanges(roots, state), [
+    `reserved: ${path.join("archive", "x.md")} (the docs root's archive/ directory is not synced)`,
+    "deleted: superpowers/specs/gone.md",
+  ]);
+  assert.deepEqual(localChanges({ ...roots, families: { documents: false, progress: true } }, state), []);
 });
 
 test("a directory that cannot be read is an error, not an empty listing", () => {

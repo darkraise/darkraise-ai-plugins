@@ -9,7 +9,7 @@ import path from "node:path";
 import { HttpError } from "./darkmem-client.mjs";
 import { forgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
 import {
-  MAX_ENTRIES_PER_APPEND, decodeUtf8, emptyState, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor,
+  MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor,
   splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriToLocal,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers } from "./darkmem-pull.mjs";
@@ -23,7 +23,8 @@ function readSources(roots) {
   for (const dir of unsupportedPlanDirs(roots.workRoot)) problems.push(`${dir}: not a usable workstream key`);
   for (const { file, uri } of listDocumentFiles(roots)) {
     if (!uri) {
-      problems.push(`${file}: the docs directory's handoff/ is reserved for handoff notes`);
+      const top = path.relative(roots.docsRoot, file).split(path.sep)[0];
+      problems.push(`${file}: the docs directory's ${top}/ is reserved for ${RESERVED_DIRS[top]}`);
       continue;
     }
     const buffer = fs.readFileSync(file);
