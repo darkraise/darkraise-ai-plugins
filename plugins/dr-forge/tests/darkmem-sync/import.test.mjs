@@ -135,7 +135,21 @@ test("import in local mode is exit 2", async () => {
   assert.match(result.stdout, /^darkmem-sync: local mode/);
 });
 
-test("a verified import records each family configured darkmem as applied darkmem", async t => {
+test("a verified import records documents, never progress, as applied darkmem", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  const home = makeHome({ repo, url: stub.url, stores: null });
+  write(path.join(repo, "docs", "forge", "specs", "s.md"), "# Spec\n");
+  write(path.join(repo, ".forge", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: complete\n");
+  const result = await run(["import"], { cwd: repo, env: home.env });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const record = JSON.parse(fs.readFileSync(path.join(home.home, ".dr-forge", "stores.json"), "utf8"));
+  assert.deepEqual(record, { [repo]: { documents: "darkmem" } });
+  assert.match(result.stdout, /^note: recorded documents as applied darkmem in .*stores\.json$/m);
+});
+
+test("an import with documents configured local records nothing", async t => {
   const stub = await startStub();
   t.after(() => stub.close());
   const repo = makeRepo();
@@ -145,9 +159,7 @@ test("a verified import records each family configured darkmem as applied darkme
   write(path.join(repo, ".forge", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: complete\n");
   const result = await run(["import"], { cwd: repo, env: home.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  const record = JSON.parse(fs.readFileSync(path.join(home.home, ".dr-forge", "stores.json"), "utf8"));
-  assert.deepEqual(record, { [repo]: { progress: "darkmem" } });
-  assert.match(result.stdout, /^note: recorded progress as applied darkmem in .*stores\.json$/m);
+  assert.equal(fs.existsSync(path.join(home.home, ".dr-forge", "stores.json")), false);
 });
 
 test("an import with a refused document records nothing", async t => {

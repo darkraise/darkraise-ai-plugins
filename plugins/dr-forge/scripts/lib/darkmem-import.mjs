@@ -142,10 +142,13 @@ export async function importRepository(context) {
   }
   for (const ledger of snapshot.ledgers) await importLedger(context, roots, ledger);
   await verify(context, roots, snapshot);
-  // Only a clean, verified import moves a family's applied store; a family
-  // configured local stays local even though its files were filed.
+  // Only a clean, verified import moves the documents' applied store, and only
+  // when documents are configured darkmem. Progress waits for reconcile: import
+  // closes every workstream it files and pull reads only open ones, and it
+  // reads neither latest.md nor linked worktrees, so recording progress would
+  // empty every reader's view.
   if (report.failures.length || report.conflicts.length) return;
-  const families = ["documents", "progress"].filter(family => cfg[family].configured === "darkmem");
+  const families = ["documents"].filter(family => cfg[family].configured === "darkmem");
   if (!families.length) return;
   writeApplied(env, cfg.repoRoot, Object.fromEntries(families.map(family => [family, "darkmem"])));
   report.notes.push(`recorded ${families.join(" and ")} as applied darkmem in ${storesPath(env)}`);
