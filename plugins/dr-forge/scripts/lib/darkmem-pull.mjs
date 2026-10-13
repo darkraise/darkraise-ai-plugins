@@ -12,6 +12,15 @@ const RESOLVE = "move the local file aside, pull, and re-apply your change";
 
 const localHash = file => (fs.existsSync(file) ? sha256(fs.readFileSync(file)) : null);
 
+const sameFile = (a, b) => {
+  try {
+    const x = fs.statSync(a), y = fs.statSync(b);
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
+  }
+};
+
 // A workstream's ledger as a file: its ledger entries' bodies, in order, and
 // the seq of the newest one (0 when it holds none), which the next append
 // names as its expected_last_seq.
@@ -74,6 +83,12 @@ function removeVanished({ roots, state, persist, report }, filed) {
     if (filed.has(uri) || uriFamily(uri) !== "documents" || isArchiveUri(uri)) continue;
     const file = uriToLocal(roots, uri);
     if (!file) continue;
+    const twin = Object.keys(state.documents).find(other => other !== uri && filed.has(other) && !isArchiveUri(other) && other.toLowerCase() === uri.toLowerCase());
+    if (twin && sameFile(file, uriToLocal(roots, twin))) {
+      delete state.documents[uri];
+      persist();
+      continue;
+    }
     const local = localHash(file);
     if (local !== null && local !== state.documents[uri]) {
       report.conflicts.push(`${uri}: archived or deleted on darkmem, and changed locally; the local file stays — push it under a new name, or delete it`);

@@ -352,3 +352,18 @@ test("a local deletion waits for push while darkmem is unchanged; a changed copy
   assert.equal(read(path.join(s.docsRoot, "a.md")), "two\n");
   assert.equal(read(path.join(s.docsRoot, "b.md")), "b\n");
 });
+
+test("a case-only rename on darkmem keeps the file a case-insensitive file system shares", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "a\n" });
+  await s.pull();
+  const id = s.stub.db.documents.get("proj\u0000superpowers/a.md").id;
+  await s.seed.moveDocument(id, { uri: "superpowers/A.md" });
+  // A hard link stands in for a case-insensitive file system: both names reach one file.
+  fs.linkSync(path.join(s.docsRoot, "a.md"), path.join(s.docsRoot, "A.md"));
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /removed/);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
+  assert.deepEqual(Object.keys(s.state().documents), ["superpowers/A.md"]);
+});
