@@ -149,6 +149,8 @@ type World = {
   runs?: string[]
   /** forge-config refuses, as on a Claude settings file it cannot parse. */
   isForgeConfigRefusing?: boolean
+  /** How many claude-restore writes the engine misses, as one landing right after its own save. */
+  missedRestores?: number
   /** The session refuses every row the plugin appends. */
   isAppendFailing?: boolean
   toasts?: string[]
@@ -262,6 +264,10 @@ function world(on: On, w: World) {
     if (w.refusedCommands?.includes(e.command)) throw new Error(`/${e.command} refused`)
     w.commands?.push(e.args === '' ? `/${e.command}` : `/${e.command} ${e.args}`)
     if (e.command === 'clear') w.sessionId = 'sess-2'
+    if (e.command === 'model' && w.userSettings !== undefined) w.userSettings = { ...w.userSettings, model: e.args }
+    if (e.command === 'effort' && w.userSettings !== undefined) {
+      w.userSettings = { ...w.userSettings, modelSettings: { ...(w.userSettings.modelSettings as object | undefined), 'claude-sonnet-5-5': { effortLevel: e.args } } }
+    }
     return { text: '' } as never
   })
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -287,6 +293,18 @@ function world(on: On, w: World) {
     }
     if (argv.includes('/scripts/lib/forge-config.mjs ')) {
       w.runs?.push(argv)
+      const restore = e.argv[e.argv.indexOf('claude-restore') + 1]
+      if (e.argv.includes('claude-restore') && !w.isForgeConfigRefusing && w.userSettings !== undefined) {
+        if ((w.missedRestores ?? 0) > 0) w.missedRestores = (w.missedRestores ?? 0) - 1
+        else {
+          const next: Record<string, unknown> = { ...w.userSettings }
+          for (const [key, value] of Object.entries(JSON.parse(restore!) as Record<string, unknown>)) {
+            if (value === null) delete next[key]
+            else next[key] = value
+          }
+          w.userSettings = next
+        }
+      }
       const stderr = w.isForgeConfigRefusing ? 'forge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
       return { value: { exitCode: w.isForgeConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -2693,6 +2711,34 @@ describe('auto run', () => {
     expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
     expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
     expect(w.prompts?.[0]).toMatch(/scripts\/auto-run ruling add/)
+  })
+
+  test('writes the defaults again when the engine misses the first write', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 1, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts).toEqual([])
+    for (let i = 0; i < 8; i++) await clock.advance(500)
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(2)
+    expect(w.userSettings).toEqual({ model: 'opus[1m]' })
+    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
+  })
+
+  test('tells the cleared session when the engine never takes the restored defaults', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 3, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    for (let i = 0; i < 30; i++) await clock.advance(500)
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(3)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
   })
 
   test('shows the cleared session\'s run at once', async ($, on) => {

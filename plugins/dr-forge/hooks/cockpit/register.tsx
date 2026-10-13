@@ -115,6 +115,11 @@ const AUTO_COMPACT_INSTRUCTIONS =
   'Preserve verbatim: the worktree path; the plan, ledger, handoff and auto-run state file paths; the current HEAD; every Ruling: line; and the auto run pending decisions. Name the task in progress and its fix round.'
 // A failed stage is tried again after this long; a live turn or background work defers it as long.
 const AUTO_RETRY_MS = 5_000
+// The restored default model is written this many times at most, each write
+// watched this long for the engine to read it back.
+const RESTORE_WRITES = 3
+const RESTORE_WAIT_MS = 3_000
+const RESTORE_POLL_MS = 500
 type AutoStage = 'compact' | 'continue' | 'clear' | 'resume'
 // The pending action the state file holds while each stage is due.
 const AUTO_STAGE_PENDING: Record<AutoStage, string> = { compact: 'compact', continue: 'after-compact', clear: 'clear', resume: 'resume' }
@@ -2224,8 +2229,8 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
   }
 }
 
-// What /model and /effort save as the user's defaults, read before they run;
-// null when the settings cannot be read, so nothing is restored from a guess.
+// What /model and /effort save as the user's defaults, as the engine has them
+// loaded; null when the settings cannot be read, so nothing is restored from a guess.
 async function userDefaults($: EngineInterface): Promise<{ model: unknown; modelSettings: unknown } | null> {
   const user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
   if (user === null) return null
@@ -2234,11 +2239,22 @@ async function userDefaults($: EngineInterface): Promise<{ model: unknown; model
 
 // /model and /effort save their values as the user's defaults for every new
 // session; the cleared session keeps running on them after the file is put back.
+// The engine never reloads a write that lands right after its own save, and its
+// next settings write would save the launch model again, so the restore counts
+// only once the engine reads it back; a later write is outside that window.
 async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; modelSettings: unknown }): Promise<boolean> {
-  const ran = await $.process
-    .run(['node', `${$.plugin.root}/scripts/lib/forge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
-    .catch(() => null)
-  return ran?.exitCode === 0
+  for (let write = 0; write < RESTORE_WRITES; write++) {
+    const ran = await $.process
+      .run(['node', `${$.plugin.root}/scripts/lib/forge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
+      .catch(() => null)
+    if (ran?.exitCode !== 0) return false
+    for (let waited = 0; ; waited += RESTORE_POLL_MS) {
+      if (JSON.stringify(await userDefaults($)) === JSON.stringify(saved)) return true
+      if (waited >= RESTORE_WAIT_MS) break
+      await $.clock.sleep(RESTORE_POLL_MS)
+    }
+  }
+  return false
 }
 
 // The run stopped while the session was idle: record it, and give the model a
