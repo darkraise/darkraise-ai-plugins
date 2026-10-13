@@ -2842,6 +2842,20 @@ describe('auto run in the pane', () => {
     expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
   })
 
+  test('hides Resume while a run is active and brings it back when the run stops', async ($, on) => {
+    const files = { ...autoFiles({ pending: null }), '/home/me/code/shop/.forge/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
+    const w: World = { ...SIGNED_IN, files, autoRuns: [], autoFile: files[AUTO] }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'pane-stop-auto' })).toBeDefined()
+    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
+    await ui.press({ key: 'pane-stop-auto' })
+    expect(await ui.find({ key: 'pane-stop-auto' })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
+  })
+
   test('says the handoff budget again after a run that stopped', async ($, on) => {
     const fetches: World['fetches'] = []
     const w: World = { tokens: 100_000, env: { HOME: '/home/me' }, fetches }

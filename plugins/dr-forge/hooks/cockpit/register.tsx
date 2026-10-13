@@ -709,7 +709,7 @@ export const register: Register = on => {
         )}
         {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($))}
         {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
-        {canResume && button('pane-resume', 'Resume', () => $.prompt.submit({ text: resumePrompt(), asUser: true }), { hotkey: 'r', isMain: true })}
+        {canResume && !autoNow?.active && button('pane-resume', 'Resume', () => $.prompt.submit({ text: resumePrompt(), asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
         {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's' })}
         {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
