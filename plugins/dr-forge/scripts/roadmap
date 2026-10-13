@@ -57,7 +57,8 @@ done
 set -- ${args[@]+"${args[@]}"}
 [ -n "$root" ] || root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 root=$(cd "$root" 2>/dev/null && pwd) || { echo "no such directory: $root" >&2; exit 2; }
-FILE="$(forge_dir docs "$root")/roadmap.md"
+forge_stores_init "$root"
+FILE="$(forge_docs_root "$root")/roadmap.md"
 
 need_roadmap() {
   [ -f "$FILE" ] || { echo "no roadmap at $FILE" >&2; exit 2; }
@@ -95,7 +96,7 @@ cmd_check() {
   spec=${spec#\`}; spec=${spec%\`}
   if [ -z "$spec" ]; then
     echo "ERROR 1: missing **Spec:** line"; errors=$((errors + 1))
-  elif [ ! -f "$root/$spec" ]; then
+  elif [ ! -f "$(forge_resolve "$spec" "$root")" ]; then
     echo "ERROR 1: Spec path does not exist: $spec"; errors=$((errors + 1))
   fi
 
@@ -120,9 +121,9 @@ cmd_check() {
     reg=${reg#\`}; reg=${reg%\`}
     if blank "$reg"; then
       echo "ERROR $line: $m names no register"; errors=$((errors + 1))
-    elif [ ! -f "$root/$reg" ]; then
+    elif [ ! -f "$(forge_resolve "$reg" "$root")" ]; then
       echo "ERROR $line: $m register does not exist: $reg"; errors=$((errors + 1))
-    elif ! out=$(bash "$HERE/register" check "$root/$reg" 2>&1); then
+    elif ! out=$(bash "$HERE/register" check "$(forge_resolve "$reg" "$root")" 2>&1); then
       echo "ERROR $line: $m register fails register check: $reg"
       grep '^ERROR' <<<"$out" | sed 's/^/    /'
       errors=$((errors + 1))
@@ -134,7 +135,7 @@ cmd_check() {
     if [ "$state" = closed ]; then
       blank "$note" && { echo "ERROR $line: closed $m needs a note (the audit summary)"; errors=$((errors + 1)); }
       [ -z "$open_seen" ] || { echo "ERROR $line: $m is closed while earlier $open_seen is open"; errors=$((errors + 1)); }
-      if [ -f "$root/$reg" ] && [ -n "$(roadmap_unresolved "$root" "$reg")" ]; then
+      if [ -f "$(forge_resolve "$reg" "$root")" ] && [ -n "$(roadmap_unresolved "$root" "$reg")" ]; then
         echo "ERROR $line: $m is closed but rows below it are unresolved (roadmap open $m)"; errors=$((errors + 1))
       fi
     elif [ -z "$open_seen" ]; then
@@ -164,7 +165,7 @@ cmd_status() {
       printf '%s %s — closed — %s\n' "$m" "$name" "$note"
       continue
     fi
-    open_list=$(register_open "$root/$reg" 2>/dev/null | awk -F'\t' '
+    open_list=$(register_open "$(forge_resolve "$reg" "$root")" 2>/dev/null | awk -F'\t' '
       { printf "%s#%s %s (%s)", (NR > 1 ? ", " : ""), $1, $2, $5 }')
     extra=$(roadmap_unresolved "$root" "$reg" | awk -F'\t' -v r="$reg" '$1 != r' | grep -c . || true)
     printf '%s %s — open — %s of %s epics resolved' "$m" "$name" "$resolved" "$total"
@@ -285,16 +286,16 @@ cmd_settle() {
     return 0
   fi
   while IFS=$'\t' read -r m _ _ reg _ _; do
-    [ -f "$root/$reg" ] || continue
+    [ -f "$(forge_resolve "$reg" "$root")" ] || continue
     while IFS=$'\t' read -r rid ritem rassigned racc rstate rnote; do
       a=${rassigned#\`}; a=${a%\`}
       [ "$a" = "$spec" ] || continue
       case " $REGISTER_UNRESOLVED " in *" $rstate "*) ;; *) continue ;; esac
       [ "$rstate" != verify ] || continue
-      bash "$HERE/register" set "$root/$reg" "$rid" verify --note "built; owner confirms at the milestone audit" || exit 2
+      bash "$HERE/register" set "$(forge_resolve "$reg" "$root")" "$rid" verify --note "built; owner confirms at the milestone audit" || exit 2
       echo "$m: #$rid $ritem — verify"
       changed=1
-    done < <(register_rows "$root/$reg")
+    done < <(register_rows "$(forge_resolve "$reg" "$root")")
   done < <(roadmap_rows "$FILE")
   [ "$changed" -eq 1 ] || echo "no open epic row is assigned to $spec"
   return 0

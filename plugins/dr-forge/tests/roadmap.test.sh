@@ -200,5 +200,20 @@ check "usage: no verb" "$RC" "2"
 run bash "$RM" frobnicate --root "$ROOT"
 check "usage: unknown verb" "$RC" "2"
 
+# --- documents kept in darkmem: the roadmap and its registers are read in the mirror ---
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+SR="$TMP/stores-repo"; git init -q -b main "$SR"
+M=$(stores_home "$SH" "$SR" proj darkmem local)
+mkdir -p "$M/superpowers/registers"
+printf '# Roadmap\n' > "$M/superpowers/roadmap.md"
+register "$M/superpowers/registers/m1.md" "docs/forge/specs/x.md" \
+  '| 1 | A | - | - | done | - |' '| 2 | B | - | - | open | - |'
+check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/superpowers/roadmap.md"
+check "roadmap_epic_counts: a register name resolves in the mirror" \
+  "$(HOME=$SH roadmap_epic_counts "$SR" docs/forge/registers/m1.md)" "1 2"
+check "roadmap_unresolved: rows named by register name" \
+  "$(HOME=$SH roadmap_unresolved "$SR" docs/forge/registers/m1.md | cut -f1,2)" "$(printf 'docs/forge/registers/m1.md\t2')"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -42,7 +42,7 @@ cmd_check() {
   [ $# -eq 1 ] || usage
   local file=$1 errors=0 root covers line n id item assigned acceptance state note seen=""
   need_file "$file"
-  root=$(git -C "$(dirname "$file")" rev-parse --show-toplevel 2>/dev/null || pwd)
+  root=$(git -C "$(dirname "$file")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
 
   if [ -z "$(register_field "$file" Source)" ]; then
     echo "ERROR 1: missing **Source:** line"
@@ -55,7 +55,7 @@ cmd_check() {
   else
     while IFS= read -r line; do
       [ -n "$line" ] || continue
-      [ -f "$root/$line" ] && continue
+      [ -f "$(forge_resolve "$line" "$root")" ] && continue
       echo "ERROR 1: Covers path does not exist: $line"
       errors=$((errors + 1))
     done < <(register_covers "$file")
@@ -113,7 +113,7 @@ cmd_open() {
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     rel=$f
-    [ -z "$root" ] || rel=${f#"$root"/}
+    [ -z "$root" ] || rel=$(forge_name "$f" "$root")
     while IFS=$'\t' read -r id item assigned acceptance state note; do
       found=1
       printf '%s: #%s %s — %s, assigned %s\n' "$rel" "$id" "$item" "$state" "${assigned:--}"
