@@ -309,6 +309,45 @@ test("a ledger that changes while the move sends it stays local, and nothing is 
   assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "progress.md")), false);
 });
 
+test("a ledger that darkmem reads back different stays local, and nothing is copied or moved", async t => {
+  const s = await setup(t, "darkmem");
+  const ledger = path.join(s.repo, ".forge", "sdd", "p1", "progress.md");
+  write(ledger, LEDGER("p1"));
+  let appended = false;
+  let altered = false;
+  s.stub.db.onRequest = (method, pathname) => {
+    if (method === "POST" && pathname === "/api/v1/worklog/entries") appended = true;
+    if (!appended || altered || method !== "GET" || !pathname.endsWith("/entries")) return;
+    altered = true;
+    for (const ws of s.stub.db.workstreams) for (const entry of ws.entries) if (entry.kind === "ledger") entry.body += "altered\n";
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a read-back of darkmem's copies differs; nothing was moved locally\n"), result.stdout);
+  assert.ok(result.stdout.includes("  sdd/p1/progress.md: darkmem's copy reads back different\n"), result.stdout);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
+  assert.equal(read(ledger), LEDGER("p1"));
+  assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "progress.md")), false);
+});
+
+test("a handoff note that darkmem reads back different stays local, and nothing is copied or moved", async t => {
+  const s = await setup(t, "darkmem");
+  const note = path.join(s.repo, ".forge", "sdd", "p1", "handoff.md");
+  write(note, "# Handoff p1\n");
+  s.stub.db.onRequest = (method, pathname) => {
+    const held = s.stub.db.documents.get("proj\u0000superpowers/handoff/p1.md");
+    if (held && method === "GET" && pathname === "/api/v1/documents/by-uri") held.content_hash = sha("altered\n");
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a read-back of darkmem's copies differs; nothing was moved locally\n"), result.stdout);
+  assert.ok(result.stdout.includes("  superpowers/handoff/p1.md: darkmem's copy reads back different\n"), result.stdout);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
+  assert.equal(read(note), "# Handoff p1\n");
+});
+
 test("a plan directory that is a symbolic link stays local, and nothing is sent or moved", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
   const outside = path.join(scratch("dms-link-"), "p1");
