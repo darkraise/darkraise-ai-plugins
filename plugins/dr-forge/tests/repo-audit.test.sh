@@ -130,5 +130,17 @@ SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
 has "audit: lists the milestone" "$SECTION" "- M1 MVP — open — 0 of 1 epics resolved; open: #1 Search (open)"
 has "audit: names the current milestone" "$SECTION" "- Current: M1 MVP"
 
+# --- progress kept in darkmem: the mirror's ledgers and latest.md ---
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+M=$(stores_home "$SH" "$REPO" proj local darkmem)
+mkdir -p "$M/work/sdd/plan"
+printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/plan/progress.md"
+printf '# Handoff\n\n**Status:** mirror status\n' > "$M/work/handoff/latest.md"
+out=$(cd "$REPO" && HOME=$SH bash "$SCRIPT")
+has "darkmem: the mirror's ledger" "$out" "- \`docs/plan.md\` in the darkmem mirror: 1 of 3 tasks complete"
+has "darkmem: the mirror's latest.md" "$out" "- \`$M/work/handoff/latest.md\`"
+has "darkmem: its status" "$out" "**Status:** mirror status"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
