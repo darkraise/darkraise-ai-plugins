@@ -51,6 +51,15 @@ test("revision refuses a document that is unsynced, edited, behind darkmem, miss
   assert.match(local.stdout, /: documents are applied local\n$/);
 });
 
+test("revision refuses a name that is a directory", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "notes", "n.md"), "n\n");
+  const result = await s.sync("revision", "docs/forge/notes");
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^refused: docs\/forge\/notes is not synced and unchanged: .*notes is not a file\n$/);
+});
+
 test("revision refuses when darkmem files a newer version between the manifest read and the revisions read", async t => {
   let armed = false;
   const s = await setup(t, {

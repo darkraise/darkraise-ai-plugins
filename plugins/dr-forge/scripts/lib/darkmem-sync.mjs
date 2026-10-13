@@ -40,7 +40,9 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
   const uri = pathToUri(roots, name);
   const file = uri && uriFamily(uri) === "documents" && !isArchiveUri(uri) ? uriToLocal(roots, uri) : null;
   if (!file) return refuse("it does not name a document");
-  if (!fs.existsSync(file)) return refuse(`${file} does not exist`);
+  const stat = fs.statSync(file, { throwIfNoEntry: false });
+  if (!stat) return refuse(`${file} does not exist`);
+  if (!stat.isFile()) return refuse(`${file} is not a file`);
   const local = sha256(fs.readFileSync(file));
   if (state.documents[uri] === undefined) return refuse("it was never synced");
   if (state.documents[uri] !== local) return refuse("it changed since the last sync; push first");
