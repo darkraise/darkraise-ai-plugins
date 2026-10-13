@@ -52,6 +52,7 @@ check "start: active, bound, based on main" "$(field active) $(field session) $(
 check "start: phase spec, regime normal" "$(field phase) $(field regime)" "spec normal"
 check "start: nothing pending" "$(field pending)" "null"
 check "start: the state file is ignored by git" "$(git -C "$REPO" status --porcelain -- .forge | grep -c .)" "0"
+check "start: sdd ignores everything in it" "$(cat "$REPO/.forge/sdd/.gitignore")" "*"
 
 # --- binding ---
 ar --session s-2 status >/dev/null 2>&1; status=$?
@@ -83,6 +84,10 @@ git -C "$REPO" worktree add -q -b side "$TMP/side"
 out=$(cd "$TMP/side" && bash "$AR" --session s-5 start --spec "$SPEC" --force 2>&1); status=$?
 check "worktree: the register is created in that checkout" "$status:$([ -f "$TMP/side/$reg" ] && echo yes)" "0:yes"
 check "worktree: the state stays in the primary checkout" "$(field session) $(field base)" "s-5 side"
+git -C "$REPO" worktree add -q --detach "$TMP/loose"
+(cd "$TMP/loose" && bash "$AR" --session s-6 start --spec "$SPEC" --register docs/r.md --force >/dev/null)
+check "a detached HEAD has no base" "$(field base)" "null"
+check "a detached HEAD: status says none" "$(ar --session s-6 status | grep -c 'base none')" "1"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 
 # --- progress ---
@@ -108,6 +113,8 @@ ar --session s-1 ruling add "Opus: three retries"
 check "ruling list" "$(ar --session s-1 ruling list | paste -sd'|' -)" "Fable: keep the sqlite store — cost if wrong: one migration|Opus: three retries"
 
 # --- clears ---
+ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
+check "clear without a handoff file: exit 1, nothing pending" "$status:$(field pending)" "1:null"
 mkdir -p "$REPO/.forge/handoff"
 cat > "$REPO/.forge/handoff/latest.md" <<'EOF'
 # Handoff

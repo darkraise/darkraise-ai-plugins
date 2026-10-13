@@ -2678,6 +2678,7 @@ describe('auto run', () => {
     await settle(clock)
     expect(w.prompts).toHaveLength(1)
     expect(w.prompts?.[0]).toMatch(/could not run \/model sonnet/)
+    expect(w.commands).toContain('/effort high')
     expect(w.prompts?.[0]).toMatch(/auto-run ruling add/)
   })
 
@@ -2770,6 +2771,15 @@ describe('auto run', () => {
     await $.session.start(START)
     await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
     expect(w.autoRuns).toContain('--session sess-1 compacted')
+  })
+
+  test('books no engine compaction over a pending clear', async ($, on) => {
+    const w: World = { ...SIGNED_IN, autoRuns: [] }
+    world(on, w)
+    signedIn(on, autoFiles({ pending: 'clear' }))
+    await $.session.start(START)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
+    expect(w.autoRuns).toEqual([])
   })
 
   test('books nothing without a run', async ($, on) => {
