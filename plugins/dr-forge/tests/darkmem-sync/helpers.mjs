@@ -38,14 +38,22 @@ export function makeRepo() {
 // A HOME whose ~/.dr-forge/config.json (with legacy: true, the pre-2.0
 // ~/.dr-superpowers/config.json) maps `repo` to `project`.
 // `config` replaces the file's content (a string is written verbatim); null
-// writes no file at all.
-export function makeHome({ repo, url = "http://127.0.0.1:9", project = "proj", config, legacy = false } = {}) {
+// writes no file at all. `stores` is the ~/.dr-forge/stores.json entry for
+// `repo` (both families applied darkmem by default); null writes no record.
+export function makeHome({
+  repo, url = "http://127.0.0.1:9", project = "proj", config, legacy = false,
+  stores = { documents: "darkmem", progress: "darkmem" },
+} = {}) {
   const home = scratch("dms-home-");
   const dir = path.join(home, legacy ? ".dr-superpowers" : ".dr-forge");
   const body = config !== undefined ? config : { darkmem: { url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project } } } };
   if (body !== null) {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "config.json"), typeof body === "string" ? body : JSON.stringify(body));
+  }
+  if (stores !== null && repo) {
+    fs.mkdirSync(path.join(home, ".dr-forge"), { recursive: true });
+    fs.writeFileSync(path.join(home, ".dr-forge", "stores.json"), JSON.stringify({ [repo]: stores }));
   }
   const env = {
     ...process.env,
@@ -54,6 +62,8 @@ export function makeHome({ repo, url = "http://127.0.0.1:9", project = "proj", c
     DR_FORGE_SESSION_ID: "sess-1",
     DARKMEM_SYNC_TIMEOUT_MS: "3000",
   };
+  delete env.DR_FORGE_DOCUMENT_STORE;
+  delete env.DR_FORGE_PROGRESS_SOURCE;
   const mirror = path.join(dir, "mirror", project);
   return { home, env, mirror, docsRoot: path.join(mirror, "superpowers"), workRoot: path.join(mirror, "work") };
 }
