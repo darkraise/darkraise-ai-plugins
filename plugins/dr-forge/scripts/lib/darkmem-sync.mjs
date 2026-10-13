@@ -2,15 +2,19 @@
 // the stores, lock, state and exit codes. The commands live in darkmem-pull.mjs,
 // darkmem-push.mjs and darkmem-import.mjs; scripts/darkmem-sync documents the
 // usage and exit codes.
+import fs from "node:fs";
 import path from "node:path";
 import { ConfigError, resolveStores, runKey } from "./darkmem-config.mjs";
 import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
-import { StateError, UsageError, acquireLock, loadState, localChanges, lockOwner, saveState } from "./darkmem-mirror.mjs";
+import {
+  StateError, UsageError, acquireLock, isArchiveUri, loadState, localChanges, lockOwner, pathToUri, saveState, sha256, uriFamily,
+  uriToLocal,
+} from "./darkmem-mirror.mjs";
 import { importRepository } from "./darkmem-import.mjs";
 import { pull } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
 
-const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace]";
+const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
 
 const familyLine = (name, family) => `${name}: configured ${family.configured}, applied ${family.applied}${family.applied === "darkmem" ? "" : ", not synced"}`;
 
@@ -22,15 +26,54 @@ async function status({ cfg, roots, state, report, out }) {
   report.conflicts.push(...(state.conflicts ?? []));
 }
 
-// options maps each accepted flag to whether it takes a value. needsKey skips
-// the command when the API key is unset, since the mirror stays usable
-// offline; syncsFamilies makes it a no-op when no family is applied darkmem;
-// recordsConflicts keeps this run's conflicts in the state file for `status`.
+const notCitable = (name, reason) => `refused: ${name} is not synced and unchanged: ${reason}`;
+
+// NAME@r<id>: the darkmem revision a distillation cites. Only a document the
+// mirror holds exactly as darkmem does has one to cite; main refuses it
+// before this runs when documents are not applied darkmem.
+async function revision({ cfg, roots, state, client, report, args, out }) {
+  const [name] = args;
+  const refuse = reason => {
+    out(notCitable(name, reason));
+    report.refused += 1;
+  };
+  const uri = pathToUri(roots, name);
+  const file = uri && uriFamily(uri) === "documents" && !isArchiveUri(uri) ? uriToLocal(roots, uri) : null;
+  if (!file) return refuse("it does not name a document");
+  if (!fs.existsSync(file)) return refuse(`${file} does not exist`);
+  const local = sha256(fs.readFileSync(file));
+  if (state.documents[uri] === undefined) return refuse("it was never synced");
+  if (state.documents[uri] !== local) return refuse("it changed since the last sync; push first");
+  const item = (await client.manifest(cfg.project, uri)).find(entry => entry.uri === uri);
+  if (!item) return refuse("darkmem does not hold it");
+  if (item.content_hash !== local) return refuse("darkmem's copy differs; pull first");
+  const [newest] = (await client.revisions(item.id, { limit: 1 })).items;
+  if (!newest) return refuse("darkmem lists no revision of it");
+  // darkmem can file a newer version between the two reads.
+  if (newest.content_hash !== local) return refuse("darkmem's newest revision differs; pull first");
+  out(`${name}@r${String(newest.id)}`);
+}
+
+// options maps each accepted flag to whether it takes a value; positional is
+// how many arguments follow the command. needsKey skips the command when the
+// API key is unset, since the mirror stays usable offline; syncsFamilies makes
+// it a no-op when no family is applied darkmem; recordsConflicts keeps this
+// run's conflicts in the state file for `status`; summary prints the closing
+// count line. refuseLocal marks a command that needs documents applied
+// darkmem: main calls it instead of the command when the repository is
+// unmapped or its documents are applied local, and returns its exit code.
 const COMMANDS = {
-  status: { options: {}, needsKey: false, syncsFamilies: false, recordsConflicts: false, run: status },
-  pull: { options: {}, needsKey: true, syncsFamilies: true, recordsConflicts: true, run: pull },
-  push: { options: { "--workstream": true }, needsKey: true, syncsFamilies: true, recordsConflicts: true, run: push },
-  import: { options: { "--replace": false }, needsKey: true, syncsFamilies: false, recordsConflicts: false, run: importRepository },
+  status: { options: {}, positional: 0, needsKey: false, syncsFamilies: false, recordsConflicts: false, summary: false, run: status },
+  pull: { options: {}, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: pull },
+  push: { options: { "--workstream": true }, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: push },
+  import: { options: { "--replace": false }, positional: 0, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: true, run: importRepository },
+  revision: {
+    options: {}, positional: 1, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: false, run: revision,
+    refuseLocal: ({ args, reason, out }) => {
+      out(notCitable(args[0], reason));
+      return 1;
+    },
+  },
 };
 
 function parse(argv) {
@@ -38,19 +81,26 @@ function parse(argv) {
   const command = Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : null;
   if (!command) return null;
   const options = {};
+  const args = [];
   for (let i = 0; i < rest.length; i += 1) {
     const flag = rest[i];
-    if (!Object.hasOwn(command.options, flag)) return null;
-    if (command.options[flag]) {
-      const value = rest[i + 1];
-      if (value === undefined) return null;
-      options[flag] = value;
-      i += 1;
+    if (Object.hasOwn(command.options, flag)) {
+      if (command.options[flag]) {
+        const value = rest[i + 1];
+        if (value === undefined) return null;
+        options[flag] = value;
+        i += 1;
+      } else {
+        options[flag] = true;
+      }
+    } else if (!flag.startsWith("--") && args.length < command.positional) {
+      args.push(flag);
     } else {
-      options[flag] = true;
+      return null;
     }
   }
-  return { name, command, options };
+  if (args.length !== command.positional) return null;
+  return { name, command, options, args };
 }
 
 function summary(name, report) {
@@ -78,11 +128,15 @@ async function main(argv, {
     return 2;
   }
   if (!stores.sync) {
+    if (parsed.command.refuseLocal) return parsed.command.refuseLocal({ args: parsed.args, reason: `local mode — ${stores.reason}`, out, err });
     out(`darkmem-sync: local mode — ${stores.reason}`);
     return parsed.name === "import" ? 2 : 0;
   }
   const cfg = { ...stores.sync, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress };
   const families = { documents: cfg.documents.applied === "darkmem", progress: cfg.progress.applied === "darkmem" };
+  if (parsed.command.refuseLocal && !families.documents) {
+    return parsed.command.refuseLocal({ args: parsed.args, reason: "documents are applied local", out, err });
+  }
   if (parsed.command.syncsFamilies && !families.documents && !families.progress) {
     out(`darkmem-sync: nothing to ${parsed.name}: documents and progress are both applied local`);
     return 0;
@@ -98,7 +152,7 @@ async function main(argv, {
     err(`darkmem-sync: another darkmem-sync (${holder}) holds ${path.join(cfg.mirror, ".sync.lock")}; if that process is gone, remove the directory`);
     return 1;
   }
-  const report = { conflicts: [], failures: [], notes: [], counts: {}, partial: false };
+  const report = { conflicts: [], failures: [], notes: [], counts: {}, partial: false, refused: 0 };
   let state = null;
   let code = 0;
   try {
@@ -111,7 +165,7 @@ async function main(argv, {
       timeoutMs: Number(env.DARKMEM_SYNC_TIMEOUT_MS) || 10000,
     });
     const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
-    await parsed.command.run({ cfg, roots, state, persist, client, report, options: parsed.options, out, env });
+    await parsed.command.run({ cfg, roots, state, persist, client, report, options: parsed.options, args: parsed.args, out, env });
   } catch (error) {
     if (error instanceof TransportError || error instanceof HttpError) {
       err(`darkmem-sync: ${parsed.name} failed: ${error.message}`);
@@ -142,8 +196,8 @@ async function main(argv, {
   for (const line of report.failures) out(`failed: ${line}`);
   for (const line of report.notes) out(`note: ${line}`);
   if (code !== 0) return code;
-  if (parsed.name !== "status") out(summary(parsed.name, report));
-  return report.conflicts.length || report.failures.length ? 1 : 0;
+  if (parsed.command.summary) out(summary(parsed.name, report));
+  return report.conflicts.length || report.failures.length || report.refused ? 1 : 0;
 }
 
 main(process.argv.slice(2)).then(
