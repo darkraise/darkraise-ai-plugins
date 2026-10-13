@@ -13,6 +13,7 @@ check() { # check <name> <got> <want>
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export HOME="$TMP/home"; mkdir -p "$HOME"
 R="$TMP/repo"
 mkdir -p "$R"
 
@@ -48,6 +49,24 @@ mkdir -p "$G/.superpowers"
 check "forge-path: pre-2.0 state" "$(cd "$G" && bash "$HERE/../scripts/forge-path" state)" "$TOP/.superpowers"
 (cd "$G" && bash "$HERE/../scripts/forge-path" > /dev/null 2>&1)
 check "forge-path: usage exit 2" "$?" "2"
+
+# --- forge-path: the families' roots and names ---
+. "$HERE/fixtures/darkmem-stores.sh"
+H=$HOME
+git -C "$G" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
+FP="$HERE/../scripts/forge-path"
+check "forge-path: ledger, local" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$TOP/.superpowers/sdd/p1"
+check "forge-path: latest, local" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.superpowers/handoff/latest.md"
+check "forge-path: store, local" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents local|progress local|"
+M=$(stores_home "$H" "$G" proj darkmem darkmem)
+check "forge-path: docs, darkmem" "$(cd "$G" && HOME=$H bash "$FP" docs plans/p1.md)" "$M/superpowers/plans/p1.md"
+check "forge-path: ledger, darkmem" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$M/work/sdd/p1"
+check "forge-path: latest, darkmem" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$M/work/handoff/latest.md"
+check "forge-path: state stays local" "$(cd "$G" && HOME=$H bash "$FP" state)" "$TOP/.superpowers"
+check "forge-path: store, darkmem" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents darkmem|progress darkmem|"
+check "forge-path: name" "$(cd "$G" && HOME=$H bash "$FP" name "$M/superpowers/plans/p1.md")" "docs/forge/plans/p1.md"
+(cd "$G" && HOME=$H bash "$FP" ledger > /dev/null 2>&1)
+check "forge-path: ledger needs a slug" "$?" "2"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

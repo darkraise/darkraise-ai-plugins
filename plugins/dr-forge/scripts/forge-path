@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
-# forge-path state|docs [RELATIVE] — this repository's dr-forge directory, or a
-# path under it: .forge/ and docs/forge/, or the pre-2.0 .superpowers/ and
-# docs/superpowers/ where only those exist. Resolved under the checkout at hand.
+# forge-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG | latest | store | name PATH
+# Where this repository's dr-forge files live: the state directory (.forge/,
+# or the pre-2.0 .superpowers/; always in the checkout), the docs root and a
+# plan's ledger directory and latest.md (in the checkout or in the darkmem
+# mirror, as documentStore and progressSource apply them), each family's
+# applied store, or the repository-relative name of a path.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$HERE/lib/forge-dir.sh"
-[ $# -ge 1 ] && [ $# -le 2 ] || { echo "usage: forge-path state|docs [RELATIVE]" >&2; exit 2; }
-root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-dir=$(forge_dir "$1" "$root") || exit 2
+. "$HERE/lib/roots.sh"
+usage() { echo "usage: forge-path state|docs [RELATIVE] | ledger SLUG | latest | store | name PATH" >&2; exit 2; }
+[ $# -ge 1 ] || usage
+forge_stores_init
+case $1 in
+  state)
+    [ $# -le 2 ] || usage
+    dir=$(forge_dir state "$(git rev-parse --show-toplevel 2>/dev/null || pwd)") || exit 2
+    ;;
+  docs) [ $# -le 2 ] || usage; dir=$(forge_docs_root) ;;
+  ledger) [ $# -eq 2 ] || usage; forge_ledger_dir "$2"; exit 0 ;;
+  latest) [ $# -eq 1 ] || usage; forge_latest_file; exit 0 ;;
+  store) [ $# -eq 1 ] || usage; printf 'documents %s\nprogress %s\n' "$(forge_docs_store)" "$(forge_progress_store)"; exit 0 ;;
+  name) [ $# -eq 2 ] || usage; forge_name "$2"; exit 0 ;;
+  *) usage ;;
+esac
 if [ $# -eq 2 ]; then printf '%s/%s\n' "$dir" "$2"; else printf '%s\n' "$dir"; fi
