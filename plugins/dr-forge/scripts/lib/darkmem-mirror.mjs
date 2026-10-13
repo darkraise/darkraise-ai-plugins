@@ -43,6 +43,18 @@ export function uriToLocal(roots, uri) {
   return path.join(roots.docsRoot, ...parts.slice(1));
 }
 
+// The families a sync touches. Roots without the field (import's, and the
+// scratch roots its verification pulls into) touch both.
+export function familiesOf(roots) {
+  return roots.families ?? { documents: true, progress: true };
+}
+
+// A plan's handoff note is progress; every other document uri is documents.
+export function uriFamily(uri) {
+  const parts = String(uri).split("/");
+  return parts.length === 3 && parts[0] === DOC_PREFIX && parts[1] === HANDOFF_DIR ? "progress" : "documents";
+}
+
 // A missing directory is empty; any other failure to read one is an error,
 // because a silently empty listing would read as "nothing to sync".
 function sortedEntries(dir) {
@@ -74,10 +86,11 @@ export function unsupportedPlanDirs(workRoot) {
 }
 
 // Every document file the mirror syncs, with its uri: files under the docs
-// root, then each plan's handoff.md. Dotfiles are never synced. A file under
-// the docs root's handoff/ directory gets uri null: that uri space belongs to
-// the handoff notes.
+// root when documents sync, then each plan's handoff.md when progress does.
+// Dotfiles are never synced. A file under the docs root's handoff/ directory
+// gets uri null: that uri space belongs to the handoff notes.
 export function listDocumentFiles(roots) {
+  const families = familiesOf(roots);
   const found = [];
   const walk = (dir, rel) => {
     for (const entry of sortedEntries(dir)) {
@@ -88,10 +101,12 @@ export function listDocumentFiles(roots) {
       else if (entry.isFile()) found.push({ file, uri: next[0] === HANDOFF_DIR ? null : `${DOC_PREFIX}/${next.join("/")}` });
     }
   };
-  walk(roots.docsRoot, []);
-  for (const { slug, dir } of planDirs(roots.workRoot)) {
-    const file = path.join(dir, "handoff.md");
-    if (fs.existsSync(file)) found.push({ file, uri: `${DOC_PREFIX}/${HANDOFF_DIR}/${slug}.md` });
+  if (families.documents) walk(roots.docsRoot, []);
+  if (families.progress) {
+    for (const { slug, dir } of planDirs(roots.workRoot)) {
+      const file = path.join(dir, "handoff.md");
+      if (fs.existsSync(file)) found.push({ file, uri: `${DOC_PREFIX}/${HANDOFF_DIR}/${slug}.md` });
+    }
   }
   return found;
 }
@@ -445,11 +460,25 @@ export function splitAtBlankLines(text) {
   return text.split(/(?<=\n\r?\n)/).filter(piece => piece.length > 0);
 }
 
-// The darkmem uri a path names: what follows its `superpowers/` segment (a
-// pre-2.0 repository path or a mirror path) or its `docs/forge/` segment.
-export function pathToUri(file) {
-  const match = String(file).replace(/\\/g, "/").match(/(?:^|\/)(?:superpowers|docs\/forge)\/(.+)$/);
-  return match ? `${DOC_PREFIX}/${match[1]}` : null;
+// The darkmem uri a document's name or path stands for: a name under
+// docs/forge/ or docs/superpowers/ (as a ledger or a **Spec:** line writes
+// it), or an absolute path under the docs root or the worktree's docs
+// directory. Computed from the roots, never by searching for a segment.
+export function pathToUri(roots, file) {
+  const text = String(file).replace(/\\/g, "/");
+  const name = /^(?:\.\/)?docs\/(?:forge|superpowers)\/(.+)$/.exec(text);
+  if (name) return `${DOC_PREFIX}/${name[1]}`;
+  if (!path.isAbsolute(String(file))) return null;
+  const bases = [roots.docsRoot];
+  if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "forge"), path.join(roots.worktreeRoot, "docs", "superpowers"));
+  for (const base of bases) {
+    if (!base) continue;
+    const rel = path.relative(path.resolve(base), path.resolve(String(file)));
+    if (rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)) {
+      return `${DOC_PREFIX}/${rel.split(path.sep).join("/")}`;
+    }
+  }
+  return null;
 }
 
 // The plan path a ledger's identity line names, or null.
@@ -464,12 +493,12 @@ export function ledgerPlanPath(ledgerText) {
 // handoff note adds handoff_uri.
 export function propertiesFor(roots, slug, namedPath) {
   const properties = {};
-  const uri = namedPath ? pathToUri(namedPath) : null;
+  const uri = namedPath ? pathToUri(roots, namedPath) : null;
   if (uri && uri.startsWith(`${DOC_PREFIX}/plans/`)) {
     properties.plan_uri = uri;
     try {
       const spec = /^\*\*Spec:\*\*\s*`?([^`\s]+)`?/m.exec(fs.readFileSync(uriToLocal(roots, uri), "utf8"));
-      const specUri = spec ? pathToUri(spec[1]) : null;
+      const specUri = spec ? pathToUri(roots, spec[1]) : null;
       if (specUri) properties.spec_uri = specUri;
     } catch {
       // The plan is not in this mirror; the workstream carries no spec_uri.
@@ -477,7 +506,7 @@ export function propertiesFor(roots, slug, namedPath) {
   } else if (uri) {
     properties.spec_uri = uri;
   }
-  if (fs.existsSync(path.join(roots.workRoot, "sdd", slug, "handoff.md"))) {
+  if (familiesOf(roots).progress && fs.existsSync(path.join(roots.workRoot, "sdd", slug, "handoff.md"))) {
     properties.handoff_uri = `${DOC_PREFIX}/${HANDOFF_DIR}/${slug}.md`;
   }
   return properties;
@@ -506,6 +535,7 @@ export function localChanges(roots, state) {
     if (recorded === undefined) lines.push(`new: ${uri}`);
     else if (sha256(fs.readFileSync(file)) !== recorded) lines.push(`modified: ${uri}`);
   }
+  if (!familiesOf(roots).progress) return lines;
   for (const { slug, file } of ledgerFiles(roots.workRoot)) {
     const buffer = fs.readFileSync(file);
     const record = state.ledgers[slug];

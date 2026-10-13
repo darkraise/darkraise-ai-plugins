@@ -5,9 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  EMPTY_SHA, StateError, acquireLock, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, isoMicros,
+  EMPTY_SHA, StateError, acquireLock, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf, isoMicros,
   ledgerFiles, ledgerPlanPath, listDocumentFiles, loadState, localChanges, pathToUri, propertiesFor, saveState, sha256,
-  splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriProblem, uriToLocal, utf8Fault,
+  splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utf8Fault,
 } from "../../scripts/lib/darkmem-mirror.mjs";
 import { scratch, write } from "./helpers.mjs";
 
@@ -74,11 +74,21 @@ test("decodeUtf8 refuses invalid bytes and keeps a byte order mark", () => {
 
 test("paths name their uris; plans and drafts name their properties; a handoff note names its target", () => {
   const { roots } = mirror();
-  assert.equal(pathToUri("docs/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
-  assert.equal(pathToUri("/home/u/.dr-superpowers/mirror/p/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
-  assert.equal(pathToUri("docs/forge/plans/p1.md"), "superpowers/plans/p1.md");
-  assert.equal(pathToUri("/r/docs/forge/specs/s.md"), "superpowers/specs/s.md");
-  assert.equal(pathToUri("/repo/.superpowers/sdd/p1/progress.md"), null);
+  // A checkout and a project both named superpowers: the uri comes from the
+  // roots, never from the leftmost superpowers/ segment.
+  const named = {
+    docsRoot: "/home/u/.dr-forge/mirror/superpowers/superpowers",
+    workRoot: "/home/u/.dr-forge/mirror/superpowers/work",
+    worktreeRoot: "/w/superpowers",
+  };
+  assert.equal(pathToUri(named, "docs/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
+  assert.equal(pathToUri(named, "./docs/forge/plans/p1.md"), "superpowers/plans/p1.md");
+  assert.equal(pathToUri(named, "/home/u/.dr-forge/mirror/superpowers/superpowers/plans/p1.md"), "superpowers/plans/p1.md");
+  assert.equal(pathToUri(named, "/w/superpowers/docs/forge/specs/s.md"), "superpowers/specs/s.md");
+  assert.equal(pathToUri(named, "/w/superpowers/docs/superpowers/specs/s.md"), "superpowers/specs/s.md");
+  assert.equal(pathToUri(named, "/w/superpowers/.forge/sdd/p1/progress.md"), null);
+  assert.equal(pathToUri(named, "/elsewhere/superpowers/plans/p1.md"), null);
+  assert.equal(pathToUri(named, "plans/p1.md"), null);
   assert.equal(ledgerPlanPath("# SDD ledger — plan: docs/superpowers/plans/p1.md\nTask 1: x\n"), "docs/superpowers/plans/p1.md");
   assert.equal(ledgerPlanPath("Task 1: x\n"), null);
   write(path.join(roots.docsRoot, "plans", "p1.md"), "# P\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
@@ -94,6 +104,30 @@ test("paths name their uris; plans and drafts name their properties; a handoff n
   );
   assert.deepEqual(checkpointTarget("## State\n- Draft: `docs/superpowers/specs/d-design.md`\n"), { slug: "d-design", path: "docs/superpowers/specs/d-design.md" });
   assert.equal(checkpointTarget("## State\n- a punch list\n## Gotchas\n- Plan: `x.md`\n"), null);
+});
+
+test("each family lists, reports and links only when the roots sync it", () => {
+  const { roots } = mirror();
+  write(path.join(roots.docsRoot, "specs", "a.md"), "a");
+  write(path.join(roots.workRoot, "sdd", "p1", "handoff.md"), "h");
+  write(path.join(roots.workRoot, "sdd", "p1", "progress.md"), "l\n");
+  write(path.join(roots.workRoot, "handoff", "latest.md"), "x");
+  const only = (documents, progress) => ({ ...roots, families: { documents, progress } });
+  const uris = r => listDocumentFiles(r).map(f => f.uri);
+  assert.deepEqual(uris(roots), ["superpowers/specs/a.md", "superpowers/handoff/p1.md"]);
+  assert.deepEqual(uris(only(true, false)), ["superpowers/specs/a.md"]);
+  assert.deepEqual(uris(only(false, true)), ["superpowers/handoff/p1.md"]);
+  assert.deepEqual(uris(only(false, false)), []);
+  assert.deepEqual(localChanges(only(true, false), emptyState()), ["new: superpowers/specs/a.md"]);
+  assert.deepEqual(localChanges(only(false, true), emptyState()), [
+    "new: superpowers/handoff/p1.md", "unpushed: sdd/p1/progress.md (2 bytes, never synced)", "modified: handoff/latest.md",
+  ]);
+  assert.deepEqual(propertiesFor(only(true, false), "p1", null), {});
+  assert.deepEqual(propertiesFor(only(false, true), "p1", null), { handoff_uri: "superpowers/handoff/p1.md" });
+  assert.deepEqual(familiesOf(roots), { documents: true, progress: true });
+  assert.equal(uriFamily("superpowers/handoff/p1.md"), "progress");
+  assert.equal(uriFamily("superpowers/specs/a.md"), "documents");
+  assert.equal(uriFamily("superpowers/handoff/sub/x.md"), "documents");
 });
 
 test("state round-trips, including keys an ordinary object would inherit", () => {
