@@ -101,7 +101,8 @@ register_files() {
 
 # register_for_spec ROOT SPEC... — the registers covering any of the given
 # specs. Resolution runs this way round so that a plan cannot carry a stale
-# pointer to a register.
+# pointer to a register. Covers entries and specs compare as name keys, so
+# either docs prefix matches.
 register_for_spec() {
   local root="$1" f cov want
   shift
@@ -110,10 +111,9 @@ register_for_spec() {
     [ -n "$f" ] || continue
     while IFS= read -r cov; do
       [ -n "$cov" ] || continue
-      cov=${cov#./}
+      cov=$(forge_name_key "$cov")
       for want in "$@"; do
-        want=${want#./}
-        if [ "$cov" = "$want" ]; then
+        if [ "$cov" = "$(forge_name_key "$want")" ]; then
           printf '%s\n' "$f"
           break 2
         fi

@@ -82,6 +82,12 @@ check "register_files: both" "$(register_files "$ROOT" | wc -l | tr -d ' ')" "2"
 check "register_for_spec: matches one" \
   "$(register_for_spec "$ROOT" docs/superpowers/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: no spec argument prints nothing" "$(register_for_spec "$ROOT")" ""
+check "register_for_spec: the other docs prefix matches" \
+  "$(register_for_spec "$ROOT" docs/forge/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
+check "register_for_spec: a leading ./ and the other prefix match" \
+  "$(register_for_spec "$ROOT" ./docs/forge/specs/b-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
+check "register_for_spec: docs/superpowersx is another name" \
+  "$(register_for_spec "$ROOT" docs/superpowersx/specs/a-design.md)" ""
 check "register_files: no directory prints nothing" "$(register_files "$TMP/absent")" ""
 mkdir -p "$TMP/forge/docs/forge/registers"
 reg "$TMP/forge/docs/forge/registers/one.md" '| 1 | A | - | - | open | - |'
