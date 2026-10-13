@@ -2182,6 +2182,8 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
     }
     if (at === 'continue') {
       await $.prompt.submit({ text: autoContinuePrompt($.plugin.root, auto.plan), asUser: true })
+      // Clears a failure booked before this retry; pending stays after-compact.
+      await autoRunCall($, bound, ['resumed'])
       return
     }
     if (at === 'clear') {

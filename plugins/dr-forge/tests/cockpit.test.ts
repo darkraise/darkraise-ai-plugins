@@ -278,7 +278,7 @@ function world(on: On, w: World) {
         const state = JSON.parse(w.autoFile.text) as Record<string, unknown>
         if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: 'after-compact', compactions: Number(state.compactions) + 1 })
         if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume', regime: 'normal' })
-        if (exitCode === 0 && word === 'resumed') state.pending = null
+        if (exitCode === 0 && word === 'resumed' && state.pending === 'resume') state.pending = null
         if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
         if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
         w.autoFile.text = JSON.stringify(state)
@@ -2710,6 +2710,9 @@ describe('auto run', () => {
     expect(w.compacts).toHaveLength(1)
     expect(w.prompts).toHaveLength(1)
     expect(w.prompts?.[0]).toMatch(/after-compact/)
+    // The submitted retry clears the booked failure, so a later one does not stop the run.
+    expect(w.autoRuns?.at(-1)).toBe('--session sess-1 resumed')
+    expect(pendingOf(files)).toBe('after-compact')
   })
 
   test('books a refused compaction and retries it once', async ($, on) => {
