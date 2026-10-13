@@ -192,3 +192,171 @@ test("a docs directory left in the checkout while documents are applied darkmem 
   assert.equal(result.code, 0, result.stderr);
   assert.equal(result.stdout, `darkmem-sync reconcile: ${path.join(repo, "docs", "forge")} is not read while documents are applied darkmem\n`);
 });
+
+// A repository whose committed docs/forge holds `files` (name -> content),
+// mapped with documents configured darkmem; progress stays local. `stores` is
+// the stores.json record (null: none); `stub` is passed to startStub.
+async function docsRepo(t, files = { "specs/a.md": "# A\n" }, { stores = { documents: "local", progress: "local" }, stub: stubOptions = {} } = {}) {
+  const stub = await startStub(stubOptions);
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  for (const [name, content] of Object.entries(files)) write(path.join(repo, "docs", "forge", ...name.split("/")), content);
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "docs");
+  const home = mapped(repo, { url: stub.url, entry: { progressSource: "local" }, stores });
+  const seed = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
+  return { stub, repo, seed, ...home, stores: () => storesOf(home.home, repo), reconcile: () => reconcile(repo, home.env) };
+}
+
+const commitAll = (repo, message) => {
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", message);
+};
+const writes = (stub, from = 0) => stub.db.requests.slice(from).filter(r => r.method === "POST" || r.method === "PATCH");
+const at = (repo, name) => path.join(repo, ...name.split("/"));
+
+test("documents move into darkmem: imported, pulled into the mirror, verified, and their deletion staged", async t => {
+  const s = await docsRepo(t, { "specs/a.md": "# A\n", "plans/p.md": "# P\n**Spec:** docs/forge/specs/a.md\n" });
+  write(path.join(s.repo, "CLAUDE.md"), "See docs/superpowers/specs/a.md\n");
+  write(path.join(s.repo, "README.md"), "No citations\n");
+  commitAll(s.repo, "cite");
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/specs/a.md", content: "# A\n" });
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
+  assert.ok(result.stdout.includes(`  the deletion of docs/forge is staged in ${s.repo}; commit it\n`), result.stdout);
+  assert.ok(result.stdout.includes("    CLAUDE.md\n"), result.stdout);
+  assert.doesNotMatch(result.stdout, /README\.md/);
+  assert.equal(read(path.join(s.docsRoot, "plans", "p.md")), "# P\n**Spec:** docs/forge/specs/a.md\n");
+  assert.equal(s.stub.db.documents.size, 2);
+  assert.equal(writes(s.stub).filter(r => r.body?.uri === "superpowers/specs/a.md").length, 1, "the copy darkmem already held is not sent again");
+  assert.equal(git(s.repo, "status", "--porcelain"), "D  docs/forge/plans/p.md\nD  docs/forge/specs/a.md");
+  assert.equal(fs.existsSync(path.join(s.repo, "docs", "forge")), false);
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+  const again = await s.reconcile();
+  assert.equal(again.code, 0, again.stderr);
+  assert.equal(again.stdout, "");
+});
+
+test("a docs directory with no tracked files moves without staging anything, and is then named as not read", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  fs.mkdirSync(path.join(repo, "docs", "forge", "specs"), { recursive: true });
+  const { env, home, docsRoot } = mapped(repo, { url: stub.url, entry: { progressSource: "local" } });
+  await createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" }).putDocument({ project: "proj", uri: "superpowers/specs/b.md", content: "# B\n" });
+  const result = await reconcile(repo, env);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
+  assert.ok(result.stdout.includes("  docs/forge holds no tracked files; nothing to stage\n"), result.stdout);
+  assert.ok(result.stdout.includes(`darkmem-sync reconcile: ${path.join(repo, "docs", "forge")} is not read while documents are applied darkmem\n`), result.stdout);
+  assert.equal(read(path.join(docsRoot, "specs", "b.md")), "# B\n");
+  assert.equal(git(repo, "status", "--porcelain"), "");
+  assert.deepEqual(storesOf(home, repo), { documents: "darkmem", progress: "local" });
+});
+
+test("the citation list stops at 20 and counts the rest, and does not refuse the move", async t => {
+  const s = await docsRepo(t);
+  for (let i = 0; i < 23; i += 1) write(path.join(s.repo, "cite", `f${String(i).padStart(2, "0")}.md`), "docs/forge/specs/a.md\n");
+  commitAll(s.repo, "cite");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("    cite/f19.md\n"), result.stdout);
+  assert.doesNotMatch(result.stdout, /cite\/f20\.md/);
+  assert.ok(result.stdout.includes("  and 3 more\n"), result.stdout);
+});
+
+const caseFolds = (() => {
+  const dir = scratch("dms-case-");
+  fs.writeFileSync(path.join(dir, "a"), "");
+  return fs.existsSync(path.join(dir, "A"));
+})();
+const UNCARRIED = [
+  { kind: "a dotfile at depth", named: "docs/forge/specs/.draft.md", plant: repo => write(at(repo, "docs/forge/specs/.draft.md"), "x\n") },
+  { kind: "a dot directory", named: "docs/forge/.cache/x.md", plant: repo => write(at(repo, "docs/forge/.cache/x.md"), "x\n") },
+  { kind: "a symbolic link", named: "docs/forge/link.md", skip: process.platform === "win32", plant: repo => fs.symlinkSync("specs/a.md", at(repo, "docs/forge/link.md")) },
+  { kind: "a file under handoff/", named: "docs/forge/handoff/x.md", plant: repo => write(at(repo, "docs/forge/handoff/x.md"), "x\n") },
+  { kind: "a file under archive/", named: "docs/forge/archive/x.md", plant: repo => write(at(repo, "docs/forge/archive/x.md"), "x\n") },
+  { kind: "an empty file", named: "docs/forge/empty.md", plant: repo => write(at(repo, "docs/forge/empty.md"), "") },
+  { kind: "a file that is not UTF-8", named: "docs/forge/bin.md", plant: repo => write(at(repo, "docs/forge/bin.md"), Buffer.from([0x41, 0xff, 0x0a])) },
+  { kind: "a name uriProblem rejects", named: "docs/forge/specs/aux.md", skip: process.platform === "win32", plant: repo => write(at(repo, "docs/forge/specs/aux.md"), "x\n") },
+  { kind: "a case twin", named: "docs/forge/specs/A.md", skip: caseFolds, plant: repo => write(at(repo, "docs/forge/specs/A.md"), "# twin\n") },
+  {
+    kind: "an ignored file", named: "docs/forge/secret.md",
+    plant: repo => {
+      write(at(repo, ".gitignore"), "docs/forge/secret.md\n");
+      write(at(repo, "docs/forge/secret.md"), "s\n");
+    },
+  },
+];
+
+for (const { kind, named, plant, skip = false } of UNCARRIED) {
+  test(`documents stay local when the docs directory holds ${kind}`, { skip }, async t => {
+    const s = await docsRepo(t);
+    plant(s.repo);
+    commitAll(s.repo, "plant");
+    const result = await s.reconcile();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/forge holds files the move cannot carry$/m);
+    assert.ok(result.stdout.includes(`  ${named}`), result.stdout);
+    assert.deepEqual(writes(s.stub), []);
+    assert.equal(s.stub.db.documents.size, 0);
+    assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+    assert.equal(git(s.repo, "status", "--porcelain"), "");
+  });
+}
+
+test("documents stay local while the docs directory has uncommitted changes", async t => {
+  const s = await docsRepo(t);
+  write(path.join(s.repo, "docs", "forge", "specs", "a.md"), "# A edited\n");
+  write(path.join(s.repo, "docs", "forge", "new.md"), "new\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/forge has uncommitted changes$/m);
+  assert.match(result.stdout, /^ {3}M docs\/forge\/specs\/a\.md$/m);
+  assert.match(result.stdout, /^ {2}\?\? docs\/forge\/new\.md$/m);
+  assert.deepEqual(writes(s.stub), []);
+});
+
+test("a different version on darkmem refuses the move before anything is sent", async t => {
+  const s = await docsRepo(t, { "specs/a.md": "# A\n", "specs/b.md": "# B\n" });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/specs/a.md", content: "# A on darkmem\n" });
+  const from = s.stub.db.requests.length;
+  const result = await s.reconcile();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): darkmem holds a different version of some documents; nothing was sent$/m);
+  assert.match(result.stdout, /^ {2}superpowers\/specs\/a\.md: darkmem holds a different version$/m);
+  assert.deepEqual(writes(s.stub, from), []);
+  assert.equal(s.stub.db.documents.size, 1);
+  assert.equal(git(s.repo, "status", "--porcelain"), "");
+});
+
+test("a pull that reads back different bytes refuses the move, keeps the repository copy, and with no record keeps documents applied local", async t => {
+  const s = await docsRepo(t, undefined, { stores: null, stub: { transformContent: content => `${content}altered\n` } });
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): a pull of darkmem's copy differs from the repository$/m);
+  assert.match(result.stdout, /^ {2}superpowers\/specs\/a\.md: the mirror's copy differs from the repository's$/m);
+  assert.equal(read(at(s.repo, "docs/forge/specs/a.md")), "# A\n");
+  assert.equal(git(s.repo, "status", "--porcelain"), "");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+  assert.equal(cfgFor(s.repo, s.env).documents.applied, "local", "the pulled sync state does not tip the first-run rule");
+});
+
+test("a plan that starts during the pull stops the move before the deletion is staged", async t => {
+  let repo;
+  const s = await docsRepo(t, undefined, {
+    stub: {
+      onRequest: request => {
+        if (repo && request.path === "/api/v1/documents/by-uri") write(at(repo, ".forge/sdd/late/progress.md"), LEDGER("docs/forge/plans/late.md"));
+      },
+    },
+  });
+  repo = s.repo;
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): a plan is in progress: docs\/forge\/plans\/late\.md$/m);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.equal(read(at(s.repo, "docs/forge/specs/a.md")), "# A\n");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});

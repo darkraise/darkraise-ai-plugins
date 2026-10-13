@@ -6,7 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
 import { forgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
-import { DOC_PREFIX, ledgerPlanPath } from "./darkmem-mirror.mjs";
+import { DOC_PREFIX, caseGroups, decodeUtf8, ledgerPlanPath, sha256, uriProblem } from "./darkmem-mirror.mjs";
+import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
 const LEGACY = "docs/superpowers";
@@ -14,7 +15,9 @@ const DOCS = "docs/forge";
 
 // Each move, under "<family>:<target store>". A move answers
 // { moved: true, details } or { moved: false, reason, details }.
-const MOVES = {};
+const MOVES = {
+  "documents:darkmem": documentsToDarkmem,
+};
 
 function runGit(cwd, args, input) {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 60000, input, maxBuffer: 64 * 1024 * 1024 });
@@ -147,6 +150,115 @@ export function inProgress(cfg) {
 export function inProgressReason(context) {
   const found = inProgress(context.cfg);
   return found.length ? { reason: `a plan is in progress: ${found[0]}`, details: found.slice(1) } : null;
+}
+
+const pullReport = () => ({ conflicts: [], failures: [], notes: [], counts: { documents: 0, ledgers: 0, checkpoints: 0 }, partial: false, refused: 0 });
+const fileHash = file => (fs.existsSync(file) ? sha256(fs.readFileSync(file)) : null);
+
+// Why the mirror would never sync a tracked file (spec §7.2), or null.
+function uncarried(docsDir, parts) {
+  if (parts.some(part => part.startsWith("."))) return "a dot name, which the mirror never syncs";
+  if (parts[0] === "handoff") return "under handoff/, which is reserved for plan handoff notes";
+  if (parts[0] === "archive") return "under archive/, which is reserved for deletion archives";
+  let at = docsDir;
+  for (const part of parts) {
+    at = path.join(at, part);
+    if (fs.lstatSync(at).isSymbolicLink()) return "a symbolic link, or reached through one, which the mirror never syncs";
+  }
+  return fs.lstatSync(at).isFile() ? null : "not a regular file";
+}
+
+// The tracked documents the move carries, and every file it cannot (§7.2).
+// Tracked is the test because git rm -r deletes only tracked paths.
+function carriedDocuments(repoRoot, docsDir, rel) {
+  const problems = [];
+  const documents = [];
+  const listed = runGit(repoRoot, ["ls-files", "-z", "--", rel]);
+  for (const file of listed.stdout.split("\0").filter(Boolean)) {
+    const parts = file.slice(rel.length + 1).split("/");
+    const why = uncarried(docsDir, parts);
+    if (why) {
+      problems.push(`${file}: ${why}`);
+      continue;
+    }
+    const buffer = fs.readFileSync(path.join(docsDir, ...parts));
+    const content = decodeUtf8(buffer);
+    if (!content) {
+      problems.push(`${file}: empty or not UTF-8 text, which darkmem cannot store`);
+      continue;
+    }
+    const uri = `${DOC_PREFIX}/${parts.join("/")}`;
+    const problem = uriProblem(uri);
+    if (problem) {
+      problems.push(`${file}: ${problem}`);
+      continue;
+    }
+    documents.push({ file, parts, uri, content, hash: sha256(buffer) });
+  }
+  const fileOf = new Map(documents.map(doc => [doc.uri, doc.file]));
+  for (const group of caseGroups(documents.map(doc => doc.uri))) {
+    problems.push(`${group.map(uri => fileOf.get(uri)).join(", ")}: differ only in case, which a case-insensitive file system holds as one file`);
+  }
+  // The mirror walks the filesystem, so it would carry an ignored file, and
+  // git rm -r would leave it behind.
+  const ignored = runGit(repoRoot, ["status", "--porcelain", "-z", "--ignored=matching", "--untracked-files=all", "--", rel]);
+  for (const item of ignored.stdout.split("\0")) {
+    if (item.startsWith("!! ")) problems.push(`${item.slice(3)}: ignored by git, so the mirror would carry it and git rm would leave it behind`);
+  }
+  return { problems, documents };
+}
+
+// Documents, repository -> darkmem (spec §4): nothing is sent until every
+// check passes, darkmem's copies are never overwritten, and the repository
+// copy is removed only after a pull into the mirror reads back every file.
+// A missing or empty docs directory has nothing tracked and moves as is.
+async function documentsToDarkmem(context) {
+  const { cfg, client } = context;
+  const docsDir = forgeDir("docs", cfg.repoRoot);
+  const rel = slash(path.relative(cfg.repoRoot, docsDir));
+  const dirty = runGit(cfg.repoRoot, ["status", "--porcelain", "--untracked-files=all", "--", rel]);
+  if (dirty.status !== 0) return { moved: false, reason: `git status failed: ${dirty.stderr.trim()}`, details: [] };
+  if (dirty.stdout.trim()) return { moved: false, reason: `${rel} has uncommitted changes`, details: dirty.stdout.split("\n").filter(Boolean) };
+  const { problems, documents } = carriedDocuments(cfg.repoRoot, docsDir, rel);
+  if (problems.length) return { moved: false, reason: `${rel} holds files the move cannot carry`, details: problems };
+  // Import puts without a hash precondition, so this check is what keeps
+  // darkmem's copies; the window between it and the puts is accepted.
+  const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+  const differing = [];
+  for (const doc of documents) {
+    const held = remote.get(doc.uri);
+    if (held !== undefined && held !== doc.hash) differing.push(`${doc.uri}: darkmem holds a different version`);
+    const twins = [...remote.keys()].filter(uri => uri !== doc.uri && uri.toLowerCase() === doc.uri.toLowerCase()).sort();
+    if (twins.length) differing.push(`${doc.uri}: darkmem holds ${twins.join(", ")}, which differ only in case`);
+  }
+  if (differing.length) return { moved: false, reason: "darkmem holds a different version of some documents; nothing was sent", details: differing };
+  for (const doc of documents) {
+    if (!remote.has(doc.uri)) await client.putDocument({ project: cfg.project, uri: doc.uri, content: doc.content });
+  }
+  const mirror = mirrorRoots(cfg, "documents");
+  const pulled = pullReport();
+  await pullDocuments({ ...context, roots: mirror, report: pulled });
+  if (pulled.conflicts.length || pulled.failures.length) {
+    return { moved: false, reason: "the pull into the mirror did not complete; the repository copy stays", details: [...pulled.conflicts, ...pulled.failures] };
+  }
+  const busy = inProgressReason(context);
+  if (busy) return { moved: false, ...busy };
+  const mismatched = documents
+    .filter(doc => fileHash(path.join(mirror.docsRoot, ...doc.parts)) !== doc.hash)
+    .map(doc => `${doc.uri}: the mirror's copy differs from the repository's`);
+  if (mismatched.length) return { moved: false, reason: "a pull of darkmem's copy differs from the repository", details: mismatched };
+  if (!documents.length) return { moved: true, details: [`${rel} holds no tracked files; nothing to stage`] };
+  const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
+  if (removed.status !== 0) return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details: [] };
+  const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
+  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "--", ".", `:(exclude)${rel}`]);
+  const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
+  if (citing.length) {
+    details.push("these tracked files cite docs/superpowers/ or docs/forge/ names; rewrite them before you commit the deletion:");
+    details.push(...citing.slice(0, 20).map(file => `  ${file}`));
+    if (citing.length > 20) details.push(`and ${citing.length - 20} more`);
+  }
+  return { moved: true, details };
 }
 
 export async function reconcile(context) {
