@@ -24,8 +24,12 @@ for skill in subagent-driven-development executing-plans; do
   names "$skill: blocked goes to Fable" "$F" '`BLOCKED` goes on the pending list and one Fable batch runs at once'
   names "$skill: the deferred line" "$F" 'Task <N>: complete (deferred by the auto run)'
   names "$skill: dependents are deferred too" "$F" 'and every task that depends on it'
-  names "$skill: never performed" "$F" 'is never performed'
-  names "$skill: each task resets the count" "$F" '`scripts/auto-run task-complete`. After each'
+  names "$skill: never performed" "$F" 'irreversible, security-sensitive or outside-the-worktree action is never'
+  case $skill in
+    executing-plans) after='`scripts/auto-run task-complete`. After each task, run the Fable batch when' ;;
+    *) after='`scripts/auto-run task-complete`. After each wave, or each task in' ;;
+  esac
+  names "$skill: each task resets the count" "$F" "$after"
   names "$skill: compact ends the turn" "$F" '`Auto run: compacting` as its last line'
   names "$skill: the step owns the clear" "$F" 'then run `scripts/auto-run clear` and end as auto-run.md §Clears says'
   names "$skill: a handoff line waits for the task in flight" "$F" 'On `handoff`, finish the task in'

@@ -24,7 +24,8 @@ Serialize the rest of a wave, logging `Wave <k>: serialized — <reason>` and a
   such option (a Codex host never reaches this file: plan-lint refuses waves
   there);
 - the integration check fails on the wave's base (§1);
-- `scripts/context-size --wave 2` says `handoff`, or `compact` in an auto run (§1);
+- `scripts/context-size --wave 2` says `handoff`, or `compact` in an auto run
+  (§1);
 - your human partner says so.
 
 Tasks already running in worktrees finish and merge as below; the tasks not
@@ -63,12 +64,12 @@ At a wave boundary — every earlier task complete, every earlier wave
    output's summary in the Ruling, so the next wave's check is not blamed on
    it.
 3. **Size it.** `c` starts at the smaller of the wave's width and 3. Run
-   `scripts/context-size --wave <c>` and lower `c` while it exits 5 (or 6, an auto run's `compact`); it
-   reserves one task's worst growth for every task beside the first. `c = 1`
-   serializes the wave, and `scripts/context-size` alone then decides between
-   the next task and a handoff, exactly as in sequential mode: within the
-   plan's last two tasks that is `scripts/context-size --tail <R>`, the line
-   their briefs print.
+   `scripts/context-size --wave <c>` and lower `c` while it exits 5 (or 6, an
+   auto run's `compact`); it reserves one task's worst growth for every task
+   beside the first. `c = 1` serializes the wave, and `scripts/context-size`
+   alone then decides between the next task and a handoff, exactly as in
+   sequential mode: within the plan's last two tasks that is
+   `scripts/context-size --tail <R>`, the line their briefs print.
 4. **Check the checkout.** `git status --porcelain --untracked-files=no` is
    empty; commit your own bookkeeping first if it is not.
 5. **Log** `Wave <k>: started (base <sha7>; Tasks <a>-<b>; at most <c> at once)`.
