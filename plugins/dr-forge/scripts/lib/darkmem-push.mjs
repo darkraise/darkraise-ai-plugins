@@ -9,7 +9,7 @@ import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
   DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, caseGroups, checkpointTarget, decodeUtf8,
-  isoMicros, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs,
+  familiesOf, isoMicros, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit, unsupportedPlanDirs,
   uriProblem, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
@@ -334,9 +334,12 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
 export async function push(context) {
   const named = context.options["--workstream"];
   if (named !== undefined && !validKey(named)) throw new UsageError(`--workstream ${JSON.stringify(named)} is not a workstream key`);
+  const families = familiesOf(context.roots);
+  if (named !== undefined && !families.progress) throw new UsageError("--workstream needs progress applied darkmem; latest.md is local");
   Object.assign(context.report.counts, { documents: 0, "ledger entries": 0, checkpoints: 0 });
-  for (const uri of [...context.state.pendingLinks]) await linkHandoff(context, uri);
+  if (families.progress) for (const uri of [...context.state.pendingLinks]) await linkHandoff(context, uri);
   await pushDocuments(context);
+  if (!families.progress) return;
   await pushLedgers(context);
   await pushCheckpoint(context, named);
 }

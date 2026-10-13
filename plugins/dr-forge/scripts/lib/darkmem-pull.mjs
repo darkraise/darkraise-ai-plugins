@@ -4,7 +4,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { failItem } from "./darkmem-client.mjs";
-import { DOC_PREFIX, caseGroups, isoMicros, sha256, uriProblem, uriToLocal, validKey, writeFileAtomic } from "./darkmem-mirror.mjs";
+import {
+  DOC_PREFIX, caseGroups, familiesOf, isoMicros, sha256, uriFamily, uriProblem, uriToLocal, validKey, writeFileAtomic,
+} from "./darkmem-mirror.mjs";
 
 const RESOLVE = "move the local file aside, pull, and re-apply your change";
 
@@ -72,6 +74,8 @@ export async function pullDocuments(context) {
     failItem(report, "document manifest", error, "; no document pulled");
     return;
   }
+  const families = familiesOf(context.roots);
+  items = items.filter(item => families[uriFamily(item.uri)]);
   const twins = caseGroups(items.map(item => item.uri));
   for (const group of twins) {
     report.conflicts.push(`${group.join(", ")}: differ only in case, which a case-insensitive file system holds as one file; none of them pulled — rename or delete all but one on darkmem by hand (the sync has no rename or delete route)`);
@@ -163,7 +167,9 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
 
 export async function pull(context) {
   Object.assign(context.report.counts, { documents: 0, ledgers: 0, checkpoints: 0 });
-  await pullDocuments(context);
+  const families = familiesOf(context.roots);
+  if (families.documents || families.progress) await pullDocuments(context);
+  if (!families.progress) return;
   let open;
   try {
     open = await context.client.workstreams(context.cfg.project, "open");

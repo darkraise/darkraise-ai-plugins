@@ -282,3 +282,24 @@ test("a pull whose manifest read fails keeps the conflicts it never re-checked",
   assert.equal(status.code, 1);
   assert.match(status.stdout, /^conflict: superpowers\/a\.md: changed locally and on darkmem/m);
 });
+
+test("pull writes only the applied families, a handoff note with progress", async t => {
+  const s = await setup(t);
+  const records = stores => fs.writeFileSync(path.join(s.home, ".dr-forge", "stores.json"), JSON.stringify({ [s.repo]: stores }));
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/specs/a.md", content: "# A\n" });
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/handoff/p1.md", content: "# Handoff\n" });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  records({ documents: "darkmem", progress: "local" });
+  const documents = await s.pull();
+  assert.equal(documents.code, 0, documents.stdout + documents.stderr);
+  assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "# A\n");
+  assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "handoff.md")), false);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "progress.md")), false);
+  fs.rmSync(path.join(s.docsRoot, "specs", "a.md"));
+  records({ documents: "local", progress: "darkmem" });
+  const progress = await s.pull();
+  assert.equal(progress.code, 0, progress.stdout + progress.stderr);
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "handoff.md")), "# Handoff\n");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "specs", "a.md")), false);
+});

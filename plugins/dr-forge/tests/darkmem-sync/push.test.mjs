@@ -530,3 +530,25 @@ test("a pending link that names no handoff note is dropped", async t => {
   assert.equal(result.code, 0, result.stdout);
   assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, []);
 });
+
+test("push sends only the applied families, a plan's handoff.md with progress, and --workstream needs progress", async t => {
+  const s = await setup(t);
+  const records = stores => fs.writeFileSync(path.join(s.home, ".dr-forge", "stores.json"), JSON.stringify({ [s.repo]: stores }));
+  const uris = () => [...s.stub.db.documents.keys()].map(k => k.split("\u0000")[1]).sort();
+  records({ documents: "darkmem", progress: "local" });
+  write(path.join(s.docsRoot, "specs", "a.md"), "# A\n");
+  write(path.join(s.workRoot, "sdd", "p1", "handoff.md"), "# h\n");
+  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
+  const documents = await s.push();
+  assert.equal(documents.code, 0, documents.stdout + documents.stderr);
+  assert.deepEqual(uris(), ["superpowers/specs/a.md"]);
+  assert.equal(s.stub.db.workstreams.length, 0);
+  const refused = await s.push("--workstream", "p1");
+  assert.equal(refused.code, 2);
+  assert.match(refused.stderr, /--workstream needs progress applied darkmem/);
+  records({ documents: "local", progress: "darkmem" });
+  const progress = await s.push();
+  assert.equal(progress.code, 0, progress.stdout + progress.stderr);
+  assert.deepEqual(uris(), ["superpowers/handoff/p1.md", "superpowers/specs/a.md"]);
+  assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n"]);
+});
