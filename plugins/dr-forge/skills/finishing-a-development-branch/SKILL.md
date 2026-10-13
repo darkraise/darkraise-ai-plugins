@@ -385,7 +385,7 @@ already is) resolves against the wrong checkout, so `cd "$WORKTREE_PATH"`
 and re-resolve `PLAN_FILE` against that checkout's own copy of the plan
 file — not the absolute path into the main repo root the session may still
 be holding, which `scripts/sdd-workspace` now refuses from inside the
-worktree (`plan_require_same_repo` treats a linked worktree and its primary
+worktree (`plan_require_same_project` treats a linked worktree and its primary
 checkout as different repositories). Then run `scripts/sdd-workspace
 PLAN_FILE` and `rm -rf` the path it prints. Then, if your platform provides
 a workspace-exit tool, use it.

@@ -17,11 +17,11 @@ if [ $# -lt 3 ] || [ $# -gt 4 ]; then
   exit 2
 fi
 
-plan=$1
+plan=$(plan_locate "$1")
 base=$2
 head=$3
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-plan_require_same_repo "$plan"
+plan_require_same_project "$plan"
 
 git rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
 git rev-parse --verify --quiet "$head" >/dev/null || { echo "bad HEAD: $head" >&2; exit 2; }

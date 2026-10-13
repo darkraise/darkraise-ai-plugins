@@ -115,5 +115,29 @@ check "nine skill and reference files cite the contract" \
 check "no script execs a sibling instead of running it with bash" \
   "$(grep -rnE '(^|\$\(|&& |\|\| |; )"\$(HERE/|\(cd )' "$P/scripts" 2>/dev/null)" ""
 
+# --- a plan kept in darkmem: found by name, accepted as this project's ---
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+SR="$TMP/stores-repo"
+git init -q "$SR"
+git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
+STOP=$(git -C "$SR" rev-parse --show-toplevel)
+M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+mkdir -p "$M/superpowers/plans"
+printf '# Mirror plan\n\n### Task 1: One\n' > "$M/superpowers/plans/mp.md"
+check "sdd-workspace: a mirror plan by name gets a local workspace" \
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/forge/plans/mp.md)" "$STOP/.forge/sdd/mp"
+check "sdd-workspace: a mirror plan by path" \
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/superpowers/plans/mp.md")" "$STOP/.forge/sdd/mp"
+
+# --- a ConfigError stops a plan reader instead of dropping its amendments ---
+BH="$TMP/bad-home"; mkdir -p "$BH/.dr-forge"
+BR="$TMP/bad-repo"; git init -q "$BR"
+printf '{"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"p","documentStore":"bogus"}}}}\n' \
+  "$(git -C "$BR" rev-parse --show-toplevel)" > "$BH/.dr-forge/config.json"
+printf '# P\n\n### Task 1: One\n' > "$BR/p.md"
+(cd "$BR" && HOME=$BH bash "$P/scripts/task-brief" p.md 1 "$TMP/bad-brief.md" >/dev/null 2>&1)
+check "task-brief: a ConfigError exits 2" "$?" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

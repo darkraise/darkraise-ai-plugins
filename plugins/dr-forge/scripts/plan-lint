@@ -20,7 +20,7 @@ ROUTING="$HERE/../reference/codex-routing.json"
 
 usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]" >&2; exit 2; }
 [ $# -ge 1 ] || usage
-plan=$1; shift
+plan=$(plan_locate "$1"); shift
 amend="" amend_given=0 probe=1
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,6 +30,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+forge_stores_init "$(_plan_ctx "$plan")"
 [ "$amend_given" -eq 1 ] || amend=$(plan_amendments_file "$plan")
 
 TMP=$(mktemp -d)

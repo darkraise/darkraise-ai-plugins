@@ -273,7 +273,7 @@ if [ "${1:-}" = --survey ]; then
 fi
 
 [ $# -eq 1 ] || usage
-plan=$1
+plan=$(plan_locate "$1")
 [ -f "$plan" ] || die "no such plan file: $plan"
 is_codex_plan "$plan" && die "$plan is a Codex-host plan; convert it per reference/native-codex.md §Existing plans"
 

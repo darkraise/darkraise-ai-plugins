@@ -30,7 +30,7 @@ usage() {
 die() { echo "wave: $2" >&2; exit "$1"; }
 
 [ $# -ge 2 ] || usage
-cmd=$1 plan=$2
+cmd=$1 plan=$(plan_locate "$2")
 shift 2
 [ -f "$plan" ] || die 2 "no such plan file: $plan"
 

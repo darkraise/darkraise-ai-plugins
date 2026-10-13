@@ -27,8 +27,9 @@ if { [ "$header" -eq 1 ] && { [ $# -lt 1 ] || [ $# -gt 2 ]; }; } \
   exit 2
 fi
 
-plan=$1
+plan=$(plan_locate "$1")
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+forge_stores_init "$(_plan_ctx "$plan")"
 if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
 
 if [ -n "$given" ]; then
