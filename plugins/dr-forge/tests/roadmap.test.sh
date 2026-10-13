@@ -21,6 +21,8 @@ run() { # run <args...> -> sets OUT and RC
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export HOME="$TMP/home"
+mkdir -p "$HOME"
 
 ROOT="$TMP/repo"
 git init -q -b main "$ROOT"
@@ -121,6 +123,8 @@ bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: refuses while the spec's register is open" "$(grep -c '^not settled' <<<"$OUT")" "1"
 check "settle: the epic is untouched" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "doing"
+run bash "$RM" settle --root "$ROOT" --spec docs/forge/specs/2026-10-08-billing-design.md
+check "settle: the other docs prefix still refuses while open" "$(grep -c '^not settled' <<<"$OUT")" "1"
 bash "$REG" set "$D/registers/billing.md" 1 done >/dev/null
 bash "$REG" set "$D/registers/billing.md" 2 done >/dev/null
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
@@ -129,6 +133,10 @@ check "settle: the epic moves to verify, never done" "$(register_rows "$D/regist
 check "settle: with the owner note" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $6 }')" "built; owner confirms at the milestone audit"
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: idempotent" "$(grep -c '^no open epic row' <<<"$OUT")" "1"
+bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
+run bash "$RM" settle --root "$ROOT" --spec docs/forge/specs/2026-10-08-billing-design.md
+check "settle: an epic matches its spec under the other docs prefix" \
+  "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
 
 # verify is unresolved: the owner's confirmation is still owed.
 run bash "$RM" close --root "$ROOT" M1 --note "audit"
@@ -214,6 +222,14 @@ check "roadmap_epic_counts: a register name resolves in the mirror" \
   "$(HOME=$SH roadmap_epic_counts "$SR" docs/forge/registers/m1.md)" "1 2"
 check "roadmap_unresolved: rows named by register name" \
   "$(HOME=$SH roadmap_unresolved "$SR" docs/forge/registers/m1.md | cut -f1,2)" "$(printf 'docs/forge/registers/m1.md\t2')"
+
+mkdir -p "$M/superpowers/specs"
+printf '# X\n' > "$M/superpowers/specs/x.md"
+register "$M/superpowers/registers/m9.md" "docs/forge/specs/x.md" \
+  '| 1 | Epic | docs/forge/specs/x.md | - | open | - |'
+check "roadmap_unresolved: the milestone register under the other prefix is not listed twice" \
+  "$(HOME=$SH roadmap_unresolved "$SR" docs/superpowers/registers/m9.md | cut -f1,2 | tr '\n' '|')" \
+  "$(printf 'docs/superpowers/registers/m9.md\t1|docs/forge/registers/m1.md\t2|')"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

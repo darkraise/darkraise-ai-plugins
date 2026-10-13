@@ -82,7 +82,7 @@ roadmap_unresolved() {
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       rel=$(forge_name "$f" "$root")
-      [ "$rel" != "$reg" ] || continue
+      [ "$(forge_name_key "$rel")" != "$(forge_name_key "$reg")" ] || continue
       case " $seen " in *" $rel "*) continue ;; esac
       seen="$seen $rel"
       while IFS=$'\t' read -r rid ritem rassigned racc rstate rnote; do

@@ -289,7 +289,7 @@ cmd_settle() {
     [ -f "$(forge_resolve "$reg" "$root")" ] || continue
     while IFS=$'\t' read -r rid ritem rassigned racc rstate rnote; do
       a=${rassigned#\`}; a=${a%\`}
-      [ "$a" = "$spec" ] || continue
+      [ "$(forge_name_key "$a")" = "$(forge_name_key "$spec")" ] || continue
       case " $REGISTER_UNRESOLVED " in *" $rstate "*) ;; *) continue ;; esac
       [ "$rstate" != verify ] || continue
       bash "$HERE/register" set "$(forge_resolve "$reg" "$root")" "$rid" verify --note "built; owner confirms at the milestone audit" || exit 2
