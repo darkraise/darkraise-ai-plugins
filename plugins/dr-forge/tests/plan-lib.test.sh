@@ -373,6 +373,9 @@ check "plan_ledger: a mirror plan finds its mirror ledger by name" \
 printf '# SDD ledger — plan: %s\n' "$M/superpowers/plans/mp.md" > "$M/work/sdd/mp/progress.md"
 check "plan_ledger: an absolute mirror path names it too" \
   "$(cd "$SR" && HOME=$SH plan_ledger "$M/superpowers/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+check "plan_ledger: the pre-2.0 prefix names a mirror plan" \
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/superpowers/plans/mp.md")" "$M/work/sdd/mp/progress.md"
 check "plan_locate: a document name finds the mirror's copy" \
   "$(cd "$SR" && HOME=$SH plan_locate docs/forge/plans/mp.md)" "$M/superpowers/plans/mp.md"
 check "plan_locate: an existing file stays" "$(cd "$REPO" && plan_locate docs/demo.md)" "docs/demo.md"
@@ -391,6 +394,9 @@ printf '# LP\n' > "$STOP/docs/forge/plans/lp.md"
 mkdir -p "$M/work/sdd/lp"
 printf '# SDD ledger — plan: docs/forge/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
 check "plan_ledger: a checkout plan finds its mirror ledger" \
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/forge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
+printf '# SDD ledger — plan: docs/superpowers/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
+check "plan_ledger: the pre-2.0 prefix names a checkout plan" \
   "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/forge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
 (cd "$SR" && HOME=$SH plan_require_same_project "$M/superpowers/plans/mp.md" 2>/dev/null)
 check "same project: a mirror plan while documents are local is refused" "$?" "2"

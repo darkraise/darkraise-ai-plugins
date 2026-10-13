@@ -325,12 +325,12 @@ plan_locate() {
 
 # plan_ledger PLAN — the plan's ledger file when it exists and its identity line
 # names PLAN; nothing otherwise. A stale ledger under the same slug is ignored.
-# Plan and identity are compared as names, so a ledger in darkmem can name a
-# plan in the checkout and the reverse.
+# Plan and identity are compared as name keys, so a ledger in darkmem can name a
+# plan in the checkout and the reverse, under either docs prefix.
 plan_ledger() {
   local ctx want file named
   ctx=$(_plan_ctx "$1")
-  want=$(forge_name "$1" "$ctx")
+  want=$(forge_name_key "$(forge_name "$1" "$ctx")")
   file="$(forge_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
   [ -f "$file" ] || return 0
   named=$(ledger_plan "$file")
@@ -338,7 +338,7 @@ plan_ledger() {
   if command -v cygpath >/dev/null 2>&1; then
     named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
   fi
-  [ "$(forge_name "$named" "$ctx")" != "$want" ] || printf '%s\n' "$file"
+  [ "$(forge_name_key "$(forge_name "$named" "$ctx")")" != "$want" ] || printf '%s\n' "$file"
   return 0
 }
 
