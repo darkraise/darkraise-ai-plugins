@@ -27,7 +27,9 @@ import {
   nowLine,
   parseFinish,
   parseLedger,
+  docsLeaf,
   parseModeLines,
+  planCandidates,
   planTasks,
   planWithUpdate,
   remoteRuns,
@@ -2201,6 +2203,114 @@ describe('cockpit roots', () => {
     files['/home/me/.dr-forge/stores.json']!.mtimeMs = 2
     await $.tool.call({ tool: 'Bash', command: 'cat ~/.dr-forge/mirror/shop/work/sdd/p/progress.md' })
     expect(modeRuns).toEqual(['/home/me/code/shop', '/home/me/code/shop'])
+  })
+
+  test('resolves a plan under the docs root in darkmem, under the docs directory of each checkout otherwise', () => {
+    expect(docsLeaf(new Set(['forge', 'superpowers']))).toBe('forge')
+    expect(docsLeaf(new Set(['superpowers']))).toBe('superpowers')
+    expect(docsLeaf(new Set())).toBe('forge')
+    const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
+    const w = { root: '/w', docsDir: '/w/docs/forge' }
+    const p = { root: '/p', docsDir: '/p/docs/superpowers' }
+    for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', './docs/forge/plans/p.md']) {
+      expect(planCandidates(name, darkmem, [w, p])).toEqual([`${MIRROR}/superpowers/plans/p.md`])
+      // Either prefix names the same document, read under whichever docs directory each checkout has.
+      expect(planCandidates(name, { store: 'local', root: '/p/docs/superpowers' }, [w, p])).toEqual(['/w/docs/forge/plans/p.md', '/p/docs/superpowers/plans/p.md'])
+      expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/superpowers/plans/p.md'])
+    }
+    expect(planCandidates('docs/plans/p.md', null, [w, p])).toEqual(['/w/docs/plans/p.md', '/p/docs/plans/p.md'])
+    expect(planCandidates('/abs/plans/p.md', darkmem, [w])).toEqual(['/abs/plans/p.md'])
+    expect(planCandidates('docs/superpowersx/p.md', darkmem, [w])).toEqual(['/w/docs/superpowersx/p.md'])
+  })
+
+  test('reads a plan named under docs/superpowers from a checkout that has only docs/forge', async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/forge/plans/p.md': { text: PLAN },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
+  })
+
+  test('reads a plan named under docs/forge from a checkout that has only docs/superpowers', async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER.replace('docs/superpowers', 'docs/forge'), mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
+  })
+
+  test('reads the ledger and the plan from the mirror when both families are in darkmem', async ($, on) => {
+    const files: World['files'] = {
+      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
+      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
+    }
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
+    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
+  })
+
+  test('offers Resume for latest.md in the mirror, naming it', async ($, on) => {
+    const files: World['files'] = { [`${MIRROR}/work/handoff/latest.md`]: { text: '# Handoff', mtimeMs: 900_000 } }
+    const prompts: string[] = []
+    world(on, { ...SIGNED_IN, files, prompts, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-resume' })
+    expect(prompts).toEqual([expect.stringContaining(`${MIRROR}/work/handoff/latest.md`)])
+  })
+
+  test("reads finish.json and a local plan from the session's worktree before the primary", async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/main/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/main/.forge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900}' },
+      '/home/me/code/main/docs/superpowers/plans/p.md': { text: '# Plan\n\n### Task 1: Old title\n' },
+      '/home/me/code/shop/.forge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900}' },
+      '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
+    }
+    world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Finish push and open a PR/ })).toBeDefined()
+  })
+
+  test('a changed stores.json moves the card to the new roots', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      '/home/me/.dr-forge/stores.json': { text: '{}', mtimeMs: 1 },
+      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
+      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
+    }
+    const w: World = { ...SIGNED_IN, files }
+    world(on, w)
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeUndefined()
+    await ui.unmount()
+    w.modeOut = { exitCode: 0, stdout: MODE, stderr: '' }
+    files['/home/me/.dr-forge/stores.json']!.mtimeMs = 2
+    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dr-forge/stores.json' })
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
   })
 })
 

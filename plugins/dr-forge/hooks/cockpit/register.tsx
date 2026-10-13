@@ -48,6 +48,8 @@ import {
   parseFinish,
   parseLedger,
   parseModeLines,
+  planCandidates,
+  docsLeaf,
   planTasks,
   planFromTodos,
   planWithUpdate,
@@ -55,7 +57,6 @@ import {
   rampColor,
   remoteRuns,
   repoFromPorcelain,
-  isAbsolutePath,
   repoName,
   shellAge,
   roundNumber,
@@ -108,7 +109,7 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-forge handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.stateLeaf}/handoff/latest.md with the dr-forge resume-execution skill.`
+  return `Resume the work in ${S.latestName ?? `${S.stateLeaf}/handoff/latest.md`} with the dr-forge resume-execution skill.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
@@ -2032,6 +2033,9 @@ const S = {
   // The roots --mode last named, and the primary checkout and stores.json
   // modification time they were read for.
   roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
+  // latest.md's absolute path while progress is in darkmem; null while it is
+  // in the checkout, where the resume prompt names it by its state directory.
+  latestName: null as string | null,
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2342,26 +2346,47 @@ async function readRoots($: EngineInterface, primary: string): Promise<CockpitRo
   return value
 }
 
-// The run's ledger, its plan's tasks, and the newest handoff: read from the
-// primary checkout, S.where dr-forge keeps .forge/ (.superpowers/ before 2.0).
+// finish.json for the newest ledger's slug, or the no-plan one: it stays in
+// the workspace of the worktree that ran the plan, so the session's checkout
+// is read first, then the primary; the primary's path when neither has one.
+async function finishPath($: EngineInterface, checkouts: readonly string[], slug: string | null): Promise<string> {
+  const paths: string[] = []
+  for (const dir of checkouts) {
+    const leaf = stateLeaf(new Set((await $.fs.list(dir).catch(() => [])).map(entry => entry.name)))
+    paths.push(slug === null ? `${dir}/${leaf}/sdd/finish.json` : `${dir}/${leaf}/sdd/${slug}/finish.json`)
+  }
+  for (const path of paths) {
+    if ((await $.fs.stat(path).catch(() => null))?.kind === 'file') return path
+  }
+  return paths[paths.length - 1] ?? ''
+}
+
+// The run's ledger, its plan's tasks, and the newest handoff, read where the
+// roots put them (store options spec §7.3): the primary checkout's state
+// directory (.forge/, .superpowers/ before 2.0) while progress is local, the
+// darkmem mirror while it is not.
 async function readRun($: EngineInterface) {
-  const root = S.where.primary ?? (await read($, place))?.root ?? null
+  const session = (await read($, place))?.root ?? null
+  const root = S.where.primary ?? session
   if (root === null) return
   const state = await stateDirOf($, root)
-  await readRoots($, root)
+  const roots = await readRoots($, root)
+  const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
+  S.latestName = roots?.progress.store === 'darkmem' ? latest : null
+  const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
   try {
-    const handoff = await $.fs.stat(`${state}/handoff/latest.md`).catch(() => null)
+    const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
     if ((await read($, handoffAt)) !== handoffTime) await update($, handoffAt, () => handoffTime)
-    const base = `${state}/sdd`
+    const base = roots?.progress.ledgerRoot ?? `${state}/sdd`
     const entries = await $.fs.list(base).catch(() => [])
-    let newest: { path: string; at: number } | null = null
+    let newest: { slug: string; path: string; at: number } | null = null
     for (const entry of entries) {
       if (entry.kind !== 'dir') continue
       const info = await $.fs.stat(`${base}/${entry.name}/progress.md`).catch(() => null)
-      if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
+      if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: entry.name, path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
     }
-    await readFinish($, newest === null ? `${base}/finish.json` : newest.path.replace(/progress\.md$/, 'finish.json'))
+    await readFinish($, await finishPath($, checkouts, newest?.slug ?? null))
     const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage().catch(() => null))?.startedAt ?? 0
     const isOlder = newest !== null && newest.at < startedAt
     const clear = async () => {
@@ -2373,8 +2398,11 @@ async function readRun($: EngineInterface) {
     const ledger = parseLedger(String(await $.fs.read(newest.path)))
     let titles: { n: number; title: string }[] = []
     if (ledger.plan !== null) {
-      const planPath = isAbsolutePath(ledger.plan) ? ledger.plan : null
-      for (const candidate of planPath === null ? [(await read($, place))?.root, root].filter(Boolean).map(dir => `${dir}/${ledger.plan}`) : [planPath]) {
+      const places: { root: string; docsDir: string }[] = []
+      for (const dir of checkouts) {
+        places.push({ root: dir, docsDir: `${dir}/docs/${docsLeaf(new Set((await $.fs.list(`${dir}/docs`).catch(() => [])).map(entry => entry.name)))}` })
+      }
+      for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
           if (titles.length > 0) break

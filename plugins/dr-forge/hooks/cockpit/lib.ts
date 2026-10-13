@@ -117,6 +117,11 @@ export function stateLeaf(names: ReadonlySet<string>): string {
   return !names.has('.forge') && names.has('.superpowers') ? '.superpowers' : '.forge'
 }
 
+/** The docs directory's name under a checkout's docs/: forge, or the pre-2.0 superpowers where only that exists. */
+export function docsLeaf(names: ReadonlySet<string>): string {
+  return !names.has('forge') && names.has('superpowers') ? 'superpowers' : 'forge'
+}
+
 /** Whether a subagent type or skill name belongs to dr-forge, under its name or the pre-2.0 dr-superpowers. */
 export function isSuperpowers(name: string): boolean {
   return name.startsWith('dr-forge:') || name.startsWith('dr-superpowers:')
@@ -494,6 +499,24 @@ export function billingLabel(billing: string | null): string | null {
 /** Whether a path is absolute on any platform: rooted at a slash or a drive letter. */
 export function isAbsolutePath(path: string): boolean {
   return /^([\\/]|[a-z]:[\\/])/i.test(path)
+}
+
+/**
+ * Where a ledger's plan name may be read, in order (darkmem store options spec
+ * §7.1 and §7.3): an absolute name as written; a document name under either
+ * prefix under the docs root while documents are in darkmem, else under each
+ * checkout's own docs directory, since docs/superpowers/<rest> and
+ * docs/forge/<rest> name one document; any other name under each checkout.
+ * The session's checkout comes first.
+ */
+export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
+  if (isAbsolutePath(plan)) return [plan]
+  const name = plan.replace(/^\.\//, '')
+  const doc = /^docs\/(?:forge|superpowers)(?:\/(.*))?$/.exec(name)
+  const under = (dir: string) => (doc?.[1] ? `${dir}/${doc[1]}` : dir)
+  if (doc && docs?.store === 'darkmem') return [under(docs.root)]
+  const seen = new Set<string>()
+  return checkouts.filter(one => !seen.has(one.root) && Boolean(seen.add(one.root))).map(one => (doc ? under(one.docsDir) : `${one.root}/${name}`))
 }
 
 function slashes(path: string): string {
