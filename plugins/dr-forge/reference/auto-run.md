@@ -178,10 +178,15 @@ and launch command `scripts/next-step` wrote to `latest.md`), then:
   `scripts/auto-run clear --phase`.
 - **A compaction that left too much:** `scripts/auto-run clear`.
 
-On exit 0, end the turn with `Auto run: clearing` as the last line, below the
-next-step block. The cleared session runs on the launch command's model and
-effort. On exit 5 the run has stopped (the third self-resume in a row without
-a completed task): end with the next-step block alone, as Stopping says.
+If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`: the
+`latest.md` it would read is an older handoff's. Run `scripts/auto-run stop
+--reason "the handoff file could not be written"` and end as Stopping says.
+
+When `scripts/auto-run clear` exits 0, end the turn with `Auto run: clearing`
+as the last line, below the next-step block. The cleared session runs on the
+launch command's model and effort. On exit 5 the run has stopped (the third
+self-resume in a row without a completed task): end with the next-step block
+alone, as Stopping says.
 
 ## Stopping
 
@@ -192,7 +197,8 @@ ends as finished. Run it, then end as the attended flow would, when:
 - dr-forge:resume-execution would stop to ask (a worktree whose branch is
   gone);
 - finishing hits one of its unattended stops (failing tests at its first
-  step or on the merged result, a rejected push, a refused worktree removal).
+  step or on the merged result, a rejected push, a refused worktree removal);
+- `scripts/next-step` exits 4 during a clear (see Clears).
 
 When `scripts/auto-run clear` exits 5, or the cockpit's prompt says the run
 stopped, it has already stopped: end with the next-step block. The cockpit
