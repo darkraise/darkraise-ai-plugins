@@ -2326,6 +2326,8 @@ async function stopAutoRun($: EngineInterface) {
 // changes, so the session that ran a move sees the new roots. Null keeps the
 // checkout paths: silently without node or mode lines, with a note in the
 // pane when the run fails or outruns its 5 seconds.
+const NO_NODE = /ENOENT|not found/i
+
 async function readRoots($: EngineInterface, primary: string): Promise<CockpitRoots | null> {
   const home = (await read($, place))?.home ?? null
   const stores = home === null ? null : await $.fs.stat(`${home}/.dr-forge/stores.json`).catch(() => null)
@@ -2333,13 +2335,17 @@ async function readRoots($: EngineInterface, primary: string): Promise<CockpitRo
   if (S.roots.key === key) return S.roots.value
   let value: CockpitRoots | null = null
   let note: string | null = null
+  const started = await $.clock.now()
   try {
     const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', primary], { timeoutMs: 5000 })
     if (ran.exitCode === 0) value = parseModeLines(ran.stdout)
-    else note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
+    else if (ran.exitCode !== 127 && !NO_NODE.test(ran.stderr)) {
+      note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
+    }
   } catch (error) {
-    // The run could not start (no node) or outran its timeout.
-    if (!/ENOENT/.test(String(error))) note = 'darkmem-config.mjs --mode gave no answer within 5 seconds'
+    // How the engine words a timeout or a missing node is unconfirmed, so the
+    // run's duration decides: a failure well inside the bound is not a timeout.
+    if (!NO_NODE.test(String(error)) && (await $.clock.now()) - started >= 4900) note = 'darkmem-config.mjs --mode gave no answer within 5 seconds'
   }
   S.roots = { key, value }
   if ((await read($, rootsNote)) !== note) await update($, rootsNote, () => note)

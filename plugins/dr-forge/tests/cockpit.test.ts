@@ -203,7 +203,7 @@ type World = {
   /** The auto-run state file the fake script updates, as the real one would. */
   autoFile?: { text: string }
   /** What `darkmem-config.mjs --mode` answers; `missing` rejects as a missing node does. Git porcelain with exit 0 unless said. */
-  modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing'
+  modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing' | 'rejects' | 'timeout'
   /** The directory each `--mode` call names. */
   modeRuns?: string[]
   /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
@@ -320,6 +320,12 @@ function world(on: On, w: World) {
     if (argv.includes('/scripts/lib/darkmem-config.mjs ')) {
       w.modeRuns?.push(e.argv[e.argv.length - 1] ?? '')
       if (w.modeOut === 'missing') throw new Error('spawn node ENOENT')
+      if (w.modeOut === 'rejects') throw new Error('the engine refused to start the process')
+      if (w.modeOut === 'timeout') {
+        return clock.advance(5_000).then(() => {
+          throw new Error('the process was stopped')
+        })
+      }
       const out = w.modeOut ?? { exitCode: 0, stdout: PORCELAIN, stderr: '' }
       return { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -2176,6 +2182,32 @@ describe('cockpit roots', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
     expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
+  })
+
+  for (const [name, modeOut] of [
+    ['a run that fails at once without naming node', 'rejects'],
+    ['an exit 127', { exitCode: 127, stdout: '', stderr: 'sh: 1: node: not found\n' }],
+  ] as const) {
+    test(`${name} keeps the checkout paths silently`, async ($, on) => {
+      const files = checkoutFiles()
+      world(on, { ...SIGNED_IN, files, modeOut })
+      signedIn(on, files)
+      await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+      expect(JSON.stringify(await ui.drawn())).not.toMatch(/gave no answer|exited 127|not found/)
+    })
+  }
+
+  test('a run that fails only after its 5 seconds says it gave no answer', async ($, on) => {
+    const files = checkoutFiles()
+    world(on, { ...SIGNED_IN, files, modeOut: 'timeout' })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /darkmem-config\.mjs --mode gave no answer within 5 seconds/ })).toBeDefined()
   })
 
   test('a run that prints no mode lines keeps the checkout paths silently', async ($, on) => {
