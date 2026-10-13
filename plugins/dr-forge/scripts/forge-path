@@ -10,7 +10,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/roots.sh"
 usage() { echo "usage: forge-path state|docs [RELATIVE] | ledger SLUG | latest | store | name PATH" >&2; exit 2; }
 [ $# -ge 1 ] || usage
-forge_stores_init
+[ "$1" = state ] || forge_stores_init
 case $1 in
   state)
     [ $# -le 2 ] || usage

@@ -504,7 +504,7 @@ export function ledgerEntries(text) {
 export function pathToUri(roots, file) {
   const text = String(file).replace(/\\/g, "/");
   const name = /^(?:\.\/)?docs\/(?:forge|superpowers)\/(.+)$/.exec(text);
-  if (name) return `${DOC_PREFIX}/${name[1]}`;
+  if (name) return name[1].split("/").some(segment => segment === ".." || segment === ".") ? null : `${DOC_PREFIX}/${name[1]}`;
   if (!path.isAbsolute(String(file))) return null;
   const bases = [roots.docsRoot];
   if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "forge"), path.join(roots.worktreeRoot, "docs", "superpowers"));

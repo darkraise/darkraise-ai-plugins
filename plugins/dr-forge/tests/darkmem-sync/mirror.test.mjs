@@ -110,6 +110,7 @@ test("paths name their uris; plans and drafts name their properties; a handoff n
   assert.equal(pathToUri(named, "/w/superpowers/.forge/sdd/p1/progress.md"), null);
   assert.equal(pathToUri(named, "/elsewhere/superpowers/plans/p1.md"), null);
   assert.equal(pathToUri(named, "plans/p1.md"), null);
+  assert.equal(pathToUri(named, "docs/forge/../../x.md"), null);
   assert.equal(ledgerPlanPath("# SDD ledger — plan: docs/superpowers/plans/p1.md\nTask 1: x\n"), "docs/superpowers/plans/p1.md");
   assert.equal(ledgerPlanPath("Task 1: x\n"), null);
   write(path.join(roots.docsRoot, "plans", "p1.md"), "# P\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
