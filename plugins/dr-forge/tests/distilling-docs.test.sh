@@ -56,6 +56,17 @@ present "exactly one removal commit" "$SKILL" 'exactly one removal commit'
 present "never squashed" "$SKILL" 'never squashed on integration'
 present "waves are bounded" "$SKILL" 'never the whole tree'
 
+# Documents in darkmem (wiring spec §2): the mirror is untracked, so synced and
+# unchanged replaces tracked and clean, a revision replaces the SHA, two pushes
+# replace the two commits, and restore replaces git revert.
+present "darkmem: follows the document store" "$SKILL" 'prints `documents darkmem`'
+present "darkmem: eligible means synced and unchanged" "$SKILL" 'bash <plugin-root>/scripts/darkmem-sync revision <name>'
+present "darkmem: Source cites the revision" "$SKILL" '`<name>@r<id>`'
+present "darkmem: two pushes" "$SKILL" 'The two commits become two pushes.'
+present "darkmem: deletions are archived" "$SKILL" 'superpowers/archive/<stamp>/'
+present "darkmem: restore replaces git revert" "$SKILL" 'bash <plugin-root>/scripts/darkmem-sync restore <name>'
+present "darkmem: a rewrite reads the restored source" "$SKILL" 'restore <name>` brings the archived copy back'
+
 JUDGE="$P/skills/distilling-docs/references/distil-judge.md"
 check "exists: references/distil-judge.md" \
   "$([ -f "$JUDGE" ] && echo yes || echo no)" "yes"
@@ -72,6 +83,9 @@ present "judge returns one verdict per source file" "$JUDGE" 'one verdict per so
 present "judge names the SHA it was given" "$JUDGE" 'Name [COMMIT] in your report'
 present "judge is read-only" "$JUDGE" 'read-only'
 present "judge rules on rewritten entries too" "$JUDGE" 'rewrite'
+present "judge accepts one revision per file in darkmem" "$JUDGE" 'one `<name>@r<id>` line per distilled file'
+present "judge reads the files unedited since the snapshot" "$JUDGE" 'unedited since [COMMIT]'
+present "judge rewrites carry the restored source in darkmem" "$JUDGE" 'the text of each source restored with `darkmem-sync restore`'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
