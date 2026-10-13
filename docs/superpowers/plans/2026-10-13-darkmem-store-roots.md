@@ -12,6 +12,8 @@
 
 **Execution:** inline — `claude --model sonnet --effort high` — 4 of 17 tasks are heavy (Tasks 2, 3, 4, 10) and are delegated; the rest total 4 or less
 
+**Plan review:** 2026-10-13 — dr-superpowers:judge-opus — executability 17 / coherence 18 / coverage 17 / assumptions 17 (round 2)
+
 **Parallelism:** sequential — the spec's Execution strategy: the options feed the roots, the roots feed the rewiring and the sync
 
 ## Global Constraints
@@ -86,7 +88,7 @@
 
 **C9. `scripts/forge-path`** (Task 9): `state [REL]` (unchanged), `docs [REL]` (follows the documents root), `ledger SLUG`, `latest`, `store` (two lines, `documents <applied>` and `progress <applied>`), `name PATH`.
 
-**C10. `scripts/lib/plan.sh`** (Tasks 10, 16): sources `roots.sh` instead of `forge-dir.sh`; new `plan_locate PLAN` (PLAN when it is a file, else `forge_resolve PLAN` when that is a file, else PLAN unchanged) and `plan_require_same_project FILE` (accepts FILE inside the working directory's top level, or under the documents root when documents are applied darkmem; otherwise the existing message and exit 2). Task 11 deletes `plan_require_same_repo`; Task 16 deletes `plan_repo_canon`.
+**C10. `scripts/lib/plan.sh`** (Tasks 10, 16): sources `roots.sh` instead of `forge-dir.sh`; new `plan_locate PLAN` (PLAN when it is a file, else `forge_resolve PLAN` when that is a file, else PLAN unchanged) and `plan_require_same_project FILE` (accepts FILE inside the working directory's top level, or under the documents root when documents are applied darkmem; otherwise the existing message and exit 2), plus the internal `_plan_ctx PLAN` (Task 10) that Task 16 also calls: prints PLAN's own directory when that directory is inside a git repository, else `$PWD`. Task 11 deletes `plan_require_same_repo`; Task 16 deletes `plan_repo_canon`.
 
 **C11. Prose tokens** (Task 17): `<ledger dir>` = `bash <plugin-root>/scripts/forge-path ledger <plan-basename>`; `<latest.md>` = `bash <plugin-root>/scripts/forge-path latest`.
 
@@ -97,13 +99,15 @@
 - `createClient` accepts a null key and only uses it per call: `scripts/lib/darkmem-client.mjs:27-33`. So `status` works offline.
 - `forge-config.mjs` is safe to import: its CLI runs only under the `process.argv[1]` guard (`scripts/lib/forge-config.mjs`, last lines).
 - The host's `~/.dr-forge/config.json` has no `darkmem` section (read 2026-10-13), and every existing suite works in temporary repositories, so with this plan every existing suite keeps local behaviour.
+- Existing shell suites that leave `HOME` real stay correct once scripts source `roots.sh`: for an unmapped repository `resolveStores` reads only `~/.dr-forge/config.json` (Task 2 calls `resolveSettings` and reads `stores.json` only after a mapping matches), and every suite works in temporary repositories no host mapping names. The one host dependency left is a malformed `~/.dr-forge/config.json`, which now exits 2 as a `ConfigError` by design; Task 9 isolates `HOME` in `forge-dir.test.sh`, the suite that exercises `forge-path` directly.
+- `resolveStores` reads the global settings through `resolve(env, warn)` (`scripts/lib/forge-config.mjs:179`), which applies a key's environment variable over the config file's value; Task 2 passes a silent `warn`.
 - The executor lane is closed: `codex-gate usable=false reason=plugin-not-enabled lane=false` (2026-10-13), so no task carries an Executor line.
 - `resolveStores` adds `worktreeRoot`, `reason` and `sync.keyEnv` to the spec §1 shape: additive, needed for local roots, the local-mode message and the offline message.
 - `roots.sh` converts node's paths with `cygpath -m`, not the inventory's `-u`: `-m` gives the `C:/…` form `git rev-parse` prints under Git Bash, so prefix comparisons in `forge_name` match.
 - The spec's §2 rewiring list misses the `$root/<name>` joins in `scripts/roadmap`, `scripts/register` and `lib/roadmap.sh`, and every script's `PLAN_FILE` argument: handoff prompts name plans as `docs/forge/…`, which only resolve through `plan_locate`. Tasks 11 and 12 cover them (inventory re-checked 2026-10-13 with `grep -n '\$root/'`).
-- Out of this plan: the cockpit mod (`hooks/cockpit/register.tsx:2290-2325`) reads ledgers and `latest.md` from `<primary>/<state>/` directly; recorded as a new open row in `docs/superpowers/registers/2026-09-24-darkmem-mirror.md`.
-- Register row 16 stays `doing`, assigned to the spec, because plan 2 delivers its move; this plan discharges row 2 and dr-forge register row 13 (`docs/superpowers/registers/2026-10-11-dr-forge.md`, which does not cover this spec, so Task 3 names it in its text instead of an Items line).
-- Until plan 2, flipping `documentStore` or `progressSource` changes only the configured store; the applied store (`stores.json`) moves nothing until plan 2's reconcile. Plan 1 writes the record only from `darkmem-sync import` (Task 5).
+- Out of this plan: the cockpit mod (`hooks/cockpit/register.tsx:2290-2325`) reads ledgers and `latest.md` from `<primary>/<state>/` directly; already recorded as open row 17 of `docs/superpowers/registers/2026-09-24-darkmem-mirror.md` (committed with this plan, 2659b22), so no task edits it.
+- Register row 16 stays `doing`, assigned to the spec, because plan 2 delivers its move; this plan discharges row 2 and dr-forge register row 13 (`docs/superpowers/registers/2026-10-11-dr-forge.md`, which does not cover this spec, so Task 3 names it in its text instead of an Items line). Both rows were already set `planned` and assigned to this plan when it was written (2659b22); finishing the branch moves them on, so no task edits a register.
+- Until plan 2, flipping `documentStore` or `progressSource` changes only the configured store; the applied store (`stores.json`) moves nothing until plan 2's reconcile. Plan 1 writes the record only from `darkmem-sync import` (Task 5). This pulls one piece of the spec's plan 2 (`stores.json`, Delivery item 2) forward: `resolveStores` must read the record to report an applied store, and an import is the one plan 1 command that makes a family darkmem-held, so without Task 5 the applied store would rest on the `.sync-state.json` inference alone. Owner to confirm at handoff.
 - `skills/using-superpowers/SKILL.md` must stay at or under 5,100 bytes (`tests/hook.test.sh:183`); it is 5,025 bytes today, and Task 17's replacement line is 43 bytes shorter than the line it replaces (measured 2026-10-13).
 
 ## Task index
@@ -206,7 +210,7 @@ git commit -m "feat(dr-forge): add documentStore and progressSource"
 
 **Files:**
 - Modify: `scripts/lib/darkmem-config.mjs`
-- Modify: `tests/darkmem-sync/helpers.mjs:42-59`
+- Modify: `tests/darkmem-sync/helpers.mjs:38-59`
 - Test: `tests/darkmem-sync/config.test.mjs` (rewritten)
 
 **Interfaces:**
@@ -455,6 +459,7 @@ test("the run key prefers the declared id, then the session record, then a day k
   assert.equal(runKey({ cwd: repo, env, now }), "abc-123");
 });
 
+// Carried over unchanged from the current file: it needs an empty HOME, not makeHome's mapping.
 test("the pre-2.0 session id variable still declares the run, behind the new one", () => {
   const cwd = makeRepo();
   const HOME = scratch("dms-home-");
@@ -860,7 +865,7 @@ git commit -m "fix(dr-forge): compute darkmem uris from the roots"
 - Modify: `scripts/lib/darkmem-sync.mjs` (replace the whole file)
 - Modify: `scripts/lib/darkmem-config.mjs` (delete `resolveMode`; new header comment)
 - Modify: `scripts/darkmem-sync:2-16` (header comment)
-- Test: `tests/darkmem-sync/cli.test.mjs`
+- Test: `tests/darkmem-sync/cli.test.mjs`, `tests/darkmem-sync/push.test.mjs:131,282`
 
 **Interfaces:**
 - Consumes: C2, C4
@@ -884,7 +889,9 @@ In `tests/darkmem-sync/cli.test.mjs`, replace the expected output in "status in 
   ].join("\n"));
 ```
 
-Append these tests:
+In `tests/darkmem-sync/push.test.mjs`, `status` now prints three header lines (the project line, `documents: …`, `progress: …`) before any change line. Change the expected count in both clean-status assertions from `1` to `3`: line 131, which ends `.stdout.split("\n").filter(Boolean).length, 1);`, and line 282, `assert.equal(clean.stdout.split("\n").filter(Boolean).length, 1);`. The `pull.test.mjs` status checks are regex matches and need no change.
+
+In `tests/darkmem-sync/cli.test.mjs`, append these tests:
 
 ```js
 test("status names a local family as not synced and leaves its files out", async () => {
@@ -1132,7 +1139,7 @@ Expected: PASS, every file.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dr-forge/scripts/lib/darkmem-sync.mjs plugins/dr-forge/scripts/lib/darkmem-config.mjs plugins/dr-forge/scripts/darkmem-sync plugins/dr-forge/tests/darkmem-sync/cli.test.mjs
+git add plugins/dr-forge/scripts/lib/darkmem-sync.mjs plugins/dr-forge/scripts/lib/darkmem-config.mjs plugins/dr-forge/scripts/darkmem-sync plugins/dr-forge/tests/darkmem-sync/cli.test.mjs plugins/dr-forge/tests/darkmem-sync/push.test.mjs
 git commit -m "feat(dr-forge): run darkmem-sync on the stores"
 ```
 
@@ -1406,7 +1413,7 @@ test("a ledger line yields its task, state and commit; a blank line joins the en
 });
 ```
 
-In `tests/darkmem-sync/push.test.mjs`, replace the test "a ledger goes up as the appended bytes, one entry per push, and darkmem's concatenation is the file" (lines 134-152) with:
+In `tests/darkmem-sync/push.test.mjs` (every line number below is the original file's; find each test by its name once an earlier edit has shifted them), replace the test "a ledger goes up as the appended bytes, one entry per push, and darkmem's concatenation is the file" (lines 134-152) with:
 
 ```js
 test("a ledger goes up one entry per complete line, with the line's properties, and darkmem's concatenation is the file", async t => {
@@ -1435,6 +1442,23 @@ test("a ledger goes up one entry per complete line, with the line's properties, 
   assert.equal((await s.ledger("p1")).map(e => e.body).join(""), read(file));
   assert.equal((await s.push()).code, 0);
   assert.equal((await s.ledger("p1")).length, 6, "nothing new, nothing sent");
+});
+```
+
+In the test "a rewritten ledger is refused and nothing is sent" (line 154), the first push of `"one\ntwo\n"` now sends two entries: change its last line, `assert.equal((await s.ledger("p1")).length, 1);` (line 163), to `assert.equal((await s.ledger("p1")).length, 2);`.
+
+After that test, add:
+
+```js
+test("a ledger line longer than one entry is split and every piece carries the line's properties", async t => {
+  const s = await setup(t);
+  const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  write(file, `Task 1: complete (commits 1a2b3c4..5d6e7f8, review clean) — ${"x".repeat(70000)}\n`);
+  assert.equal((await s.push()).code, 0);
+  const entries = await s.ledger("p1");
+  assert.equal(entries.length, 2);
+  for (const entry of entries) assert.deepEqual(entry.properties, { task: 1, state: "done", commit: "5d6e7f8" });
+  assert.equal(entries.map(e => e.body).join(""), read(file));
 });
 ```
 
@@ -1873,7 +1897,7 @@ git commit -m "feat(dr-forge): add the roots library"
 
 **Files:**
 - Modify: `scripts/forge-path` (replace the whole file)
-- Test: `tests/forge-dir.test.sh:42-50`
+- Test: `tests/forge-dir.test.sh:14-15`, `:42-50`
 
 **Interfaces:**
 - Consumes: C7, C8
@@ -1886,12 +1910,12 @@ git commit -m "feat(dr-forge): add the roots library"
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/forge-dir.test.sh`, insert before the final `printf '\n%d passed…`:
+In `tests/forge-dir.test.sh`, directly after `trap 'rm -rf "$TMP"' EXIT` (line 15), add `export HOME="$TMP/home"; mkdir -p "$HOME"`, so the existing forge-path checks no longer read the host's `~/.dr-forge/`. Then insert before the final `printf '\n%d passed…`:
 
 ```bash
 # --- forge-path: the families' roots and names ---
 . "$HERE/fixtures/darkmem-stores.sh"
-H="$TMP/home"; mkdir -p "$H"
+H=$HOME
 git -C "$G" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 FP="$HERE/../scripts/forge-path"
 check "forge-path: ledger, local" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$TOP/.superpowers/sdd/p1"
@@ -2178,7 +2202,7 @@ check "sdd-workspace: a mirror plan by path" \
   "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/superpowers/plans/mp.md")" "$STOP/.forge/sdd/mp"
 ```
 
-`$P` is the plugin root the suite already defines (it is used at line 110); if the suite names it differently, use that name.
+`$P` is the plugin root the suite already defines (`P="$HERE/.."`, line 102).
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -2203,7 +2227,9 @@ In each script below, change the line that assigns the plan from its argument so
 
 Before editing `scripts/wave`, confirm it sources `lib/plan.sh` (`grep -n 'lib/plan.sh' plugins/dr-forge/scripts/wave`); if it does not, add `. "$HERE/lib/plan.sh"` beside its other library lines, using the variable it already uses for its own directory.
 
-Rename every call of `plan_require_same_repo` to `plan_require_same_project`: `scripts/plan-amend:23`, `scripts/review-package:24`, `scripts/sdd-workspace:32`, `scripts/next-step:130`. Then delete `plan_require_same_repo` and its comment from `scripts/lib/plan.sh`, and confirm nothing names it: `grep -rn plan_require_same_repo plugins/dr-forge` prints nothing except the skill line below.
+Rename every call of `plan_require_same_repo` to `plan_require_same_project`: `scripts/plan-amend:23`, `scripts/review-package:24`, `scripts/sdd-workspace:32`, `scripts/next-step:130`. Then delete `plan_require_same_repo` and its comment from `scripts/lib/plan.sh`. After the skill edit below, `grep -rn plan_require_same_repo plugins/dr-forge` prints nothing.
+
+In `scripts/sdd-workspace`, the header comment's line 4 `# and the progress ledger. Print the plan directory's absolute path.` becomes `# and, while progress is local, the progress ledger. Print the plan`, followed by a new line `# directory's absolute path.`.
 
 In `skills/finishing-a-development-branch/SKILL.md:388`, replace `` (`plan_require_same_repo` treats a linked worktree and its primary `` with `` (`plan_require_same_project` treats a linked worktree and its primary ``.
 
@@ -2283,7 +2309,7 @@ Expected: FAIL on `register_files: the mirror's registers` and `roadmap_file: th
 
 `scripts/lib/register.sh`: line 3 `. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"` becomes `. "$(dirname "${BASH_SOURCE[0]}")/roots.sh"`; in `register_files`, `dir="$(forge_dir docs "$1")/registers"` becomes `dir="$(forge_docs_root "$1")/registers"`.
 
-`scripts/lib/roadmap.sh`:
+`scripts/lib/roadmap.sh` (line numbers are the original file's; line 98 becomes two lines, so edit from line 118 upward or find each by its old text):
 
 | Line | Old | New |
 |---|---|---|
@@ -2498,7 +2524,7 @@ check "darkmem: latest.md is written to the mirror" \
 check "darkmem: nothing is written in the checkout" "$([ -e "$SR/.forge/handoff/latest.md" ] && echo yes || echo no)" "no"
 ```
 
-`write_plan` is the suite's own helper (line 41); if its signature differs from `write_plan <file> <execution line> <program line or empty>`, follow the suite's. If `has` for the ledger text fails only because the status block words the ledger differently, match the suite's existing ledger assertion text instead of the literal above.
+`write_plan` is the suite's own helper (line 41): `write_plan <file> <execution line> <program line or empty>`. The ledger text is `next-step`'s own `ledger_note` (``ledger `$ledger_file` ``, `scripts/next-step:188`).
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -2506,6 +2532,8 @@ Run: `timeout 600 bash plugins/dr-forge/tests/next-step.test.sh`
 Expected: FAIL — `plan_repo_canon` cannot canonicalise a mirror plan (`not inside a git repository`).
 
 - [ ] **Step 3: Write the implementation**
+
+Every line number in this step is the original file's: the first replacement adds five lines, so make the edits from the bottom of the file up (line 423 first, `plan_finished` last), or find each by its quoted old text.
 
 Replace `plan_finished` (lines 88-93, comment included) with:
 
@@ -2554,7 +2582,7 @@ else latest_shown="$(forge_dir_rel state "$primary")/handoff/latest.md"; fi
 
 Then replace each `` `$(forge_dir_rel state "$primary")/handoff/latest.md` `` on lines 143, 146 and 155 with `` `$latest_shown` ``.
 
-Line 171 becomes `ledger_file="$(forge_ledger_dir "$slug")/progress.md"`. Replace lines 182-186
+Line 171, `ledger_file="$(forge_dir state "$root")/sdd/$slug/progress.md"`, becomes `ledger_file="$(forge_ledger_dir "$slug")/progress.md"`. Replace lines 182-186
 
 ```bash
     if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
@@ -2756,6 +2784,7 @@ printf '# P\n\n**Spec:** docs/forge/specs/s.md\n\n### Task 1: One\n' > "$M/super
 out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/forge/plans/p.md --no-probe 2>&1)
 lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"
+has "darkmem: the lint ran to its summary" "$out" " errors, "
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -2846,7 +2875,7 @@ git commit -m "feat(dr-forge): route plan-revise through roots"
 
 **Files:**
 - Modify: `skills/using-superpowers/SKILL.md:63`, `reference/project-state.md:74-91`
-- Modify: `skills/handoff/SKILL.md:76-77,83-87,96,130`, `skills/brainstorming/SKILL.md:367`, `skills/closing-a-milestone/SKILL.md:54`, `skills/writing-plans/SKILL.md:511-512`, `skills/finishing-a-development-branch/SKILL.md:341-342,406`, `skills/resume-execution/SKILL.md:17,37`, `skills/executing-plans/SKILL.md:133,158-166,173`, `skills/subagent-driven-development/SKILL.md:123,229-239,245,319`, `skills/subagent-driven-development/references/ruling-prompt.md:121-122`, `skills/distilling-docs/SKILL.md:74`
+- Modify: `skills/handoff/SKILL.md:76-77,83-87,96,130`, `skills/brainstorming/SKILL.md:367`, `skills/closing-a-milestone/SKILL.md:54`, `skills/writing-plans/SKILL.md:511-512`, `skills/finishing-a-development-branch/SKILL.md:301,341-342,406`, `skills/resume-execution/SKILL.md:17,37`, `skills/executing-plans/SKILL.md:133,158-166,173`, `skills/subagent-driven-development/SKILL.md:123,229-239,245,319`, `skills/subagent-driven-development/references/ruling-prompt.md:121-122`, `skills/distilling-docs/SKILL.md:74`
 - Modify: `README.md:274-290`
 
 **Interfaces:**
@@ -2941,6 +2970,7 @@ Make each replacement below exactly; each Old text is unique in its file.
 
 `skills/finishing-a-development-branch/SKILL.md`:
 
+- Old (line 301): ``a full basename would not.`` — New: ``a full basename would not. While documents live in darkmem, `completed.md` is``, then ``in the mirror: push it instead of committing it (see project-state.md).``
 - Old: ``A plan's workspace (`<state>/sdd/<plan>/`: ledger, briefs, reports,`` and the next line ``\`handoff.md\`) is git-ignored and lives in the worktree, so it goes with it —`` — New: ``A plan's workspace (`<state>/sdd/<plan>/`: briefs, reports, and the ledger``, then ``and `handoff.md` while progress is local) is git-ignored and lives in the worktree, so it goes with it —``
 - Old: ``also rewrites the primary checkout's `<state>/handoff/latest.md` to`` — New: ``also rewrites `<latest.md>` to``
 
