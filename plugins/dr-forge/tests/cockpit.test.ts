@@ -2715,6 +2715,25 @@ describe('auto run', () => {
     expect(pendingOf(files)).toBe('after-compact')
   })
 
+  test('retries the first prompt after /clear without clearing again', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], submitFailures: 1 }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts).toEqual([])
+    expect(w.autoRuns?.filter(call => call.startsWith('--session sess-2 failure '))).toHaveLength(1)
+    expect(pendingOf(files)).toBe('resume')
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.commands).toEqual(['/clear'])
+    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
+    expect(w.autoRuns?.at(-1)).toBe('--session sess-2 resumed')
+    expect(pendingOf(files)).toBeNull()
+  })
+
   test('books a refused compaction and retries it once', async ($, on) => {
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], isCompactVetoed: true }
     const clock = world(on, w)
