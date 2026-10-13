@@ -361,6 +361,38 @@ test("a plan that starts during the pull stops the move before the deletion is s
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
 });
 
+test("a document committed during the pull keeps the repository copy", async t => {
+  let repo;
+  let committed = false;
+  const s = await docsRepo(t, undefined, {
+    stub: {
+      onRequest: request => {
+        if (!repo || committed || request.path !== "/api/v1/documents/by-uri") return;
+        committed = true;
+        write(at(repo, "docs/forge/specs/a.md"), "# A newer\n");
+        commitAll(repo, "newer");
+      },
+    },
+  });
+  repo = s.repo;
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/forge changed during the move; the repository copy stays$/m);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.equal(read(at(s.repo, "docs/forge/specs/a.md")), "# A newer\n");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
+test("a failing citation search is named in the move's details", { skip: process.platform === "win32" }, async t => {
+  const s = await docsRepo(t);
+  const realGit = process.env.PATH.split(path.delimiter).map(dir => path.join(dir, "git")).find(file => fs.existsSync(file));
+  const bin = scratch("dms-git-");
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "grep" ] && { echo "fatal: grep refused by the test" >&2; exit 128; }; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /git grep failed: fatal: grep refused by the test; check for docs\/superpowers\/ and docs\/forge\/ citations before you commit/);
+});
+
 for (const { arg, reason } of [
   { arg: "ls-files", reason: "git ls-files failed: fatal: refused by the test" },
   { arg: "--ignored=matching", reason: "git status failed: fatal: refused by the test" },

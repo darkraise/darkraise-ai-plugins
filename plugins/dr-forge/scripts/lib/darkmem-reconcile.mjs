@@ -256,12 +256,20 @@ async function documentsToDarkmem(context) {
     .filter(doc => fileHash(path.join(mirror.docsRoot, ...doc.parts)) !== doc.hash)
     .map(doc => `${doc.uri}: the mirror's copy differs from the repository's`);
   if (mismatched.length) return { moved: false, reason: "a pull of darkmem's copy differs from the repository", details: mismatched };
+  // A commit from another session during the upload and pull leaves the index
+  // clean, so git rm would delete a version that was never carried.
+  const again = carriedDocuments(cfg.repoRoot, docsDir, rel);
+  const sent = new Map(documents.map(doc => [doc.uri, doc.hash]));
+  if (again.failed || again.problems.length || again.documents.length !== sent.size || again.documents.some(doc => sent.get(doc.uri) !== doc.hash)) {
+    return { moved: false, reason: `${rel} changed during the move; the repository copy stays`, details: [] };
+  }
   if (!documents.length) return { moved: true, details: [`${rel} holds no tracked files; nothing to stage`] };
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
   if (removed.status !== 0) return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details: [] };
   const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
   const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "--", ".", `:(exclude)${rel}`]);
   const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
+  if (cites.status > 1) details.push(`git grep failed: ${cites.stderr.trim()}; check for docs/superpowers/ and docs/forge/ citations before you commit`);
   if (citing.length) {
     details.push("these tracked files cite docs/superpowers/ or docs/forge/ names; rewrite them before you commit the deletion:");
     details.push(...citing.slice(0, 20).map(file => `  ${file}`));
