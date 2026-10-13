@@ -277,3 +277,51 @@ test("progress reached through a symbolic link stays local, and nothing is sent 
   assert.deepEqual(movedAside(s.repo), []);
   assert.equal(read(path.join(s.repo, ".forge", "sdd", "p1", "progress.md")), LEDGER("p1"));
 });
+
+test("a darkmem error inside the move refuses it as a failure during the move, and nothing is moved", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".forge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 503, detail: "busy" });
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem failed during the move: .*503: busy$/m);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
+});
+
+test("a ledger that changes while the move sends it stays local, and nothing is copied or moved", async t => {
+  const s = await setup(t, "darkmem");
+  const ledger = path.join(s.repo, ".forge", "sdd", "p1", "progress.md");
+  write(ledger, LEDGER("p1"));
+  let appended = false;
+  s.stub.db.onRequest = (method, pathname) => {
+    if (appended || method !== "POST" || pathname !== "/api/v1/worklog/entries") return;
+    appended = true;
+    fs.appendFileSync(ledger, "Task 9: late\n");
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): progress changed in the checkouts during the move; nothing was moved locally\n"), result.stdout);
+  assert.ok(result.stdout.includes(`  ${ledger}: changed or removed during the move\n`), result.stdout);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
+  assert.ok(read(ledger).endsWith("Task 9: late\n"));
+  assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "progress.md")), false);
+});
+
+test("a plan directory that is a symbolic link stays local, and nothing is sent or moved", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "darkmem");
+  const outside = path.join(scratch("dms-link-"), "p1");
+  write(path.join(outside, "progress.md"), LEDGER("p1"));
+  const link = path.join(s.worktree, ".forge", "sdd", "p1");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(outside, link);
+  const before = s.stub.db.requests.length;
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the checkouts hold progress the move cannot carry\n"), result.stdout);
+  assert.ok(result.stdout.includes(`  ${link}: a symbolic link, which the move will not move files through\n`), result.stdout);
+  assert.deepEqual(s.stub.db.requests.slice(before).filter(r => r.method !== "GET").map(r => `${r.method} ${r.path}`), []);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.worktree), []);
+});

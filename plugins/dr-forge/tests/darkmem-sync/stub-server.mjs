@@ -27,7 +27,8 @@ export function storedDocument(project, uri, content) {
 // pageSize caps every page, to exercise paging. transformContent rewrites a
 // document's content as it is stored, to simulate a server that alters bytes.
 // onRequest(request, db) runs before each authenticated request is answered,
-// to simulate another client or a local edit landing mid-sync.
+// to simulate another client or a local edit landing mid-sync; a test that
+// gets the stub from a shared helper sets db.onRequest(method, path) instead.
 export async function startStub({ pageSize, transformContent, onRequest } = {}) {
   const db = { documents: new Map(), workstreams: [], requests: [], failures: [], nextSeq: 1, nextRevision: 1, clock: Date.now() };
   const tick = () => new Date((db.clock += 1000)).toISOString();
@@ -227,6 +228,7 @@ export async function startStub({ pageSize, transformContent, onRequest } = {}) 
       db.requests.push(request);
       if (req.headers.authorization !== `Bearer ${STUB_KEY}`) return send(401, { detail: "Not authenticated" });
       if (onRequest) onRequest(request, db);
+      db.onRequest?.(req.method, url.pathname);
       const injected = db.failures.findIndex(f => f.method === req.method && url.pathname.startsWith(f.path));
       if (injected >= 0) {
         const [failure] = db.failures.splice(injected, 1);

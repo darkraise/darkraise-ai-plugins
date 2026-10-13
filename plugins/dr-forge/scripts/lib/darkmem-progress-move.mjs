@@ -14,6 +14,7 @@ import {
   utcStamp, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
+import { inProgressReason } from "./darkmem-reconcile.mjs";
 
 const local = (base, rel) => path.join(base, ...rel.split("/"));
 
@@ -36,6 +37,16 @@ export function gatherLocalProgress(cfg) {
   const files = [];
   for (const checkout of listed.dirs) {
     const stateDir = forgeDir("state", checkout);
+    const sdd = path.join(stateDir, "sdd");
+    // A linked plan directory is not listed as one, so its progress would be
+    // left behind without a word.
+    const entries = fs.existsSync(sdd) ? fs.readdirSync(sdd, { withFileTypes: true }) : [];
+    for (const entry of entries) {
+      const dir = path.join(sdd, entry.name);
+      if (entry.isSymbolicLink() && fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
+        problems.push(`${dir}: a symbolic link, which the move will not move files through`);
+      }
+    }
     for (const dir of unsupportedPlanDirs(stateDir)) problems.push(`${dir}: not a usable workstream key`);
     for (const { slug, file } of ledgerFiles(stateDir)) files.push({ kind: "ledger", slug, file, stateDir, rel: `sdd/${slug}/progress.md` });
     for (const { file, uri } of listDocumentFiles({ workRoot: stateDir, families: { documents: false, progress: true } })) {
@@ -110,8 +121,7 @@ const refuse = (reason, details = []) => ({ moved: false, reason, details });
 // An answer from darkmem, or none, ends a move as a refusal; anything else is
 // a bug and propagates.
 function darkmemRefusal(error, details = []) {
-  if (error instanceof TransportError) return refuse(`darkmem is unreachable: ${error.message}`, details);
-  if (error instanceof HttpError) return refuse(`darkmem answered ${error.status}: ${error.detail}; nothing was moved locally`, details);
+  if (error instanceof TransportError || error instanceof HttpError) return refuse(`darkmem failed during the move: ${error.message}`, details);
   throw error;
 }
 
@@ -240,6 +250,21 @@ export async function progressToDarkmem(context) {
   } catch (error) {
     return darkmemRefusal(error, report.failures);
   }
+  // A plan may have started, or a ledger grown, while darkmem was written;
+  // darkmem keeps what it was sent, and nothing local changes.
+  const busy = inProgressReason(context);
+  if (busy) return { moved: false, ...busy };
+  const changed = [];
+  for (const item of files) {
+    let now;
+    try {
+      now = fs.readFileSync(item.file);
+    } catch {
+      now = null;
+    }
+    if (!now?.equals(item.buffer)) changed.push(`${item.file}: changed or removed during the move`);
+  }
+  if (changed.length) return refuse("progress changed in the checkouts during the move; nothing was moved locally", changed);
   const workRoot = path.join(cfg.mirror, "work");
   for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer);
   const unread = sources.filter(item => !fs.readFileSync(local(workRoot, item.rel)).equals(item.buffer));
