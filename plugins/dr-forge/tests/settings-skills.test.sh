@@ -64,6 +64,12 @@ names "finishing: an auto run shows no menu" "$P/skills/finishing-a-development-
 names "finishing: the run's base" "$P/skills/finishing-a-development-branch/SKILL.md" 'the base `scripts/auto-run status` names'
 names "finishing: a detached HEAD never merges in an auto run" "$P/skills/finishing-a-development-branch/SKILL.md" 'there is no merge, so `merge` keeps'
 names "finishing: failing tests at Step 1 stop the run" "$P/skills/finishing-a-development-branch/SKILL.md" '(failing tests at Step 1, a merged'
+H="$P/skills/handoff/SKILL.md"
+names "handoff: a design phase writes the Draft line" "$H" '- Draft: `<spec path>`'
+names "handoff: pushes once latest.md is written" "$H" 'run `scripts/darkmem-sync push` and promote'
+CT="$P/skills/using-superpowers/references/codex-tools.md"
+names "codex-tools: session start reconciles, then pulls" "$CT" 'bash <plugin-root>/scripts/darkmem-sync reconcile`, then'
+names "codex-tools: nothing pushes at the end of a turn" "$CT" 'nothing pushes for you at the end of a turn'
 
 # Every skill-enforced key in the schema is named by at least one skill.
 keys=$(node -e 'const { pathToFileURL } = require("url"); import(pathToFileURL(process.argv[1]).href).then(m => console.log(Object.entries(m.default).filter(([, spec]) => spec.enforcedBy === "skill").map(([key]) => key).join(" ")))' "$P/config/schema.mjs")

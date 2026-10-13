@@ -102,7 +102,10 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    - <owner constraints and prohibitions>
    ```
 
-   In a design phase, `State` names the draft instead of a plan and ledger.
+   In a design phase, `State` names the draft instead of a plan and ledger,
+   on the line ``- Draft: `<spec path>` `` in place of the `- Plan:` line, where
+   `<spec path>` is the draft's name (`forge-path name`). darkmem files the
+   checkpoint under the workstream either line names.
    For unplanned work, `State` lists each item with its state: implemented
    and uncommitted, committed, awaiting feedback (with the link), or
    unscoped.
@@ -120,6 +123,10 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    On Codex, add `--host codex` to the design-phase and unplanned-work calls,
    so the block names the Codex client rather than Claude. A plan states its
    own host in its header, so the execution call needs no flag.
+
+   Then run `scripts/darkmem-sync push` and promote the session's durable
+   facts ([project-state.md](../../reference/project-state.md) §darkmem sync
+   points): the push carries the ledger, `handoff.md` and `latest.md`.
 5. **End the session.** Your final message is one line on why you stopped,
    then the block, verbatim, as the last thing. The block is the resume guide:
    the launch command, the directory to launch it in, and the first prompt.
