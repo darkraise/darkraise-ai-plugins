@@ -198,7 +198,7 @@ function readMapping(env, repoRoot) {
       throw new ConfigError(`${file}: the mapping for ${repoRoot} sets ${key} to ${JSON.stringify(entry[key])}; use local or darkmem`);
     }
   }
-  return { file, entry, url: darkmem.url.replace(/\/+$/, ""), keyEnv, decided: Object.hasOwn(config, "darkmemEnabled") };
+  return { file, entry, url: darkmem.url.replace(/\/+$/, ""), keyEnv, decided: typeof config.darkmemEnabled === "boolean" };
 }
 
 // enabled false: the mirror is read and moved from, never synced.

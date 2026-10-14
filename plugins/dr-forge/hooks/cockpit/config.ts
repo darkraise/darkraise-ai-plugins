@@ -25,6 +25,8 @@ export type SettingSpec = {
   /** The smallest value allowed other than 0, on a number where 0 means unset. */
   floor?: number
   enforcedBy?: 'script' | 'skill'
+  /** Written even at its default, because an absent key means something else. */
+  keepDefault?: boolean
 }
 
 export type Schema = Readonly<Record<string, SettingSpec>>
@@ -120,7 +122,7 @@ export function settingWritten(schema: Schema, file: SettingsFile, key: string, 
   if (spec.target === 'claude') throw new Error(`${key} is stored in Claude's settings file`)
   if (!isValidSetting(spec, value)) throw new Error(`${String(value)} is not a valid ${key}`)
   const next: SettingsFile = { ...file }
-  if (value === spec.default) delete next[key]
+  if (value === spec.default && !spec.keepDefault) delete next[key]
   else next[key] = value
   return next
 }

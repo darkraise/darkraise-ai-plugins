@@ -2433,6 +2433,11 @@ describe('settings file', () => {
     expect(settingWritten(FAKE, { darkmem }, 'layout', 'compact')).toEqual({ darkmem, layout: 'compact' })
   })
 
+  test('a keepDefault key is saved even at its default', () => {
+    const KEEP: Schema = { on: { type: 'boolean', default: false, keepDefault: true, group: 'darkmem', label: 'On', title: 'On', description: 'd', target: 'forge' } }
+    expect(settingWritten(KEEP, { on: true }, 'on', false)).toEqual({ on: false })
+  })
+
   test('refuses an unknown key and a value that does not fit', () => {
     expect(() => settingWritten(FAKE, {}, 'nope', true)).toThrow('unknown setting nope')
     expect(() => settingWritten(FAKE, {}, 'layout', 'tiles')).toThrow('tiles is not a valid layout')

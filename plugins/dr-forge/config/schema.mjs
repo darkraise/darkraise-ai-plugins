@@ -9,6 +9,8 @@
 // a number reads (`k` is thousands of tokens, zero the word shown at 0).
 // enforcedBy names what obeys a workflow key: `script`, the script that already
 // makes the decision, or `skill`, through the `forge-config workflow` line.
+// keepDefault writes the key even at its default, for a key whose absence
+// means something of its own.
 export default {
   openAtStart: {
     type: 'boolean', default: true, group: 'Cockpit', target: 'forge',
@@ -151,9 +153,9 @@ export default {
     description: 'full sends command, question and answer excerpts (secrets masked); brief sends titles and figures only.',
   },
   darkmemEnabled: {
-    type: 'boolean', default: false, group: 'darkmem', target: 'forge',
+    type: 'boolean', default: false, keepDefault: true, group: 'darkmem', target: 'forge',
     label: 'Use darkmem', title: 'Use darkmem',
-    description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository, and a family already in the mirror moves back at the next session start, from darkmem when it answers, else from the mirror. A repository is mapped under darkmem.repos in ~/.dr-forge/config.json.',
+    description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository: a family already in the mirror moves back at the next session start, from the mirror alone. Left unset after an upgrade, a family a 2.x release put in the mirror stays there unsynced until you choose. A repository is mapped under darkmem.repos in ~/.dr-forge/config.json.',
   },
   documentStore: {
     type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'forge',

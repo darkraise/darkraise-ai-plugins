@@ -226,7 +226,7 @@ export function setValue(key, text, env = process.env) {
   }
   const file = configPath(env);
   const data = readFile(file) ?? {};
-  if (value === spec.default) delete data[key];
+  if (value === spec.default && !spec.keepDefault) delete data[key];
   else data[key] = value;
   writeFile(file, data);
   return value;

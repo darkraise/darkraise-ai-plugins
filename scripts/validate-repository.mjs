@@ -163,6 +163,7 @@ export async function validateSchema(root) {
     if (spec.unit !== undefined && !(spec.type === 'number' && UNITS.includes(spec.unit))) errors.push(`${at}: unit must be one of ${UNITS.join(', ')}, on a number`);
     if (spec.zero !== undefined && !(spec.type === 'number' && ZEROS.includes(spec.zero))) errors.push(`${at}: zero must be one of ${ZEROS.join(', ')}, on a number`);
     if (spec.enforcedBy !== undefined && !['script', 'skill'].includes(spec.enforcedBy)) errors.push(`${at}: enforcedBy must be script or skill`);
+    if (spec.keepDefault !== undefined && spec.keepDefault !== true) errors.push(`${at}: keepDefault must be true when present`);
     if (spec.floor !== undefined && !(spec.type === 'number' && spec.min === 0 && Number.isFinite(spec.floor) && spec.floor >= 1 && (spec.max === undefined || spec.floor <= spec.max))) errors.push(`${at}: floor must lie between 1 and max, on a number whose min is 0`);
     const fits = spec.type === 'boolean' ? typeof spec.default === 'boolean'
       : spec.type === 'number' ? Number.isFinite(spec.default) && (spec.min === undefined || (Number.isFinite(spec.min) && spec.default >= spec.min)) && (spec.max === undefined || (Number.isFinite(spec.max) && spec.default <= spec.max))

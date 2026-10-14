@@ -32,6 +32,9 @@ fc set warnAt 80
 check "a default value is not stored" "$(node -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))).join(","))' "$FILE")" "layout"
 fc unset layout
 check "unset" "$(fc get layout)" "auto"
+fc set darkmemEnabled false
+check "a keepDefault key is stored at its default" "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).darkmemEnabled)' "$FILE")" "false"
+fc unset darkmemEnabled
 
 # --- refusals leave the file unchanged ---
 before=$(cat "$FILE")
