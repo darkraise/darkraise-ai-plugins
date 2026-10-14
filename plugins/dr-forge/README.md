@@ -319,7 +319,7 @@ opens the review seats, and the executor-lane smoke test opens the lane.
 
 ## Requirements
 
-**The superpowers workflow ships in-plugin.** The fork carries the full skill
+**The upstream workflow ships in-plugin.** The fork carries the full skill
 set — brainstorming through finishing-a-development-branch — frozen at upstream
 6.3.0, so no other plugin is required: every agent definition preloads
 `dr-forge:verification-before-completion` through its `skills:`
@@ -873,7 +873,7 @@ obeys the line and never recomputes when it is present. Add
 `**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
 the deviation as a warning instead of an error.
 
-The heading keeps superpowers' `### Task N: <name>` form on purpose.
+The heading keeps upstream's `### Task N: <name>` form on purpose.
 `scripts/task-brief` finds a task by matching a heading that starts with
 `Task <N>`, so a heading like `### Wire the export pipeline (Task 4)` yields an
 empty brief and a non-zero exit — and, because the extractor keeps copying
@@ -882,7 +882,7 @@ previous task's brief.
 
 ## Differences from upstream 6.3.0
 
-The superpowers loop is kept - the brief and report protocol, the review
+The upstream loop is kept - the brief and report protocol, the review
 package, the five-round cap, the breaker (whose adjudication now goes to the ruling seat), and the
 handoff to dr-forge:finishing-a-development-branch - with these
 differences:

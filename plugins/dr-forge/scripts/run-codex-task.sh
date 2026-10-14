@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs one plan task on Codex and leaves behind a superpowers-shaped report.
+# Runs one plan task on Codex and leaves behind a report in the implementer report format.
 #
 # The Codex CLI validates neither --model nor model_reasoning_effort: it accepts
 # any string, prints it in its banner, and fails at the API. Validating here is

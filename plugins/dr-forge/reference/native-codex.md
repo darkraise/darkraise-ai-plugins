@@ -2,7 +2,7 @@
 
 This policy applies only when the active host exposes native Codex agent tools.
 Identify the host from callable tool schemas, never from a `codex` executable.
-If the host is ambiguous, required Superpowers skills are missing, or model and
+If the host is ambiguous, required dr-forge skills are missing, or model and
 effort capabilities are not advertised, stop with the missing prerequisite.
 Shared skill invocation activates this path; no Claude `Skill` hook is needed.
 
