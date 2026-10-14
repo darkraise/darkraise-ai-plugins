@@ -1,5 +1,5 @@
 {
-  "description": "Loads the cockpit mod, injects the dr-forge entry point at session start, persists the session's transcript path for budget tooling, appends a compaction snapshot after compaction, runs darkmem's reconcile and pull at session start and pushes at each stop for a repository mapped to darkmem, and holds a stop once when a turn that advanced a plan ends without the finishing menu or the next step.",
+  "description": "Loads the cockpit mod, injects the dr-forge entry point at session start, persists the session's transcript path for budget tooling, appends a compaction snapshot after compaction, runs darkmem's reconcile and pull at session start and pushes at each stop for a repository mapped to darkmem, and holds a stop once when a turn that advanced a plan, or moved a branch without one, ends without the finishing menu or the next step.",
   "modules": ["./cockpit/register.tsx"],
   "hooks": {
     "SessionStart": [

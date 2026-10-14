@@ -11,6 +11,9 @@
 # notification starts the next turn. The reverse is held once: a next-step
 # block or finishing menu printed over running work would invite the human to
 # end a session whose work is still in flight.
+# A turn that wrote no ledger but moved a local branch (a commit, a merge, a
+# deleted branch) in a project with forge docs is unplanned work, and owes the
+# same ending: the next-step block (`next-step --adhoc`) or finishing's menu.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,7 +37,16 @@ sdd=$(forge_ledger_root "$root") || sdd=""
 # An auto run bound to this session (reference/auto-run.md) lives in the
 # primary checkout, whichever worktree the turn ran in: its pending action.
 auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
-[ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
+# The heads turn-start.sh recorded, compared only within the same repository.
+. "${SCRIPT_DIR}/lib/turn-refs.sh"
+moved=0 now_refs=""
+if [ -f "$stamp.refs" ] && now_refs=$(turn_refs "$root"); then
+  was_refs=$(cat "$stamp.refs")
+  if [ "$(head -n 1 <<<"$was_refs")" = "$(head -n 1 <<<"$now_refs")" ] && [ "$was_refs" != "$now_refs" ]; then
+    moved=1
+  fi
+fi
+[ -d "$sdd" ] || [ -n "$auto_pending" ] || [ "$moved" = 1 ] || exit 0
 root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 . "${SCRIPT_DIR}/lib/in-flight.sh"
@@ -95,6 +107,7 @@ fi
 # before its first task. The first ledger without its ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
 ledger="" clean=0
+[ -d "$sdd" ] || sdd=""
 ws="$(forge_dir state "$root")/sdd"
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
@@ -111,8 +124,21 @@ while IFS= read -r candidate; do
     ledger=$candidate clean=0
   fi
   break
-done < <(find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
-[ -n "$ledger" ] || exit 0
+done < <([ -z "$sdd" ] || find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
+
+if [ -z "$ledger" ]; then
+  [ "$moved" = 1 ] || exit 0
+  # Forge docs in the primary checkout mark a project that uses this flow; in
+  # a subshell, so a malformed config costs only this check.
+  primary=$(dirname "$(head -n 1 <<<"$now_refs")")
+  docs=$(forge_docs_root "$primary") || docs=""
+  [ -n "$docs" ] && [ -d "$docs" ] || exit 0
+  ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' \
+            'Worktree removal refused' 'If it gets none within ' 'No plan file — no follow-on work recorded.' && exit 0
+  reason="This turn moved a branch (a commit, a merge or a deleted branch) without a plan's ledger, but your message ends without the next step. If work remains for this session, continue it: a ruling you can make with a recommendation in hand is yours to make and record, not a reason to stop. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If the turn did only the one change you were asked for and nothing follows from it, end the turn as you were. If the branch's work is complete and not yet integrated, invoke dr-forge:finishing-a-development-branch with the Skill tool and end on its menu. If you are stopping, run \`bash ${root_shown}/scripts/next-step --adhoc --phase <design|build> --next \"<the next action>\"\` (design when what remains is rulings, a spec or a plan) and end your message with the block it prints, verbatim."
+  jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
+  exit 0
+fi
 
 plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r')
 [ -n "$plan" ] || plan="PLAN_FILE"

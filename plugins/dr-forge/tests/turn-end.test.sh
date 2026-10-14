@@ -26,7 +26,9 @@ WS="$REPO/.superpowers/sdd/2026-10-08-example"
 mkdir -p "$WS"
 LEDGER="$WS/progress.md"
 
-prompt() { jq -n --arg sid "$1" '{hook_event_name:"UserPromptSubmit",session_id:$sid,prompt:"go"}' | bash "$START"; }
+prompt() { # prompt <session> [cwd]
+  jq -n --arg sid "$1" --arg cwd "${2:-$REPO}" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$START"
+}
 stop() { # stop <session> <last message> [stop_hook_active] [transcript]
   jq -n --arg sid "$1" --arg cwd "$REPO" --arg msg "$2" --argjson active "${3:-false}" --arg tp "${4:-}" \
     '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:$active}
@@ -252,6 +254,46 @@ sleep 1; prompt s-3; sleep 1
 printf '# SDD ledger — plan: docs/forge/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
 check "darkmem progress: another worktree's ledger does not block" "$(stop s-3 'Task 1 is done.')" ""
 rm -f "$HOME/.dr-forge/config.json" "$HOME/.dr-forge/stores.json"
+
+# --- unplanned work: a turn that moved a branch without writing a ledger ---
+commit_in() { git -C "$1" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "$2"; }
+mkdir -p "$REPO/docs/forge"
+sleep 1; prompt s-4
+check "unplanned: turn-start records the branch heads" \
+  "$([ -f "$HOME/.claude/dr-forge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "yes"
+check "unplanned: no branch moved: passes" "$(stop s-4 'Here is the answer.')" ""
+git -C "$REPO" branch -q fresh
+check "unplanned: a new branch on an existing commit: passes" "$(stop s-4 'Here is the answer.')" ""
+commit_in "$REPO" adhoc
+out=$(stop s-4 'Fixed and committed. Tell me whether to merge.')
+check "unplanned: a commit and a summary: blocks" "$(decision "$out")" "block"
+check "unplanned: the hold says to continue" "$(jq -r .reason <<<"$out" | grep -c 'If work remains for this session, continue it')" "1"
+check "unplanned: the hold names next-step --adhoc" "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step --adhoc --phase')" "1"
+check "unplanned: the hold names finishing" "$(jq -r .reason <<<"$out" | grep -c 'dr-forge:finishing-a-development-branch')" "1"
+check "unplanned: the retry passes" "$(stop s-4 'Fixed.' true)" ""
+check "unplanned: the next-step block passes" "$(stop s-4 "$NEXT")" ""
+check "unplanned: the finishing menu passes" "$(stop s-4 $'1. Merge back to main locally\n\nWhich option?')" ""
+check "unplanned: finishing's no-plan ending passes" "$(stop s-4 'Merged. No plan file — no follow-on work recorded.')" ""
+sleep 1; prompt s-4
+git -C "$REPO" branch -q -D fresh
+check "unplanned: deleting a branch whose commit another keeps: passes" "$(stop s-4 'Done.')" ""
+git -C "$REPO" checkout -q -b gone && commit_in "$REPO" side && git -C "$REPO" checkout -q -
+sleep 1; prompt s-4
+git -C "$REPO" branch -q -D gone
+check "unplanned: deleting a branch with its own commit: blocks" "$(decision "$(stop s-4 'Done.')")" "block"
+sleep 1; prompt s-4
+commit_in "$TMP/wt" from-worktree
+check "unplanned: a commit in a worktree, stop there: blocks" "$(decision "$(stop_in "$TMP/wt" s-4 'Done.')")" "block"
+OTHER="$TMP/other"; git init -q "$OTHER"; commit_in "$OTHER" init
+sleep 1; prompt s-4
+commit_in "$OTHER" more
+check "unplanned: a stop in another repository than the prompt's: passes" "$(stop_in "$OTHER" s-4 'Done.')" ""
+sleep 1; prompt s-4 "$OTHER"
+commit_in "$OTHER" again
+check "unplanned: a repository without forge docs: passes" "$(stop_in "$OTHER" s-4 'Done.')" ""
+sleep 1; prompt s-4 "$outside"
+check "unplanned: a prompt outside git records no heads" \
+  "$([ -f "$HOME/.claude/dr-forge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

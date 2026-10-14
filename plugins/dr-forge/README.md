@@ -385,6 +385,16 @@ anything is on it.
 When the turn wrote more than one ledger, each one must have its
 ending.
 
+Unplanned work gets the same hold. The prompt hook also records which commits
+the repository's local branches point at. A turn that wrote no ledger but
+changed that set (a commit, a merge, or deleting a branch's only pointer to a
+commit) in a project with forge docs must end on the `## Next session` block
+from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
+line. Otherwise the hook holds the stop once and tells Claude to continue
+remaining work, finish a branch that is ready to integrate, or print the block. Creating
+a branch on an existing commit, or a stop in another repository than the
+prompt's, does not count.
+
 A run also asks one question before its first task: what finishing should do
 if its menu goes unanswered for the configured wait, 30 minutes by default
 (merge locally, push and open a pull request, keep the branch, or wait).
@@ -917,7 +927,8 @@ skills the same way — structurally, against the documents themselves.
 `test-simplifier.test.sh` does the same for that skill and runs
 `scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
 `scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
-drives the turn-stamp and Stop hooks against a temporary repository and ledger;
+drives the turn-stamp and Stop hooks against a temporary repository, its
+ledgers and its branch heads;
 `darkmem-sync/hooks.test.mjs` drives darkmem's session-start sync and the
 background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
