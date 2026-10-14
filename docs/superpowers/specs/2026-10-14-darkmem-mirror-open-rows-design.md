@@ -20,7 +20,9 @@ release bump that touches every manifest; inline execution in one session.
    `docs/forge` segment. An identity no root maps stays unfinished, so the move
    refuses and names it.
 3. **Row 25: the Stop push runs in the background now.** No Windows measurement
-   gates the decision; row 6 records the timing as an observation.
+   gates the decision; row 6 records the timing as an observation. An explicit
+   `push` waits up to 100 s for the mirror lock instead of refusing at once
+   (§3).
 4. **Row 26: settle the engine's wording with a probe.** The engine's types
    already say `$.process.run` rejects both when the command cannot start and
    when it outlives `timeoutMs`; a probe records the two messages.
@@ -176,10 +178,11 @@ What the hooks reference (https://code.claude.com/docs/en/hooks.md, read
 **The mirror lock.** `darkmem-sync` refuses, with exit 1, when another run holds
 the mirror lock (`darkmem-sync.mjs`, `acquireLock` returning null); nothing
 waits. Once the Stop push runs in the background, a skill's explicit push at a
-stop point can start while it still holds the lock. *Pending owner ruling;
-recommended:* `push` (only `push`) waits for the lock, retrying once a second
+stop point can start while it still holds the lock. Ruled by the owner on
+2026-10-14: `push` (only `push`) waits for the lock, retrying once a second
 for up to 100 s, the Stop push's own bound, before refusing as today.
-`reconcile`, `pull` and the other commands keep refusing at once.
+`reconcile`, `pull` and the other commands keep refusing at once. Chosen over
+accepting the refusal and rewording the skills.
 
 Prose naming the Stop hook as a pusher (`README.md` darkmem section,
 `reference/project-state.md` sync points, the `hooks.json` description) stays
