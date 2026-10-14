@@ -121,12 +121,14 @@ const realOr = file => {
 };
 
 // The name an absolute ledger identity stands for, computed from the roots and
-// never by searching for a docs segment (as pathToUri does): under the docs
-// root in use, then this checkout's docs directory and top level, then the
-// primary checkout's and every other worktree's (a ledger the mirror holds is
-// checked from the primary, whichever worktree wrote it), tried as written and
-// then with symbolic links resolved. A relative name, or an absolute one under
-// no root, is unchanged.
+// never by searching for a docs segment (as pathToUri does): the docs root in
+// use, this checkout's docs directory and top level, and the primary checkout's
+// and every other worktree's (a ledger the mirror holds is checked from the
+// primary, whichever worktree wrote it), tried as written and then with
+// symbolic links resolved. The deepest of these roots that holds the name wins,
+// so a worktree nested inside the primary checkout is not taken for the
+// primary's own files. A relative name, or an absolute one under no root, is
+// unchanged.
 function rootedName(cfg, checkout, name) {
   if (!path.isAbsolute(name)) return name;
   const bases = [
@@ -138,12 +140,16 @@ function rootedName(cfg, checkout, name) {
   ];
   if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, "superpowers"), DOCS]);
   for (const resolve of [file => path.resolve(file), realOr]) {
+    let best = null;
     for (const [base, prefix] of bases) {
-      const rel = path.relative(resolve(base), resolve(name));
-      if (rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)) {
-        const posix = rel.split(path.sep).join("/");
-        return prefix ? `${prefix}/${posix}` : posix;
-      }
+      const root = resolve(base);
+      const rel = path.relative(root, resolve(name));
+      if (rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
+        && (!best || root.length > best.root.length)) best = { root, rel, prefix };
+    }
+    if (best) {
+      const posix = best.rel.split(path.sep).join("/");
+      return best.prefix ? `${best.prefix}/${posix}` : posix;
     }
   }
   return name;

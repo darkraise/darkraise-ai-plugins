@@ -584,3 +584,15 @@ test("a darkmem ledger whose absolute identity names a linked worktree's plan co
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
 });
+
+test("a darkmem ledger whose absolute identity names a worktree nested in the primary counts as finished", async t => {
+  const s = await setup(t, "local");
+  fs.appendFileSync(path.join(s.repo, ".git", "info", "exclude"), ".claude/worktrees/\n");
+  const nested = path.join(s.repo, ".claude", "worktrees", "nested");
+  git(s.repo, "worktree", "add", "-q", "-b", "nested", nested);
+  const identity = path.join(nested, "docs", "forge", "plans", "p2.md");
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: ABSOLUTE_LEDGER(identity) }] });
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
+});
