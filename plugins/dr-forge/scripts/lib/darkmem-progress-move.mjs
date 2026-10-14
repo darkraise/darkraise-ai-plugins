@@ -10,7 +10,7 @@ import { HttpError, TransportError } from "./darkmem-client.mjs";
 import { forgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
-  DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerFiles, listDocumentFiles, propertiesFor, sha256, unsupportedPlanDirs,
+  DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerFiles, ledgerPieces, listDocumentFiles, propertiesFor, sha256, unsupportedPlanDirs,
   uriFamily, utcStamp, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
@@ -81,13 +81,28 @@ export function gatherLocalProgress(cfg) {
   return { problems, files, sources };
 }
 
+// How many of the ledger's import pieces darkmem's bytes are, when they are a
+// proper prefix ending on a piece boundary; -1 otherwise.
+function stoppedImport(held, buffer) {
+  if (held.length >= buffer.length || !buffer.subarray(0, held.length).equals(held)) return -1;
+  let at = 0;
+  for (const [k, piece] of ledgerPieces(decodeUtf8(buffer)).entries()) {
+    if (at === held.length) return k;
+    if (at > held.length) return -1;
+    at += Buffer.byteLength(piece, "utf8");
+  }
+  return -1;
+}
+
 // What darkmem and the mirror already hold at each source's place. A ledger
-// darkmem holds byte for byte is already filed, so a move stopped part-way
-// runs again; any other existing copy that differs is a problem, so nothing
-// is overwritten.
+// darkmem holds byte for byte is already filed, and one an open workstream
+// holds the first pieces of is a stopped import to resume, so a move stopped
+// part-way runs again; any other existing copy that differs is a problem, so
+// nothing is overwritten.
 export async function checkProgressTargets({ cfg, client }, sources) {
   const problems = [];
   const filed = new Map();
+  const partial = new Map();
   for (const item of sources) {
     const target = local(path.join(cfg.mirror, "work"), item.rel);
     if (!fs.existsSync(target)) continue;
@@ -108,12 +123,15 @@ export async function checkProgressTargets({ cfg, client }, sources) {
     } else if (item.kind === "ledger") {
       const existing = await client.resume(cfg.project, item.slug);
       if (!existing) continue;
-      const { text } = await remoteLedger(client, existing.workstream.id);
-      if (Buffer.from(text, "utf8").equals(item.buffer)) filed.set(item.slug, existing.workstream.id);
+      const { text, lastSeq } = await remoteLedger(client, existing.workstream.id);
+      const held = Buffer.from(text, "utf8");
+      const from = existing.workstream.state === "closed" ? -1 : stoppedImport(held, item.buffer);
+      if (held.equals(item.buffer)) filed.set(item.slug, existing.workstream.id);
+      else if (from >= 0) partial.set(item.slug, { id: existing.workstream.id, lastSeq, from });
       else problems.push(`${item.rel}: darkmem already holds a different ledger for workstream ${item.slug}`);
     }
   }
-  return { problems, filed };
+  return { problems, filed, partial };
 }
 
 const refuse = (reason, details = []) => ({ moved: false, reason, details });
@@ -224,7 +242,7 @@ export async function progressToDarkmem(context) {
     for (const item of sources) {
       if (item.kind === "ledger" && !ids.has(item.slug)) {
         const ledger = { slug: item.slug, text: decodeUtf8(item.buffer), mtime: fs.statSync(item.file).mtime.toISOString(), id: null };
-        await importLedger({ ...context, report }, checkoutRoots(cfg, item.stateDir), ledger);
+        await importLedger({ ...context, report }, checkoutRoots(cfg, item.stateDir), ledger, checked.partial.get(item.slug));
         if (ledger.id) ids.set(item.slug, ledger.id);
       } else if (item.kind === "handoff") {
         await client.putDocument({ project: cfg.project, uri: item.uri, content: decodeUtf8(item.buffer) });

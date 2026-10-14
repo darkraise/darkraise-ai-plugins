@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  EMPTY_SHA, StateError, acquireLock, archiveUri, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
-  isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges,
+  EMPTY_SHA, MAX_ENTRY_CHARS, StateError, acquireLock, archiveUri, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
+  isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPieces, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges,
   pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal,
   utcStamp, utf8Fault,
 } from "../../scripts/lib/darkmem-mirror.mjs";
@@ -449,4 +449,13 @@ test("a takeover whose moved-aside lock another acquire's cleanup removed tries 
   assert.equal(typeof release, "function", "the slot is empty, so the lock is taken");
   release();
   assert.deepEqual(fs.readdirSync(root), []);
+});
+
+test("ledgerPieces cuts at blank lines, then at the entry limit, and concatenates back", () => {
+  const text = `# SDD ledger\n\nTask 1: a\n\n${"x".repeat(MAX_ENTRY_CHARS + 10)}\n`;
+  const pieces = ledgerPieces(text);
+  assert.equal(pieces.join(""), text);
+  assert.deepEqual(pieces.slice(0, 2), ["# SDD ledger\n\n", "Task 1: a\n\n"]);
+  assert.equal(pieces.length, 4);
+  assert.ok(pieces.every(piece => piece.length <= MAX_ENTRY_CHARS));
 });

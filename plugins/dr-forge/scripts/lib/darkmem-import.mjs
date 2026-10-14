@@ -9,8 +9,8 @@ import path from "node:path";
 import { HttpError } from "./darkmem-client.mjs";
 import { forgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
 import {
-  MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor,
-  splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriToLocal,
+  MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
+  unsupportedPlanDirs, uriToLocal,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers } from "./darkmem-pull.mjs";
 
@@ -47,15 +47,23 @@ function readSources(roots) {
   return { problems, documents, ledgers };
 }
 
-export async function importLedger({ cfg, client, report }, roots, ledger) {
-  const pieces = splitAtBlankLines(ledger.text).flatMap(piece => splitAtLimit(piece));
+// `resume` continues a stopped import of the same ledger: { id, lastSeq, from }
+// names darkmem's open workstream, its newest ledger entry and how many pieces
+// it already holds. Each later batch is sent under the last sequence number
+// darkmem answered, so another writer's append is a 409, not interleaved lines.
+export async function importLedger({ cfg, client, report }, roots, ledger, resume = null) {
+  const pieces = ledgerPieces(ledger.text);
   const properties = { ...propertiesFor(roots, ledger.slug, ledgerPlanPath(ledger.text)), imported_mtime: ledger.mtime };
-  for (let i = 0; i < pieces.length; i += MAX_ENTRIES_PER_APPEND) {
+  let lastSeq = resume?.lastSeq;
+  ledger.id = resume?.id ?? null;
+  for (let i = resume?.from ?? 0; i < pieces.length; i += MAX_ENTRIES_PER_APPEND) {
     const entries = pieces.slice(i, i + MAX_ENTRIES_PER_APPEND).map(body => ({ kind: "ledger", body }));
     try {
-      ledger.id = (await client.append({ project: cfg.project, workstream: ledger.slug, properties, entries })).workstream.id;
+      const answer = await client.append({ project: cfg.project, workstream: ledger.slug, properties, entries, expectedLastSeq: lastSeq });
+      ledger.id = answer.workstream.id;
+      if (resume) lastSeq = answer.last_seq;
     } catch (error) {
-      if (!(error instanceof HttpError && error.status === 422)) throw error;
+      if (!(error instanceof HttpError && (error.status === 422 || (resume && error.status === 409)))) throw error;
       report.failures.push(`sdd/${ledger.slug}/progress.md: darkmem refused an entry: ${error.detail}`);
       ledger.id = null;
       return;

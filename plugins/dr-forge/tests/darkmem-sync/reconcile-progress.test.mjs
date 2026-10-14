@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
+import { ledgerPieces } from "../../scripts/lib/darkmem-mirror.mjs";
 import { checkProgressTargets, gatherLocalProgress } from "../../scripts/lib/darkmem-progress-move.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
@@ -490,3 +491,87 @@ test("an absolute ledger identity through a symbolic-linked docs directory is na
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
 });
+
+// 251 pieces: a stopped import holding the first 100 leaves two batches to send.
+const LONG = `# SDD ledger — plan: docs/forge/plans/p1.md\n\n${Array.from({ length: 250 }, (_, i) => `Task ${i + 1}: complete (commits aaaa..bbbb)\n\n`).join("")}`;
+const FIRST_BATCH = () => ledgerPieces(LONG).slice(0, 100).map(body => ({ kind: "ledger", body }));
+const ledgerOf = ws => ws.entries.filter(e => e.kind === "ledger");
+const ledgerAppends = s => s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries" && r.body.entries[0].kind === "ledger");
+
+test("a move stopped after its first append batch resumes the import", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), LONG);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+  const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+  assert.equal(ws.state, "closed");
+  assert.equal(ledgerOf(ws).map(e => e.body).join(""), LONG);
+  assert.equal(ledgerOf(ws).length, ledgerPieces(LONG).length);
+  const resumed = ledgerAppends(s).slice(1);
+  assert.equal(resumed.length, 2, "the two remaining batches");
+  assert.equal(resumed[0].body.expected_last_seq, ledgerOf(ws)[99].seq, "the first resumed batch follows the stopped import");
+  assert.equal(resumed[1].body.expected_last_seq, ledgerOf(ws)[199].seq, "the next batch follows the answer to the one before");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), LONG);
+});
+
+test("another writer's append during a resumed import refuses the move, and nothing local moves", async t => {
+  const s = await setup(t, "darkmem");
+  const ledger = path.join(s.repo, ".forge", "sdd", "p1", "progress.md");
+  write(ledger, LONG);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
+  let competed = false;
+  s.stub.db.onRequest = (method, pathname) => {
+    if (competed || method !== "POST" || pathname !== "/api/v1/worklog/entries") return;
+    competed = true;
+    const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+    ws.entries.push({ id: "competing", seq: s.stub.db.nextSeq++, run_key: "other", kind: "ledger", body: "another writer\n", properties: {}, created_at: new Date().toISOString() });
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): darkmem refused part of the progress; nothing was moved locally\n"), result.stdout);
+  assert.match(result.stdout, /^ {2}sdd\/p1\/progress\.md: darkmem refused an entry: expected the newest ledger entry to be seq \d+, but it is \d+$/m);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
+  assert.equal(read(ledger), LONG);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "progress.md")), false);
+});
+
+test("an open workstream holding no ledger entries yet is resumed from the start", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/forge/plans/p1.md`\n" }] });
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+  assert.equal(ws.state, "closed");
+  assert.equal(ledgerOf(ws).map(e => e.body).join(""), LEDGER("p1"));
+});
+
+for (const [name, prepare] of [
+  ["a closed workstream holding a prefix", async s => {
+    const { workstream } = await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
+    await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
+  }],
+  ["a prefix ending inside a piece", async s => {
+    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LONG.slice(0, 20) }] });
+  }],
+  ["a different ledger", async s => {
+    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
+  }],
+]) {
+  test(`${name} refuses the move and sends nothing`, async t => {
+    const s = await setup(t, "darkmem");
+    write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), LONG);
+    await prepare(s);
+    const appends = () => s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries").length;
+    const before = appends();
+    const result = await s.reconcile();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem or the mirror already holds different progress$/m);
+    assert.match(result.stdout, /^ {2}sdd\/p1\/progress\.md: darkmem already holds a different ledger for workstream p1$/m);
+    assert.equal(appends(), before);
+    assert.equal(read(path.join(s.repo, ".forge", "sdd", "p1", "progress.md")), LONG);
+  });
+}

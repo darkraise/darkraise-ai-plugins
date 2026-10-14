@@ -480,6 +480,13 @@ export function splitAtBlankLines(text) {
   return text.split(/(?<=\n\r?\n)/).filter(piece => piece.length > 0);
 }
 
+// A ledger's import entries. Import and the move's stopped-import check both
+// split with this, so the entries a stopped import sent are the first pieces
+// of the same ledger's split.
+export function ledgerPieces(text) {
+  return splitAtBlankLines(text).flatMap(piece => splitAtLimit(piece));
+}
+
 // What a darkmem progress board reads from one ledger line without parsing
 // markdown (darkmem store options spec §3). Only a `Task N:` line yields any.
 export function lineProperties(line) {
