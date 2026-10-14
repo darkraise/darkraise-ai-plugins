@@ -30,22 +30,22 @@ git init -q -b main "$REPO"
 mkdir -p "$REPO/docs"
 printf '# Plan\n\n### Task 1: One\n\n### Task 2: Two\n\n### Task 3: Three\n' > "$REPO/docs/plan.md"
 printf '# Project\n\nNo compaction notes.\n' > "$REPO/CLAUDE.md"
-printf '.superpowers/\n' > "$REPO/.gitignore"
+printf '.forge/\n' > "$REPO/.gitignore"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
 ROOT="$(git -C "$REPO" rev-parse --show-toplevel)"
 
 WT="$TMP/wt"
 git -C "$REPO" worktree add -q -b feat "$WT"
 WT_ROOT="$(git -C "$WT" rev-parse --show-toplevel)"
-WS="$WT/.superpowers/sdd/plan"
+WS="$WT/.forge/sdd/plan"
 mkdir -p "$WS"
 printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\nTask 2: fix round 1/5 (1 addressed, 1 open — x)\n' > "$WS/progress.md"
 printf '# Handoff notes\n' > "$WS/handoff.md"
 
-mkdir -p "$REPO/.superpowers/handoff"
+mkdir -p "$REPO/.forge/handoff"
 printf '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/plan.md`: 1 of 3 tasks complete.\n**Next:** Resume at Task 2 (Two).\n' \
-  > "$REPO/.superpowers/handoff/latest.md"
-touch -d '1 hour ago' "$REPO/.superpowers/handoff/latest.md"
+  > "$REPO/.forge/handoff/latest.md"
+touch -d '1 hour ago' "$REPO/.forge/handoff/latest.md"
 printf 'later\n' > "$REPO/later.txt"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm second
 
@@ -95,8 +95,8 @@ has "audit: the section exists" "$OUT" "## Item registers"
 SECTION=$(sed -n '/## Item registers/,/^$/p' <<<"$OUT")
 has "audit: no registers says so" "$SECTION" "- none"
 
-mkdir -p "$REPO/docs/superpowers/registers"
-cat > "$REPO/docs/superpowers/registers/r.md" <<'REG'
+mkdir -p "$REPO/docs/forge/registers"
+cat > "$REPO/docs/forge/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** owner list
@@ -112,19 +112,19 @@ OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
 has "audit: counts open rows" "$OUT" "2 open"
 has "audit: counts rows awaiting the owner" "$OUT" "1 awaiting your check"
 has "audit: counts the whole register" "$OUT" "of 3 rows"
-has "audit: names the register" "$OUT" "docs/superpowers/registers/r.md"
+has "audit: names the register" "$OUT" "docs/forge/registers/r.md"
 
 # --- roadmap ---
 OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
 SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
 has "audit: the roadmap section exists" "$OUT" "## Roadmap"
 has "audit: no roadmap says so" "$SECTION" "- none"
-mkdir -p "$REPO/docs/superpowers/specs" "$REPO/docs/superpowers/registers"
-: > "$REPO/docs/superpowers/specs/shop-design.md"
+mkdir -p "$REPO/docs/forge/specs" "$REPO/docs/forge/registers"
+: > "$REPO/docs/forge/specs/shop-design.md"
 printf '# M1 — item register\n\n**Source:** roadmap\n**Covers:** docs/superpowers/specs/shop-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Search | - | - | open | - |\n' \
-  > "$REPO/docs/superpowers/registers/m1.md"
+  > "$REPO/docs/forge/registers/m1.md"
 printf '# Shop — roadmap\n\n**Product:** a shop\n**Spec:** docs/superpowers/specs/shop-design.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |\n' \
-  > "$REPO/docs/superpowers/roadmap.md"
+  > "$REPO/docs/forge/roadmap.md"
 OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
 SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
 has "audit: lists the milestone" "$SECTION" "- M1 MVP — open — 0 of 1 epics resolved; open: #1 Search (open)"
@@ -141,6 +141,18 @@ out=$(cd "$REPO" && HOME=$SH bash "$SCRIPT")
 has "darkmem: the mirror's ledger" "$out" "- \`docs/plan.md\` in the darkmem mirror: 1 of 3 tasks complete"
 has "darkmem: the mirror's latest.md" "$out" "- \`$M/work/handoff/latest.md\`"
 has "darkmem: its status" "$out" "**Status:** mirror status"
+
+# --- a pre-3.0 directory is named with the command that moves it ---
+check "3.0 layout: no migration line" "$(grep -c 'pre-3.0 layout' <<<"$out")" "0"
+W2="$TMP/wt2"
+git -C "$REPO" worktree add -q --detach "$W2"
+W2_ROOT="$(git -C "$W2" rev-parse --show-toplevel)"
+mkdir -p "$REPO/.superpowers" "$W2/docs/superpowers"
+out=$(cd "$W2" && bash "$SCRIPT" 2>&1)
+has "pre-3.0: the worktree's and the primary's directories, and the command" "$out" \
+  "- dr-forge: this repository still uses the pre-3.0 layout ($ROOT/.superpowers, $W2_ROOT/docs/superpowers); run bash $(cd "$HERE/../scripts" && pwd)/forge-migrate"
+git -C "$REPO" worktree remove --force "$W2" >/dev/null 2>&1
+rm -rf "$REPO/.superpowers"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

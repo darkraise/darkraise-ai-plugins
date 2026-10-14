@@ -89,8 +89,8 @@ export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invali
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
-mkdir -p "$REPO/.superpowers/handoff"
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.superpowers/handoff/latest.md"
+mkdir -p "$REPO/.forge/handoff"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.forge/handoff/latest.md"
 TR="$TMP/transcript.jsonl"
 MSYS_NO_PATHCONV=1 jq -cn '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:"keep the API stable"}}' > "$TR"
 compact_payload() {
@@ -122,12 +122,12 @@ check "compact: control bytes stripped from the context" \
   "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$esc_out" 2>/dev/null | grep -c $'\033')" "0"
 
 # --- a roadmap project: its position rides in every session ---
-mkdir -p "$REPO/docs/superpowers/registers" "$REPO/docs/superpowers/specs"
-: > "$REPO/docs/superpowers/specs/shop-design.md"
+mkdir -p "$REPO/docs/forge/registers" "$REPO/docs/forge/specs"
+: > "$REPO/docs/forge/specs/shop-design.md"
 printf '# M1 — item register\n\n**Source:** roadmap\n**Covers:** docs/superpowers/specs/shop-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Billing | - | - | done | - |\n| 2 | Search | - | - | open | - |\n' \
-  > "$REPO/docs/superpowers/registers/m1.md"
+  > "$REPO/docs/forge/registers/m1.md"
 printf '# Shop — roadmap\n\n**Product:** a shop\n**Spec:** docs/superpowers/specs/shop-design.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |\n' \
-  > "$REPO/docs/superpowers/roadmap.md"
+  > "$REPO/docs/forge/roadmap.md"
 startup_payload() {
   MSYS_NO_PATHCONV=1 jq -n --arg tp "$TR" --arg cwd "$REPO" \
     '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:$tp,cwd:$cwd,source:"startup"}'
@@ -140,6 +140,15 @@ rm_ctx=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.h
 check "roadmap: survives compaction alongside the snapshot" "$(grep -c '^Roadmap: M1 MVP' <<<"$rm_ctx")" "1"
 check "roadmap: still under the 10,000-character hook cap" "$([ "${#rm_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
 check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" "0"
+
+# --- a pre-3.0 directory left behind is named, with the command that moves it ---
+check "3.0 layout: no migration line" "$(grep -c 'pre-3.0 layout' <<<"$rm_ctx")" "0"
+mkdir -p "$REPO/.superpowers"
+lg_out=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
+check "pre-3.0: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$lg_out" && echo yes || echo no)" "yes"
+check "pre-3.0: the migration line is injected" \
+  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dr-forge: this repository still uses the pre-3.0 layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run bash $(cd "$HERE/.." && pwd)/scripts/forge-migrate")" "1"
+rm -rf "$REPO/.superpowers"
 
 # --- workflow settings ride in every session as one line ---
 if command -v node >/dev/null 2>&1; then

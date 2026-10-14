@@ -9,7 +9,6 @@
 # Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
 #        task-brief --header PLAN_FILE [OUTFILE]
 # Default OUTFILE: <repo-root>/.forge/sdd/<plan-basename>/task-<N>-brief.md
-# (.superpowers/sdd/ in a pre-2.0 checkout)
 # or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
 # plan in the same working tree share it).
 # Exit: 0 ok; 2 usage; 3 no such task; 4 an amendment does not apply.

@@ -112,7 +112,7 @@ present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FI
 present "inline confirms a Header amendment" "$INLINE" 'A Header amendment is confirmed by a second, independent `judge-opus` dispatch'
 absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-flight scan.'
 absent "inline no longer names judge-fable as the ruling seat" "$INLINE" '`dr-forge:judge-fable` (`dr-forge:judge-opus` when Fable is'
-present "inline translates a delegated task's agent" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
+absent "inline no longer translates older plugin prefixes" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
 absent "inline drops the all-inert legacy sentence" "$INLINE" 'no task is dispatched, so their names need no translation'
 present "a return to inline starts at a task that is not delegated" "$INLINE" 'The return takes effect at the first remaining task that is not delegated'
 

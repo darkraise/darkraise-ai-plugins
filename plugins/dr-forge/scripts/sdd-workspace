@@ -4,8 +4,7 @@
 # and, while progress is local, the progress ledger. Print the plan
 # directory's absolute path.
 #
-# One directory per plan (.forge/sdd/<plan-basename>/, or .superpowers/sdd/ in
-# a pre-2.0 checkout) so a follow-up
+# One directory per plan (.forge/sdd/<plan-basename>/) so a follow-up
 # plan in the same working tree can never read or overwrite another plan's
 # artifacts. A stale ledger misread as current progress makes controllers
 # skip whole task sequences — plan-scoping removes that failure structurally.

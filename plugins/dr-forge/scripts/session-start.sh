@@ -96,6 +96,17 @@ if [ -n "$settings_line" ]; then
   context="${context}\n\n$(escape_for_json "$settings_line")"
 fi
 
+# dr-forge reads none of the pre-3.0 names, so a repository that still has them
+# would split its work between the old directories and the new ones unnoticed.
+legacy_line=""
+if [ -n "$roadmap_root" ]; then
+  legacy=$(forge_legacy_layout "$roadmap_root" | paste -sd, - | sed 's/,/, /g' | tr -d '\001-\037')
+  if [ -n "$legacy" ]; then
+    legacy_line="dr-forge: this repository still uses the pre-3.0 layout ($legacy); run bash $plugin_root_shown/scripts/forge-migrate"
+    context="${context}\n\n$(escape_for_json "$legacy_line")"
+  fi
+fi
+
 # darkmem's reconcile and pull (darkmem store options spec §5), on every
 # source: a line per moved or refused family and the pull's result, fitted to
 # the room the hook's 10,000-character cap leaves the entry point. A
@@ -104,7 +115,7 @@ fi
 # nothing.
 darkmem_lines=""
 if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
-  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} ))
+  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} ))
   if [ "$room" -ge 100 ]; then
     darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" \
       | tr -d '\001-\010\013\014\016-\037')
@@ -122,7 +133,7 @@ fi
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#darkmem_lines} ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#darkmem_lines} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with

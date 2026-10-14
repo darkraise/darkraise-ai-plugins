@@ -77,16 +77,13 @@ mkdir -p "$MIRROR/work/sdd/c"
 printf 'x\n' > "$MIRROR/work/sdd/c/progress.md"
 check "ledger files: darkmem lists the mirror's once" "$(cd "$WT" && forge_ledger_files)" "$(printf '%s\tmirror' "$MIRROR/work/sdd/c/progress.md")"
 
-# --- a pre-2.0 checkout keeps its names ---
-MIRROR=$(stores_home "$HOME" "$REPO" superpowers local local)
-mkdir -p "$WT/docs/superpowers/plans"
-check "pre-2.0: the docs root" "$(cd "$WT" && forge_docs_root)" "$WT/docs/superpowers"
-check "pre-2.0: the name" "$(cd "$WT" && forge_name "$WT/docs/superpowers/plans/p.md")" "docs/superpowers/plans/p.md"
-
 # --- a relative file spelled from a subdirectory is named from the checkout ---
-printf 'p\n' > "$WT/docs/superpowers/plans/p.md"
-check "subdirectory: a relative file" "$(cd "$WT/docs/superpowers/plans" && forge_name p.md)" "docs/superpowers/plans/p.md"
-check "subdirectory: a name that is no file here stays" "$(cd "$WT/docs/superpowers/plans" && forge_name docs/superpowers/plans/p.md)" "docs/superpowers/plans/p.md"
+MIRROR=$(stores_home "$HOME" "$REPO" superpowers local local)
+mkdir -p "$WT/docs/forge/plans"
+printf 'p\n' > "$WT/docs/forge/plans/p.md"
+check "subdirectory: a relative file" "$(cd "$WT/docs/forge/plans" && forge_name p.md)" "docs/forge/plans/p.md"
+check "subdirectory: a name that is no file here stays" "$(cd "$WT/docs/forge/plans" && forge_name docs/superpowers/plans/p.md)" "docs/superpowers/plans/p.md"
+check "a historical citation resolves to the file" "$(cd "$WT" && cat "$(forge_resolve docs/superpowers/plans/p.md)")" "p"
 
 # --- one name under either docs prefix (spec §7.1) ---
 check "name key: the pre-2.0 prefix" "$(forge_name_key docs/superpowers/plans/p.md)" "docs/forge/plans/p.md"

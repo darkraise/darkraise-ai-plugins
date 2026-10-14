@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The state directory the scripts write: .forge/ in a new checkout, the
-# pre-2.0 .superpowers/ where only that exists.
+# The state directory the scripts write: .forge/, even in a checkout that still
+# has the pre-3.0 .superpowers/.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,13 +37,12 @@ checkout "$TMP/old"
 mkdir -p "$TMP/old/.superpowers"
 top=$(cd "$TMP/old" && pwd)
 dir=$(cd "$TMP/old" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
-check "pre-2.0 checkout: workspace" "${dir#"$top"}" "/.superpowers/sdd/p"
+check "pre-3.0 checkout: workspace under .forge" "${dir#"$top"}" "/.forge/sdd/p"
 (cd "$TMP/old" && bash "$SCRIPTS/finish-choice" set pr --base main > /dev/null)
-check "pre-2.0 checkout: finish choice" "$([ -f "$TMP/old/.superpowers/sdd/finish.json" ] && echo yes)" "yes"
-check "pre-2.0 checkout: no .forge" "$([ -e "$TMP/old/.forge" ] && echo yes || echo no)" "no"
+check "pre-3.0 checkout: finish choice under .forge" "$([ -f "$TMP/old/.forge/sdd/finish.json" ] && echo yes)" "yes"
+check "pre-3.0 checkout: .superpowers left to forge-migrate" "$(ls -A "$TMP/old/.superpowers")" ""
 
-# A worktree resolves under its own root, as sdd-workspace always did: a new
-# worktree has neither directory, so it gets .forge/.
+# A worktree resolves under its own root, as sdd-workspace always did.
 git -C "$TMP/old" worktree add -q -b wt "$TMP/wt"
 top=$(cd "$TMP/wt" && pwd)
 dir=$(cd "$TMP/wt" && bash "$SCRIPTS/sdd-workspace" docs/p.md)

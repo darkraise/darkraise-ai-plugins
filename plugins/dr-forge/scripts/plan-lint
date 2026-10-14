@@ -329,7 +329,7 @@ for n in $nums; do
         say ERROR "$where" "Implementer '$name' is not fully qualified"
       else
         suffix=${name##*:} prefix=${name%%:*}
-        [ "$prefix" = "dr-forge" ] || say WARN "$where" "legacy prefix '$prefix:' (resolved by suffix per legacy-names.md)"
+        [ "$prefix" = "dr-forge" ] || say ERROR "$where" "Implementer '$name' is not a dr-forge agent (dr-forge:$suffix)"
         want=$(awk -v t="$t" '$1 == t { print $2 }' <<<"$assignment")
         if grep -qxF "$suffix" <<<"$reserve"; then
           say "$sev" "$where" "$suffix is a reserve tier; it needs a human **Override:**"

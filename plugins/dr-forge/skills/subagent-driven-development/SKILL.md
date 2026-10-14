@@ -96,8 +96,7 @@ ledger and the tool results carry the record.
 
 **Rulings, not stalls.** A running plan does not wait on a human, and it does
 not wait on your judgment either. You decide the mechanical problems yourself —
-the dispatch-problems table, legacy names, resuming or re-dispatching by cache
-state, batching, a report missing a required section, a tool failure — and
+the dispatch-problems table, resuming or re-dispatching by cache state, batching, a report missing a required section, a tool failure — and
 record each in the ledger as `Ruling: <what you decided> — <why> — <what it
 costs if wrong>`, said aloud. Everything that needs judgment about the plan,
 the spec or a finding goes to the ruling seat (see The Ruling Seat): it reads
@@ -165,14 +164,14 @@ digraph process {
         "Append completion to ledger, mark todo complete" [shape=box];
     }
 
-    "Setup: worktree, finish preference, ledger check, plan header, legacy names, pre-flight ruling" [shape=box];
+    "Setup: worktree, finish preference, ledger check, plan header, pre-flight ruling" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Final review: code reviewer + Codex round, judge verifies the union" [shape=box];
     "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" [shape=box];
     "Final review clean: ledger it, print rulings" [shape=box];
     "Use dr-forge:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
-    "Setup: worktree, finish preference, ledger check, plan header, legacy names, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
+    "Setup: worktree, finish preference, ledger check, plan header, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)";
     "Dispatch the assigned implementer or executor (./references/implementer-prompt.md)" -> "Implementer reports NEEDS_CONTEXT?";
     "Implementer reports NEEDS_CONTEXT?" -> "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [label="yes"];
     "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" -> "Implementer implements, tests, commits, self-reviews";
@@ -268,14 +267,6 @@ each task's title from its brief's first line. You never read the spec: the
 ruling seat, the plan review and the final review do. If the plan's
 `**Spec:**` path is unreachable, note it in the ledger and say so in every
 ruling-seat dispatch; the seat marks its rulings provisional.
-
-**Resolve legacy names.** Plans written before this plugin's 1.2.0 may name
-skills and agents under older plugin prefixes, in the header and in
-`**Implementer:**` lines. Translate each with
-[legacy-names.md](../../reference/legacy-names.md) at read time, never edit the
-plan, and log one `Ruling: translated <old> -> <new> — legacy plugin name —
-none` per distinct name. A header demanding the retired tiered-dispatch skill
-needs nothing further: this skill reads the `**Implementer:**` lines itself.
 
 Before dispatching Task 1, send one `preflight` item to the ruling seat (see
 The Ruling Seat). It scans the whole plan against the spec for:

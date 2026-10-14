@@ -3,8 +3,7 @@
 # finishing, next program sub-project or roadmap epic, a milestone audit, or
 # nothing; for a design draft: its
 # next step — as a "## Next session" block, and write the same block into the
-# primary checkout's .forge/handoff/latest.md (.superpowers/handoff/ in a
-# pre-2.0 checkout).
+# primary checkout's .forge/handoff/latest.md.
 #
 # Sessions end by pasting this block verbatim, so what comes next is computed
 # here rather than remembered by the model: small executors reliably forget to

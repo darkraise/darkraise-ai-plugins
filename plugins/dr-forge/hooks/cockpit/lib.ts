@@ -6,7 +6,7 @@ import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
 export const WARN_AT = 0.8
 
 /**
- * The handoff budget: the configured tokens, else DR_FORGE_BUDGET (or the pre-2.0 DR_SUPERPOWERS_BUDGET), else
+ * The handoff budget: the configured tokens, else DR_FORGE_BUDGET, else
  * dr-forge's own rule (reference/session-budget.md): the compaction point
  * minus one task's worst growth, min(autoCompactWindow, window) × 93% − 140,000.
  * Small windows, where that comes out near zero, hold a fifth of the window.
@@ -112,19 +112,9 @@ export function isGitWriteTool(tool: string): boolean {
   return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
 }
 
-/** The repository's state directory name, as scripts/lib/forge-dir.sh picks it: .forge unless only .superpowers exists. */
-export function stateLeaf(names: ReadonlySet<string>): string {
-  return !names.has('.forge') && names.has('.superpowers') ? '.superpowers' : '.forge'
-}
-
-/** The docs directory's name under a checkout's docs/: forge, or the pre-2.0 superpowers where only that exists. */
-export function docsLeaf(names: ReadonlySet<string>): string {
-  return !names.has('forge') && names.has('superpowers') ? 'superpowers' : 'forge'
-}
-
-/** Whether a subagent type or skill name belongs to dr-forge, under its name or the pre-2.0 dr-superpowers. */
-export function isSuperpowers(name: string): boolean {
-  return name.startsWith('dr-forge:') || name.startsWith('dr-superpowers:')
+/** Whether a subagent type or skill name belongs to dr-forge. */
+export function isForge(name: string): boolean {
+  return name.startsWith('dr-forge:')
 }
 
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
@@ -503,11 +493,12 @@ export function isAbsolutePath(path: string): boolean {
 
 /**
  * Where a ledger's plan name may be read, in order (darkmem store options spec
- * §7.1 and §7.3): an absolute name as written; a document name under either
- * prefix under the docs root while documents are in darkmem, else under each
- * checkout's own docs directory, since docs/superpowers/<rest> and
- * docs/forge/<rest> name one document; any other name under each checkout.
- * The session's checkout comes first.
+ * §7.1 and §7.3): an absolute name as written; a document name under the docs
+ * root while documents are in darkmem, else under each checkout's own docs
+ * directory; any other name under each checkout. The session's checkout comes
+ * first. A ledger written before 3.0.0 cites its plan as
+ * docs/superpowers/<rest>, which still names docs/forge/<rest>: ledgers are
+ * never rewritten.
  */
 export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
   if (isAbsolutePath(plan)) return [plan]

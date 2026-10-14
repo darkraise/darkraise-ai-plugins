@@ -98,7 +98,7 @@ asst 285000 > "$T"
 DR_FORGE_BUDGET=300000 run
 check "override: line" "$out" "budget: 285k of 300k (95%) — ok — source: record"
 DR_SUPERPOWERS_BUDGET=300000 run
-check "pre-2.0 override name still applies" "$out" "budget: 285k of 300k (95%) — ok — source: record"
+check "the pre-2.0 override name is not read" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 DR_FORGE_BUDGET=380000 DR_SUPERPOWERS_BUDGET=300000 run
 check "the dr-forge name wins" "$out" "budget: 285k of 380k (75%) — ok — source: record"
 

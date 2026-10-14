@@ -286,9 +286,8 @@ ctx_plan_budget() {
   echo "$plan"
 }
 
-# The primary checkout's root: a worktree's .forge/ (.superpowers/ in a pre-2.0
-# checkout) lives with the checkout that owns the repository, so every session
-# logs to one file.
+# The primary checkout's root: a worktree's .forge/ lives with the checkout
+# that owns the repository, so every session logs to one file.
 ctx_primary_root() {
   local common
   common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
@@ -298,9 +297,9 @@ ctx_primary_root() {
 # ctx_log_observation TOKENS — append one row, and never fail the caller: the
 # budget line is printed whether or not the observation is recorded.
 #
-# The log lives inside .forge/sdd/ (.superpowers/sdd/ in a pre-2.0 checkout)
-# because that directory self-ignores (scripts/sdd-workspace writes * into its
-# .gitignore). Only this repository's root .gitignore lists the state
+# The log lives inside .forge/sdd/ because that directory self-ignores
+# (scripts/sdd-workspace writes * into its .gitignore). Only this repository's
+# root .gitignore lists the state
 # directory, and an untracked-but-not-ignored file
 # would enter scripts/lib/task-state.sh's review snapshot, invalidating a Codex
 # review, and would block initial execution's clean-worktree check.

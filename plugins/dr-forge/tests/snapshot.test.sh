@@ -36,21 +36,21 @@ unset DR_FORGE_JQ DR_SUPERPOWERS_JQ
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
-printf '.superpowers/\n' > "$REPO/.gitignore"
+printf '.forge/\n' > "$REPO/.gitignore"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
 WT="$TMP/wt"
 git -C "$REPO" worktree add -q -b feat "$WT"
-mkdir -p "$WT/.superpowers/sdd/plan"
+mkdir -p "$WT/.forge/sdd/plan"
 {
   printf '# SDD ledger — plan: docs/plan.md\n'
   printf 'Ruling: translated old -> new — legacy plugin name — none\n'
   printf 'Task 1: complete (commits a..b, review clean)\n'
   printf 'Task 2: Ruling: kept the retry — spec 4.2 — a second fix round\n'
   printf 'Task 2: fix round 1/5 (1 addressed, 1 open — x)\n'
-} > "$WT/.superpowers/sdd/plan/progress.md"
-mkdir -p "$REPO/.superpowers/handoff"
+} > "$WT/.forge/sdd/plan/progress.md"
+mkdir -p "$REPO/.forge/handoff"
 printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** Resume at Task 2 (Two).\n\n## Do not\nKeep out of the snapshot.\n' \
-  > "$REPO/.superpowers/handoff/latest.md"
+  > "$REPO/.forge/handoff/latest.md"
 
 prompt() { jq -cn --arg c "$1" '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:$c}}'; }
 tool() { # tool <name> <path> [isSidechain]
@@ -138,7 +138,7 @@ has "explicit cap: ledger kept" "$out" "Task 2: fix round 1/5"
 # --- an oversized Next session block: s1+s2 alone still fits under cap ---
 LONG_NEXT=$(printf '%08000d' 0)
 printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** %s\n\n## Do not\nKeep out.\n' "$LONG_NEXT" \
-  > "$REPO/.superpowers/handoff/latest.md"
+  > "$REPO/.forge/handoff/latest.md"
 out=$(snapshot_build "$T" "$REPO")
 check "oversized handoff: at most 5500 characters" "$([ "${#out}" -le 5500 ] && echo yes || echo no)" "yes"
 check "oversized handoff: heading kept" "$(sed -n 1p <<<"$out")" "## Compaction snapshot"

@@ -67,9 +67,7 @@ these steps directly.
   (3) interfaces and decisions from earlier tasks that the brief cannot
   know; (4) the ruling-seat verdicts in the ledger that bear on this task,
   copied verbatim (an ambiguity you notice in the brief goes to the seat as a
-  `plan-conflict` item before you dispatch) — and, when the brief names a
-  skill under an old plugin prefix, that legacy names resolve per
-  `reference/legacy-names.md`; (5) the report-file
+  `plan-conflict` item before you dispatch); (5) the report-file
   path and report contract. Exact values (numbers, magic strings, signatures,
   test cases) appear only in the brief. Never make a subagent read the whole
   plan file. A brief whose task the seat split into `#### Part` units is

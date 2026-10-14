@@ -210,15 +210,11 @@ Never re-score the tasks. `scripts/plan-lint` enforced the eligibility rule
 when the plan was saved, and a plan whose Execution line says `inline` has
 passed it.
 
-**Resolve legacy names.** Plans written before this plugin's 1.2.0 may name
-skills and agents under older plugin prefixes. Translate each with
-[legacy-names.md](../../reference/legacy-names.md) at read time, never edit the
-plan, and log one `Ruling: translated <old> -> <new> — legacy plugin name —
-none` per distinct name. A task whose brief's second line marks it delegated is dispatched, never
+A task whose brief's second line marks it delegated is dispatched, never
 implemented here, and its `**Executor:**` line is read by
 [delegated-task.md](../../reference/delegated-task.md) §1, which runs that
 executor's wrapper in place of an implementer subagent. `**Implementer:**` lines are inert for the tasks
-you implement; translate a delegated task's `**Implementer:**` agent before dispatching it.
+you implement.
 
 **Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated`
 line naming at least one `(heavy)` task, send one `preflight` item to the

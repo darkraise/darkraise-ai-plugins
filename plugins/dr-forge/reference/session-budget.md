@@ -24,8 +24,6 @@ never earlier.
 | Skill bodies after compaction | First 5,000 tokens per skill, 25,000 in total, oldest dropped | Claude Code context-window docs |
 | Codex | Hand off every 3 tasks, or after a task that needed 3+ fix rounds | Program design R7; the measured line does not override it |
 
-The pre-2.0 names `DR_SUPERPOWERS_BUDGET` and `DR_SUPERPOWERS_JQ` still apply when the `DR_FORGE_` name is unset.
-
 The budget sits below the point where compaction fires by one task's worst
 growth — a controller adds about 140k across a long fix loop — so a task that
 starts under budget always finishes before compaction.

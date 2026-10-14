@@ -290,13 +290,8 @@ For native final branch review use independent native reviewer contexts; do not
 invoke a Codex CLI round. Independence here does not guarantee cross-provider
 review. Record the restriction mode and this limitation in the ledger.
 
-## Claude rename compatibility
+## Claude plans
 
-On a Claude host only, translate legacy skill and agent names per
-[legacy-names.md](legacy-names.md). A suffix outside that table is not a legacy
-name; it is handled as an unknown name. Preserve effort, Evaluation, and
-reserve overrides and record the namespace translation in the ledger without
-rewriting the plan.
 Claude plans carry no Host or Routing policy line: `scripts/plan-lint` reads a
 plan without `Host: codex` as a Claude plan. Native-to-Claude conversion uses the explicit
 preview/approval process above: preserve raw axes and previous assignments, and

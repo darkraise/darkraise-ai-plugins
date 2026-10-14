@@ -405,7 +405,7 @@ lacks "impl-opus-high at total 6 is not a reserve finding" "$out" "reserve tier"
 lacks "impl-opus-high at total 6 matches" "$out" "does not match the assignment"
 variant t7.md "s/^(\*\*Implementer:\*\*) dr-forge:impl-sonnet-low$/\1 old-$(printf 'plug'):impl-sonnet-low/"
 lint t7.md
-has "legacy prefix warns" "$out" "WARN Task 1: legacy prefix 'old-plug:'"
+has "an older plugin prefix is an error" "$out" "ERROR Task 1: Implementer 'old-plug:impl-sonnet-low' is not a dr-forge agent (dr-forge:impl-sonnet-low)"
 variant t8.md 's/^\*\*Approach:\*\* .*/**Approach:** inline - follows the pattern/'
 lint t8.md
 has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must cite 'skip <n>'"

@@ -26,7 +26,7 @@ mkdir -p "$HOME"
 
 ROOT="$TMP/repo"
 git init -q -b main "$ROOT"
-D="$ROOT/docs/superpowers"
+D="$ROOT/docs/forge"
 mkdir -p "$D/registers" "$D/specs"
 printf '# Product design\n' > "$D/specs/2026-10-07-shop-design.md"
 printf '# Billing design\n' > "$D/specs/2026-10-08-billing-design.md"
@@ -98,7 +98,7 @@ run bash "$RM" open --root "$ROOT"
 check "open: rows open exits 1" "$RC" "1"
 check "open: epic and requirement rows" "$(grep -c '^M1: ' <<<"$OUT")" "4"
 check "open: a requirement row is attributed to its register" \
-  "$(grep -c 'docs/superpowers/registers/billing.md #2 Refund — open' <<<"$OUT")" "1"
+  "$(grep -c 'docs/forge/registers/billing.md #2 Refund — open' <<<"$OUT")" "1"
 run bash "$RM" open --root "$ROOT" M0
 check "open: a closed milestone with nothing open exits 0" "$RC" "0"
 run bash "$RM" open --root "$ROOT" M9
@@ -156,7 +156,7 @@ check "close: written" "$RC" "0"
 check "close: state" "$(roadmap_row "$D/roadmap.md" M1 | cut -f5)" "closed"
 check "close: note" "$(roadmap_row "$D/roadmap.md" M1 | cut -f6)" "audit 2026-10-09: 2 MET"
 run bash "$RM" status --root "$ROOT" --line
-check "all closed: the hook line" "$OUT" "Roadmap: every milestone is closed (docs/superpowers/roadmap.md)."
+check "all closed: the hook line" "$OUT" "Roadmap: every milestone is closed (docs/forge/roadmap.md)."
 run bash "$RM" check --root "$ROOT"
 check "close: the written roadmap checks clean" "$RC" "0"
 

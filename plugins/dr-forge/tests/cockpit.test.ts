@@ -7,7 +7,7 @@ import {
   autoLimitFor,
   autoRunFor,
   isAbsolutePath,
-  isSuperpowers,
+  isForge,
   attributionIn,
   bar,
   billingLabel,
@@ -27,7 +27,6 @@ import {
   nowLine,
   parseFinish,
   parseLedger,
-  docsLeaf,
   parseModeLines,
   planCandidates,
   planTasks,
@@ -38,7 +37,6 @@ import {
   runsWidth,
   sectionsToggled,
   sparkline,
-  stateLeaf,
   stackedRuns,
   shellAge,
   tasksEnded,
@@ -409,10 +407,10 @@ function signedIn(on: On, files: World['files'] = {}) {
   on('session.model', () => ({ value: 'claude-opus-5-5[1m]' }))
 }
 
-test('a dr-forge and a pre-2.0 dr-superpowers name both mark a workflow session', () => {
-  expect(isSuperpowers('dr-forge:brainstorming')).toBe(true)
-  expect(isSuperpowers('dr-superpowers:brainstorming')).toBe(true)
-  expect(isSuperpowers('feature-dev:code-reviewer')).toBe(false)
+test('only a dr-forge name marks a workflow session', () => {
+  expect(isForge('dr-forge:brainstorming')).toBe(true)
+  expect(isForge('dr-superpowers:brainstorming')).toBe(false)
+  expect(isForge('feature-dev:code-reviewer')).toBe(false)
 })
 
 describe('budget rule', () => {
@@ -801,24 +799,16 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
   })
 
-  test('the pre-2.0 budget name sets the budget while DR_FORGE_BUDGET is unset', async ($, on) => {
+  test('the pre-2.0 budget name is not read', async ($, on) => {
     world(on, { tokens: 340_000, config: {}, env: { DR_SUPERPOWERS_BUDGET: '400000' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^85%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
   })
 
-  test('the pre-2.0 budget name sets the budget while DR_FORGE_BUDGET is empty', async ($, on) => {
-    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '', DR_SUPERPOWERS_BUDGET: '400000' } })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^85%$/ })).toBeDefined()
-  })
-
-  test('DR_FORGE_BUDGET wins over the pre-2.0 budget name', async ($, on) => {
-    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '500000', DR_SUPERPOWERS_BUDGET: '400000' } })
+  test('DR_FORGE_BUDGET sets the budget', async ($, on) => {
+    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '500000' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
@@ -881,13 +871,13 @@ describe('settings', () => {
   // world's fs.list names the store file through `files`.
   const LISTED = { [STORE_FILE]: { text: '' } }
 
-  test('the first session imports the cockpit options, darkmem and the webhook', async ($, on) => {
+  test('the first session imports the cockpit options and the webhook, not the pre-2.0 darkmem mapping', async ($, on) => {
     const written: Record<string, string> = {}
     world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
     disk(on, written, OLD_FILES)
     const store = memory(on)
     await $.session.start(START)
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70, darkmem: DARKMEM })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
     expect(store.get('notifyUrl')).toBe('https://discord.com/api/webhooks/1/abc')
     expect(store.get('notifyMention')).toBe('42')
   })
@@ -902,7 +892,7 @@ describe('settings', () => {
     w.settings = legacy(60)
     store.delete('notifyUrl')
     await $.session.start(START)
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70, darkmem: DARKMEM })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
     expect(store.get('notifyUrl')).toBeUndefined()
   })
 
@@ -1961,12 +1951,6 @@ describe('discord', () => {
   })
 })
 
-test('the state directory is .forge unless only .superpowers exists', () => {
-  expect(stateLeaf(new Set())).toBe('.forge')
-  expect(stateLeaf(new Set(['.superpowers']))).toBe('.superpowers')
-  expect(stateLeaf(new Set(['.forge', '.superpowers']))).toBe('.forge')
-})
-
 describe('run card', () => {
   const LEDGER = [
     '# SDD ledger — plan: docs/plans/p.md',
@@ -1977,7 +1961,7 @@ describe('run card', () => {
   ].join('\n')
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n\n### Task 3: Ship it\n'
   const runFiles = (ledger: string): World['files'] => ({
-    '/home/me/code/shop/.superpowers/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 },
+    '/home/me/code/shop/.forge/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 },
     '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
   })
 
@@ -2016,9 +2000,9 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
   })
 
-  test('reads a ledger kept under .forge', async ($, on) => {
+  test('reads no ledger left under the pre-3.0 .superpowers', async ($, on) => {
     const files: World['files'] = {
-      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/shop/.superpowers/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
       '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
     }
     world(on, { ...SIGNED_IN, files })
@@ -2026,12 +2010,7 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^1\/3$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /round 2\/5 · impl-sonnet-low/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeUndefined()
   })
 
   test('says a blocked task once, in red and on Discord', async ($, on) => {
@@ -2043,10 +2022,10 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     expect(fetches).toHaveLength(0)
-    const ledger = files?.['/home/me/code/shop/.superpowers/sdd/p/progress.md']
+    const ledger = files?.['/home/me/code/shop/.forge/sdd/p/progress.md']
     if (ledger !== undefined) ledger.text += '\nTask 2: BLOCKED — impl exhausted — pick a meter width rule'
-    await $.tool.call({ tool: 'Bash', command: 'echo x >> .superpowers/sdd/p/progress.md' })
-    await $.tool.call({ tool: 'Bash', command: 'cat .superpowers/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'echo x >> .forge/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'cat .forge/sdd/p/progress.md' })
     expect(fetches).toHaveLength(1)
     expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('🛑 Task 2 blocked')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -2068,9 +2047,9 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: 'Run' })).toBeUndefined()
     await ui.unmount()
     // A run still open from before keeps its card.
-    const ledger = files?.['/home/me/code/shop/.superpowers/sdd/p/progress.md']
+    const ledger = files?.['/home/me/code/shop/.forge/sdd/p/progress.md']
     if (ledger !== undefined) ledger.text = LEDGER
-    await $.tool.call({ tool: 'Bash', command: 'cat .superpowers/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'cat .forge/sdd/p/progress.md' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
   })
@@ -2093,7 +2072,7 @@ describe('run card', () => {
   test('shows the finish choice on the Run card', async ($, on) => {
     const files = {
       ...runFiles(LEDGER),
-      '/home/me/code/shop/.superpowers/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
+      '/home/me/code/shop/.forge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
@@ -2104,16 +2083,13 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
   })
 
-  test('offers Resume when a recent handoff waits', async ($, on) => {
+  test('offers no Resume for a handoff left under the pre-3.0 .superpowers', async ($, on) => {
     const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
-    const prompts: string[] = []
-    world(on, { ...SIGNED_IN, files, prompts })
+    world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
-    await ui.press({ key: 'pane-resume' })
-    expect(prompts).toEqual([expect.stringContaining('.superpowers/handoff/latest.md')])
+    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
   })
 
   test('offers Resume for a handoff under .forge', async ($, on) => {
@@ -2141,7 +2117,7 @@ describe('cockpit roots', () => {
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
   const checkoutFiles = (): NonNullable<World['files']> => ({
     '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-    '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
+    '/home/me/code/shop/docs/forge/plans/p.md': { text: PLAN },
   })
 
   test('reads the roots --mode prints', () => {
@@ -2236,17 +2212,14 @@ describe('cockpit roots', () => {
   })
 
   test('resolves a plan under the docs root in darkmem, under the docs directory of each checkout otherwise', () => {
-    expect(docsLeaf(new Set(['forge', 'superpowers']))).toBe('forge')
-    expect(docsLeaf(new Set(['superpowers']))).toBe('superpowers')
-    expect(docsLeaf(new Set())).toBe('forge')
     const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
     const w = { root: '/w', docsDir: '/w/docs/forge' }
-    const p = { root: '/p', docsDir: '/p/docs/superpowers' }
+    const p = { root: '/p', docsDir: '/p/docs/forge' }
     for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', './docs/forge/plans/p.md']) {
       expect(planCandidates(name, darkmem, [w, p])).toEqual([`${MIRROR}/superpowers/plans/p.md`])
-      // Either prefix names the same document, read under whichever docs directory each checkout has.
-      expect(planCandidates(name, { store: 'local', root: '/p/docs/superpowers' }, [w, p])).toEqual(['/w/docs/forge/plans/p.md', '/p/docs/superpowers/plans/p.md'])
-      expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/superpowers/plans/p.md'])
+      // Either prefix names the same document: a pre-3.0 citation reads under each checkout's docs/forge.
+      expect(planCandidates(name, { store: 'local', root: '/p/docs/forge' }, [w, p])).toEqual(['/w/docs/forge/plans/p.md', '/p/docs/forge/plans/p.md'])
+      expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/forge/plans/p.md'])
     }
     expect(planCandidates('docs/plans/p.md', null, [w, p])).toEqual(['/w/docs/plans/p.md', '/p/docs/plans/p.md'])
     expect(planCandidates('/abs/plans/p.md', darkmem, [w])).toEqual(['/abs/plans/p.md'])
@@ -2266,7 +2239,7 @@ describe('cockpit roots', () => {
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
   })
 
-  test('reads a plan named under docs/forge from a checkout that has only docs/superpowers', async ($, on) => {
+  test('reads no plan from a pre-3.0 docs/superpowers directory', async ($, on) => {
     const files: World['files'] = {
       '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER.replace('docs/superpowers', 'docs/forge'), mtimeMs: 2_000_000 },
       '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
@@ -2276,7 +2249,7 @@ describe('cockpit roots', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeUndefined()
   })
 
   test('reads the ledger and the plan from the mirror when both families are in darkmem', async ($, on) => {
@@ -2309,9 +2282,9 @@ describe('cockpit roots', () => {
     const files: World['files'] = {
       '/home/me/code/main/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
       '/home/me/code/main/.forge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900}' },
-      '/home/me/code/main/docs/superpowers/plans/p.md': { text: '# Plan\n\n### Task 1: Old title\n' },
+      '/home/me/code/main/docs/forge/plans/p.md': { text: '# Plan\n\n### Task 1: Old title\n' },
       '/home/me/code/shop/.forge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900}' },
-      '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
+      '/home/me/code/shop/docs/forge/plans/p.md': { text: PLAN },
     }
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
     signedIn(on, files)
@@ -2356,7 +2329,7 @@ describe('flight deck', () => {
     ].join('\n')
     const now = 1_000_000
     const files: World['files'] = {
-      '/home/me/code/shop/.superpowers/sdd/p/progress.md': { text: ledger, mtimeMs: now },
+      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: ledger, mtimeMs: now },
       '/home/me/code/shop/docs/plans/cockpit.md': { text: '# Plan\n\n### Task 1: Read the budget\n\n### Task 2: Draw the strip\n\n### Task 3: Draw the context section\n\n### Task 4: Draw usage and agents\n\n### Task 5: Track the plan and repo\n\n### Task 6: Write the README\n' },
     }
     const w: World = { ...SIGNED_IN, files, remoteControl: 'true' }
@@ -2465,11 +2438,10 @@ describe('settings file', () => {
     expect(() => settingWritten(FAKE, {}, 'layout', 'tiles')).toThrow('tiles is not a valid layout')
   })
 
-  test('imports dr-cockpit options that differ from their defaults, and the darkmem mapping', () => {
+  test('imports dr-cockpit options that differ from their defaults', () => {
     const claude = { pluginConfigs: { 'dr-cockpit@darkraise': { options: { layout: 'compact', warnAt: 80, nudgeModel: 'yes' } } } }
-    const darkmem = { url: 'http://d.test', api_key_env: 'DARKMEM_API_KEY', repos: {} }
-    expect(importedSettings(FAKE, claude, { darkmem })).toEqual({ layout: 'compact', darkmem })
-    expect(importedSettings(FAKE, {}, null)).toEqual({})
+    expect(importedSettings(FAKE, claude)).toEqual({ layout: 'compact' })
+    expect(importedSettings(FAKE, {})).toEqual({})
   })
 
   test('every default in the real schema fits its own type', () => {
@@ -2570,7 +2542,7 @@ describe('settings rows', () => {
     expect(resolveSettings(ROWS, { compactAt: 300_000 }, {}).compactAt).toBe(0)
     expect(settingProblems(ROWS, { compactAt: 'x' }, {})).toEqual([])
     expect(() => settingWritten(ROWS, {}, 'compactAt', 650_000)).toThrow("compactAt is stored in Claude's settings file")
-    expect(importedSettings(ROWS, { pluginConfigs: { 'dr-cockpit@darkraise': { options: { compactAt: 650_000, warnAt: 70 } } } }, null)).toEqual({ warnAt: 70 })
+    expect(importedSettings(ROWS, { pluginConfigs: { 'dr-cockpit@darkraise': { options: { compactAt: 650_000, warnAt: 70 } } } })).toEqual({ warnAt: 70 })
     expect(isValidSetting(spec('compactAt'), 0)).toBe(true)
     expect(isValidSetting(spec('compactAt'), 99_999)).toBe(false)
     expect(isValidSetting(spec('wait'), 5.5)).toBe(false)
@@ -2597,13 +2569,13 @@ describe('settings held outside the file', () => {
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ handoffTokens: 300_000 })
   })
 
-  test('the pre-2.0 variable is named when it is the one set', async ($, on) => {
+  test('the pre-2.0 variable locks nothing', async ($, on) => {
     world(on, { tokens: 284_000, config: {}, env: { DR_SUPERPOWERS_BUDGET: '465000' } })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Context' })
-    expect(await ui.find({ type: 'Text', text: 'set by DR_SUPERPOWERS_BUDGET' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /set by DR_/ })).toBeUndefined()
   })
 
   test('a Claude key is saved through forge-config, never into the forge file', async ($, on) => {

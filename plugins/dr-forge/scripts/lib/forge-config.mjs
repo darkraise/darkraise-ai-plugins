@@ -11,8 +11,6 @@ import SCHEMA from "../../config/schema.mjs";
 
 export class SettingError extends Error {}
 
-// A pre-2.0 environment name still read when the new one is unset.
-const LEGACY_ENV = { DR_FORGE_BUDGET: "DR_SUPERPOWERS_BUDGET" };
 const USAGE = "usage: forge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
 
 function homeOf(env) {
@@ -191,12 +189,11 @@ export function resolve(env = process.env, warn = message => process.stderr.writ
       values[key] = spec.default;
       continue;
     }
-    const name = spec.env === undefined ? undefined : env[spec.env] ? spec.env : LEGACY_ENV[spec.env];
-    const raw = name === undefined ? undefined : env[name];
+    const raw = spec.env === undefined ? undefined : env[spec.env];
     if (raw !== undefined && raw !== "") {
       const value = fromText(spec, raw);
       if (value !== undefined) { values[key] = value; continue; }
-      warn(`${name}=${raw} is not a valid ${key}; ignored`);
+      warn(`${spec.env}=${raw} is not a valid ${key}; ignored`);
     }
     if (key in data) {
       if (isValid(spec, data[key])) { values[key] = data[key]; continue; }
@@ -245,8 +242,7 @@ export function unsetValue(key, env = process.env) {
 }
 
 // Once per machine, while ~/.dr-forge/config.json does not exist: dr-cockpit's
-// options from the Claude settings file and the darkmem mapping from
-// ~/.dr-superpowers/config.json. The old files stay in place.
+// options from the Claude settings file. The old file stays in place.
 export function importLegacy(env = process.env) {
   const file = configPath(env);
   if (fs.existsSync(file)) return false;
@@ -257,8 +253,6 @@ export function importLegacy(env = process.env) {
       if (spec.target === "forge" && key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
     }
   }
-  const darkmem = readJson(path.join(homeOf(env), ".dr-superpowers", "config.json"))?.darkmem;
-  if (darkmem && typeof darkmem === "object" && !Array.isArray(darkmem)) data.darkmem = darkmem;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.import`;
   fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`);

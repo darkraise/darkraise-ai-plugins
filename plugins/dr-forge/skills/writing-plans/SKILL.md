@@ -317,9 +317,9 @@ git commit -m "feat: add specific feature"
 Every task records which implementer runs it, so the choice is a property of
 the plan rather than a judgment made from memory at dispatch time. Do this
 after the tasks are drafted and before the plan is saved. Retrofitting an
-existing plan is the same process: read it, resolve names written under older
-plugin prefixes with [legacy-names.md](../../reference/legacy-names.md) (a name
-outside that table: ask), score each task, and add the lines.
+existing plan is the same process: read it, rename any skill or agent written
+under an older plugin prefix to its `dr-forge:` name, score each task, and add
+the lines.
 
 **Codex host:** follow [native-codex.md](../../reference/native-codex.md) — its
 `codex-v4` selector, plan headers, assignment-source fields, and conversion
