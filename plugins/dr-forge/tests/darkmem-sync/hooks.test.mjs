@@ -197,3 +197,49 @@ test("_darkmem_bounded falls back to the watchdog where GNU timeout is missing",
   await new Promise(resolve => setTimeout(resolve, 300));
   assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
 });
+
+// Ignores SIGTERM, as does its child: only SIGKILL stops it before it ends by itself.
+const STUBBORN = `'trap "" TERM; sleep 20 & echo $! > "$0"; wait'`;
+
+test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command", async () => {
+  const dir = scratch("dmh-kill-");
+  const pidFile = path.join(dir, "child.pid");
+  const started = Date.now();
+  const result = await bash(["-c", `. "$1"; _darkmem_watchdog 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
+  assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
+  assert.notEqual(result.code, 0);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+});
+
+test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: spawnSync("timeout", ["--version"]).status !== 0 && "GNU timeout is not on PATH" }, async () => {
+  const dir = scratch("dmh-tkill-");
+  const pidFile = path.join(dir, "child.pid");
+  const started = Date.now();
+  const result = await bash(["-c", `. "$1"; _darkmem_bounded 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
+  assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
+  assert.notEqual(result.code, 0);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+});
+
+test("the watchdog leaves the caller's job-control setting as it found it", async () => {
+  const dir = scratch("dmh-jc-");
+  const probe = setting => bash(["-c", `. "$1"; ${setting}; _darkmem_watchdog 5 true; case $- in *m*) echo on ;; *) echo off ;; esac`, "hook-test", LIB], { cwd: dir, env: process.env });
+  assert.equal((await probe("set -m")).stdout, "on\n");
+  assert.equal((await probe("set +m")).stdout, "off\n");
+});
+
+test("the Stop push refuses at once while another darkmem-sync holds the mirror lock", async t => {
+  const s = await setup(t);
+  write(path.join(s.home.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: a\n");
+  const lock = path.join(s.home.mirror, ".sync.lock");
+  fs.mkdirSync(lock, { recursive: true });
+  const released = setTimeout(() => fs.rmdirSync(lock), 3000);
+  t.after(() => clearTimeout(released));
+  const started = Date.now();
+  const result = await pushQuietly(s.repo, "sid-hook", s.env);
+  assert.deepEqual(result, { code: 0, stdout: "", stderr: "" });
+  assert.ok(Date.now() - started < 2500, "the Stop push did not wait for the lock");
+  assert.equal(s.stub.db.requests.some(r => r.method === "POST" && r.path === "/api/v1/worklog/entries"), false, "nothing was sent");
+});

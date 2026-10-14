@@ -141,3 +141,20 @@ test("push waits for a held lock and then runs; past its wait it refuses as befo
   assert.equal(appended(), ledger, "a refused push sends nothing");
   fs.rmdirSync(lock);
 });
+
+test("a negative or infinite lock wait falls back to the default wait", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  const { env, mirror, workRoot } = makeHome({ repo, url: stub.url });
+  const ledger = "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: a\n";
+  write(path.join(workRoot, "sdd", "p1", "progress.md"), ledger);
+  const lock = path.join(mirror, ".sync.lock");
+  fs.mkdirSync(lock, { recursive: true });
+  const released = setTimeout(() => fs.rmdirSync(lock), 1500);
+  t.after(() => clearTimeout(released));
+  const started = Date.now();
+  const waited = await run(["push"], { cwd: repo, env: { ...env, DARKMEM_SYNC_LOCK_WAIT_MS: "-5" } });
+  assert.equal(waited.code, 0, waited.stdout + waited.stderr);
+  assert.ok(Date.now() - started >= 1400, "a negative wait did not refuse at once");
+});

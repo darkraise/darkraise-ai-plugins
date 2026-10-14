@@ -169,7 +169,8 @@ function summary(name, report) {
 // point can meet its lock: push waits for it, every other command refuses at
 // once.
 async function lockForPush(mirror, env) {
-  const deadline = Date.now() + (Number(env.DARKMEM_SYNC_LOCK_WAIT_MS) || 100000);
+  const asked = Number(env.DARKMEM_SYNC_LOCK_WAIT_MS);
+  const deadline = Date.now() + (Number.isFinite(asked) && asked > 0 ? asked : 100000);
   for (;;) {
     const release = acquireLock(mirror);
     if (release || Date.now() >= deadline) return release;

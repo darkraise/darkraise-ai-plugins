@@ -17,27 +17,31 @@ _darkmem_configured() {
 # _darkmem_watchdog SECONDS CMD... — CMD, killed with its children after
 # SECONDS, where GNU timeout is missing (macOS ships none): an async hook's
 # timeout is not enforced, so nothing else would stop it. set -m starts CMD in
-# its own process group, which the kill takes whole, node included.
+# its own process group, which the kill takes whole, node included. SIGTERM
+# first, SIGKILL after the grace period (DARKMEM_KILL_GRACE, 5 s) for a command
+# that ignores it.
 _darkmem_watchdog() {
-  local seconds=$1 pid watchdog status
+  local seconds=$1 pid watchdog status monitor=1
+  case $- in *m*) ;; *) monitor=0 ;; esac
   shift
   set -m
   "$@" &
   pid=$!
-  (sleep "$seconds"; kill -TERM -- "-$pid") >/dev/null 2>&1 &
+  (sleep "$seconds"; kill -TERM -- "-$pid"; sleep "${DARKMEM_KILL_GRACE:-5}"; kill -KILL -- "-$pid") >/dev/null 2>&1 &
   watchdog=$!
   wait "$pid" 2>/dev/null
   status=$?
   kill -TERM -- "-$watchdog" 2>/dev/null
   wait "$watchdog" 2>/dev/null
-  set +m
+  [ "$monitor" = 1 ] || set +m
   return "$status"
 }
 
-# _darkmem_bounded SECONDS CMD... — CMD under GNU timeout, else the watchdog.
+# _darkmem_bounded SECONDS CMD... — CMD under GNU timeout, else the watchdog;
+# both escalate to SIGKILL after the same grace period.
 _darkmem_bounded() {
   if command -v timeout >/dev/null 2>&1; then
-    timeout "$@"
+    timeout -k "${DARKMEM_KILL_GRACE:-5}" "$@"
   else
     _darkmem_watchdog "$@"
   fi
@@ -98,10 +102,13 @@ darkmem_session_lines() {
 }
 
 # darkmem_push_quietly DIR SID — the background Stop push
-# (scripts/darkmem-stop-push.sh). Nothing it prints would reach anyone.
+# (scripts/darkmem-stop-push.sh). Nothing it prints would reach anyone. It
+# refuses at once when the mirror lock is held (a wait of 1 ms; 0 would mean the
+# 100 s default), so Stop pushes never queue up ahead of a skill's own push or
+# the next session's reconcile; the next stop pushes what this one missed.
 darkmem_push_quietly() {
   _darkmem_configured || return 0
   (forge_project "$1") >/dev/null 2>&1 || return 0
-  _darkmem_run "$1" "$2" 100 push >/dev/null 2>&1
+  DARKMEM_SYNC_LOCK_WAIT_MS=1 _darkmem_run "$1" "$2" 100 push >/dev/null 2>&1
   return 0
 }
