@@ -25,7 +25,7 @@ Before your first question, classify the request and say it in one
 line — `Process: <spike|bounded|architectural>, <inline|subagent> —
 <trigger | no trigger>` — so your human partner can override it. The mode
 slot is your expectation only; the plan's Execution line decides. The
-triggers are the seven in dr-forge:using-superpowers' Process Depth:
+triggers are the seven in dr-forge:using-forge' Process Depth:
 a new project or subsystem; an interface that something outside its own
 files depends on changes; the files touched cannot be enumerated after
 exploring; a load-bearing approach question is open; irreducible risk
@@ -392,7 +392,7 @@ Wait for the user's response. If they request changes, make them and run one new
 
 **Implementation:**
 
-- Run `scripts/context-size --plan` (see using-superpowers §Session Budget).
+- Run `scripts/context-size --plan` (see using-forge §Session Budget).
   It measures against 150% of the task budget, capped at the final-phase
   limit: writing the plan here costs less than a fresh session's baseline
   and reload. On exit 5 (handoff), invoke dr-forge:handoff with

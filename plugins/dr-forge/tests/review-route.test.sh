@@ -312,7 +312,7 @@ present "writing-plans states the heavy-majority rule" "$WP" '`subagent` when mo
 present "writing-plans raises a delegating inline effort" "$WP" 'raised to `high` when any task is'
 present "writing-plans falls back to Opus on exit 2" "$WP" 'On any other exit 2, review with `dr-forge:judge-opus`'
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dr-forge:judge-opus`)'
-present "using-superpowers states the mixed-mode rule" "$P/skills/using-superpowers/SKILL.md" 'an inline plan delegates those'
+present "using-forge states the mixed-mode rule" "$P/skills/using-forge/SKILL.md" 'an inline plan delegates those'
 present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
 present "README caps plan review" "$P/README.md" 'capped by the plan'"'"'s highest task total'
 absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'

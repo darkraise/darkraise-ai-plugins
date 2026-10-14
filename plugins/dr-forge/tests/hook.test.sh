@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The SessionStart hook must inject the using-superpowers entry point in the
+# The SessionStart hook must inject the using-forge entry point in the
 # Claude Code JSON shape, persist the session record keyed by sanitized cwd and
 # by session id, tolerate malformed stdin (inject anyway, persist nothing), and
 # always exit 0.
@@ -36,12 +36,12 @@ check "well-formed: names the plugin root" \
   "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c '^Plugin root: ')" "1"
 check "well-formed: the plugin root line states the working-directory contract" \
   "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c ' — call scripts by this path, with the working directory inside the project$')" "1"
-check "using-superpowers states the working-directory contract" \
-  "$(grep -cF "with the working directory inside the project's worktree" "$HERE/../skills/using-superpowers/SKILL.md")" "1"
+check "using-forge states the working-directory contract" \
+  "$(grep -cF "with the working directory inside the project's worktree" "$HERE/../skills/using-forge/SKILL.md")" "1"
 check "well-formed: additionalContext is non-empty" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 check "well-formed: context names the entry-point skill" \
-  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dr-forge:using-superpowers')" "1"
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dr-forge:using-forge')" "1"
 check "well-formed: emits no permissionDecision" \
   "$(jq -r '.hookSpecificOutput.permissionDecision // "ABSENT"' <<<"$out" 2>/dev/null)" "ABSENT"
 
@@ -103,7 +103,7 @@ status=$?
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out" 2>/dev/null)
 check "compact: exits 0" "$status" "0"
 check "compact: emits valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
-check "compact: entry point still injected" "$(grep -c 'dr-forge:using-superpowers' <<<"$ctx")" "1"
+check "compact: entry point still injected" "$(grep -c 'dr-forge:using-forge' <<<"$ctx")" "1"
 check "compact: snapshot appended" "$(grep -c '^## Compaction snapshot' <<<"$ctx")" "1"
 check "compact: carries the handoff next step" "$(grep -c 'Resume at Task 4 (Four)' <<<"$ctx")" "1"
 check "compact: carries the owner prompt" "$(grep -c 'keep the API stable' <<<"$ctx")" "1"
@@ -169,7 +169,7 @@ if command -v node >/dev/null 2>&1; then
   check "settings: a broken file injects no line" \
     "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dr-forge settings in force')" "0"
   check "settings: a broken file keeps the entry point" \
-    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dr-forge:using-superpowers')" "1"
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dr-forge:using-forge')" "1"
 fi
 
 # --- hooks.json wiring ---
@@ -189,11 +189,11 @@ check "session-start.sh parses" \
 # The entry point rides in every session's baseline and shares the hook's
 # 10,000-character cap with the compaction snapshot.
 check "entry point is at most 5,100 bytes" \
-  "$([ "$(wc -c < "$HERE/../skills/using-superpowers/SKILL.md")" -le 5100 ] && echo yes || echo no)" "yes"
+  "$([ "$(wc -c < "$HERE/../skills/using-forge/SKILL.md")" -le 5100 ] && echo yes || echo no)" "yes"
 
 # The project-state skills and test-simplifier must be reachable from the entry point, which
 # is the only skill list a cold session sees.
-ENTRY="$HERE/../skills/using-superpowers/SKILL.md"
+ENTRY="$HERE/../skills/using-forge/SKILL.md"
 for s in project-status running-gates distilling-docs test-simplifier planning-a-product closing-a-milestone; do
   if grep -qF -- "dr-forge:$s" "$ENTRY"; then
     printf 'ok   - routing names dr-forge:%s\n' "$s"; pass=$((pass + 1))

@@ -105,7 +105,7 @@ present "the preflight arises only for a heavy task" "$INLINE" '`preflight` aris
 present "inline mode names both delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`'
 absent "writing-plans no longer defines four-band tasks" "$P/skills/writing-plans/SKILL.md" 'four-band'
 absent "inline mode no longer delegates total-4 tasks" "$INLINE" 'total-4'
-absent "using-superpowers no longer delegates total-4 tasks" "$P/skills/using-superpowers/SKILL.md" 'total-4'
+absent "using-forge no longer delegates total-4 tasks" "$P/skills/using-forge/SKILL.md" 'total-4'
 absent "README no longer delegates total-4 tasks" "$P/README.md" 'total-4'
 absent "the delegated loop no longer delegates total-4 tasks" "$P/reference/delegated-task.md" 'total-4'
 present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
@@ -342,7 +342,7 @@ rm -rf "$DTMP"
 EXEC_REASON='and every task carrying an `**Executor:**` line'
 present "inline mode delegates every Executor line" "$INLINE" "$EXEC_REASON"
 present "writing-plans delegates every Executor line" "$P/skills/writing-plans/SKILL.md" "$EXEC_REASON"
-present "using-superpowers delegates every Executor line" "$P/skills/using-superpowers/SKILL.md" "$EXEC_REASON"
+present "using-forge delegates every Executor line" "$P/skills/using-forge/SKILL.md" "$EXEC_REASON"
 present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
 present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" "$EXEC_REASON"
 present "writing-plans gates the roster per executor" "$P/skills/writing-plans/SKILL.md" 'for every executor whose gate prints `lane=true`'

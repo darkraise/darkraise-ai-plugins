@@ -107,7 +107,7 @@ check "no skill or reference re-explains where the plugin root is" \
 check "the compaction snapshot names the contract" \
   "$(grep -cF 'plugin-root path, with the working directory inside the project;' "$P/scripts/lib/snapshot.sh")" "1"
 check "nine skill and reference files cite the contract" \
-  "$(grep -rlF '(see using-superpowers §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "9"
+  "$(grep -rlF '(see using-forge §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "9"
 
 # A script that execs a sibling depends on the executable bit, which a Windows
 # checkout cannot carry: core.filemode is false there, so a new script lands as

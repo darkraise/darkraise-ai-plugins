@@ -67,7 +67,7 @@ names "finishing: failing tests at Step 1 stop the run" "$P/skills/finishing-a-d
 H="$P/skills/handoff/SKILL.md"
 names "handoff: a design phase writes the Draft line" "$H" '- Draft: `<spec path>`'
 names "handoff: pushes once latest.md is written" "$H" 'run `scripts/darkmem-sync push` and promote'
-CT="$P/skills/using-superpowers/references/codex-tools.md"
+CT="$P/skills/using-forge/references/codex-tools.md"
 names "codex-tools: session start reconciles, then pulls" "$CT" 'bash <plugin-root>/scripts/darkmem-sync reconcile`, then'
 names "codex-tools: nothing pushes at the end of a turn" "$CT" 'nothing pushes for you at the end of a turn'
 

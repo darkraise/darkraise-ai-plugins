@@ -347,7 +347,7 @@ message instead.
 ## How it fires
 
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
-`dr-forge:using-superpowers` entry point as `additionalContext`, so every
+`dr-forge:using-forge` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
 `selecting-approaches`, implementer assignment in `writing-plans`, and tiered
 dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same

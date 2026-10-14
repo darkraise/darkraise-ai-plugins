@@ -435,7 +435,7 @@ If you find issues, fix them inline. If you find a spec requirement with no task
 
 ## Lint and Review
 
-1. **Lint.** Run `scripts/plan-lint PLAN_FILE` (see using-superpowers §Session Budget)
+1. **Lint.** Run `scripts/plan-lint PLAN_FILE` (see using-forge §Session Budget)
    until it reports `0 errors`. Fix each
    WARN, or explain it in one line of the plan's Assumptions. The checker
    covers the header sections, the task headings and index, the Execution

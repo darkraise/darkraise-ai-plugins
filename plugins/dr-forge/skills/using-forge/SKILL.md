@@ -1,5 +1,5 @@
 ---
-name: using-superpowers
+name: using-forge
 description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
 ---
 
@@ -52,7 +52,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 
 Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>` (the plan's Execution line decides the mode), and still get approval. Execute inline by default when the plan allows it (at most half the tasks heavy: total 5+ or risk 3; an inline plan delegates those and every task carrying an `**Executor:**` line).
 
-Prefer an indexed code tool (e.g. darkmem `code_search`) over Explore subagents.
+When the darkmem MCP is configured, prefer its `code_search` over Explore subagents.
 
 ## Session Budget
 
