@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { makeHome, makeRepo, run, write } from "./helpers.mjs";
+import { startStub } from "./stub-server.mjs";
 
 test("no command, an unknown command or an unknown flag is a usage error", async () => {
   const repo = makeRepo();
@@ -109,4 +110,34 @@ test("a mapped repository with both families local has nothing to pull or push",
     assert.equal(result.code, 0, command);
     assert.equal(result.stdout, `darkmem-sync: nothing to ${command}: documents and progress are both applied local\n`);
   }
+});
+
+test("push waits for a held lock and then runs; past its wait it refuses as before", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  const { env, mirror, workRoot } = makeHome({ repo, url: stub.url });
+  const ledger = "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: a\n";
+  write(path.join(workRoot, "sdd", "p1", "progress.md"), ledger);
+  const appended = () => stub.db.workstreams.find(w => w.key === "p1")?.entries.map(e => e.body).join("") ?? null;
+  const lock = path.join(mirror, ".sync.lock");
+  fs.mkdirSync(lock, { recursive: true });
+  const released = setTimeout(() => fs.rmdirSync(lock), 1500);
+  t.after(() => clearTimeout(released));
+  const started = Date.now();
+  const waited = await run(["push"], { cwd: repo, env: { ...env, DARKMEM_SYNC_LOCK_WAIT_MS: "20000" } });
+  assert.equal(waited.code, 0, waited.stdout + waited.stderr);
+  assert.ok(Date.now() - started >= 1400, "push waited for the lock");
+  assert.equal(appended(), ledger, "the push ran once the lock was free");
+  assert.equal(fs.existsSync(lock), false, "push released the lock it took");
+  fs.appendFileSync(path.join(workRoot, "sdd", "p1", "progress.md"), "Task 1: complete\n");
+  fs.mkdirSync(lock, { recursive: true });
+  const again = Date.now();
+  const refused = await run(["push"], { cwd: repo, env: { ...env, DARKMEM_SYNC_LOCK_WAIT_MS: "1500" } });
+  const waitedFor = Date.now() - again;
+  assert.equal(refused.code, 1);
+  assert.ok(waitedFor >= 1400 && waitedFor < 15000, `refused after its wait, not at once or never (${waitedFor} ms)`);
+  assert.match(refused.stderr, /another darkmem-sync \(an unknown process\) holds .*\.sync\.lock; if that process is gone, remove the directory/);
+  assert.equal(appended(), ledger, "a refused push sends nothing");
+  fs.rmdirSync(lock);
 });

@@ -165,6 +165,18 @@ function summary(name, report) {
   return `darkmem-sync ${name}: ${counts}; ${report.conflicts.length} conflicts, ${report.failures.length} failures`;
 }
 
+// The Stop hook's push runs in the background, so a skill's push at a stop
+// point can meet its lock: push waits for it, every other command refuses at
+// once.
+async function lockForPush(mirror, env) {
+  const deadline = Date.now() + (Number(env.DARKMEM_SYNC_LOCK_WAIT_MS) || 100000);
+  for (;;) {
+    const release = acquireLock(mirror);
+    if (release || Date.now() >= deadline) return release;
+    await new Promise(resolve => setTimeout(resolve, Math.min(1000, Math.max(0, deadline - Date.now()))));
+  }
+}
+
 async function main(argv, {
   cwd = process.cwd(),
   env = process.env,
@@ -208,7 +220,7 @@ async function main(argv, {
     err(`darkmem-sync: ${parsed.name} skipped: ${cfg.keyEnv} is not set; working offline from the mirror`);
     return 3;
   }
-  const release = acquireLock(cfg.mirror);
+  const release = parsed.name === "push" ? await lockForPush(cfg.mirror, env) : acquireLock(cfg.mirror);
   if (!release && parsed.name === "reconcile") {
     for (const family of pendingFamilies(cfg)) out(stayLine(cfg, family, "another darkmem-sync holds the mirror lock"));
     return 1;
