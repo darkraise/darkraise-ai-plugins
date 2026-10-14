@@ -300,8 +300,12 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   an empty or non-UTF-8 file, a name some platform cannot hold, a case twin,
   an ignored file); it never overwrites a different darkmem copy, and moved
   progress files are kept under a dated `moved-<stamp>` backup. Session start
-  runs `reconcile` and `pull`; the Stop hook and the skills' stop points run
-  `push`. A document deleted from the mirror is archived on darkmem under
+  runs `reconcile` and `pull`; the skills' stop points run `push`, and a
+  background Stop hook pushes as a safety net, each of its steps bounded at
+  100 seconds. `push`
+  waits up to 100 seconds for another run's mirror lock before refusing. A
+  move stopped part-way through filing a ledger resumes it at the next session
+  start. A document deleted from the mirror is archived on darkmem under
   `superpowers/archive/<stamp>/` and `restore <name>` brings it back;
   `revision <name>` prints the `<name>@r<id>` a distilled `Source:` line
   cites. `docs/superpowers/<rest>` and `docs/forge/<rest>` name the same
