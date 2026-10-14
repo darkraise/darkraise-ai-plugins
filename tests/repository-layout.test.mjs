@@ -38,6 +38,8 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
     ['pre-2.0 plugin prefix', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'see dr-superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
     ['unresolved dr-forge reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'see dr-forge:no-such-skill\n'); }, /unresolved dr-forge reference no-such-skill/],
+    ['retired superpowers name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/scripts/stray.sh'), 'mkdir -p .superpowers/sdd\n'); }, /plugins\/dr-forge\/scripts\/stray\.sh:1: retired superpowers name/],
+    ['retired name in any case', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'a Superpowers worktree\n'); }, /plugins\/dr-forge\/reference\/stray\.md:1: retired superpowers name/],
   ]) {
     await t.test(name, () => {
       const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
@@ -67,6 +69,23 @@ test('bundled-link check ignores links inside fenced code blocks', async () => {
     assert.deepEqual(validateRepository(dir), []);
     writeFileSync(file, '````\n[example](missing-example.md)\n````\n[live](missing-live.md)\n');
     assert.deepEqual(validateRepository(dir), [`plugins${sep}dr-forge${sep}skills${sep}selecting-approaches${sep}fenced.md: missing bundled reference missing-live.md`]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the retired superpowers name is allowed only in the allowlisted files', async () => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
+  try {
+    for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
+      cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
+    }
+    for (const path of ['plugins/dr-forge/tests/stray.test.sh', 'plugins/dr-forge/LICENSES/stray-LICENSE', 'plugins/dr-forge/scripts/lib/darkmem-migrate.mjs', 'plugins/dr-status/stray.md']) {
+      writeFileSync(resolve(dir, path), 'superpowers\n');
+    }
+    const retired = () => validateRepository(dir).filter(error => error.includes('retired superpowers name'));
+    assert.deepEqual(retired(), []);
+    writeFileSync(resolve(dir, 'plugins/dr-forge/scripts/lib/darkmem-migrate.sh'), 'superpowers\n');
+    assert.deepEqual(retired(), ['plugins/dr-forge/scripts/lib/darkmem-migrate.sh:1: retired superpowers name']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

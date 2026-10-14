@@ -87,10 +87,30 @@ export function validateRepository(root) {
   }
   const legacyPattern = /(?:^|[^\w-])superpowers:|dr-superpowers:|dcc-superpower-companions:/;
   const legacyAllowed = new Set([
-    'plugins/dr-forge/reference/legacy-names.md',
-    'plugins/dr-forge/hooks/cockpit/lib.ts',
     'plugins/dr-forge/tests/cockpit.test.ts',
   ]);
+  // dr-forge 3.0 spells the retired name only where it translates historical
+  // citations, migrates a pre-3.0 layout, cites this repository's historical
+  // specs, or credits upstream.
+  const superpowersAllowed = new Set([
+    'plugins/dr-forge/README.md',
+    'plugins/dr-forge/hooks/cockpit/lib.ts',
+    'plugins/dr-forge/scripts/forge-migrate',
+    'plugins/dr-forge/scripts/lib/forge-dir.sh',
+    'plugins/dr-forge/scripts/lib/roots.sh',
+    'plugins/dr-forge/reference/project-state.md',
+    'plugins/dr-forge/skills/project-status/SKILL.md',
+    'plugins/dr-forge/skills/finishing-a-development-branch/SKILL.md',
+    'plugins/dr-forge/reference/auto-run.md',
+    'plugins/dr-forge/reference/parallel-waves.md',
+    'plugins/dr-forge/reference/session-budget.md',
+    'plugins/dr-forge/scripts/darkmem-sync',
+    'plugins/dr-forge/scripts/lib/darkmem-hook.sh',
+    'plugins/dr-forge/skills/distilling-docs/SKILL.md',
+  ]);
+  const superpowersExempt = rel => superpowersAllowed.has(rel) ||
+    /^plugins\/dr-forge\/(?:LICENSES|tests)\//.test(rel) ||
+    /^plugins\/dr-forge\/scripts\/lib\/darkmem-[a-z-]+\.mjs$/.test(rel);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;
@@ -99,8 +119,10 @@ export function validateRepository(root) {
         const path = resolve(dir, item.name);
         if (item.isDirectory()) { visit(path); continue; }
         const rel = relative(root, path).replaceAll('\\', '/');
-        if (legacyAllowed.has(rel)) continue;
+        const checksSuperpowers = name === 'dr-forge' && !superpowersExempt(rel);
         readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+          if (checksSuperpowers && /superpowers/i.test(line)) errors.push(`${rel}:${index + 1}: retired superpowers name`);
+          if (legacyAllowed.has(rel)) return;
           if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
           for (const match of line.matchAll(/dr-forge:([a-z0-9-]+)/g)) {
             // A name followed by `<` is a template placeholder such as impl-<model>-<effort>.
