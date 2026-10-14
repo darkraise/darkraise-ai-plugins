@@ -23,14 +23,6 @@ session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
 cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
 [ -n "$session_id" ] || exit 0
-
-# darkmem's safety-net push (darkmem store options spec §5), before the
-# recursion guard and every early exit below, so every stop sends the work
-# before it, a retried stop included. stdout is this hook's decision, so the
-# push prints nothing.
-if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
-  darkmem_push_quietly "${cwd:-$PWD}" "$session_id"
-fi
 [ "$(jq -r '.stop_hook_active // false' <<<"$stdin_json")" = "true" ] && exit 0
 
 stamp="${HOME:-}/.claude/dr-forge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"

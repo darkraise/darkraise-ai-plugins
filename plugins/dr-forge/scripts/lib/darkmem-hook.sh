@@ -14,14 +14,38 @@ _darkmem_configured() {
   [ -f "${HOME:-}/.dr-forge/config.json" ] || [ -f "${HOME:-}/.dr-superpowers/config.json" ]
 }
 
-# _darkmem_run DIR SID SECONDS COMMAND — darkmem-sync COMMAND in DIR, bounded
-# when GNU timeout exists (macOS ships none; the hook's own timeout bounds it).
-_darkmem_run() {
+# _darkmem_watchdog SECONDS CMD... — CMD, killed with its children after
+# SECONDS, where GNU timeout is missing (macOS ships none): an async hook's
+# timeout is not enforced, so nothing else would stop it. set -m starts CMD in
+# its own process group, which the kill takes whole, node included.
+_darkmem_watchdog() {
+  local seconds=$1 pid watchdog status
+  shift
+  set -m
+  "$@" &
+  pid=$!
+  (sleep "$seconds"; kill -TERM -- "-$pid") >/dev/null 2>&1 &
+  watchdog=$!
+  wait "$pid" 2>/dev/null
+  status=$?
+  kill -TERM -- "-$watchdog" 2>/dev/null
+  wait "$watchdog" 2>/dev/null
+  set +m
+  return "$status"
+}
+
+# _darkmem_bounded SECONDS CMD... — CMD under GNU timeout, else the watchdog.
+_darkmem_bounded() {
   if command -v timeout >/dev/null 2>&1; then
-    (cd "$1" 2>/dev/null && DR_FORGE_SESSION_ID=$2 timeout "$3" bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
+    timeout "$@"
   else
-    (cd "$1" 2>/dev/null && DR_FORGE_SESSION_ID=$2 bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
+    _darkmem_watchdog "$@"
   fi
+}
+
+# _darkmem_run DIR SID SECONDS COMMAND — darkmem-sync COMMAND in DIR, bounded.
+_darkmem_run() {
+  (cd "$1" 2>/dev/null && export DR_FORGE_SESSION_ID=$2 && _darkmem_bounded "$3" bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
 }
 
 # _darkmem_fit MAXLINES MAXCHARS — the lines on stdin, fitted. Every unindented
@@ -73,8 +97,8 @@ darkmem_session_lines() {
   return 0
 }
 
-# darkmem_push_quietly DIR SID — the Stop hook's push. Its stdout is the hook's
-# decision JSON, so nothing may reach it.
+# darkmem_push_quietly DIR SID — the background Stop push
+# (scripts/darkmem-stop-push.sh). Nothing it prints would reach anyone.
 darkmem_push_quietly() {
   _darkmem_configured || return 0
   (forge_project "$1") >/dev/null 2>&1 || return 0

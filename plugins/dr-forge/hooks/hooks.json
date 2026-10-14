@@ -37,6 +37,12 @@
             "shell": "bash",
             "async": false,
             "timeout": 120
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/darkmem-stop-push.sh\"",
+            "shell": "bash",
+            "async": true
           }
         ]
       }

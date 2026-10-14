@@ -909,7 +909,9 @@ skills the same way — structurally, against the documents themselves.
 `test-simplifier.test.sh` does the same for that skill and runs
 `scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
 `scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
-drives the turn-stamp and Stop hooks against a temporary repository and ledger.
+drives the turn-stamp and Stop hooks against a temporary repository and ledger;
+`darkmem-sync/hooks.test.mjs` drives darkmem's session-start sync and the
+background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.

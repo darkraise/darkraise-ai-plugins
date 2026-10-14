@@ -6,7 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, startStub } from "./stub-server.mjs";
-import { makeHome, makeRepo, write } from "./helpers.mjs";
+import { makeHome, makeRepo, scratch, write } from "./helpers.mjs";
 
 const LIB = fileURLToPath(new URL("../../scripts/lib/darkmem-hook.sh", import.meta.url));
 
@@ -124,10 +124,17 @@ const HOOKS_JSON = fileURLToPath(new URL("../../hooks/hooks.json", import.meta.u
 const hasJq = spawnSync("jq", ["--version"]).status === 0;
 const runHook = (name, payload, options) => bash([path.join(SCRIPTS, name)], { ...options, input: JSON.stringify(payload) });
 
-test("the hooks are bounded: SessionStart 300 seconds, Stop 120", () => {
+test("the hooks are bounded: SessionStart 300 seconds, Stop 120, and the darkmem push runs in the background", () => {
   const hooks = JSON.parse(fs.readFileSync(HOOKS_JSON, "utf8")).hooks;
   assert.equal(hooks.SessionStart[0].hooks[0].timeout, 300);
-  assert.equal(hooks.Stop[0].hooks[0].timeout, 120);
+  const [turnEnd, stopPush, ...more] = hooks.Stop[0].hooks;
+  assert.match(turnEnd.command, /scripts\/turn-end\.sh/);
+  assert.equal(turnEnd.async, false);
+  assert.equal(turnEnd.timeout, 120);
+  assert.match(stopPush.command, /scripts\/darkmem-stop-push\.sh/);
+  assert.equal(stopPush.async, true);
+  assert.equal(stopPush.timeout, undefined, "Claude Code does not enforce an async hook's timeout; the push bounds itself");
+  assert.deepEqual(more, []);
 });
 
 test("session start adds the darkmem lines on every source, compaction included", { skip: !hasJq && "jq is not on PATH" }, async t => {
@@ -143,16 +150,50 @@ test("session start adds the darkmem lines on every source, compaction included"
   }
 });
 
-test("the Stop hook pushes under its session id, a retried stop too, and prints nothing", { skip: !hasJq && "jq is not on PATH" }, async t => {
+test("the Stop push sends under its session id, a retried stop too, and prints nothing; turn-end.sh sends nothing", { skip: !hasJq && "jq is not on PATH" }, async t => {
   const s = await setup(t);
   const ledger = path.join(s.home.workRoot, "sdd", "p1", "progress.md");
   write(ledger, "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: a\n");
   const payload = active => ({ hook_event_name: "Stop", session_id: "sid-stop", cwd: s.repo, transcript_path: "", stop_hook_active: active });
   const appends = () => s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries");
+  const requests = s.stub.db.requests.length;
   assert.deepEqual(await runHook("turn-end.sh", payload(false), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
-  assert.equal(appends().length, 1, "the Stop hook pushed the ledger");
+  assert.equal(s.stub.db.requests.length, requests, "turn-end.sh makes no darkmem request");
+  assert.deepEqual(await runHook("darkmem-stop-push.sh", payload(false), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
+  assert.equal(appends().length, 1, "the Stop push sent the ledger");
   fs.appendFileSync(ledger, "Task 1: complete (commits abc1234..def5678, review clean)\n");
-  assert.deepEqual(await runHook("turn-end.sh", payload(true), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
+  assert.deepEqual(await runHook("darkmem-stop-push.sh", payload(true), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
   assert.equal(appends().length, 2, "a retried stop pushes the lines written since");
   assert.ok(appends().every(r => r.body.run_key === "sid-stop"));
+});
+
+test("the watchdog bounds a command and its children where GNU timeout is missing", async () => {
+  const dir = scratch("dmh-wd-");
+  const pidFile = path.join(dir, "child.pid");
+  const quick = await bash(["-c", '. "$1"; _darkmem_watchdog 5 bash -c "echo out; echo err >&2; exit 3"', "hook-test", LIB], { cwd: dir, env: process.env });
+  assert.deepEqual(quick, { code: 3, stdout: "out\n", stderr: "err\n" });
+  const started = Date.now();
+  const slow = await bash(["-c", '. "$1"; _darkmem_watchdog 1 bash -c "sleep 30 & echo \\$! > \\"\\$0\\"; wait" "$2"', "hook-test", LIB, pidFile], { cwd: dir, env: process.env });
+  assert.ok(Date.now() - started < 10000, "the command was stopped at its bound");
+  assert.notEqual(slow.code, 0);
+  assert.equal(slow.stderr, "", "no job-control notice reaches stderr");
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+});
+
+test("_darkmem_bounded falls back to the watchdog where GNU timeout is missing", { skip: process.platform === "win32" && "file symbolic links need privileges on Windows" }, async () => {
+  const dir = scratch("dmh-bin-");
+  const bin = path.join(dir, "bin");
+  fs.mkdirSync(bin);
+  for (const tool of ["bash", "sleep"]) {
+    fs.symlinkSync(spawnSync("bash", ["-c", `command -v ${tool}`], { encoding: "utf8" }).stdout.trim(), path.join(bin, tool));
+  }
+  const pidFile = path.join(dir, "child.pid");
+  const started = Date.now();
+  const result = await bash(["-c", '. "$1"; PATH="$3"; command -v timeout && exit 9; _darkmem_bounded 1 bash -c "sleep 30 & echo \\$! > \\"\\$0\\"; wait" "$2"', "hook-test", LIB, pidFile, bin], { cwd: dir, env: process.env });
+  assert.notEqual(result.code, 9, "timeout must not be on the trimmed PATH");
+  assert.ok(Date.now() - started < 10000, "the watchdog stopped the command at its bound");
+  assert.notEqual(result.code, 0);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
 });
