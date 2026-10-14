@@ -5,7 +5,8 @@
 # plan's ledger directory and latest.md (in the checkout or in the darkmem
 # mirror, as documentStore and progressSource apply them), each family's
 # applied store, the repository-relative name of a path, or the darkmem
-# project the repository is mapped to (exit 1 when it is unmapped).
+# project the repository syncs with (exit 1 when darkmem is off or the
+# repository is unmapped).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/roots.sh"

@@ -125,7 +125,7 @@ repository that is not mapped to darkmem, or while darkmem is off, it prints
 one line and exits 0, so no check comes first. On Claude Code the SessionStart hook runs `darkmem-sync reconcile`, then `pull`,
 and the Stop hook pushes as a safety net. Codex has no hooks, so there these
 steps and the session-start step in
-`skills/using-superpowers/references/codex-tools.md` are the only triggers.
+`skills/using-forge/references/codex-tools.md` are the only triggers.
 
 **Promotion to memory.** At each `Task <N>: complete` line and at handoff,
 record the durable facts the work established (decisions and their reasons,

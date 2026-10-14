@@ -160,7 +160,7 @@ test("session start adds the darkmem lines on every source, compaction included"
     assert.equal(result.code, 0, result.stderr);
     const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
     assert.match(context, /darkmem-sync pull: 1 documents, 0 ledgers, 0 checkpoints; 0 conflicts, 0 failures/, source);
-    assert.match(context, /dr-forge:using-superpowers/, source);
+    assert.match(context, /dr-forge:using-forge/, source);
   }
 });
 

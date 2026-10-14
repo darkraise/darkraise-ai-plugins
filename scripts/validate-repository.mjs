@@ -104,13 +104,10 @@ export function validateRepository(root) {
     'plugins/dr-forge/reference/auto-run.md',
     'plugins/dr-forge/reference/parallel-waves.md',
     'plugins/dr-forge/reference/session-budget.md',
-    'plugins/dr-forge/scripts/darkmem-sync',
-    'plugins/dr-forge/scripts/lib/darkmem-hook.sh',
-    'plugins/dr-forge/skills/distilling-docs/SKILL.md',
   ]);
   const superpowersExempt = rel => superpowersAllowed.has(rel) ||
     /^plugins\/dr-forge\/(?:LICENSES|tests)\//.test(rel) ||
-    /^plugins\/dr-forge\/scripts\/lib\/darkmem-[a-z-]+\.mjs$/.test(rel);
+    /^plugins\/dr-forge\/scripts\/lib\/darkmem-(?:sync|migrate|mirror|reconcile)\.mjs$/.test(rel);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;

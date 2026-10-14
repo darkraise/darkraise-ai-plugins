@@ -116,9 +116,11 @@ menu, say which option was chosen before the run and wait for a reply
 
 ## darkmem at session start
 
-Codex runs no hooks. In a repository mapped to darkmem
-(`bash <plugin-root>/scripts/forge-path project` prints its project), start
-each session with `bash <plugin-root>/scripts/darkmem-sync reconcile`, then `bash <plugin-root>/scripts/darkmem-sync pull`,
+Codex runs no hooks. In a repository that syncs with darkmem
+(`bash <plugin-root>/scripts/forge-path project` prints its project), or one
+with a family still in the mirror (`bash <plugin-root>/scripts/forge-path store`
+names `darkmem`), start each session with
+`bash <plugin-root>/scripts/darkmem-sync reconcile`, then `bash <plugin-root>/scripts/darkmem-sync pull`,
 and read what they print: a `darkmem-sync reconcile:` line names a family
 that moved or stayed and why. Push at the stop points
 [project-state.md](../../../reference/project-state.md) §darkmem sync points
