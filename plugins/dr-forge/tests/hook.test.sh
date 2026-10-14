@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The SessionStart hook must inject the using-superpowers entry point in the
+# The SessionStart hook must inject the using-forge entry point in the
 # Claude Code JSON shape, persist the session record keyed by sanitized cwd and
 # by session id, tolerate malformed stdin (inject anyway, persist nothing), and
 # always exit 0.
@@ -36,12 +36,12 @@ check "well-formed: names the plugin root" \
   "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c '^Plugin root: ')" "1"
 check "well-formed: the plugin root line states the working-directory contract" \
   "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c ' — call scripts by this path, with the working directory inside the project$')" "1"
-check "using-superpowers states the working-directory contract" \
-  "$(grep -cF "with the working directory inside the project's worktree" "$HERE/../skills/using-superpowers/SKILL.md")" "1"
+check "using-forge states the working-directory contract" \
+  "$(grep -cF "with the working directory inside the project's worktree" "$HERE/../skills/using-forge/SKILL.md")" "1"
 check "well-formed: additionalContext is non-empty" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 check "well-formed: context names the entry-point skill" \
-  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dr-forge:using-superpowers')" "1"
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dr-forge:using-forge')" "1"
 check "well-formed: emits no permissionDecision" \
   "$(jq -r '.hookSpecificOutput.permissionDecision // "ABSENT"' <<<"$out" 2>/dev/null)" "ABSENT"
 
@@ -89,8 +89,8 @@ export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invali
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
-mkdir -p "$REPO/.superpowers/handoff"
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.superpowers/handoff/latest.md"
+mkdir -p "$REPO/.forge/handoff"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.forge/handoff/latest.md"
 TR="$TMP/transcript.jsonl"
 MSYS_NO_PATHCONV=1 jq -cn '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:"keep the API stable"}}' > "$TR"
 compact_payload() {
@@ -103,7 +103,7 @@ status=$?
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out" 2>/dev/null)
 check "compact: exits 0" "$status" "0"
 check "compact: emits valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
-check "compact: entry point still injected" "$(grep -c 'dr-forge:using-superpowers' <<<"$ctx")" "1"
+check "compact: entry point still injected" "$(grep -c 'dr-forge:using-forge' <<<"$ctx")" "1"
 check "compact: snapshot appended" "$(grep -c '^## Compaction snapshot' <<<"$ctx")" "1"
 check "compact: carries the handoff next step" "$(grep -c 'Resume at Task 4 (Four)' <<<"$ctx")" "1"
 check "compact: carries the owner prompt" "$(grep -c 'keep the API stable' <<<"$ctx")" "1"
@@ -122,12 +122,12 @@ check "compact: control bytes stripped from the context" \
   "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$esc_out" 2>/dev/null | grep -c $'\033')" "0"
 
 # --- a roadmap project: its position rides in every session ---
-mkdir -p "$REPO/docs/superpowers/registers" "$REPO/docs/superpowers/specs"
-: > "$REPO/docs/superpowers/specs/shop-design.md"
+mkdir -p "$REPO/docs/forge/registers" "$REPO/docs/forge/specs"
+: > "$REPO/docs/forge/specs/shop-design.md"
 printf '# M1 — item register\n\n**Source:** roadmap\n**Covers:** docs/superpowers/specs/shop-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Billing | - | - | done | - |\n| 2 | Search | - | - | open | - |\n' \
-  > "$REPO/docs/superpowers/registers/m1.md"
+  > "$REPO/docs/forge/registers/m1.md"
 printf '# Shop — roadmap\n\n**Product:** a shop\n**Spec:** docs/superpowers/specs/shop-design.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |\n' \
-  > "$REPO/docs/superpowers/roadmap.md"
+  > "$REPO/docs/forge/roadmap.md"
 startup_payload() {
   MSYS_NO_PATHCONV=1 jq -n --arg tp "$TR" --arg cwd "$REPO" \
     '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:$tp,cwd:$cwd,source:"startup"}'
@@ -140,6 +140,15 @@ rm_ctx=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.h
 check "roadmap: survives compaction alongside the snapshot" "$(grep -c '^Roadmap: M1 MVP' <<<"$rm_ctx")" "1"
 check "roadmap: still under the 10,000-character hook cap" "$([ "${#rm_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
 check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" "0"
+
+# --- a pre-3.0 directory left behind is named, with the command that moves it ---
+check "3.0 layout: no migration line" "$(grep -c 'pre-3.0 layout' <<<"$rm_ctx")" "0"
+mkdir -p "$REPO/.superpowers"
+lg_out=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
+check "pre-3.0: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$lg_out" && echo yes || echo no)" "yes"
+check "pre-3.0: the migration line is injected" \
+  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dr-forge: this repository still uses the pre-3.0 layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run bash $(cd "$HERE/.." && pwd)/scripts/forge-migrate")" "1"
+rm -rf "$REPO/.superpowers"
 
 # --- workflow settings ride in every session as one line ---
 if command -v node >/dev/null 2>&1; then
@@ -160,7 +169,7 @@ if command -v node >/dev/null 2>&1; then
   check "settings: a broken file injects no line" \
     "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dr-forge settings in force')" "0"
   check "settings: a broken file keeps the entry point" \
-    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dr-forge:using-superpowers')" "1"
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dr-forge:using-forge')" "1"
 fi
 
 # --- hooks.json wiring ---
@@ -180,11 +189,11 @@ check "session-start.sh parses" \
 # The entry point rides in every session's baseline and shares the hook's
 # 10,000-character cap with the compaction snapshot.
 check "entry point is at most 5,100 bytes" \
-  "$([ "$(wc -c < "$HERE/../skills/using-superpowers/SKILL.md")" -le 5100 ] && echo yes || echo no)" "yes"
+  "$([ "$(wc -c < "$HERE/../skills/using-forge/SKILL.md")" -le 5100 ] && echo yes || echo no)" "yes"
 
 # The project-state skills and test-simplifier must be reachable from the entry point, which
 # is the only skill list a cold session sees.
-ENTRY="$HERE/../skills/using-superpowers/SKILL.md"
+ENTRY="$HERE/../skills/using-forge/SKILL.md"
 for s in project-status running-gates distilling-docs test-simplifier planning-a-product closing-a-milestone; do
   if grep -qF -- "dr-forge:$s" "$ENTRY"; then
     printf 'ok   - routing names dr-forge:%s\n' "$s"; pass=$((pass + 1))

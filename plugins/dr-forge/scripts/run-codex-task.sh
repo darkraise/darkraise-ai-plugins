@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs one plan task on Codex and leaves behind a superpowers-shaped report.
+# Runs one plan task on Codex and leaves behind a report in the implementer report format.
 #
 # The Codex CLI validates neither --model nor model_reasoning_effort: it accepts
 # any string, prints it in its banner, and fails at the API. Validating here is
@@ -142,7 +142,7 @@ cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
 report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
 case "$report" in
   "$cwd"/*)
-    case "$report" in "$cwd"/.forge/*|"$cwd"/.superpowers/*) ;; *) die 'report must be outside checkout or in ignored .forge workspace' ;; esac
+    case "$report" in "$cwd"/.forge/*) ;; *) die 'report must be outside checkout or in ignored .forge workspace' ;; esac
     git -C "$cwd" check-ignore -q -- "$report" || die 'report workspace is not ignored'
     [ -z "$(git -C "$cwd" ls-files -- "$report")" ] || die 'report cannot be tracked' ;;
 esac

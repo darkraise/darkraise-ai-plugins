@@ -261,14 +261,14 @@ rm -f "$SUR/docs/codex.md"
 # --- liveness precedence ---
 check "no ledger and no completed entry is unknown" "$(field live "$(row scored)")" "unknown"
 
-mkdir -p "$SUR/.superpowers/sdd/scored"
+mkdir -p "$SUR/.forge/sdd/scored"
 printf '# SDD ledger — plan: docs/scored.md\nTask 1: complete (x)\n' \
-  > "$SUR/.superpowers/sdd/scored/progress.md"
+  > "$SUR/.forge/sdd/scored/progress.md"
 check "a ledger naming the plan is live" "$(field live "$(row scored)")" "yes"
 
-printf '# SDD ledger — plan: docs/other.md\n' > "$SUR/.superpowers/sdd/scored/progress.md"
+printf '# SDD ledger — plan: docs/other.md\n' > "$SUR/.forge/sdd/scored/progress.md"
 check "a ledger naming another plan is not this plan's" "$(field live "$(row scored)")" "unknown"
-rm -rf "$SUR/.superpowers"
+rm -rf "$SUR/.forge"
 
 # completed.md names the plan by its recorded path, so a shorter basename that
 # is a substring of a longer one must not match it.
@@ -282,10 +282,10 @@ check "a via-PR entry is unknown, not done" "$(field live "$(row scored)")" "unk
 printf -- '- 2026-09-20 `docs/scored.md` — merged into `main` at abc1234\n- 2026-09-21 `docs/scored.md` — via PR\n' > "$SUR/docs/completed.md"
 check "merged outranks a later via-PR entry" "$(field live "$(row scored)")" "no"
 
-mkdir -p "$SUR/.superpowers/sdd/scored"
-printf '# SDD ledger — plan: docs/scored.md\n' > "$SUR/.superpowers/sdd/scored/progress.md"
+mkdir -p "$SUR/.forge/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$SUR/.forge/sdd/scored/progress.md"
 check "a ledger outranks a completed entry" "$(field live "$(row scored)")" "yes"
-rm -rf "$SUR/.superpowers"
+rm -rf "$SUR/.forge"
 rm -f "$SUR/docs/completed.md"
 
 # A ledger may live in a linked worktree while the plan is read from the primary
@@ -294,8 +294,8 @@ rm -f "$SUR/docs/completed.md"
 git -C "$SUR" add -A >/dev/null 2>&1
 git -C "$SUR" commit -qm base >/dev/null 2>&1
 git -C "$SUR" worktree add -q "$TMP/wt" -b feature >/dev/null 2>&1
-mkdir -p "$TMP/wt/.superpowers/sdd/scored"
-printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.superpowers/sdd/scored/progress.md"
+mkdir -p "$TMP/wt/.forge/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.forge/sdd/scored/progress.md"
 check "a ledger in a linked worktree is found" "$(field live "$(row scored)")" "yes"
 # Git reports native paths on Windows; mktemp uses Git Bash's POSIX spelling.
 WT_ROOT="$(git -C "$TMP/wt" rev-parse --show-toplevel)"
@@ -329,7 +329,7 @@ present "the skill re-runs the report before settling execution" "$SK" "Re-run p
 present "the skill reconciles an existing Executor line" "$SK" "replace it with the printed rung"
 present "the skill leaves a thin task unscored" "$SK" "A guessed score is worse than a visible gap"
 present "the skill allows the split Rule S requires" "$SK" "Splitting a task Rule S rejects is part of this skill"
-present "the routing table lists the skill" "$HERE/../skills/using-superpowers/SKILL.md" "dr-forge:revising-plans"
+present "the routing table lists the skill" "$HERE/../skills/using-forge/SKILL.md" "dr-forge:revising-plans"
 present "the skill pushes the revised plan" "$SK" '10. **Push the revised plan.** Run `bash <plugin-root>/scripts/darkmem-sync push`'
 
 # --- documents and progress kept in darkmem: the survey finds the mirror's ledger ---

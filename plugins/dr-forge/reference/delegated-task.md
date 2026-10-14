@@ -55,7 +55,7 @@ these steps directly.
   `max` agent, or any Fable tier — is a human ruling: dispatch it as written
   and note `reserve tier`. See [escalation.md](../skills/subagent-driven-development/references/escalation.md).
 - **Task brief:** run `scripts/task-brief PLAN_FILE N`
-  (see using-superpowers §Session Budget) — it extracts the task's full text
+  (see using-forge §Session Budget) — it extracts the task's full text
   to a uniquely named file and prints `wrote <path>: <N> lines`, then the
   budget line (see the caller's Session Budget section). Read the path out of the first line; do
   not pipe the output into a prompt as if it were a filename. Compose the
@@ -67,9 +67,7 @@ these steps directly.
   (3) interfaces and decisions from earlier tasks that the brief cannot
   know; (4) the ruling-seat verdicts in the ledger that bear on this task,
   copied verbatim (an ambiguity you notice in the brief goes to the seat as a
-  `plan-conflict` item before you dispatch) — and, when the brief names a
-  skill under an old plugin prefix, that legacy names resolve per
-  `reference/legacy-names.md`; (5) the report-file
+  `plan-conflict` item before you dispatch); (5) the report-file
   path and report contract. Exact values (numbers, magic strings, signatures,
   test cases) appear only in the brief. Never make a subagent read the whole
   plan file. A brief whose task the seat split into `#### Part` units is
@@ -170,7 +168,7 @@ needed.
 
 - Hand the reviewer its diff as a file: run
   `scripts/review-package PLAN_FILE BASE HEAD`
-  (see using-superpowers §Session Budget), and pass the reviewer the
+  (see using-forge §Session Budget), and pass the reviewer the
   file path it prints (or, without bash: `git log --oneline`, `git diff --stat`,
   and `git diff -U10` for the range, redirected to one uniquely named
   file). The output never enters your own context. Use the BASE you recorded

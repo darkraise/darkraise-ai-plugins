@@ -73,10 +73,9 @@ is edited by a human or by an approved bootstrap, never silently.
 
 ## Where `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` are
 
-`<state>` is `.forge/` and `<docs>` is `docs/forge/`, except in a repository
-that has `.superpowers/` or `docs/superpowers/` and not the new directory:
-there the old one stays in use, for writing as well as reading, so a pre-2.0
-checkout never splits across both.
+`<state>` is `.forge/` and `<docs>` is `docs/forge/`. A repository that still
+has a pre-3.0 directory is moved with `bash <plugin-root>/scripts/forge-migrate`
+first; session start and `scripts/repo-audit` name what it still has.
 
 darkmem is off unless the `darkmemEnabled` setting is on. A repository mapped
 to darkmem while it is on may keep each family in the darkmem mirror instead
@@ -107,9 +106,10 @@ Where a path is written into a file or onto a command line (a ledger's
 identity line, a roadmap `Spec` or `Register` cell, a `**Spec:**` line,
 `.gitattributes`, a script argument), write its name:
 `bash <plugin-root>/scripts/forge-path name <path>`. A document's name is
-`docs/forge/<rest>` (`docs/superpowers/<rest>` in a pre-2.0 repository) in both
-stores, so a ledger in darkmem can name a plan in the checkout and the reverse;
-every script accepts a name where it takes a path.
+`docs/forge/<rest>` in both stores (a name written before 3.0.0 as
+`docs/superpowers/<rest>` still means it), so a ledger in darkmem can name a
+plan in the checkout and the reverse; every script accepts a name where it
+takes a path.
 
 While `forge-path store` prints `documents darkmem`, a step that commits a
 spec, plan, register, roadmap or `completed.md` line runs

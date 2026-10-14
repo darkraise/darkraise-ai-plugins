@@ -125,16 +125,14 @@ export function settingWritten(schema: Schema, file: SettingsFile, key: string, 
   return next
 }
 
-/** The first run's file: dr-cockpit's options that differ from their defaults, and dr-superpowers' darkmem mapping. */
-export function importedSettings(schema: Schema, claudeSettings: unknown, oldForge: unknown): SettingsFile {
+/** The first run's file: dr-cockpit's options that differ from their defaults. */
+export function importedSettings(schema: Schema, claudeSettings: unknown): SettingsFile {
   const file: SettingsFile = {}
   const options = objectAt(objectAt(objectAt(claudeSettings, 'pluginConfigs'), 'dr-cockpit@darkraise'), 'options')
   for (const [key, spec] of Object.entries(schema)) {
     const value = options?.[key]
     if (spec.target === 'forge' && isValidSetting(spec, value) && value !== spec.default) file[key] = value
   }
-  const darkmem = objectAt(oldForge, 'darkmem')
-  if (darkmem !== undefined) file.darkmem = darkmem
   return file
 }
 

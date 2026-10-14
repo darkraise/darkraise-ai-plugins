@@ -74,7 +74,7 @@ A fresh session reloads only its baseline plus these files. The numbers are in
      `Task N: complete`, a fix-round line, or an assigned line whose run is
      over, per step 0). Update
      `<ledger dir>/handoff.md` (below; `<ledger dir>` per
-     using-superpowers §Session Budget).
+     using-forge §Session Budget).
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
      file. It is the authority.
    - Unplanned work (a change designed in chat, or a punch list, with no plan
@@ -109,7 +109,7 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    For unplanned work, `State` lists each item with its state: implemented
    and uncommitted, committed, awaiting feedback (with the link), or
    unscoped.
-4. **Run `scripts/next-step`** (see using-superpowers §Session Budget):
+4. **Run `scripts/next-step`** (see using-forge §Session Budget):
    - Execution: `scripts/next-step PLAN_FILE`.
    - Design phase: `scripts/next-step --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
      for example `--next "Write the implementation plan with dr-forge:writing-plans."`

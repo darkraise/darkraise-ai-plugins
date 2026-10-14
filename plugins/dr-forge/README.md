@@ -47,8 +47,7 @@ disclose instruction-only restrictions where it does not.
 Codex CLI instead of a Claude implementer. The lane needs an exclusively
 assigned linked worktree, stable task IDs, approved file paths and durable
 recovery; read [external-task-recovery.md](reference/external-task-recovery.md)
-before offloading. Names written under older plugin prefixes are translated at
-read time per [legacy-names.md](reference/legacy-names.md).
+before offloading.
 
 ## What you get
 
@@ -336,7 +335,7 @@ opens the review seats, and the executor-lane smoke test opens the lane.
 
 ## Requirements
 
-**The superpowers workflow ships in-plugin.** The fork carries the full skill
+**The upstream workflow ships in-plugin.** The fork carries the full skill
 set — brainstorming through finishing-a-development-branch — frozen at upstream
 6.3.0, so no other plugin is required: every agent definition preloads
 `dr-forge:verification-before-completion` through its `skills:`
@@ -364,7 +363,7 @@ message instead.
 ## How it fires
 
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
-`dr-forge:using-superpowers` entry point as `additionalContext`, so every
+`dr-forge:using-forge` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
 `selecting-approaches`, implementer assignment in `writing-plans`, and tiered
 dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same
@@ -742,7 +741,7 @@ The same settings can be set with
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band always draws its own lines. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
-| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dr-forge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000. `DR_FORGE_BUDGET` overrides it (`DR_SUPERPOWERS_BUDGET` still read). |
+| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dr-forge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000. `DR_FORGE_BUDGET` overrides it. |
 | Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
 | Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
 | Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-forge` sessions. |
@@ -828,12 +827,38 @@ saved settings:
     /plugin uninstall dr-superpowers@darkraise
     /plugin uninstall dr-cockpit@darkraise
 
-The first session imports the cockpit's options and the darkmem mapping into
+The first session imports the cockpit's options into
 `~/.dr-forge/config.json`, and the cockpit's Discord webhook and mention into
-dr-forge's own plugin store, once; the old files stay.
-Plans written for dr-superpowers, which name its agents and skills under the
-old plugin name, still run. A repository's `.superpowers/` and `docs/superpowers/` keep working
-until you move them to `.forge/` and `docs/forge/`.
+dr-forge's own plugin store, once; the old files stay. Since 3.0.0 the
+dr-superpowers names are no longer read: see Migrating to 3.0.
+
+## Migrating to 3.0
+
+dr-forge 3.0.0 reads and writes only its own names: `.forge/`, `docs/forge/`,
+the git directory's `dr-forge/`, `~/.dr-forge/`, the `DR_FORGE_*` variables
+and the `dr-forge:` prefix. The pre-2.0 `.superpowers/`, `docs/superpowers/`,
+`dr-superpowers/` and `DR_SUPERPOWERS_*` names and the `dr-superpowers`
+prefix are no longer read. Session start and `repo-audit` print one line naming
+any pre-3.0 directory a repository still has; run, once per repository:
+
+    bash <plugin-root>/scripts/forge-migrate [DIR]
+
+In the primary checkout and every linked worktree it moves `.superpowers/` to
+`.forge/`, `docs/superpowers/` to `docs/forge/` (with `git mv` when the
+directory is tracked) and `<git dir>/dr-superpowers/` to `<git dir>/dr-forge/`,
+then rewrites the lines of `.gitignore`, `.gitattributes` and
+`.git/info/exclude` that name the old directories. It prints each move and what
+you must commit. A checkout that has both the old and the new directory, or a
+`docs/superpowers/` with uncommitted changes, is refused and left as it is;
+merge or commit, then run the command again, which does only what is left. It
+exits 0 when done or when there was nothing to do, and 1 when something was
+refused.
+
+No other file is edited: plans, specs and ledgers that cite
+`docs/superpowers/<rest>` keep that spelling, and dr-forge still reads it as
+`docs/forge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
+older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
+Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 
 ## What a plan looks like
 
@@ -865,7 +890,7 @@ obeys the line and never recomputes when it is present. Add
 `**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
 the deviation as a warning instead of an error.
 
-The heading keeps superpowers' `### Task N: <name>` form on purpose.
+The heading keeps upstream's `### Task N: <name>` form on purpose.
 `scripts/task-brief` finds a task by matching a heading that starts with
 `Task <N>`, so a heading like `### Wire the export pipeline (Task 4)` yields an
 empty brief and a non-zero exit — and, because the extractor keeps copying
@@ -874,7 +899,7 @@ previous task's brief.
 
 ## Differences from upstream 6.3.0
 
-The superpowers loop is kept - the brief and report protocol, the review
+The upstream loop is kept - the brief and report protocol, the review
 package, the five-round cap, the breaker (whose adjudication now goes to the ruling seat), and the
 handoff to dr-forge:finishing-a-development-branch - with these
 differences:
@@ -919,9 +944,6 @@ differences:
     [final-review.md](reference/final-review.md), with no per-task review. A
     task it cannot land in three fix rounds escalates to subagent mode at the
     next task boundary.
-
-Names written under older plugin prefixes resolve through
-[legacy-names.md](reference/legacy-names.md).
 
 ## Licenses
 
@@ -971,8 +993,7 @@ An entry names the executor's locator, probe, wrapper, gate, session directory,
 surfaces and ladder blocks, so adding an executor is an entry, a wrapper and a
 ladder block rather than an edit to every script. `reference/executor-lane.md`
 states the entry schema and holds the Claude-hosted external executor lanes,
-`reference/legacy-names.md` translates names written under older plugin
-prefixes, `reference/session-budget.md` holds the budget numbers, checkpoints,
+`reference/session-budget.md` holds the budget numbers, checkpoints,
 stops and the Compact Instructions block, and `reference/final-review.md` holds
 the whole-branch review both execution skills end at.
 `scripts/run-codex-review.sh` runs every Codex review seat: it
@@ -1020,8 +1041,7 @@ review, `codex-review-schema.json` for the Codex task seats, and
 A register is the list of source items a body of work must answer, and the
 authority on whether that work is finished. One file per incoming list —
 an owner's list, a review's findings, a batch — at
-`docs/forge/registers/YYYY-MM-DD-<slug>.md` (`docs/superpowers/registers/`
-before 2.0), committed, and required whenever a request carries two or more
+`docs/forge/registers/YYYY-MM-DD-<slug>.md`, committed, and required whenever a request carries two or more
 distinct items.
 
 Each row carries an identifier, the requester's words, an assignment, an

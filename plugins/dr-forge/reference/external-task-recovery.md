@@ -9,7 +9,7 @@ line, and its wrapper is resolved with
 Prerequisites are Bash, Git, jq, GNU timeout/coreutils, a working CLI for that
 executor, and successful bounded login detection through its own gate.
 
-Reserve a linked Superpowers worktree for one task. Initial execution requires
+Reserve a linked dr-forge worktree for one task. Initial execution requires
 a clean index and no tracked/untracked changes. Stop only controller-owned
 competing writers; require user editing to cease in this worktree. The owner
 record and per-run lock prevent cooperating invocations from sharing it, but

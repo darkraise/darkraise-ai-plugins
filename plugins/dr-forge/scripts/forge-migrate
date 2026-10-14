@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# forge-migrate [DIR] — move a repository from the pre-3.0 names to dr-forge
+# 3.0's, which reads only the new ones. For the repository at DIR (default:
+# the working directory), its primary checkout and every linked worktree:
+#   .superpowers/          -> .forge/            (plain rename)
+#   docs/superpowers/      -> docs/forge/        (git mv when tracked)
+#   <git dir>/dr-superpowers/ -> <git dir>/dr-forge/
+# then, once every move has succeeded, the lines of .gitignore, .gitattributes
+# and the shared info/exclude that name .superpowers or docs/superpowers. No
+# other file's content changes: historical plans and specs keep the citations
+# dr-forge translates when it reads them. Last, scripts/lib/darkmem-migrate.mjs
+# moves the home (~/.dr-superpowers/ -> ~/.dr-forge/) when it is installed.
+#
+# A checkout that holds both names, or a docs/superpowers/ with uncommitted
+# changes, is refused and left as it is; the rest still moves, and a second
+# run finishes the job once the refusal is resolved.
+#
+# Exit: 0 done or nothing to do; 1 something was refused; 2 usage or not
+# inside a git repository.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/lib/native-path.sh"
+
+[ $# -le 1 ] || { echo "usage: forge-migrate [DIR]" >&2; exit 2; }
+dir=${1:-$PWD}
+
+if command -v timeout >/dev/null 2>&1; then g() { timeout 60 git "$@"; }; else g() { git "$@"; }; fi
+
+root=$(g -C "$dir" rev-parse --show-toplevel 2>/dev/null) \
+  || { echo "forge-migrate: $dir is not inside a git repository" >&2; exit 2; }
+common=$(g -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  || { echo "forge-migrate: cannot read the git directory of $root" >&2; exit 2; }
+
+refused=0 moved=0
+checkouts=()
+commit_notes=()
+
+refuse() { printf 'forge-migrate: refused: %s\n' "$1" >&2; refused=1; }
+done_move() { printf 'moved %s -> %s\n' "$1" "$2"; moved=1; }
+
+# mv_plain FROM TO — the rename, refused when both exist.
+mv_plain() {
+  [ -e "$1" ] || return 0
+  if [ -e "$2" ]; then refuse "$1 and $2 both exist; merge them by hand, then run forge-migrate again"; return 0; fi
+  if mv -- "$1" "$2"; then done_move "$1" "$2"; else refuse "could not rename $1"; fi
+}
+
+migrate_docs() { # CHECKOUT
+  local wt=$1 old="$1/docs/superpowers" new="$1/docs/forge"
+  [ -e "$old" ] || return 0
+  if [ -e "$new" ]; then refuse "$old and $new both exist; merge them by hand, then run forge-migrate again"; return 0; fi
+  if [ -z "$(g -C "$wt" ls-files -- docs/superpowers | head -n 1)" ]; then mv_plain "$old" "$new"; return 0; fi
+  if [ -n "$(g -C "$wt" status --porcelain --untracked-files=all -- docs/superpowers)" ]; then
+    refuse "$old has uncommitted changes; commit or stash them, then run forge-migrate again"
+    return 0
+  fi
+  if g -C "$wt" mv docs/superpowers docs/forge; then
+    done_move "$old" "$new"
+    commit_notes+=("$wt: the staged rename docs/superpowers/ -> docs/forge/")
+  else
+    refuse "git mv docs/superpowers docs/forge failed in $wt"
+  fi
+}
+
+# rewrite_names FILE — the ignore and attribute lines that name a pre-3.0
+# directory, renamed in place.
+rewrite_names() {
+  local file=$1 tmp
+  [ -f "$file" ] || return 1
+  grep -qE '(^|[^A-Za-z0-9_-])\.superpowers([/[:space:]*]|$)|docs/superpowers([/[:space:]*]|$)' "$file" || return 1
+  tmp="$file.forge-migrate.$$"
+  sed -E -e 's#(^|[^A-Za-z0-9_-])\.superpowers([/[:space:]*]|$)#\1.forge\2#g' \
+         -e 's#docs/superpowers([/[:space:]*]|$)#docs/forge\1#g' "$file" > "$tmp" \
+    && cat "$tmp" > "$file"
+  rm -f -- "$tmp"
+  printf 'rewrote the pre-3.0 names in %s\n' "$file"
+  moved=1
+}
+
+while IFS= read -r wt; do
+  [ -n "$wt" ] && [ -d "$wt" ] && checkouts+=("$wt")
+done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+[ ${#checkouts[@]} -gt 0 ] || checkouts=("$root")
+
+for wt in "${checkouts[@]}"; do
+  if [ -e "$wt/.superpowers" ] && [ ! -e "$wt/.forge" ] && [ -n "$(g -C "$wt" ls-files -- .superpowers | head -n 1)" ]; then
+    commit_notes+=("$wt: the rename .superpowers/ -> .forge/ (git add -A .superpowers .forge)")
+  fi
+  mv_plain "$wt/.superpowers" "$wt/.forge"
+  migrate_docs "$wt"
+  if gitdir=$(g -C "$wt" rev-parse --absolute-git-dir 2>/dev/null); then
+    mv_plain "$gitdir/dr-superpowers" "$gitdir/dr-forge"
+  else
+    refuse "cannot read the git directory of $wt"
+  fi
+done
+
+# A rewritten ignore line would expose a directory a refusal left in place.
+if [ "$refused" -eq 0 ]; then
+  for wt in "${checkouts[@]}"; do
+    for name in .gitignore .gitattributes; do
+      if rewrite_names "$wt/$name" && g -C "$wt" ls-files --error-unmatch -- "$name" >/dev/null 2>&1; then
+        commit_notes+=("$wt: $name")
+      fi
+    done
+  done
+  rewrite_names "$common/info/exclude" || true
+fi
+
+if [ -f "$HERE/lib/darkmem-migrate.mjs" ]; then
+  if ! command -v node >/dev/null 2>&1; then
+    refuse "node is not on PATH, so the home (~/.dr-superpowers/) was not migrated"
+  elif ! (cd "$root" && node "$(dr_native_path "$HERE/lib/darkmem-migrate.mjs")"); then
+    refuse "scripts/lib/darkmem-migrate.mjs did not finish; see its output above"
+  fi
+fi
+
+for note in "${commit_notes[@]+"${commit_notes[@]}"}"; do printf 'commit: %s\n' "$note"; done
+[ "$moved" -eq 1 ] || [ "$refused" -eq 1 ] || echo "forge-migrate: nothing to migrate in $root"
+exit "$refused"

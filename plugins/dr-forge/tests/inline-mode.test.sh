@@ -105,14 +105,14 @@ present "the preflight arises only for a heavy task" "$INLINE" '`preflight` aris
 present "inline mode names both delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`'
 absent "writing-plans no longer defines four-band tasks" "$P/skills/writing-plans/SKILL.md" 'four-band'
 absent "inline mode no longer delegates total-4 tasks" "$INLINE" 'total-4'
-absent "using-superpowers no longer delegates total-4 tasks" "$P/skills/using-superpowers/SKILL.md" 'total-4'
+absent "using-forge no longer delegates total-4 tasks" "$P/skills/using-forge/SKILL.md" 'total-4'
 absent "README no longer delegates total-4 tasks" "$P/README.md" 'total-4'
 absent "the delegated loop no longer delegates total-4 tasks" "$P/reference/delegated-task.md" 'total-4'
 present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
 present "inline confirms a Header amendment" "$INLINE" 'A Header amendment is confirmed by a second, independent `judge-opus` dispatch'
 absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-flight scan.'
 absent "inline no longer names judge-fable as the ruling seat" "$INLINE" '`dr-forge:judge-fable` (`dr-forge:judge-opus` when Fable is'
-present "inline translates a delegated task's agent" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
+absent "inline no longer translates older plugin prefixes" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
 absent "inline drops the all-inert legacy sentence" "$INLINE" 'no task is dispatched, so their names need no translation'
 present "a return to inline starts at a task that is not delegated" "$INLINE" 'The return takes effect at the first remaining task that is not delegated'
 
@@ -342,7 +342,7 @@ rm -rf "$DTMP"
 EXEC_REASON='and every task carrying an `**Executor:**` line'
 present "inline mode delegates every Executor line" "$INLINE" "$EXEC_REASON"
 present "writing-plans delegates every Executor line" "$P/skills/writing-plans/SKILL.md" "$EXEC_REASON"
-present "using-superpowers delegates every Executor line" "$P/skills/using-superpowers/SKILL.md" "$EXEC_REASON"
+present "using-forge delegates every Executor line" "$P/skills/using-forge/SKILL.md" "$EXEC_REASON"
 present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
 present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" "$EXEC_REASON"
 present "writing-plans gates the roster per executor" "$P/skills/writing-plans/SKILL.md" 'for every executor whose gate prints `lane=true`'

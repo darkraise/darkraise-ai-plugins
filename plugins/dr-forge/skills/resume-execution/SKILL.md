@@ -13,7 +13,7 @@ session from memory or from a summary.
 
 ## Steps
 
-1. **Orient in one call.** Run `scripts/repo-audit` (see using-superpowers §Session Budget). Read
+1. **Orient in one call.** Run `scripts/repo-audit` (see using-forge §Session Budget). Read
    `<latest.md>`; the audit prints its path.
 2. **Verify the worktree** named in latest.md's `## State` against
    `git worktree list --porcelain`. Normalise both paths before comparing:

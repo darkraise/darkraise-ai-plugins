@@ -5,8 +5,7 @@
 # ends while its human is away and the menu would otherwise wait forever.
 #
 # One JSON file holds it: `<workspace>/finish.json` beside a plan's ledger, or
-# `.forge/sdd/finish.json` (`.superpowers/sdd/` in a pre-2.0 checkout) for work
-# done without a plan. Both are
+# `.forge/sdd/finish.json` for work done without a plan. Both are
 # git-ignored; the cockpit Run card reads the file to show the choice.
 #
 # Usage: finish-choice <command> [--plan PLAN_FILE] [args]

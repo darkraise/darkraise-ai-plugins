@@ -31,6 +31,8 @@ echo "- Root: \`$root\`"
 [ "$root" = "$primary" ] || echo "- Primary checkout: \`$primary\`"
 echo "- Branch: \`$branch\` at $head$tracking"
 echo "- $("$here/context-size" 2>/dev/null)"
+legacy=$( { forge_legacy_layout "$root"; [ "$root" = "$primary" ] || forge_legacy_layout "$primary"; } | sort -u | paste -sd, - | sed 's/,/, /g')
+[ -z "$legacy" ] || echo "- dr-forge: this repository still uses the pre-3.0 layout ($legacy); run bash $here/forge-migrate"
 
 echo
 echo "## Worktrees"

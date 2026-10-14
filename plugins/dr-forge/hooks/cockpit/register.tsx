@@ -37,8 +37,7 @@ import {
   isAtLeast,
   isFinishArmed,
   isGitWriteTool,
-  isSuperpowers,
-  stateLeaf,
+  isForge,
   kTokens,
   levelOf,
   limitForecast,
@@ -49,7 +48,6 @@ import {
   parseLedger,
   parseModeLines,
   planCandidates,
-  docsLeaf,
   planTasks,
   planFromTodos,
   planWithUpdate,
@@ -109,7 +107,7 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dr-forge handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? `${S.stateLeaf}/handoff/latest.md`} with the dr-forge resume-execution skill.`
+  return `Resume the work in ${S.latestName ?? '.forge/handoff/latest.md'} with the dr-forge resume-execution skill.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
@@ -394,7 +392,7 @@ export const register: Register = on => {
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.deny !== undefined || started.agentId === undefined) return started
-    if (isSuperpowers(e.subagentType)) {
+    if (isForge(e.subagentType)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -426,7 +424,7 @@ export const register: Register = on => {
   // A skill typed as a slash command makes no Skill tool call; its prompt is expanded on every path.
   on('skill.prompt', async ($, e, next) => {
     const expanded = await next(e)
-    if (isSuperpowers(e.skill)) {
+    if (isForge(e.skill)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -609,7 +607,7 @@ export const register: Register = on => {
       await endWait($, id, ran.deny !== undefined ? '✗ Denied' : ASKING_TOOLS.includes(tool) ? '✓ Answered' : '✓ Approved')
     }
     if ((await read($, activity)).tool === tool) await setActivity($, now => (now.kind === 'running' ? { ...now, tool: null, agent: null } : now))
-    if (tool === 'Skill' && isSuperpowers(String((e as { skill?: unknown }).skill ?? ''))) {
+    if (tool === 'Skill' && isForge(String((e as { skill?: unknown }).skill ?? ''))) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -620,7 +618,7 @@ export const register: Register = on => {
       await trackAutoRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       // The controller writes its ledger with its own tool calls.
-      if (/\.forge|\.superpowers|\.dr-forge|\.dr-superpowers|finish-choice/.test(JSON.stringify(e))) await readRun($)
+      if (/\.forge|\.dr-forge|finish-choice/.test(JSON.stringify(e))) await readRun($)
     }
 
     return ran
@@ -2004,8 +2002,6 @@ const S = {
   changed: {} as Record<string, SettingValue>,
   // Claude keys this session saved: the engine's settings snapshot may not show another process's write at once.
   claudeSaved: {} as Record<string, SettingValue | undefined>,
-  // The state directory's name in the primary checkout, as last read.
-  stateLeaf: '.forge',
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,
@@ -2138,20 +2134,12 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
   await setActivity($, now => (now.kind === 'waiting' || now.kind === 'asking' ? { ...now, kind: 'running', detail: null, isSent: false } : now))
 }
 
-/** The state directory under a checkout: .forge, or the pre-2.0 .superpowers where only that exists. */
-async function stateDirOf($: EngineInterface, root: string): Promise<string> {
-  const names = new Set((await $.fs.list(root).catch(() => [])).map(entry => entry.name))
-  S.stateLeaf = stateLeaf(names)
-  return `${root}/${S.stateLeaf}`
-}
-
 // The auto run state file in the primary checkout, as the run bound to this
 // session; null when there is none or another session owns it.
 async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return null
-  const state = await stateDirOf($, root)
-  const text = await $.fs.read(`${state}/sdd/auto-run.json`).catch(() => null)
+  const text = await $.fs.read(`${root}/.forge/sdd/auto-run.json`).catch(() => null)
   if (typeof text !== 'string') return null
   return autoRunFor(text, await $.session.id())
 }
@@ -2361,8 +2349,7 @@ async function readRoots($: EngineInterface, primary: string): Promise<CockpitRo
 async function finishPath($: EngineInterface, checkouts: readonly string[], slug: string | null): Promise<string> {
   const paths: string[] = []
   for (const dir of checkouts) {
-    const leaf = stateLeaf(new Set((await $.fs.list(dir).catch(() => [])).map(entry => entry.name)))
-    paths.push(slug === null ? `${dir}/${leaf}/sdd/finish.json` : `${dir}/${leaf}/sdd/${slug}/finish.json`)
+    paths.push(slug === null ? `${dir}/.forge/sdd/finish.json` : `${dir}/.forge/sdd/${slug}/finish.json`)
   }
   for (const path of paths) {
     if ((await $.fs.stat(path).catch(() => null))?.kind === 'file') return path
@@ -2371,14 +2358,13 @@ async function finishPath($: EngineInterface, checkouts: readonly string[], slug
 }
 
 // The run's ledger, its plan's tasks, and the newest handoff, read where the
-// roots put them (store options spec §7.3): the primary checkout's state
-// directory (.forge/, .superpowers/ before 2.0) while progress is local, the
-// darkmem mirror while it is not.
+// roots put them (store options spec §7.3): the primary checkout's .forge/
+// while progress is local, the darkmem mirror while it is not.
 async function readRun($: EngineInterface) {
   const session = (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
-  const state = await stateDirOf($, root)
+  const state = `${root}/.forge`
   const roots = await readRoots($, root)
   const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
   S.latestName = roots?.progress.store === 'darkmem' ? latest : null
@@ -2408,9 +2394,7 @@ async function readRun($: EngineInterface) {
     let titles: { n: number; title: string }[] = []
     if (ledger.plan !== null) {
       const places: { root: string; docsDir: string }[] = []
-      for (const dir of checkouts) {
-        places.push({ root: dir, docsDir: `${dir}/docs/${docsLeaf(new Set((await $.fs.list(`${dir}/docs`).catch(() => [])).map(entry => entry.name)))}` })
-      }
+      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/forge` })
       for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
@@ -2532,7 +2516,7 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
-  // A worktree's .forge/ (.superpowers/ before 2.0) lives in the primary checkout.
+  // A worktree's .forge/ lives in the primary checkout.
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   S.where.primary = common === null ? null : common.replace(/[\\/]\.git[\\/]?$/, '') || null
 }
@@ -2716,9 +2700,7 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
 
 /** Puts a settings file in force: the atom every hook reads through live(), the locked rows, and the notifier. */
 async function applySettings($: EngineInterface, file: SettingsFile) {
-  const forge = await $.env.get('DR_FORGE_BUDGET')
-  const legacy = await $.env.get('DR_SUPERPOWERS_BUDGET')
-  const env = { DR_FORGE_BUDGET: forge || legacy }
+  const env = { DR_FORGE_BUDGET: await $.env.get('DR_FORGE_BUDGET') }
   const engineUser = ((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>
   // The engine's snapshot can predate a save: until it shows the saved value the merged read is overlaid too, then a project or managed override shows through.
   const awaited = Object.fromEntries(Object.entries(S.claudeSaved).filter(([key, saved]) => engineUser[key] !== saved))
@@ -2727,21 +2709,15 @@ async function applySettings($: EngineInterface, file: SettingsFile) {
   const values = resolveSettings(SCHEMA, file, env, merged)
   S.settingProblems = settingProblems(SCHEMA, file, env)
   const locks = { ...envLocks(SCHEMA, env), ...claudeLocks(SCHEMA, merged, user) }
-  if (!forge && legacy && locks.handoffTokens !== undefined) locks.handoffTokens = 'set by DR_SUPERPOWERS_BUDGET'
   S.locks = locks
   await update($, settings, () => values)
   applyNotify(liveFrom(values as Partial<Options>))
 }
 
-/** The first run: dr-cockpit's options and dr-superpowers' darkmem mapping, written to the new file. */
+/** The first run: dr-cockpit's options, written to the new file. */
 async function importSettings($: EngineInterface, path: string): Promise<SettingsFile> {
   const claude = await $.settings.read({ source: 'user' }).catch(() => ({}))
-  const home = path.slice(0, -'/.dr-forge/config.json'.length)
-  const old = await $.fs
-    .read(`${home}/.dr-superpowers/config.json`)
-    .then(text => JSON.parse(String(text)) as unknown)
-    .catch(() => null)
-  const file = importedSettings(SCHEMA, claude, old)
+  const file = importedSettings(SCHEMA, claude)
   // The mod has no exclusive create: a file saved while the reads above ran is kept.
   if (await $.fs.exists(path).catch(() => false)) return (await readSettingsFile($, path)) ?? file
   await $.fs.write(path, `${JSON.stringify(file, null, 2)}\n`).catch(() => undefined)
@@ -3103,7 +3079,7 @@ function repoChanges(git: { changed: number; untracked: number }): string {
 }
 
 function shortSeat(seat: string): string {
-  return seat.replace(/^dr-(?:forge|superpowers):/, '')
+  return seat.replace(/^dr-forge:/, '')
 }
 
 function costRate(usd: number, startedAt: number | undefined, now: number): string {

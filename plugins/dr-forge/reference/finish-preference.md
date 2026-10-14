@@ -7,7 +7,7 @@ dr-forge:finishing-a-development-branch carries it out when its menu goes
 unanswered for the configured wait. An answer to the menu inside that wait always
 wins over the choice made here.
 
-`scripts/finish-choice` keeps the choice (see using-superpowers §Session
+`scripts/finish-choice` keeps the choice (see using-forge §Session
 Budget). Pass `--plan PLAN_FILE` in a plan run; leave it out for work done
 without a plan.
 

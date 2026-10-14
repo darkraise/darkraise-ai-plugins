@@ -48,7 +48,7 @@ check "refusals change nothing" "$(cat "$FILE")" "$before"
 fc set handoffTokens 300000
 check "file value" "$(fc get handoffTokens)" "300000"
 check "DR_FORGE_BUDGET wins" "$(DR_FORGE_BUDGET=400000 fc get handoffTokens)" "400000"
-check "pre-2.0 DR_SUPERPOWERS_BUDGET applies" "$(DR_SUPERPOWERS_BUDGET=450000 fc get handoffTokens)" "450000"
+check "the pre-2.0 DR_SUPERPOWERS_BUDGET is not read" "$(DR_SUPERPOWERS_BUDGET=450000 fc get handoffTokens)" "300000"
 check "an invalid override is ignored" "$(DR_FORGE_BUDGET=junk fc get handoffTokens)" "300000"
 check "and warned about" "$(grep -c 'DR_FORGE_BUDGET' "$TMP/stderr")" "1"
 
@@ -64,7 +64,8 @@ printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"comp
 printf '%s' '{"darkmem":{"url":"http://d.test","api_key_env":"DM_KEY","repos":{"/r":{"project":"p"}}}}' > "$HOME/.dr-superpowers/config.json"
 fc get layout > /dev/null
 DM='{"url":"http://d.test","api_key_env":"DM_KEY","repos":{"/r":{"project":"p"}}}'
-check "import: options and darkmem" "$(node -e 'const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(JSON.stringify(v))' "$FILE")" "{\"layout\":\"compact\",\"darkmem\":$DM}"
+check "import: options only, not the pre-2.0 home" "$(node -e 'const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(JSON.stringify(v))' "$FILE")" '{"layout":"compact"}'
+printf '{"layout":"compact","darkmem":%s}\n' "$DM" > "$FILE"
 fc set warnAt 70
 fc unset warnAt
 fc set notifyDetail brief

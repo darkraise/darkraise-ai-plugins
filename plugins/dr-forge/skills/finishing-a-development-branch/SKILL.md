@@ -354,7 +354,7 @@ keep it for the next session.
 work came from a plan, delete its workspace — `rm -rf` on the directory
 `scripts/sdd-workspace PLAN_FILE` prints. Done.
 
-**If `WORKTREE_PATH` is under `.worktrees/` or `worktrees/`:** Superpowers
+**If `WORKTREE_PATH` is under `.worktrees/` or `worktrees/`:** dr-forge
 created this worktree — we own cleanup:
 
 ```bash
@@ -403,7 +403,7 @@ a workspace-exit tool, use it.
 gone, so nothing follows from it.
 
 If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`
-(see using-superpowers §Session Budget), with the
+(see using-forge §Session Budget), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
 the next program sub-project or roadmap epic with its launch command and

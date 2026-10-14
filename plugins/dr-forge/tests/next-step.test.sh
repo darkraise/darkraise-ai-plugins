@@ -536,10 +536,10 @@ esac
 # "every sub-project is done" answer.
 RREPO="$TMP/registers"
 git init -q -b main "$RREPO"
-mkdir -p "$RREPO/docs/superpowers/plans" "$RREPO/docs/superpowers/specs" "$RREPO/docs/superpowers/registers"
+mkdir -p "$RREPO/docs/forge/plans" "$RREPO/docs/forge/specs" "$RREPO/docs/forge/registers"
 printf '.forge/\n' > "$RREPO/.gitignore"
-: > "$RREPO/docs/superpowers/specs/prog-design.md"
-cat > "$RREPO/docs/superpowers/plans/c1.md" <<'PLAN'
+: > "$RREPO/docs/forge/specs/prog-design.md"
+cat > "$RREPO/docs/forge/plans/c1.md" <<'PLAN'
 # C1
 
 **Goal:** One
@@ -551,7 +551,7 @@ cat > "$RREPO/docs/superpowers/plans/c1.md" <<'PLAN'
 PLAN
 git -C "$RREPO" add -A && git -C "$RREPO" commit -qm init
 
-cat > "$RREPO/docs/superpowers/registers/prog.md" <<'REG'
+cat > "$RREPO/docs/forge/registers/prog.md" <<'REG'
 # Programme — item register
 
 **Source:** owner list 2026-09-18
@@ -567,29 +567,29 @@ cat > "$RREPO/docs/superpowers/registers/prog.md" <<'REG'
 REG
 
 OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
-has "next-step: a register with open rows refuses 'Nothing'" "$OUT" "Register rows still open (4) in \`docs/superpowers/registers/prog.md\`"
+has "next-step: a register with open rows refuses 'Nothing'" "$OUT" "Register rows still open (4) in \`docs/forge/registers/prog.md\`"
 has "next-step: names the first rows" "$OUT" "#4 Settings tabs"
 has "next-step: caps the list at three" "$OUT" "+1 more"
 has "next-step: routes to the assignment" "$OUT" "\`C2 Settings\`: write its spec in a fresh session."
 lacks "next-step: must not claim the program is done" "$OUT" "Nothing — every sub-project"
 
 # An unassigned row routes to brainstorming instead.
-bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 4 open --assigned -
-bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 6 done
-bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 16 done
-bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 17 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 4 open --assigned -
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 6 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 16 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 17 done
 OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
 has "next-step: an unassigned row routes to brainstorming" "$OUT" "Rule on the open rows with dr-forge:brainstorming."
 has "next-step: one row still reports" "$OUT" "Register rows still open (1) in"
 
 # Every row resolved: the Program line answers again, exactly as before.
-bash "$HERE/../scripts/register" set "$RREPO/docs/superpowers/registers/prog.md" 4 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 4 done
 OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
 has "next-step: a fully resolved register restores the old answer" "$OUT" "Nothing — every sub-project"
 
 # No register at all: unchanged behaviour, which is what keeps every existing
 # plan in this repository working.
-rm "$RREPO/docs/superpowers/registers/prog.md"
+rm "$RREPO/docs/forge/registers/prog.md"
 OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
 has "next-step: no register means no change" "$OUT" "Nothing — every sub-project"
 
@@ -599,14 +599,14 @@ has "next-step: no register means no change" "$OUT" "Nothing — every sub-proje
 # re-specified; verify rows and other repositories' rows are not work here.
 GREPO="$TMP/routing"
 git init -q -b main "$GREPO"
-mkdir -p "$GREPO/docs/superpowers/plans" "$GREPO/docs/superpowers/specs" "$GREPO/docs/superpowers/registers"
+mkdir -p "$GREPO/docs/forge/plans" "$GREPO/docs/forge/specs" "$GREPO/docs/forge/registers"
 printf '.forge/\n' > "$GREPO/.gitignore"
-: > "$GREPO/docs/superpowers/specs/lane-design.md"
-: > "$GREPO/docs/superpowers/specs/rev-design.md"
+: > "$GREPO/docs/forge/specs/lane-design.md"
+: > "$GREPO/docs/forge/specs/rev-design.md"
 for p in inc1 inc2 inc3; do
   effort=high
   [ "$p" = inc3 ] && effort=medium
-  cat > "$GREPO/docs/superpowers/plans/$p.md" <<PLAN
+  cat > "$GREPO/docs/forge/plans/$p.md" <<PLAN
 # $p
 
 **Goal:** $p
@@ -617,8 +617,8 @@ for p in inc1 inc2 inc3; do
 PLAN
 done
 printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — merged into `main` at abc1234\n' \
-  > "$GREPO/docs/superpowers/plans/completed.md"
-cat > "$GREPO/docs/superpowers/registers/lane.md" <<'REG'
+  > "$GREPO/docs/forge/plans/completed.md"
+cat > "$GREPO/docs/forge/registers/lane.md" <<'REG'
 # Lane — item register
 
 **Source:** owner list 2026-01-01
@@ -634,7 +634,7 @@ cat > "$GREPO/docs/superpowers/registers/lane.md" <<'REG'
 | 6 | Leftover | docs/superpowers/plans/inc1.md | - | open | - |
 REG
 git -C "$GREPO" add -A && git -C "$GREPO" commit -qm init
-GREG="$GREPO/docs/superpowers/registers/lane.md"
+GREG="$GREPO/docs/forge/registers/lane.md"
 
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: still reports every unresolved row" "$OUT" "Register rows still open (6)"
@@ -646,18 +646,18 @@ has "routing: names rows left on finished plans" "$OUT" "Still assigned to a fin
 # Either docs prefix names the same plan (spec §7.1): a completed.md entry and
 # an Assigned cell spelled docs/forge/ match the docs/superpowers/ plan.
 printf '# Completed plans\n\n- 2026-01-01 `docs/forge/plans/inc1.md` — merged into `main` at abc1234\n' \
-  > "$GREPO/docs/superpowers/plans/completed.md"
+  > "$GREPO/docs/forge/plans/completed.md"
 bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/forge/plans/inc2.md >/dev/null
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: either prefix names a finished plan" "$OUT" "Still assigned to a finished plan: #1, #6"
 printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — merged into `main` at abc1234\n' \
-  > "$GREPO/docs/superpowers/plans/completed.md"
+  > "$GREPO/docs/forge/plans/completed.md"
 bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
 
 # An absolute Assigned cell is named from the roots: one naming the plan being
 # completed and one naming a finished plan are both stale.
-bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned "$GREPO/docs/superpowers/plans/inc2.md" >/dev/null
-bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$GREPO/docs/superpowers/plans/inc1.md" >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned "$GREPO/docs/forge/plans/inc2.md" >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$GREPO/docs/forge/plans/inc1.md" >/dev/null
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: absolute Assigned cells name finished plans" "$OUT" "Still assigned to a finished plan: #1, #6"
 bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
@@ -668,7 +668,7 @@ bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned docs/superpowers/
 # and completed.md (row 1 on inc2, row 6 on inc1, inc1 recorded).
 GWT="$TMP/routing-wt"
 git -C "$GREPO" worktree add -q -b routing-side "$GWT"
-bash "$HERE/../scripts/register" set "$GWT/docs/superpowers/registers/lane.md" 6 open --assigned "$GREPO/docs/superpowers/plans/inc1.md" >/dev/null
+bash "$HERE/../scripts/register" set "$GWT/docs/forge/registers/lane.md" 6 open --assigned "$GREPO/docs/forge/plans/inc1.md" >/dev/null
 OUT=$(cd "$GWT" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: a worktree names the primary checkout's absolute plan path" "$OUT" "Still assigned to a finished plan: #1, #6"
 git -C "$GREPO" worktree remove --force "$GWT"
@@ -679,7 +679,7 @@ git -C "$GREPO" branch -q -D routing-side
 # file of the primary named .nested-wt/docs/….
 NWT="$GREPO/.nested-wt"
 git -C "$GREPO" worktree add -q -b routing-nested "$NWT"
-bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$NWT/docs/superpowers/plans/inc1.md" >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$NWT/docs/forge/plans/inc1.md" >/dev/null
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: a name in a nested worktree is named from that worktree" "$OUT" "Still assigned to a finished plan: #1, #6"
 git -C "$GREPO" worktree remove --force "$NWT"
@@ -717,7 +717,7 @@ lacks "routing: nothing routable launches nothing" "$OUT" "Launch in"
 # to its audit, and only when every milestone is closed is there nothing to do.
 MREPO="$TMP/roadmap"
 git init -q -b main "$MREPO"
-MD="$MREPO/docs/superpowers"
+MD="$MREPO/docs/forge"
 mkdir -p "$MD/plans" "$MD/specs" "$MD/registers"
 printf '.forge/\n' > "$MREPO/.gitignore"
 : > "$MD/specs/shop-design.md"
@@ -768,7 +768,7 @@ has "roadmap: the audit gets a launch prompt" "$OUT" "Close milestone M1 (MVP)"
 
 bash "$HERE/../scripts/roadmap" close --root "$MREPO" M1 --note "audit: 1 MET" >/dev/null
 OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
-has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`docs/superpowers/roadmap.md\` is closed."
+has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`docs/forge/roadmap.md\` is closed."
 lacks "roadmap: closed launches nothing" "$OUT" "Launch in"
 
 # --- documents and progress kept in darkmem ---

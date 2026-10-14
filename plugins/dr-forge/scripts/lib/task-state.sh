@@ -135,7 +135,7 @@ dr_task_scope_valid() {
   jq -e 'type == "array" and all(.[]; type == "string" and length > 0)' "$1" >/dev/null || return 2
   local path target
   while IFS= read -r -d '' path; do
-    case "$path" in /*|[A-Za-z]:*|*\\*|..|../*|*/../*|*/..|.git|.git/*|.superpowers|.superpowers/*|.forge|.forge/*) return 2 ;; esac
+    case "$path" in /*|[A-Za-z]:*|*\\*|..|../*|*/../*|*/..|.git|.git/*|.forge|.forge/*) return 2 ;; esac
     target="$(realpath -m -- "$DR_WORKTREE/$path")" || return 2
     case "$target" in "$DR_WORKTREE"/*) ;; *) return 2 ;; esac
   done < <(jq -j '.[] + "\u0000"' "$1")
@@ -153,7 +153,6 @@ dr_task_open() {
   common="$(dr_canonical "$common")" || return 2
   [ "$gitdir" != "$common" ] && [ -z "$(git -C "$DR_WORKTREE" rev-parse --show-superproject-working-tree)" ] || { dr_state_error 'an exclusively assigned linked worktree is required'; return 2; }
   DR_TASK_ROOT="$gitdir/dr-forge"
-  [ -d "$DR_TASK_ROOT" ] || [ ! -d "$gitdir/dr-superpowers" ] || DR_TASK_ROOT="$gitdir/dr-superpowers"
   key="$(printf '%s' "$task" | git -C "$DR_WORKTREE" hash-object --stdin)" || return 2
   DR_TASK_DIR="$DR_TASK_ROOT/tasks/$key"
   mkdir -p -- "$DR_TASK_ROOT" || return 2

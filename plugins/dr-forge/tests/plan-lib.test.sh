@@ -116,10 +116,10 @@ REPO="$TMP/repo"
 git init -q "$REPO"
 cp "$TMP/h.md" "$REPO/plan.md"
 check "amendments_file: none yet" "$(plan_amendments_file "$REPO/plan.md")" ""
-mkdir -p "$REPO/.superpowers/sdd/plan"
-cp "$TMP/am.md" "$REPO/.superpowers/sdd/plan/amendments.md"
+mkdir -p "$REPO/.forge/sdd/plan"
+cp "$TMP/am.md" "$REPO/.forge/sdd/plan/amendments.md"
 got=$(plan_amendments_file "$REPO/plan.md")
-check "amendments_file: the plan's workspace file" "${got##*/.superpowers/}" "sdd/plan/amendments.md"
+check "amendments_file: the plan's workspace file" "${got##*/.forge/}" "sdd/plan/amendments.md"
 check "amendments_file: outside a repository" "$(plan_amendments_file "$TMP/h.md")" ""
 
 # --- plan_scores and plan_heavy ---
@@ -202,16 +202,16 @@ check "plan_delegated: the scores fixture" "$(deleg "$TMP/scores.md")" "2 heavy|
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
 git init -q "$REPO"
-mkdir -p "$REPO/docs" "$REPO/.superpowers/sdd/demo"
+mkdir -p "$REPO/docs" "$REPO/.forge/sdd/demo"
 printf '# Demo\n' > "$REPO/docs/demo.md"
-L="$REPO/.superpowers/sdd/demo/progress.md"
+L="$REPO/.forge/sdd/demo/progress.md"
 check "plan_ledger: no ledger prints nothing" "$(plan_ledger "$REPO/docs/demo.md")" ""
 printf '# SDD ledger — plan: docs/demo.md\n' > "$L"
 check "plan_ledger: a relative identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
-  "$(git -C "$REPO" rev-parse --show-toplevel)/.superpowers/sdd/demo/progress.md"
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.forge/sdd/demo/progress.md"
 printf '# SDD ledger — plan: %s/docs/demo.md\n' "$(git -C "$REPO" rev-parse --show-toplevel)" > "$L"
 check "plan_ledger: an absolute identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
-  "$(git -C "$REPO" rev-parse --show-toplevel)/.superpowers/sdd/demo/progress.md"
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.forge/sdd/demo/progress.md"
 printf '# SDD ledger — plan: docs/other.md\n' > "$L"
 check "plan_ledger: another plan's ledger is ignored" "$(plan_ledger "$REPO/docs/demo.md")" ""
 printf '# SDD ledger — plan: docs/demo.md\nTask 1: implementer inline (assigned; base a)\nTask 2: escalated inline -> subagent — still failing\n' > "$L"

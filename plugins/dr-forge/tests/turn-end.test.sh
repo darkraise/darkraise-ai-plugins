@@ -22,7 +22,7 @@ unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DR_FORGE_BUDGET
 
 REPO="$TMP/repo"
 git init -q "$REPO"
-WS="$REPO/.superpowers/sdd/2026-10-08-example"
+WS="$REPO/.forge/sdd/2026-10-08-example"
 mkdir -p "$WS"
 LEDGER="$WS/progress.md"
 
@@ -72,7 +72,7 @@ check "finishing menu: passes" "$(stop s-1 $'1. Merge back to main locally\n2. P
 check "finishing test failure: passes" "$(stop s-1 'Tests failing (2 failures). Must fix before completing:')" ""
 
 # --- two ledgers written this turn: each needs its own ending ---
-WS2="$REPO/.superpowers/sdd/2026-10-09-other"
+WS2="$REPO/.forge/sdd/2026-10-09-other"
 mkdir -p "$WS2"
 printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-09-other.md\nTask 2: complete (commits c..d, review clean)\n' > "$WS2/progress.md"
 out=$(stop s-1 $'1. Merge back to main locally\n\nWhich option?')
@@ -203,7 +203,7 @@ done
 AR="$HERE/../scripts/auto-run"
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
 (cd "$REPO" && bash "$AR" --session s-1 start --spec docs/s.md --register docs/r.md >/dev/null)
-STATE="$REPO/.superpowers/sdd/auto-run.json"
+STATE="$REPO/.forge/sdd/auto-run.json"
 pend() { jq --arg p "$1" '.pending = $p' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
 stop_in() { # stop_in <cwd> <session> <last message>
   jq -n --arg cwd "$1" --arg sid "$2" --arg msg "$3" \
@@ -242,7 +242,7 @@ check "a stopped run: back to the plain rules" "$(stop s-1 'Here is the answer.'
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---
 . "$HERE/fixtures/darkmem-stores.sh"
 M=$(stores_home "$HOME" "$REPO" proj local darkmem)
-mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.superpowers/sdd/2026-10-10-mirror"
+mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.forge/sdd/2026-10-10-mirror"
 sleep 1; prompt s-2; sleep 1
 printf '# SDD ledger — plan: docs/forge/plans/2026-10-10-mirror.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-10-mirror/progress.md"
 out=$(stop s-2 'Task 1 is done.')
