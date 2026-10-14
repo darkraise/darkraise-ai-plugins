@@ -319,13 +319,11 @@ function world(on: On, w: World) {
     }
     if (argv.includes('/scripts/lib/darkmem-config.mjs ')) {
       w.modeRuns?.push(e.argv[e.argv.length - 1] ?? '')
-      if (w.modeOut === 'missing') throw new Error('spawn node ENOENT')
-      if (w.modeOut === 'rejects') throw new Error('the engine refused to start the process')
-      if (w.modeOut === 'timeout') {
-        return clock.advance(5_000).then(() => {
-          throw new Error('the process was stopped')
-        })
+      if (w.modeOut === 'missing') {
+        return clock.advance(5_000).then(() => ({ deny: 'dr-forge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }))
       }
+      if (w.modeOut === 'rejects') return { deny: 'the engine refused to start the process' }
+      if (w.modeOut === 'timeout') return { deny: 'dr-forge: $.process.run(node) aborted: still running after 5000ms' }
       const out = w.modeOut ?? { exitCode: 0, stdout: PORCELAIN, stderr: '' }
       return { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -2200,7 +2198,7 @@ describe('cockpit roots', () => {
     })
   }
 
-  test('a run that fails only after its 5 seconds says it gave no answer', async ($, on) => {
+  test('a run the engine stops at its timeout says it gave no answer', async ($, on) => {
     const files = checkoutFiles()
     world(on, { ...SIGNED_IN, files, modeOut: 'timeout' })
     signedIn(on, files)
