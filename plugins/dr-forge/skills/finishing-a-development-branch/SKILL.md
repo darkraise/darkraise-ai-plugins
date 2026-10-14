@@ -318,7 +318,10 @@ prose note is not written. In the same commit as the index line:
   complete line's `discovered:` field that is not `none`, and every final-review
   finding you left for your human partner, with
   `scripts/register add <register> "<item>"` — `--state deferred --note <the
-  ruling>` when it is not work anyone will do, plain `open` when it is.
+  ruling>` only when a ruling already says no one will do it; plain `open`
+  when it is work, or when it waits on your human partner's ruling. A
+  `deferred` row is resolved, so `next-step` never routes to it; an open row
+  with no assignment routes to a ruling session.
 
 When `<docs>/roadmap.md` exists, run
 `scripts/roadmap settle --spec <the plan's Spec path>` after resolving those
@@ -412,7 +415,12 @@ match, so a fresh session finds the same answer. If it exits 4, say the
 handoff file could not be written.
 
 The last thing in your final message is that block, verbatim. Without a
-plan file, end with: "No plan file — no follow-on work recorded."
+plan file, when something follows (a register row this work left open, a
+finding awaiting a ruling), run
+`scripts/next-step --adhoc --phase <design|build> --next "<what follows>"` —
+`design` when what follows is rulings, a spec or a plan — and end with the
+block it prints, verbatim. When nothing follows, end with: "No plan file — no
+follow-on work recorded."
 
 ## Quick Reference
 
