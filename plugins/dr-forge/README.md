@@ -302,8 +302,12 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   progress files are kept under a dated `moved-<stamp>` backup. Session start
   runs `reconcile` and `pull`; the skills' stop points run `push`, and a
   background Stop hook pushes as a safety net, the whole run bounded at 100
-  seconds. `push` waits up to 100 seconds for another run's mirror lock before
-  refusing; `DARKMEM_SYNC_LOCK_WAIT_MS` sets that wait in milliseconds. A
+  seconds (SIGTERM, then SIGKILL after 5 seconds). `push` waits up to 100
+  seconds for another run's mirror lock before refusing;
+  `DARKMEM_SYNC_LOCK_WAIT_MS` sets that wait in milliseconds, and a value that
+  is not a positive number means the 100 seconds. The Stop hook's push never
+  waits: it refuses at once while another run holds the lock and the next stop
+  sends what it missed. A
   move stopped part-way through filing a ledger resumes it at the next session
   start. A document deleted from the mirror is archived on darkmem under
   `superpowers/archive/<stamp>/` and `restore <name>` brings it back;
