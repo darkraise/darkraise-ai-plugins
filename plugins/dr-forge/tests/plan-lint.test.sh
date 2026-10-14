@@ -529,9 +529,9 @@ check "CRLF plan: exit 0" "$status" "0"
 # --- item registers ---
 LREPO="$TMP/lint-registers"
 git init -q -b main "$LREPO"
-mkdir -p "$LREPO/docs/superpowers/plans" "$LREPO/docs/superpowers/specs" "$LREPO/docs/superpowers/registers"
-: > "$LREPO/docs/superpowers/specs/s-design.md"
-cat > "$LREPO/docs/superpowers/registers/r.md" <<'REG'
+mkdir -p "$LREPO/docs/forge/plans" "$LREPO/docs/forge/specs" "$LREPO/docs/forge/registers"
+: > "$LREPO/docs/forge/specs/s-design.md"
+cat > "$LREPO/docs/forge/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** review 2026-09-20
@@ -544,7 +544,7 @@ cat > "$LREPO/docs/superpowers/registers/r.md" <<'REG'
 REG
 
 write_plan() { # write_plan <program-suffix> <items-line>
-  cat > "$LREPO/docs/superpowers/plans/p.md" <<PLAN
+  cat > "$LREPO/docs/forge/plans/p.md" <<PLAN
 # P Implementation Plan
 
 **Goal:** g
@@ -614,7 +614,7 @@ has "plan-lint: 'last' with another sub-project's open row is an error" "$OUT" \
 # Either docs prefix names this plan: an Assigned cell spelled docs/forge/ is
 # its row (spec §7.1).
 mkdir -p "$TMP/name-key-home"
-cat > "$LREPO/docs/superpowers/registers/r.md" <<'REG'
+cat > "$LREPO/docs/forge/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** review 2026-09-20
@@ -635,7 +635,7 @@ has "plan-lint: 'last' leaves out this plan's row under the other prefix" "$OUT"
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
 # A plan with no covering register lints exactly as it did before.
-rm "$LREPO/docs/superpowers/registers/r.md"
+rm "$LREPO/docs/forge/registers/r.md"
 write_plan "last" ""
 OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"

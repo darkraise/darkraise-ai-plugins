@@ -72,12 +72,12 @@ check "register_rows: a short row is not a row" "$(register_rows "$TMP/short.md"
 # look for these specs in the checkout running the suite.
 ROOT="$TMP/repo"
 git init -q -b main "$ROOT"
-mkdir -p "$ROOT/docs/superpowers/registers" "$ROOT/docs/superpowers/specs"
-: > "$ROOT/docs/superpowers/specs/a-design.md"
-: > "$ROOT/docs/superpowers/specs/b-design.md"
-reg "$ROOT/docs/superpowers/registers/one.md" '| 1 | A | - | - | open | - |'
+mkdir -p "$ROOT/docs/forge/registers" "$ROOT/docs/forge/specs"
+: > "$ROOT/docs/forge/specs/a-design.md"
+: > "$ROOT/docs/forge/specs/b-design.md"
+reg "$ROOT/docs/forge/registers/one.md" '| 1 | A | - | - | open | - |'
 printf '# Two — item register\n\n**Source:** s\n**Covers:** docs/superpowers/specs/z-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | B | - | - | open | - |\n' \
-  > "$ROOT/docs/superpowers/registers/two.md"
+  > "$ROOT/docs/forge/registers/two.md"
 check "register_files: both" "$(register_files "$ROOT" | wc -l | tr -d ' ')" "2"
 check "register_for_spec: matches one" \
   "$(register_for_spec "$ROOT" docs/superpowers/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
