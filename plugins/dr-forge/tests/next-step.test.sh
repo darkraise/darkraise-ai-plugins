@@ -654,6 +654,26 @@ printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — m
   > "$GREPO/docs/superpowers/plans/completed.md"
 bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
 
+# An absolute Assigned cell is named from the roots: one naming the plan being
+# completed and one naming a finished plan are both stale.
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned "$GREPO/docs/superpowers/plans/inc2.md" >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$GREPO/docs/superpowers/plans/inc1.md" >/dev/null
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: absolute Assigned cells name finished plans" "$OUT" "Still assigned to a finished plan: #1, #6"
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned docs/superpowers/plans/inc1.md >/dev/null
+
+# From a linked worktree, an Assigned cell naming the primary checkout's copy
+# of a finished plan is stale too. The worktree holds the committed register
+# and completed.md (row 1 on inc2, row 6 on inc1, inc1 recorded).
+GWT="$TMP/routing-wt"
+git -C "$GREPO" worktree add -q -b routing-side "$GWT"
+bash "$HERE/../scripts/register" set "$GWT/docs/superpowers/registers/lane.md" 6 open --assigned "$GREPO/docs/superpowers/plans/inc1.md" >/dev/null
+OUT=$(cd "$GWT" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: a worktree names the primary checkout's absolute plan path" "$OUT" "Still assigned to a finished plan: #1, #6"
+git -C "$GREPO" worktree remove --force "$GWT"
+git -C "$GREPO" branch -q -D routing-side
+
 mkdir -p "$GREPO/.forge/sdd/inc3"
 printf '# SDD ledger — plan: docs/superpowers/plans/inc3.md\n' > "$GREPO/.forge/sdd/inc3/progress.md"
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)

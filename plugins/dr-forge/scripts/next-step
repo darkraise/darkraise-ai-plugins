@@ -87,15 +87,47 @@ execution_launch() {
 # plan_finished ROOT NAME — true when the completed.md beside the plan NAME
 # records it. Matched on the backticked name, as plan-revise does, so one
 # plan's name that is a substring of another's cannot claim its outcome; an
-# entry under either docs prefix counts.
+# entry under either docs prefix counts. An absolute NAME is named from the roots
+# first (plan_name); one no root maps never counts.
 plan_finished() {
-  local f s
-  f="$(dirname "$(forge_resolve "$2" "$1")")/completed.md"
+  local f s name
+  name=$(plan_name "$1" "$2")
+  case $name in /*|[A-Za-z]:/*|[A-Za-z]:\\*) return 1 ;; esac
+  f="$(dirname "$(forge_resolve "$name" "$1")")/completed.md"
   [ -f "$f" ] || return 1
   while IFS= read -r s; do
     grep -qF "\`$s\`" "$f" && return 0
-  done < <(forge_name_spellings "$2")
+  done < <(forge_name_spellings "$name")
   return 1
+}
+
+# plan_name ROOT NAME — NAME; an absolute NAME is named from the roots instead
+# (forge_name), else from the primary checkout's top level, as written and then
+# in its physical form, so a worktree's register or ledger naming the primary's
+# copy still finds its plan. Never a search for a docs segment; an absolute name
+# under no root is printed unchanged, and plan_finished never counts it. Only
+# an absolute NAME goes through forge_name, which would make an existing
+# relative name absolute.
+plan_name() {
+  local name=$2 common primary physical spelling
+  case $name in
+    /*|[A-Za-z]:/*|[A-Za-z]:\\*) ;;
+    *) printf '%s\n' "$name"; return 0 ;;
+  esac
+  name=$(forge_name "$name" "$1")
+  case $name in
+    /*|[A-Za-z]:/*|[A-Za-z]:\\*) ;;
+    *) printf '%s\n' "$name"; return 0 ;;
+  esac
+  if common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+    && primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null); then
+    primary=$(_forge_path "$primary")
+    physical=$(_forge_path "$(cd "$(dirname "$name")" 2>/dev/null && pwd -P)/$(basename "$name")")
+    for spelling in "$name" "$physical"; do
+      case $spelling in "$primary"/*) printf '%s\n' "${spelling#"$primary"/}"; return 0 ;; esac
+    done
+  fi
+  printf '%s\n' "$name"
 }
 
 execution_skill() { # execution_skill EXECUTION_LINE
@@ -279,7 +311,7 @@ else
           waiting="${waiting:+$waiting, }#$rid"; continue
         elif [ -z "$a" ] || [ "$a" = "-" ]; then
           r=4 k=rule
-        elif [ "$(forge_name_key "$a")" = "$(forge_name_key "$rel")" ] || plan_finished "$root" "$a"; then
+        elif [ "$(forge_name_key "$(plan_name "$root" "$a")")" = "$(forge_name_key "$rel")" ] || plan_finished "$root" "$a"; then
           stale="${stale:+$stale, }#$rid"; continue
         elif [ -f "$(forge_resolve "$a")" ]; then
           if [ -n "$(plan_tasks "$(forge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
