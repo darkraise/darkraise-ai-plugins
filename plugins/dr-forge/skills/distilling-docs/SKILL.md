@@ -170,7 +170,7 @@ change; everything else stands.
   `darkmem-sync push`; give the judge each distilled file's `revision` line
   where it expects the SHA, and hold the mirror unedited until the verdicts
   return. Then delete exactly the `CARRIED` sources from the mirror and push
-  again: push moves each deleted document to `superpowers/archive/<stamp>/`
+  again: push moves each deleted document to `forge/archive/<stamp>/`
   on darkmem. Never add entries and delete sources in one push.
 - **Recovery** is `bash <plugin-root>/scripts/darkmem-sync restore <name>`,
   which moves the newest archived copy back and pulls it, in place of

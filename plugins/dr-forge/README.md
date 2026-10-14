@@ -271,36 +271,53 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   `test-driven-development` and `writing-plans` now place each test at the
   lowest layer that can fail for its change, so the suite stops regrowing.
 
-**darkmem mirror (optional).** `scripts/darkmem-sync` keeps a repository's
-  planning documents and progress in a darkmem instance over its keyed REST
-  routes. Map the repository's primary checkout in
-  `~/.dr-forge/config.json` —
+**darkmem mirror (optional, off by default).** `scripts/darkmem-sync` keeps
+  a repository's planning documents and progress in a darkmem instance over
+  its keyed REST routes. It does nothing until you opt in: turn on **Use
+  darkmem** (`darkmemEnabled`) in the cockpit's darkmem settings or with
+  `bash <plugin-root>/scripts/forge-config set darkmemEnabled true`, and map
+  the repository's primary checkout in `~/.dr-forge/config.json` —
   `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
-  — and export a `dmk_` key in that variable, and the repository syncs a mirror
-  at `~/.dr-forge/mirror/<project>/`. Before 2.0 these lived under
-  `~/.dr-superpowers/`, which is still read until the new file exists. The key
-  needs the `read` and `capture` scopes, and `import --replace` also `admin`.
-  Two settings choose each family's store: `documentStore` (specs, plans,
-  registers, notes) and `progressSource` (ledgers and handoffs), `local` or
-  `darkmem`; a mapping entry may override either, for example
+  — and export a `dmk_` key in that variable. The repository then syncs a
+  mirror at `~/.dr-forge/mirror/<project>/`, whose documents live under the
+  darkmem uri prefix `forge/`. The key needs the `read` and `capture` scopes,
+  and `import --replace` also `admin`. Two settings choose each family's
+  store while darkmem is on: `documentStore` (specs, plans, registers, notes)
+  and `progressSource` (ledgers and handoffs), `local` or `darkmem`, both
+  `darkmem` by default; a mapping entry may override either, for example
   `{"project": "plugins", "documentStore": "local"}`. `~/.dr-forge/stores.json`
-  records where each family actually lives, and the scripts and skills read
-  and write there through `scripts/lib/roots.sh` and `scripts/forge-path`.
+  records where each family actually lives, with its project and mirror, and
+  the scripts and skills read and write there through `scripts/lib/roots.sh`
+  and `scripts/forge-path`.
   `pull` fetches what changed; `push` sends documents under their last synced
   hash and each new ledger line as its own entry, with `task`, `state` and
   `commit` properties a progress board can read; `status` lists each family's
   store and local changes;
   `import` files an existing `docs/forge/` and its ledgers once, verified byte
-  for byte. A changed `documentStore` or `progressSource` moves its family at
-  the next session start: `reconcile` copies the files across, verifies every
-  hash, records the new store in `stores.json`, and leaves documents leaving
-  the repository as a staged `git rm` for you to commit. It refuses, naming
-  the reason, while a plan is in progress, while darkmem is unreachable or the
-  key is unset, or when a file cannot be carried (a dotfile, a symbolic link,
-  an empty or non-UTF-8 file, a name some platform cannot hold, a case twin,
-  an ignored file); it never overwrites a different darkmem copy, and moved
-  progress files are kept under a dated `moved-<stamp>` backup. Session start
-  runs `reconcile` and `pull`; the skills' stop points run `push`, and a
+  for byte. A store that changes moves its family at the next session start:
+  `reconcile` copies the files across, verifies every hash, records the new
+  store in `stores.json`, and leaves documents leaving the repository as a
+  staged `git rm` for you to commit. A move into darkmem refuses, naming the
+  reason, while a plan is in progress, while darkmem is unreachable or the key
+  is unset, or when a file cannot be carried (a dotfile, a symbolic link, an
+  empty or non-UTF-8 file, a name some platform cannot hold, a case twin, an
+  ignored file); it never overwrites a different darkmem copy, and moved
+  progress files are kept under a dated `moved-<stamp>` backup.
+  **Falling back to the file system.** While darkmem is on, the mirror is plain
+  local files: without the key or the server, work goes on from it and `pull`
+  and `push` say why they skipped. Turn darkmem off (`darkmemEnabled` false) or
+  remove the mapping, and the next session start moves every family back
+  into the repository from the mirror alone, without asking darkmem, naming
+  each file darkmem does not hold as the mirror does and keeping the mirror
+  as a dated `forge-moved-<stamp>` / `work-moved-<stamp>` backup; until then
+  the scripts keep reading the mirror, and `push` and `pull` do nothing. A
+  store set back to `local` while darkmem is on and reachable is pulled from
+  darkmem first. A repository a 2.x release moved into darkmem stays there,
+  unsynced, while `darkmemEnabled` is unset: each session start says so until
+  you set it either way. Without the darkmem MCP tools, or with darkmem off,
+  the durable facts the skills would file with `memory_add` go to
+  `<docs>/notes/<date>-facts.md` instead. Session start runs `reconcile` and
+  `pull`; the skills' stop points run `push`, and a
   background Stop hook pushes as a safety net, the whole run bounded at 100
   seconds (SIGTERM, then SIGKILL after 5 seconds). `push` waits up to 100
   seconds for another run's mirror lock before refusing;
@@ -310,13 +327,12 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   sends what it missed. A
   move stopped part-way through filing a ledger resumes it at the next session
   start. A document deleted from the mirror is archived on darkmem under
-  `superpowers/archive/<stamp>/` and `restore <name>` brings it back;
+  `forge/archive/<stamp>/` and `restore <name>` brings it back;
   `revision <name>` prints the `<name>@r<id>` a distilled `Source:` line
   cites. `docs/superpowers/<rest>` and `docs/forge/<rest>` name the same
-  document everywhere names are compared. A conflict is reported, never
-  merged. Without the key the mirror still works offline and `pull` and
-  `push` say why they skipped. Without a mapping every command but `import`
-  prints one line and does nothing.
+  document everywhere names are compared, so historical plans keep resolving.
+  A conflict is reported, never merged. Without a mapping every command but
+  `import` prints one line and does nothing.
 
 ## Requirements
 
@@ -749,8 +765,9 @@ The same settings can be set with
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
-| darkmem | `documentStore` | `darkmem` | Where a repository mapped to darkmem keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it and `DR_FORGE_DOCUMENT_STORE`; an unmapped repository is always local. |
-| darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it and `DR_FORGE_PROGRESS_SOURCE`. |
+| darkmem | `darkmemEnabled` | `false` | Use darkmem for mapped repositories. Off keeps everything in the repository, and a family already in the mirror moves back at the next session start, from the mirror alone. |
+| darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is always local. |
+| darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
 The cockpit settings (Cockpit, Context, Notifications) apply at once, except
 the two Claude keys, which Claude reads at its next session start. A

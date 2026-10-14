@@ -78,13 +78,16 @@ that has `.superpowers/` or `docs/superpowers/` and not the new directory:
 there the old one stays in use, for writing as well as reading, so a pre-2.0
 checkout never splits across both.
 
-A repository mapped to darkmem may keep each family in the darkmem mirror
-instead (`documentStore`, `progressSource`; `bash <plugin-root>/scripts/forge-path store`
-prints which):
+darkmem is off unless the `darkmemEnabled` setting is on. A repository mapped
+to darkmem while it is on may keep each family in the darkmem mirror instead
+(`documentStore`, `progressSource`; `bash <plugin-root>/scripts/forge-path store`
+prints which). Turned off or unmapped, both families belong in the checkout:
+a family still in the mirror is read there until the next session start's
+reconcile copies it back from the mirror, without asking darkmem.
 
 | Token | Local | darkmem |
 |---|---|---|
-| `<docs>` | `<worktree>/docs/forge` | `~/.dr-forge/mirror/<project>/superpowers` |
+| `<docs>` | `<worktree>/docs/forge` | `~/.dr-forge/mirror/<project>/forge` |
 | `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` | `~/.dr-forge/mirror/<project>/work/sdd/<plan-basename>` |
 | `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` | `~/.dr-forge/mirror/<project>/work/handoff/latest.md` |
 
@@ -118,14 +121,18 @@ unchanged.
 Run `bash <plugin-root>/scripts/darkmem-sync push` at each stop point: after
 every `Task <N>: complete` and fix-round ledger line, after a spec or plan is
 saved, and at handoff once `scripts/next-step` has written `<latest.md>`. In a
-repository that is not mapped to darkmem it prints one line and exits 0, so no
-check comes first. On Claude Code the SessionStart hook runs `darkmem-sync reconcile`, then `pull`,
+repository that is not mapped to darkmem, or while darkmem is off, it prints
+one line and exits 0, so no check comes first. On Claude Code the SessionStart hook runs `darkmem-sync reconcile`, then `pull`,
 and the Stop hook pushes as a safety net. Codex has no hooks, so there these
 steps and the session-start step in
 `skills/using-superpowers/references/codex-tools.md` are the only triggers.
 
 **Promotion to memory.** At each `Task <N>: complete` line and at handoff,
-when `forge-path project` prints a project and the darkmem MCP tools are
-available, record the durable facts the work established (decisions and
-their reasons, root causes and fixes, constraints) with `memory_add`, one fact per call, tagged `project/<project>`.
-Ledger lines, progress and commit hashes stay in the work log.
+record the durable facts the work established (decisions and their reasons,
+root causes and fixes, constraints), one fact per entry. When
+`forge-path project` prints a project (darkmem is on and the repository
+mapped) and the darkmem MCP tools are available, file each with `memory_add`,
+tagged `project/<project>`. Otherwise append each as one bullet to
+`<docs>/notes/<YYYY-MM-DD>-facts.md`, which dr-forge:distilling-docs later
+absorbs. Ledger lines, progress and commit hashes stay in the work log either
+way.
