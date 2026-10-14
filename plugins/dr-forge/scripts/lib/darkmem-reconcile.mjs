@@ -88,15 +88,18 @@ export function leftoverLines(cfg) {
     .map(dir => `darkmem-sync reconcile: ${dir} is not read while documents are applied darkmem`);
 }
 
+function worktreeTops(cfg) {
+  const listing = runGit(cfg.repoRoot, ["worktree", "list", "--porcelain"]);
+  return listing.status === 0
+    ? listing.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree ")).map(line => line.slice("worktree ".length))
+    : [cfg.repoRoot];
+}
+
 // Where the ledgers live: every worktree's state directory while progress is
 // local, the mirror's work tree while it is darkmem.
 function ledgerSources(cfg) {
   if (cfg.progress.applied === "darkmem") return [{ sdd: path.join(cfg.mirror, "work", "sdd"), checkout: cfg.repoRoot }];
-  const listing = runGit(cfg.repoRoot, ["worktree", "list", "--porcelain"]);
-  const trees = listing.status === 0
-    ? listing.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree ")).map(line => line.slice("worktree ".length))
-    : [cfg.repoRoot];
-  return trees.map(tree => ({ sdd: path.join(forgeDir("state", tree), "sdd"), checkout: tree }));
+  return worktreeTops(cfg).map(tree => ({ sdd: path.join(forgeDir("state", tree), "sdd"), checkout: tree }));
 }
 
 function planFile(cfg, checkout, name) {
@@ -120,8 +123,10 @@ const realOr = file => {
 // The name an absolute ledger identity stands for, computed from the roots and
 // never by searching for a docs segment (as pathToUri does): under the docs
 // root in use, then this checkout's docs directory and top level, then the
-// primary checkout's, tried as written and then with symbolic links resolved.
-// A relative name, or an absolute one under no root, is unchanged.
+// primary checkout's and every other worktree's (a ledger the mirror holds is
+// checked from the primary, whichever worktree wrote it), tried as written and
+// then with symbolic links resolved. A relative name, or an absolute one under
+// no root, is unchanged.
 function rootedName(cfg, checkout, name) {
   if (!path.isAbsolute(name)) return name;
   const bases = [
@@ -129,6 +134,7 @@ function rootedName(cfg, checkout, name) {
     [checkout, null],
     [forgeDir("docs", cfg.repoRoot), DOCS],
     [cfg.repoRoot, null],
+    ...worktreeTops(cfg).flatMap(tree => [[forgeDir("docs", tree), DOCS], [tree, null]]),
   ];
   if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, "superpowers"), DOCS]);
   for (const resolve of [file => path.resolve(file), realOr]) {
