@@ -35,29 +35,32 @@ export function migrateMirror(mirror, state) {
   return changed;
 }
 
-// A pre-3.0 mirror: its old folder, or an old uri in its state file.
+// A pre-3.0 mirror: its old folder, or an old uri its state records.
 export function legacyMirror(mirror) {
   if (fs.existsSync(path.join(mirror, LEGACY_PREFIX))) return true;
+  let raw;
   try {
-    return fs.readFileSync(path.join(mirror, ".sync-state.json"), "utf8").includes(`"${OLD}`);
+    raw = JSON.parse(fs.readFileSync(path.join(mirror, ".sync-state.json"), "utf8"));
   } catch {
     return false;
   }
+  const uris = [...Object.keys(raw?.documents ?? {}), ...(Array.isArray(raw?.pendingLinks) ? raw.pendingLinks : [])];
+  return uris.some(uri => String(uri).startsWith(OLD));
 }
 
 // The local half under the mirror's lock, for a caller that holds none.
-// Answers a line saying what happened, or null when nothing needed doing; a
-// held lock leaves the mirror for the next run.
+// Answers { line, blocked } saying what happened, or null when nothing needed
+// doing; blocked: a held lock left the mirror in the pre-3.0 layout.
 export function migrateMirrorLocked(mirror) {
   if (!legacyMirror(mirror)) return null;
   const release = acquireLock(mirror);
-  if (!release) return `${mirror} is still in the pre-3.0 layout; another darkmem-sync holds its lock`;
+  if (!release) return { line: `${mirror} is still in the pre-3.0 layout and another darkmem-sync holds its lock; try again once it is done`, blocked: true };
   try {
     const statePath = path.join(mirror, ".sync-state.json");
     const state = loadState(statePath);
     if (!migrateMirror(mirror, state)) return null;
     saveState(statePath, state);
-    return `renamed ${mirror}'s ${LEGACY_PREFIX}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`;
+    return { line: `renamed ${mirror}'s ${LEGACY_PREFIX}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`, blocked: false };
   } finally {
     release();
   }
@@ -144,9 +147,9 @@ export function migrateHome(env = process.env) {
   for (const entry of fs.existsSync(newMirrors) ? fs.readdirSync(newMirrors, { withFileTypes: true }) : []) {
     if (!entry.isDirectory()) continue;
     try {
-      const line = migrateMirrorLocked(path.join(newMirrors, entry.name));
-      if (line?.includes("holds its lock")) refused += 1;
-      if (line) lines.push(line);
+      const result = migrateMirrorLocked(path.join(newMirrors, entry.name));
+      if (result?.blocked) refused += 1;
+      if (result) lines.push(result.blocked ? `refused: ${result.line}` : result.line);
     } catch (error) {
       if (!(error instanceof StateError)) throw error;
       lines.push(`refused: ${error.message}`);

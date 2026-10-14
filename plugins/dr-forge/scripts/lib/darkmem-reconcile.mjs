@@ -362,12 +362,17 @@ async function documentsToLocal(context, { offline = null } = {}) {
     const dest = path.join(target, path.relative(mirror.docsRoot, file));
     return { file, uri, dest, name: slash(path.relative(cfg.repoRoot, dest)), hash: fileHash(file) };
   });
+  // Offline, what darkmem lacks is named by what a later move into darkmem
+  // does with it: an edit is refused, a new file is sent, and a deletion is
+  // undone by the pull that move runs.
   const notes = [];
   if (offline) {
-    for (const uri of unpushed) notes.push(`${uri}: deleted in the mirror but not on darkmem`);
     for (const item of files) {
-      if (state.documents[item.uri] !== item.hash) notes.push(`${item.name}: not on darkmem as the mirror holds it`);
+      const synced = state.documents[item.uri];
+      if (synced === undefined) notes.push(`${item.name}: new since the last sync; a later move to darkmem sends it`);
+      else if (synced !== item.hash) notes.push(`${item.name}: edited since the last sync; a later move to darkmem refuses it until darkmem's copy matches`);
     }
+    for (const uri of unpushed) notes.push(`${uri}: deleted since the last sync; darkmem still holds it, and a later move to darkmem brings it back`);
   } else {
     const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX))
       .filter(item => uriFamily(item.uri) === "documents" && !isArchiveUri(item.uri))
@@ -431,7 +436,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
   if (fs.existsSync(mirror.docsRoot)) fs.renameSync(mirror.docsRoot, aside);
   const details = [`copied ${files.length} files into docs/forge, untracked; commit them`];
   if (notes.length) {
-    details.push(`darkmem was not consulted; the mirror is kept at ${aside}. These differ from darkmem's last known copy, and a later move to darkmem refuses them until they match:`);
+    details.push(`darkmem was not consulted; the mirror is kept at ${aside}. These differ from darkmem's last known copy:`);
     details.push(...notes.map(line => `  ${line}`));
   }
   for (const name of ignored.stdout.split("\n").filter(Boolean)) details.push(`${name}: ignored by git, so a commit would leave it out`);

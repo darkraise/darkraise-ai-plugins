@@ -63,8 +63,31 @@ test("reconcile still moves a family back from the mirror while darkmem's uris c
   await s.seed.putDocument({ project: "proj", uri: "forge/a.md", content: "new\n" });
   write(path.join(s.docsRoot, "b.md"), "b\n");
   const result = await s.sync("reconcile");
+  assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local from the mirror, without darkmem \(darkmem still holds pre-3\.0 superpowers\/ documents/m);
   assert.equal(read(path.join(s.repo, "docs", "forge", "b.md")), "b\n");
+});
+
+test("a held lock on a pre-3.0 mirror refuses the command and changes nothing", async t => {
+  const s = await setup(t);
+  write(path.join(s.mirror, "superpowers", "a.md"), "a\n");
+  fs.mkdirSync(path.join(s.mirror, ".sync.lock"), { recursive: true });
+  const result = await s.sync("pull");
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /^darkmem-sync: pull refused: .* is still in the pre-3\.0 layout and another darkmem-sync holds its lock/);
+  assert.equal(fs.existsSync(s.docsRoot), false);
+  assert.equal(s.stub.db.requests.length, 0);
+});
+
+test("a conflict line that names an old uri does not make a mirror pre-3.0", async t => {
+  const s = await setup(t);
+  write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: ["superpowers/a.md: old"], pendingLinks: [], prefix: "forge",
+  }));
+  const result = await s.sync("status");
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^conflict: superpowers\/a\.md: old$/m);
+  assert.doesNotMatch(result.stdout, /renamed|pre-3\.0/);
 });
 
 test("migrateHome copies the darkmem mapping, moves each mirror and renames its folder", () => {

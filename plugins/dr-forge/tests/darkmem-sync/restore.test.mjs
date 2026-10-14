@@ -145,7 +145,7 @@ test("restore refuses an occupied uri or a name with no archived copy, and needs
   fs.writeFileSync(path.join(s.home, ".dr-forge", "stores.json"), JSON.stringify({ [s.repo]: { documents: "local", progress: "darkmem" } }));
   const local = await s.sync("restore", "docs/forge/a.md");
   assert.equal(local.code, 2);
-  assert.equal(local.stderr, "darkmem-sync: restore needs documents applied darkmem\n");
+  assert.equal(local.stderr, "darkmem-sync: restore needs documents synced with darkmem (documents are applied local)\n");
 });
 
 test("restore takes only a document name and refuses in an unmapped repository", async t => {
@@ -161,5 +161,5 @@ test("restore takes only a document name and refuses in an unmapped repository",
   const { env } = makeHome({ repo, config: null, stores: null });
   const unmapped = await run(["restore", "docs/forge/a.md"], { cwd: repo, env });
   assert.equal(unmapped.code, 2);
-  assert.equal(unmapped.stderr, "darkmem-sync: restore needs documents applied darkmem\n");
+  assert.equal(unmapped.stderr, "darkmem-sync: restore needs documents synced with darkmem (local mode — darkmem is disabled (darkmemEnabled is false))\n");
 });

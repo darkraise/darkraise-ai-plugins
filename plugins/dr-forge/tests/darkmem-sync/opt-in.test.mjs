@@ -14,6 +14,7 @@ function inMirror({ enabled = "off", config } = {}) {
   const home = makeHome({ repo, enabled, config });
   write(path.join(home.docsRoot, "specs", "synced.md"), "synced\n");
   write(path.join(home.docsRoot, "specs", "edited.md"), "edited locally\n");
+  write(path.join(home.docsRoot, "specs", "new.md"), "new\n");
   write(path.join(home.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\n");
   write(path.join(home.workRoot, "handoff", "latest.md"), "# Handoff\n");
   write(path.join(home.mirror, ".sync-state.json"), STATE({
@@ -30,9 +31,10 @@ test("darkmem turned off moves both families back from the mirror without asking
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local from the mirror, without darkmem \(darkmem is turned off\)$/m);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local from the mirror, without darkmem/m);
-  assert.match(result.stdout, /^ {4}docs\/forge\/specs\/edited\.md: not on darkmem as the mirror holds it$/m);
-  assert.match(result.stdout, /^ {4}forge\/specs\/deleted\.md: deleted in the mirror but not on darkmem$/m);
-  assert.doesNotMatch(result.stdout, /synced\.md: not on darkmem/);
+  assert.match(result.stdout, /^ {4}docs\/forge\/specs\/edited\.md: edited since the last sync; a later move to darkmem refuses it until darkmem's copy matches$/m);
+  assert.match(result.stdout, /^ {4}docs\/forge\/specs\/new\.md: new since the last sync; a later move to darkmem sends it$/m);
+  assert.match(result.stdout, /^ {4}forge\/specs\/deleted\.md: deleted since the last sync; darkmem still holds it, and a later move to darkmem brings it back$/m);
+  assert.doesNotMatch(result.stdout, /synced\.md: /);
   assert.equal(read(path.join(s.repo, "docs", "forge", "specs", "edited.md")), "edited locally\n");
   assert.equal(read(path.join(s.repo, ".forge", "sdd", "p1", "progress.md")), "# SDD ledger — plan: docs/forge/plans/p1.md\n");
   assert.equal(read(path.join(s.repo, ".forge", "handoff", "latest.md")), "# Handoff\n");
@@ -69,16 +71,42 @@ test("while darkmem is off, push and pull skip, status names the mirror, and rev
   }
   const status = await s.sync("status");
   assert.equal(status.code, 0, status.stderr);
-  assert.match(status.stdout, /^darkmem-sync: project proj not synced \(darkmem disabled or unmapped\); mirror /);
+  assert.match(status.stdout, /^darkmem-sync: project proj not synced \(darkmem is disabled \(darkmemEnabled is false\)\); mirror /);
   const revision = await s.sync("revision", "docs/forge/specs/synced.md");
   assert.equal(revision.code, 1);
   assert.match(revision.stdout, /^refused: docs\/forge\/specs\/synced\.md is not synced and unchanged: darkmem is disabled/);
 });
 
-test("turned on with darkmem unreachable, a family stays in the mirror and keeps working offline", async () => {
+test("turned on with darkmem unreachable, nothing pending stays in the mirror; a store set local moves back offline", async () => {
   const s = inMirror({ enabled: true });
   const result = await s.sync("reconcile");
   assert.deepEqual([result.code, result.stdout], [0, ""]);
+  assert.equal(read(path.join(s.docsRoot, "specs", "synced.md")), "synced\n");
   const status = await s.sync("status");
   assert.match(status.stdout, /^darkmem-sync: project proj at http:\/\/127\.0\.0\.1:9; mirror /);
+  write(path.join(s.home, ".dr-forge", "config.json"), JSON.stringify({
+    darkmemEnabled: true, darkmem: { url: "http://127.0.0.1:9", api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj", documentStore: "local" } } },
+  }));
+  const moved = await s.sync("reconcile");
+  assert.equal(moved.code, 0, moved.stdout + moved.stderr);
+  assert.match(moved.stdout, /^darkmem-sync reconcile: documents moved to local from the mirror, without darkmem \(darkmem is unreachable: /m);
+  assert.equal(read(path.join(s.repo, "docs", "forge", "specs", "synced.md")), "synced\n");
+});
+
+test("undecided, push and pull skip without promising a move", async () => {
+  const s = inMirror({ enabled: false });
+  const result = await s.sync("push");
+  assert.deepEqual([result.code, result.stdout], [0, "darkmem-sync: push skipped: darkmem is off by default since dr-forge 3.0 and darkmemEnabled is unset; the mirror is not synced until darkmemEnabled is set\n"]);
+});
+
+test("a 2.x record gains its project and mirror at the next command, so unmapping later still finds the mirror", async () => {
+  const s = inMirror({ enabled: true });
+  write(path.join(s.home, ".dr-forge", "stores.json"), JSON.stringify({ [s.repo]: { documents: "darkmem", progress: "darkmem" } }));
+  assert.equal((await s.sync("status")).code, 0);
+  const record = JSON.parse(read(path.join(s.home, ".dr-forge", "stores.json")))[s.repo];
+  assert.deepEqual([record.project, record.mirror], ["proj", s.mirror]);
+  write(path.join(s.home, ".dr-forge", "config.json"), JSON.stringify({ darkmemEnabled: true }));
+  const moved = await s.sync("reconcile");
+  assert.equal(moved.code, 0, moved.stdout + moved.stderr);
+  assert.equal(read(path.join(s.repo, "docs", "forge", "specs", "synced.md")), "synced\n");
 });

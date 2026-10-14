@@ -97,7 +97,7 @@ darkmem_session_lines() {
     || return 0
   { _darkmem_run "$1" "$2" 200 reconcile 2>&1; _darkmem_run "$1" "$2" 60 pull 2>&1; } \
     | tr -d '\r' \
-    | grep -v -e '^note:' -e 'nothing to pull' -e 'reconcile moves it back$' \
+    | grep -v -e '^note:' -e 'nothing to pull' -e 'reconcile moves it back$' -e 'until darkmemEnabled is set$' \
         -e '^darkmem-sync pull: 0 documents, 0 ledgers, 0 checkpoints; 0 conflicts, 0 failures$' \
     | _darkmem_fit 20 "${3:-1000000}"
   return 0

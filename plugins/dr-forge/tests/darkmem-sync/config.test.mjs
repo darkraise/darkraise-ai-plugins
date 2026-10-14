@@ -151,6 +151,7 @@ test("a pre-2.0 checkout's directories and home are not read", () => {
   fs.mkdirSync(path.join(repo, ".superpowers"), { recursive: true });
   const home = scratch("dms-home-");
   write(path.join(home, ".dr-superpowers", "config.json"), JSON.stringify(mapped(repo)));
+  write(path.join(home, ".dr-forge", "config.json"), JSON.stringify({ darkmemEnabled: true }));
   const stores = resolveStores({ cwd: repo, env: { ...process.env, HOME: home } });
   assert.equal(stores.sync, null);
   assert.equal(stores.documents.root, path.join(repo, "docs", "forge"));

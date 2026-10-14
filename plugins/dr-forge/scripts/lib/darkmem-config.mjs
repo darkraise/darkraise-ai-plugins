@@ -79,6 +79,12 @@ function readRecord(env) {
   return data;
 }
 
+// The record's project and mirror, written only when they differ.
+export function recordWhere(env, repoRoot, where) {
+  const held = Object.entries(readRecord(env)).find(([key]) => samePath(key, repoRoot))?.[1] ?? {};
+  if (held.project !== where.project || held.mirror !== where.mirror) writeApplied(env, repoRoot, {}, where);
+}
+
 // `where` ({ project, mirror }) is kept beside the applied stores, so a family
 // applied darkmem can still be found once darkmem is disabled or unmapped.
 export function writeApplied(env, repoRoot, applied, where = {}) {
@@ -149,7 +155,7 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
     const project = recorded.project ?? mapped.entry?.project;
     const mirror = recorded.mirror ?? (mapped.entry && path.join(forgeHome(env), "mirror", mapped.entry.project));
     if (typeof project !== "string" || !PROJECT.test(project) || typeof mirror !== "string" || !path.isAbsolute(mirror)) {
-      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; enable darkmem and map the repository again so reconcile can move it back`);
+      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dr-forge/config.json again (or run scripts/forge-migrate if it was mapped in ~/.dr-superpowers) so reconcile can move it back`);
     }
     return result(reason, undecided ? applied : LOCAL, applied, syncOf(env, mapped, project, mirror, false));
   }

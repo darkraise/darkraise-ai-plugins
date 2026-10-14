@@ -4,7 +4,7 @@
 // usage and exit codes.
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, resolveStores, runKey } from "./darkmem-config.mjs";
+import { ConfigError, recordWhere, resolveStores, runKey } from "./darkmem-config.mjs";
 import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
 import {
   ARCHIVE_PREFIX, DOC_PREFIX, StateError, UsageError, acquireLock, isArchiveUri, loadState, localChanges, lockOwner, pathToUri,
@@ -23,7 +23,7 @@ const familyLine = (name, family) => `${name}: configured ${family.configured}, 
 async function status({ cfg, roots, state, report, out }) {
   out(cfg.enabled
     ? `darkmem-sync: project ${cfg.project} at ${cfg.url}; mirror ${cfg.mirror}`
-    : `darkmem-sync: project ${cfg.project} not synced (darkmem disabled or unmapped); mirror ${cfg.mirror}`);
+    : `darkmem-sync: project ${cfg.project} not synced (${cfg.reason}); mirror ${cfg.mirror}`);
   out(familyLine("documents", cfg.documents));
   out(familyLine("progress", cfg.progress));
   for (const line of localChanges(roots, state)) out(line);
@@ -122,8 +122,8 @@ const COMMANDS = {
   reconcile: { options: {}, positional: 0, needsKey: false, syncsFamilies: false, recordsConflicts: false, summary: false, run: reconcile },
   restore: {
     options: {}, positional: 1, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: true, run: restore,
-    refuseLocal: ({ err }) => {
-      err("darkmem-sync: restore needs documents applied darkmem");
+    refuseLocal: ({ reason, err }) => {
+      err(`darkmem-sync: restore needs documents synced with darkmem (${reason})`);
       return 2;
     },
   },
@@ -205,20 +205,33 @@ async function main(argv, {
     out(`darkmem-sync: local mode — ${stores.reason}`);
     return parsed.name === "import" ? 2 : 0;
   }
-  const cfg = { ...stores.sync, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress };
+  const cfg = {
+    ...stores.sync, reason: stores.reason, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress,
+  };
+  // A command must not run on a pre-3.0 mirror: a pull would fill forge/
+  // beside superpowers/ and every later run would refuse.
   try {
     const migrated = migrateMirrorLocked(cfg.mirror);
-    if (migrated) out(`darkmem-sync: ${migrated}`);
+    if (migrated?.blocked) {
+      err(`darkmem-sync: ${parsed.name} refused: ${migrated.line}`);
+      return 1;
+    }
+    if (migrated) out(`darkmem-sync: ${migrated.line}`);
   } catch (error) {
     if (!(error instanceof StateError)) throw error;
     err(`darkmem-sync: ${error.message}`);
     return 2;
   }
   const families = { documents: cfg.documents.applied === "darkmem", progress: cfg.progress.applied === "darkmem" };
+  // A 2.x record names no project or mirror; without them a family in the
+  // mirror could not be found once the mapping is gone.
+  if (families.documents || families.progress) recordWhere(env, cfg.repoRoot, { project: cfg.project, mirror: cfg.mirror });
   // Disabled or unmapped with a family still in the mirror: only reconcile,
   // which moves it back, and status act.
   if (!cfg.enabled && parsed.name !== "reconcile" && parsed.name !== "status") {
-    const reason = `${stores.reason}; the mirror is not synced, and reconcile moves it back`;
+    const reason = pendingFamilies(cfg).length
+      ? `${stores.reason}; the mirror is not synced, and reconcile moves it back`
+      : `${stores.reason}; the mirror is not synced until darkmemEnabled is set`;
     if (parsed.command.refuseLocal) return parsed.command.refuseLocal({ args: parsed.args, reason, out, err });
     out(`darkmem-sync: ${parsed.name} skipped: ${reason}`);
     return parsed.name === "import" ? 2 : 0;
