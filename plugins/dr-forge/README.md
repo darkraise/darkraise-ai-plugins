@@ -860,6 +860,15 @@ No other file is edited: plans, specs and ledgers that cite
 older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
 Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 
+`forge-migrate` also moves the home: the darkmem mapping in
+`~/.dr-superpowers/config.json` into `~/.dr-forge/config.json` when that file
+has none, and each `~/.dr-superpowers/mirror/<project>/` that
+`~/.dr-forge/mirror/` lacks. darkmem itself is off in 3.0 until you set
+`darkmemEnabled`. A mirror's `superpowers/` folder becomes `forge/` at the next
+`darkmem-sync` run, and the first online run moves darkmem's `superpowers/`
+documents to `forge/`; upgrade every machine that shares a darkmem project,
+since a 2.x client no longer sees the moved documents.
+
 ## What a plan looks like
 
 A plan opens with a header block: Goal, Spec, the `**Execution:**` line that
