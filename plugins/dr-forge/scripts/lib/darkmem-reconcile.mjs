@@ -42,7 +42,8 @@ function dirEntries(dir) {
 }
 
 // One document name under either docs prefix (spec §7.1), as forge_name_key
-// and forge_name_spellings spell it in roots.sh.
+// and forge_name_spellings spell it in roots.sh. The pre-2.0 docs/superpowers
+// spelling stays readable because historical plans and ledgers cite it.
 export function nameSpellings(name) {
   const text = String(name).replace(/^\.\//, "");
   const key = text === LEGACY || text.startsWith(`${LEGACY}/`) ? `${DOCS}${text.slice(LEGACY.length)}` : text;
@@ -60,7 +61,7 @@ export function stayLine(cfg, family, reason) {
 // The mirror subtree one move reads or fills, with only that family synced.
 export function mirrorRoots(cfg, family) {
   return {
-    docsRoot: path.join(cfg.mirror, "superpowers"),
+    docsRoot: path.join(cfg.mirror, DOC_PREFIX),
     workRoot: path.join(cfg.mirror, "work"),
     worktreeRoot: cfg.repoRoot,
     families: { documents: family === "documents", progress: family === "progress" },
@@ -68,10 +69,13 @@ export function mirrorRoots(cfg, family) {
 }
 
 // Re-reads the stores after a move, so the next move sees the roots the
-// last one produced; cfg and roots are rebuilt as main builds them.
+// last one produced; cfg and roots are rebuilt as main builds them. Once a
+// disabled or unmapped repository has moved every family back, the stores
+// name no mirror, so the run keeps the one it started with.
 export function refreshContext(context) {
   const stores = resolveStores({ cwd: context.cfg.worktreeRoot, env: context.env });
-  const cfg = { ...stores.sync, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress };
+  const sync = stores.sync ?? { ...context.cfg, documents: undefined, progress: undefined };
+  const cfg = { ...sync, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress };
   context.cfg = cfg;
   context.roots = {
     docsRoot: cfg.documents.root,
@@ -83,7 +87,7 @@ export function refreshContext(context) {
 
 export function leftoverLines(cfg) {
   if (cfg.documents.applied !== "darkmem" || !cfg.worktreeRoot) return [];
-  return [path.join(cfg.worktreeRoot, "docs", "forge"), path.join(cfg.worktreeRoot, "docs", "superpowers")]
+  return [path.join(cfg.worktreeRoot, "docs", "forge")]
     .filter(dir => fs.existsSync(dir))
     .map(dir => `darkmem-sync reconcile: ${dir} is not read while documents are applied darkmem`);
 }
@@ -106,7 +110,7 @@ function planFile(cfg, checkout, name) {
   if (path.isAbsolute(name)) return name;
   const [key] = nameSpellings(name);
   if (key === DOCS || key.startsWith(`${DOCS}/`)) {
-    const docsRoot = cfg.documents.applied === "darkmem" ? path.join(cfg.mirror, "superpowers") : forgeDir("docs", checkout);
+    const docsRoot = cfg.documents.applied === "darkmem" ? path.join(cfg.mirror, DOC_PREFIX) : forgeDir("docs", checkout);
     return path.join(docsRoot, ...key.slice(DOCS.length).split("/").filter(Boolean));
   }
   return path.join(checkout, key);
@@ -138,7 +142,7 @@ function rootedName(cfg, checkout, name) {
     [cfg.repoRoot, null],
     ...worktreeTops(cfg).flatMap(tree => [[forgeDir("docs", tree), DOCS], [tree, null]]),
   ];
-  if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, "superpowers"), DOCS]);
+  if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, DOC_PREFIX), DOCS]);
   for (const resolve of [file => path.resolve(file), realOr]) {
     let best = null;
     for (const [base, prefix] of bases) {
@@ -332,48 +336,59 @@ async function documentsToDarkmem(context) {
 // Documents, darkmem -> repository (spec §4): the mirror, brought up to
 // darkmem and matching darkmem's hashes, is copied into docs/forge untracked;
 // darkmem keeps its copy, and the mirror tree is set aside so a later move
-// back cannot meet stale files. A legacy docs/superpowers is left alone:
-// docs/forge outranks it once it exists.
-async function documentsToLocal(context) {
+// back cannot meet stale files. Offline (darkmem disabled, unmapped or not
+// answering) the mirror is copied as it stands, and every file darkmem does
+// not hold as the mirror does is named.
+async function documentsToLocal(context, { offline = null } = {}) {
   const { cfg, client, state, persist } = context;
   const mirror = mirrorRoots(cfg, "documents");
-  const pulled = pullReport();
-  await pullDocuments({ ...context, roots: mirror, report: pulled });
-  if (pulled.conflicts.length || pulled.failures.length) {
-    return { moved: false, reason: "the mirror could not be brought up to darkmem", details: [...pulled.conflicts, ...pulled.failures] };
+  if (!offline) {
+    const pulled = pullReport();
+    await pullDocuments({ ...context, roots: mirror, report: pulled });
+    if (pulled.conflicts.length || pulled.failures.length) {
+      return { moved: false, reason: "the mirror could not be brought up to darkmem", details: [...pulled.conflicts, ...pulled.failures] };
+    }
+    const busy = inProgressReason(context);
+    if (busy) return { moved: false, ...busy };
   }
-  const busy = inProgressReason(context);
-  if (busy) return { moved: false, ...busy };
   // A deletion push has not archived yet: copied out now it would never be
   // archived, and a later move back would pull darkmem's copy in again.
   const unpushed = Object.keys(state.documents).sort().filter(uri => uriFamily(uri) === "documents" && !isArchiveUri(uri)
     && !fs.existsSync(path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"))));
-  if (unpushed.length) return { moved: false, reason: "the mirror holds deletions not yet pushed; push first", details: unpushed };
-  const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX))
-    .filter(item => uriFamily(item.uri) === "documents" && !isArchiveUri(item.uri))
-    .map(item => [item.uri, item.content_hash]));
+  if (unpushed.length && !offline) return { moved: false, reason: "the mirror holds deletions not yet pushed; push first", details: unpushed };
   const target = path.join(cfg.repoRoot, "docs", "forge");
   // A file under the docs root's handoff/ or archive/ has uri null: never synced, not carried.
   const files = listDocumentFiles(mirror).filter(item => item.uri).map(({ file, uri }) => {
     const dest = path.join(target, path.relative(mirror.docsRoot, file));
     return { file, uri, dest, name: slash(path.relative(cfg.repoRoot, dest)), hash: fileHash(file) };
   });
-  // Only what darkmem holds is carried, so an unpushed or damaged mirror
-  // copy never lands in the repository as if it were darkmem's.
-  const unverified = files.filter(item => remote.get(item.uri) !== item.hash).map(item => (remote.has(item.uri)
-    ? `${item.uri}: the mirror's copy differs from darkmem's; push or discard it first`
-    : `${item.uri}: not on darkmem; push or discard it first`));
-  // listDocumentFiles lists regular files only, so a link or directory where
-  // darkmem holds a document would otherwise be left behind unnoticed.
-  const covered = new Set(files.map(item => item.uri));
-  for (const uri of remote.keys()) {
-    if (covered.has(uri)) continue;
-    const held = path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"));
-    if (fs.lstatSync(held, { throwIfNoEntry: false })) {
-      unverified.push(`${uri}: the mirror holds a symbolic link or other non-file here, which the move cannot copy; make it a regular file`);
+  const notes = [];
+  if (offline) {
+    for (const uri of unpushed) notes.push(`${uri}: deleted in the mirror but not on darkmem`);
+    for (const item of files) {
+      if (state.documents[item.uri] !== item.hash) notes.push(`${item.name}: not on darkmem as the mirror holds it`);
     }
+  } else {
+    const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX))
+      .filter(item => uriFamily(item.uri) === "documents" && !isArchiveUri(item.uri))
+      .map(item => [item.uri, item.content_hash]));
+    // Only what darkmem holds is carried, so an unpushed or damaged mirror
+    // copy never lands in the repository as if it were darkmem's.
+    const unverified = files.filter(item => remote.get(item.uri) !== item.hash).map(item => (remote.has(item.uri)
+      ? `${item.uri}: the mirror's copy differs from darkmem's; push or discard it first`
+      : `${item.uri}: not on darkmem; push or discard it first`));
+    // listDocumentFiles lists regular files only, so a link or directory where
+    // darkmem holds a document would otherwise be left behind unnoticed.
+    const covered = new Set(files.map(item => item.uri));
+    for (const uri of remote.keys()) {
+      if (covered.has(uri)) continue;
+      const held = path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"));
+      if (fs.lstatSync(held, { throwIfNoEntry: false })) {
+        unverified.push(`${uri}: the mirror holds a symbolic link or other non-file here, which the move cannot copy; make it a regular file`);
+      }
+    }
+    if (unverified.length) return { moved: false, reason: "the mirror does not match darkmem; nothing was copied", details: unverified };
   }
-  if (unverified.length) return { moved: false, reason: "the mirror does not match darkmem; nothing was copied", details: unverified };
   // Copies and equality reads must not follow a link out of the repository.
   const checked = new Set(["docs", DOCS]);
   for (const { dest } of files) {
@@ -412,21 +427,14 @@ async function documentsToLocal(context) {
     if (uriFamily(uri) === "documents") delete state.documents[uri];
   }
   persist();
-  if (fs.existsSync(mirror.docsRoot)) fs.renameSync(mirror.docsRoot, path.join(cfg.mirror, `superpowers-moved-${utcStamp()}`));
+  const aside = path.join(cfg.mirror, `${DOC_PREFIX}-moved-${utcStamp()}`);
+  if (fs.existsSync(mirror.docsRoot)) fs.renameSync(mirror.docsRoot, aside);
   const details = [`copied ${files.length} files into docs/forge, untracked; commit them`];
-  const legacy = path.join(cfg.repoRoot, "docs", "superpowers");
-  if (fs.existsSync(legacy)) details.push(`${legacy} is a legacy docs directory and is not read; documents now live in docs/forge`);
-  for (const name of ignored.stdout.split("\n").filter(Boolean)) details.push(`${name}: ignored by git, so a commit would leave it out`);
-  let attributes = "";
-  try {
-    attributes = fs.readFileSync(path.join(cfg.repoRoot, ".gitattributes"), "utf8");
-  } catch (error) {
-    // No .gitattributes means nothing names the old prefix; any other failure is named.
-    if (error.code !== "ENOENT") details.push(`.gitattributes could not be read (${error.code}); check it for lines naming docs/superpowers/`);
+  if (notes.length) {
+    details.push(`darkmem was not consulted; the mirror is kept at ${aside}. These differ from darkmem's last known copy, and a later move to darkmem refuses them until they match:`);
+    details.push(...notes.map(line => `  ${line}`));
   }
-  attributes.split(/\r?\n/).forEach((line, index) => {
-    if (line.includes("docs/superpowers/")) details.push(`.gitattributes line ${index + 1} still names docs/superpowers/: ${line}`);
-  });
+  for (const name of ignored.stdout.split("\n").filter(Boolean)) details.push(`${name}: ignored by git, so a commit would leave it out`);
   return { moved: true, details };
 }
 
@@ -442,37 +450,51 @@ export async function reconcile(context) {
   };
   const busy = inProgressReason(context);
   if (busy) return refuseAll(busy.reason, busy.details);
-  if (!context.cfg.apiKey) return refuseAll(`${context.cfg.keyEnv} is not set`);
+  // A move back to the checkout never waits for darkmem: without it the
+  // mirror's own files are carried (offline). A move into darkmem needs it.
+  // Turned off, darkmem is never asked: push is off too, so a mirror edit
+  // darkmem lacks could never be resolved before an online move.
+  let offline = context.cfg.enabled ? null : context.cfg.url ? "darkmem is turned off" : "the repository is not mapped to darkmem";
   try {
-    await client.manifest(context.cfg.project, DOC_PREFIX);
+    offline ??= await context.migrate?.() ?? null;
   } catch (error) {
-    if (error instanceof TransportError) return refuseAll(`darkmem is unreachable: ${error.message}`);
-    if (error instanceof HttpError) return refuseAll(`darkmem refused the manifest read: ${error.message}`);
-    throw error;
+    if (!(error instanceof TransportError || error instanceof HttpError)) throw error;
+    // The probe below names the same failure.
   }
-  // Without a record the applied store follows the sync state (first-run
-  // rule), which a refused move's partial pull could tip to darkmem; the
-  // record pins it first. A recorded family is rewritten with its own value.
-  writeApplied(env, context.cfg.repoRoot, { documents: context.cfg.documents.applied, progress: context.cfg.progress.applied });
+  if (!offline && !context.cfg.url) offline = "the repository is not mapped to darkmem";
+  else if (!offline && !context.cfg.apiKey) offline = `${context.cfg.keyEnv} is not set`;
+  else if (!offline) {
+    try {
+      await client.manifest(context.cfg.project, DOC_PREFIX);
+    } catch (error) {
+      if (error instanceof TransportError) offline = `darkmem is unreachable: ${error.message}`;
+      else if (error instanceof HttpError) offline = `darkmem refused the manifest read: ${error.message}`;
+      else throw error;
+    }
+  }
+  if (offline && pending.every(family => context.cfg[family].configured === "darkmem")) return refuseAll(offline);
+  writeApplied(env, context.cfg.repoRoot, { documents: context.cfg.documents.applied, progress: context.cfg.progress.applied }, { project: context.cfg.project, mirror: context.cfg.mirror });
   for (const family of pending) {
     const { cfg } = context;
     const target = cfg[family].configured;
     const move = MOVES[`${family}:${target}`];
     let result;
-    if (!move) {
+    if (offline && target === "darkmem") {
+      result = { moved: false, reason: offline, details: [] };
+    } else if (!move) {
       result = { moved: false, reason: `no move from ${cfg[family].applied} to ${target}`, details: [] };
     } else {
       try {
-        result = await move(context);
+        result = await move(context, { offline });
       } catch (error) {
         if (!(error instanceof TransportError || error instanceof HttpError)) throw error;
         result = { moved: false, reason: `darkmem failed during the move: ${error.message}`, details: [] };
       }
     }
     if (result.moved) {
-      writeApplied(env, cfg.repoRoot, { [family]: target });
+      writeApplied(env, cfg.repoRoot, { [family]: target }, { project: cfg.project, mirror: cfg.mirror });
       refreshContext(context);
-      out(`darkmem-sync reconcile: ${family} moved to ${target}`);
+      out(`darkmem-sync reconcile: ${family} moved to ${target}${offline ? ` from the mirror, without darkmem (${offline})` : ""}`);
     } else {
       out(stayLine(context.cfg, family, result.reason));
       report.refused += 1;

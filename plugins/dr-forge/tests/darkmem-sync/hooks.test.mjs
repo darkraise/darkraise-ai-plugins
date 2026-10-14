@@ -46,8 +46,8 @@ async function setup(t, homeOptions = {}) {
 test("session lines show reconcile's refusal and pull's result, without notes", async t => {
   const s = await setup(t, { stores: { documents: "darkmem", progress: "local" } });
   write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: implementer x (assigned; base abc1234)\n");
-  await s.seed.putDocument({ project: "proj", uri: "superpowers/specs/a.md", content: "# A\n" });
-  await s.seed.putDocument({ project: "proj", uri: "superpowers/.x.md", content: "hidden\n" });
+  await s.seed.putDocument({ project: "proj", uri: "forge/specs/a.md", content: "# A\n" });
+  await s.seed.putDocument({ project: "proj", uri: "forge/.x.md", content: "hidden\n" });
   const result = await sessionLines(s.repo, "sid-hook", s.env);
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): a plan is in progress/m);
@@ -74,17 +74,17 @@ test("the line cap trims only detail lines, keeping both families' lines", async
 test("unindented lines outlast the line cap; the character room trims them last", async t => {
   const s = await setup(t);
   for (let i = 0; i < 25; i += 1) {
-    await s.seed.putDocument({ project: "proj", uri: `superpowers/n${String(i).padStart(2, "0")}.`, content: "x\n" });
+    await s.seed.putDocument({ project: "proj", uri: `forge/n${String(i).padStart(2, "0")}.`, content: "x\n" });
   }
   const result = await sessionLines(s.repo, "sid-hook", s.env);
   assert.equal(result.code, 0, result.stderr);
   const lines = result.stdout.split("\n").filter(Boolean);
-  assert.equal(lines.filter(line => line.startsWith("failed: superpowers/n")).length, 25);
+  assert.equal(lines.filter(line => line.startsWith("failed: forge/n")).length, 25);
   assert.match(lines.at(-1), /^darkmem-sync pull: 0 documents, 0 ledgers, 0 checkpoints; 0 conflicts, 25 failures$/);
   assert.doesNotMatch(result.stdout, MORE);
   const tight = await sessionLines(s.repo, "sid-hook", s.env, "400");
   assert.ok(tight.stdout.length <= 400, `${tight.stdout.length} characters`);
-  assert.match(tight.stdout, /^failed: superpowers\/n00\.: /m);
+  assert.match(tight.stdout, /^failed: forge\/n00\.: /m);
   assert.match(tight.stdout.trimEnd().split("\n").at(-1), MORE);
 });
 
@@ -92,14 +92,28 @@ test("session lines print nothing for an unmapped repository or one with nothing
   const s = await setup(t);
   const other = makeHome({ repo: makeRepo(), url: s.stub.url });
   assert.deepEqual(await sessionLines(s.repo, "sid-hook", hookEnv(other)), { code: 0, stdout: "", stderr: "" });
-  const none = makeHome({ repo: s.repo, url: s.stub.url, config: null });
+  const none = makeHome({ repo: s.repo, url: s.stub.url, config: null, stores: null });
   assert.deepEqual(await sessionLines(s.repo, "sid-hook", hookEnv(none)), { code: 0, stdout: "", stderr: "" });
   const local = makeHome({
     repo: s.repo, url: s.stub.url, stores: { documents: "local", progress: "local" },
-    config: { darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj", documentStore: "local", progressSource: "local" } } } },
+    config: { darkmemEnabled: true, darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj", documentStore: "local", progressSource: "local" } } } },
   });
   assert.deepEqual(await sessionLines(s.repo, "sid-hook", hookEnv(local)), { code: 0, stdout: "", stderr: "" });
   assert.equal(s.stub.db.requests.length, 0);
+});
+
+test("darkmem turned off still reconciles a family left in the mirror, and the Stop push sends nothing", async t => {
+  const s = await setup(t);
+  const off = makeHome({ repo: s.repo, url: s.stub.url, enabled: "off", stores: { documents: "darkmem", progress: "local" } });
+  write(path.join(off.docsRoot, "a.md"), "a\n");
+  const result = await sessionLines(s.repo, "sid-hook", hookEnv(off));
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local/m);
+  assert.doesNotMatch(result.stdout, /pull skipped/);
+  assert.equal(fs.readFileSync(path.join(s.repo, "docs", "forge", "a.md"), "utf8"), "a\n");
+  const before = s.stub.db.requests.length;
+  assert.deepEqual(await pushQuietly(s.repo, "sid-stop", hookEnv(off)), { code: 0, stdout: "", stderr: "" });
+  assert.equal(s.stub.db.requests.length, before);
 });
 
 test("a pull that changes nothing prints no line", async t => {
@@ -140,7 +154,7 @@ test("the hooks are bounded: SessionStart 300 seconds, Stop 120, and the darkmem
 test("session start adds the darkmem lines on every source, compaction included", { skip: !hasJq && "jq is not on PATH" }, async t => {
   const s = await setup(t);
   const payload = source => ({ hook_event_name: "SessionStart", session_id: "sid-start", transcript_path: "", cwd: s.repo, source });
-  for (const [source, uri] of [["startup", "superpowers/specs/a.md"], ["compact", "superpowers/specs/b.md"]]) {
+  for (const [source, uri] of [["startup", "forge/specs/a.md"], ["compact", "forge/specs/b.md"]]) {
     await s.seed.putDocument({ project: "proj", uri, content: `# ${uri}\n` });
     const result = await runHook("session-start.sh", payload(source), { cwd: s.repo, env: s.env });
     assert.equal(result.code, 0, result.stderr);

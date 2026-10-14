@@ -9,7 +9,7 @@ import path from "node:path";
 import { HttpError } from "./darkmem-client.mjs";
 import { forgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
 import {
-  MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
+  DOC_PREFIX, MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
   unsupportedPlanDirs, uriToLocal,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers } from "./darkmem-pull.mjs";
@@ -81,7 +81,7 @@ async function verify(context, roots, snapshot) {
   // A byte difference keeps the scratch copy for the operator to compare.
   let keepScratch = false;
   try {
-    const scratchRoots = { docsRoot: path.join(scratch, "superpowers"), workRoot: path.join(scratch, "work") };
+    const scratchRoots = { docsRoot: path.join(scratch, DOC_PREFIX), workRoot: path.join(scratch, "work") };
     const scratchContext = {
       ...context,
       roots: scratchRoots,
@@ -159,6 +159,6 @@ export async function importRepository(context) {
   if (report.failures.length || report.conflicts.length) return;
   const families = ["documents"].filter(family => cfg[family].configured === "darkmem");
   if (!families.length) return;
-  writeApplied(env, cfg.repoRoot, Object.fromEntries(families.map(family => [family, "darkmem"])));
+  writeApplied(env, cfg.repoRoot, Object.fromEntries(families.map(family => [family, "darkmem"])), { project: cfg.project, mirror: cfg.mirror });
   report.notes.push(`recorded ${families.join(" and ")} as applied darkmem in ${storesPath(env)}`);
 }

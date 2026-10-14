@@ -6,7 +6,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const DOC_PREFIX = "superpowers";
+export const DOC_PREFIX = "forge";
+// The pre-3.0 prefix, read only to migrate a mirror and darkmem's documents.
+export const LEGACY_PREFIX = "superpowers";
 export const MAX_ENTRY_CHARS = 65536;
 export const MAX_ENTRIES_PER_APPEND = 100;
 export const EMPTY_SHA = sha256(Buffer.alloc(0));
@@ -31,9 +33,9 @@ export function validKey(key) {
   return typeof key === "string" && KEY.test(key) && key !== "." && key !== "..";
 }
 
-// uri -> absolute file. `superpowers/handoff/<slug>.md` is reserved for a
+// uri -> absolute file. `forge/handoff/<slug>.md` is reserved for a
 // plan's handoff.md, which lives beside its ledger; any other
-// `superpowers/<path>` lives under the docs root. A uri that would climb out
+// `forge/<path>` lives under the docs root. A uri that would climb out
 // of the mirror, or name a dotfile, maps nowhere: dotfiles are never synced.
 export function uriToLocal(roots, uri) {
   const parts = String(uri).split("/");
@@ -68,8 +70,8 @@ export function utcStamp(date = new Date()) {
   return date.toISOString().replace(/\.\d+Z$/, "Z").replace(/[-:]/g, "");
 }
 
-// Where a deleted document is archived: superpowers/<rest> becomes
-// superpowers/archive/<stamp>/<rest>, so a name deleted twice never collides.
+// Where a deleted document is archived: forge/<rest> becomes
+// forge/archive/<stamp>/<rest>, so a name deleted twice never collides.
 export function archiveUri(uri, stamp) {
   return `${ARCHIVE_PREFIX}/${stamp}/${String(uri).slice(DOC_PREFIX.length + 1)}`;
 }
@@ -178,12 +180,16 @@ export function loadState(file) {
     && (raw.checkpoint === null || isHash(raw.checkpoint))
     && (raw.checkpointAt === null || (typeof raw.checkpointAt === "string" && !Number.isNaN(Date.parse(raw.checkpointAt))))
     && Array.isArray(raw.conflicts) && raw.conflicts.every(line => typeof line === "string")
-    && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")));
+    && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")))
+    && (raw.prefix === undefined || raw.prefix === DOC_PREFIX);
   if (!valid) throw new StateError(`${file} does not hold a valid sync state; ${REBUILD}`);
-  return {
+  const state = {
     version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt: raw.checkpointAt, conflicts: raw.conflicts,
     pendingLinks: raw.pendingLinks ?? [],
   };
+  // Set once darkmem was checked for pre-3.0 uris (darkmem-migrate.mjs).
+  if (raw.prefix !== undefined) state.prefix = raw.prefix;
+  return state;
 }
 
 // The temporary file is a dotfile, so a crash between write and rename never
@@ -534,7 +540,7 @@ export function pathToUri(roots, file) {
   if (name) return name[1].split("/").some(segment => segment === ".." || segment === ".") ? null : `${DOC_PREFIX}/${name[1]}`;
   if (!path.isAbsolute(String(file))) return null;
   const bases = [roots.docsRoot];
-  if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "forge"), path.join(roots.worktreeRoot, "docs", "superpowers"));
+  if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "forge"));
   for (const base of bases) {
     if (!base) continue;
     const rel = path.relative(path.resolve(base), path.resolve(String(file)));

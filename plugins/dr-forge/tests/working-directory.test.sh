@@ -123,12 +123,12 @@ git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 STOP=$(git -C "$SR" rev-parse --show-toplevel)
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/superpowers/plans"
-printf '# Mirror plan\n\n### Task 1: One\n' > "$M/superpowers/plans/mp.md"
+mkdir -p "$M/forge/plans"
+printf '# Mirror plan\n\n### Task 1: One\n' > "$M/forge/plans/mp.md"
 check "sdd-workspace: a mirror plan by name gets a local workspace" \
   "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/forge/plans/mp.md)" "$STOP/.forge/sdd/mp"
 check "sdd-workspace: a mirror plan by path" \
-  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/superpowers/plans/mp.md")" "$STOP/.forge/sdd/mp"
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/forge/plans/mp.md")" "$STOP/.forge/sdd/mp"
 
 # --- a ConfigError stops a plan reader instead of dropping its amendments ---
 BH="$TMP/bad-home"; mkdir -p "$BH/.dr-forge"

@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Keep this repository's dr-forge documents and progress in darkmem.
 #
-# A repository mapped in ~/.dr-forge/config.json (~/.dr-superpowers/ before 2.0)
-# syncs a mirror at ~/.dr-forge/mirror/<project>/ (~/.dr-superpowers/ before
-# 2.0): superpowers/ (specs, plans, registers, notes) while its documents are
-# applied darkmem, work/sdd/<plan>/{progress.md,handoff.md} and
-# work/handoff/latest.md while its progress is. ~/.dr-forge/stores.json records
-# the applied stores; documentStore and progressSource choose them. reconcile
-# moves each family whose configured store differs from its applied store, or
-# prints a line saying where it stays and why it was refused. push archives a
-# document deleted from the mirror under superpowers/archive/<stamp>/; restore
+# With darkmemEnabled on, a repository mapped in ~/.dr-forge/config.json
+# syncs a mirror at ~/.dr-forge/mirror/<project>/: forge/ (specs, plans,
+# registers, notes) while its documents are applied darkmem,
+# work/sdd/<plan>/{progress.md,handoff.md} and work/handoff/latest.md while its
+# progress is. ~/.dr-forge/stores.json records the applied stores;
+# documentStore and progressSource choose them. reconcile moves each family
+# whose configured store differs from its applied store, or prints a line
+# saying where it stays and why it was refused; a move back to the repository
+# copies the mirror as it stands when darkmem cannot be asked. push archives a
+# document deleted from the mirror under forge/archive/<stamp>/; restore
 # brings back the newest archived copy of a document name; revision prints
-# NAME@r<id>, the darkmem revision a synced, unchanged document cites. An
-# unmapped repository is local mode: every command except import prints one
-# line and does nothing.
+# NAME@r<id>, the darkmem revision a synced, unchanged document cites. A
+# disabled or unmapped repository is local mode: every command except import
+# prints one line and does nothing, and only reconcile and status act while a
+# family is still in the mirror.
 #
 # Usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile
 # Exit: 0 done, or no family applied darkmem; 1 conflicts, refused or failed

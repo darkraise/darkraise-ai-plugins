@@ -369,27 +369,30 @@ function linksBelow(checkout, stateRel, rels) {
 // The mirror is brought up to darkmem first. A pull renders only open
 // workstreams, and every imported ledger is closed, so this renders every
 // workstream's ledger and the newest checkpoint across all of them; darkmem
-// keeps its copy.
-export async function progressToLocal(context) {
+// keeps its copy. Offline (darkmem disabled, unmapped or not answering) the
+// mirror is copied as it stands.
+export async function progressToLocal(context, { offline = null } = {}) {
   const { cfg, client, state, persist } = context;
   const workRoot = path.join(cfg.mirror, "work");
   const roots = { docsRoot: path.join(cfg.mirror, DOC_PREFIX), workRoot, worktreeRoot: cfg.repoRoot, families: { documents: false, progress: true } };
-  const report = scratchReport();
-  try {
-    const pulling = { ...context, roots, report };
-    await pullDocuments(pulling);
-    const every = await client.workstreams(cfg.project);
-    await pullLedgers(pulling, every);
-    renderCheckpoint(pulling, workRoot, await newestCheckpoint(context, every));
-  } catch (error) {
-    return darkmemRefusal(error);
+  if (!offline) {
+    const report = scratchReport();
+    try {
+      const pulling = { ...context, roots, report };
+      await pullDocuments(pulling);
+      const every = await client.workstreams(cfg.project);
+      await pullLedgers(pulling, every);
+      renderCheckpoint(pulling, workRoot, await newestCheckpoint(context, every));
+    } catch (error) {
+      return darkmemRefusal(error);
+    }
+    const unclean = [...report.conflicts.map(line => `conflict: ${line}`), ...report.failures.map(line => `failed: ${line}`)];
+    if (unclean.length) return refuse("the pull into the mirror did not finish cleanly", unclean);
+    // The pull can bring a workstream another machine opened since this
+    // mirror's last pull, which reconcile's own check never saw.
+    const busy = inProgressReason(context);
+    if (busy) return refuse(busy.reason, busy.details);
   }
-  const unclean = [...report.conflicts.map(line => `conflict: ${line}`), ...report.failures.map(line => `failed: ${line}`)];
-  if (unclean.length) return refuse("the pull into the mirror did not finish cleanly", unclean);
-  // The pull can bring a workstream another machine opened since this
-  // mirror's last pull, which reconcile's own check never saw.
-  const busy = inProgressReason(context);
-  if (busy) return refuse(busy.reason, busy.details);
   const stateDir = forgeDir("state", cfg.repoRoot);
   const problems = unsupportedPlanDirs(workRoot).map(dir => `${dir}: not a usable workstream key`);
   const sources = [
@@ -432,6 +435,7 @@ export async function progressToLocal(context) {
   const differing = sources.filter(item => !fs.readFileSync(item.target).equals(item.buffer)).map(item => `${item.target}: the copy reads back different`);
   if (differing.length) return refuse("a copy into the primary checkout reads back different", differing);
   const details = [`${sources.length} files copied into ${stateDir}`];
+  if (offline) details.push("darkmem was not consulted: ledger lines and handoffs not yet pushed stay off darkmem, and another machine's newer progress was not fetched");
   // Moved, not deleted: left in place, these copies would meet a later move
   // back to darkmem as differing files.
   if (fs.existsSync(workRoot)) {

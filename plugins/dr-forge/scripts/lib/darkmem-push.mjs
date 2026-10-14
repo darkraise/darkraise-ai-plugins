@@ -109,7 +109,7 @@ async function pushDocument(context, { uri, buffer, local, recorded }, remote) {
 }
 
 // Every synced document whose mirror file is gone moves on darkmem to
-// superpowers/archive/<stamp>/<rest> under its recorded hash, so an edit made
+// forge/archive/<stamp>/<rest> under its recorded hash, so an edit made
 // on darkmem since the last sync is never archived unseen; restore moves it
 // back. A missing docs root archives nothing: a lost mirror is not a request
 // to archive every document.

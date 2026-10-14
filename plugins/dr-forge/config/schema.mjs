@@ -150,14 +150,19 @@ export default {
     label: 'Detail', title: 'Discord: detail',
     description: 'full sends command, question and answer excerpts (secrets masked); brief sends titles and figures only.',
   },
+  darkmemEnabled: {
+    type: 'boolean', default: false, group: 'darkmem', target: 'forge',
+    label: 'Use darkmem', title: 'Use darkmem',
+    description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository, and a family already in the mirror moves back at the next session start, from darkmem when it answers, else from the mirror. A repository is mapped under darkmem.repos in ~/.dr-forge/config.json.',
+  },
   documentStore: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', env: 'DR_FORGE_DOCUMENT_STORE', group: 'darkmem', target: 'forge',
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'forge',
     label: 'Documents', title: 'Document store',
-    description: 'Where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
+    description: 'While Use darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
   },
   progressSource: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', env: 'DR_FORGE_PROGRESS_SOURCE', group: 'darkmem', target: 'forge',
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'forge',
     label: 'Progress', title: 'Progress tracking source',
-    description: 'Where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
+    description: 'While Use darkmem is on, where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
   },
 };

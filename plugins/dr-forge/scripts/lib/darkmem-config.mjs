@@ -1,15 +1,17 @@
 // dr-forge's darkmem stores for one repository (darkmem store options spec
-// §1): the mapping in ~/.dr-forge/config.json (the pre-2.0
-// ~/.dr-superpowers/config.json until the new file exists), each family's
-// configured store and its applied store from ~/.dr-forge/stores.json, the
-// mirror, the API key's variable, and the run key a sync declares. An
-// unmapped repository keeps both families local.
+// §1): whether darkmem is enabled (the darkmemEnabled setting), the mapping in
+// ~/.dr-forge/config.json, each family's configured store and its applied
+// store from ~/.dr-forge/stores.json, the mirror, the API key's variable, and
+// the run key a sync declares. A disabled or unmapped repository configures
+// both families local; a family still applied darkmem keeps its mirror until
+// reconcile moves it back.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolve as resolveSettings } from "./forge-config.mjs";
+import { DOC_PREFIX } from "./darkmem-mirror.mjs";
 
 export class ConfigError extends Error {}
 
@@ -24,21 +26,9 @@ export function forgeHome(env = process.env) {
   return path.join(homeOf(env), ".dr-forge");
 }
 
-function legacyHome(env) {
-  return path.join(homeOf(env), ".dr-superpowers");
-}
-
-// The new path, unless it does not exist and the pre-2.0 one does.
-export function preferNew(next, old) {
-  return !fs.existsSync(next) && fs.existsSync(old) ? old : next;
-}
-
-// A repository's dr-forge directory: docs/forge/ or .forge/, or the pre-2.0
-// docs/superpowers/ or .superpowers/ where only that exists.
+// A repository's dr-forge directory: docs/forge/ or .forge/.
 export function forgeDir(kind, root) {
-  return kind === "docs"
-    ? preferNew(path.join(root, "docs", "forge"), path.join(root, "docs", "superpowers"))
-    : preferNew(path.join(root, ".forge"), path.join(root, ".superpowers"));
+  return kind === "docs" ? path.join(root, "docs", "forge") : path.join(root, ".forge");
 }
 
 function git(cwd, args) {
@@ -62,6 +52,7 @@ function samePath(a, b) {
 const FAMILIES = ["documents", "progress"];
 const STORES = ["local", "darkmem"];
 const OPTION = { documents: "documentStore", progress: "progressSource" };
+
 
 // Each primary checkout's applied store per family (darkmem store options
 // spec §4), written once a move or an import verifies.
@@ -88,7 +79,9 @@ function readRecord(env) {
   return data;
 }
 
-export function writeApplied(env, repoRoot, applied) {
+// `where` ({ project, mirror }) is kept beside the applied stores, so a family
+// applied darkmem can still be found once darkmem is disabled or unmapped.
+export function writeApplied(env, repoRoot, applied, where = {}) {
   const file = storesPath(env);
   const data = readRecord(env);
   let entry = {};
@@ -97,29 +90,12 @@ export function writeApplied(env, repoRoot, applied) {
     entry = { ...entry, ...data[key] };
     delete data[key];
   }
-  data[repoRoot] = { ...entry, ...applied };
+  const known = Object.fromEntries(Object.entries(where).filter(([, value]) => value !== undefined && value !== null));
+  data[repoRoot] = { ...entry, ...known, ...applied };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = path.join(path.dirname(file), `.stores.json.${process.pid}.tmp`);
   fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`);
   fs.renameSync(temporary, file);
-}
-
-// With no record, a family counts as applied darkmem only when the mirror's
-// sync state already lists its files, so a repository synced by hand is never
-// imported over darkmem's copy.
-function syncedFamilies(statePath) {
-  let raw;
-  try {
-    raw = JSON.parse(fs.readFileSync(statePath, "utf8"));
-  } catch {
-    return { documents: false, progress: false };
-  }
-  const uris = Object.keys(raw?.documents ?? {});
-  const handoff = uri => uri.startsWith("superpowers/handoff/");
-  return {
-    documents: uris.some(uri => !handoff(uri)),
-    progress: uris.some(handoff) || Object.keys(raw?.ledgers ?? {}).length > 0 || Boolean(raw?.checkpoint),
-  };
 }
 
 export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
@@ -132,7 +108,7 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
     documents: {
       configured: configured.documents,
       applied: applied.documents,
-      root: applied.documents === "darkmem" ? path.join(sync.mirror, "superpowers") : worktreeRoot && forgeDir("docs", worktreeRoot),
+      root: applied.documents === "darkmem" ? path.join(sync.mirror, DOC_PREFIX) : worktreeRoot && forgeDir("docs", worktreeRoot),
     },
     progress: {
       configured: configured.progress,
@@ -147,24 +123,67 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
     sync,
   });
   const LOCAL = { documents: "local", progress: "local" };
-  const local = reason => result(reason, LOCAL, LOCAL, null);
-  if (!repoRoot) return local("not inside a git repository");
-  const file = preferNew(path.join(forgeHome(env), "config.json"), path.join(legacyHome(env), "config.json"));
-  if (!fs.existsSync(file)) return local(`no ${file}`);
+  if (!repoRoot) return result("not inside a git repository", LOCAL, LOCAL, null);
+  const recorded = Object.entries(readRecord(env)).find(([key]) => samePath(key, repoRoot))?.[1] ?? {};
+  const applied = {};
+  for (const family of FAMILIES) {
+    const value = recorded[family] ?? "local";
+    if (!STORES.includes(value)) throw new ConfigError(`${storesPath(env)}: ${family} for ${repoRoot} must be local or darkmem`);
+    applied[family] = value;
+  }
+  const inMirror = FAMILIES.some(family => applied[family] === "darkmem");
+  const mapped = readMapping(env, repoRoot);
+  const settings = resolveSettings(env, () => {});
+  const enabled = settings.darkmemEnabled === true;
+  // Disabled or unmapped: both families belong in the checkout. A family
+  // still in the mirror resolves there, offline, until reconcile moves it.
+  if (!enabled || !mapped.entry) {
+    if (!inMirror) return result(!enabled ? "darkmem is disabled (darkmemEnabled is false)" : mapped.reason, LOCAL, LOCAL, null);
+    // 3.0 made darkmem opt-in. A family a 2.x run put in the mirror is not
+    // moved by the upgrade alone: it stays, unsynced, until darkmemEnabled is
+    // set either way.
+    const undecided = !enabled && mapped.entry && !mapped.decided;
+    const reason = undecided
+      ? "darkmem is off by default since dr-forge 3.0 and darkmemEnabled is unset"
+      : !enabled ? "darkmem is disabled (darkmemEnabled is false)" : mapped.reason;
+    const project = recorded.project ?? mapped.entry?.project;
+    const mirror = recorded.mirror ?? (mapped.entry && path.join(forgeHome(env), "mirror", mapped.entry.project));
+    if (typeof project !== "string" || !PROJECT.test(project) || typeof mirror !== "string" || !path.isAbsolute(mirror)) {
+      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; enable darkmem and map the repository again so reconcile can move it back`);
+    }
+    return result(reason, undecided ? applied : LOCAL, applied, syncOf(env, mapped, project, mirror, false));
+  }
+  const entry = mapped.entry;
+  const configured = {};
+  for (const family of FAMILIES) configured[family] = entry[OPTION[family]] ?? settings[OPTION[family]];
+  const mirror = path.join(forgeHome(env), "mirror", entry.project);
+  return result(`project ${entry.project}`, configured, applied, syncOf(env, mapped, entry.project, mirror, true));
+}
+
+// The repository's darkmem mapping: { file, entry, url, keyEnv }, or
+// { reason } when there is none. A malformed file or entry throws.
+function readMapping(env, repoRoot) {
+  const file = path.join(forgeHome(env), "config.json");
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return { reason: `no ${file}` };
+    throw error;
+  }
   let config;
   try {
-    config = JSON.parse(fs.readFileSync(file, "utf8"));
+    config = JSON.parse(text);
   } catch (error) {
     throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
   }
   const darkmem = config?.darkmem;
-  if (darkmem === undefined) return local(`${file} has no darkmem section`);
+  if (darkmem === undefined) return { reason: `${file} has no darkmem section` };
   if (!darkmem || typeof darkmem !== "object") throw new ConfigError(`${file}: darkmem must be an object`);
   const mapping = Object.entries(darkmem.repos ?? {}).find(([key]) => samePath(key, repoRoot));
-  if (!mapping) return local(`no darkmem mapping for ${repoRoot}`);
+  if (!mapping) return { reason: `no darkmem mapping for ${repoRoot}` };
   const entry = mapping[1];
-  const project = entry?.project;
-  if (typeof project !== "string" || !PROJECT.test(project)) {
+  if (typeof entry?.project !== "string" || !PROJECT.test(entry.project)) {
     throw new ConfigError(`${file}: the mapping for ${repoRoot} needs a project made of letters, digits, '.', '_' or '-'`);
   }
   if (typeof darkmem.url !== "string" || !/^https?:\/\/\S+$/.test(darkmem.url)) {
@@ -174,42 +193,26 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
   if (typeof keyEnv !== "string" || !keyEnv) {
     throw new ConfigError(`${file}: darkmem.api_key_env must name an environment variable`);
   }
-  // The mapping entry is the most specific choice, so it outranks the
-  // environment variable, unlike every other forge-config key.
-  const settings = resolveSettings(env, () => {});
-  const configured = {};
-  for (const family of FAMILIES) {
-    const key = OPTION[family];
-    const override = entry[key];
-    if (override !== undefined && !STORES.includes(override)) {
-      throw new ConfigError(`${file}: the mapping for ${repoRoot} sets ${key} to ${JSON.stringify(override)}; use local or darkmem`);
+  for (const key of Object.values(OPTION)) {
+    if (entry[key] !== undefined && !STORES.includes(entry[key])) {
+      throw new ConfigError(`${file}: the mapping for ${repoRoot} sets ${key} to ${JSON.stringify(entry[key])}; use local or darkmem`);
     }
-    configured[family] = override ?? settings[key];
   }
-  const mirror = preferNew(path.join(forgeHome(env), "mirror", project), path.join(legacyHome(env), "mirror", project));
-  const sync = {
+  return { file, entry, url: darkmem.url.replace(/\/+$/, ""), keyEnv, decided: Object.hasOwn(config, "darkmemEnabled") };
+}
+
+// enabled false: the mirror is read and moved from, never synced.
+function syncOf(env, mapped, project, mirror, enabled) {
+  const keyEnv = mapped.keyEnv ?? "DARKMEM_API_KEY";
+  return {
     project,
-    url: darkmem.url.replace(/\/+$/, ""),
-    apiKey: env[keyEnv] || null,
+    enabled,
+    url: mapped.url ?? null,
+    apiKey: (mapped.url && env[keyEnv]) || null,
     keyEnv,
     mirror,
     statePath: path.join(mirror, ".sync-state.json"),
   };
-  const recorded = Object.entries(readRecord(env)).find(([key]) => samePath(key, repoRoot))?.[1] ?? {};
-  let synced = null;
-  const applied = {};
-  for (const family of FAMILIES) {
-    const value = recorded[family];
-    if (value === undefined) {
-      synced ??= syncedFamilies(sync.statePath);
-      applied[family] = synced[family] ? "darkmem" : "local";
-    } else if (STORES.includes(value)) {
-      applied[family] = value;
-    } else {
-      throw new ConfigError(`${storesPath(env)}: ${family} for ${repoRoot} must be local or darkmem`);
-    }
-  }
-  return result(`project ${project}`, configured, applied, sync);
 }
 
 export function modeLines(stores) {
@@ -217,16 +220,16 @@ export function modeLines(stores) {
     `documents\t${stores.documents.applied}\t${stores.documents.root}`,
     `progress\t${stores.progress.applied}\t${stores.progress.ledgerRoot}\t${stores.progress.latestFile}`,
   ];
-  if (stores.sync) lines.push(`project\t${stores.sync.project}`);
+  if (stores.sync?.enabled) lines.push(`project\t${stores.sync.project}`);
   return lines;
 }
 
 // The run a sync declares; darkmem refuses an undeclared one.
-// DR_FORGE_SESSION_ID (or the pre-2.0 DR_SUPERPOWERS_SESSION_ID) lets a hook pass the id it holds; otherwise the
+// DR_FORGE_SESSION_ID lets a hook pass the id it holds; otherwise the
 // record scripts/session-start.sh writes for this directory; otherwise one run
 // per machine per day, which is what a Codex session (no hooks) gets.
 export function runKey({ cwd = process.cwd(), env = process.env, now = new Date() } = {}) {
-  const declared = env.DR_FORGE_SESSION_ID?.trim() || env.DR_SUPERPOWERS_SESSION_ID?.trim();
+  const declared = env.DR_FORGE_SESSION_ID?.trim();
   if (declared) return declared;
   const sessions = path.join(homeOf(env), ".claude", "dr-forge", "sessions");
   for (const dir of [cwd, git(cwd, ["rev-parse", "--show-toplevel"]), primaryRoot(cwd)]) {

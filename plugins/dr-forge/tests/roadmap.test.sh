@@ -213,19 +213,19 @@ check "usage: unknown verb" "$RC" "2"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q -b main "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem local)
-mkdir -p "$M/superpowers/registers"
-printf '# Roadmap\n' > "$M/superpowers/roadmap.md"
-register "$M/superpowers/registers/m1.md" "docs/forge/specs/x.md" \
+mkdir -p "$M/forge/registers"
+printf '# Roadmap\n' > "$M/forge/roadmap.md"
+register "$M/forge/registers/m1.md" "docs/forge/specs/x.md" \
   '| 1 | A | - | - | done | - |' '| 2 | B | - | - | open | - |'
-check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/superpowers/roadmap.md"
+check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/forge/roadmap.md"
 check "roadmap_epic_counts: a register name resolves in the mirror" \
   "$(HOME=$SH roadmap_epic_counts "$SR" docs/forge/registers/m1.md)" "1 2"
 check "roadmap_unresolved: rows named by register name" \
   "$(HOME=$SH roadmap_unresolved "$SR" docs/forge/registers/m1.md | cut -f1,2)" "$(printf 'docs/forge/registers/m1.md\t2')"
 
-mkdir -p "$M/superpowers/specs"
-printf '# X\n' > "$M/superpowers/specs/x.md"
-register "$M/superpowers/registers/m9.md" "docs/forge/specs/x.md" \
+mkdir -p "$M/forge/specs"
+printf '# X\n' > "$M/forge/specs/x.md"
+register "$M/forge/registers/m9.md" "docs/forge/specs/x.md" \
   '| 1 | Epic | docs/forge/specs/x.md | - | open | - |'
 check "roadmap_unresolved: the milestone register under the other prefix is not listed twice" \
   "$(HOME=$SH roadmap_unresolved "$SR" docs/superpowers/registers/m9.md | cut -f1,2 | tr '\n' '|')" \

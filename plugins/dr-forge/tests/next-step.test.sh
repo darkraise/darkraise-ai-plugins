@@ -778,8 +778,8 @@ SR="$TMP/stores-repo"
 git init -q "$SR"
 git -C "$SR" commit -q --allow-empty -m init
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/superpowers/plans" "$M/work/sdd/2026-02-02-mirror"
-write_plan "$M/superpowers/plans/2026-02-02-mirror.md" '**Execution:** subagent — `claude --model sonnet --effort high` — demo' ""
+mkdir -p "$M/forge/plans" "$M/work/sdd/2026-02-02-mirror"
+write_plan "$M/forge/plans/2026-02-02-mirror.md" '**Execution:** subagent — `claude --model sonnet --effort high` — demo' ""
 printf '# SDD ledger — plan: docs/forge/plans/2026-02-02-mirror.md\nTask 1: complete (commits a..b, review clean)\n' \
   > "$M/work/sdd/2026-02-02-mirror/progress.md"
 out=$(cd "$SR" && HOME=$SH bash "$SCRIPT" docs/forge/plans/2026-02-02-mirror.md)

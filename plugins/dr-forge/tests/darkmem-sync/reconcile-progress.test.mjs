@@ -31,7 +31,7 @@ test("progress sources come from every checkout, and agreeing copies are one sou
   assert.deepEqual(problems, []);
   assert.deepEqual(sources.map(item => item.rel).sort(), ["handoff/latest.md", "sdd/p1/handoff.md", "sdd/p1/progress.md", "sdd/p2/progress.md"]);
   assert.equal(files.length, 5);
-  assert.equal(sources.find(item => item.kind === "handoff").uri, "superpowers/handoff/p1.md");
+  assert.equal(sources.find(item => item.kind === "handoff").uri, "forge/handoff/p1.md");
 });
 
 test("an unusable plan directory, unreadable text and disagreeing copies are all problems", () => {
@@ -59,14 +59,14 @@ test("an equal ledger on darkmem is already filed; a different ledger, handoff n
   write(path.join(repo, ".forge", "handoff", "latest.md"), "local latest\n");
   const { workstream } = await client.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   await client.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
-  await client.putDocument({ project: "proj", uri: "superpowers/handoff/p2.md", content: "# darkmem note\n" });
+  await client.putDocument({ project: "proj", uri: "forge/handoff/p2.md", content: "# darkmem note\n" });
   write(path.join(mirror, "work", "handoff", "latest.md"), "mirror latest\n");
   const { sources } = gatherLocalProgress({ repoRoot: repo });
   const { problems, filed } = await checkProgressTargets({ cfg: { project: "proj", mirror }, client }, sources);
   assert.deepEqual([...filed], [["p1", workstream.id]]);
   assert.equal(problems.length, 3, problems.join("\n"));
   assert.match(problems.join("\n"), /^sdd\/p2\/progress\.md: darkmem already holds a different ledger for workstream p2$/m);
-  assert.match(problems.join("\n"), /^superpowers\/handoff\/p2\.md: darkmem already holds a different handoff note$/m);
+  assert.match(problems.join("\n"), /^forge\/handoff\/p2\.md: darkmem already holds a different handoff note$/m);
   assert.match(problems.join("\n"), /work[\\/]handoff[\\/]latest\.md: the mirror already holds a different copy of handoff\/latest\.md$/m);
 });
 
@@ -87,14 +87,17 @@ async function setup(t, target) {
   git(repo, "worktree", "add", "-q", "-b", "side", worktree);
   const home = makeHome({
     repo,
-    config: { darkmem: { url: stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project: "proj", documentStore: "local", progressSource: target } } } },
+    config: { darkmemEnabled: true, darkmem: { url: stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project: "proj", documentStore: "local", progressSource: target } } } },
     stores: { documents: "local", progress: target === "darkmem" ? "local" : "darkmem" },
   });
   const seed = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
   return {
     stub, repo, worktree, ...home, seed,
     state: () => JSON.parse(fs.readFileSync(path.join(home.mirror, ".sync-state.json"), "utf8")),
-    stores: () => JSON.parse(fs.readFileSync(path.join(home.home, ".dr-forge", "stores.json"), "utf8"))[repo],
+    stores: () => {
+      const { documents, progress } = JSON.parse(fs.readFileSync(path.join(home.home, ".dr-forge", "stores.json"), "utf8"))[repo];
+      return { documents, progress };
+    },
     reconcile: () => run(["reconcile"], { cwd: repo, env: home.env }),
   };
 }
@@ -120,9 +123,9 @@ test("progress moves into darkmem from every checkout, and a second run does not
     assert.equal(read(path.join(s.workRoot, "sdd", key, "progress.md")), LEDGER(key));
     assert.deepEqual(s.state().ledgers[key], { offset: Buffer.byteLength(LEDGER(key)), prefix: sha(LEDGER(key)), lastSeq: ledger.at(-1).seq });
   }
-  assert.equal(s.stub.db.documents.get("proj\u0000superpowers/handoff/p1.md").content, "# Handoff p1\n");
+  assert.equal(s.stub.db.documents.get("proj\u0000forge/handoff/p1.md").content, "# Handoff p1\n");
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
-  assert.equal(s.state().documents["superpowers/handoff/p1.md"], sha("# Handoff p1\n"));
+  assert.equal(s.state().documents["forge/handoff/p1.md"], sha("# Handoff p1\n"));
   assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), LATEST);
   const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
   const [checkpoint, ...more] = p1.entries.filter(e => e.kind === "checkpoint");
@@ -181,7 +184,7 @@ test("a ledger's workstream properties read its plan in its own checkout", async
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "p4").properties;
-  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "superpowers/plans/p4.md", spec_uri: "superpowers/specs/s4.md" });
+  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "forge/plans/p4.md", spec_uri: "forge/specs/s4.md" });
 });
 
 test("documents and progress both move to darkmem in one run, and the ledger's properties read the plan from the mirror", async t => {
@@ -190,7 +193,7 @@ test("documents and progress both move to darkmem in one run, and the ledger's p
   write(path.join(s.repo, "docs", "forge", "specs", "s1.md"), "# s1\n");
   git(s.repo, "add", "docs");
   git(s.repo, "commit", "-q", "-m", "spec");
-  write(path.join(s.home, ".dr-forge", "config.json"), JSON.stringify({ darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
+  write(path.join(s.home, ".dr-forge", "config.json"), JSON.stringify({ darkmemEnabled: true, darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
   write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), LEDGER("p1"));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -198,7 +201,7 @@ test("documents and progress both move to darkmem in one run, and the ledger's p
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
   assert.equal(fs.existsSync(path.join(s.repo, "docs", "forge", "plans", "p1.md")), false, "the documents move ran first and removed the checkout's copy");
   const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "p1").properties;
-  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "superpowers/plans/p1.md", spec_uri: "superpowers/specs/s1.md" });
+  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "forge/plans/p1.md", spec_uri: "forge/specs/s1.md" });
   assert.deepEqual(s.stores(), { documents: "darkmem", progress: "darkmem" });
 });
 
@@ -337,13 +340,13 @@ test("a handoff note that darkmem reads back different stays local, and nothing 
   const note = path.join(s.repo, ".forge", "sdd", "p1", "handoff.md");
   write(note, "# Handoff p1\n");
   s.stub.db.onRequest = (method, pathname) => {
-    const held = s.stub.db.documents.get("proj\u0000superpowers/handoff/p1.md");
+    const held = s.stub.db.documents.get("proj\u0000forge/handoff/p1.md");
     if (held && method === "GET" && pathname === "/api/v1/documents/by-uri") held.content_hash = sha("altered\n");
   };
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a read-back of darkmem's copies differs; nothing was moved locally\n"), result.stdout);
-  assert.ok(result.stdout.includes("  superpowers/handoff/p1.md: darkmem's copy reads back different\n"), result.stdout);
+  assert.ok(result.stdout.includes("  forge/handoff/p1.md: darkmem's copy reads back different\n"), result.stdout);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);
   assert.equal(read(note), "# Handoff p1\n");
@@ -372,7 +375,7 @@ test("progress moves back into the primary checkout from closed and open workstr
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: LATEST }] });
   await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
   await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: LEDGER("p2") }] });
-  await s.seed.putDocument({ project: "proj", uri: "superpowers/handoff/p1.md", content: "# Handoff p1\n" });
+  await s.seed.putDocument({ project: "proj", uri: "forge/handoff/p1.md", content: "# Handoff p1\n" });
   assert.equal(fs.existsSync(s.mirror), false, "the mirror starts empty");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -390,10 +393,10 @@ test("progress moves back into the primary checkout from closed and open workstr
   assert.equal(after.checkpoint, null);
   assert.equal(after.checkpointAt, null);
   assert.deepEqual(after.pendingLinks, []);
-  assert.equal("superpowers/handoff/p1.md" in after.documents, false);
+  assert.equal("forge/handoff/p1.md" in after.documents, false);
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
   assert.equal(s.stub.db.workstreams.length, 2);
-  assert.equal(s.stub.db.documents.has("proj\u0000superpowers/handoff/p1.md"), true);
+  assert.equal(s.stub.db.documents.has("proj\u0000forge/handoff/p1.md"), true);
   const again = await s.reconcile();
   assert.equal(again.code, 0, again.stdout + again.stderr);
   assert.equal(again.stdout, "");
@@ -454,7 +457,7 @@ const ABSOLUTE_LEDGER = file => `# SDD ledger — plan: ${file}\nTask 1: complet
 
 test("an absolute ledger identity into the checkout counts as finished after the documents move removed it", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.home, ".dr-forge", "config.json"), JSON.stringify({ darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
+  write(path.join(s.home, ".dr-forge", "config.json"), JSON.stringify({ darkmemEnabled: true, darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
   write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(path.join(s.repo, "docs", "forge", "plans", "p1.md")));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);

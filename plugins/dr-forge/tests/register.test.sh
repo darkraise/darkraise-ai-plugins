@@ -227,12 +227,12 @@ done < <(register_files "$REPO_ROOT")
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem local)
-mkdir -p "$M/superpowers/registers" "$M/superpowers/specs"
-printf '# A\n' > "$M/superpowers/specs/a-design.md"
-printf '# B\n' > "$M/superpowers/specs/b-design.md"
-reg "$M/superpowers/registers/r.md" '| 1 | One | - | - | planned | - |'
-check "register_files: the mirror's registers" "$(HOME=$SH register_files "$SR")" "$M/superpowers/registers/r.md"
-out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" check "$M/superpowers/registers/r.md" 2>&1)
+mkdir -p "$M/forge/registers" "$M/forge/specs"
+printf '# A\n' > "$M/forge/specs/a-design.md"
+printf '# B\n' > "$M/forge/specs/b-design.md"
+reg "$M/forge/registers/r.md" '| 1 | One | - | - | planned | - |'
+check "register_files: the mirror's registers" "$(HOME=$SH register_files "$SR")" "$M/forge/registers/r.md"
+out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" check "$M/forge/registers/r.md" 2>&1)
 check "register check: Covers names resolve in the mirror" "$(tail -n 1 <<<"$out")" "register: 0 errors"
 out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" open --spec docs/superpowers/specs/a-design.md 2>&1)
 check "register open: the register is named, not pathed" "$out" "docs/forge/registers/r.md: #1 One — planned, assigned -"

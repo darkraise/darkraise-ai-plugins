@@ -14,13 +14,16 @@ import { importRepository } from "./darkmem-import.mjs";
 import { pull, pullDocuments } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
 import { leftoverLines, pendingFamilies, reconcile, stayLine } from "./darkmem-reconcile.mjs";
+import { migrateMirrorLocked, migrateServer } from "./darkmem-migrate.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
 
 const familyLine = (name, family) => `${name}: configured ${family.configured}, applied ${family.applied}${family.applied === "darkmem" ? "" : ", not synced"}`;
 
 async function status({ cfg, roots, state, report, out }) {
-  out(`darkmem-sync: project ${cfg.project} at ${cfg.url}; mirror ${cfg.mirror}`);
+  out(cfg.enabled
+    ? `darkmem-sync: project ${cfg.project} at ${cfg.url}; mirror ${cfg.mirror}`
+    : `darkmem-sync: project ${cfg.project} not synced (darkmem disabled or unmapped); mirror ${cfg.mirror}`);
   out(familyLine("documents", cfg.documents));
   out(familyLine("progress", cfg.progress));
   for (const line of localChanges(roots, state)) out(line);
@@ -58,7 +61,7 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
 }
 
 // A document name as ledgers and plans write it, docs/forge/<rest> or the
-// pre-2.0 docs/superpowers/<rest>, as its uri superpowers/<rest>; null for a
+// pre-2.0 docs/superpowers/<rest> that historical plans cite, as its uri forge/<rest>; null for a
 // path, a handoff note, an archived copy, or a name that climbs.
 function documentUri(name) {
   const match = /^(?:\.\/)?docs\/(?:forge|superpowers)\/(.+)$/.exec(name);
@@ -82,7 +85,7 @@ async function restore(context) {
   const rest = uri.slice(DOC_PREFIX.length + 1);
   const items = await client.manifest(cfg.project, DOC_PREFIX);
   if (items.some(item => item.uri === uri)) return refuse(`${uri} is occupied on darkmem; move or rename that document first`);
-  // superpowers/archive/<stamp>/<rest>: a stamp sorts by time.
+  // forge/archive/<stamp>/<rest>: a stamp sorts by time.
   const newest = items
     .filter(item => isArchiveUri(item.uri) && item.uri.slice(ARCHIVE_PREFIX.length + 1).replace(/^[^/]+\//, "") === rest)
     .sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0))
@@ -203,7 +206,23 @@ async function main(argv, {
     return parsed.name === "import" ? 2 : 0;
   }
   const cfg = { ...stores.sync, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress };
+  try {
+    const migrated = migrateMirrorLocked(cfg.mirror);
+    if (migrated) out(`darkmem-sync: ${migrated}`);
+  } catch (error) {
+    if (!(error instanceof StateError)) throw error;
+    err(`darkmem-sync: ${error.message}`);
+    return 2;
+  }
   const families = { documents: cfg.documents.applied === "darkmem", progress: cfg.progress.applied === "darkmem" };
+  // Disabled or unmapped with a family still in the mirror: only reconcile,
+  // which moves it back, and status act.
+  if (!cfg.enabled && parsed.name !== "reconcile" && parsed.name !== "status") {
+    const reason = `${stores.reason}; the mirror is not synced, and reconcile moves it back`;
+    if (parsed.command.refuseLocal) return parsed.command.refuseLocal({ args: parsed.args, reason, out, err });
+    out(`darkmem-sync: ${parsed.name} skipped: ${reason}`);
+    return parsed.name === "import" ? 2 : 0;
+  }
   if (parsed.command.refuseLocal && !families.documents) {
     return parsed.command.refuseLocal({ args: parsed.args, reason: "documents are applied local", out, err });
   }
@@ -214,6 +233,10 @@ async function main(argv, {
   // Nothing to move takes no lock and calls nothing; the leftover warning
   // still prints, since session start runs reconcile every time.
   if (parsed.name === "reconcile" && !pendingFamilies(cfg).length) {
+    if (!cfg.enabled) {
+      const held = ["documents", "progress"].filter(family => families[family]).join(" and ");
+      out(`darkmem-sync reconcile: ${stores.reason}; ${held} stay in the mirror, unsynced: set darkmemEnabled to true to sync them, or to false to move them back`);
+    }
     for (const line of leftoverLines(cfg)) out(line);
     return 0;
   }
@@ -245,7 +268,22 @@ async function main(argv, {
       timeoutMs: Number(env.DARKMEM_SYNC_TIMEOUT_MS) || 10000,
     });
     const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
-    await parsed.command.run({ cfg, roots, state, persist, client, report, options: parsed.options, args: parsed.args, out, env });
+    // darkmem's pre-3.0 uris move before anything syncs: a pull would read a
+    // document still under superpowers/ as deleted from forge/. Answers why
+    // the command may not sync, or null. Reconcile calls it after its own
+    // refusals and still moves a family back to the checkout, from the mirror.
+    const migrate = async () => {
+      if (!cfg.enabled || !cfg.url || !cfg.apiKey || state.prefix !== undefined) return null;
+      const failures = await migrateServer({ cfg, client, state, persist });
+      if (!failures.length) return null;
+      report.failures.push(...failures);
+      return `darkmem still holds pre-3.0 superpowers/ documents it could not move to ${DOC_PREFIX}/`;
+    };
+    if (parsed.command.needsKey) {
+      const blocked = await migrate();
+      if (blocked) throw new UsageError(`${parsed.name} refused: ${blocked}`);
+    }
+    await parsed.command.run({ cfg, roots, state, persist, client, report, options: parsed.options, args: parsed.args, out, env, migrate });
   } catch (error) {
     if (error instanceof TransportError || error instanceof HttpError) {
       err(`darkmem-sync: ${parsed.name} failed: ${error.message}`);

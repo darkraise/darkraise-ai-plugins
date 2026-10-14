@@ -42,7 +42,7 @@ for docs in local darkmem; do
     MIRROR=$(stores_home "$HOME" "$REPO" superpowers "$docs" "$progress")
     for where in "$TOP" "$WT"; do
       label="$docs/$progress from $(basename "$where")"
-      if [ "$docs" = darkmem ]; then want_docs="$MIRROR/superpowers"; else want_docs="$where/docs/forge"; fi
+      if [ "$docs" = darkmem ]; then want_docs="$MIRROR/forge"; else want_docs="$where/docs/forge"; fi
       if [ "$progress" = darkmem ]; then
         want_ledger="$MIRROR/work/sdd/p1" want_latest="$MIRROR/work/handoff/latest.md"
       else

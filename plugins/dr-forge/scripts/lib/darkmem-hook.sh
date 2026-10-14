@@ -7,11 +7,11 @@
 . "$(dirname "${BASH_SOURCE[0]}")/roots.sh"
 _DARKMEM_HOOK_SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-# No config file means no mapping, and costs no node start: the common case
-# for a repository that never used darkmem.
+# Neither file means no mapping and nothing in a mirror, and costs no node
+# start: the common case for a repository that never used darkmem.
 _darkmem_configured() {
   command -v node >/dev/null 2>&1 || return 1
-  [ -f "${HOME:-}/.dr-forge/config.json" ] || [ -f "${HOME:-}/.dr-superpowers/config.json" ]
+  [ -f "${HOME:-}/.dr-forge/config.json" ] || [ -f "${HOME:-}/.dr-forge/stores.json" ]
 }
 
 # _darkmem_watchdog SECONDS CMD... — CMD, killed with its children after
@@ -82,20 +82,22 @@ _darkmem_fit() {
 # darkmem_session_lines DIR SID [ROOM] — reconcile's and pull's lines for the
 # session start note, without notes, "nothing to pull" or a pull summary that
 # reports nothing, fitted to 20 lines and ROOM characters (default: no
-# character limit). A malformed config prints its one-line reason instead.
+# character limit). A malformed config prints its one-line reason instead. A
+# repository that is disabled or unmapped still reconciles while a family is in
+# the mirror, so that family moves back.
 darkmem_session_lines() {
   local reason status
   _darkmem_configured || return 0
-  reason=$( (forge_project "$1" >/dev/null) 2>&1 )
+  reason=$( (forge_docs_store "$1" >/dev/null) 2>&1 )
   status=$?
-  case $status in
-    0) ;;
-    1) return 0 ;;
-    *) printf '%s\n' "$reason" | head -n 1; return 0 ;;
-  esac
+  [ "$status" = 0 ] || { printf '%s\n' "$reason" | head -n 1; return 0; }
+  (forge_project "$1") >/dev/null 2>&1 \
+    || [ "$( (forge_docs_store "$1") 2>/dev/null)" = darkmem ] \
+    || [ "$( (forge_progress_store "$1") 2>/dev/null)" = darkmem ] \
+    || return 0
   { _darkmem_run "$1" "$2" 200 reconcile 2>&1; _darkmem_run "$1" "$2" 60 pull 2>&1; } \
     | tr -d '\r' \
-    | grep -v -e '^note:' -e 'nothing to pull' \
+    | grep -v -e '^note:' -e 'nothing to pull' -e 'reconcile moves it back$' \
         -e '^darkmem-sync pull: 0 documents, 0 ledgers, 0 checkpoints; 0 conflicts, 0 failures$' \
     | _darkmem_fit 20 "${3:-1000000}"
   return 0

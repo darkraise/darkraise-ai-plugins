@@ -949,9 +949,9 @@ has "waves: the integration check is required" "$out" "ERROR header: a waves pla
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/superpowers/specs" "$M/superpowers/plans"
-printf '# Spec\n' > "$M/superpowers/specs/s.md"
-printf '# P\n\n**Spec:** docs/forge/specs/s.md\n\n### Task 1: One\n' > "$M/superpowers/plans/p.md"
+mkdir -p "$M/forge/specs" "$M/forge/plans"
+printf '# Spec\n' > "$M/forge/specs/s.md"
+printf '# P\n\n**Spec:** docs/forge/specs/s.md\n\n### Task 1: One\n' > "$M/forge/plans/p.md"
 out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/forge/plans/p.md --no-probe 2>&1)
 lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"

@@ -17,10 +17,10 @@ test("no command, an unknown command or an unknown flag is a usage error", async
 
 test("local mode prints one line and succeeds", async () => {
   const repo = makeRepo();
-  const { env } = makeHome({ repo, config: null });
+  const { env } = makeHome({ repo, config: null, stores: null });
   const result = await run(["status"], { cwd: repo, env });
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /^darkmem-sync: local mode — no .*config\.json\n$/);
+  assert.match(result.stdout, /^darkmem-sync: local mode — darkmem is disabled \(darkmemEnabled is false\)\n$/);
 });
 
 test("a malformed config is exit 2 naming the file", async () => {
@@ -42,7 +42,7 @@ test("status in darkmem mode names the mirror and its local changes", async () =
     `darkmem-sync: project proj at http://127.0.0.1:9; mirror ${mirror}`,
     "documents: configured darkmem, applied darkmem",
     "progress: configured darkmem, applied darkmem",
-    "new: superpowers/specs/a.md",
+    "new: forge/specs/a.md",
     "unpushed: sdd/p1/progress.md (52 bytes, never synced)",
     "",
   ].join("\n"));
@@ -85,7 +85,7 @@ test("status names a local family as not synced and leaves its files out", async
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /^documents: configured darkmem, applied darkmem$/m);
   assert.match(result.stdout, /^progress: configured darkmem, applied local, not synced$/m);
-  assert.match(result.stdout, /^new: superpowers\/specs\/a\.md$/m);
+  assert.match(result.stdout, /^new: forge\/specs\/a\.md$/m);
   assert.doesNotMatch(result.stdout, /sdd\/p1/);
 });
 

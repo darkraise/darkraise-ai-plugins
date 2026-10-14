@@ -35,25 +35,29 @@ export function makeRepo() {
   return dir;
 }
 
-// A HOME whose ~/.dr-forge/config.json (with legacy: true, the pre-2.0
-// ~/.dr-superpowers/config.json) maps `repo` to `project`.
+// A HOME whose ~/.dr-forge/config.json maps `repo` to `project` with darkmem
+// enabled (`enabled: false` leaves darkmemEnabled out, `enabled: "off"` sets it false).
 // `config` replaces the file's content (a string is written verbatim); null
 // writes no file at all. `stores` is the ~/.dr-forge/stores.json entry for
 // `repo` (both families applied darkmem by default); null writes no record.
 export function makeHome({
-  repo, url = "http://127.0.0.1:9", project = "proj", config, legacy = false,
+  repo, url = "http://127.0.0.1:9", project = "proj", config, enabled = true,
   stores = { documents: "darkmem", progress: "darkmem" },
 } = {}) {
   const home = scratch("dms-home-");
-  const dir = path.join(home, legacy ? ".dr-superpowers" : ".dr-forge");
-  const body = config !== undefined ? config : { darkmem: { url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project } } } };
+  const dir = path.join(home, ".dr-forge");
+  const mapping = { darkmem: { url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project } } } };
+  if (enabled === true) mapping.darkmemEnabled = true;
+  if (enabled === "off") mapping.darkmemEnabled = false;
+  const body = config !== undefined ? config : mapping;
   if (body !== null) {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "config.json"), typeof body === "string" ? body : JSON.stringify(body));
   }
+  const mirror = path.join(dir, "mirror", project);
   if (stores !== null && repo) {
-    fs.mkdirSync(path.join(home, ".dr-forge"), { recursive: true });
-    fs.writeFileSync(path.join(home, ".dr-forge", "stores.json"), JSON.stringify({ [repo]: stores }));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "stores.json"), JSON.stringify({ [repo]: { project, mirror, ...stores } }));
   }
   const env = {
     ...process.env,
@@ -62,10 +66,7 @@ export function makeHome({
     DR_FORGE_SESSION_ID: "sess-1",
     DARKMEM_SYNC_TIMEOUT_MS: "3000",
   };
-  delete env.DR_FORGE_DOCUMENT_STORE;
-  delete env.DR_FORGE_PROGRESS_SOURCE;
-  const mirror = path.join(dir, "mirror", project);
-  return { home, env, mirror, docsRoot: path.join(mirror, "superpowers"), workRoot: path.join(mirror, "work") };
+  return { home, env, mirror, docsRoot: path.join(mirror, "forge"), workRoot: path.join(mirror, "work") };
 }
 
 // Runs scripts/darkmem-sync asynchronously: a stub server in this process
@@ -85,4 +86,12 @@ export function write(file, content) {
 
 export function read(file) {
   return fs.readFileSync(file, "utf8");
+}
+
+// A mirror whose darkmem was already checked for pre-3.0 uris, so a test's
+// first injected failure meets the command, not that check.
+export function markMigrated(mirror) {
+  write(path.join(mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [], prefix: "forge",
+  }));
 }
