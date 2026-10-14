@@ -109,9 +109,48 @@ function planFile(cfg, checkout, name) {
   return path.join(checkout, key);
 }
 
+const realOr = file => {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return path.resolve(file);
+  }
+};
+
+// The name an absolute ledger identity stands for, computed from the roots and
+// never by searching for a docs segment (as pathToUri does): under the docs
+// root in use, then this checkout's docs directory and top level, then the
+// primary checkout's, tried as written and then with symbolic links resolved.
+// A relative name, or an absolute one under no root, is unchanged.
+function rootedName(cfg, checkout, name) {
+  if (!path.isAbsolute(name)) return name;
+  const bases = [
+    [forgeDir("docs", checkout), DOCS],
+    [checkout, null],
+    [forgeDir("docs", cfg.repoRoot), DOCS],
+    [cfg.repoRoot, null],
+  ];
+  if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, "superpowers"), DOCS]);
+  for (const resolve of [file => path.resolve(file), realOr]) {
+    for (const [base, prefix] of bases) {
+      const rel = path.relative(resolve(base), resolve(name));
+      if (rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)) {
+        const posix = rel.split(path.sep).join("/");
+        return prefix ? `${prefix}/${posix}` : posix;
+      }
+    }
+  }
+  return name;
+}
+
 // Matched on the backticked name, as plan_finished does, so one plan's name
-// that is a substring of another's cannot claim its outcome.
-function planFinished(cfg, checkout, name) {
+// that is a substring of another's cannot claim its outcome. An absolute
+// identity is mapped first and completed.md is found from the mapped name: the
+// directory the absolute path names is gone once the documents have moved. An
+// identity no root maps is never finished, whatever lies beside it.
+function planFinished(cfg, checkout, identity) {
+  const name = rootedName(cfg, checkout, identity);
+  if (path.isAbsolute(name)) return false;
   let text;
   try {
     text = fs.readFileSync(path.join(path.dirname(planFile(cfg, checkout, name)), "completed.md"), "utf8");

@@ -448,3 +448,45 @@ test("a primary checkout file that cannot be read keeps progress in darkmem, not
   assert.ok(result.stdout.includes(`  ${target}: could not be read (EISDIR)\n`), result.stdout);
   assert.equal(s.stores().progress, "darkmem");
 });
+
+const ABSOLUTE_LEDGER = file => `# SDD ledger — plan: ${file}\nTask 1: complete (commits aaaa..bbbb)\n`;
+
+test("an absolute ledger identity into the checkout counts as finished after the documents move removed it", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.home, ".dr-forge", "config.json"), JSON.stringify({ darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
+  write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(path.join(s.repo, "docs", "forge", "plans", "p1.md")));
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+  assert.equal(fs.existsSync(path.join(s.repo, "docs", "forge", "plans", "p1.md")), false, "the documents move ran first");
+});
+
+test("a worktree's ledger whose absolute identity points into the primary checkout counts as finished", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.worktree, ".forge", "sdd", "p2", "progress.md"), ABSOLUTE_LEDGER(path.join(s.repo, "docs", "forge", "plans", "p2.md")));
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+});
+
+test("an absolute ledger identity under no root stays in progress and is named, even beside a completed.md naming it", async t => {
+  const s = await setup(t, "darkmem");
+  const elsewhere = path.join(scratch("dms-elsewhere-"), "docs", "forge", "plans", "p1.md");
+  write(path.join(path.dirname(elsewhere), "completed.md"), `- \`${elsewhere}\`\n`);
+  write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(elsewhere));
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(`darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: ${elsewhere}\n`), result.stdout);
+});
+
+test("an absolute ledger identity through a symbolic-linked docs directory is named from its physical path", { skip: process.platform === "win32" && "directory symbolic links need privileges on Windows" }, async t => {
+  const s = await setup(t, "darkmem");
+  const outside = path.join(scratch("dms-docs-"), "forge");
+  fs.renameSync(path.join(s.repo, "docs", "forge"), outside);
+  fs.symlinkSync(outside, path.join(s.repo, "docs", "forge"), "dir");
+  write(path.join(s.repo, ".forge", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(path.join(outside, "plans", "p1.md")));
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+});
