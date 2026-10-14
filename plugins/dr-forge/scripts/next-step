@@ -101,32 +101,58 @@ plan_finished() {
   return 1
 }
 
-# plan_name ROOT NAME — NAME; an absolute NAME is named from the roots instead
-# (forge_name), else from the primary checkout's top level, as written and then
-# in its physical form, so a worktree's register or ledger naming the primary's
-# copy still finds its plan. Never a search for a docs segment; an absolute name
-# under no root is printed unchanged, and plan_finished never counts it. Only
-# an absolute NAME goes through forge_name, which would make an existing
-# relative name absolute.
-plan_name() {
-  local name=$2 common primary physical spelling
-  case $name in
-    /*|[A-Za-z]:/*|[A-Za-z]:\\*) ;;
-    *) printf '%s\n' "$name"; return 0 ;;
-  esac
-  name=$(forge_name "$name" "$1")
-  case $name in
-    /*|[A-Za-z]:/*|[A-Za-z]:\\*) ;;
-    *) printf '%s\n' "$name"; return 0 ;;
-  esac
-  if common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
-    && primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null); then
-    primary=$(_forge_path "$primary")
-    physical=$(_forge_path "$(cd "$(dirname "$name")" 2>/dev/null && pwd -P)/$(basename "$name")")
-    for spelling in "$name" "$physical"; do
-      case $spelling in "$primary"/*) printf '%s\n' "${spelling#"$primary"/}"; return 0 ;; esac
-    done
+# _plan_roots ROOT — "<root>\t<name prefix>" for each place a plan name can be
+# read from: the docs root in use, then the docs directory and top level of the
+# checkout and of every worktree (the primary among them).
+_plan_roots() {
+  local top=${_FORGE_TOP:-$1} tree
+  printf '%s\t%s\n' "$_FORGE_DOCS_ROOT" "$(forge_dir_rel docs "$top")"
+  { printf '%s\n' "$top"; git -C "$top" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p'; } |
+  while IFS= read -r tree; do
+    tree=$(_forge_path "$tree")
+    printf '%s\t%s\n' "$(forge_dir docs "$tree")" "$(forge_dir_rel docs "$tree")"
+    printf '%s\t\n' "$tree"
+  done
+}
+
+# _plan_physical PATH — PATH with symbolic links resolved where its directory
+# exists, else unchanged.
+_plan_physical() {
+  local dir
+  if [ -d "$1" ]; then dir=$(cd "$1" 2>/dev/null && pwd -P) && { _forge_path "$dir"; return 0; }
+  else dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) && { _forge_path "$dir/$(basename "$1")"; return 0; }
   fi
+  printf '%s\n' "$1"
+}
+
+# plan_name ROOT NAME — NAME; an absolute NAME is named from the roots instead
+# (_plan_roots), as written and then with symbolic links resolved in the name
+# and in each root, the same rule as the JavaScript mapping. The deepest root
+# holding the name wins, so a worktree nested inside the primary checkout is
+# not taken for the primary's own files, and a worktree's register or ledger
+# naming the primary's copy still finds its plan. Never a search for a docs
+# segment; an absolute name under no root is printed unchanged, and
+# plan_finished never counts it.
+plan_name() {
+  local name=${2//\\//} pass candidate root prefix best="" best_len=0
+  case $name in
+    /*|[A-Za-z]:/*) ;;
+    *) printf '%s\n' "$2"; return 0 ;;
+  esac
+  forge_stores_init "$1"
+  name=$(_forge_path "$name")
+  for pass in written physical; do
+    candidate=$name
+    [ "$pass" = written ] || candidate=$(_plan_physical "$name")
+    while IFS=$'\t' read -r root prefix; do
+      [ "$pass" = written ] || root=$(_plan_physical "$root")
+      case $candidate in
+        "$root"/*)
+          if [ "${#root}" -gt "$best_len" ]; then best_len=${#root}; best=${prefix:+$prefix/}${candidate#"$root"/}; fi ;;
+      esac
+    done < <(_plan_roots "$1")
+    if [ -n "$best" ]; then printf '%s\n' "$best"; return 0; fi
+  done
   printf '%s\n' "$name"
 }
 

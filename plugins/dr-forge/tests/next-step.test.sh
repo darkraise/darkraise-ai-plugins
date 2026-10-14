@@ -674,6 +674,18 @@ has "routing: a worktree names the primary checkout's absolute plan path" "$OUT"
 git -C "$GREPO" worktree remove --force "$GWT"
 git -C "$GREPO" branch -q -D routing-side
 
+# The deepest root wins, as in the JavaScript mapping: a cell naming a copy in a
+# worktree nested inside the primary checkout is that worktree's plan, not a
+# file of the primary named .nested-wt/docs/….
+NWT="$GREPO/.nested-wt"
+git -C "$GREPO" worktree add -q -b routing-nested "$NWT"
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$NWT/docs/superpowers/plans/inc1.md" >/dev/null
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: a name in a nested worktree is named from that worktree" "$OUT" "Still assigned to a finished plan: #1, #6"
+git -C "$GREPO" worktree remove --force "$NWT"
+git -C "$GREPO" branch -q -D routing-nested
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned docs/superpowers/plans/inc1.md >/dev/null
+
 mkdir -p "$GREPO/.forge/sdd/inc3"
 printf '# SDD ledger — plan: docs/superpowers/plans/inc3.md\n' > "$GREPO/.forge/sdd/inc3/progress.md"
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
