@@ -67,13 +67,38 @@ check "second run: nothing to migrate" "$out" "forge-migrate: nothing to migrate
 B="$TMP/both"
 repo "$B"
 mkdir -p "$B/.superpowers" "$B/.forge" "$B/docs/superpowers"
+echo old > "$B/.superpowers/clash.md"
+echo new > "$B/.forge/clash.md"
 printf '.superpowers/\n' > "$B/.gitignore"
 out=$(bash "$FM" "$B" 2>&1); code=$?
 check "both: exit 1" "$code" "1"
-check "both: refusal names the pair" "$(grep -c "refused: $B/.superpowers and $B/.forge both exist" <<<"$out")" "1"
-check "both: .superpowers kept" "$(exists "$B/.superpowers")" "yes"
+check "both: refusal names the differing file" "$(grep -c "refused: $B/.superpowers/clash.md differs from $B/.forge/clash.md" <<<"$out")" "1"
+check "both: differing file kept in .superpowers" "$(cat "$B/.superpowers/clash.md")" "old"
+check "both: .forge file untouched" "$(cat "$B/.forge/clash.md")" "new"
 check "both: untracked docs still moved" "$(exists "$B/docs/forge")" "yes"
-check "both: no ignore rewrite after a refusal" "$(cat "$B/.gitignore")" ".superpowers/"
+check "both: the new pattern is added beside the old" "$(cat "$B/.gitignore")" $'.superpowers/\n.forge/'
+rm "$B/.superpowers/clash.md"
+out=$(bash "$FM" "$B" 2>&1); code=$?
+check "both resolved: exit 0" "$code" "0"
+check "both resolved: .superpowers gone" "$(exists "$B/.superpowers")" "no"
+check "both resolved: the old pattern is replaced, not duplicated" "$(cat "$B/.gitignore")" ".forge/"
+
+# --- .superpowers and .forge both present: merged file by file ---
+M="$TMP/merge"
+repo "$M"
+mkdir -p "$M/.superpowers/sub" "$M/.forge"
+echo a > "$M/.superpowers/only-old.md"
+echo b > "$M/.superpowers/sub/deep.md"
+echo same > "$M/.superpowers/same.md"
+echo same > "$M/.forge/same.md"
+echo c > "$M/.forge/only-new.md"
+out=$(bash "$FM" "$M" 2>&1); code=$?
+check "merge: exit 0" "$code" "0"
+check "merge: old-only file moved" "$(cat "$M/.forge/only-old.md" 2>/dev/null)" "a"
+check "merge: nested old-only file moved" "$(cat "$M/.forge/sub/deep.md" 2>/dev/null)" "b"
+check "merge: new-only file kept" "$(cat "$M/.forge/only-new.md" 2>/dev/null)" "c"
+check "merge: identical file kept once" "$(cat "$M/.forge/same.md" 2>/dev/null)" "same"
+check "merge: .superpowers gone" "$(exists "$M/.superpowers")" "no"
 
 D="$TMP/dirty"
 repo "$D"
@@ -86,6 +111,31 @@ out=$(bash "$FM" "$D" 2>&1); code=$?
 check "dirty docs: exit 1" "$code" "1"
 check "dirty docs: refused" "$(grep -c 'has uncommitted changes' <<<"$out")" "1"
 check "dirty docs: left in place" "$(cat "$D/docs/superpowers/a.md")" "two"
+
+# --- a refused checkout never leaves a moved .forge/ un-ignored ---
+G="$TMP/partial"
+repo "$G"
+mkdir -p "$G/.superpowers" "$G/docs/superpowers"
+echo one > "$G/docs/superpowers/a.md"
+printf '.superpowers/\n' > "$G/.gitignore"
+git -C "$G" add docs .gitignore
+git -C "$G" commit -q -m docs
+echo two > "$G/docs/superpowers/a.md"
+echo 'docs/superpowers/local/' >> "$G/.git/info/exclude"
+out=$(bash "$FM" "$G" 2>&1); code=$?
+check "partial: exit 1" "$code" "1"
+check "partial: .superpowers moved" "$(exists "$G/.forge")" "yes"
+check "partial: .gitignore ignores both names" "$(cat "$G/.gitignore")" $'.superpowers/\n.forge/'
+check "partial: info/exclude names both" "$(tail -n 2 "$G/.git/info/exclude" | tr '\n' ' ')" "docs/superpowers/local/ docs/forge/local/ "
+out=$(bash "$FM" "$G" 2>&1)
+check "partial again: ignore files unchanged, nothing rewritten" "$(grep -c '^rewrote' <<<"$out")" "0"
+check "partial again: .gitignore not duplicated" "$(cat "$G/.gitignore")" $'.superpowers/\n.forge/'
+git -C "$G" checkout -q -- docs
+out=$(bash "$FM" "$G" 2>&1); code=$?
+check "partial resolved: exit 0" "$code" "0"
+check "partial resolved: .gitignore holds only the new name" "$(cat "$G/.gitignore")" ".forge/"
+check "partial resolved: info/exclude holds only the new name" "$(tail -n 1 "$G/.git/info/exclude")" "docs/forge/local/"
+check "partial resolved: info/exclude has no old line" "$(grep -c 'docs/superpowers' "$G/.git/info/exclude")" "0"
 
 E="$TMP/both-docs"
 repo "$E"
@@ -108,10 +158,28 @@ printf 'console.log("home migrated");\n' > "$P/lib/darkmem-migrate.mjs"
 out=$(bash "$P/forge-migrate" "$H" 2>&1); code=$?
 check "darkmem-migrate: exit 0" "$code" "0"
 check "darkmem-migrate: its output shown" "$(grep -c 'home migrated' <<<"$out")" "1"
+check "darkmem-migrate moved the home: not reported as nothing to migrate" "$(grep -c 'nothing to migrate' <<<"$out")" "0"
 printf 'process.exit(3);\n' > "$P/lib/darkmem-migrate.mjs"
 out=$(bash "$P/forge-migrate" "$H" 2>&1); code=$?
 check "darkmem-migrate fails: exit 1" "$code" "1"
 check "darkmem-migrate fails: refused" "$(grep -c 'refused: scripts/lib/darkmem-migrate.mjs' <<<"$out")" "1"
+
+# --- no Node: refused only when there is a home to migrate ---
+NB="$TMP/nonode-bin"
+mkdir -p "$NB"
+for c in git timeout dirname tr sed head grep mv rm cat find cmp mkdir awk readlink sort mktemp cp bash; do
+  src=$(type -P "$c") && ln -s "$src" "$NB/$c"
+done
+printf 'console.log("x");\n' > "$P/lib/darkmem-migrate.mjs"
+NH="$TMP/no-home"
+mkdir -p "$NH"
+out=$(HOME="$NH" PATH="$NB" bash "$P/forge-migrate" "$H" 2>&1); code=$?
+check "no node, no old home: exit 0" "$code" "0"
+check "no node, no old home: nothing to migrate" "$out" "forge-migrate: nothing to migrate in $H"
+mkdir -p "$NH/.dr-superpowers"
+out=$(HOME="$NH" PATH="$NB" bash "$P/forge-migrate" "$H" 2>&1); code=$?
+check "no node, old home present: exit 1" "$code" "1"
+check "no node, old home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
