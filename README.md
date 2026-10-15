@@ -301,6 +301,9 @@ before enabling `dr-status` and `dr-forge`, so their hooks do not run twice.
 `dr-forge` 2.0.0 replaces `dr-superpowers` and `dr-cockpit`: install it, start
 one session so it imports their settings, then uninstall both (see
 [Migrating from dr-superpowers and dr-cockpit](plugins/dr-forge/README.md#migrating-from-dr-superpowers-and-dr-cockpit)).
+dr-forge 3.0.0 then renames the pre-3.0 repository directories and the home with
+`forge-migrate`: see
+[Migrating to 3.0](plugins/dr-forge/README.md#migrating-to-30).
 Statusline script storage remains `~/.claude/dcc-statusline/`; a registry at
 `~/.claude/dcc-statusline-installations.json` remembers custom account destinations.
 Set `DCC_STATUSLINE_HOME` only when installing or intentionally moving a copy.

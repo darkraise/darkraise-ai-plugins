@@ -313,7 +313,9 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   store set back to `local` while darkmem is on and reachable is pulled from
   darkmem first. A repository a 2.x release moved into darkmem stays there,
   unsynced, while `darkmemEnabled` is unset: each session start says so until
-  you set it either way. Without the darkmem MCP tools, or with darkmem off,
+  you set it either way. A repository with no mapping but a record that still
+  places a family in the mirror is read and reconciled the same way: the
+  scripts read the mirror until the next session start moves the family back. Without the darkmem MCP tools, or with darkmem off,
   the durable facts the skills would file with `memory_add` go to
   `<docs>/notes/<date>-facts.md` instead. Session start runs `reconcile` and
   `pull`; the skills' stop points run `push`, and a
@@ -765,7 +767,7 @@ The same settings can be set with
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
 | darkmem | `darkmemEnabled` | `false` | Use darkmem for mapped repositories. Off keeps everything in the repository, and a family already in the mirror moves back at the next session start, from the mirror alone. |
-| darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is always local. |
+| darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until the next session start moves it back. |
 | darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
 The cockpit settings (Cockpit, Context, Notifications) apply at once, except
@@ -859,6 +861,8 @@ No other file is edited: plans, specs and ledgers that cite
 `docs/forge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
 older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
 Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
+`DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
+no longer read at all: set `documentStore` and `progressSource` instead.
 
 `forge-migrate` also moves the home: the darkmem mapping in
 `~/.dr-superpowers/config.json` into `~/.dr-forge/config.json` when that file

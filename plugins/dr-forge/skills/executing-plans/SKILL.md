@@ -102,8 +102,8 @@ whole branch at the end.
 continue?" prompts and progress summaries waste your human partner's time -
 they asked you to execute the plan, so execute it.
 
-**Rulings, not stalls.** Decide the mechanical problems yourself - a legacy
-name, a missing directory, a tool failure, a plan that is silent where you need
+**Rulings, not stalls.** Decide the mechanical problems yourself - a missing
+directory, a tool failure, a plan that is silent where you need
 an answer - and record each in the ledger as `Ruling: <what you decided> —
 <why> — <what it costs if wrong>`, said aloud. Everything that needs judgment
 about the plan, the spec or a finding goes to the ruling seat, which reads the
