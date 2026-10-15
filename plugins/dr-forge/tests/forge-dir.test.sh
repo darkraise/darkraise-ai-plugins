@@ -75,5 +75,33 @@ check "worktree: its git dir and the primary's state" "$(forge_legacy_layout "$W
 rm -rf "$WG/dr-superpowers" "$G/.superpowers"
 check "worktree: nothing left" "$(forge_legacy_layout "$W")" ""
 
+# --- forge_legacy_layout: an unmigrated home ---
+SAVED_HOME=$HOME
+export HOME="$TMP/home2"; mkdir -p "$HOME"
+OLDH="$HOME/.dr-superpowers"
+NEWH="$HOME/.dr-forge"
+mkdir -p "$OLDH"
+printf '{"darkmem":{"repos":{}}}\n' > "$OLDH/config.json"
+check "home: old darkmem mapping, new home lacks it" "$(forge_legacy_layout "$R")" "$OLDH"
+mkdir -p "$NEWH"
+printf '{"darkmemEnabled":true}\n' > "$NEWH/config.json"
+check "home: a new config without the mapping still counts" "$(forge_legacy_layout "$R")" "$OLDH"
+printf '{"darkmem":{"repos":{}}}\n' > "$NEWH/config.json"
+check "home: the new config holds the mapping" "$(forge_legacy_layout "$R")" ""
+printf '{"darkmemEnabled":true}\n' > "$OLDH/config.json"
+check "home: an old config without a mapping" "$(forge_legacy_layout "$R")" ""
+mkdir -p "$OLDH/mirror"
+check "home: an empty old mirror folder" "$(forge_legacy_layout "$R")" ""
+mkdir -p "$OLDH/mirror/proj"
+check "home: a mirror left in the old home" "$(forge_legacy_layout "$R")" "$OLDH"
+printf '{"darkmem":{}}\n' > "$OLDH/config.json"
+rm -rf "$NEWH" "$OLDH/mirror/proj"
+check "home: reported once beside a repository path" "$(mkdir -p "$R/.superpowers"; forge_legacy_layout "$R" | tr '\n' '|')" "$OLDH|$R/.superpowers|"
+rm -rf "$R/.superpowers" "$OLDH"
+export HOME=$SAVED_HOME
+
+# Codex runs no session-start hook, so its tool notes carry the check.
+check "codex-tools: names the pre-3.0 check" "$(grep -c 'pre-3.0 layout' "$HERE/../skills/using-forge/references/codex-tools.md")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -36,6 +36,13 @@ disagree.
   spawn allowlist — V2 accepts only V2-capable presets and hard-errors
   on the rest.
 
+## Pre-3.0 layout check
+
+Codex runs no session-start hook, so nothing reports a repository or home that
+still uses the pre-3.0 names. Run `scripts/repo-audit` once at the start of a
+session; if it prints a `pre-3.0 layout` line, run the `forge-migrate` command
+that line names before any other work.
+
 ## Waiting on children
 
 `wait_agent` is an event subscription, not a poll: a long wait wakes

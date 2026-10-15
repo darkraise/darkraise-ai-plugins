@@ -21,10 +21,17 @@ forge_dir_rel() {
 # forge_legacy_layout [ROOT] — each pre-3.0 path of the checkout at ROOT
 # (default: .) that still exists, one per line: its .superpowers/ and
 # docs/superpowers/, its git dir's dr-superpowers/, and the primary checkout's
-# .superpowers/, which holds a linked worktree's handoff. dr-forge reads none of
-# them since 3.0.0, so scripts/forge-migrate must move them first.
+# .superpowers/, which holds a linked worktree's handoff. It also names
+# ~/.dr-superpowers when that home is unmigrated: its config holds a darkmem
+# mapping the new config lacks, or its mirror folder still holds a mirror.
+# dr-forge reads none of them since 3.0.0, so scripts/forge-migrate must move
+# them first.
 forge_legacy_layout() {
-  local root=${1:-.} gitdir common primary
+  local root=${1:-.} gitdir common primary home=${HOME:-}/.dr-superpowers
+  if [ -n "${HOME:-}" ] && {
+    { grep -qs '"darkmem"[[:space:]]*:' "$home/config.json" && ! grep -qs '"darkmem"[[:space:]]*:' "${HOME}/.dr-forge/config.json"; } ||
+    [ -n "$(ls -A "$home/mirror" 2>/dev/null)" ]
+  }; then printf '%s\n' "$home"; fi
   [ ! -e "$root/.superpowers" ] || printf '%s\n' "$root/.superpowers"
   [ ! -e "$root/docs/superpowers" ] || printf '%s\n' "$root/docs/superpowers"
   gitdir=$(git -C "$root" rev-parse --absolute-git-dir 2>/dev/null) || return 0
