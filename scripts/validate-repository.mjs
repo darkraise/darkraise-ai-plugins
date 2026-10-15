@@ -38,6 +38,7 @@ export function validateRepository(root) {
       if (manifest.name !== entry.name) errors.push(`${client}: manifest name mismatch for ${entry.name}`);
       if (!/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(manifest.version ?? '')) errors.push(`${entry.name}: invalid version`);
       if (!manifest.description || typeof manifest.description !== 'string') errors.push(`${entry.name}: description is required`);
+      if (entry.name === 'dr-forge' && /superpowers/i.test(JSON.stringify(entry))) errors.push(`${catalogPath}: dr-forge entry: retired superpowers name`);
       const previous = manifests.get(entry.name);
       if (previous && previous.version !== manifest.version) errors.push(`${entry.name}: client version mismatch`);
       manifests.set(entry.name, manifest);

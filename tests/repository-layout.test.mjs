@@ -39,6 +39,8 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['pre-2.0 plugin prefix', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'see dr-superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
     ['unresolved dr-forge reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'see dr-forge:no-such-skill\n'); }, /unresolved dr-forge reference no-such-skill/],
     ['retired superpowers name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/scripts/stray.sh'), 'mkdir -p .superpowers/sdd\n'); }, /plugins\/dr-forge\/scripts\/stray\.sh:1: retired superpowers name/],
+    ['retired name in the Claude catalog entry', c => { c.plugins.find(p => p.name === 'dr-forge').keywords.push('superpowers'); }, /\.claude-plugin\/marketplace\.json: dr-forge entry: retired superpowers name/],
+    ['retired name in the Codex catalog entry', c => { c.plugins.find(p => p.name === 'dr-forge').description = 'a superpowers fork'; }, /\.agents\/plugins\/marketplace\.json: dr-forge entry: retired superpowers name/, '.agents/plugins/marketplace.json'],
     ['retired name in any case', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'a Superpowers worktree\n'); }, /plugins\/dr-forge\/reference\/stray\.md:1: retired superpowers name/],
   ]) {
     await t.test(name, () => {
