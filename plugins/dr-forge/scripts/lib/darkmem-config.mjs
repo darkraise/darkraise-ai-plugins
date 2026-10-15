@@ -155,7 +155,7 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
     const project = recorded.project ?? mapped.entry?.project;
     const mirror = recorded.mirror ?? (mapped.entry && path.join(forgeHome(env), "mirror", mapped.entry.project));
     if (typeof project !== "string" || !PROJECT.test(project) || typeof mirror !== "string" || !path.isAbsolute(mirror)) {
-      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dr-forge/config.json again (or run scripts/forge-migrate if it was mapped in ~/.dr-superpowers) so reconcile can move it back`);
+      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dr-forge/config.json again (or run scripts/forge-migrate if it was mapped before 3.0) so reconcile can move it back`);
     }
     return result(reason, undecided ? applied : LOCAL, applied, syncOf(env, mapped, project, mirror, false));
   }
