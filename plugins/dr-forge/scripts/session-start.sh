@@ -37,6 +37,9 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
         printf '%s\n' "$record" \
           > "$sessions_dir/by-id/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').json" 2>/dev/null || true
       fi
+      # Every session start rewrites its own records, so one untouched for a
+      # month belongs to a session or a checkout that is gone.
+      find "$sessions_dir" "$sessions_dir/by-id" -maxdepth 1 -type f -name '*.json' -mtime +30 -delete 2>/dev/null || true
     fi
   fi
   # Background work dies with the process, so a launch made before a startup or

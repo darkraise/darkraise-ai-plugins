@@ -65,6 +65,16 @@ check "shared cwd: the first session keeps its own record" \
 check "shared cwd: the second session has its own record" \
   "$(jq -r '.transcript_path' "$BYID/s-456.json" 2>/dev/null)" "/tmp/second-transcript.jsonl"
 
+# --- records a month old are pruned; the session's own and recent ones stay ---
+printf '{}\n' > "$BYID/s-old.json"
+printf '{}\n' > "$HOME_A/.claude/dr-forge/sessions/D--gone-worktree.json"
+touch -d '40 days ago' "$BYID/s-old.json" "$HOME_A/.claude/dr-forge/sessions/D--gone-worktree.json" "$BYID/s-123.json"
+payload | HOME="$HOME_A" bash "$SCRIPT" >/dev/null 2>&1
+check "prune: an old session record is removed" "$([ -e "$BYID/s-old.json" ] && echo yes || echo no)" "no"
+check "prune: an old checkout record is removed" "$([ -e "$HOME_A/.claude/dr-forge/sessions/D--gone-worktree.json" ] && echo yes || echo no)" "no"
+check "prune: the starting session's record is rewritten, not removed" "$(jq -r '.session_id' "$BYID/s-123.json" 2>/dev/null)" "s-123"
+check "prune: a recent record stays" "$([ -e "$BYID/s-456.json" ] && echo yes || echo no)" "yes"
+
 # --- malformed stdin ---
 HOME_B="$TMP/b"; mkdir -p "$HOME_B"
 out=$(printf 'not json' | HOME="$HOME_B" bash "$SCRIPT" 2>/dev/null)

@@ -378,7 +378,8 @@ script persists the session's `transcript_path`, `session_id`, `cwd`, and
 and to `~/.claude/dr-forge/sessions/<sanitized-cwd>.json` (last writer
 wins per directory). `scripts/context-size` reads the session's own record by
 `CLAUDE_CODE_SESSION_ID`, so two sessions in one checkout each measure their
-own transcript, and falls back to the directory's record. On the
+own transcript, and falls back to the directory's record. A record no
+session start has rewritten for 30 days is deleted. On the
 `compact` source it also appends a compaction snapshot (see Session budget).
 Malformed stdin skips persistence but never blocks the injection, and the
 hook always exits 0.
