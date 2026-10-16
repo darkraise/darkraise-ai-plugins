@@ -78,7 +78,7 @@ import {
   tabsOf,
   typedNumber,
 } from '../hooks/cockpit/config'
-import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -1436,7 +1436,6 @@ describe('desktop', () => {
     expect(segments).toContain('#4f7cff')
     expect(segments).toContain('#e5534b')
     expect(avatarSvg('<me>', undefined)).toContain('>&#60;</text>')
-    expect(statSvg('68%', 'of handoff budget', 200, 'success')).toContain('fill="#3fb36b">68%</text>')
     const named = labelledMeterSvg(0.4, 300, 'cyan', [{ at: 0.6 }], [
       { at: 0, text: '412k / 1.0M' },
       { at: 0.6, text: 'handoff 604k' },

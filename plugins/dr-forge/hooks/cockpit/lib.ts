@@ -678,12 +678,6 @@ export function planTasks(text: string): { n: number; title: string }[] {
   return out
 }
 
-/** "2/5" → 2. */
-export function roundNumber(round: string | null): number | null {
-  const n = Number((round ?? '').split('/')[0])
-  return round !== null && Number.isFinite(n) && n > 0 ? n : null
-}
-
 /** Milliseconds → "42s", "2m14s", "1h05m": a turn's clock, to the second under an hour. */
 export function elapsed(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))

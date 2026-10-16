@@ -60,7 +60,6 @@ import {
   repoName,
   resumeOfferOf,
   shellAge,
-  roundNumber,
   runsWidth,
   SECTIONS,
   sectionsFrom,
@@ -144,12 +143,12 @@ const STORE_IMPORTED = 'webhookImported'
 const TREND_LENGTH = 40
 // The colors the context breakdown cycles through, largest category first.
 const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] as const
-// How the desktop's run bar colors a task by its state.
 // The usage windows the desktop draws as gauges, in order.
 const GAUGED: readonly string[] = ['five_hour', 'seven_day']
 // The desktop's panel fill: a faint gray that lifts a card off the pane in
 // the light theme and the dark alike.
 const CARD = '#8080800f'
+// How the desktop's run bar colors a task by its state.
 const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
@@ -932,7 +931,6 @@ export const register: Register = on => {
     const actNow = act.kind === 'interrupted' ? { ...act, detail: kept.length === 0 ? 'nothing left running' : `${kept.join(' and ')} still running` } : act
     const finished = all.filter(one => one.isDone)
     const doneCount = items.filter(item => item.status === 'completed').length
-    const current = items.find(item => item.status === 'in_progress') ?? items.find(item => item.status === 'pending')
     const limits = spend?.limits ?? []
     const cost = head?.usd == null ? null : `$${head.usd.toFixed(2)}`
 
@@ -2741,8 +2739,6 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   return reading
 }
 
-// The pane's slower readings: the /context breakdown, estimated locally, and
-// the working tree's git state. Read while the pane is up, never per tool call.
 /** What the pane asks the surface for under a layout: the band's rows unless it is full. */
 function paneFor(layout: string) {
   return { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, ...(layout === 'full' ? {} : { rows: COMPACT_ROWS }) }
@@ -2904,6 +2900,8 @@ async function flushSettingNote($: EngineInterface) {
   for (const key of keys) if (S.changed[key] === sent[key]) delete S.changed[key]
 }
 
+// The pane's slower readings: the /context breakdown, estimated locally, and
+// the working tree's git state. Read while the pane is up, never per tool call.
 async function refreshDetail($: EngineInterface) {
   await readPlace($)
   try {
@@ -3041,8 +3039,6 @@ async function shutPane($: EngineInterface) {
   }
 }
 
-// Follows the main loop's todo list (TodoWrite) or task list (TaskCreate and
-// TaskUpdate), whichever the session uses.
 async function readVersion($: EngineInterface) {
   try {
     S.canUnderline = isAtLeast((await $.session.version()).base, UNDERLINE_SINCE)
@@ -3051,8 +3047,6 @@ async function readVersion($: EngineInterface) {
   }
 }
 
-// A Bash call that went to the background (asked for, Ctrl+B, or its
-// timeout) is a running shell until its notification or a stop names it.
 function clip(text: string, width: number): string {
   const chars = [...text]
   return chars.length <= width ? text : chars.slice(0, width - 1).join('') + '…'
@@ -3066,6 +3060,8 @@ async function endShells($: EngineInterface, text: string) {
   await syncTicker($)
 }
 
+// A Bash call that went to the background (asked for, Ctrl+B, or its
+// timeout) is a running shell until its notification or a stop names it.
 async function trackShells($: EngineInterface, tool: string, e: object, result: unknown) {
   if (tool === 'Bash') {
     const id = (result as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
@@ -3102,6 +3098,8 @@ async function readRemote($: EngineInterface) {
   }
 }
 
+// Follows the main loop's todo list (TodoWrite) or task list (TaskCreate and
+// TaskUpdate), whichever the session uses.
 async function trackPlan($: EngineInterface, tool: string, e: object, result: unknown) {
   if (tool === 'TodoWrite') {
     const todos = (e as { todos?: unknown }).todos
@@ -3163,11 +3161,6 @@ function addRun(all: CockpitSeat[], seat: string, usage: TurnUsage): CockpitSeat
   return found ? all.map(one => (one.seat === seat ? next : one)) : [...all, next]
 }
 
-function repoChanges(git: { changed: number; untracked: number }): string {
-  if (git.changed + git.untracked === 0) return ' · clean'
-  return ` · ${git.changed} changed` + (git.untracked > 0 ? ` · ${git.untracked} untracked` : '')
-}
-
 function shortSeat(seat: string): string {
   return seat.replace(/^dr-forge:/, '')
 }
@@ -3187,7 +3180,7 @@ function cacheShare(seat: CockpitSeat): number {
   return total === 0 ? 0 : Math.round((seat.cacheRead / total) * 100)
 }
 
-// The round of the task in flight, as a number, for the strip.
+// The round of the task in flight, as the ledger writes it ("2/5"), for the Run card's head.
 function runRound(summary: CockpitRun): string | null {
   return summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null
 }
