@@ -108,6 +108,12 @@ check "compact: snapshot appended" "$(grep -c '^## Compaction snapshot' <<<"$ctx
 check "compact: carries the handoff next step" "$(grep -c 'Resume at Task 4 (Four)' <<<"$ctx")" "1"
 check "compact: carries the owner prompt" "$(grep -c 'keep the API stable' <<<"$ctx")" "1"
 check "compact: under the 10,000-character hook cap" "$([ "${#ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
+check "an existing state directory ignores itself" "$(git -C "$REPO" status --porcelain --untracked-files=all -- .forge)" ""
+BARE="$TMP/bare-repo"
+git init -q -b main "$BARE"
+MSYS_NO_PATHCONV=1 jq -n --arg cwd "$BARE" '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:"",cwd:$cwd,source:"startup"}' \
+  | HOME="$HOME_D" bash "$SCRIPT" >/dev/null 2>&1
+check "a checkout without a state directory gains none" "$([ -e "$BARE/.forge" ] && echo yes || echo no)" "no"
 startup_ctx=$(payload | HOME="$HOME_A" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "startup: no snapshot" "$(grep -c '^## Compaction snapshot' <<<"$startup_ctx")" "0"
 

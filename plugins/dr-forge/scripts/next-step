@@ -492,6 +492,7 @@ handoff=$(forge_latest_file)
 today=$(date -u +%Y-%m-%d)
 write_handoff() {
   mkdir -p "$(dirname "$handoff")" || return 1
+  case $handoff in */.forge/handoff/latest.md) forge_state_ignore "${handoff%/.forge/handoff/latest.md}" ;; esac
   if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
     printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$handoff.tmp" || return 1
   else

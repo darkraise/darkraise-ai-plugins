@@ -11,6 +11,17 @@ forge_dir() {
   printf '%s/%s\n' "$root" "$leaf"
 }
 
+# forge_state_ignore [ROOT] — give ROOT's existing state directory a
+# self-ignoring .gitignore, as .forge/sdd/ has: nothing under it is ever
+# committed, and the host repository need not list it. An existing .gitignore
+# is left as it is.
+forge_state_ignore() {
+  local dir
+  dir=$(forge_dir state "${1:-.}") || return
+  [ -d "$dir" ] && [ ! -e "$dir/.gitignore" ] || return 0
+  printf '*\n' > "$dir/.gitignore" 2>/dev/null || true
+}
+
 # forge_dir_rel state|docs [ROOT] — the same directory, relative to ROOT.
 forge_dir_rel() {
   local dir
