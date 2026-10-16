@@ -134,7 +134,7 @@ your path and complete them in order.
 6. **Present design** — in sections scaled to their complexity, get user approval after each section
 7. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the last section is approved (see After the Design)
 8. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
-9. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope; post its block before the user review (see below)
+9. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
 10. **User reviews written spec** — ask user to review the spec file before proceeding (an auto run has Fable review it instead)
 11. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
@@ -313,7 +313,8 @@ needs another's output waits for it.
 - Once you believe you understand what you're building, present the design
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
 - Ask after each section whether it looks right so far; with `designApproval=whole`, present every section in one message and ask once (see Settings)
-- Cover: architecture, components, data flow, error handling, testing
+- Cover: architecture, components, data flow, error handling, testing, how the
+  work will be accepted, and the riskiest assumption
 - On Claude Code, when an option is genuinely clearer shown than described, present it visually with the Artifact tool
 - Be ready to go back and clarify if something doesn't make sense
 
@@ -363,6 +364,19 @@ without an auto run. On no, continue as below.
 
 - Write the validated design (spec) to `<docs>/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
+- Every spec has an `## Acceptance` section: numbered statements a test or a
+  demo can check, as Given/When/Then or a checklist. Cover the main path, the
+  errors and edge cases, and at least one thing that must not happen. State
+  observable behaviour, not the implementation, and give a word like "fast" its
+  number. When a register covers the spec, a row's Acceptance cell can cite
+  these numbers.
+- Every spec has a `## Riskiest assumption` section: the one assumption that,
+  if wrong, sinks the design, with its evidence (a command and the date it ran,
+  a `file:line`, or a documentation URL). Without evidence, find out before the
+  plan, as cheaply as correctness allows, and record what you found. When only
+  code the plan builds can tell, write
+  `unverified — the plan's first task verifies it`, so a wrong design fails
+  before the rest is built on it.
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git (push instead while documents live in darkmem; see project-state.md)
 
@@ -375,6 +389,8 @@ required, and it is yours: run it once, never through a subagent.
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
 5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output.
+6. **Acceptance:** The `## Acceptance` section is present, every statement in it is checkable by a test or a demo, and at least one says what must not happen.
+7. **Riskiest assumption:** The `## Riskiest assumption` section is present and names its evidence, or reads `unverified — the plan's first task verifies it`.
 
 Fix any issues inline, then post `Self-review (round 1 of 1):` with one line
 per item: clean, or what you fixed. Do not re-review after fixing.

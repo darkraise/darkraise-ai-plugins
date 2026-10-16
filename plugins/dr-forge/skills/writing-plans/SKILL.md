@@ -129,7 +129,8 @@ output.]
 [One bullet per assumption the plan relies on, each with its evidence: a
 command and the date it ran, a `file:line`, or a documentation URL. An
 assumption you could not verify reads `unverified — Task N verifies it`, and
-Task N contains the verifying step.]
+Task N contains the verifying step. When the spec's riskiest assumption reads
+`unverified — the plan's first task verifies it`, Task 1 is that verifying step.]
 
 ## Task index
 

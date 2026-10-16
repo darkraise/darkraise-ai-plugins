@@ -347,6 +347,18 @@ present "writing-plans posts the block before plan review" "$WP" 'before the fir
 present "brainstorming flags a skipped round" "$BS" 'I'"'"'ll skip the self-review'
 absent "brainstorming no longer re-runs a review loop" "$BS" 're-run the spec review loop'
 
+# --- what a spec must carry -------------------------------------------------------
+SRP="$P/skills/brainstorming/references/spec-document-reviewer-prompt.md"
+present "a spec carries an Acceptance section" "$BS" 'Every spec has an `## Acceptance` section'
+present "acceptance names what must not happen" "$BS" 'at least one thing that must not happen'
+present "a spec carries its riskiest assumption" "$BS" 'Every spec has a `## Riskiest assumption` section'
+present "an unverified riskiest assumption goes first in the plan" "$BS" '`unverified — the plan'"'"'s first task verifies it`'
+present "the spec self-review checks acceptance" "$BS" '6. **Acceptance:**'
+present "the spec self-review checks the riskiest assumption" "$BS" '7. **Riskiest assumption:**'
+present "the plan's first task verifies the spec's riskiest assumption" "$WP" 'Task 1 is that verifying step'
+present "the spec reviewer checks acceptance" "$SRP" '| Acceptance |'
+present "the spec reviewer checks the riskiest assumption" "$SRP" '| Riskiest assumption |'
+
 # --- task review prose -----------------------------------------------------------
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 DT="$P/reference/delegated-task.md"

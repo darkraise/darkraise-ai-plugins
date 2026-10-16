@@ -23,6 +23,8 @@ Subagent (general-purpose):
     | Clarity | Requirements ambiguous enough to cause someone to build the wrong thing |
     | Scope | Focused enough for a single plan — not covering multiple independent subsystems |
     | YAGNI | Unrequested features, over-engineering |
+    | Acceptance | No `## Acceptance` section, a statement no test or demo could check, or no statement of what must not happen |
+    | Riskiest assumption | No `## Riskiest assumption` section, or one with neither evidence nor `unverified — the plan's first task verifies it` |
 
     ## Calibration
 
