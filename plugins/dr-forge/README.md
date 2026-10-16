@@ -639,7 +639,8 @@ with the band and no pane. `/cockpit settings` still opens the settings, and
 app, the two that draw above the prompt; elsewhere a minimized cockpit shows
 nothing until `/cockpit` opens it. The band is also what a pane that is not
 docked draws (`layout` `auto`, the default). Its frame takes the account's
-color, with the email, billing and Remote Control on the top rule. The first
+color, with the email, billing and Remote Control (`connected`, `on` or
+`not connected`, as on the Account card) on the top rule. The first
 line has the
 context against the handoff budget with the turns left, and the 5-hour and
 7-day limits with their pace (`on pace`, or when the window runs out before

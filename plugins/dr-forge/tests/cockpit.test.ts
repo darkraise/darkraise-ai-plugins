@@ -960,7 +960,7 @@ describe('minimized band', () => {
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ off ─+ $/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
     expect(await ui.find({ key: 'band-expand' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /\$ 1 shell · longest 0s.*~\/code\/shop\/web ⎇ feat\/pane\* ↑2 ↓1 ~1 \?1/ })).toBeDefined()
@@ -1816,6 +1816,17 @@ describe('shells and remote', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^╭─ Remote ○ on ─+ $/ })).toBeDefined()
+  })
+
+  test('say Remote is not connected on the band as the pane does', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on)
+    await $.session.start(START)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Remote ○ not connected/ })).toBeDefined()
+    await ui.unmount()
+    ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
   })
 
   test('say what kept running after Esc', async ($, on) => {

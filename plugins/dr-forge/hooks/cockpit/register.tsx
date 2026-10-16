@@ -1892,7 +1892,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
       ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
       : remoteNow.setting === 'true'
         ? [{ text: 'Remote ○ on', color: 'green' }]
-        : [{ text: 'Remote ○ off', dim: true }]
+        : [{ text: 'Remote ○ not connected', dim: true }]
 
   if (isDesktop) {
     const w = svgWidth(room - 4)
