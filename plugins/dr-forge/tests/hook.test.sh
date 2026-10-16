@@ -114,6 +114,13 @@ git init -q -b main "$BARE"
 MSYS_NO_PATHCONV=1 jq -n --arg cwd "$BARE" '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:"",cwd:$cwd,source:"startup"}' \
   | HOME="$HOME_D" bash "$SCRIPT" >/dev/null 2>&1
 check "a checkout without a state directory gains none" "$([ -e "$BARE/.forge" ] && echo yes || echo no)" "no"
+LINKED="$TMP/linked-repo"
+git init -q -b main "$LINKED"
+mkdir -p "$LINKED/.forge" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$LINKED/.forge/.gitignore"
+MSYS_NO_PATHCONV=1 jq -n --arg cwd "$LINKED" '{hook_event_name:"SessionStart",session_id:"s-11",transcript_path:"",cwd:$cwd,source:"startup"}' \
+  | HOME="$HOME_D" bash "$SCRIPT" >/dev/null 2>&1
+check "the state ignore is never written through a link" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
 startup_ctx=$(payload | HOME="$HOME_A" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "startup: no snapshot" "$(grep -c '^## Compaction snapshot' <<<"$startup_ctx")" "0"
 

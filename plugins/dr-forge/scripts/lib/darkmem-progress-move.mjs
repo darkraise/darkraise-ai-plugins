@@ -308,9 +308,14 @@ export async function progressToDarkmem(context) {
   }
   // The checkout's state directory ignores itself, as .forge/sdd/ does, so a
   // backup never shows as untracked in a repository that does not list it.
+  // "wx" never writes through a link or over a file already there.
   for (const stateDir of new Set(files.map(item => item.stateDir))) {
-    const ignore = path.join(stateDir, ".gitignore");
-    if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, "*\n");
+    if (fs.lstatSync(stateDir).isSymbolicLink()) continue;
+    try {
+      fs.writeFileSync(path.join(stateDir, ".gitignore"), "*\n", { flag: "wx" });
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
   }
   const count = kind => sources.filter(item => item.kind === kind).length;
   return {
