@@ -14,6 +14,7 @@
 # A turn that wrote no ledger but moved a local branch (a commit, a merge, a
 # deleted branch) in a project with forge docs is unplanned work, and owes the
 # same ending: the next-step block (`next-step --adhoc`) or finishing's menu.
+# Every hold also tells the user why the session went on (systemMessage).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,6 +28,10 @@ cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
 [ -n "$session_id" ] || exit 0
 [ "$(jq -r '.stop_hook_active // false' <<<"$stdin_json")" = "true" ] && exit 0
+
+hold() { # hold <reason> <what the user sees>
+  jq -n --arg reason "$1" --arg msg "$2" '{decision: "block", reason: $reason, systemMessage: $msg}'
+}
 
 stamp="${HOME:-}/.claude/dr-forge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 [ -f "$stamp" ] || exit 0
@@ -74,7 +79,7 @@ if has_pending_background; then
       reason="Your message ends the session (the next-step block or the finishing menu), but ${pending} background launch(es) you started this session are still running:
 $(sed 's/^/- /' <<<"$running")
 An agent that already sent its report is still running when work it started is alive. Do not hand off or finish over running work. Either wait for each (end the turn without the block; its notification starts the next turn), or stop it with TaskStop <id> and, if its result is not in hand, record a Ruling line in the ledger for the task it served. Then run next-step again and end with the fresh block."
-      jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
+      hold "$reason" "dr-forge held the stop: this message ends the session while ${pending} background launch(es) still run"
       ;;
   esac
   exit 0
@@ -95,7 +100,7 @@ if [ -n "$auto_pending" ]; then
   if [ "$auto_pending" = handoff ]; then
     reason="An auto run is bound to this session and a compaction left too much behind (pending: handoff; see reference/auto-run.md §Clears), so this turn ends only on the clearing line, after the clear. Do not stop: finish the task in flight, run dr-forge:handoff, then \`bash ${root_shown}/scripts/auto-run clear\` and end with the line \`Auto run: clearing\`. If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
   fi
-  jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
+  hold "$reason" "dr-forge held the stop (auto run): pending ${auto_pending}, and the turn did not end on its sentinel line"
   exit 0
 fi
 
@@ -136,7 +141,7 @@ if [ -z "$ledger" ]; then
   ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' \
             'Worktree removal refused' 'If it gets none within ' 'No plan file — no follow-on work recorded.' && exit 0
   reason="This turn moved a branch (a commit, a merge or a deleted branch) without a plan's ledger, but your message ends without the next step. If work remains for this session, continue it: a ruling you can make with a recommendation in hand is yours to make and record, not a reason to stop. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If the turn did only the one change you were asked for and nothing follows from it, end the turn as you were. If the branch's work is complete and not yet integrated, invoke dr-forge:finishing-a-development-branch with the Skill tool and end on its menu. If you are stopping, run \`bash ${root_shown}/scripts/next-step --adhoc --phase <design|build> --next \"<the next action>\"\` (design when what remains is rulings, a spec or a plan) and end your message with the block it prints, verbatim."
-  jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
+  hold "$reason" "dr-forge held the stop: this turn moved a branch and the message ends without the next step"
   exit 0
 fi
 
@@ -145,8 +150,10 @@ plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r'
 
 if [ "$clean" = 1 ]; then
   reason="This turn advanced plan ${plan} and its final review is clean, but your message ends without the finishing menu. Invoke dr-forge:finishing-a-development-branch with the Skill tool now and follow it: tests, the rulings and amendments, then the integration menu as the last thing in your message."
+  shown="dr-forge held the stop: plan ${plan} passed its final review, and the message ends without the finishing menu"
 else
   reason="This turn advanced plan ${plan}, but your message ends without the next step. If work remains for this session, continue it. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If you are stopping, run \`bash ${root_shown}/scripts/next-step ${plan}\` and end your message with the block it prints, verbatim."
+  shown="dr-forge held the stop: plan ${plan} advanced, and the message ends without the next step"
 fi
-jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
+hold "$reason" "$shown"
 exit 0

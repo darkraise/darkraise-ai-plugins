@@ -400,7 +400,8 @@ counts: Claude Code keeps listing it, and its notification says so.
 finishing menu run it, and `scripts/next-step` prints no block (exit 5) while
 anything is on it.
 When the turn wrote more than one ledger, each one must have its
-ending.
+ending. Each hold also shows you a one-line note saying why the session went
+on.
 
 Unplanned work gets the same hold. The prompt hook also records which commits
 the repository's local branches point at. A turn that wrote no ledger but

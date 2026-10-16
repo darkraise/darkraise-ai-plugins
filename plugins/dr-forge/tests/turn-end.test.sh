@@ -57,6 +57,7 @@ out=$(stop s-1 'Task 1 is done. Everything looks good.')
 check "mid-plan summary: blocks" "$(decision "$out")" "block"
 check "mid-plan summary: names next-step and the plan" \
   "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/superpowers/plans/2026-10-08-example.md')" "1"
+check "mid-plan summary: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dr-forge held the stop')" "1"
 check "retry with stop_hook_active: passes" "$(stop s-1 'Task 1 is done.' true)" ""
 check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
 check "finish-preference question: passes" "$(stop s-1 $'Before I start: when the implementation is done, the finish menu waits for\nyour answer. If it gets none within 30 minutes, what should I do?\n\nWhich option?')" ""
@@ -213,6 +214,7 @@ sleep 1; prompt s-1
 out=$(stop s-1 'Task 2 is done. Everything looks good.')
 check "auto run: a summary is held" "$(decision "$out")" "block"
 check "auto run: the reason names the sentinel" "$(jq -r .reason <<<"$out" | grep -c 'Auto run: compacting')" "1"
+check "auto run: the hold tells the user" "$(jq -r .systemMessage <<<"$out" | grep -c 'held the stop (auto run')" "1"
 check "auto run: the retry passes" "$(stop s-1 'Task 2 is done.' true)" ""
 pend compact
 check "auto run: the compacting line passes" "$(stop s-1 $'Task 2 is done.\n\nAuto run: compacting\n')" ""
