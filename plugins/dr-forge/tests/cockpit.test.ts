@@ -1189,6 +1189,14 @@ describe('/cockpit', () => {
     const answer = await $.command.run(COCKPIT)
     expect(answer.text).toBe('Cockpit pane is waiting: this desktop app places no panes')
   })
+
+  test('answers an unknown argument with its usage and opens nothing', async ($, on) => {
+    const opened: string[] = []
+    world(on, { tokens: 284_000, opened })
+    const answer = await $.command.run({ ...COCKPIT, args: 'bogus' })
+    expect(answer.text).toBe('Unknown argument "bogus". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]')
+    expect(opened).toEqual([])
+  })
 })
 
 describe('buttons', () => {

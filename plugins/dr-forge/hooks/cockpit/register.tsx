@@ -281,7 +281,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'cockpit',
       description: 'Show context, usage, subagents, the plan and the repo in a pane',
-      argumentHint: '[settings]',
+      argumentHint: '[settings | notify test | notify url <url> | notify mention <id>]',
     })
     await loadSettings($)
     const o = await live($)
@@ -308,6 +308,9 @@ export const register: Register = on => {
     const words = e.args.trim().split(/\s+/)
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
+    if (!wantsSettings && e.args.trim() !== '') {
+      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]` }
+    }
     if (wantsSettings) await showSettings($)
     else {
       await flushSettingNote($)

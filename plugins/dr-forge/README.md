@@ -681,8 +681,11 @@ returns to the cockpit.
 The breakdown and the repo are read after each turn while the pane is open, and
 when it opens; nothing in the pane costs the model context.
 
-The cockpit never pops up a banner. Usage limits show in the gauges and the
-band, and a Discord message that fails to send shows in the settings view.
+The cockpit pops up nothing in the normal course: usage limits show in the
+gauges and the band, and a Discord message that fails to send shows in the
+settings view. A toast appears only when it cannot do what was asked: a
+setting that could not be saved, or a handoff note the session would not take.
+`/cockpit` with an argument it does not know answers with its usage.
 
 **Handoff reading.** The handoff reading shows only in the cockpit: the
 Context card and the band. The main session re-reads its whole context on every request, so a session that
