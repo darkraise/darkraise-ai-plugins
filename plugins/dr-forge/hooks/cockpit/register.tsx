@@ -1395,14 +1395,19 @@ export const register: Register = on => {
           rootsLine,
         )
         ) : (
-          rootsLine !== false &&
+          (rootsLine !== false || (finishNow !== null && finishLine(finishNow, now).length > 0)) &&
           section(
             'plan',
             'Plan',
-            'red',
+            rootsLine !== false ? 'red' : 'yellow',
             <Text key="plan-head" dimColor>
-              checkout paths
+              {rootsLine !== false ? 'checkout paths' : 'no plan'}
             </Text>,
+            finishNow !== null && finishLine(finishNow, now).length > 0 && (
+              <Text key="plan-finish" wrap="truncate-end">
+                {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+              </Text>
+            ),
             rootsLine,
           )
         ),
@@ -1647,7 +1652,13 @@ export const register: Register = on => {
               lines,
             )
           }
-          if (items.length === 0) return rootsNow !== null && panel('plan', 'Plan', 'red', [{ text: 'checkout paths' }], [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] }])
+          const finishChips: PanelLine[] = finishNow !== null && finishLine(finishNow, now).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] }] : []
+          if (items.length === 0) {
+            return (rootsNow !== null || finishChips.length > 0) && panel('plan', 'Plan', rootsNow !== null ? 'red' : 'yellow', [{ text: rootsNow !== null ? 'checkout paths' : 'no plan' }], [
+              ...finishChips,
+              ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
+            ])
+          }
           return panel('plan', 'Plan', 'yellow', [{ text: `${doneCount}/${items.length}` }], [
             { kind: 'picture', svg: segmentsSvg(items.map(item => (item.status === 'completed' ? 'done' : item.status === 'in_progress' ? 'active' : 'todo')), width, 6) },
             ...shownItems.map(
@@ -1659,7 +1670,7 @@ export const register: Register = on => {
                 ],
               }),
             ),
-            ...(finishNow !== null && finishLine(finishNow, now).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] } as PanelLine] : []),
+            ...finishChips,
             ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
           ])
         })(),

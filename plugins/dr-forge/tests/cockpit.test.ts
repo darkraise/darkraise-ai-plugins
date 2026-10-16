@@ -2123,6 +2123,18 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
   })
 
+  test('shows the finish choice for work without a plan or a todo list', async ($, on) => {
+    const files = { '/home/me/code/shop/.forge/sdd/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
+    await ui.unmount()
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(JSON.stringify(await desk.drawn())).toContain('⏱ Finish push and open a PR · in 30m')
+  })
+
   test('offers no Resume for a handoff left under the pre-3.0 .superpowers', async ($, on) => {
     const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     world(on, { ...SIGNED_IN, files })
