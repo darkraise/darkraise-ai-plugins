@@ -541,7 +541,7 @@ The verdict was revise, and every finding was applied:
 - **Blocker, residual acceptance failure.** Handled in section 4, Results.
 - **High, the dispatched/complete ledger pair.** Added in section 4.
 - **High, keep the branch on unverified acceptance.** Added in section 6.
-  Owner confirmation is pending at the spec review.
+  The owner confirmed this rule at the spec review, 2026-10-17.
 - **Medium findings:**
   - the `acceptance-ambiguous` kind with `REWORD`/`PARK`, and the immediate
     Fable batch;
