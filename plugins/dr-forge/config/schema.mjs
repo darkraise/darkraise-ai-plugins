@@ -20,7 +20,7 @@ export default {
   layout: {
     type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', target: 'forge',
     label: 'Layout', title: 'Pane layout',
-    description: 'auto: the full layout docked beside the transcript, the band when the pane sits above the prompt. full: always the full layout. compact: minimized, the band above the prompt; Minimize sets it and Expand sets auto.',
+    description: 'auto: the full layout docked beside the transcript, the band when the pane sits above the prompt. full: always the full layout. compact: minimized, the band above the prompt; Minimize sets it and Expand sets auto, or full where the pane does not dock.',
   },
   sections: {
     type: 'string', default: '', group: 'Cockpit', target: 'forge',
@@ -40,7 +40,7 @@ export default {
   handoffTokens: {
     type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DR_FORGE_BUDGET', group: 'Context', target: 'forge',
     label: 'Handoff budget', title: 'Handoff budget (tokens)',
-    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dr-forge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000. DR_FORGE_BUDGET overrides it; relaxed handoff mode ignores it.",
+    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dr-forge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DR_FORGE_BUDGET overrides it; relaxed handoff mode ignores it.",
   },
   handoffMode: {
     type: 'enum', values: ['strict', 'relaxed'], default: 'strict', enforcedBy: 'script', group: 'Context', target: 'forge',

@@ -759,7 +759,7 @@ The same settings can be set with
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band always draws its own lines. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
-| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dr-forge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000. `DR_FORGE_BUDGET` overrides it. |
+| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dr-forge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DR_FORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
 | Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
 | Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
 | Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dr-forge` sessions. |
