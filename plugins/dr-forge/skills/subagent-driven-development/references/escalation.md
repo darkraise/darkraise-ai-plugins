@@ -141,11 +141,14 @@ session's model and effort and nothing in the output would reveal it.
 - **No same-effort model below exists** - any Sonnet agent, or `impl-haiku`.
   Haiku ships in one flavour with no effort variants, so "same effort, one model
   down" has no target. Dispatch the agent's successor in the escalation table
-  instead. The cost if wrong is spend, not quality.
+  instead. `impl-sonnet-xhigh` and `impl-sonnet-max` sit only in the reserve
+  table, where every Sonnet row leads to `impl-opus-high`: dispatch that. The
+  cost if wrong is spend, not quality.
 - **Inside the reserve, for a hand-assigned Fable tier.** The same substitution
   has a target at every effort: `impl-fable-max` drops to `impl-opus-max`,
-  `impl-fable-xhigh` to `impl-opus-xhigh`, and `impl-fable-high` to
-  `impl-opus-high`.
+  `impl-fable-xhigh` to `impl-opus-xhigh`, `impl-fable-high` to
+  `impl-opus-high`, `impl-fable-medium` to `impl-opus-medium`, and
+  `impl-fable-low` to `impl-opus-low`.
 - **Fable unavailable inside a reserve chain entered automatically.** The task
   reached Fable precisely by exhausting those Opus rungs; re-dispatching one of
   them would re-run an agent that already failed. Write `Task <N>: BLOCKED`

@@ -321,7 +321,7 @@ recorded approved amendment or baseline before automatic work continues.
 
 Fix rounds 1 to 3 resume that executor's own session, as a Claude
 implementer's rounds do, to preserve its model, effort, and context. The resume-or-re-dispatch
-cache rule (R4) does not apply here: the session runs on a separate
+cache rule ([delegated-task.md](delegated-task.md) §Rounds 1-3) does not apply here: the session runs on a separate
 subscription, so there is no Claude cache cost to protect. Write the open
 findings verbatim into a file and pass that file as the brief - the wrapper
 appends the task contract to every run, resume included:
@@ -584,7 +584,7 @@ and its `id` equals its filename stem; an invalid entry is skipped by
 | `reference` | no | A reference file for this executor |
 | `session_dir_env` | no | An environment variable that replaces `session_dir` |
 | `blocks.assignment`, `blocks.successor`, `blocks.timeout`, `blocks.judge` | no | The executor's other ladder blocks |
-| `reasons.not_enabled`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
+| `reasons.not_enabled`, `reasons.not_installed`, `reasons.missing`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
 
 `${DR_EXECUTORS_DIR}` replaces the registry directory when set; it does not add
 to it. Adding an executor is an entry here, a wrapper, and its ladder blocks.
