@@ -81,8 +81,9 @@ darkmem is off unless the `darkmemEnabled` setting is on. A repository mapped
 to darkmem while it is on may keep each family in the darkmem mirror instead
 (`documentStore`, `progressSource`; `bash <plugin-root>/scripts/forge-path store`
 prints which). Turned off or unmapped, both families belong in the checkout:
-a family still in the mirror is read there until the next session start's
-reconcile copies it back from the mirror, without asking darkmem.
+a family still in the mirror is read there until the reconcile of a session
+start with no plan in progress copies it back from the mirror, without asking
+darkmem.
 
 | Token | Local | darkmem |
 |---|---|---|
@@ -133,6 +134,7 @@ root causes and fixes, constraints), one fact per entry. When
 `forge-path project` prints a project (darkmem is on and the repository
 mapped) and the darkmem MCP tools are available, file each with `memory_add`,
 tagged `project/<project>`. Otherwise append each as one bullet to
-`<docs>/notes/<YYYY-MM-DD>-facts.md`, which dr-forge:distilling-docs later
-absorbs. Ledger lines, progress and commit hashes stay in the work log either
+`<docs>/notes/<YYYY-MM-DD>-facts.md` and commit it in a `docs(notes): …`
+commit of its own (while documents live in darkmem, the push carries it
+instead): dr-forge:distilling-docs absorbs only tracked, clean notes. Ledger lines, progress and commit hashes stay in the work log either
 way.

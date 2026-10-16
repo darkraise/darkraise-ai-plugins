@@ -280,7 +280,8 @@ Before the loop starts, two routes leave it immediately:
 Everything else enters the loop. A fix round is one fix dispatch plus one
 scoped re-review. Five rounds maximum per task:
 
-**Rounds 1-3 — resume or re-dispatch by cache state.** Resuming keeps the
+**Rounds 1-3 — resume or re-dispatch by cache state**, except a round 3 that
+follows stalled progress, which escalates (see **Progress** below). Resuming keeps the
 implementer's context, but a cold resume re-writes that whole context into the
 cache. Resume only when all of these hold:
 

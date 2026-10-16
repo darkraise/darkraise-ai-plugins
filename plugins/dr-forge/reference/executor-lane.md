@@ -151,7 +151,9 @@ for ownership, artifacts, approved write sets, and recovery operations.
    Unless it prints `lane=true`, run neither the roster nor the wrapper:
    dispatch the task's `**Implementer:**` agent on the Claude lane, say the
    substitution aloud, and record it with the line below, quoting the gate's
-   `reason` (`untrusted` when it printed `usable=true`). Otherwise run
+   `reason` (`untrusted` when it printed `usable=true`). The wrapper reads the
+   gate again and exits 2 with `codex lane is off for this session (<reason>)`
+   when the lane has closed since. Otherwise run
    `bash "<plugin-root>/scripts/detect-executors.sh"` and read the entry
    for the named executor. **Never trust the plan's copy** - it records what was
    available when the plan was written.
@@ -319,7 +321,7 @@ recorded approved amendment or baseline before automatic work continues.
 
 Fix rounds 1 to 3 resume that executor's own session, as a Claude
 implementer's rounds do, to preserve its model, effort, and context. The resume-or-re-dispatch
-cache rule (R4) does not apply here: the session runs on a separate
+cache rule ([delegated-task.md](delegated-task.md) §Rounds 1-3) does not apply here: the session runs on a separate
 subscription, so there is no Claude cache cost to protect. Write the open
 findings verbatim into a file and pass that file as the brief - the wrapper
 appends the task contract to every run, resume included:
@@ -550,7 +552,7 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Task has an `**Executor:**` line and that executor's gate does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
 | Task has an `**Executor:**` line, the gate prints `lane=true`, and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
-| The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`/`ultra`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
+| The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
@@ -582,7 +584,7 @@ and its `id` equals its filename stem; an invalid entry is skipped by
 | `reference` | no | A reference file for this executor |
 | `session_dir_env` | no | An environment variable that replaces `session_dir` |
 | `blocks.assignment`, `blocks.successor`, `blocks.timeout`, `blocks.judge` | no | The executor's other ladder blocks |
-| `reasons.not_enabled`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
+| `reasons.not_enabled`, `reasons.not_installed`, `reasons.missing`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
 
 `${DR_EXECUTORS_DIR}` replaces the registry directory when set; it does not add
 to it. Adding an executor is an entry here, a wrapper, and its ladder blocks.
@@ -608,8 +610,8 @@ specific to it:
 - **Quota.** Codex reports a reset time, which the gate caches, so a quota
   answer is re-probed once that time has passed. An executor whose provider
   publishes no reset time marks itself off for the session instead.
-- **Effort values.** `low`, `medium`, `high`, `xhigh` and `ultra`; `minimal`
-  is rejected. Another executor's efforts are whatever its assignment block
+- **Effort values.** `low`, `medium`, `high` and `xhigh`; `minimal` and
+  `ultra` are rejected. Another executor's efforts are whatever its assignment block
   names, and its wrapper validates them.
 
 ## When the client itself wedges

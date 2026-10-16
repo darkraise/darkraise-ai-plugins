@@ -6,10 +6,12 @@ import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
 export const WARN_AT = 0.8
 
 /**
- * The handoff budget: the configured tokens, else DR_FORGE_BUDGET, else
- * dr-forge's own rule (reference/session-budget.md): the compaction point
- * minus one task's worst growth, min(autoCompactWindow, window) × 93% − 140,000.
- * Small windows, where that comes out near zero, hold a fifth of the window.
+ * The handoff budget: `configured`, else `env`, else dr-forge's own rule
+ * (reference/session-budget.md): the compaction point minus one task's worst
+ * growth, min(autoCompactWindow, window) × 93% − 140,000. Small windows, where
+ * that comes out near zero, hold a fifth of the window. `configured` is
+ * handoffTokens as the settings resolve it, where DR_FORGE_BUDGET already
+ * overrides the file; `env` is a raw DR_FORGE_BUDGET for a caller without them.
  */
 export function budgetFor(configured: number, env: string | undefined, window: number, compactWindow?: number): number {
   if (configured > 0) return Math.round(configured)
@@ -676,12 +678,6 @@ export function planTasks(text: string): { n: number; title: string }[] {
     if (match && !out.some(one => one.n === Number(match[1]))) out.push({ n: Number(match[1]), title: (match[2] ?? '').trim() })
   }
   return out
-}
-
-/** "2/5" → 2. */
-export function roundNumber(round: string | null): number | null {
-  const n = Number((round ?? '').split('/')[0])
-  return round !== null && Number.isFinite(n) && n > 0 ? n : null
 }
 
 /** Milliseconds → "42s", "2m14s", "1h05m": a turn's clock, to the second under an hour. */

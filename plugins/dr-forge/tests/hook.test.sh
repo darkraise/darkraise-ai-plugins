@@ -65,6 +65,16 @@ check "shared cwd: the first session keeps its own record" \
 check "shared cwd: the second session has its own record" \
   "$(jq -r '.transcript_path' "$BYID/s-456.json" 2>/dev/null)" "/tmp/second-transcript.jsonl"
 
+# --- records a month old are pruned; the session's own and recent ones stay ---
+printf '{}\n' > "$BYID/s-old.json"
+printf '{}\n' > "$HOME_A/.claude/dr-forge/sessions/D--gone-worktree.json"
+touch -d '40 days ago' "$BYID/s-old.json" "$HOME_A/.claude/dr-forge/sessions/D--gone-worktree.json" "$BYID/s-123.json"
+payload | HOME="$HOME_A" bash "$SCRIPT" >/dev/null 2>&1
+check "prune: an old session record is removed" "$([ -e "$BYID/s-old.json" ] && echo yes || echo no)" "no"
+check "prune: an old checkout record is removed" "$([ -e "$HOME_A/.claude/dr-forge/sessions/D--gone-worktree.json" ] && echo yes || echo no)" "no"
+check "prune: the starting session's record is rewritten, not removed" "$(jq -r '.session_id' "$BYID/s-123.json" 2>/dev/null)" "s-123"
+check "prune: a recent record stays" "$([ -e "$BYID/s-456.json" ] && echo yes || echo no)" "yes"
+
 # --- malformed stdin ---
 HOME_B="$TMP/b"; mkdir -p "$HOME_B"
 out=$(printf 'not json' | HOME="$HOME_B" bash "$SCRIPT" 2>/dev/null)
@@ -108,6 +118,19 @@ check "compact: snapshot appended" "$(grep -c '^## Compaction snapshot' <<<"$ctx
 check "compact: carries the handoff next step" "$(grep -c 'Resume at Task 4 (Four)' <<<"$ctx")" "1"
 check "compact: carries the owner prompt" "$(grep -c 'keep the API stable' <<<"$ctx")" "1"
 check "compact: under the 10,000-character hook cap" "$([ "${#ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
+check "an existing state directory ignores itself" "$(git -C "$REPO" status --porcelain --untracked-files=all -- .forge)" ""
+BARE="$TMP/bare-repo"
+git init -q -b main "$BARE"
+MSYS_NO_PATHCONV=1 jq -n --arg cwd "$BARE" '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:"",cwd:$cwd,source:"startup"}' \
+  | HOME="$HOME_D" bash "$SCRIPT" >/dev/null 2>&1
+check "a checkout without a state directory gains none" "$([ -e "$BARE/.forge" ] && echo yes || echo no)" "no"
+LINKED="$TMP/linked-repo"
+git init -q -b main "$LINKED"
+mkdir -p "$LINKED/.forge" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$LINKED/.forge/.gitignore"
+MSYS_NO_PATHCONV=1 jq -n --arg cwd "$LINKED" '{hook_event_name:"SessionStart",session_id:"s-11",transcript_path:"",cwd:$cwd,source:"startup"}' \
+  | HOME="$HOME_D" bash "$SCRIPT" >/dev/null 2>&1
+check "the state ignore is never written through a link" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
 startup_ctx=$(payload | HOME="$HOME_A" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "startup: no snapshot" "$(grep -c '^## Compaction snapshot' <<<"$startup_ctx")" "0"
 

@@ -9,10 +9,11 @@ import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
   DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointTarget, decodeUtf8,
-  familiesOf, isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, propertiesFor, sha256, splitAtLimit,
+  familiesOf, isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
   unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
+import { nameSpellings } from "./darkmem-reconcile.mjs";
 
 const RESOLVE = "pull, reconcile, then push";
 // darkmem's own answer for a uri nothing is filed at; any other 404 (a wrong
@@ -321,6 +322,37 @@ async function pushLedger(context, slug, file) {
   }
 }
 
+// Whether the completed.md beside the plan a ledger names records it, by its
+// backticked name under either docs prefix, as next-step's plan_finished does.
+function planFinished(roots, named) {
+  const uri = named ? pathToUri(roots, named) : null;
+  const completed = uri ? uriToLocal(roots, `${path.posix.dirname(uri)}/completed.md`) : null;
+  if (!completed) return false;
+  let text;
+  try {
+    text = fs.readFileSync(completed, "utf8");
+  } catch {
+    return false;
+  }
+  return nameSpellings(`docs/forge/${uri.slice(DOC_PREFIX.length + 1)}`).some(name => text.includes(`\`${name}\``));
+}
+
+// A finished plan's workstream is closed once its ledger is fully pushed, so
+// the pull at each session start, which fetches only open workstreams, stops
+// fetching it. An append reopens it, and drops the record's closed mark.
+async function closeFinished(context, slug, file) {
+  const { cfg, client, roots, state, persist } = context;
+  const record = state.ledgers[slug];
+  if (!record || record.pending || record.closed) return;
+  const buffer = fs.readFileSync(file);
+  if (record.offset !== buffer.length || !planFinished(roots, ledgerPlanPath(buffer.toString("utf8")))) return;
+  const existing = await client.resume(cfg.project, slug);
+  if (!existing) return;
+  if (existing.workstream.state !== "closed") await client.updateWorkstream(existing.workstream.id, { state: "closed", retain: true });
+  state.ledgers[slug] = { ...record, closed: true };
+  persist();
+}
+
 async function pushLedgers(context) {
   const { roots, report } = context;
   for (const dir of unsupportedPlanDirs(roots.workRoot)) {
@@ -329,6 +361,7 @@ async function pushLedgers(context) {
   for (const { slug, file } of ledgerFiles(roots.workRoot)) {
     try {
       await pushLedger(context, slug, file);
+      await closeFinished(context, slug, file);
     } catch (error) {
       // A pending mark set before a failed append stays: its answer may have
       // been lost, so the next push reconciles before sending.

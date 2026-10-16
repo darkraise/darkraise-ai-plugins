@@ -307,6 +307,32 @@ test("documents stay local while the docs directory has uncommitted changes", as
   assert.deepEqual(writes(s.stub), []);
 });
 
+test("documents stay local while a linked worktree holds documents the primary checkout does not", async t => {
+  const s = await docsRepo(t);
+  const tree = path.join(scratch("dms-tree-"), "wt");
+  git(s.repo, "worktree", "add", "-q", "-b", "feature", tree);
+  write(at(tree, "docs/forge/specs/b.md"), "# B\n");
+  commitAll(tree, "spec b");
+  write(at(tree, "docs/forge/specs/c.md"), "# C draft\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): a linked worktree holds documents the primary checkout does not; merge or remove them first$/m);
+  assert.ok(result.stdout.includes(`  ${tree}: docs/forge/specs/b.md\n`), result.stdout);
+  assert.ok(result.stdout.includes(`  ${tree}: docs/forge/specs/c.md\n`), result.stdout);
+  assert.deepEqual(writes(s.stub), []);
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
+test("a linked worktree holding only the primary checkout's documents does not refuse the move", async t => {
+  const s = await docsRepo(t);
+  git(s.repo, "worktree", "add", "-q", "-b", "feature", path.join(scratch("dms-tree-"), "wt"));
+  write(at(s.repo, "docs/forge/specs/d.md"), "# D\n");
+  commitAll(s.repo, "spec d on the primary");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
+});
+
 test("a different version on darkmem refuses the move before anything is sent", async t => {
   const s = await docsRepo(t, { "specs/a.md": "# A\n", "specs/b.md": "# B\n" });
   await s.seed.putDocument({ project: "proj", uri: "forge/specs/a.md", content: "# A on darkmem\n" });

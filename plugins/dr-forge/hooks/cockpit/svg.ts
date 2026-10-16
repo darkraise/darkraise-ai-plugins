@@ -64,18 +64,6 @@ export function meterSvg(share: number, width: number, color: string, marks: rea
   return svg(width, height, `<rect x="0" y="${n(y)}" width="${width}" height="${n(bar)}" rx="${n(r)}" fill="${TRACK}"/>${fill}${lines}`)
 }
 
-/** A headline figure, large in its color, with its words beside it. */
-export function statSvg(value: string, words: string, width: number, color: string): string {
-  // Figures at 24px run about 14px wide, a percent sign 21px.
-  const after = 8 + [...value].reduce((sum, ch) => sum + (ch === '%' ? 21 : ch === '.' || ch === ',' ? 7 : 14.5), 0)
-  return svg(
-    width,
-    30,
-    `<text x="0" y="23" font-family="${SANS}" font-size="24" font-weight="600" fill="${paint(color)}">${esc(value)}</text>` +
-      `<text x="${n(after)}" y="23" font-family="${SANS}" font-size="13" fill="${MARK}">${esc(words)}</text>`,
-  )
-}
-
 export type SvgLabel = { at: number; text: string; color?: string }
 
 /**
@@ -427,7 +415,6 @@ export function panelSvg(lines: readonly PanelLine[], width: number, pad = PAD):
     if (index > 0) y += GAP
     if (line.kind === 'head') {
       const right = cut(line.right, SMALL, width / 2)
-      const rightWidth = right.reduce((sum, run) => sum + runWidth(run, SMALL), 0)
       out += `<circle cx="4" cy="${n(y + 7)}" r="4" fill="${paint(line.lamp)}"/>`
       out += `<text x="15" y="${n(y + 10.5)}" class="faint" font-family="${MONO}" font-size="10.5" font-weight="600" letter-spacing="0.84">${esc(line.title.toUpperCase())}</text>`
       out += drawRunsAt(right.map(run => ({ ...run, dim: run.color === undefined ? true : run.dim })), width, y + 11, SMALL, 'end')

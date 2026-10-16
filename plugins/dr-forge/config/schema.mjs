@@ -20,7 +20,7 @@ export default {
   layout: {
     type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', target: 'forge',
     label: 'Layout', title: 'Pane layout',
-    description: 'auto: the full layout docked beside the transcript, the band when the pane sits above the prompt. full: always the full layout. compact: minimized, the band above the prompt; Minimize sets it and Expand sets auto.',
+    description: 'auto: the full layout docked beside the transcript, the band when the pane sits above the prompt. full: always the full layout. compact: minimized, the band above the prompt; Minimize sets it and Expand sets auto, or full where the pane does not dock.',
   },
   sections: {
     type: 'string', default: '', group: 'Cockpit', target: 'forge',
@@ -40,7 +40,7 @@ export default {
   handoffTokens: {
     type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DR_FORGE_BUDGET', group: 'Context', target: 'forge',
     label: 'Handoff budget', title: 'Handoff budget (tokens)',
-    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dr-forge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000. DR_FORGE_BUDGET overrides it; relaxed handoff mode ignores it.",
+    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dr-forge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DR_FORGE_BUDGET overrides it; relaxed handoff mode ignores it.",
   },
   handoffMode: {
     type: 'enum', values: ['strict', 'relaxed'], default: 'strict', enforcedBy: 'script', group: 'Context', target: 'forge',
@@ -155,16 +155,16 @@ export default {
   darkmemEnabled: {
     type: 'boolean', default: false, keepDefault: true, group: 'darkmem', target: 'forge',
     label: 'Use darkmem', title: 'Use darkmem',
-    description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository: a family already in the mirror moves back at the next session start, from the mirror alone. Left unset after an upgrade, a family a 2.x release put in the mirror stays there unsynced until you choose. A repository is mapped under darkmem.repos in ~/.dr-forge/config.json.',
+    description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository: a family already in the mirror moves back at the next session start with no plan in progress, from the mirror alone. Left unset after an upgrade, a family a 2.x release put in the mirror stays there unsynced until you choose. A repository is mapped under darkmem.repos in ~/.dr-forge/config.json.',
   },
   documentStore: {
     type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'forge',
     label: 'Documents', title: 'Document store',
-    description: 'While Use darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
+    description: 'While Use darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
   },
   progressSource: {
     type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'forge',
     label: 'Progress', title: 'Progress tracking source',
-    description: 'While Use darkmem is on, where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start.',
+    description: 'While Use darkmem is on, where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
   },
 };

@@ -3,7 +3,7 @@
 # checkout and from a linked worktree, and names round-trip in all four
 # combinations, including a checkout and a project both named superpowers.
 set -uo pipefail
-unset CLAUDE_CONFIG_DIR DR_FORGE_DOCUMENT_STORE DR_FORGE_PROGRESS_SOURCE
+unset CLAUDE_CONFIG_DIR DR_FORGE_DOCUMENT_STORE DR_FORGE_PROGRESS_SOURCE CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../scripts/lib/roots.sh"

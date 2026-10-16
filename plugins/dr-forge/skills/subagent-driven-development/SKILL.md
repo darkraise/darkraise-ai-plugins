@@ -153,7 +153,7 @@ digraph process {
         "Verdicts clean and no score 1-8?" [shape=diamond];
         "Finding conflicts with plan text?" [shape=diamond];
         "Ruling seat rules on the conflict (./references/ruling-prompt.md)" [shape=box];
-        "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" [shape=box];
+        "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" [shape=box];
         "Dispatch scoped re-review with progress (./references/re-review-prompt.md)" [shape=box];
         "All findings addressed?" [shape=diamond];
         "R = 5?" [shape=diamond];
@@ -181,13 +181,13 @@ digraph process {
     "Verdicts clean and no score 1-8?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "Verdicts clean and no score 1-8?" -> "Finding conflicts with plan text?" [label="no"];
     "Finding conflicts with plan text?" -> "Ruling seat rules on the conflict (./references/ruling-prompt.md)" [label="yes"];
-    "Ruling seat rules on the conflict (./references/ruling-prompt.md)" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung";
-    "Finding conflicts with plan text?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" [label="no"];
-    "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" -> "Dispatch scoped re-review with progress (./references/re-review-prompt.md)";
+    "Ruling seat rules on the conflict (./references/ruling-prompt.md)" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung";
+    "Finding conflicts with plan text?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" [label="no"];
+    "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" -> "Dispatch scoped re-review with progress (./references/re-review-prompt.md)";
     "Dispatch scoped re-review with progress (./references/re-review-prompt.md)" -> "All findings addressed?";
     "All findings addressed?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "All findings addressed?" -> "R = 5?" [label="no"];
-    "R = 5?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4 successor rung" [label="no - next round"];
+    "R = 5?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" [label="no - next round"];
     "R = 5?" -> "Ruling seat adjudicates each open finding" [label="yes - breaker trips"];
     "Ruling seat adjudicates each open finding" -> "Any CONFIRMED-GAP or AMEND?";
     "Any CONFIRMED-GAP or AMEND?" -> "Carry the fix or amendment forward; BLOCKED stops" [label="yes"];

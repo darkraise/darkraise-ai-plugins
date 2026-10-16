@@ -350,5 +350,12 @@ present "writing-plans allows one Executor line per task" "$P/skills/writing-pla
 absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
 absent "writing-plans no longer reads executor lines only when delegated" "$P/skills/writing-plans/SKILL.md" 'the lines are read only for the delegated tasks'
 
+# Inline mode delegates heavy and executor tasks, so no text may say it
+# implements every task.
+for doc in skills/executing-plans/SKILL.md skills/writing-plans/SKILL.md reference/native-codex.md; do
+  absent "$doc does not say inline mode implements every task itself" "$P/$doc" 'implements every task itself'
+  absent "$doc does not say inline mode implements every task in the session" "$P/$doc" 'implements every task in'
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

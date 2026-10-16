@@ -28,7 +28,7 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
-unset DR_FORGE_BUDGET DR_FORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID
+unset DR_FORGE_BUDGET DR_FORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -113,6 +113,21 @@ check "window beats a larger autoCompactWindow" "$out" "budget: 285k of 790k (36
 rm -f "$HOME/.claude/settings.json"
 run
 check "no settings: the model's window" "$out" "budget: 285k of 790k (36%) — ok — source: record"
+settings 650000
+mkdir -p "$TMP/project/.claude"
+printf '{"autoCompactWindow": 500000}\n' > "$TMP/project/.claude/settings.json"
+CLAUDE_PROJECT_DIR="$TMP/project" run
+check "a project autoCompactWindow overrides the user's" "$out" "budget: 285k of 325k (87%) — ok — source: record"
+printf '{"autoCompactWindow": 400000}\n' > "$TMP/project/.claude/settings.local.json"
+CLAUDE_PROJECT_DIR="$TMP/project" run
+check "a local autoCompactWindow overrides the project's" "$out" "budget: 285k of 232k (122%) — handoff — source: record"
+run
+check "project settings are read only under CLAUDE_PROJECT_DIR" "$out" "budget: 285k of 465k (61%) — ok — source: record"
+asst 15000 false claude-sonnet-5 > "$T"
+settings 100000
+run
+check "a small window holds a fifth of it" "$out" "budget: 15k of 20k (75%) — ok — source: record"
+asst 285000 false claude-sonnet-5 > "$T"
 settings 650000
 DR_FORGE_BUDGET=junk run
 check "invalid override is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"

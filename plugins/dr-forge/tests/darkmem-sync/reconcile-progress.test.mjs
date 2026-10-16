@@ -133,6 +133,7 @@ test("progress moves into darkmem from every checkout, and a second run does not
   assert.deepEqual(more, []);
   assert.equal(p1.state, "closed", "a closed workstream is closed again after its checkpoint");
   assert.equal(s.state().checkpoint, sha(LATEST));
+  for (const dir of [s.repo, s.worktree]) assert.equal(git(dir, "status", "--porcelain", "--untracked-files=all", "--", ".forge"), "", `${dir}'s backup is ignored`);
   assert.equal(s.state().checkpointAt, checkpoint.created_at);
   assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p1$/m);
   assert.deepEqual(s.stores(), { documents: "local", progress: "darkmem" });

@@ -184,7 +184,7 @@ per-task review. The tasks not delegated are the **self-implemented** tasks.
   line when it is `inline` or `subagent`, in place of the majority rule.
   `inline` also makes the plan sequential, whatever the spec's
   `**Execution strategy:**` line or the `executionStrategy` setting says,
-  because an inline session implements every task itself: write
+  because an inline session implements its own tasks one after another: write
   `**Parallelism:** sequential — executionMode is inline`
   and group no waves. An inline plan still delegates its heavy tasks and every
   task carrying an `**Executor:**` line.
@@ -234,8 +234,9 @@ never invents parallelism the work does not have:
    `**Worktree setup:**` is what a fresh checkout needs before its tests run
    (`npm ci`, a code generator), or `none`.
 8. **The Execution line names `subagent`**, `claude --model sonnet --effort
-   high`, whatever the heavy-task count: inline mode implements every task in
-   the session itself, so it has nothing to run in parallel. `plan-lint`
+   high`, whatever the heavy-task count: inline mode implements the tasks it
+   does not delegate in the session itself, one after another, so it has
+   nothing to run in parallel. `plan-lint`
    skips the majority-rule warning for a waves plan.
 
 `plan-lint` checks the waves mechanically — ranges, dependencies, shared

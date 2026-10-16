@@ -257,8 +257,9 @@ yet. Those historical
 observations do not establish current access on another account, CLI version,
 or native client. Native Codex routes Terra through its separate capability filter.
 
-This CLI policy allows `low`, `medium`, `high`, `xhigh`, and `ultra`, and rejects
-`minimal`. Verify advertised capabilities for the actual CLI/account before use;
+This CLI policy allows `low`, `medium`, `high`, and `xhigh`, and rejects
+`minimal` and `ultra`: no row assigns or succeeds to `ultra`, and no bound has
+been measured for it. Verify advertised capabilities for the actual CLI/account before use;
 do not infer them from the native model list or make paid capability probes.
 
 ### Codex successor

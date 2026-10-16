@@ -37,6 +37,9 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
         printf '%s\n' "$record" \
           > "$sessions_dir/by-id/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').json" 2>/dev/null || true
       fi
+      # Every session start rewrites its own records, so one untouched for a
+      # month belongs to a session or a checkout that is gone.
+      find "$sessions_dir" "$sessions_dir/by-id" -maxdepth 1 -type f -name '*.json' -mtime +30 -delete 2>/dev/null || true
     fi
   fi
   # Background work dies with the process, so a launch made before a startup or
@@ -79,6 +82,7 @@ context="<EXTREMELY_IMPORTANT>\nYou have dr-forge.\n\n**Below is the full conten
 # which epic is still open. Anything that fails here injects nothing extra.
 roadmap_line=""
 roadmap_root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)
+[ -z "$roadmap_root" ] || forge_state_ignore "$roadmap_root"
 if [ -n "$roadmap_root" ] && [ -f "$(forge_docs_root "$roadmap_root")/roadmap.md" ]; then
   roadmap_line=$(bash "${SCRIPT_DIR}/roadmap" status --root "$roadmap_root" --line 2>/dev/null \
     | head -n 1 | tr -d '\001-\010\013\014\016-\037' || true)
@@ -112,15 +116,16 @@ fi
 # the room the hook's 10,000-character cap leaves the entry point. A
 # compaction's snapshot gets what remains after them. Under 100 characters of
 # room the closing line alone would not fit, so the sync still runs but prints
-# nothing.
+# nothing. The sync gets what is left of the hook's 300-second timeout less 30
+# seconds for the snapshot and the reply, since a killed hook injects nothing.
 darkmem_lines=""
 if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
   room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} ))
   if [ "$room" -ge 100 ]; then
-    darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" \
+    darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" $(( 270 - SECONDS )) \
       | tr -d '\001-\010\013\014\016-\037')
   else
-    darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" 0 >/dev/null
+    darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" 0 $(( 270 - SECONDS )) >/dev/null
   fi
   if [ -n "$darkmem_lines" ]; then
     context="${context}\n\n$(escape_for_json "$darkmem_lines")"

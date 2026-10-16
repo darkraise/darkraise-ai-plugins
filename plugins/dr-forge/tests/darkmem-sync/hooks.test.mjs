@@ -20,7 +20,7 @@ function bash(args, { cwd, env, input }) {
   });
 }
 
-const sessionLines = (dir, sid, env, room = "") => bash(["-c", '. "$1"; darkmem_session_lines "$2" "$3" "$4"', "hook-test", LIB, dir, sid, room], { cwd: dir, env });
+const sessionLines = (dir, sid, env, room = "", seconds = "") => bash(["-c", '. "$1"; darkmem_session_lines "$2" "$3" "$4" "$5"', "hook-test", LIB, dir, sid, room, seconds], { cwd: dir, env });
 const MORE = /^darkmem-sync: (\d+) more lines; run darkmem-sync reconcile or status to see them$/m;
 const pushQuietly = (dir, sid, env) => bash(["-c", '. "$1"; darkmem_push_quietly "$2" "$3"', "hook-test", LIB, dir, sid], { cwd: dir, env });
 
@@ -256,4 +256,27 @@ test("the Stop push refuses at once while another darkmem-sync holds the mirror 
   assert.deepEqual(result, { code: 0, stdout: "", stderr: "" });
   assert.ok(Date.now() - started < 2500, "the Stop push did not wait for the lock");
   assert.equal(s.stub.db.requests.some(r => r.method === "POST" && r.path === "/api/v1/worklog/entries"), false, "nothing was sent");
+});
+
+test("session start waits for a Stop push's mirror lock before it pulls", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "forge/specs/a.md", content: "# A\n" });
+  const lock = path.join(s.home.mirror, ".sync.lock");
+  fs.mkdirSync(lock, { recursive: true });
+  const released = setTimeout(() => fs.rmdirSync(lock), 2000);
+  t.after(() => clearTimeout(released));
+  const result = await sessionLines(s.repo, "sid-hook", s.env);
+  assert.equal(result.code, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /holds/);
+  assert.match(result.stdout, /^darkmem-sync pull: 1 documents, 0 ledgers, 0 checkpoints; 0 conflicts, 0 failures$/m);
+});
+
+test("session lines skip the sync, and say so, when too little of the hook's time is left", async t => {
+  const s = await setup(t);
+  const started = Date.now();
+  const result = await sessionLines(s.repo, "sid-hook", s.env, "", "20");
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, "darkmem-sync: reconcile and pull skipped at session start: too little of the hook's time is left; run darkmem-sync reconcile, then pull\n");
+  assert.ok(Date.now() - started < 10000);
+  assert.equal(s.stub.db.requests.length, 0);
 });

@@ -60,7 +60,6 @@ import {
   repoName,
   resumeOfferOf,
   shellAge,
-  roundNumber,
   runsWidth,
   SECTIONS,
   sectionsFrom,
@@ -144,12 +143,12 @@ const STORE_IMPORTED = 'webhookImported'
 const TREND_LENGTH = 40
 // The colors the context breakdown cycles through, largest category first.
 const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] as const
-// How the desktop's run bar colors a task by its state.
 // The usage windows the desktop draws as gauges, in order.
 const GAUGED: readonly string[] = ['five_hour', 'seven_day']
 // The desktop's panel fill: a faint gray that lifts a card off the pane in
 // the light theme and the dark alike.
 const CARD = '#8080800f'
+// How the desktop's run bar colors a task by its state.
 const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
@@ -282,7 +281,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'cockpit',
       description: 'Show context, usage, subagents, the plan and the repo in a pane',
-      argumentHint: '[settings]',
+      argumentHint: '[settings | notify test | notify url <url> | notify mention <id>]',
     })
     await loadSettings($)
     const o = await live($)
@@ -309,6 +308,9 @@ export const register: Register = on => {
     const words = e.args.trim().split(/\s+/)
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
+    if (!wantsSettings && e.args.trim() !== '') {
+      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]` }
+    }
     if (wantsSettings) await showSettings($)
     else {
       await flushSettingNote($)
@@ -727,7 +729,7 @@ export const register: Register = on => {
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
         {autoNow?.active && (
           <Text key="auto-line" color="magenta">
-            {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} compactions · ${autoNow.resumes} resumes`}
+            {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
           </Text>
         )}
         {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($))}
@@ -932,7 +934,6 @@ export const register: Register = on => {
     const actNow = act.kind === 'interrupted' ? { ...act, detail: kept.length === 0 ? 'nothing left running' : `${kept.join(' and ')} still running` } : act
     const finished = all.filter(one => one.isDone)
     const doneCount = items.filter(item => item.status === 'completed').length
-    const current = items.find(item => item.status === 'in_progress') ?? items.find(item => item.status === 'pending')
     const limits = spend?.limits ?? []
     const cost = head?.usd == null ? null : `$${head.usd.toFixed(2)}`
 
@@ -1395,14 +1396,19 @@ export const register: Register = on => {
           rootsLine,
         )
         ) : (
-          rootsLine !== false &&
+          (rootsLine !== false || (finishNow !== null && finishLine(finishNow, now).length > 0)) &&
           section(
             'plan',
             'Plan',
-            'red',
+            rootsLine !== false ? 'red' : 'yellow',
             <Text key="plan-head" dimColor>
-              checkout paths
+              {rootsLine !== false ? 'checkout paths' : 'no plan'}
             </Text>,
+            finishNow !== null && finishLine(finishNow, now).length > 0 && (
+              <Text key="plan-finish" wrap="truncate-end">
+                {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+              </Text>
+            ),
             rootsLine,
           )
         ),
@@ -1647,7 +1653,13 @@ export const register: Register = on => {
               lines,
             )
           }
-          if (items.length === 0) return rootsNow !== null && panel('plan', 'Plan', 'red', [{ text: 'checkout paths' }], [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] }])
+          const finishChips: PanelLine[] = finishNow !== null && finishLine(finishNow, now).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] }] : []
+          if (items.length === 0) {
+            return (rootsNow !== null || finishChips.length > 0) && panel('plan', 'Plan', rootsNow !== null ? 'red' : 'yellow', [{ text: rootsNow !== null ? 'checkout paths' : 'no plan' }], [
+              ...finishChips,
+              ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
+            ])
+          }
           return panel('plan', 'Plan', 'yellow', [{ text: `${doneCount}/${items.length}` }], [
             { kind: 'picture', svg: segmentsSvg(items.map(item => (item.status === 'completed' ? 'done' : item.status === 'in_progress' ? 'active' : 'todo')), width, 6) },
             ...shownItems.map(
@@ -1659,7 +1671,7 @@ export const register: Register = on => {
                 ],
               }),
             ),
-            ...(finishNow !== null && finishLine(finishNow, now).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] } as PanelLine] : []),
+            ...finishChips,
             ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
           ])
         })(),
@@ -1883,7 +1895,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
       ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
       : remoteNow.setting === 'true'
         ? [{ text: 'Remote ○ on', color: 'green' }]
-        : [{ text: 'Remote ○ off', dim: true }]
+        : [{ text: 'Remote ○ not connected', dim: true }]
 
   if (isDesktop) {
     const w = svgWidth(room - 4)
@@ -1991,11 +2003,16 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   // A bare button on the top rule, so the band keeps its height.
   const expand = <Button key="band-expand" label="Expand" plain hover={{ bold: true }} onPress={onExpand} />
   const email = who?.email ?? ''
-  // What rides on the top rule, dropped from the end while it does not fit.
+  // What rides on the top rule, dropped from the end while it does not fit;
+  // only the parts that are known are joined.
+  const joined = (parts: Run[][]): Run[] => parts.flatMap((runs, index) => (index === 0 ? runs : [{ text: ' · ', dim: true }, ...runs]))
+  const emailPart: Run[][] = email === '' ? [] : [[{ text: email, bold: true }]]
+  const billingPart: Run[][] = billing === null ? [] : [[{ text: billing, dim: true }]]
+  const remotePart: Run[][] = remoteBand.length === 0 ? [] : [remoteBand]
   const tops: Run[][] = [
-    [{ text: email, bold: true }, ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]), { text: ' · ', dim: true }, ...remoteBand],
-    [{ text: email, bold: true }, { text: ' · ', dim: true }, ...remoteBand],
-    [{ text: email, bold: true }],
+    joined([...emailPart, ...billingPart, ...remotePart]),
+    joined([...emailPart, ...remotePart]),
+    joined(emailPart),
     [],
   ]
   // "╭─ " + top + " " + dashes + " Expand ─╮"
@@ -2725,8 +2742,6 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   return reading
 }
 
-// The pane's slower readings: the /context breakdown, estimated locally, and
-// the working tree's git state. Read while the pane is up, never per tool call.
 /** What the pane asks the surface for under a layout: the band's rows unless it is full. */
 function paneFor(layout: string) {
   return { id: PANE, title: 'Cockpit', columns: PANE_COLUMNS, ...(layout === 'full' ? {} : { rows: COMPACT_ROWS }) }
@@ -2888,6 +2903,8 @@ async function flushSettingNote($: EngineInterface) {
   for (const key of keys) if (S.changed[key] === sent[key]) delete S.changed[key]
 }
 
+// The pane's slower readings: the /context breakdown, estimated locally, and
+// the working tree's git state. Read while the pane is up, never per tool call.
 async function refreshDetail($: EngineInterface) {
   await readPlace($)
   try {
@@ -3025,8 +3042,6 @@ async function shutPane($: EngineInterface) {
   }
 }
 
-// Follows the main loop's todo list (TodoWrite) or task list (TaskCreate and
-// TaskUpdate), whichever the session uses.
 async function readVersion($: EngineInterface) {
   try {
     S.canUnderline = isAtLeast((await $.session.version()).base, UNDERLINE_SINCE)
@@ -3035,8 +3050,6 @@ async function readVersion($: EngineInterface) {
   }
 }
 
-// A Bash call that went to the background (asked for, Ctrl+B, or its
-// timeout) is a running shell until its notification or a stop names it.
 function clip(text: string, width: number): string {
   const chars = [...text]
   return chars.length <= width ? text : chars.slice(0, width - 1).join('') + '…'
@@ -3050,6 +3063,8 @@ async function endShells($: EngineInterface, text: string) {
   await syncTicker($)
 }
 
+// A Bash call that went to the background (asked for, Ctrl+B, or its
+// timeout) is a running shell until its notification or a stop names it.
 async function trackShells($: EngineInterface, tool: string, e: object, result: unknown) {
   if (tool === 'Bash') {
     const id = (result as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
@@ -3086,6 +3101,8 @@ async function readRemote($: EngineInterface) {
   }
 }
 
+// Follows the main loop's todo list (TodoWrite) or task list (TaskCreate and
+// TaskUpdate), whichever the session uses.
 async function trackPlan($: EngineInterface, tool: string, e: object, result: unknown) {
   if (tool === 'TodoWrite') {
     const todos = (e as { todos?: unknown }).todos
@@ -3147,11 +3164,6 @@ function addRun(all: CockpitSeat[], seat: string, usage: TurnUsage): CockpitSeat
   return found ? all.map(one => (one.seat === seat ? next : one)) : [...all, next]
 }
 
-function repoChanges(git: { changed: number; untracked: number }): string {
-  if (git.changed + git.untracked === 0) return ' · clean'
-  return ` · ${git.changed} changed` + (git.untracked > 0 ? ` · ${git.untracked} untracked` : '')
-}
-
 function shortSeat(seat: string): string {
   return seat.replace(/^dr-forge:/, '')
 }
@@ -3171,7 +3183,7 @@ function cacheShare(seat: CockpitSeat): number {
   return total === 0 ? 0 : Math.round((seat.cacheRead / total) * 100)
 }
 
-// The round of the task in flight, as a number, for the strip.
+// The round of the task in flight, as the ledger writes it ("2/5"), for the Run card's head.
 function runRound(summary: CockpitRun): string | null {
   return summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null
 }

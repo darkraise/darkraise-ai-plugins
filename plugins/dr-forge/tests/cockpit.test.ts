@@ -78,7 +78,7 @@ import {
   tabsOf,
   typedNumber,
 } from '../hooks/cockpit/config'
-import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, statSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -960,7 +960,7 @@ describe('minimized band', () => {
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ off ─+ $/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
     expect(await ui.find({ key: 'band-expand' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /\$ 1 shell · longest 0s.*~\/code\/shop\/web ⎇ feat\/pane\* ↑2 ↓1 ~1 \?1/ })).toBeDefined()
@@ -1188,6 +1188,14 @@ describe('/cockpit', () => {
     world(on, { tokens: 284_000, open: { isPlaced: false, reason: 'this desktop app places no panes' } })
     const answer = await $.command.run(COCKPIT)
     expect(answer.text).toBe('Cockpit pane is waiting: this desktop app places no panes')
+  })
+
+  test('answers an unknown argument with its usage and opens nothing', async ($, on) => {
+    const opened: string[] = []
+    world(on, { tokens: 284_000, opened })
+    const answer = await $.command.run({ ...COCKPIT, args: 'bogus' })
+    expect(answer.text).toBe('Unknown argument "bogus". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]')
+    expect(opened).toEqual([])
   })
 })
 
@@ -1436,7 +1444,6 @@ describe('desktop', () => {
     expect(segments).toContain('#4f7cff')
     expect(segments).toContain('#e5534b')
     expect(avatarSvg('<me>', undefined)).toContain('>&#60;</text>')
-    expect(statSvg('68%', 'of handoff budget', 200, 'success')).toContain('fill="#3fb36b">68%</text>')
     const named = labelledMeterSvg(0.4, 300, 'cyan', [{ at: 0.6 }], [
       { at: 0, text: '412k / 1.0M' },
       { at: 0.6, text: 'handoff 604k' },
@@ -1812,6 +1819,24 @@ describe('shells and remote', () => {
     expect(await ui.find({ type: 'Text', text: /Remote ○ on · no device yet/ })).toBeDefined()
   })
 
+  test('start the band\'s top rule with Remote when no email is known', async ($, on) => {
+    world(on, { ...SIGNED_IN, remoteControl: 'true' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^╭─ Remote ○ on ─+ $/ })).toBeDefined()
+  })
+
+  test('say Remote is not connected on the band as the pane does', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on)
+    await $.session.start(START)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Remote ○ not connected/ })).toBeDefined()
+    await ui.unmount()
+    ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
+  })
+
   test('say what kept running after Esc', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
     signedIn(on)
@@ -2114,6 +2139,18 @@ describe('run card', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     // The world's clock reads 1,000,000 ms; the menu's 30 minutes end at 2,800 s.
     expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
+  })
+
+  test('shows the finish choice for work without a plan or a todo list', async ($, on) => {
+    const files = { '/home/me/code/shop/.forge/sdd/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
+    await ui.unmount()
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(JSON.stringify(await desk.drawn())).toContain('⏱ Finish push and open a PR · in 30m')
   })
 
   test('offers no Resume for a handoff left under the pre-3.0 .superpowers', async ($, on) => {
@@ -3127,7 +3164,7 @@ describe('auto run', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
-    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compactions/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compaction · 0 resumes/ })).toBeDefined()
   })
 
   test('tells the cleared session when its model was refused', async ($, on) => {

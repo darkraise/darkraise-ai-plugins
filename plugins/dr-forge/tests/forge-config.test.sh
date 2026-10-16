@@ -16,7 +16,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 if command -v cygpath > /dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
-unset CLAUDE_CONFIG_DIR DR_FORGE_BUDGET DR_SUPERPOWERS_BUDGET
+unset CLAUDE_CONFIG_DIR DR_FORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 fc() { bash "$CMD" "$@" 2> "$TMP/stderr"; }
 fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dr-forge/config.json"; }
 
@@ -244,6 +244,10 @@ check "the command runs with path conversion off" "$(MSYS_NO_PATHCONV=1 fc get w
 # A number setting is a whole number.
 fc set finishTimeout 5.5; check "a fraction: exit 2" "$?" "2"
 fc set warnAt 72.5; check "a fraction of an older key: exit 2" "$?" "2"
+
+# The settings view gives each group a tab and the tabs the hotkeys 1, 2, ….
+groups=$(node --input-type=module -e "const { default: schema } = await import(process.argv[1]); console.log(new Set(Object.values(schema).map(spec => spec.group)).size)" "$(cd "$HERE/../config" && pwd)/schema.mjs")
+check "the README's tab hotkeys cover every settings group" "$(grep -c "press \`1\` to \`$groups\` to switch" "$HERE/../README.md")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

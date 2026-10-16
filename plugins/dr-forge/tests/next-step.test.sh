@@ -236,6 +236,7 @@ has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`.forge/han
 hand=$(cat "$HANDOFF")
 has "adhoc: handoff keeps the notes" "$hand" "Item C unscoped."
 lacks "adhoc: handoff drops the stale block" "$hand" "Old block."
+check "adhoc: the state directory ignores itself" "$(git -C "$REPO" status --porcelain --untracked-files=all -- .forge)" ""
 run "$REPO" --adhoc --phase build --next "Commit items A and B"
 check "adhoc build: exits 0" "$status" "0"
 has "adhoc build: sonnet launch command" "$out" "claude --model sonnet --effort high"

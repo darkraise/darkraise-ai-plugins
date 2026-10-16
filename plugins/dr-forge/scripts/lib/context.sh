@@ -226,13 +226,20 @@ ctx_find_rollout() {
   return 1
 }
 
-# autoCompactWindow from the user settings, or nothing. Read without jq so the
-# budget stays printable when jq is missing.
+# autoCompactWindow from the user, then project, then local settings, the last
+# file that sets it winning as in Claude Code's own merge; or nothing. Project
+# settings are read only when Claude Code names the project directory. Read
+# without jq so the budget stays printable when jq is missing.
 ctx_auto_compact_window() {
-  local f="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-  [ -f "$f" ] || return 0
-  tr -d '\r' <"$f" | grep -oE '"autoCompactWindow"[[:space:]]*:[[:space:]]*[0-9]+' \
-    | head -n 1 | grep -oE '[0-9]+$' || true
+  local f v acw=""
+  for f in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" \
+           ${CLAUDE_PROJECT_DIR:+"$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json"}; do
+    [ -f "$f" ] || continue
+    v=$(tr -d '\r' <"$f" | grep -oE '"autoCompactWindow"[[:space:]]*:[[:space:]]*[0-9]+' \
+      | head -n 1 | grep -oE '[0-9]+$' || true)
+    [ -z "$v" ] || acw=$v
+  done
+  printf '%s' "$acw"
 }
 
 # ctx_window MODEL — the window compaction is measured against: the model's
@@ -246,8 +253,13 @@ ctx_window() {
 }
 
 # ctx_budget MODEL — the handoff budget for a session on MODEL (may be empty).
+# A window small enough to put the rule near or below zero holds a fifth of it.
 ctx_budget() {
-  echo $(( $(ctx_window "$1") * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
+  local window budget
+  window=$(ctx_window "$1")
+  budget=$(( window * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
+  [ "$budget" -ge $(( window / 5 )) ] || budget=$(( window / 5 ))
+  echo "$budget"
 }
 
 # ctx_final_budget MODEL — the final phase's limit. DR_FORGE_BUDGET pins

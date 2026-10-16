@@ -60,7 +60,7 @@ set -- ${hostless[@]+"${hostless[@]}"}
 
 # The design tier writes specs and plans; the build tier executes them. Claude's
 # pairs are its ladder's top execution rung and the subagent Execution default.
-# Codex runs both tiers on GPT-6 Sol high, the subagent Execution default
+# Codex runs both tiers on GPT-6.1 Sol high, the subagent Execution default
 # plan-lint expects: the session runs for hours, and the judgment calls that
 # need Astra go to native judges at the rank-8 floor, not to the session.
 launch_for() { # launch_for design|build
@@ -492,6 +492,7 @@ handoff=$(forge_latest_file)
 today=$(date -u +%Y-%m-%d)
 write_handoff() {
   mkdir -p "$(dirname "$handoff")" || return 1
+  case $handoff in */.forge/handoff/latest.md) forge_state_ignore "${handoff%/.forge/handoff/latest.md}" ;; esac
   if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
     printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$handoff.tmp" || return 1
   else

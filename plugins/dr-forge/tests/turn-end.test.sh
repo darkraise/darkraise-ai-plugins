@@ -18,7 +18,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DR_FORGE_BUDGET
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DR_FORGE_BUDGET CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
