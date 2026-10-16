@@ -43,8 +43,21 @@ final_message() { printf '{"status":"%s","summary":"fixture","commit_subject":"f
 export STUB_FINAL_MESSAGE="$(final_message DONE)" STUB_WRITE_PATH=produced.txt STUB_WRITE_CONTENT=produced
 launches() { grep -c '^runAppServerTurn' "$STUB_EVENT_LOG" 2>/dev/null || echo 0; }
 
+# A stub session gate. Every case sees an open lane unless it sets GATE_STUB_LINE.
+cat > "$fixture/gate-stub" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "${GATE_STUB_LINE:-codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache}"
+STUB
+export CODEX_TASK_GATE="$fixture/gate-stub"
+
 run() { bash "$SCRIPT" --cwd "$fixture/work" --task-id task-one --write-set "$fixture/scope.json" \
   --brief "$fixture/brief.md" --report "$fixture/report.md" --model gpt-6.1-sol --effort medium "$@" > "$fixture/out" 2> "$fixture/err"; }
+GATE_STUB_LINE='codex-gate usable=false reason=quota review=false lane=false resets_at=- source=cache' run
+check 'a closed lane is refused' "$?" 2
+check 'a closed lane never launches model' "$(launches)" 0
+check 'a closed lane names the gate reason' "$(grep -c 'codex lane is off for this session (quota)' "$fixture/err")" 1
+GATE_STUB_LINE='codex-gate usable=true reason=ok review=true lane=false resets_at=- source=cache' run
+check 'a usable Codex with the lane surface closed is refused' "$?" 2
 printf 'unrelated\n' > "$fixture/work/unrelated.txt"
 before="$(git -C "$fixture/work" rev-parse HEAD)"
 run

@@ -9,6 +9,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LADDER="$HERE/../reference/ladder.md"
 SCHEMA="$HERE/codex-report-schema.json"
+# Tests point this at a stub gate. Unset in production, where scripts/codex-gate
+# answers from this session's cache or probes the codex plugin.
+GATE="${CODEX_TASK_GATE:-$HERE/codex-gate}"
 source "$HERE/lib/task-state.sh"
 source "$HERE/lib/task-execution.sh"
 source "$HERE/lib/executor-session.sh"
@@ -138,6 +141,14 @@ if [ "$dry" -eq 1 ]; then
 fi
 
 [ -n "$task_id" ] || die '--task-id is required'
+# The controller reads the gate before choosing the lane; reading it again here
+# keeps a lane that closed since then (a quota, a settings switch, a failed
+# smoke gate) from reaching a paid turn.
+gate_line=$(bash "$GATE" 2>/dev/null | tail -1 | tr -d '\r')
+if [[ "$gate_line" != *" lane=true "* ]]; then
+  gate_reason=$(sed -n 's/.* reason=\([^ ]*\).*/\1/p' <<<"$gate_line")
+  die "codex lane is off for this session (${gate_reason:-no gate answer})"
+fi
 cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
 report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
 case "$report" in

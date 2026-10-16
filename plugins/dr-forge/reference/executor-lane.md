@@ -151,7 +151,9 @@ for ownership, artifacts, approved write sets, and recovery operations.
    Unless it prints `lane=true`, run neither the roster nor the wrapper:
    dispatch the task's `**Implementer:**` agent on the Claude lane, say the
    substitution aloud, and record it with the line below, quoting the gate's
-   `reason` (`untrusted` when it printed `usable=true`). Otherwise run
+   `reason` (`untrusted` when it printed `usable=true`). The wrapper reads the
+   gate again and exits 2 with `codex lane is off for this session (<reason>)`
+   when the lane has closed since. Otherwise run
    `bash "<plugin-root>/scripts/detect-executors.sh"` and read the entry
    for the named executor. **Never trust the plan's copy** - it records what was
    available when the plan was written.
