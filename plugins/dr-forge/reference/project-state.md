@@ -81,8 +81,9 @@ darkmem is off unless the `darkmemEnabled` setting is on. A repository mapped
 to darkmem while it is on may keep each family in the darkmem mirror instead
 (`documentStore`, `progressSource`; `bash <plugin-root>/scripts/forge-path store`
 prints which). Turned off or unmapped, both families belong in the checkout:
-a family still in the mirror is read there until the next session start's
-reconcile copies it back from the mirror, without asking darkmem.
+a family still in the mirror is read there until the reconcile of a session
+start with no plan in progress copies it back from the mirror, without asking
+darkmem.
 
 | Token | Local | darkmem |
 |---|---|---|

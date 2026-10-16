@@ -42,7 +42,7 @@ function dirEntries(dir) {
 }
 
 // One document name under either docs prefix (spec §7.1), as forge_name_key
-// and forge_name_spellings spell it in roots.sh. The pre-2.0 docs/superpowers
+// and forge_name_spellings spell it in roots.sh. The pre-3.0 docs/superpowers
 // spelling stays readable because historical plans and ledgers cite it.
 export function nameSpellings(name) {
   const text = String(name).replace(/^\.\//, "");

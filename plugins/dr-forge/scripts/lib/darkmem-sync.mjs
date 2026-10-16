@@ -61,7 +61,7 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
 }
 
 // A document name as ledgers and plans write it, docs/forge/<rest> or the
-// pre-2.0 docs/superpowers/<rest> that historical plans cite, as its uri forge/<rest>; null for a
+// pre-3.0 docs/superpowers/<rest> that historical plans cite, as its uri forge/<rest>; null for a
 // path, a handoff note, an archived copy, or a name that climbs.
 function documentUri(name) {
   const match = /^(?:\.\/)?docs\/(?:forge|superpowers)\/(.+)$/.exec(name);

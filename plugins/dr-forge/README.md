@@ -293,21 +293,24 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   `commit` properties a progress board can read; `status` lists each family's
   store and local changes;
   `import` files an existing `docs/forge/` and its ledgers once, verified byte
-  for byte. A store that changes moves its family at the next session start:
+  for byte. A store that changes moves its family at the next session start
+  with no plan in progress and no auto run active:
   `reconcile` copies the files across, verifies every hash, records the new
   store in `stores.json`, and leaves documents leaving the repository as a
-  staged `git rm` for you to commit. A move into darkmem refuses, naming the
-  reason, while a plan is in progress, while darkmem is unreachable or the key
-  is unset, or when a file cannot be carried (a dotfile, a symbolic link, an
-  empty or non-UTF-8 file, a name some platform cannot hold, a case twin, an
-  ignored file); it never overwrites a different darkmem copy, and moved
+  staged `git rm` for you to commit. Every move refuses, naming the reason,
+  while a plan is in progress (a ledger whose plan `completed.md` does not
+  record) or an auto run is active. A move into darkmem also refuses while
+  darkmem is unreachable or the key is unset, while a linked worktree holds
+  documents the primary checkout does not, or when a file cannot be carried
+  (a dotfile, a symbolic link, an empty or non-UTF-8 file, a name some
+  platform cannot hold, a case twin, an ignored file); it never overwrites a different darkmem copy, and moved
   progress files are kept under a dated `moved-<stamp>` backup.
   **Falling back to the file system.** While darkmem is on, the mirror is plain
   local files: without the key or the server, work goes on from it and `pull`
   and `push` say why they skipped. Turn darkmem off (`darkmemEnabled` false) or
-  remove the mapping, and the next session start moves every family back
-  into the repository from the mirror alone, without asking darkmem, naming
-  each file darkmem does not hold as the mirror does and keeping the mirror
+  remove the mapping, and the next session start with no plan in progress
+  moves every family back into the repository from the mirror alone, without
+  asking darkmem, naming each file darkmem does not hold as the mirror does and keeping the mirror
   as a dated `forge-moved-<stamp>` / `work-moved-<stamp>` backup; until then
   the scripts keep reading the mirror, and `push` and `pull` do nothing. A
   store set back to `local` while darkmem is on and reachable is pulled from
@@ -315,7 +318,8 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   unsynced, while `darkmemEnabled` is unset: each session start says so until
   you set it either way. A repository with no mapping but a record that still
   places a family in the mirror is read and reconciled the same way: the
-  scripts read the mirror until the next session start moves the family back. Without the darkmem MCP tools, or with darkmem off,
+  scripts read the mirror until a session start with no plan in progress
+  moves the family back. Without the darkmem MCP tools, or with darkmem off,
   the durable facts the skills would file with `memory_add` go to
   `<docs>/notes/<date>-facts.md` instead. Session start runs `reconcile` and
   `pull`; the skills' stop points run `push`, and a
@@ -777,8 +781,8 @@ The same settings can be set with
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
-| darkmem | `darkmemEnabled` | `false` | Use darkmem for mapped repositories. Off keeps everything in the repository, and a family already in the mirror moves back at the next session start, from the mirror alone. |
-| darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until the next session start moves it back. |
+| darkmem | `darkmemEnabled` | `false` | Use darkmem for mapped repositories. Off keeps everything in the repository, and a family already in the mirror moves back at the next session start with no plan in progress, from the mirror alone. |
+| darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until a session start with no plan in progress moves it back. |
 | darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
 The cockpit settings (Cockpit, Context, Notifications) apply at once, except
