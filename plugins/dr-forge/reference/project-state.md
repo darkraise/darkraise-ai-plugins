@@ -134,6 +134,7 @@ root causes and fixes, constraints), one fact per entry. When
 `forge-path project` prints a project (darkmem is on and the repository
 mapped) and the darkmem MCP tools are available, file each with `memory_add`,
 tagged `project/<project>`. Otherwise append each as one bullet to
-`<docs>/notes/<YYYY-MM-DD>-facts.md`, which dr-forge:distilling-docs later
-absorbs. Ledger lines, progress and commit hashes stay in the work log either
+`<docs>/notes/<YYYY-MM-DD>-facts.md` and commit it in a `docs(notes): …`
+commit of its own (while documents live in darkmem, the push carries it
+instead): dr-forge:distilling-docs absorbs only tracked, clean notes. Ledger lines, progress and commit hashes stay in the work log either
 way.

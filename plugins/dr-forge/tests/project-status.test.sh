@@ -201,6 +201,7 @@ present "project-state: the hooks reconcile, pull and push" "$STATE" 'runs `dark
 present "project-state: promotion uses memory_add" "$STATE" 'file each with `memory_add`,'
 present "project-state: promotion keys on the mapping" "$STATE" '`forge-path project` prints a project (darkmem is on and the repository'
 present "project-state: promotion falls back to a notes file" "$STATE" '`<docs>/notes/<YYYY-MM-DD>-facts.md`'
+present "project-state: the facts note is committed, so distilling-docs can absorb it" "$STATE" 'commit it in a `docs(notes): …`'
 for skill in subagent-driven-development executing-plans; do
   present "$skill: pushes after each ledger line" "$P/skills/$skill/SKILL.md" '§darkmem sync points'
 done
