@@ -13,6 +13,7 @@ import {
   unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
+import { nameSpellings } from "./darkmem-reconcile.mjs";
 
 const RESOLVE = "pull, reconcile, then push";
 // darkmem's own answer for a uri nothing is filed at; any other 404 (a wrong
@@ -333,8 +334,7 @@ function planFinished(roots, named) {
   } catch {
     return false;
   }
-  const rest = uri.slice(DOC_PREFIX.length + 1);
-  return [`docs/forge/${rest}`, `docs/superpowers/${rest}`].some(name => text.includes(`\`${name}\``));
+  return nameSpellings(`docs/forge/${uri.slice(DOC_PREFIX.length + 1)}`).some(name => text.includes(`\`${name}\``));
 }
 
 // A finished plan's workstream is closed once its ledger is fully pushed, so
