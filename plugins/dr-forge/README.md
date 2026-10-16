@@ -733,7 +733,7 @@ Code" or a Claude session link). Human co-authors pass.
 ### Settings
 
 Open the settings with **Settings** in the pane or `/cockpit settings`. They are
-one tab per group: press `1` to `6` to switch, `i` to hide or show each
+one tab per group: press `1` to `7` to switch, `i` to hide or show each
 setting's description, and `b` to go back. A row whose value differs from its
 default is marked `*` and shows the default with a **Reset**; `r` resets the
 whole tab after a second press. Numbers step with `−` and `+` or take a typed
