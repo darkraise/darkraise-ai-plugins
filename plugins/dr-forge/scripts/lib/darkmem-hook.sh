@@ -79,14 +79,21 @@ _darkmem_fit() {
     }'
 }
 
-# darkmem_session_lines DIR SID [ROOM] — reconcile's and pull's lines for the
-# session start note, without notes, "nothing to pull" or a pull summary that
-# reports nothing, fitted to 20 lines and ROOM characters (default: no
-# character limit). A malformed config prints its one-line reason instead. A
-# repository that is disabled or unmapped still reconciles while a family is in
-# the mirror, so that family moves back.
+# darkmem_session_lines DIR SID [ROOM] [SECONDS] — reconcile's and pull's lines
+# for the session start note, without notes, "nothing to pull" or a pull
+# summary that reports nothing, fitted to 20 lines and ROOM characters
+# (default: no character limit). A malformed config prints its one-line reason
+# instead. A repository that is disabled or unmapped still reconciles while a
+# family is in the mirror, so that family moves back.
+#
+# SECONDS (default 270) is all the time the two may take, kill grace included:
+# a hook killed at its timeout loses the whole note, the entry point with it.
+# Reconcile gets what pull's 60 seconds leave, up to 200; pull what reconcile
+# left, up to 60; a step left under 10 seconds is skipped with a line. Both
+# wait up to 30 seconds for a mirror lock, which a Stop push still running in
+# the background may hold.
 darkmem_session_lines() {
-  local reason status
+  local reason status end grace bound
   _darkmem_configured || return 0
   reason=$( (forge_docs_store "$1" >/dev/null) 2>&1 )
   status=$?
@@ -95,7 +102,23 @@ darkmem_session_lines() {
     || [ "$( (forge_docs_store "$1") 2>/dev/null)" = darkmem ] \
     || [ "$( (forge_progress_store "$1") 2>/dev/null)" = darkmem ] \
     || return 0
-  { _darkmem_run "$1" "$2" 200 reconcile 2>&1; _darkmem_run "$1" "$2" 60 pull 2>&1; } \
+  end=$(( SECONDS + ${4:-270} )) grace=${DARKMEM_KILL_GRACE:-5}
+  {
+    bound=$(( end - SECONDS - 60 - 2 * grace ))
+    [ "$bound" -le 200 ] || bound=200
+    if [ "$bound" -lt 10 ]; then
+      echo "darkmem-sync: reconcile and pull skipped at session start: too little of the hook's time is left; run darkmem-sync reconcile, then pull"
+    else
+      DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" reconcile 2>&1
+      bound=$(( end - SECONDS - grace ))
+      [ "$bound" -le 60 ] || bound=60
+      if [ "$bound" -lt 10 ]; then
+        echo "darkmem-sync: pull skipped at session start: too little of the hook's time is left; run darkmem-sync pull"
+      else
+        DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" pull 2>&1
+      fi
+    fi
+  } \
     | tr -d '\r' \
     | grep -v -e '^note:' -e 'nothing to pull' -e 'reconcile moves it back$' -e 'until darkmemEnabled is set$' \
         -e '^darkmem-sync pull: 0 documents, 0 ledgers, 0 checkpoints; 0 conflicts, 0 failures$' \
