@@ -201,6 +201,14 @@ export type CockpitRoots = {
   project: string | null
 }
 
+/** A handoff note that starts a next session, as the resume card and band offer it. */
+export type CockpitResumeOffer = {
+  /** When the note was written, in milliseconds since the epoch. */
+  at: number
+  /** The note's `**Next:**` line. */
+  next: string
+}
+
 /** An auto run as its state file says (reference/auto-run.md), for the session it is bound to. */
 export type CockpitAutoRun = {
   active: boolean
@@ -279,6 +287,10 @@ declare module 'claude-code' {
       finish: CockpitFinish | null
       /** When the newest handoff note was written, in milliseconds since the epoch. */
       handoffAt: number | null
+      /** The handoff this session could resume; null when the note starts no next session. */
+      resumeOffer: CockpitResumeOffer | null
+      /** The handoff time whose offer this session resumed or dismissed. */
+      resumeDismissed: number | null
       /** Why the plan section reads checkout paths, not the roots `--mode` names: its first line of stderr; null otherwise. */
       rootsNote: string | null
       notifier: CockpitNotifier

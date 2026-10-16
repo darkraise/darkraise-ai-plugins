@@ -589,9 +589,16 @@ desktop window joins the session, unless you closed it.
   where auto-compaction runs, and the largest `/context` categories, estimated
   locally with no API calls. The title adds about how many turns are left to
   the budget at the pace of the last few. **Hand off** appears in
-  `dr-forge` sessions; **Resume** (`r`) appears outside them when
-  `.forge/handoff/latest.md` is under three days old, and queues the
-  prompt that resumes it.
+  `dr-forge` sessions.
+- **Resumable work** is a card at the top of the pane, framed in the accent
+  color, when `.forge/handoff/latest.md` is under three days old and its
+  `## Next session` block has a first prompt to paste (a finished plan, or a
+  task blocked on your ruling, has none). It names the note's age and its
+  **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The
+  same offer rides in a band above the prompt, over the minimized band when
+  there is one, with **Resume** and **Dismiss**. Pressing either in one place
+  removes both for this session; so does an auto run, or the session starting
+  on a plan.
 - **Usage** is the account's 5-hour and 7-day limits with their resets, and the
   session's cost and cost per hour. Once a window is ten minutes old each meter
   says whether the limit lasts to its reset at the pace so far (`on pace`), or

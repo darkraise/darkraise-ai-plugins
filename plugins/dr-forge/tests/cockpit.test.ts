@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMessage } from 'claude-code'
 
 import {
@@ -20,6 +21,7 @@ import {
   bandLines,
   fitBand,
   folderRuns,
+  handedOff,
   isAtLeast,
   levelOf,
   limitForecast,
@@ -34,6 +36,7 @@ import {
   remoteRuns,
   repoFromPorcelain,
   repoName,
+  resumeOfferOf,
   runsWidth,
   sectionsToggled,
   sparkline,
@@ -128,6 +131,36 @@ const COCKPIT: CommandRunInput = {
 
 // A terminal session starting in the repository.
 const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractive: true } as never
+
+// Handoff notes as scripts/next-step writes them: a next session to start, or none.
+const RESUMABLE = [
+  '# Handoff',
+  '',
+  '## Next session',
+  '',
+  '**Status:** Plan `docs/forge/plans/2026-10-14-band.md`: 3 of 6 tasks complete.',
+  '**Next:** Task 4 — wire the band into the pane.',
+  '',
+  'Launch in `/home/me/code/shop`:',
+  '',
+  '```',
+  'claude --model opus',
+  '```',
+  '',
+  'Paste as the first prompt:',
+  '',
+  '```',
+  'Execute docs/forge/plans/2026-10-14-band.md.',
+  '```',
+  '',
+  '## State',
+  '',
+  'Worktree: /home/me/code/shop-wt',
+  '',
+].join('\n')
+const FINISHED = '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/forge/plans/x.md` is complete.\n**Next:** Nothing — the plan records no follow-on work.\n'
+const BLOCKED =
+  '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/forge/plans/x.md`: 2 of 5 tasks complete; Task 3 is BLOCKED (needs a key).\n**Next:** Your human partner decides: needs a key.\n'
 
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
@@ -2084,7 +2117,7 @@ describe('run card', () => {
   })
 
   test('offers no Resume for a handoff left under the pre-3.0 .superpowers', async ($, on) => {
-    const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
+    const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
     await $.session.start(START)
@@ -2093,7 +2126,7 @@ describe('run card', () => {
   })
 
   test('offers Resume for a handoff under .forge', async ($, on) => {
-    const files: World['files'] = { '/home/me/code/shop/.forge/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
+    const files: World['files'] = { '/home/me/code/shop/.forge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const prompts: string[] = []
     world(on, { ...SIGNED_IN, files, prompts })
     signedIn(on, files)
@@ -2102,6 +2135,126 @@ describe('run card', () => {
     expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
     await ui.press({ key: 'pane-resume' })
     expect(prompts).toEqual([expect.stringContaining('.forge/handoff/latest.md')])
+  })
+})
+
+describe('resume offer', () => {
+  const LATEST = '/home/me/code/shop/.forge/handoff/latest.md'
+  const COMPACT = configured({ layout: 'compact' })
+  const start = async ($: Parameters<TestBody>[0], on: On, text: string, more: World['files'] = {}, mtimeMs = 900_000) => {
+    const files: World['files'] = { [LATEST]: { text, mtimeMs }, ...more }
+    const prompts: string[] = []
+    world(on, { ...SIGNED_IN, files, prompts })
+    signedIn(on, files)
+    await $.session.start(START)
+    return prompts
+  }
+
+  test('reads the next action of a handoff that has a first prompt', () => {
+    expect(resumeOfferOf(RESUMABLE)).toEqual({ next: 'Task 4 — wire the band into the pane.' })
+  })
+
+  test('says a handoff under a minute old was just handed off', () => {
+    expect(handedOff(59_999)).toBe('handed off just now')
+    expect(handedOff(100_000)).toBe('handed off 1m ago')
+  })
+
+  test('reads no offer from a finished, blocked or bare handoff', () => {
+    expect(resumeOfferOf(FINISHED)).toBeNull()
+    expect(resumeOfferOf(BLOCKED)).toBeNull()
+    expect(resumeOfferOf('# Handoff')).toBeNull()
+  })
+
+  test('reads no offer from a first prompt outside the Next session block', () => {
+    expect(resumeOfferOf(`${FINISHED}\n## Notes\n\nPaste as the first prompt:\n\n\`\`\`\nold\n\`\`\`\n`)).toBeNull()
+  })
+
+  test('draws a resume card at the top of the pane', async ($, on) => {
+    await start($, on, RESUMABLE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'resume-card' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Resumable work · handed off 1m ago/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Next: Task 4 — wire the band into the pane\./ })).toBeDefined()
+    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
+  })
+
+  for (const surface of SURFACES) {
+    test(`draws the resume band above the prompt on ${surface}, the pane open`, async ($, on) => {
+      await start($, on, RESUMABLE)
+      const band = await $.ui.mount({ ...BAND, surface })
+      expect(await band.find({ key: 'band-resume' })).toBeDefined()
+      expect(await band.find({ key: 'band-resume-dismiss' })).toBeDefined()
+      expect(await band.find({ type: 'Text', text: /Resumable work · handed off 1m ago/ })).toBeDefined()
+      expect(await band.find({ key: 'band-expand' })).toBeUndefined()
+    })
+
+    test(`stacks the resume band on the minimized band on ${surface}`, async ($, on) => {
+      await start($, on, RESUMABLE, COMPACT)
+      const band = await $.ui.mount({ ...BAND, surface })
+      expect(await band.find({ key: 'band-resume' })).toBeDefined()
+      expect(await band.find({ key: 'band-expand' })).toBeDefined()
+    })
+  }
+
+  for (const [name, text] of [['finished', FINISHED], ['blocked', BLOCKED]] as const) {
+    test(`offers nothing for a ${name} plan`, async ($, on) => {
+      await start($, on, text)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+      expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
+      expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    })
+  }
+
+  test('offers nothing for a handoff older than three days', async ($, on) => {
+    await start($, on, RESUMABLE, {}, 1_000_000 - 3 * 86_400_000 - 1)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test('offers nothing once the session runs a plan', async ($, on) => {
+    await start($, on, RESUMABLE)
+    await $.tool.call({ tool: 'Skill', skill: 'dr-forge:subagent-driven-development' })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test('leaves the slot above the prompt to a survey', async ($, on) => {
+    await start($, on, RESUMABLE)
+    const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test("the band's Resume submits the resume prompt and removes the offer", async ($, on) => {
+    const prompts = await start($, on, RESUMABLE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'band-resume' })
+    expect(prompts).toEqual([expect.stringContaining('resume-execution')])
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
+  })
+
+  test("the pane's Resume removes the band too", async ($, on) => {
+    const prompts = await start($, on, RESUMABLE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await ui.press({ key: 'pane-resume' })
+    expect(prompts).toHaveLength(1)
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
+  })
+
+  test('Dismiss removes the offer without a prompt', async ($, on) => {
+    const prompts = await start($, on, RESUMABLE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'band-resume-dismiss' })
+    expect(prompts).toEqual([])
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
   })
 })
 
@@ -2268,7 +2421,7 @@ describe('cockpit roots', () => {
   })
 
   test('offers Resume for latest.md in the mirror, naming it', async ($, on) => {
-    const files: World['files'] = { [`${MIRROR}/work/handoff/latest.md`]: { text: '# Handoff', mtimeMs: 900_000 } }
+    const files: World['files'] = { [`${MIRROR}/work/handoff/latest.md`]: { text: RESUMABLE, mtimeMs: 900_000 } }
     const prompts: string[] = []
     world(on, { ...SIGNED_IN, files, prompts, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
     signedIn(on, files)
@@ -3174,7 +3327,7 @@ describe('auto run in the pane', () => {
   })
 
   test('hides Resume while a run is active and brings it back when the run stops', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), '/home/me/code/shop/.forge/handoff/latest.md': { text: '# Handoff', mtimeMs: 900_000 } }
+    const files = { ...autoFiles({ pending: null }), '/home/me/code/shop/.forge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const w: World = { ...SIGNED_IN, files, autoRuns: [], autoFile: files[AUTO] }
     world(on, w)
     signedIn(on, files)

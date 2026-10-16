@@ -10,6 +10,7 @@ import type {
   CockpitFinish,
   CockpitPlanItem,
   CockpitRefusal,
+  CockpitResumeOffer,
   CockpitRoots,
   CockpitRun,
   CockpitSeat,
@@ -34,6 +35,7 @@ import {
   finishLine,
   fitBand,
   folderRuns,
+  handedOff,
   isAtLeast,
   isFinishArmed,
   isGitWriteTool,
@@ -56,6 +58,7 @@ import {
   remoteRuns,
   repoFromPorcelain,
   repoName,
+  resumeOfferOf,
   shellAge,
   roundNumber,
   runsWidth,
@@ -175,6 +178,8 @@ const turnTokens = atom({ plugin: 'dr-forge', key: 'turnTokens' } as const, [])
 const run = atom({ plugin: 'dr-forge', key: 'run' } as const, null)
 const finish = atom({ plugin: 'dr-forge', key: 'finish' } as const, null)
 const handoffAt = atom({ plugin: 'dr-forge', key: 'handoffAt' } as const, null)
+const resumeOffer = atom({ plugin: 'dr-forge', key: 'resumeOffer' } as const, null)
+const resumeDismissed = atom({ plugin: 'dr-forge', key: 'resumeDismissed' } as const, null)
 const rootsNote = atom({ plugin: 'dr-forge', key: 'rootsNote' } as const, null)
 const settings = atom({ plugin: 'dr-forge', key: 'settings' } as const, null)
 const SETTINGS_VIEW: CockpitSettingsView = { tab: '', isHelpShown: true, editing: null, error: null, isConfirmingReset: false }
@@ -657,9 +662,8 @@ export const register: Register = on => {
     const act = await read($, activity)
     const summary = await read($, run)
     const finishNow = await read($, finish)
-    const handoffTime = await read($, handoffAt)
     const rootsNow = await read($, rootsNote)
-    const canResume = !canHandOff && handoffTime !== null && now - handoffTime < RESUME_WITHIN
+    const offer = await offerNow($, now)
     const drawRuns = (key: string, runs: Run[]) =>
       runs.map((one, index) => (
         <Text key={`${key}-${index}`} color={one.color} bold={one.bold} dimColor={one.dim}>
@@ -707,6 +711,17 @@ export const register: Register = on => {
       )
     }
     const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, o.tuning.warnAt) !== 'quiet'
+    const resumeCard = offer !== null && (
+      <Box key="resume-card" flexDirection="column" borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
+        <Text key="resume-title" color={BUTTON_MAIN} bold wrap="truncate-end">
+          {`↻ Resumable work · ${handedOff(now - offer.at)}`}
+        </Text>
+        <Text key="resume-next" wrap="truncate-end">{`Next: ${offer.next}`}</Text>
+        <Box key="resume-actions" flexDirection="row">
+          {button('pane-resume', 'Resume', () => resume($, offer), { hotkey: 'r', isMain: true })}
+        </Box>
+      </Box>
+    )
     const autoNow = await read($, autoRun)
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
@@ -717,7 +732,6 @@ export const register: Register = on => {
         )}
         {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($))}
         {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
-        {canResume && !autoNow?.active && button('pane-resume', 'Resume', () => $.prompt.submit({ text: resumePrompt(), asUser: true }), { hotkey: 'r', isMain: true })}
         {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
         {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's' })}
         {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
@@ -1740,6 +1754,7 @@ export const register: Register = on => {
       }
       return (
         <Box flexDirection="column" rowGap={1}>
+          {resumeCard}
           {o.shown.includes('account') && panels.account}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="now-box" flexGrow={1} flexShrink={1}>
@@ -1762,6 +1777,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {resumeCard}
         <Text key="now" wrap="truncate-end">
           {drawRuns('now', nowLine(actNow, now))}
         </Text>
@@ -1771,11 +1787,42 @@ export const register: Register = on => {
     )
   })
 
-  // Minimized, the band sits above the prompt in place of the pane.
+  // Minimized, the band sits above the prompt in place of the pane. A handoff
+  // to resume rides above it, or alone while the pane is open.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
     const o = await live($)
-    return !o.isMinimized || e.props.hasSurvey ? next(e) : drawBand($, e, () => expand($, e.viewport?.isFullscreen === true))
+    const offer = await offerNow($, await $.clock.now())
+    const band = o.isMinimized ? await drawBand($, e, () => expand($, e.viewport?.isFullscreen === true)) : null
+    if (offer === null) return band ?? next(e)
+    const { Box } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {await drawResumeBand($, e, offer)}
+        {band}
+      </Box>
+    )
   })
+}
+
+/** One framed line above the prompt: the handoff to resume, Resume and Dismiss. */
+async function drawResumeBand($: EngineInterface, e: RenderInput<'AbovePrompt'>, offer: CockpitResumeOffer) {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  // No hotkeys: the prompt holds the focus here, and a letter would be typed.
+  return (
+    <Box key="resume-band" flexDirection="row" alignItems="center" columnGap={1} borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
+      <Box key="resume-band-text" flexGrow={1} flexShrink={1}>
+        <Text key="resume-band-line" wrap="truncate-end">
+          <Text color={BUTTON_MAIN} bold>
+            {`↻ Resumable work · ${handedOff((await $.clock.now()) - offer.at)}`}
+          </Text>
+          <Text dimColor>{` — Next: ${offer.next}`}</Text>
+        </Text>
+      </Box>
+      <Button key="band-resume" label="Resume" variant="primary" onPress={() => resume($, offer)} />
+      <Button key="band-resume-dismiss" label="Dismiss" plain dimColor hover={{ bold: true }} onPress={() => update($, resumeDismissed, () => offer.at)} />
+    </Box>
+  )
 }
 
 const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
@@ -2032,6 +2079,8 @@ const S = {
   // latest.md's absolute path while progress is in darkmem; null while it is
   // in the checkout, where the resume prompt names it by its state directory.
   latestName: null as string | null,
+  // The latest.md path and modification time the resume offer was read for.
+  offerRead: '',
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2357,6 +2406,30 @@ async function finishPath($: EngineInterface, checkouts: readonly string[], slug
   return paths[paths.length - 1] ?? ''
 }
 
+// The note is read again only when it changes: readRun runs at every turn.
+async function readResumeOffer($: EngineInterface, latest: string, at: number | null) {
+  const key = `${latest}\t${at}`
+  if (S.offerRead === key) return
+  S.offerRead = key
+  const text = at === null ? null : await $.fs.read(latest).catch(() => null)
+  const found = typeof text === 'string' ? resumeOfferOf(text) : null
+  const offer: CockpitResumeOffer | null = found === null || at === null ? null : { at, next: found.next }
+  if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
+}
+
+/** The handoff the resume card and band offer now; null while nothing is to resume. */
+async function offerNow($: EngineInterface, now: number): Promise<CockpitResumeOffer | null> {
+  const offer = await read($, resumeOffer)
+  if (offer === null || now - offer.at >= RESUME_WITHIN) return null
+  if ((await read($, resumeDismissed)) === offer.at || (await read($, isPlanSession)) || (await read($, autoRun))?.active) return null
+  return offer
+}
+
+async function resume($: EngineInterface, offer: CockpitResumeOffer) {
+  await update($, resumeDismissed, () => offer.at)
+  await $.prompt.submit({ text: resumePrompt(), asUser: true })
+}
+
 // The run's ledger, its plan's tasks, and the newest handoff, read where the
 // roots put them (store options spec §7.3): the primary checkout's .forge/
 // while progress is local, the darkmem mirror while it is not.
@@ -2373,6 +2446,7 @@ async function readRun($: EngineInterface) {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
     if ((await read($, handoffAt)) !== handoffTime) await update($, handoffAt, () => handoffTime)
+    await readResumeOffer($, latest, handoffTime)
     const base = roots?.progress.ledgerRoot ?? `${state}/sdd`
     const entries = await $.fs.list(base).catch(() => [])
     let newest: { slug: string; path: string; at: number } | null = null

@@ -142,6 +142,11 @@ export function duration(ms: number): string {
   return hours > 0 ? `${hours}h${minutes % 60}m` : `${minutes}m`
 }
 
+/** A handoff's age as the resume offer says it: "handed off 2h5m ago", "handed off just now". */
+export function handedOff(ms: number): string {
+  return ms < 60_000 ? 'handed off just now' : `handed off ${duration(ms)} ago`
+}
+
 /** five_hour → "5h", seven_day → "7d", spend_limit → "spend". */
 export function limitLabel(kind: string): string {
   if (kind === 'five_hour') return '5h'
@@ -764,6 +769,23 @@ export function isAtLeast(base: string | undefined, least: string): boolean {
     if ((have[i] ?? 0) !== want[i]) return (have[i] ?? 0) > want[i]!
   }
   return true
+}
+
+/**
+ * What a handoff note offers to resume: the `**Next:**` line of its
+ * `## Next session` block. scripts/next-step writes a first prompt into that
+ * block only when a next session has work to start, so without one (a finished
+ * plan, or a blocked task its human partner must rule on) there is no offer.
+ */
+export function resumeOfferOf(text: string): { next: string } | null {
+  const lines = text.split(/\r?\n/)
+  const start = lines.findIndex(line => /^## Next session\s*$/.test(line))
+  if (start < 0) return null
+  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '))
+  const block = lines.slice(start + 1, end < 0 ? undefined : end)
+  if (!block.some(line => line.trim() === 'Paste as the first prompt:')) return null
+  const next = block.find(line => line.startsWith('**Next:**'))?.slice('**Next:**'.length).trim() ?? ''
+  return next === '' ? null : { next }
 }
 
 /** finish.json as dr-forge's finish-choice writes it; null when unreadable. */
