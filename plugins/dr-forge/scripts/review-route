@@ -202,21 +202,20 @@ case "$1" in
       [ "$(cut -f3 <<<"$row")" != 3 ] || risky=1
       ids="${ids:+$ids,}$id"
     done
-    if [ "$kind" = final-residual ]; then primary=$OPUS reason=merge-gate
-    elif [ "$risky" -eq 1 ]; then primary=$OPUS reason=risk
-    elif [ "$kind" = preflight ] && [ "$intricate" -eq 1 ]; then primary=$OPUS reason=intricate
-    else primary=$OPUS reason=routine
+    # Every ruling sits on Opus; the reason only records why, for the ledger.
+    if [ "$kind" = final-residual ]; then reason=merge-gate
+    elif [ "$risky" -eq 1 ]; then reason=risk
+    elif [ "$kind" = preflight ] && [ "$intricate" -eq 1 ]; then reason=intricate
+    else reason=routine
     fi
-    printf 'review-seat ruling=%s tasks=%s primary=%s fallback=- reason=%s\n' "$kind" "${ids:-plan}" "$primary" "$reason"
+    printf 'review-seat ruling=%s tasks=%s primary=%s fallback=- reason=%s\n' "$kind" "${ids:-plan}" "$OPUS" "$reason"
     exit 0 ;;
   --final)
     [ $# -eq 1 ] || usage
     plan_shape
-    if [ "$intricate" -eq 1 ]; then
-      printf 'review-seat final primary=%s fallback=- reason=intricate\n' "$OPUS"
-    else
-      printf 'review-seat final primary=%s fallback=- reason=plain\n' "$OPUS"
-    fi
+    reason=plain
+    [ "$intricate" -eq 0 ] || reason=intricate
+    printf 'review-seat final primary=%s fallback=- reason=%s\n' "$OPUS" "$reason"
     exit 0 ;;
   --final-fix)
     shift
