@@ -3134,7 +3134,7 @@ describe('auto run', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
-    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compactions/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compaction · 0 resumes/ })).toBeDefined()
   })
 
   test('tells the cleared session when its model was refused', async ($, on) => {

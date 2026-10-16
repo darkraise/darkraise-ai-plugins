@@ -727,7 +727,7 @@ export const register: Register = on => {
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
         {autoNow?.active && (
           <Text key="auto-line" color="magenta">
-            {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} compactions · ${autoNow.resumes} resumes`}
+            {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
           </Text>
         )}
         {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($))}
