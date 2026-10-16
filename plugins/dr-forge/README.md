@@ -480,7 +480,10 @@ executes in its recorded strategy, and the branch is finished by
 batch; what Fable cannot rule is deferred on the run's register. Instead of
 handing off, the session compacts at the handoff budget, and the cockpit
 clears and resumes it when a compaction leaves too much. The pane shows the
-run and a **Stop auto** button. See [auto-run.md](reference/auto-run.md).
+run and a **Stop auto** button. A run's turn that ends without its sentinel
+line is held up to three times in a row, retries included; then the run stops
+with a reason, which the cockpit sends to Discord. See
+[auto-run.md](reference/auto-run.md).
 
 ## Cockpit
 

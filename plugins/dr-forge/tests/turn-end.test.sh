@@ -214,8 +214,8 @@ sleep 1; prompt s-1
 out=$(stop s-1 'Task 2 is done. Everything looks good.')
 check "auto run: a summary is held" "$(decision "$out")" "block"
 check "auto run: the reason names the sentinel" "$(jq -r .reason <<<"$out" | grep -c 'Auto run: compacting')" "1"
-check "auto run: the hold tells the user" "$(jq -r .systemMessage <<<"$out" | grep -c 'held the stop (auto run')" "1"
-check "auto run: the retry passes" "$(stop s-1 'Task 2 is done.' true)" ""
+check "auto run: the hold tells the user" "$(jq -r .systemMessage <<<"$out" | grep -c 'auto run, hold 1 of 3')" "1"
+check "auto run: the retry is held again" "$(decision "$(stop s-1 'Task 2 is done.' true)")" "block"
 pend compact
 check "auto run: the compacting line passes" "$(stop s-1 $'Task 2 is done.\n\nAuto run: compacting\n')" ""
 check "auto run: the clearing line does not answer compact" "$(decision "$(stop s-1 $'Done.\n\nAuto run: clearing')")" "block"
@@ -238,7 +238,15 @@ git -C "$REPO" worktree add -q -b wt "$TMP/wt"
 pend compact
 check "auto run: found from a worktree" "$(stop_in "$TMP/wt" s-1 $'Done.\n\nAuto run: compacting')" ""
 check "auto run: held from a worktree" "$(decision "$(stop_in "$TMP/wt" s-1 'Done.')")" "block"
-(cd "$REPO" && bash "$AR" --session s-1 stop)
+check "auto run: a first stop starts the count again" "$(stop s-1 'Done.' | jq -r .systemMessage | grep -c 'hold 1 of 3')" "1"
+check "auto run: the second hold in a row" "$(stop s-1 'Done.' true | jq -r .systemMessage | grep -c 'hold 2 of 3')" "1"
+check "auto run: the third hold in a row" "$(stop s-1 'Done.' true | jq -r .systemMessage | grep -c 'hold 3 of 3')" "1"
+out=$(stop s-1 'Done.' true)
+check "auto run: past the cap the run stops" "$(jq -r .active "$STATE")" "false"
+check "auto run: the stop names its reason" "$(jq -r .stopped "$STATE" | grep -c 'without its sentinel')" "1"
+check "auto run: past the cap, one hold asks for the attended ending" "$(jq -r .reason <<<"$out" | grep -c '§Stopping')" "1"
+check "auto run: past the cap the user is told" "$(jq -r .systemMessage <<<"$out" | grep -c 'auto run stopped')" "1"
+check "auto run: then the retry passes" "$(stop s-1 'Done.' true)" ""
 check "a stopped run: back to the plain rules" "$(stop s-1 'Here is the answer.')" ""
 
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---

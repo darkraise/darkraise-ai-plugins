@@ -14,8 +14,13 @@
 # A turn that wrote no ledger but moved a local branch (a commit, a merge, a
 # deleted branch) in a project with forge docs is unplanned work, and owes the
 # same ending: the next-step block (`next-step --adhoc`) or finishing's menu.
-# Every hold also tells the user why the session went on (systemMessage).
+# An auto run is the exception to holding once: nobody is watching to send the
+# next prompt, so its retries are held too, up to AUTO_HOLD_CAP in a row; past
+# that the run stops and one last hold asks for the attended ending. Every hold
+# also tells the user why the session went on (systemMessage).
 set -uo pipefail
+
+AUTO_HOLD_CAP=3
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -27,7 +32,7 @@ session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
 cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
 [ -n "$session_id" ] || exit 0
-[ "$(jq -r '.stop_hook_active // false' <<<"$stdin_json")" = "true" ] && exit 0
+is_retry=$(jq -r '.stop_hook_active // false' <<<"$stdin_json")
 
 hold() { # hold <reason> <what the user sees>
   jq -n --arg reason "$1" --arg msg "$2" '{decision: "block", reason: $reason, systemMessage: $msg}'
@@ -42,6 +47,7 @@ sdd=$(forge_ledger_root "$root") || sdd=""
 # An auto run bound to this session (reference/auto-run.md) lives in the
 # primary checkout, whichever worktree the turn ran in: its pending action.
 auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
+[ "$is_retry" = true ] && [ -z "$auto_pending" ] && exit 0
 # The heads turn-start.sh recorded, compared only within the same repository.
 . "${SCRIPT_DIR}/lib/turn-refs.sh"
 moved=0 now_refs=""
@@ -74,6 +80,7 @@ fi
 # block or the finishing menu) is held once, in any turn too: that is the
 # handoff that would leave the work to die with the session.
 if has_pending_background; then
+  [ "$is_retry" = true ] && exit 0
   case "$last" in
     *'## Next session'* | *'Which option?'*)
       reason="Your message ends the session (the next-step block or the finishing menu), but ${pending} background launch(es) you started this session are still running:
@@ -91,8 +98,20 @@ fi
 if [ -n "$auto_pending" ]; then
   final_line=$(printf '%s\n' "$last" | sed -e 's/[[:space:]]*$//' -e '/^$/d' | tail -n 1)
   case "$auto_pending:$final_line" in
-    'compact:Auto run: compacting' | 'clear:Auto run: clearing') exit 0 ;;
+    'compact:Auto run: compacting' | 'clear:Auto run: clearing') rm -f "$stamp.holds"; exit 0 ;;
   esac
+  holds=0
+  [ "$is_retry" = true ] && holds=$(cat "$stamp.holds" 2>/dev/null || echo 0)
+  case $holds in '' | *[!0-9]*) holds=0 ;; esac
+  holds=$((holds + 1))
+  if [ "$holds" -gt "$AUTO_HOLD_CAP" ]; then
+    rm -f "$stamp.holds"
+    why="the turn ended ${AUTO_HOLD_CAP} times in a row without its sentinel line"
+    (cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1) || true
+    hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dr-forge: the auto run stopped (${why})"
+    exit 0
+  fi
+  printf '%s\n' "$holds" > "$stamp.holds" 2>/dev/null || true
   reason="An auto run is bound to this session (pending: ${auto_pending}; see reference/auto-run.md), so its turns end only on a sentinel line. Do not stop: continue the run. When a budget line said compact, finish the task in flight, then end your message with the line \`Auto run: compacting\`. After \`auto-run clear\` exits 0, end with \`Auto run: clearing\`. If the run must stop (your human partner asked, or a stop the reference names), run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
   if [ "$auto_pending" = after-compact ]; then
     reason="An auto run is bound to this session and a compaction already ran (pending: after-compact; see reference/auto-run.md), so no sentinel ends this turn. Do not stop: run \`bash ${root_shown}/scripts/auto-run after-compact\` now and follow what it prints (continue with the next task, or hand off and clear). If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
@@ -100,7 +119,7 @@ if [ -n "$auto_pending" ]; then
   if [ "$auto_pending" = handoff ]; then
     reason="An auto run is bound to this session and a compaction left too much behind (pending: handoff; see reference/auto-run.md §Clears), so this turn ends only on the clearing line, after the clear. Do not stop: finish the task in flight, run dr-forge:handoff, then \`bash ${root_shown}/scripts/auto-run clear\` and end with the line \`Auto run: clearing\`. If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
   fi
-  hold "$reason" "dr-forge held the stop (auto run): pending ${auto_pending}, and the turn did not end on its sentinel line"
+  hold "$reason" "dr-forge held the stop (auto run, hold ${holds} of ${AUTO_HOLD_CAP}): pending ${auto_pending}, and the turn did not end on its sentinel line"
   exit 0
 fi
 

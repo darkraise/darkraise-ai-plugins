@@ -150,8 +150,10 @@ behind; it stays until `scripts/auto-run clear` turns it into `clear`, and the
 Stop hook holds a turn that tries to end before that.
 
 Nothing you started may still run in the background. The Stop hook holds any
-other ending once. The cockpit then compacts, or clears the session and binds
-the new one, and submits the next prompt itself.
+other ending, its retries included, up to three times in a row; the fourth
+stops the run (`the turn ended 3 times in a row without its sentinel line`)
+and is held once more to end as Stopping says. The cockpit then compacts, or
+clears the session and binds the new one, and submits the next prompt itself.
 
 ## After a compaction
 
