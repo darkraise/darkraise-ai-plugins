@@ -260,6 +260,9 @@ A revision your human partner asks for gets one new round.
 **Exploring approaches:**
 
 - Propose 2-3 different approaches with trade-offs
+- Make one of them the do-less option: the smallest change that could meet the
+  goal (delete or simplify something, change a configuration, or change
+  nothing), so the others have to beat it. Recommend it when they do not.
 - Present options conversationally with your recommendation and reasoning
 - Lead with your recommended option and explain why
 - YAGNI ruthlessly - remove unnecessary features from every approach and design

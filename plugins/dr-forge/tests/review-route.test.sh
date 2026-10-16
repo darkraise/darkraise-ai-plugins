@@ -349,6 +349,7 @@ absent "brainstorming no longer re-runs a review loop" "$BS" 're-run the spec re
 
 # --- what a spec must carry -------------------------------------------------------
 SRP="$P/skills/brainstorming/references/spec-document-reviewer-prompt.md"
+present "brainstorming proposes a do-less approach" "$BS" 'Make one of them the do-less option'
 present "a spec carries an Acceptance section" "$BS" 'Every spec has an `## Acceptance` section'
 present "acceptance names what must not happen" "$BS" 'at least one thing that must not happen'
 present "a spec carries its riskiest assumption" "$BS" 'Every spec has a `## Riskiest assumption` section'
