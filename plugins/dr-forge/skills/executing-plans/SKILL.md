@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Use when a plan's Execution line names inline mode - the session implements every task itself, with the whole-branch final review as its gate
+description: Use when a plan's Execution line names inline mode - the session implements every task it does not delegate, with the whole-branch final review as its gate
 ---
 
 # Executing Plans

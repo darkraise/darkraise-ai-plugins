@@ -155,7 +155,7 @@ the final review.
 
 The Execution pair runs the main session, so it is sized to what that session
 does, not to the judge floor. A subagent session coordinates and dispatches, and
-names `gpt-6.1-sol / high`. An inline session implements every task itself, and
+names `gpt-6.1-sol / high`. An inline session implements every task it does not delegate, and
 names the execution tier at its highest weighted routing score. `scripts/plan-lint`
 warns on any other pair and errors on an inline pair below that score. Design
 handoffs from `scripts/next-step` launch Sol high as well.
