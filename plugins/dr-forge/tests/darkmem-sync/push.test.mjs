@@ -74,6 +74,23 @@ test("an unrecorded file darkmem already holds is adopted when equal and a confl
   assert.equal(s.posts("/api/v1/documents").length, 2, "only the two seeding puts");
 });
 
+test("a ledger whose plan completed.md records has its workstream closed once, and an unfinished one stays open", async t => {
+  const s = await setup(t);
+  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: complete (abc)\n");
+  write(path.join(s.workRoot, "sdd", "p2", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p2.md\nTask 1: complete (abc)\n");
+  write(path.join(s.docsRoot, "plans", "completed.md"), "- `docs/forge/plans/p1.md` — merged\n");
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const ws = key => s.stub.db.workstreams.find(w => w.key === key);
+  assert.equal(ws("p1").state, "closed");
+  assert.equal(ws("p1").retain, true);
+  assert.equal(ws("p2").state, "open");
+  const patches = () => s.stub.db.requests.filter(r => r.method === "PATCH").length;
+  const before = patches();
+  assert.equal((await s.push()).code, 0);
+  assert.equal(patches(), before, "a closed workstream is not closed again");
+});
+
 test("handoff notes go up as documents and are linked from their workstream", async t => {
   const s = await setup(t);
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
