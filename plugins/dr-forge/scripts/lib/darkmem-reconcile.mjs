@@ -271,6 +271,35 @@ function carriedDocuments(repoRoot, docsDir, rel) {
   return { problems, documents };
 }
 
+// The documents a linked worktree holds that the primary checkout does not:
+// its branch's changes since the merge base with the primary's HEAD, and its
+// uncommitted ones. The move carries only the primary's docs directory, so
+// these would be left in a checkout reconcile then names as not read.
+function worktreeOnlyDocuments(cfg) {
+  const head = runGit(cfg.repoRoot, ["rev-parse", "HEAD"]);
+  if (head.status !== 0) return { failed: `git rev-parse failed: ${head.stderr.trim()}` };
+  const found = [];
+  for (const tree of worktreeTops(cfg)) {
+    if (realOr(tree) === realOr(cfg.repoRoot)) continue;
+    const rel = slash(path.relative(tree, forgeDir("docs", tree)));
+    const committed = runGit(tree, ["diff", "--name-only", "-z", "--diff-filter=ACMR", `${head.stdout.trim()}...HEAD`, "--", rel]);
+    if (committed.status !== 0) return { failed: `git diff failed in ${tree}: ${committed.stderr.trim()}` };
+    const pending = runGit(tree, ["status", "--porcelain", "-z", "--untracked-files=all", "--", rel]);
+    if (pending.status !== 0) return { failed: `git status failed in ${tree}: ${pending.stderr.trim()}` };
+    const files = new Set(committed.stdout.split("\0").filter(Boolean));
+    const entries = pending.stdout.split("\0");
+    for (let i = 0; i < entries.length; i += 1) {
+      const item = entries[i];
+      if (item.length < 4) continue;
+      // A rename or copy is followed by its source path, which is no entry.
+      if ("RC".includes(item[0])) i += 1;
+      if (!"D ".includes(item[0]) || !"D ".includes(item[1])) files.add(item.slice(3));
+    }
+    found.push(...[...files].sort().map(file => `${tree}: ${file}`));
+  }
+  return { found };
+}
+
 // Documents, repository -> darkmem (spec §4): nothing is sent until every
 // check passes, darkmem's copies are never overwritten, and the repository
 // copy is removed only after a pull into the mirror reads back every file.
@@ -285,6 +314,11 @@ async function documentsToDarkmem(context) {
   const { failed, problems, documents } = carriedDocuments(cfg.repoRoot, docsDir, rel);
   if (failed) return { moved: false, reason: failed, details: [] };
   if (problems.length) return { moved: false, reason: `${rel} holds files the move cannot carry`, details: problems };
+  const stranded = worktreeOnlyDocuments(cfg);
+  if (stranded.failed) return { moved: false, reason: stranded.failed, details: [] };
+  if (stranded.found.length) {
+    return { moved: false, reason: "a linked worktree holds documents the primary checkout does not; merge or remove them first", details: stranded.found };
+  }
   // Import puts without a hash precondition, so this check is what keeps
   // darkmem's copies; the window between it and the puts is accepted.
   const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
