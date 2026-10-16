@@ -21,7 +21,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CODEX_HOME
+unset CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_PROJECT_DIR
 export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 

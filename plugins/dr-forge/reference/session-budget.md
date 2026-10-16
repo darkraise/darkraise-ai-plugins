@@ -12,7 +12,7 @@ never earlier.
 
 | Item | Value | Source |
 |------|-------|--------|
-| Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window; `DR_FORGE_BUDGET` overrides, then the `handoffTokens` setting | Owner ruling, 2026-09-19 |
+| Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window, and never below a fifth of that window, so 20k at 100,000; `DR_FORGE_BUDGET` overrides, then the `handoffTokens` setting | Owner ruling, 2026-09-19 |
 | Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DR_FORGE_BUDGET` does not move it | Owner ruling, 2026-10-02 |
 | Relaxed handoff | With the `handoffMode` setting at `relaxed`, a plain task and a wave are measured against the final-phase limit (a wave less 140,000 per extra task) and the line reads `budget (relaxed)`; the pinned budget then has no effect. A worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on | Owner ruling, 2026-10-12 |
 | Plan after the spec | 150% of the task budget (`DR_FORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
@@ -34,8 +34,10 @@ than finishing one or two tasks and the final phase here. So the last two
 tasks start whenever the session is under the final-phase limit; in the rare
 case where both hit a worst-case fix loop the session may compact, and the
 compaction snapshot below carries it on. `scripts/lib/context.sh`
-reads `autoCompactWindow` from `settings.json` and the model from the
-transcript, so the budget follows either when they change.
+reads `autoCompactWindow` from the user, then the project, then the local
+`settings.json` (the last that sets it wins, as in Claude Code; project files
+only when `CLAUDE_PROJECT_DIR` is set) and the model from the transcript, so
+the budget follows either when they change, and agrees with the cockpit's.
 
 ## The budget line
 

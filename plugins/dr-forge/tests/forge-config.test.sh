@@ -16,7 +16,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 if command -v cygpath > /dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
-unset CLAUDE_CONFIG_DIR DR_FORGE_BUDGET DR_SUPERPOWERS_BUDGET
+unset CLAUDE_CONFIG_DIR DR_FORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 fc() { bash "$CMD" "$@" 2> "$TMP/stderr"; }
 fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dr-forge/config.json"; }
 
