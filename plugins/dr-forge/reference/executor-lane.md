@@ -552,7 +552,7 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Task has an `**Executor:**` line and that executor's gate does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
 | Task has an `**Executor:**` line, the gate prints `lane=true`, and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
-| The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`/`ultra`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
+| The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
@@ -610,8 +610,8 @@ specific to it:
 - **Quota.** Codex reports a reset time, which the gate caches, so a quota
   answer is re-probed once that time has passed. An executor whose provider
   publishes no reset time marks itself off for the session instead.
-- **Effort values.** `low`, `medium`, `high`, `xhigh` and `ultra`; `minimal`
-  is rejected. Another executor's efforts are whatever its assignment block
+- **Effort values.** `low`, `medium`, `high` and `xhigh`; `minimal` and
+  `ultra` are rejected. Another executor's efforts are whatever its assignment block
   names, and its wrapper validates them.
 
 ## When the client itself wedges

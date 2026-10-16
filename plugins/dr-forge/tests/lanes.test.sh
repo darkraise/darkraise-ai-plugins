@@ -12,7 +12,7 @@ LADDER="$HERE/../reference/ladder.md"
 # GPT-5.6 Luna and Terra were rejected with HTTP 400, and minimal was rejected
 # as an effort. gpt-5.5 retires from Codex with ChatGPT sign-in on 2026-10-14.
 VALID_MODELS="gpt-6.1-sol"
-VALID_EFFORTS="low medium high xhigh ultra"
+VALID_EFFORTS="low medium high xhigh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -34,7 +34,7 @@ in_list() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 rank() {
   local m="${1%%/*}" e="${1##*/}" mr er
   case "$m" in gpt-6.1-sol) mr=0 ;; *) echo -1; return ;; esac
-  case "$e" in low) er=0 ;; medium) er=1 ;; high) er=2 ;; xhigh) er=3 ;; ultra) er=4 ;; *) echo -1; return ;; esac
+  case "$e" in low) er=0 ;; medium) er=1 ;; high) er=2 ;; xhigh) er=3 ;; *) echo -1; return ;; esac
   echo $((mr * 10 + er))
 }
 
@@ -123,6 +123,17 @@ while read -r from to; do
   [ -n "$secs_to" ] || bad_timeout="missing:$to"
 done <<< "$successor"
 check "every rung named anywhere has a numeric timeout" "$bad_timeout" "NONE"
+
+# The wrapper admits an effort before it looks up the bound, so an admitted
+# effort without a row passes validation only to die at the lookup.
+wrapper_efforts=$(sed -n 's/^VALID_EFFORTS="\(.*\)"$/\1/p' "$HERE/../scripts/run-codex-task.sh")
+no_row=NONE
+for m in $(printf '%s\n' "$assignment" | awk '{print $2}' | sort -u); do
+  for e in $wrapper_efforts; do
+    [ -n "$(printf '%s\n' "$timeouts" | awk -v k="$m/$e" '$1 == k')" ] || no_row="$m/$e"
+  done
+done
+check "every effort the wrapper admits has a codex-timeout row" "$no_row" "NONE"
 
 # --- codex-judge -------------------------------------------------------------
 # The judge rung is policy for the two review seats, not a rung on the

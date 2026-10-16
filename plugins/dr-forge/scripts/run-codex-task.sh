@@ -16,7 +16,7 @@ source "$HERE/lib/task-state.sh"
 source "$HERE/lib/task-execution.sh"
 source "$HERE/lib/executor-session.sh"
 
-VALID_EFFORTS="low medium high xhigh ultra"
+VALID_EFFORTS="low medium high xhigh"
 
 die() { printf 'run-codex-task: %s\n' "$1" >&2; exit 2; }
 
