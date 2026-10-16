@@ -539,12 +539,12 @@ session is doing:
 │   impl-sonnet-low ×1                              │
 │   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
 ╰───────────────────────────────────────────────────╯
-╭ Run ──────────────────────────────── round 2 · 3/6 ╮
+╭ Run ────────────────────────────── round 2/5 · 3/6 ╮
 │ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
-│ docs/plans/cockpit.md                             │
+│ plan docs/plans/cockpit.md                        │
 │ ✓ Task 3: Draw the context section · clean        │
 │ ▸ Task 4: Draw usage and agents                   │
-│   round 2 · impl-sonnet-low                       │
+│   round 2/5 · impl-sonnet-low                     │
 │ ○ Task 5: Track the plan and repo                 │
 ╰───────────────────────────────────────────────────╯
 ╭ Repo ─────────────────────────────────── ● dirty ╮
