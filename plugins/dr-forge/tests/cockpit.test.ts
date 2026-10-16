@@ -1812,6 +1812,13 @@ describe('shells and remote', () => {
     expect(await ui.find({ type: 'Text', text: /Remote ○ on · no device yet/ })).toBeDefined()
   })
 
+  test('start the band\'s top rule with Remote when no email is known', async ($, on) => {
+    world(on, { ...SIGNED_IN, remoteControl: 'true' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^╭─ Remote ○ on ─+ $/ })).toBeDefined()
+  })
+
   test('say what kept running after Esc', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
     signedIn(on)

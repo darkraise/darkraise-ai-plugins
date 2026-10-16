@@ -1991,11 +1991,16 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   // A bare button on the top rule, so the band keeps its height.
   const expand = <Button key="band-expand" label="Expand" plain hover={{ bold: true }} onPress={onExpand} />
   const email = who?.email ?? ''
-  // What rides on the top rule, dropped from the end while it does not fit.
+  // What rides on the top rule, dropped from the end while it does not fit;
+  // only the parts that are known are joined.
+  const joined = (parts: Run[][]): Run[] => parts.flatMap((runs, index) => (index === 0 ? runs : [{ text: ' · ', dim: true }, ...runs]))
+  const emailPart: Run[][] = email === '' ? [] : [[{ text: email, bold: true }]]
+  const billingPart: Run[][] = billing === null ? [] : [[{ text: billing, dim: true }]]
+  const remotePart: Run[][] = remoteBand.length === 0 ? [] : [remoteBand]
   const tops: Run[][] = [
-    [{ text: email, bold: true }, ...(billing === null ? [] : [{ text: ` · ${billing}`, dim: true }]), { text: ' · ', dim: true }, ...remoteBand],
-    [{ text: email, bold: true }, { text: ' · ', dim: true }, ...remoteBand],
-    [{ text: email, bold: true }],
+    joined([...emailPart, ...billingPart, ...remotePart]),
+    joined([...emailPart, ...remotePart]),
+    joined(emailPart),
     [],
   ]
   // "╭─ " + top + " " + dashes + " Expand ─╮"
