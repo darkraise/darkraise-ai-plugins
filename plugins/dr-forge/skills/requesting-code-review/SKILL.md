@@ -43,6 +43,12 @@ Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md
 - `[BASE_SHA]` - Starting commit
 - `[HEAD_SHA]` - Ending commit
 
+**Security lens:** when the change touches authentication, secrets, input
+parsing or shell command construction, add to the prompt: "Also read
+`<plugin root>/criteria/lenses/security.md`. Its criteria are defect-pattern
+checks: report each hit as an issue tagged `[lens:security]` at your own
+severity; do not score them."
+
 **3. Act on feedback:**
 - Fix Critical issues immediately
 - Fix Important issues before proceeding

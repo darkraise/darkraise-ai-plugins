@@ -80,5 +80,16 @@ for f in "$P/skills/subagent-driven-development/SKILL.md" "$P/skills/executing-p
   names "$s: recovery points at step 0.5" "$f" '`Acceptance QA:` lines are written by'
 done
 
+names "task review: lens-route per task" "$P/reference/delegated-task.md" 'run `scripts/lens-route PLAN_FILE --task <N>`'
+TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+names "task reviewer: lens section" "$TRP" '## Lens Criteria'
+names "task reviewer: lenses are not scored" "$TRP" 'do not score them, and do not add them to Verification Scores'
+names "task reviewer: the placeholder" "$TRP" '`[LENS_FILES]` — OPTIONAL'
+names "re-review: the A<n> question" "$P/skills/subagent-driven-development/references/re-review-prompt.md" \
+  'still fail if the code violated statement A<n> of the spec?'
+names "code reviewer: the A<n> question" "$P/skills/requesting-code-review/references/code-reviewer.md" \
+  'would it fail if the code violated spec statement A<n>?'
+names "requesting review: security lens" "$P/skills/requesting-code-review/SKILL.md" 'criteria/lenses/security.md'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

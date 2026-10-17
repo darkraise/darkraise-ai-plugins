@@ -190,6 +190,12 @@ needed.
   Codex hosts are the exception: `review-route` exits 2 on every `Host: codex`
   plan, and the seat is a native judge at Astra high or above
   ([native-codex.md](native-codex.md)).
+- **Lenses:** run `scripts/lens-route PLAN_FILE --task <N>`. For each `lens`
+  line it prints, add its `criteria=` path to the judge seat's `[LENS_FILES]`;
+  with none, delete that section of the prompt. A Codex seat gets no lens
+  files: on a risk-3 task the Claude judge beside it reads them. On a
+  `Host: codex` plan `lens-route` exits 2; choose the lenses as
+  [native-codex.md](native-codex.md) says.
 - **Reviewer inputs:** the brief file (it ends with the plan's Global
   Constraints and Contracts — the reviewer's attention lens), the report
   file, and the review package. Never tell the reviewer which lane produced

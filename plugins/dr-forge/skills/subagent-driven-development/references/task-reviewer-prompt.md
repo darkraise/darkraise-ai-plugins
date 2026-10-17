@@ -202,6 +202,14 @@ Subagent ([JUDGE]):
     to ignore something, ignoring it is part of scoring correctly. The scores
     ride alongside the verdicts above and never replace them.
 
+    ## Lens Criteria
+
+    [Include this section only when [LENS_FILES] names files. Delete it otherwise.]
+
+    Read each lens file in [LENS_FILES]. Lens criteria are defect-pattern
+    checks: report each hit as an issue tagged `[lens:<id>]` at your own
+    severity; do not score them, and do not add them to Verification Scores.
+
     ## Second Pass: The Codex Review
 
     [Include this section only on a risk 3 task whose Codex seat
@@ -234,6 +242,7 @@ Subagent ([JUDGE]):
 - `[PLUGIN_ROOT]` — REQUIRED: the resolved dr-forge plugin directory.
   Expand it before sending; a judge handed the literal token cannot open the
   criteria file
+- `[LENS_FILES]` — OPTIONAL: the `criteria=` paths `scripts/lens-route PLAN_FILE --task <N>` printed. Delete the Lens Criteria section when there are none.
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N`
   prints the path; same file the implementer worked from)
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed

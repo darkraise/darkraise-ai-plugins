@@ -70,6 +70,7 @@ Subagent (general-purpose):
     - Edge cases covered?
     - Integration tests where they matter?
     - All tests passing?
+    - For each test named `A<n>:` (an acceptance test): would it fail if the code violated spec statement A<n>?
 
     **Production readiness:**
     - Migration strategy if schema changed?
