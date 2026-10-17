@@ -1,28 +1,28 @@
 ---
 name: darkraise-ui
-description: Manages darkraise-ui components and projects — adding, composing, styling, theming, and debugging UI. Applies when working with darkraise-ui, the darkraise web template, theme axes, create-darkraise-ui, or any project with darkraise-ui in its package.json. Also triggers for "darkraise theme", "theme.config.ts", and "UiLabelsProvider".
+description: Manages darkraise-ui components and projects — adding, composing, styling, theming, translating, and debugging UI. Applies when working with darkraise-ui, the darkraise web template, theme styles, presets and axes, create-darkraise-ui, or any project with darkraise-ui in its package.json. Also triggers for "darkraise theme", "theme.config.ts", "defineStyle", "UiLabelsProvider", and "UiI18nProvider".
 user-invocable: true
 ---
 
 # darkraise-ui
 
-A React 19 UI kit with themed components, hooks, a seventeen-axis theme system, and layout variants. Every primitive is implemented in-house — there is no Radix UI underneath — and components are styled with Tailwind CSS 4.
+A React 19 UI kit with themed components, hooks, a theme system of styles, presets and twenty-three axes, layouts, and built-in localization. Every primitive is implemented in-house — there is no Radix UI underneath — and components are styled with Tailwind CSS 4.
 
-**These rules were written against `darkraise-ui` 6.5.0.** The discovery steps below establish what is actually installed. **When the installed version differs from 6.5.0, the package's own type definitions win over anything written in this skill.**
+**These rules target `darkraise-ui` 7.0.** The discovery steps below establish what is actually installed. **When the installed version differs, the package's own type definitions win over anything written in this skill.** A project still on 6.x uses different theme keys and tokens; follow the [7.0 upgrade guide](https://github.com/darkraise/darkraise-web-template/blob/master/docs/upgrade-7.0.md) to move it, or trust its installed types over the rules below.
 
 ## Principles
 
 1. **Use the kit before writing custom UI.** Discover the installed component list first — the kit is wider than it looks, and a styled `div` is almost always a component you did not know existed.
-2. **Compose, don't reinvent.** A settings page is `Tabs` + `Card` + form fields. A dashboard is `SidebarLayout` + `Card` + `Chart` + `DataTable`.
+2. **Compose, don't reinvent.** A settings page is `Tabs` + `Card` + form fields. A dashboard is `SidebarLayout` + `Card` + `ChartContainer` + `DataTable`.
 3. **Use built-in variants before custom styles.** `variant="outline"`, `size="sm"` — the variant already carries the theme's opinion; a `className` color does not.
-4. **Use semantic tokens, never raw color values.** Every one of the seventeen theme axes recomputes these tokens at runtime, so a raw Tailwind color silently opts the element out of the entire theme system.
+4. **Use semantic tokens, never raw color values.** The colour engine solves these tokens at runtime from the theme axes, and the active style repaints the surfaces, so a raw Tailwind color silently opts the element out of the entire theme system.
 
 ## Current Project Context
 
 Use the active client's shell and file-reading tools explicitly. Start in the
 consumer project, inspect its `package.json`, and locate the actual installed
 `darkraise-ui` package. Read that package's `package.json` version and list its
-`dist/components/*.d.ts` files before selecting components.
+`dist/components/` directories before selecting components.
 
 For a hoisted or linked workspace dependency, follow the resolved package path
 from the consumer's package-manager metadata (`pnpm why darkraise-ui` when pnpm
@@ -36,9 +36,10 @@ Claude Code or Codex.
 ## Read the types before you write
 
 **Before using, creating, fixing, or debugging any component, read
-`node_modules/darkraise-ui/dist/components/<kebab-name>.d.ts`.** These files are
-small and exact — they give you the complete variant union, size union, and props
-interface. Do not infer props from a component's name or from shadcn/ui.
+`node_modules/darkraise-ui/dist/components/<kebab-name>/index.d.ts`** and the
+files it re-exports. These files are small and exact — they give you the
+complete variant union, size union, and props interface. Do not infer props
+from a component's name or from shadcn/ui.
 
 Subpath entry points each have their own typings, read the same way:
 
@@ -53,13 +54,21 @@ Subpath entry points each have their own typings, read the same way:
 | `darkraise-ui/errors` | `dist/errors/index.d.ts` |
 | `darkraise-ui/labels` | `dist/labels/index.d.ts` |
 | `darkraise-ui/lib` | `dist/lib/index.d.ts` |
+| `darkraise-ui/theme-config` | `dist/theme/config/index.d.ts` |
+| `darkraise-ui/vite` | `dist/vite/index.d.ts` |
+| `darkraise-ui/i18n` | `dist/i18n/index.d.ts` |
+| `darkraise-ui/i18n/react-i18next` | `dist/i18n/react-i18next/index.d.ts` |
+| `darkraise-ui/locales/en`, `/locales/vi` | `dist/locales/en.d.ts`, `dist/locales/vi.d.ts` |
 
-**Follow re-exports.** Some typings pull their principal symbols from a shared
-chunk file rather than declaring them inline. `calendar.d.ts` declares its hook
-types locally but re-exports `Calendar` and `CalendarProps` from a chunk; so does
-`dist/lib/index.d.ts` for `cn`. If the symbol you need is re-exported, read the
-chunk file the import names. Never write a chunk filename into code or docs — the
-hash in it changes on every build.
+**Follow re-exports.** An `index.d.ts` is usually a list of `export * from
+"./Calendar"` lines; the declarations are in those sibling files
+(`dist/components/calendar/Calendar.d.ts`, `dist/lib/utils.d.ts` for `cn`).
+Import from the subpath, never from a file path inside `dist`.
+
+**Server components.** Every entry except `lib`, `locales/*`, `theme-config`
+and `vite` starts with `"use client"`. A server component may render kit
+components with serialisable props, but kit hooks, functions passed as props,
+and values such as `ACCENT_COLORS` belong in a `"use client"` file.
 
 ## Critical Rules
 
@@ -67,13 +76,15 @@ These rules are **always enforced**. Each links to a file with Incorrect/Correct
 
 ### Theming → [theming.md](./rules/theming.md)
 
-- **Semantic tokens only.** `bg-background`, `text-muted-foreground`, `bg-card`, `border-border`, `bg-primary`. Never `bg-blue-500`.
-- **Theme axes live in `theme.config.ts`.** All seventeen keys are required.
-- **`accentVibrancy` no longer exists.** It was renamed `accentIntensity`; `surfaceIntensity` and `controlDepth` became required in the same line of releases.
+- **Semantic tokens only.** `bg-background`, `text-muted-foreground`, `bg-card`, `border-border`, `bg-primary-fill`. Never `bg-blue-500`.
+- **No bare status utilities.** `bg-destructive`, `bg-success`, `bg-warning`, `bg-info` were removed; use `-subtle`, `-edge`, `-text`, `-solid`, `-solid-foreground`.
+- **The theme lives in `theme.config.ts`.** `defaults` is partial; pick a `style` (`flat`, `quiet`, `tactile`, `glass`) and optionally a `preset` of it. Pass the same config to `ThemeProvider` and `darkraisePrerender`.
+- **6.x keys are gone.** `surfaceIntensity`, `accentIntensity`, `controlDepth`, `buttonElevation` and `shellStyle` fail to compile in a typed config; `preset: "default"` compiles but is ignored with only a dev-time warning, as is anything in a JSON or cast config. See the rename table in theming.md.
+- **Custom looks are definitions, not CSS hacks.** `defineStyle`, `definePreset`, `defineFont` from `darkraise-ui/theme-config`.
 
 ### Styling → [styling.md](./rules/styling.md)
 
-- **Never `!important`, never Tailwind's `!` modifier.** The layer order already makes your utilities win.
+- **Never `!important`, never Tailwind's `!` modifier.** The layer order already makes your utilities win; colour tokens are inline and change only through the axes.
 - **State variants are independent.** `bg-red-500` overrides the resting state only; hover needs its own `hover:bg-red-600`.
 - **`className` carries layout, not color or typography.**
 - **Use `cn()` from `darkraise-ui/lib` for conditional classes.**
@@ -82,10 +93,10 @@ These rules are **always enforced**. Each links to a file with Incorrect/Correct
 ### Composition → [composition.md](./rules/composition.md)
 
 - **No Radix.** Never install `@radix-ui/*`. Never assume `asChild` — check the `.d.ts`.
-- **Subpath imports, not the barrel.** Some components — `MultiSelect` among them — are not re-exported from the barrel at all and are reachable only by subpath.
+- **Subpath imports, not the barrel.** `MultiSelect` and the chart parts are not re-exported from the barrel at all and are reachable only by subpath.
 - **Dialog, Sheet, and Drawer always need a title.**
 - **Use `EmptyState`, `Banner`, `Alert`, `Skeleton`, `Separator`, `Badge`** instead of styled divs.
-- **Never hardcode English inside a kit component.** Override through `UiLabelsProvider`.
+- **Never hardcode English inside a kit component.** Override strings with `UiLabelsProvider`; switch language with `UiI18nProvider` (or `AppI18nProvider` for react-i18next) and the shipped `en` / `vi` packs.
 
 ### Forms → [forms.md](./rules/forms.md)
 
@@ -95,8 +106,8 @@ These rules are **always enforced**. Each links to a file with Incorrect/Correct
 
 ### Layout & Data → [layout-data.md](./rules/layout-data.md)
 
-- **Use `SidebarLayout` + `PageHeader`,** not a hand-built app shell.
-- **Mount `RouterAdapterProvider`.** The kit never imports a router.
+- **Use `SidebarLayout` (or another kit layout) + `PageHeader`,** not a hand-built app shell. Shell style is a layout prop.
+- **Mount `RouterAdapterProvider`.** The kit never imports a router; the adapter's `Link` must forward `aria-current`.
 - **Use `DataTable`,** not a hand-built table.
 - **The provider stack order is load-bearing.**
 
@@ -106,6 +117,8 @@ These rules are **always enforced**. Each links to a file with Incorrect/Correct
 // Semantic tokens, not raw colors — the theme axes recompute these.
 <Card className="p-4">                      // correct
 <div className="bg-slate-900 p-4">          // wrong
+<Badge className="bg-success-subtle text-success-text" />   // correct
+<Badge className="bg-success text-success-foreground" />    // wrong: removed in 7.0
 
 // Subpath imports, not the barrel.
 import { Button } from "darkraise-ui/components/button"   // correct
@@ -136,20 +149,24 @@ import { Button } from "darkraise-ui"                     // wrong
 | Form inputs | `Input`, `Textarea`, `Select`, `Combobox`, `Switch`, `Checkbox`, `RadioGroup`, `NumberInput`, `PasswordInput`, `InputOTP`, `Slider`, `DateInput`, `TimePicker` |
 | Toggle between options | `ToggleGroup`, or `SegmentGroup` for a segmented control |
 | Multi-value selection | `MultiSelect`, `TagsInput`, `CascadeSelect`, `Listbox` |
-| Data display | `Table`, `Card`, `Badge`, `Avatar`, `Stat`, `Timeline`, `TreeView`, `JsonTreeView` |
+| Data display | `Table`, `Card`, `Badge`, `Avatar`, `Stat`, `Timeline`, `TreeView`, `JsonTreeView`, `RatingGroup`, `Timer` |
 | Large tabular data | `DataTable` from `darkraise-ui/data-table` |
-| Navigation | `SidebarLayout` from `darkraise-ui/layout`, `NavigationMenu`, `Breadcrumb`, `Tabs`, `Pagination`, `Steps` |
+| App shell | `SidebarLayout`, `TopNavLayout`, `StackedLayout`, `SplitPanelLayout`, `PageHeader` from `darkraise-ui/layout` |
+| In-page layout | `Stack`, `Inline`, `Container`, `Grid`, `Section`, `Box`, `Center` from `darkraise-ui/layout` |
+| Navigation | `NavigationMenu`, `Breadcrumb`, `Tabs`, `Pagination`, `Steps`, `Toolbar` |
 | Overlays | `Dialog` (modal), `Sheet` (side panel), `Drawer` (bottom sheet), `AlertDialog` (confirmation), `Popover`, `HoverCard` |
-| Feedback | `sonner` (toast), `Alert` (inline), `Banner` (page-level), `Progress`, `Skeleton`, `Spinner` |
+| Feedback | `toast()` + `Toaster` from `components/sonner`, `Alert` (inline), `Banner` (page-level), `Progress`, `Skeleton`, `Spinner` |
 | Empty states | `EmptyState` |
-| Command palette | `Command`, inside `Dialog` |
+| Command palette | `Command`, or `CommandDialog` for a modal one |
 | Menus | `DropdownMenu`, `ContextMenu`, `Menubar` |
 | Tooltips / info | `Tooltip`, `HoverCard`, `Popover` |
-| Charts | `Chart`, `ContributionGraph` |
-| Layout | `Card`, `Separator`, `Resizable`, `ScrollArea`, `Accordion`, `Collapsible`, `AspectRatio`, `Frame` |
+| Charts | `ChartContainer` with `recharts` (optional peer, subpath only), `ContributionGraph` |
+| Layout | `Card`, `Separator`, `ResizablePanelGroup`, `ScrollArea`, `Accordion`, `Collapsible`, `AspectRatio`, `Frame` |
 | Media & files | `FileUpload`, `ImageCropper`, `ImageEditor`, `Carousel`, `QrCode`, `SignaturePad` |
 | Onboarding | `Tour`, `Steps` |
 | Floating windows | `FloatingPanel` with `FloatingPanelProvider` + `FloatingPanelHost` |
+| Language picker | `LocaleSwitcher` from `components/locale-switcher` |
+| Theme controls | `ThemeSwitcher`, `ThemeSettingsPanel` from `darkraise-ui/theme` |
 | Error pages | `NotFoundPage`, `ErrorPage`, `ServerErrorPage`, `MaintenancePage` from `darkraise-ui/errors` |
 
 ## Workflow
@@ -163,7 +180,7 @@ import { Button } from "darkraise-ui"                     // wrong
 ## Quick Reference
 
 ```bash
-# Scaffold a new project
+# Scaffold a new project (asks for brand axes and style; --help lists every flag)
 npm create darkraise-ui@latest
 
 # Add to an existing project
@@ -175,9 +192,11 @@ pnpm add darkraise-ui
 import { Button } from "darkraise-ui/components/button"
 import { ThemeProvider } from "darkraise-ui/theme"
 import { TextField } from "darkraise-ui/forms"
+import { defineThemeConfig } from "darkraise-ui/theme-config"
+import { darkraisePrerender } from "darkraise-ui/vite"   // in vite.config.ts
 ```
 
 ```css
-/* globals.css — Tailwind 4, no tailwind.config.js */
+/* globals.css — Tailwind 4, no tailwind.config.js; the kit's fonts are bundled */
 @import "darkraise-ui/styles.css";
 ```

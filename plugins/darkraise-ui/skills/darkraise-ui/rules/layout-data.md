@@ -46,6 +46,17 @@ const nav: NavGroup[] = [
 sub-navigation. `icon` is a Lucide icon component, passed as the component itself,
 not a string.
 
+The same `LayoutProps` drive `TopNavLayout`, `StackedLayout` and
+`SplitPanelLayout`. The shell's chrome treatment (`classic` `inset` `island`
+`floating` `framed` `flat`) is a layout prop, not a theme key:
+`defaultShellStyle` sets the starting look, `shellStyle` pins it. A preset's
+shell style beats `defaultShellStyle`. `selection` on `SidebarLayout` pins the
+active-row look; otherwise it follows the `sidebarSelection` axis.
+
+For in-page layout, use the primitives from `darkraise-ui/layout` — `Stack`,
+`Inline`, `Container`, `Grid`, `Section`, `Box`, `Center` — before writing
+flex and grid utility chains.
+
 ## `PageHeader` for the page's own chrome
 
 **Correct**
@@ -95,8 +106,11 @@ const adapter: RouterAdapter = {
 ```
 
 The adapter's `Link` receives `RouterLinkProps`: `to`, `className`,
-`activeClassName`, `activeExact`, `style`, `children`, `onClick`. Read
-`dist/router/index.d.ts` before writing an adapter for a different router.
+`activeClassName`, `activeExact`, `style`, `children`, `onClick` and
+`aria-current`. The kit decides which nav row is current and passes
+`aria-current="page"` itself, so **the adapter must spread its remaining props
+onto the anchor** and never override `aria-current`. Read
+`dist/router/types.d.ts` before writing an adapter for a different router.
 
 ## Use `DataTable`, not a hand-built table
 
@@ -122,7 +136,9 @@ const columns: ColumnDef<Deployment>[] = [
   {
     id: "actions",
     cell: ({ row }) => (
-      <RowActions actions={[{ label: "Delete", onSelect: () => remove(row.original.id) }]} />
+      <RowActions
+        actions={[{ label: "Delete", variant: "destructive", onClick: () => remove(row.original.id) }]}
+      />
     ),
   },
 ]
@@ -139,7 +155,10 @@ const columns: ColumnDef<Deployment>[] = [
 
 `DataTableProps` is `{ columns, data, isLoading?, searchKey?, searchPlaceholder?,
 facets?, virtualize? }`. `facets` takes **column ids** to offer as multi-select
-filters. `virtualize` windows long lists instead of paginating them.
+filters. `virtualize` is `{ rowHeight, height, overscan? }` and windows long
+lists at a fixed row height instead of paginating. A column's `meta.align`
+(`"start" | "center" | "end"`) aligns its header and cells; cells do not wrap
+unless you add `whitespace-normal`.
 
 The module also ships `DataTableSkeleton` (loading), `DataTableEmpty` (no rows),
 `DataTableFacet`, and `exportToCsv`. Use them rather than building equivalents.
@@ -172,6 +191,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 `FloatingPanelHost` and `Toaster` are **siblings of `children`, inside
 `FloatingPanelProvider`** — not wrappers, and not outside it. Both render into the
 themed tree, which is why they sit below `ThemeProvider`.
+
+A locale provider (`AppI18nProvider` or `UiI18nProvider`) goes **outside** this
+stack, around the whole app, and outside any `UiLabelsProvider`.
 
 ## Error pages come from the kit
 

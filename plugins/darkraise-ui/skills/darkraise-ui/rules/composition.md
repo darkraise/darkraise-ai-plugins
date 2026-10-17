@@ -22,9 +22,9 @@ import {
 
 ### `asChild` is not universal
 
-Some components take `asChild`, others do not. `Button`, `Dialog`, and `Tooltip`
-have it; `Card` and `Badge` do not. There is no rule you can infer — **read the
-`.d.ts`**.
+Some components take `asChild`, others do not. `Button`, `DialogTrigger`,
+`DialogClose` and `TooltipTrigger` have it; `Card` and `Badge` do not. There
+is no rule you can infer — **read the `.d.ts`**.
 
 **Incorrect**
 
@@ -37,15 +37,15 @@ have it; `Card` and `Badge` do not. There is no rule you can infer — **read th
 **Correct**
 
 ```tsx
-<Card className="..." />   {/* check card.d.ts: no asChild, so compose normally */}
+<Card className="..." />   {/* card/index.d.ts: no asChild, so compose normally */}
 ```
 
 ## Subpath imports, not the barrel
 
 Subpath imports keep the bundle small. They are also sometimes the *only* way in:
-some components are not re-exported from the barrel at all. `MultiSelect` is one —
-it exists in `dist/components/multi-select.d.ts` but is absent from
-`dist/index.d.ts`.
+some components are not re-exported from the barrel at all. `MultiSelect` and the
+chart parts (`ChartContainer`, …, whose `recharts` peer is optional) are two —
+they exist under `dist/components/<name>/` but are absent from `dist/index.d.ts`.
 
 **Incorrect**
 
@@ -61,42 +61,36 @@ import { Card } from "darkraise-ui/components/card"
 import { MultiSelect } from "darkraise-ui/components/multi-select"
 ```
 
-## Items inside their group
+## Parts inside their root; groups are for labels
 
-Compound components expect their documented nesting. A stray item outside its
-group loses keyboard navigation and ARIA wiring.
-
-**Incorrect**
-
-```tsx
-<DropdownMenuContent>
-  <DropdownMenuItem>Rename</DropdownMenuItem>
-  <DropdownMenuItem>Duplicate</DropdownMenuItem>
-</DropdownMenuContent>
-```
+Compound parts read their root's context and throw outside it
+(`DropdownMenuItem must be used within <DropdownMenu>`). A `*Group` is a plain
+`role="group"` wrapper: use it with a `*Label` to name a section, not as a
+requirement for keyboard navigation.
 
 **Correct**
 
 ```tsx
-<DropdownMenuContent>
-  <DropdownMenuGroup>
+<DropdownMenu>
+  <DropdownMenuTrigger asChild><Button variant="ghost">Actions</Button></DropdownMenuTrigger>
+  <DropdownMenuContent>
     <DropdownMenuItem>Rename</DropdownMenuItem>
     <DropdownMenuItem>Duplicate</DropdownMenuItem>
-  </DropdownMenuGroup>
-  <DropdownMenuSeparator />
-  <DropdownMenuGroup>
+    <DropdownMenuSeparator />
     <DropdownMenuItem>Delete</DropdownMenuItem>
-  </DropdownMenuGroup>
-</DropdownMenuContent>
+  </DropdownMenuContent>
+</DropdownMenu>
 ```
 
-The same applies to `Select` (`SelectItem` inside `SelectGroup`), `Command`
-(`CommandItem` inside `CommandGroup`), and `ContextMenu`.
+For a command palette in a modal, use `CommandDialog` from
+`components/command` rather than nesting `Command` in `Dialog` by hand.
 
 ## Overlays always need a title
 
 `Dialog`, `Sheet`, and `Drawer` each require their `*Title` for accessibility. If
-the design has no visible heading, keep the title and hide it visually.
+the design has no visible heading, keep the title and hide it visually — the
+content's `aria-labelledby` points at it. For long content, `DialogBody` and
+`SheetBody` pin the header and footer and scroll only the body.
 
 **Incorrect**
 
@@ -126,7 +120,7 @@ the design has no visible heading, keep the title and hide it visually.
   <CardContent>
     <h3 className="text-lg font-semibold">Usage</h3>
     <p className="text-sm text-muted-foreground">Last 30 days</p>
-    <Chart data={data} />
+    <ChartContainer config={chartConfig} description="Requests per day">…</ChartContainer>
   </CardContent>
 </Card>
 ```
@@ -140,13 +134,15 @@ the design has no visible heading, keep the title and hide it visually.
     <CardDescription>Last 30 days</CardDescription>
   </CardHeader>
   <CardContent>
-    <Chart data={data} />
+    <ChartContainer config={chartConfig} description="Requests per day">…</ChartContainer>
   </CardContent>
 </Card>
 ```
 
-`CardTitle` and `CardDescription` carry the theme's type scale. A raw `h3` with
-utility classes does not, and will not follow the `fontSize` axis.
+`CardTitle` and `CardDescription` carry the theme's type scale and heading
+font. A raw `h3` with utility classes does not follow the `fontSize` or
+`headingFont` axes. `Card` takes `surface="card" | "page" | "muted" | "none"`
+for its fill — not a `bg-*` class.
 
 ## Use the kit's components, not styled divs
 
@@ -160,7 +156,7 @@ Before writing a styled `div`, check this table.
 | Loading placeholder | `Skeleton` |
 | Horizontal rule | `Separator` |
 | Status pill | `Badge` |
-| Transient message | `sonner` — call `toast()` |
+| Transient message | `toast()` from `components/sonner` (mount `Toaster` once) |
 | Keyboard hint | `Kbd` |
 | Metric readout | `Stat` |
 | Progress | `Progress`, or `Spinner` for indeterminate |
@@ -186,8 +182,8 @@ Read `alert.d.ts` for the actual variant union before choosing one.
 
 ## Never hardcode English inside a kit component
 
-Components render English by default. To change their strings, mount
-`UiLabelsProvider` — never fork a component.
+Components render English by default. To change their strings, use the labels
+or locale providers — never fork a component.
 
 **Incorrect**
 
@@ -195,7 +191,7 @@ Components render English by default. To change their strings, mount
 // Copying DataTable's source into the app to change "Rows per page".
 ```
 
-**Correct**
+**Correct — override a few strings**
 
 ```tsx
 import { UiLabelsProvider } from "darkraise-ui/labels"
@@ -214,16 +210,53 @@ const labels = {
 ```
 
 Override only the keys you need. Providers nest and merge over the nearest
-ancestor, so a subtree can override a subset. Components render correctly with no
-provider mounted.
+ancestor. **Interpolated labels are functions, not format strings**, so a
+language can reorder operands or pluralise in its own function body. Read
+`dist/labels/types.d.ts` and `dist/i18n/types.d.ts` for `UiLabels` and
+`UiMessages`.
 
-**Interpolated labels are functions, not format strings.** That is deliberate: a
-language that orders the operands differently, or needs a plural form, expresses
-that in its own function body. Read `dist/labels/index.d.ts` for the full
-`UiLabels` shape.
+**Correct — a whole language**
 
-The package ships no translations and has no concept of a locale. It takes
-strings; the app decides which ones.
+The kit ships English and Vietnamese packs and a locale provider that also
+drives formatting (`useUiFormatters()`), `lang` and `dir` for portals:
+
+```tsx
+import { UiI18nProvider } from "darkraise-ui/i18n"
+import { vi } from "darkraise-ui/locales/vi"
+
+<UiI18nProvider locale="vi-VN" locales={[vi]} labels={{ userMenu: { logout: "Thoát" } }}>
+  <App />
+</UiI18nProvider>
+```
+
+Any other language is a partial `UiLocaleDefinition`
+(`{ locale, label, dir?, messages }`); missing keys fall back to English.
+
+**An app that also translates its own text** uses the react-i18next adapter.
+It needs the optional peers `i18next` and `react-i18next`; core imports do not.
+
+```tsx
+import { AppI18nProvider, createDarkraiseI18n, resolveBrowserLocale } from "darkraise-ui/i18n/react-i18next"
+import { en } from "darkraise-ui/locales/en"
+import { vi } from "darkraise-ui/locales/vi"
+
+const locales = [en, vi]
+const storageKey = "my-app.language"
+const instance = await createDarkraiseI18n({
+  locale: resolveBrowserLocale({ locales, storageKey }),
+  locales,
+  resources: { en: { translation: {} }, vi: { translation: {} } },
+})
+
+<AppI18nProvider instance={instance} locales={locales} storageKey={storageKey} syncDocument>
+  <App />
+</AppI18nProvider>
+```
+
+Switch language with `changeAppLanguage(instance, locale)` and offer the choice
+with `LocaleSwitcher` from `components/locale-switcher` (controlled: `value`,
+`options`, `onValueChange`, `pending`). Mount the locale provider outside any
+`UiLabelsProvider`.
 
 ## Reach for a kit hook before writing one
 
@@ -240,5 +273,4 @@ point — `useDialog` from `components/dialog`, `useCombobox` from
 drive a component's behaviour with your own markup when the composed version does
 not fit.
 
-Read `dist/hooks/index.d.ts` for the full list; it is longer than the package
-description claims.
+Read `dist/hooks/index.d.ts` for the full list (`useReducedMotion` among them).

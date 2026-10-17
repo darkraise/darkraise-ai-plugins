@@ -2,33 +2,45 @@
 
 ## The override contract
 
-This is the most consequential styling rule in the kit, and it is documented only
-in the package's `CONTRIBUTING.md`, which is **not published to npm**. A consumer
-cannot discover it from the installed package.
+This is the most consequential styling rule in the kit. It is documented in the
+repository's `CONTRIBUTING.md` and `docs/custom-styles.md`, **neither of which
+is published to npm**, so a consumer cannot discover it from the installed
+package.
 
-`theme.css` declares the cascade layer order:
+`styles.css` opens with the cascade layer order:
 
 ```css
-@layer theme, base, components, utilities, overrides;
+@layer properties, theme, base, style.base, style.mode, style.when, style.preset, style.fallback, components, utilities, overrides;
 ```
 
-Component CSS lives in `@layer components`. Your Tailwind utilities land in
-`@layer utilities`, which comes later. **Therefore your utilities already win over
-component-class declarations** — no specificity fight, no escape hatch needed.
+Component CSS lives in `@layer components`; the active style and preset write
+their paint tokens into the `style.*` layers below it. Your Tailwind utilities
+land in `@layer utilities`, which comes later. **Therefore your utilities
+already win over component-class declarations** — no specificity fight, no
+escape hatch needed.
 
-### The qualifier, which matters
+### The qualifiers, which matter
 
-Your utilities win over *component-class declarations*. They do **not** outrank
-everything:
+- **Colour tokens are inline.** The engine writes `--primary`, `--background`
+  and the rest as inline styles on `<html>`; no stylesheet rule beats them.
+  Change colour through the theme axes.
+- **Paint tokens are overridable from `@layer overrides`.** To change a style
+  token app-wide (`--card-radius`, `--btn-shadow`, …), set it on `:root` inside
+  `@layer overrides`, or define a style or preset — see
+  [theming.md](./theming.md).
+- **A few kit rules are unlayered** — the forced-colours rules and the
+  reduced-motion guard — and beat every layer. Do not fight them.
+- **Never import the kit stylesheet into a layer of your own**
+  (`@import "darkraise-ui/styles.css" layer(vendor)`); that reorders every kit
+  layer and is unsupported.
 
-- The package's own `@layer overrides` block holds preset bindings and sits above
-  `utilities`.
-- Some preset bindings — dark-mode `glass` values among them — are **unlayered**
-  entirely, which beats every layer regardless of specificity.
+```css
+@import "darkraise-ui/styles.css";
 
-So a utility fighting a preset's own binding will lose. That is the design, not a
-bug in the contract. When you need to change what a preset does, change the theme
-axis or the preset, never the utility.
+@layer overrides {
+  :root { --card-radius: 0.25rem; }
+}
+```
 
 ## Never `!important`, never the `!` modifier
 
@@ -45,8 +57,8 @@ axis or the preset, never the utility.
 ```
 
 The layer order already puts you on top of the component class. Reaching for `!`
-means you are either fighting a preset binding — which `!` will not reliably win
-either — or you have not actually tried the plain utility.
+means you are fighting an inline colour token or an unlayered kit rule — which
+`!` will not fix — or you have not actually tried the plain utility.
 
 ## State variants are independent
 
@@ -58,13 +70,13 @@ everyone exactly once.
 
 ```tsx
 // Resting state turns red; hover still uses the component's own color.
-<Button className="bg-destructive" />
+<Button className="bg-destructive-solid" />
 ```
 
 **Correct**
 
 ```tsx
-<Button className="bg-destructive hover:bg-destructive/90 focus-visible:ring-destructive" />
+<Button className="bg-destructive-solid hover:bg-destructive-solid/90 focus-visible:ring-destructive-edge" />
 ```
 
 Better still, use the variant that already means this:
@@ -112,8 +124,8 @@ import { cn } from "darkraise-ui/lib"
 <Card className={cn("p-4", isActive && "ring-2 ring-primary", dense && "p-2")} />
 ```
 
-`cn` is re-exported from a chunk file in `dist/lib/index.d.ts`. Import it from
-`darkraise-ui/lib` — never from a chunk path.
+Import `cn` from `darkraise-ui/lib`, which is also safe in a React Server
+Component — never from a file path inside `dist`.
 
 ## Tailwind 4 only
 
@@ -150,14 +162,15 @@ every component's CSS.
 
 ## Never write a chunk filename
 
-Build output contains hash-named chunks such as `Calendar-<hash>.js`. **The hash
-changes on every build.** Reading one to find a type is fine; writing one into
-source, an import, or documentation guarantees a break at the next release.
+Build output contains hash-named JavaScript chunks such as `dist/chunk-<HASH>.js`.
+**The hash changes on every build.** Writing one — or any other `dist/` path —
+into source, an import, or documentation guarantees a break at the next
+release. `package.json` `exports` does not expose them anyway.
 
 **Incorrect**
 
 ```tsx
-import type { CalendarProps } from "darkraise-ui/dist/Calendar-A1b2C3d4"
+import type { CalendarProps } from "darkraise-ui/dist/components/calendar/Calendar"
 ```
 
 **Correct**

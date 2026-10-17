@@ -39,8 +39,12 @@ All seven share `FieldPrimitiveProps<T>`:
   errors?: Array<{ message?: string } | undefined>
   disabled?: boolean
   readOnly?: boolean
+  required?: boolean   // marks the label and sets aria-required
 }
 ```
+
+Each primitive adds `label` (required) and usually `description` and
+`placeholder`.
 
 **Incorrect**
 
@@ -147,6 +151,9 @@ for screen readers.
 
 `FormSection` titles a group of related fields. `FormActions` renders the
 submit/cancel pair and owns its pending state — do not build your own.
+`FormErrorSummary` (`errors: { name, message }[]`, `submitCount`) focuses a
+linked list of errors after a failed submit; inline field errors stay as they
+are.
 
 **Incorrect**
 
@@ -184,7 +191,7 @@ render.
 `FieldWrapper`'s `children` is a **render function**, not a node:
 
 ```tsx
-children: (isInvalid: boolean, ariaDescribedBy: string | undefined) => ReactNode
+children: (isInvalid: boolean, ariaDescribedBy: string | undefined, required: boolean) => ReactNode
 ```
 
 **Correct**
@@ -203,7 +210,7 @@ import { ColorPicker } from "darkraise-ui/components/color-picker"
   {(isInvalid, ariaDescribedBy) => (
     <ColorPicker
       value={color}
-      onValueChange={setColor}
+      onValueChange={(details) => setColor(details.value)}
       aria-invalid={isInvalid}
       aria-describedby={ariaDescribedBy}
     />
@@ -211,8 +218,8 @@ import { ColorPicker } from "darkraise-ui/components/color-picker"
 </FieldWrapper>
 ```
 
-Read `color-picker.d.ts` before using it — the prop names above are illustrative
-of the pattern, not a substitute for reading the type.
+Read `dist/components/color-picker/index.d.ts` before using it — the props
+above show the pattern, not a substitute for reading the type.
 
 ## Import from the right module
 
