@@ -837,18 +837,18 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
 | `scripts/forge-config`, `scripts/forge-path`, `scripts/forge-migrate` | `scripts/dforge-config`, `scripts/dforge-path`, `scripts/dforge-migrate` |
 | darkmem documents under `forge/` | `dforge/` |
 
-1. Install dforge, then uninstall dr-forge, so their hooks do not run twice:
+1. Install dforge, then uninstall dr-forge, so their hooks do not run twice.
+   The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
+   `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
+   `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
+   them before you uninstall, then set them in a dforge session with
+   `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
 
        /plugin install dforge@darkraise
        /plugin uninstall dr-forge@darkraise
 
    On Codex: `codex plugin add dforge@darkraise`, then
    `codex plugin remove dr-forge@darkraise`.
-   The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
-   `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
-   `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
-   them before you uninstall, then set them in a dforge session with
-   `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
 2. In each repository, run `/dforge:migrate` (on Codex, ask for the
    `dforge:migrate` skill). It shows what `scripts/dforge-migrate --dry-run`
    would move, asks once, then moves every checkout and the home, rewrites the

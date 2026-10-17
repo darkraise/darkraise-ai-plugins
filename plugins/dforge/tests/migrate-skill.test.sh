@@ -30,6 +30,12 @@ present "asks before migrating" "$SKILL" "that writes before a yes"
 present "asks before committing" "$SKILL" "human partner agrees, and stage nothing"
 present "commits only what the commit lines name" "$SKILL" "stage nothing the lines do not name"
 present "names the plugin uninstall" "$SKILL" '`dr-forge@darkraise` and `dr-superpowers@darkraise`'
+present "names the webhook keys dforge does not read" "$SKILL" '`notifyUrl` and `notifyMention`'
+present "names the webhook command" "$SKILL" '`/cockpit notify url <url>`'
+present "names the mention command" "$SKILL" '`/cockpit notify mention <id>`'
+webhook=$(line_of "$SKILL" '`notifyUrl` and `notifyMention`')
+uninstall=$(line_of "$SKILL" '`dr-forge@darkraise` and `dr-superpowers@darkraise`')
+check "the webhook is copied before the uninstall" "$([ -n "$webhook" ] && [ -n "$uninstall" ] && [ "$webhook" -lt "$uninstall" ] && echo yes || echo no)" "yes"
 present "names the environment rename" "$SKILL" '`DFORGE_*` environment variables in place of `DR_FORGE_*`'
 present "writes nothing itself" "$SKILL" "This skill writes nothing"
 present "the entry point routes to it" "$P/skills/using-dforge/SKILL.md" "| dforge:migrate |"

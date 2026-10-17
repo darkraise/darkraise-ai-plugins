@@ -46,7 +46,14 @@ itself.
 6. **Commit.** Show the `commit:` lines and offer to commit what they name as
    one commit, `chore: move to the dforge layout`. Commit only after your
    human partner agrees, and stage nothing the lines do not name.
-7. **Retire the old plugins.** Remind your human partner to uninstall
+7. **Retire the old plugins.** When `dr-forge@darkraise` is installed, first
+   tell your human partner to copy the cockpit's Discord webhook and mention.
+   They stay in dr-forge's plugin store,
+   `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
+   `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`, and
+   dforge does not read that file. Once copied, they set them in a dforge
+   session with `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
+   Then remind your human partner to uninstall
    `dr-forge@darkraise` and `dr-superpowers@darkraise` when either is
    installed (`claude plugin uninstall <name>`, or `codex plugin remove
    <name>`), so their hooks do not run beside dforge's. dforge reads
