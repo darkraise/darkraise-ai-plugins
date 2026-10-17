@@ -44,5 +44,17 @@ names "auto-run.md: an unwritten handoff stops the run" "$R" 'If `scripts/next-s
 names "auto-run.md: Stopping lists it" "$R" '`scripts/next-step` exits 4 during a clear (see Clears).'
 names "auto-run.md: a deferred task keeps the branch" "$R" 'also keeps the branch when the ledger holds a'
 names "finishing: a deferred task keeps the branch" "$P/skills/finishing-a-development-branch/SKILL.md" '`merge` keeps when the ledger holds a'
+names "auto-run.md: the critic runs before Fable" "$R" 'After your own self-review round and the architecture critic'
+names "auto-run.md: a late statement goes up the ladder" "$R" 'is never asked: it goes up the ladder under Rulings'
+names "auto-run.md: an undecided critic Blocker" "$R" '--note "critic Blocker unresolved"'
+names "auto-run.md: a statement is deferred, not guessed" "$R" '**An acceptance statement in the spec phase:** the statement is deferred, not'
+names "auto-run.md: QA ambiguity is parked" "$R" '**A QA `acceptance-ambiguous` item:** PARK it'
+names "auto-run.md: QA ambiguity batches at once" "$R" 'A batch runs at once for a blocked task and for a QA'
+names "auto-run.md: unverified acceptance keeps the branch" "$R" '`merge` also keeps the branch when the `Acceptance QA: complete` line reports any'
+names "auto-run.md: failures keep the branch" "$R" '`fail`, `flaky` or `cannot-test`, or when the run added a deferred register row'
+names "auto-run.md: the final message lists demos and lenses" "$R" 'every `demo` statement of the spec, every lens'
+FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+names "finishing: unverified acceptance keeps the branch" "$FIN" '`merge` also keeps when the `Acceptance QA: complete` line reports any'
+names "finishing: the final message lists demos and lenses" "$FIN" 'every `demo` statement of the spec, every lens'
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

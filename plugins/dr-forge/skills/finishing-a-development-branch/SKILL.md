@@ -28,7 +28,9 @@ When `scripts/auto-run status` exits 0
   `none`, `merge` keeps and `pr` opens its request against the forge's default
   branch; and `merge` keeps when the ledger holds a
   `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
-  partial commits never reach the base unreviewed.
+  partial commits never reach the base unreviewed. `merge` also keeps when the `Acceptance QA: complete` line reports any
+  `fail`, `flaky` or `cannot-test`, or when the run added a deferred register
+  row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
 - **Where an unattended finish stops** (failing tests at Step 1, a merged
   result failing its tests, a rejected push, a refused worktree removal), run
   `scripts/auto-run stop --reason "<what stopped it>"` first, then stop as
@@ -36,7 +38,8 @@ When `scripts/auto-run status` exits 0
 - **The rulings** printed at Step 3 also include every line of
   `scripts/auto-run ruling list`, and Step 7's final message lists every
   deferred row the run added to its register (`scripts/auto-run status` names
-  it). Run `scripts/auto-run stop` before printing the next-step block.
+  it), every `demo` statement of the spec, every lens
+  `scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`. Run `scripts/auto-run stop` before printing the next-step block.
 
 ## Step 1: Verify Tests
 

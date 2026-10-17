@@ -49,7 +49,8 @@ when refused, 5 when the run stopped (`handoff` for `verdict` and
 
 ## The spec
 
-After your own self-review round, dispatch `dr-forge:judge-fable` on the spec
+After your own self-review round and the architecture critic
+(dr-forge:brainstorming §Architecture critic), dispatch `dr-forge:judge-fable` on the spec
 against the approved design: the design sections as approved, verbatim, and
 the spec's path. Apply what it rules, and record each ruling with
 `scripts/auto-run ruling add "Fable, spec: <item> — <ruling>"`. Add each item
@@ -61,6 +62,18 @@ At most two Fable rounds run (review, revise, re-review); anything still open
 after the second is deferred the same way. Then `scripts/context-size --plan`
 as brainstorming says: under its limit write the plan here; over it, follow
 Clears with `--phase`.
+
+**Acceptance statements and critic findings in the spec phase:**
+
+- A statement added or changed while writing the spec and rated below `high`
+  is never asked: it goes up the ladder under Rulings. A seat ruling keeps it
+  `high`; record the ruling with `scripts/auto-run ruling add`.
+- Give Fable the spec's `## Critic findings` section with the spec; it checks
+  each answer to a Blocker or High finding. A Blocker it leaves undecided after
+  its rounds is added with
+  `scripts/register add <register> "<the finding>" --state deferred --note "critic Blocker unresolved"`
+  and marked `unresolved — row <id>` in `## Critic findings`. The run
+  continues, and finishing keeps the branch.
 
 ## Rulings
 
@@ -98,8 +111,17 @@ The ladder for anything you would have asked:
 - **A spec or planning choice:** take the option listed first, record
   `scripts/auto-run ruling add "unconfirmed: <choice> — Fable gave no ruling"`,
   and add a deferred register row naming the choice.
+- **An acceptance statement in the spec phase:** the statement is deferred, not
+  guessed:
+  `scripts/register add <register> "A<n>: <statement>" --state deferred --note "Fable gave no ruling"`,
+  and its spec line becomes `A<n>. deferred — register row <id>`. It is the one
+  spec choice that does not take the option listed first.
+- **A QA `acceptance-ambiguous` item:** PARK it, as
+  [final-review.md](final-review.md) step 0.5 says, and the final review
+  continues.
 
-A batch runs at once for a blocked task, and otherwise whenever the list is
+A batch runs at once for a blocked task and for a QA `acceptance-ambiguous`
+item, and otherwise whenever the list is
 not empty at a boundary: after the spec, after the plan is reviewed, after each
 wave (each task in sequential mode) and before the final review. Tasks that do
 not depend on a deferred task keep running.
@@ -215,10 +237,17 @@ Finishing carries out the `finishAction` setting at once, into the base
 `wait` keep the branch, and so does `merge` when the base is `none`. `merge`
 also keeps the branch when the ledger holds a
 `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
-partial commits reach the base only after a person has looked at them. On a
+partial commits reach the base only after a person has looked at them.
+`merge` also keeps the branch when the `Acceptance QA: complete` line reports any
+`fail`, `flaky` or `cannot-test`, or when the run added a deferred register row
+whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`: an
+acceptance statement that failed or went unverified reaches the base only after
+a person has looked at it. On a
 detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
 branch from the detached HEAD. A `pr` with base `none` opens its request
 against the forge's default branch. No menu, no wake. Its final message lists
-every `Ruling:` ledger line, every line of `scripts/auto-run ruling list` and
-every deferred row the run added, and it runs `scripts/auto-run stop` before
+every `Ruling:` ledger line, every line of `scripts/auto-run ruling list`,
+every deferred row the run added, every `demo` statement of the spec, every lens
+`scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`, and
+it runs `scripts/auto-run stop` before
 the next-step block.
