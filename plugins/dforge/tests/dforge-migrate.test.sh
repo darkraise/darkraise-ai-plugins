@@ -210,6 +210,32 @@ check "tracked state resolved: exit 0" "$code" "0"
 check "tracked state resolved: .forge gone" "$(exists "$TS/.forge")" "no"
 check "tracked state resolved: the commit line names it" "$(grep -c "^commit: $TS: the rename .forge/ -> .dforge/ (git add -A .forge .dforge)$" <<<"$out")" "1"
 
+# --- a merge keeps an empty directory only the old tree holds ---
+ED="$TMP/empty-dirs"
+repo "$ED"
+mkdir -p "$ED/.forge/a/b" "$ED/.dforge" "$ED/.git/dr-forge/run.lock" "$ED/.git/dforge/tasks"
+echo x > "$ED/.forge/a/x.md"
+out=$(bash "$FM" --dry-run "$ED" 2>&1); code=$?
+check "empty dirs, dry: exit 0" "$code" "0"
+check "empty dirs, dry: the empty directory listed" "$(grep -cxF "would move $ED/.git/dr-forge/run.lock -> $ED/.git/dforge/run.lock" <<<"$out")" "1"
+out=$(bash "$FM" "$ED" 2>&1); code=$?
+check "empty dirs: exit 0" "$code" "0"
+check "empty dirs: the nested empty directory kept" "$([ -d "$ED/.dforge/a/b" ] && echo yes || echo no)" "yes"
+check "empty dirs: the file beside it moved" "$(cat "$ED/.dforge/a/x.md" 2>/dev/null)" "x"
+check "empty dirs: the git dir lock kept" "$([ -d "$ED/.git/dforge/run.lock" ] && echo yes || echo no)" "yes"
+check "empty dirs: the old trees gone" "$(exists "$ED/.forge")$(exists "$ED/.git/dr-forge")" "nono"
+EF="$TMP/empty-dir-clash"
+repo "$EF"
+mkdir -p "$EF/.forge/d" "$EF/.dforge"
+echo file > "$EF/.dforge/d"
+out=$(bash "$FM" --dry-run "$EF" 2>&1); code=$?
+check "empty dir over a file, dry: exit 1" "$code" "1"
+check "empty dir over a file, dry: the refusal foretold" "$(grep -c "refused: $EF/.forge/d is a directory and $EF/.dforge/d is not" <<<"$out")" "1"
+out=$(bash "$FM" "$EF" 2>&1); code=$?
+check "empty dir over a file: exit 1" "$code" "1"
+check "empty dir over a file: refused once" "$(grep -c "refused: " <<<"$out")" "1"
+check "empty dir over a file: both kept" "$([ -d "$EF/.forge/d" ] && cat "$EF/.dforge/d")" "file"
+
 # --- docs/forge/ beside docs/dforge/: refused, and no plan is rewritten ---
 K="$TMP/forge-both-docs"
 repo "$K"

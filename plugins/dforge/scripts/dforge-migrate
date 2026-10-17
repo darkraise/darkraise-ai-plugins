@@ -17,10 +17,10 @@
 # installed.
 #
 # A checkout holding an older state directory and .dforge/ is merged file by
-# file: a file only the old one has moves, an identical one is dropped, and a
-# file that differs is refused and left. A checkout holding two docs trees,
-# or an older docs tree with uncommitted changes, is refused and left as it
-# is, and its plans are not rewritten. The rest still moves, and a second run
+# file: a file or empty directory only the old one has moves, an identical
+# file is dropped, and a file that differs is refused and left. A checkout
+# holding two docs trees, or an older docs tree with uncommitted changes, is
+# refused and left as it is, and its plans are not rewritten. The rest still moves, and a second run
 # finishes the job once the refusal is resolved. A checkout that was refused
 # keeps its old ignore lines and gains the new ones beside them, so a moved
 # directory is never left un-ignored.
@@ -68,10 +68,11 @@ same_entry() {
   fi
 }
 
-# merge_into FROM TO — FROM's files into the existing directory TO: a file TO
-# lacks moves, an identical one is dropped, a differing one is refused and left.
+# merge_into FROM TO — FROM's files into the existing directory TO: a file or
+# empty directory TO lacks moves, an identical file is dropped, a differing
+# one is refused and left.
 merge_into() {
-  local from=$1 to=$2 file rel conflicts=0 touched=0
+  local from=$1 to=$2 file rel conflicts=0 touched=0 dir_conflicts=0
   if [ "$dry" -eq 1 ]; then
     while IFS= read -r -d '' file; do
       rel=${file#"$from"/}
@@ -79,6 +80,11 @@ merge_into() {
       elif same_entry "$file" "$to/$rel"; then printf 'would drop %s, the same as %s\n' "$file" "$to/$rel"; moved=1
       else refuse "$file differs from $to/$rel; keep one by hand, then run dforge-migrate again"; fi
     done < <(find "$from" \( -type f -o -type l \) -print0)
+    while IFS= read -r -d '' file; do
+      rel=${file#"$from"/}
+      if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1
+      elif [ ! -d "$to/$rel" ]; then refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dforge-migrate again"; fi
+    done < <(find "$from" -mindepth 1 -type d -empty -print0)
     return 0
   fi
   while IFS= read -r -d '' file; do
@@ -93,7 +99,15 @@ merge_into() {
       conflicts=1
     fi
   done < <(find "$from" \( -type f -o -type l \) -print0)
-  find "$from" -depth -type d -empty -delete 2>/dev/null
+  # An empty directory can be a mkdir lock (<git dir>/dforge/run.lock), so
+  # one TO lacks is made there before FROM's empty directories go.
+  while IFS= read -r -d '' file; do
+    rel=${file#"$from"/}
+    [ ! -d "$to/$rel" ] || continue
+    if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ] && mkdir -p -- "$to/$rel" 2>/dev/null; then touched=1
+    else refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dforge-migrate again"; conflicts=1 dir_conflicts=1; fi
+  done < <(find "$from" -mindepth 1 -type d -empty -print0)
+  [ "$dir_conflicts" -eq 1 ] || find "$from" -depth -type d -empty -delete 2>/dev/null
   if [ "$conflicts" -eq 0 ] && [ -e "$from" ]; then refuse "$from still holds entries that are not files; move them by hand, then run dforge-migrate again"; fi
   if [ ! -e "$from" ]; then done_move "$from" "$to"; elif [ "$touched" -eq 1 ]; then moved=1; fi
 }
