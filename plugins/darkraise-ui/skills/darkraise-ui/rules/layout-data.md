@@ -86,7 +86,8 @@ Router, React Router, or anything else. You supply an adapter once.
 ```tsx
 // Expecting SidebarLayout to know about your router.
 <SidebarLayout nav={nav}>{children}</SidebarLayout>
-// …with no RouterAdapterProvider mounted. Links will not navigate correctly.
+// …with no RouterAdapterProvider mounted: links fall back to plain anchors
+// and every click reloads the page instead of routing.
 ```
 
 **Correct**
