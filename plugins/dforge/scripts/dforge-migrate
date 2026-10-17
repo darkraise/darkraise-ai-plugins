@@ -1,23 +1,29 @@
 #!/usr/bin/env bash
-# dforge-migrate [DIR] — move a repository from the pre-3.0 names to dforge
-# 3.0's, which reads only the new ones. For the repository at DIR (default:
-# the working directory), its primary checkout and every linked worktree:
-#   .superpowers/          -> .dforge/            (plain rename)
-#   docs/superpowers/      -> docs/dforge/        (git mv when tracked)
-#   <git dir>/dr-superpowers/ -> <git dir>/dforge/
+# dforge-migrate [DIR] — move a repository from the older names to dforge
+# 4.0's, which reads only the new ones: dr-superpowers' (before 3.0) and
+# dr-forge's (3.x). For the repository at DIR (default: the working
+# directory), its primary checkout and every linked worktree:
+#   .superpowers/, .forge/                    -> .dforge/      (plain rename)
+#   docs/superpowers/ or docs/forge/          -> docs/dforge/  (git mv when tracked)
+#   <git dir>/dr-superpowers/, <git dir>/dr-forge/ -> <git dir>/dforge/
 # then, once every move has succeeded, the lines of .gitignore, .gitattributes
-# and the shared info/exclude that name .superpowers or docs/superpowers. No
-# other file's content changes: historical plans and specs keep the citations
-# dforge translates when it reads them. Last, scripts/lib/dforge-home-migrate.mjs
-# moves the home (~/.dr-superpowers/ -> ~/.dforge/) when it is installed.
+# and the shared info/exclude that name an older directory. An active plan
+# (one the completed.md beside it does not record) and the checkout's handoff
+# note have their dr-superpowers: and dr-forge: prefixes rewritten to
+# dforge:, so they keep running. No other file's content changes: finished
+# plans, specs, ledgers and registers keep the citations dforge translates
+# when it reads them. Last, scripts/lib/dforge-home-migrate.mjs moves the
+# homes (~/.dr-superpowers/ and ~/.dr-forge/ -> ~/.dforge/) when it is
+# installed.
 #
-# A checkout holding both .superpowers/ and .dforge/ is merged file by file: a
-# file only the old one has moves, an identical one is dropped, and a file that
-# differs is refused and left. A checkout holding both docs trees, or a
-# docs/superpowers/ with uncommitted changes, is refused and left as it is.
-# The rest still moves, and a second run finishes the job once the refusal is
-# resolved. A checkout that was refused keeps its old ignore lines and gains
-# the new ones beside them, so a moved directory is never left un-ignored.
+# A checkout holding an older state directory and .dforge/ is merged file by
+# file: a file only the old one has moves, an identical one is dropped, and a
+# file that differs is refused and left. A checkout holding two docs trees,
+# or an older docs tree with uncommitted changes, is refused and left as it
+# is, and its plans are not rewritten. The rest still moves, and a second run
+# finishes the job once the refusal is resolved. A checkout that was refused
+# keeps its old ignore lines and gains the new ones beside them, so a moved
+# directory is never left un-ignored.
 #
 # Exit: 0 done or nothing to do; 1 something was refused; 2 usage or not
 # inside a git repository.
@@ -83,35 +89,49 @@ mv_plain() {
   if mv -- "$1" "$2"; then done_move "$1" "$2"; else refuse "could not rename $1"; fi
 }
 
+# docs_trees CHECKOUT — each docs tree the checkout holds, one per line.
+docs_trees() {
+  local name
+  for name in superpowers forge dforge; do [ ! -e "$1/docs/$name" ] || printf '%s\n' "$1/docs/$name"; done
+}
+
 migrate_docs() { # CHECKOUT
-  local wt=$1 old="$1/docs/superpowers" new="$1/docs/dforge"
-  [ -e "$old" ] || return 0
-  if [ -e "$new" ]; then refuse "$old and $new both exist; merge them by hand, then run dforge-migrate again"; return 0; fi
-  if [ -z "$(g -C "$wt" ls-files -- docs/superpowers | head -n 1)" ]; then mv_plain "$old" "$new"; return 0; fi
-  if [ -n "$(g -C "$wt" status --porcelain --untracked-files=all -- docs/superpowers)" ]; then
+  local wt=$1 trees name old new="$1/docs/dforge"
+  trees=$(docs_trees "$wt")
+  [ -n "$trees" ] || return 0
+  if [ "$(wc -l <<<"$trees")" -gt 1 ]; then
+    refuse "$(paste -sd, - <<<"$trees" | sed 's/,/ and /g') all exist; merge them by hand, then run dforge-migrate again"
+    return 0
+  fi
+  [ "$trees" != "$new" ] || return 0
+  old=$trees name=${trees##*/}
+  if [ -z "$(g -C "$wt" ls-files -- "docs/$name" | head -n 1)" ]; then mv_plain "$old" "$new"; return 0; fi
+  if [ -n "$(g -C "$wt" status --porcelain --untracked-files=all -- "docs/$name")" ]; then
     refuse "$old has uncommitted changes; commit or stash them, then run dforge-migrate again"
     return 0
   fi
-  if g -C "$wt" mv docs/superpowers docs/dforge; then
+  if g -C "$wt" mv "docs/$name" docs/dforge; then
     done_move "$old" "$new"
-    commit_notes+=("$wt: the staged rename docs/superpowers/ -> docs/dforge/")
+    commit_notes+=("$wt: the staged rename docs/$name/ -> docs/dforge/")
   else
-    refuse "git mv docs/superpowers docs/dforge failed in $wt"
+    refuse "git mv docs/$name docs/dforge failed in $wt"
   fi
 }
 
-# rewrite_names FILE MODE — the ignore and attribute lines that name a
-# pre-3.0 directory. MODE replace renames them in place, dropping a renamed
+# rewrite_names FILE MODE — the ignore and attribute lines that name an
+# older directory. MODE replace renames them in place, dropping a renamed
 # line the file already holds; MODE add keeps each line and puts the renamed
 # one after it, skipping comments and lines already present.
 rewrite_names() {
   local file=$1 mode=$2 renamed tmp
-  [ -f "$file" ] || return 1
-  grep -qE '(^|[^A-Za-z0-9_-])\.superpowers([/[:space:]*]|$)|docs/superpowers([/[:space:]*]|$)' "$file" || return 1
-  renamed="$file.dforge-migrate.$$.renamed"
-  tmp="$file.dforge-migrate.$$"
-  sed -E -e 's#(^|[^A-Za-z0-9_-])\.superpowers([/[:space:]*]|$)#\1.dforge\2#g' \
-         -e 's#docs/superpowers([/[:space:]*]|$)#docs/dforge\1#g' "$file" > "$renamed" \
+  [ -f "$file" ] && [ ! -L "$file" ] || return 1
+  grep -qE '(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
+  # mktemp creates each name exclusively, so a link planted at it is never
+  # written through.
+  renamed=$(mktemp "$file.dforge-migrate.XXXXXX") || return 1
+  tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || { rm -f -- "$renamed"; return 1; }
+  sed -E -e 's#(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)#\1.dforge\3#g' \
+         -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dforge\2#g' "$file" > "$renamed" \
     && awk -v mode="$mode" '
       NR == FNR { old[FNR] = $0; have[$0] = 1; n = FNR; next }
       { new[FNR] = $0 }
@@ -128,8 +148,67 @@ rewrite_names() {
     && cat "$tmp" > "$file" \
     || { rm -f -- "$tmp" "$renamed"; return 1; }
   rm -f -- "$tmp" "$renamed"
-  printf 'rewrote the pre-3.0 names in %s\n' "$file"
+  printf 'rewrote the older names in %s\n' "$file"
   moved=1
+}
+
+# writable CHECKOUT FILE — FILE is no symbolic link and lies inside CHECKOUT
+# once links are resolved: a cloned repository controls these names, so a
+# rewrite must never land outside it.
+writable() {
+  local top real
+  [ ! -L "$2" ] || return 1
+  top=$(cd "$1" 2>/dev/null && pwd -P) && real=$(cd "$(dirname -- "$2")" 2>/dev/null && pwd -P) || return 1
+  case $real/ in "$top"/*) return 0 ;; *) return 1 ;; esac
+}
+
+PREFIX_RE='(^|[^A-Za-z0-9_-])dr-(superpowers|forge):([a-z])'
+
+# rewrite_prefixes FILE CHECKOUT — the older plugin prefixes before a skill or
+# agent name, as dforge's own. Status 1 when FILE names none, or is not
+# writable in CHECKOUT.
+rewrite_prefixes() {
+  local file=$1 tmp
+  writable "$2" "$file" || return 1
+  grep -qE "$PREFIX_RE" "$file" 2>/dev/null || return 1
+  tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || { refuse "could not rewrite the plugin prefixes in $file"; return 1; }
+  if sed -E "s#$PREFIX_RE#\\1dforge:\\3#g" "$file" > "$tmp" && cat "$tmp" > "$file"; then
+    rm -f -- "$tmp"
+    printf 'rewrote the plugin prefixes in %s\n' "$file"
+    moved=1
+    return 0
+  fi
+  rm -f -- "$tmp"
+  refuse "could not rewrite the plugin prefixes in $file"
+  return 1
+}
+
+# plan_done DOCS REL — the completed.md beside the plan DOCS/REL records it,
+# under any of the three docs spellings, as next-step's plan_finished reads it.
+plan_done() {
+  local f="$1/$(dirname -- "$2")/completed.md" spelling
+  [ -f "$f" ] || return 1
+  for spelling in dforge forge superpowers; do
+    grep -qF "\`docs/$spelling/$2\`" "$f" && return 0
+  done
+  return 1
+}
+
+# rewrite_active_plans CHECKOUT — every plan under docs/dforge/plans/ that is
+# still active, and the checkout's handoff note.
+rewrite_active_plans() {
+  local wt=$1 docs="$1/docs/dforge" plan rel
+  if [ -d "$docs/plans" ]; then
+    while IFS= read -r -d '' plan; do
+      rel=${plan#"$docs"/}
+      [ "${rel##*/}" != completed.md ] || continue
+      plan_done "$docs" "$rel" && continue
+      if rewrite_prefixes "$plan" "$wt" && g -C "$wt" ls-files --error-unmatch -- "docs/dforge/$rel" >/dev/null 2>&1; then
+        commit_notes+=("$wt: docs/dforge/$rel")
+      fi
+    done < <(find "$docs/plans" -type f -name '*.md' -print0)
+  fi
+  [ ! -f "$wt/.dforge/handoff/latest.md" ] || rewrite_prefixes "$wt/.dforge/handoff/latest.md" "$wt" || true
 }
 
 while IFS= read -r wt; do
@@ -139,13 +218,16 @@ done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -
 
 for wt in "${checkouts[@]}"; do
   checkout_refused=0
-  if [ -e "$wt/.superpowers" ] && [ -n "$(g -C "$wt" ls-files -- .superpowers | head -n 1)" ]; then
-    commit_notes+=("$wt: the rename .superpowers/ -> .dforge/ (git add -A .superpowers .dforge)")
-  fi
-  mv_plain "$wt/.superpowers" "$wt/.dforge"
+  for old in .superpowers .forge; do
+    if [ -e "$wt/$old" ] && [ -n "$(g -C "$wt" ls-files -- "$old" | head -n 1)" ]; then
+      commit_notes+=("$wt: the rename $old/ -> .dforge/ (git add -A $old .dforge)")
+    fi
+    mv_plain "$wt/$old" "$wt/.dforge"
+  done
   migrate_docs "$wt"
+  [ -n "$(docs_trees "$wt" | grep -vxF "$wt/docs/dforge")" ] || rewrite_active_plans "$wt"
   if gitdir=$(g -C "$wt" rev-parse --absolute-git-dir 2>/dev/null); then
-    mv_plain "$gitdir/dr-superpowers" "$gitdir/dforge"
+    for old in dr-superpowers dr-forge; do mv_plain "$gitdir/$old" "$gitdir/dforge"; done
   else
     refuse "cannot read the git directory of $wt"
   fi
@@ -170,7 +252,9 @@ rewrite_names "$common/info/exclude" "$mode" || true
 
 if [ -f "$HERE/lib/dforge-home-migrate.mjs" ]; then
   if ! command -v node >/dev/null 2>&1; then
-    if [ -e "${HOME:-}/.dr-superpowers" ]; then refuse "node is not on PATH, so the home (~/.dr-superpowers/) was not migrated"; fi
+    if [ -e "${HOME:-}/.dr-superpowers" ] || [ -e "${HOME:-}/.dr-forge" ]; then
+      refuse "node is not on PATH, so the homes (~/.dr-superpowers/, ~/.dr-forge/) were not migrated"
+    fi
   else
     home_out=$(cd "$root" && node "$(dr_native_path "$HERE/lib/dforge-home-migrate.mjs")")
     home_status=$?

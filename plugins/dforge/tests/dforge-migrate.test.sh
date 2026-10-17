@@ -146,6 +146,82 @@ check "both docs: exit 1" "$?" "1"
 bash "$FM" "$TMP/home" > /dev/null 2>&1
 check "outside git: exit 2" "$?" "2"
 
+# --- a dr-forge repository: .forge/, docs/forge/, <git dir>/dr-forge/ ---
+F="$TMP/forge"
+repo "$F"
+mkdir -p "$F/.forge/sdd/p1" "$F/.forge/handoff" "$F/docs/forge/plans" "$F/docs/forge/specs" "$F/.git/dr-forge/tasks"
+echo ledger > "$F/.forge/sdd/p1/progress.md"
+printf 'Resume with dr-forge:resume-execution\n' > "$F/.forge/handoff/latest.md"
+printf '> REQUIRED SUB-SKILL: dr-forge:subagent-driven-development\n**Implementer:** `dr-forge:impl-sonnet-low`\nsee dr-superpowers:executing-plans\n' > "$F/docs/forge/plans/active.md"
+printf '**Implementer:** dr-forge:impl-sonnet-low\n' > "$F/docs/forge/plans/done.md"
+printf -- '- 2026-10-01 `docs/forge/plans/done.md` — merged into `main` at abc1234\n' > "$F/docs/forge/plans/completed.md"
+printf 'use dr-forge:brainstorming\n' > "$F/docs/forge/specs/s.md"
+printf '.forge/\n' > "$F/.gitignore"
+printf 'docs/forge/** linguist-documentation\n' > "$F/.gitattributes"
+git -C "$F" add .gitignore .gitattributes docs
+git -C "$F" commit -q -m docs
+out=$(bash "$FM" "$F" 2>&1); code=$?
+check "dr-forge: exit 0" "$code" "0"
+check "dr-forge: .dforge holds the ledger" "$(cat "$F/.dforge/sdd/p1/progress.md" 2>/dev/null)" "ledger"
+check "dr-forge: .forge gone" "$(exists "$F/.forge")" "no"
+check "dr-forge: docs moved" "$(exists "$F/docs/dforge/specs/s.md")" "yes"
+check "dr-forge: docs/forge gone" "$(exists "$F/docs/forge")" "no"
+check "dr-forge: the rename is staged" "$(git -C "$F" status --porcelain -- docs/dforge/specs docs/forge/specs | cut -c1-2 | sort -u | tr -d ' ')" "R"
+check "dr-forge: git dir state moved" "$(exists "$F/.git/dforge/tasks")" "yes"
+check "dr-forge: .gitignore rewritten" "$(cat "$F/.gitignore")" ".dforge/"
+check "dr-forge: .gitattributes rewritten" "$(cat "$F/.gitattributes")" "docs/dforge/** linguist-documentation"
+check "dr-forge: the active plan's prefixes rewritten" "$(cat "$F/docs/dforge/plans/active.md")" \
+  $'> REQUIRED SUB-SKILL: dforge:subagent-driven-development\n**Implementer:** `dforge:impl-sonnet-low`\nsee dforge:executing-plans'
+check "dr-forge: a finished plan keeps its text" "$(cat "$F/docs/dforge/plans/done.md")" "**Implementer:** dr-forge:impl-sonnet-low"
+check "dr-forge: a spec keeps its text" "$(cat "$F/docs/dforge/specs/s.md")" "use dr-forge:brainstorming"
+check "dr-forge: the handoff note's prefixes rewritten" "$(cat "$F/.dforge/handoff/latest.md")" "Resume with dforge:resume-execution"
+check "dr-forge: names the staged rename" "$(grep -c "^commit: $F: the staged rename docs/forge/ -> docs/dforge/" <<<"$out")" "1"
+check "dr-forge: names the rewritten plan" "$(grep -c "^commit: $F: docs/dforge/plans/active.md$" <<<"$out")" "1"
+out=$(bash "$FM" "$F" 2>&1); code=$?
+check "dr-forge again: exit 0" "$code" "0"
+check "dr-forge again: nothing to migrate" "$out" "dforge-migrate: nothing to migrate in $F"
+
+# --- .superpowers/ and .forge/ both present: both merged into .dforge/ ---
+T="$TMP/two-states"
+repo "$T"
+mkdir -p "$T/.superpowers" "$T/.forge"
+echo a > "$T/.superpowers/a.md"
+echo b > "$T/.forge/b.md"
+out=$(bash "$FM" "$T" 2>&1); code=$?
+check "two states: exit 0" "$code" "0"
+check "two states: both merged" "$(cat "$T/.dforge/a.md" "$T/.dforge/b.md" 2>/dev/null | tr '\n' ' ')" "a b "
+check "two states: both gone" "$(exists "$T/.superpowers")$(exists "$T/.forge")" "nono"
+
+# --- docs/forge/ beside docs/dforge/: refused, and no plan is rewritten ---
+K="$TMP/forge-both-docs"
+repo "$K"
+mkdir -p "$K/docs/forge/plans" "$K/docs/dforge"
+printf 'dr-forge:impl-sonnet-low\n' > "$K/docs/forge/plans/p.md"
+out=$(bash "$FM" "$K" 2>&1); code=$?
+check "forge and dforge docs: exit 1" "$code" "1"
+check "forge and dforge docs: refusal names both" "$(grep -c "refused: $K/docs/forge and $K/docs/dforge all exist" <<<"$out")" "1"
+check "forge and dforge docs: the plan is untouched" "$(cat "$K/docs/forge/plans/p.md")" "dr-forge:impl-sonnet-low"
+
+# --- a cloned repository controls these names: nothing is written through a link ---
+L="$TMP/links"
+repo "$L"
+mkdir -p "$TMP/outside/state/handoff" "$L/docs/dforge/plans"
+printf 'dr-forge:resume-execution\n' > "$TMP/outside/note.md"
+printf 'dr-forge:resume-execution\n' > "$TMP/outside/state/handoff/latest.md"
+printf '.forge/\n' > "$TMP/outside/ignore"
+mkdir -p "$L/.dforge/handoff"
+ln -s "$TMP/outside/note.md" "$L/.dforge/handoff/latest.md"
+ln -s "$TMP/outside/note.md" "$L/docs/dforge/plans/linked.md"
+ln -s "$TMP/outside/ignore" "$L/.gitignore"
+LL="$TMP/linked-state"
+repo "$LL"
+ln -s "$TMP/outside/state" "$LL/.forge"
+bash "$FM" "$L" > /dev/null 2>&1
+bash "$FM" "$LL" > /dev/null 2>&1
+check "links: a linked handoff note is not rewritten" "$(cat "$TMP/outside/note.md")" "dr-forge:resume-execution"
+check "links: a linked .gitignore is not rewritten" "$(cat "$TMP/outside/ignore")" ".forge/"
+check "links: a state directory linked outside is not rewritten" "$(cat "$TMP/outside/state/handoff/latest.md")" "dr-forge:resume-execution"
+
 # --- the home step runs when dforge-home-migrate.mjs is installed ---
 P="$TMP/plugin/scripts"
 mkdir -p "$P/lib"
@@ -180,6 +256,11 @@ mkdir -p "$NH/.dr-superpowers"
 out=$(HOME="$NH" PATH="$NB" bash "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "no node, old home present: exit 1" "$code" "1"
 check "no node, old home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
+rm -rf "$NH/.dr-superpowers"
+mkdir -p "$NH/.dr-forge"
+out=$(HOME="$NH" PATH="$NB" bash "$P/dforge-migrate" "$H" 2>&1); code=$?
+check "no node, dr-forge home present: exit 1" "$code" "1"
+check "no node, dr-forge home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
