@@ -25,6 +25,7 @@ Subagent (general-purpose):
     | YAGNI | Unrequested features, over-engineering |
     | Acceptance | No `## Acceptance` section; a statement no test or demo could check; a line not in the form `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`; no statement tagged `neg`; or a rating other than `high` or `confirmed` |
     | Riskiest assumption | No `## Riskiest assumption` section, or one with neither evidence nor `unverified — the plan's first task verifies it` |
+    | Critic findings | a Blocker or High critic finding with neither a fix nor an answer in `## Critic findings` |
 
     ## Calibration
 

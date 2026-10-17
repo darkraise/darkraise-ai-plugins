@@ -136,8 +136,9 @@ your path and complete them in order.
 8. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the acceptance statements are settled (see After the Design)
 9. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
 10. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
-11. **User reviews written spec** — ask user to review the spec file before proceeding (an auto run has Fable review it instead)
-12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+11. **Architecture critic** — one `dr-forge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic)
+12. **User reviews written spec** — ask user to review the spec file before proceeding (an auto run has Fable review it instead)
+13. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
@@ -160,6 +161,7 @@ digraph brainstorming {
     "Offer an auto run\n(once, unless autoRun=off)" [shape=box];
     "Write design doc" [shape=box];
     "Spec self-review\n(one round, shown)" [shape=box];
+    "Architecture critic\n(one judge-opus round)" [shape=box];
     "User reviews spec?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
     "Hidden complexity? Upgrade path" [shape=box];
@@ -183,7 +185,8 @@ digraph brainstorming {
     "Draft acceptance\n(rate; ask below high)" -> "Offer an auto run\n(once, unless autoRun=off)";
     "Offer an auto run\n(once, unless autoRun=off)" -> "Write design doc";
     "Write design doc" -> "Spec self-review\n(one round, shown)";
-    "Spec self-review\n(one round, shown)" -> "User reviews spec?";
+    "Spec self-review\n(one round, shown)" -> "Architecture critic\n(one judge-opus round)";
+    "Architecture critic\n(one judge-opus round)" -> "User reviews spec?";
     "User reviews spec?" -> "Write design doc" [label="changes requested"];
     "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
 }
@@ -441,13 +444,28 @@ Fix any issues inline, then post `Self-review (round 1 of 1):` with one line
 per item: clean, or what you fixed. Do not re-review after fixing.
 A revision your human partner asks for gets one new round.
 
+**Architecture critic:**
+
+After the self-review block, dispatch the critic once with
+[architecture-critic-prompt.md](references/architecture-critic-prompt.md): the
+spec path, the approved design sections verbatim and the repository root. It
+runs in an auto run too, before the Fable review. A revision of the spec does
+not earn a second critic round.
+
+- Fix each Blocker and High finding in the spec, or keep the design with the
+  finding answered in a `## Critic findings` section at the end of the spec:
+  one bullet per finding, with the reason the design stands.
+- List every Medium and Nit finding in that section too; they need no answer.
+- Commit the spec, then state the counts in the review request below:
+  `Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium`.
+
 **User Review Gate:**
 In an auto run (`scripts/auto-run status` exits 0), skip this gate: run the
 Fable spec review in [auto-run.md](../../reference/auto-run.md) §The spec, then
 go to Implementation.
 With `specReview=false` (see Settings), skip this gate and go to Implementation. Otherwise, after posting the self-review block, ask the user to review the written spec before proceeding:
 
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+> "Spec written and committed to `<path>`. Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
 
 Wait for the user's response. If they request changes, make them and run one new self-review round. Only proceed once the user approves.
 

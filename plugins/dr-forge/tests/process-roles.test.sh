@@ -45,5 +45,20 @@ names "analyst: spec reviewer checks the format" "$P/skills/brainstorming/refere
 names "analyst: plans never build on a deferred statement" "$P/skills/writing-plans/SKILL.md" \
   'A row whose Item begins `A<n>:` is a deferred acceptance statement'
 
+AC="$P/criteria/architecture-critique.md"
+check "critic: criteria ids" \
+  "$(grep -o '{#[a-z0-9_]\{1,\}}' "$AC" 2>/dev/null | tr -d '{#}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')" \
+  "failure operability simplest unstated"
+CP="$P/skills/brainstorming/references/architecture-critic-prompt.md"
+names "critic: the prompt does not score" "$CP" 'do not score them 1-20'
+names "critic: ranked findings" "$CP" 'Blocker / High / Medium / Nit'
+names "critic: one change" "$CP" 'If I could change one thing, it would be'
+names "critic: checklist step" "$BS" '11. **Architecture critic** — one `dr-forge:judge-opus` round'
+names "critic: findings section" "$BS" 'answered in a `## Critic findings` section'
+names "critic: counts in the review request" "$BS" 'Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium'
+names "critic: spec reviewer checks answers" "$P/skills/brainstorming/references/spec-document-reviewer-prompt.md" \
+  'a Blocker or High critic finding with neither a fix nor an answer'
+names "critic: the process graph" "$BS" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
