@@ -172,6 +172,36 @@ Historical plans, specs and registers are not edited.
   suites, `claude plugin validate` on the marketplace and every Claude plugin,
   and `claude plugin test plugins/dforge`.
 
+## Acceptance
+
+A1. [test, high] `finish-choice set pr --base main` then `finish-choice get` prints a record with action `pr` and base `main`; `finish-choice answer pr` prints nothing, and a following `get` shows answer `pr`.
+A2. [test, high] With `finishAction` at `merge` and nothing recorded, `finish-choice get` records and prints action `merge` with base null.
+A3. [test, high] `finish-choice arm`, `finish-choice job x` and `finish-choice due` each exit 2.
+A4. [test, high] A `finish.json` written by an older version, carrying `armedAt`, `dueAt`, `job` and `firedAt`, is printed by `finish-choice get` with exit 0 and parsed by the cockpit into its action and base.
+A5. [test, high] The Run card's finish chip reads `Finish merge into main when done` for an unanswered `merge` choice with base `main`, `Finish ask me when done` for `wait`, and is absent once the choice is answered.
+A6. [test, neg, high] With a recorded `merge`, `pr` or `keep` choice and no turn, shell or subagent live, the cockpit starts no once-a-second redraw and shows no countdown.
+A7. [test, high] The Stop hook lets a turn that wrote a new, unfinished ledger end on a message containing `what should I do?`, and holds one that ends on neither that nor `## Next session`.
+A8. [test, high] `dforge-config get finishTimeout` exits 2, and with `finishTimeout: 45` still stored in `~/.dforge/config.json`, `dforge-config get --json` exits 0 and omits the key.
+A9. [test, neg, high] No file under `plugins/dforge/skills` or `plugins/dforge/reference` names `finish-choice arm`, `finish-choice due`, `finishTimeout` or CronCreate in connection with finishing.
+A10. [demo, high] In a plan run whose recorded choice is `merge` into `main`, a clean final review leads finishing to merge into `main` with no menu; the final message opens `Finished with Merge back to main locally, as chosen before the run.` and ends with the `## Next session` block.
+A11. [demo, neg, high] In a plan run whose recorded choice is `pr`, a rejected push leaves the branch and worktree in place, is never retried with force, and the message ends on the finish menu.
+
+## Riskiest assumption
+
+That nothing outside finishing depends on the menu being shown after a clean
+final review, so an immediate finish ends a turn cleanly. Evidence:
+- The Stop hook already accepts `## Next session` as the ending of a turn
+  whose ledger's final review is clean (`plugins/dforge/scripts/turn-end.sh:143`),
+  and finishing Step 7 ends on that block.
+- The auto run finishes this way today
+  (`plugins/dforge/skills/finishing-a-development-branch/SKILL.md` §Auto run).
+- A retired key left in the settings file is harmless: on 2026-10-17, with
+  `{"finishAction":"merge","notAKey":45}` as `~/.dforge/config.json` under a
+  scratch HOME, `dforge-config get --json` exited 0 without `notAKey`, `get
+  finishAction` printed `merge`, and `get notAKey` exited 2 with "unknown
+  setting". The cockpit validates only schema keys
+  (`plugins/dforge/hooks/cockpit/config.ts:111`).
+
 ## Out of scope
 
 - Moving the question into plan writing: a plan can execute in a later
