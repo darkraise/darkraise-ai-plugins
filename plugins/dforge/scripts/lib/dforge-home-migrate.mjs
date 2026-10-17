@@ -189,9 +189,21 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       }
       if (entry.name === "mirror" && entry.isDirectory() && fs.existsSync(to)) {
         for (const child of fs.readdirSync(from, { withFileTypes: true })) {
-          if (!child.isDirectory()) continue;
           const source = path.join(from, child.name);
           const target = path.join(to, child.name);
+          if (!child.isDirectory()) {
+            if (!fs.existsSync(target)) {
+              if (dryRun) pending.push([target, source]);
+              else fs.renameSync(source, target);
+              did(`moved ${source} to ${target}`, `would move ${source} to ${target}`);
+            } else if (sameFile(source, target)) {
+              if (!dryRun) fs.rmSync(source);
+              did(`dropped ${source}, the same as ${target}`, `would drop ${source}, the same as ${target}`);
+            } else {
+              refuse(`${source} differs from ${target}; keep one by hand, then run dforge-migrate again`);
+            }
+            continue;
+          }
           if (fs.existsSync(target)) {
             refuse(`${target} exists, so ${source} was not moved`);
             continue;

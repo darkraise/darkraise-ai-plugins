@@ -266,3 +266,35 @@ test("migrateHome with dryRun foretells the refusals and darkmem lines a merge i
   assert.equal(real.refused, 1, real.lines.join("\n"));
   assert.ok(real.lines.includes(refusal), real.lines.join("\n"));
 });
+
+test("migrateHome merges the plain files under ~/.dr-forge/mirror into an existing ~/.dforge/mirror", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge", "mirror");
+  const dforge = path.join(home, ".dforge", "mirror");
+  write(path.join(forge, "only-old.txt"), "old\n");
+  write(path.join(forge, "same.txt"), "same\n");
+  write(path.join(dforge, "same.txt"), "same\n");
+  write(path.join(dforge, "q", "kept"), "kept\n");
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  assert.equal(dry.refused, 0, dry.lines.join("\n"));
+  assert.ok(dry.lines.includes(`would move ${path.join(forge, "only-old.txt")} to ${path.join(dforge, "only-old.txt")}`), dry.lines.join("\n"));
+  assert.ok(dry.lines.includes(`would drop ${path.join(forge, "same.txt")}, the same as ${path.join(dforge, "same.txt")}`), dry.lines.join("\n"));
+  const real = migrateHome({ HOME: home });
+  assert.equal(real.refused, 0, real.lines.join("\n"));
+  assert.equal(read(path.join(dforge, "only-old.txt")), "old\n");
+  assert.equal(read(path.join(dforge, "same.txt")), "same\n");
+  assert.equal(fs.existsSync(path.join(home, ".dr-forge")), false);
+
+  const clash = scratch("dms-home-");
+  const from = path.join(clash, ".dr-forge", "mirror", "notes.txt");
+  const to = path.join(clash, ".dforge", "mirror", "notes.txt");
+  write(from, "old\n");
+  write(to, "new\n");
+  const refusal = `refused: ${from} differs from ${to}; keep one by hand, then run dforge-migrate again`;
+  assert.ok(migrateHome({ HOME: clash }, { dryRun: true }).lines.includes(refusal));
+  const result = migrateHome({ HOME: clash });
+  assert.equal(result.refused, 1, result.lines.join("\n"));
+  assert.ok(result.lines.includes(refusal), result.lines.join("\n"));
+  assert.equal(read(from), "old\n");
+  assert.equal(read(to), "new\n");
+});
