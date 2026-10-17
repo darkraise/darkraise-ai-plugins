@@ -98,6 +98,35 @@ check "same repository: review-package exits 0" "$status" "0"
 run "$X" next-step docs/plan.md
 check "same repository: next-step exits 0" "$status" "0"
 
+# --- a path with a space and a non-ASCII character ---
+# The repository and the plan's directory hold both, and the plan goes through
+# every script a run takes it through, from lint to the next-step block.
+U="$TMP/r3 é x" UP="docs/a b/ñ/plan.md"
+git init -q "$U"
+mkdir -p "$U/docs/a b/ñ" "$U/docs/forge/registers"
+printf '# Spec\n' > "$U/docs/a b/ñ/spec.md"
+printf '# Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/a b/ñ/spec.md`\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Files:**\n- Create: `a.sh`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nPrint `hello NAME`.\n' > "$U/$UP"
+printf '# R\n\n**Source:** s\n**Covers:** `docs/a b/ñ/spec.md`\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Spaced item | - | - | open | - |\n' > "$U/docs/forge/registers/spaced.md"
+git -C "$U" add -A && git -C "$U" commit -qm plan
+run "$U" plan-lint "$UP" --no-probe
+check "spaced path: plan-lint finds the spec" "$(grep '^ERROR' <<<"$out")" ""
+printf '## A? — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nPrint `hello NAME`.\n````\n### New\n````text\nPrint `hello, NAME`.\n````\n' > "$TMP/spaced-block.md"
+run "$U" plan-amend "$UP" "$TMP/spaced-block.md"
+check "spaced path: plan-amend applies" "$out" "amended: A1 Task 1"
+run "$U" review-route "$UP" --task 1
+has "spaced path: review-route routes the task" "$out" "review-seat task=1 primary="
+run "$U" task-brief "$UP" 1 "$TMP/spaced-brief.md"
+check "spaced path: task-brief exits 0" "$status" "0"
+check "spaced path: the brief carries the amendment" "$(grep -c 'hello, NAME' "$TMP/spaced-brief.md")" "1"
+run "$U" plan-revise "$UP"
+has "spaced path: plan-revise reads the unit" "$out" "unit 1  score=1"
+run "$U" plan-revise --survey "docs/a b/ñ"
+has "spaced path: the survey lists the plan" "$out" "plan  plan.md  tasks=1"
+run "$U" next-step "$UP"
+has "spaced path: next-step names the plan" "$out" "Plan \`$UP\`: 0 of 1 tasks complete"
+run "$U" next-step --complete "$UP"
+has "spaced path: next-step reads the register its spec covers" "$out" "Register rows still open (1)"
+
 # --- the prose names one contract ---
 P="$HERE/.."
 check "no skill, reference or script says 'from the plugin root'" \

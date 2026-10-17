@@ -92,7 +92,7 @@ done
 
 spec_line=$(header_line Spec)
 if [ -n "$spec_line" ]; then
-  spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$spec_line")
+  spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$spec_line")
   [ -f "$(forge_resolve "$spec_path" "$root")" ] || say ERROR header "Spec path does not exist: $spec_path"
 fi
 

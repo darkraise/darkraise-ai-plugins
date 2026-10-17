@@ -278,7 +278,7 @@ else
   fi
 
   if [ "$complete" -eq 1 ]; then
-    spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$program")
+    spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$program")
     k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
     n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
     next_title=$(sed -nE 's/.*( — | – | - | -- )next:[ \t]*(.*[^ \t])[ \t]*$/\2/p' <<<"$program")
@@ -288,7 +288,7 @@ else
     # program's decomposition when the plan is written, so a split decided in a
     # child spec never reaches it, and `last` alone cannot end a programme.
     reg_specs=()
-    plan_spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$(plan_header_line "$plan" Spec)")
+    plan_spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$(plan_header_line "$plan" Spec)")
     [ -z "$plan_spec" ] || reg_specs+=("$plan_spec")
     [ -z "$spec" ] || [ "$spec" = "$plan_spec" ] || reg_specs+=("$spec")
     # On a roadmap project the current milestone's register (its epics) and
