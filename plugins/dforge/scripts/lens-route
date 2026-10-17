@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Print the specialist review lenses for a final review or a risk-3 task.
+#
+# A lens is criteria/lenses/<id>.md: defect patterns a judge reads as review
+# lenses, with an Applies: line saying when the final review needs it. The
+# selection lives here rather than in prose for the reason review-route gives:
+# a rule a seat must follow is only reachable when a test can reach it.
+#
+# Usage: lens-route PLAN_FILE --final BASE HEAD
+#        lens-route PLAN_FILE --task ID
+# Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added>
+#         lens-skipped <id> reason=cap      (--final, past the lensCap setting)
+#         lenses off                        (--final, lensCap 0)
+#         lens <id> criteria=<path>         (--task, one per id on the task's **Lenses:** line)
+# Exit: 0 routed, also when no lens applies; 2 usage error, a missing plan or
+# task, an unknown lens id, or a Host: codex plan.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+. "$HERE/lib/forge-env.sh"
+LENSES="$(cd "$HERE/../criteria/lenses" 2>/dev/null && pwd)"
+SEAT=dforge:judge-sonnet-high
+
+die() { printf 'lens-route: %s\n' "$1" >&2; exit 2; }
+usage() { die "usage: lens-route PLAN_FILE --final BASE HEAD | --task ID"; }
+
+[ $# -ge 2 ] || usage
+[ -n "$LENSES" ] || die "no criteria/lenses directory next to this script"
+plan=$(plan_locate "$1"); shift
+[ -f "$plan" ] || die "no such plan file: $plan"
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+src="$TMP/plan.md"
+plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
+  || die "an amendment does not apply; run plan-lint"
+header=$(plan_header "$src")
+if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
+  die "a Host: codex plan routes reviews through reference/native-codex.md"
+fi
+
+# lens_order — every lens id, highest priority first: three fixed leaders, the
+# language lenses alphabetically, two fixed trailers, then any other lens.
+lens_order() {
+  local all id
+  all=$(for f in "$LENSES"/*.md; do [ -e "$f" ] && basename "$f" .md; done | LC_ALL=C sort)
+  for id in security silent-failures test-quality; do grep -qxF "$id" <<<"$all" && echo "$id"; done
+  grep -E '^lang-' <<<"$all"
+  for id in type-design docs-comments; do grep -qxF "$id" <<<"$all" && echo "$id"; done
+  grep -vxE 'security|silent-failures|test-quality|type-design|docs-comments|lang-.*' <<<"$all"
+}
+
+# lens_match ID — print the first Applies clause that matches the change set
+# ($changed: file names; $added: added lines without their +); status 1 when
+# none does. Globs are bash case patterns, so * crosses /.
+lens_match() {
+  local value clause kind arg glob f
+  value=$(sed -n 's/^Applies: //p' "$LENSES/$1.md" | head -n 1 | tr -d '\r')
+  [ -n "$value" ] || return 1
+  while IFS= read -r clause; do
+    clause=${clause#"${clause%%[![:space:]]*}"}
+    clause=${clause%"${clause##*[![:space:]]}"}
+    kind=${clause%% *}
+    arg=${clause#"$kind"}; arg=${arg# }
+    case $kind in
+      always) echo always; return 0 ;;
+      paths)
+        set -f
+        for glob in $arg; do
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            # shellcheck disable=SC2254
+            case $f in $glob) set +f; echo "paths:$glob"; return 0 ;; esac
+          done <<<"$changed"
+        done
+        set +f ;;
+      added)
+        if grep -qE -- "$arg" <<<"$added"; then echo added; return 0; fi ;;
+    esac
+  done < <(awk '{ gsub(/ ; /, "\n"); print }' <<<"$value")
+  return 1
+}
+
+case $1 in
+  --final)
+    [ $# -eq 3 ] || usage
+    base=$2 head=$3
+    git rev-parse --verify --quiet "$base^{commit}" >/dev/null || die "bad BASE: $base"
+    git rev-parse --verify --quiet "$head^{commit}" >/dev/null || die "bad HEAD: $head"
+    cap=${DR_FORGE_LENS_CAP:-$(forge_setting lensCap 4)}
+    [[ "$cap" =~ ^[0-9]$ ]] || cap=4
+    if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
+    changed=$(git diff --name-only "$base..$head")
+    added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}')
+    n=0
+    while IFS= read -r id; do
+      [ -n "$id" ] || continue
+      reason=$(lens_match "$id") || continue
+      if [ "$n" -lt "$cap" ]; then
+        printf 'lens %s criteria=%s seat=%s reason=%s\n' "$id" "$LENSES/$id.md" "$SEAT" "$reason"
+        n=$((n + 1))
+      else
+        printf 'lens-skipped %s reason=cap\n' "$id"
+      fi
+    done <<<"$(lens_order)"
+    exit 0 ;;
+  --task)
+    [ $# -eq 2 ] || usage
+    id=$2
+    [[ "$id" =~ ^[0-9]+$ ]] || die "not a task id: $id"
+    text=$(plan_task_text "$src" "$id") || die "no Task $id in the plan"
+    line=$(plan_lines Lenses <<<"$text" | head -n 1)
+    [ -n "$line" ] || exit 0
+    ids=$(sed 's/^\*\*Lenses:\*\*//' <<<"$line" | tr ',' ' ')
+    for lid in $ids; do [ -f "$LENSES/$lid.md" ] || die "unknown lens id: $lid"; done
+    for lid in $ids; do printf 'lens %s criteria=%s\n' "$lid" "$LENSES/$lid.md"; done
+    exit 0 ;;
+  *) usage ;;
+esac

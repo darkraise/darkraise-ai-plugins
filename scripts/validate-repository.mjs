@@ -2,7 +2,7 @@ import { readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const names = ['darkraise-ui', 'darkraise-win32ui', 'dr-forge', 'dr-status'];
+const names = ['darkraise-ui', 'darkraise-win32ui', 'dforge', 'dr-status'];
 const claudeOnly = ['dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 
@@ -38,17 +38,17 @@ export function validateRepository(root) {
       if (manifest.name !== entry.name) errors.push(`${client}: manifest name mismatch for ${entry.name}`);
       if (!/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(manifest.version ?? '')) errors.push(`${entry.name}: invalid version`);
       if (!manifest.description || typeof manifest.description !== 'string') errors.push(`${entry.name}: description is required`);
-      if (entry.name === 'dr-forge' && /superpowers/i.test(JSON.stringify(entry))) errors.push(`${catalogPath}: dr-forge entry: retired superpowers name`);
+      if (entry.name === 'dforge' && /superpowers/i.test(JSON.stringify(entry))) errors.push(`${catalogPath}: dforge entry: retired superpowers name`);
       const previous = manifests.get(entry.name);
       if (previous && previous.version !== manifest.version) errors.push(`${entry.name}: client version mismatch`);
       manifests.set(entry.name, manifest);
       if (client === 'codex') {
         if (entry.policy?.installation !== 'AVAILABLE') errors.push(`${entry.name}: installation must be AVAILABLE`);
         if (manifest.skills !== './skills/' || !existsSync(resolve(pluginRoot, 'skills'))) errors.push(`${entry.name}: skills path missing`);
-        if (entry.name === 'dr-forge' && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
+        if (entry.name === 'dforge' && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
       }
-      if (client === 'claude' && entry.name === 'dr-forge' && manifest.dependencies?.length) {
-        errors.push('dr-forge: standalone plugin must not declare dependencies');
+      if (client === 'claude' && entry.name === 'dforge' && manifest.dependencies?.length) {
+        errors.push('dforge: standalone plugin must not declare dependencies');
       }
     }
   }
@@ -88,27 +88,27 @@ export function validateRepository(root) {
   }
   const legacyPattern = /(?:^|[^\w-])superpowers:|dr-superpowers:|dcc-superpower-companions:/;
   const legacyAllowed = new Set([
-    'plugins/dr-forge/tests/cockpit.test.ts',
+    'plugins/dforge/tests/cockpit.test.ts',
   ]);
-  // dr-forge 3.0 spells the retired name only where it translates historical
+  // dforge 3.0 spells the retired name only where it translates historical
   // citations, migrates a pre-3.0 layout, cites this repository's historical
   // specs, or credits upstream.
   const superpowersAllowed = new Set([
-    'plugins/dr-forge/README.md',
-    'plugins/dr-forge/hooks/cockpit/lib.ts',
-    'plugins/dr-forge/scripts/forge-migrate',
-    'plugins/dr-forge/scripts/lib/forge-dir.sh',
-    'plugins/dr-forge/scripts/lib/roots.sh',
-    'plugins/dr-forge/reference/project-state.md',
-    'plugins/dr-forge/skills/project-status/SKILL.md',
-    'plugins/dr-forge/skills/finishing-a-development-branch/SKILL.md',
-    'plugins/dr-forge/reference/auto-run.md',
-    'plugins/dr-forge/reference/parallel-waves.md',
-    'plugins/dr-forge/reference/session-budget.md',
+    'plugins/dforge/README.md',
+    'plugins/dforge/hooks/cockpit/lib.ts',
+    'plugins/dforge/scripts/forge-migrate',
+    'plugins/dforge/scripts/lib/forge-dir.sh',
+    'plugins/dforge/scripts/lib/roots.sh',
+    'plugins/dforge/reference/project-state.md',
+    'plugins/dforge/skills/project-status/SKILL.md',
+    'plugins/dforge/skills/finishing-a-development-branch/SKILL.md',
+    'plugins/dforge/reference/auto-run.md',
+    'plugins/dforge/reference/parallel-waves.md',
+    'plugins/dforge/reference/session-budget.md',
   ]);
   const superpowersExempt = rel => superpowersAllowed.has(rel) ||
-    /^plugins\/dr-forge\/(?:LICENSES|tests)\//.test(rel) ||
-    /^plugins\/dr-forge\/scripts\/lib\/darkmem-(?:sync|migrate|mirror|reconcile)\.mjs$/.test(rel);
+    /^plugins\/dforge\/(?:LICENSES|tests)\//.test(rel) ||
+    /^plugins\/dforge\/scripts\/lib\/darkmem-(?:sync|migrate|mirror|reconcile)\.mjs$/.test(rel);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;
@@ -117,18 +117,18 @@ export function validateRepository(root) {
         const path = resolve(dir, item.name);
         if (item.isDirectory()) { visit(path); continue; }
         const rel = relative(root, path).replaceAll('\\', '/');
-        const checksSuperpowers = name === 'dr-forge' && !superpowersExempt(rel);
+        const checksSuperpowers = name === 'dforge' && !superpowersExempt(rel);
         readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
           if (checksSuperpowers && /superpowers/i.test(line)) errors.push(`${rel}:${index + 1}: retired superpowers name`);
           if (legacyAllowed.has(rel)) return;
           if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
-          for (const match of line.matchAll(/dr-forge:([a-z0-9-]+)/g)) {
+          for (const match of line.matchAll(/dforge:([a-z0-9-]+)/g)) {
             // A name followed by `<` is a template placeholder such as impl-<model>-<effort>.
             if (line[match.index + match[0].length] === '<') continue;
             const name = match[1];
-            if (!existsSync(resolve(root, 'plugins/dr-forge/skills', name)) &&
-                !existsSync(resolve(root, 'plugins/dr-forge/agents', `${name}.md`))) {
-              errors.push(`${rel}:${index + 1}: unresolved dr-forge reference ${name}`);
+            if (!existsSync(resolve(root, 'plugins/dforge/skills', name)) &&
+                !existsSync(resolve(root, 'plugins/dforge/agents', `${name}.md`))) {
+              errors.push(`${rel}:${index + 1}: unresolved dforge reference ${name}`);
             }
           }
         });
@@ -144,7 +144,7 @@ const UNITS = ['k', '%', 's', 'min'];
 const ZEROS = ['auto', 'off', 'any', 'hidden', 'unset'];
 
 export async function validateSchema(root) {
-  const rel = 'plugins/dr-forge/config/schema.mjs';
+  const rel = 'plugins/dforge/config/schema.mjs';
   let schema;
   try { schema = (await import(pathToFileURL(resolve(root, rel)).href)).default; }
   catch (error) { return [`${rel}: ${error.message}`]; }

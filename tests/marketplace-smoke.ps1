@@ -64,17 +64,17 @@ try {
   Invoke-Client $Codex @('--version') | Out-Null
   $market = Join-Path $fixture 'market'
   [void](New-Item -ItemType Directory -Path $market)
-  foreach ($path in @('.claude-plugin','.agents/plugins','plugins/dr-status','plugins/dr-forge','plugins/darkraise-ui','plugins/darkraise-win32ui')) {
+  foreach ($path in @('.claude-plugin','.agents/plugins','plugins/dr-status','plugins/dforge','plugins/darkraise-ui','plugins/darkraise-win32ui')) {
     $destination = Join-Path $market $path
     [void](New-Item -ItemType Directory -Path (Split-Path $destination) -Force)
     Copy-Item -LiteralPath (Join-Path $repository $path) -Destination $destination -Recurse
   }
   Invoke-Client $Codex @('plugin','marketplace','add',$market,'--json') | Out-Null
   $listing = (Invoke-Client $Codex @('plugin','list','--marketplace','darkraise','--available','--json')).stdout | ConvertFrom-Json
-  Check ((@($listing.available.name | Sort-Object) -join ',') -eq 'darkraise-ui,darkraise-win32ui,dr-forge') 'Codex root catalog has exactly three supported entries'
+  Check ((@($listing.available.name | Sort-Object) -join ',') -eq 'darkraise-ui,darkraise-win32ui,dforge') 'Codex root catalog has exactly three supported entries'
   $rejected = Invoke-Client $Codex @('plugin','add','dr-status@darkraise','--json') -AllowFailure
   Check ($rejected.exit -ne 0) 'Codex rejects statusline installation by name'
-  foreach ($name in @('dr-forge','darkraise-ui','darkraise-win32ui')) {
+  foreach ($name in @('dforge','darkraise-ui','darkraise-win32ui')) {
     $installed = (Invoke-Client $Codex @('plugin','add',"$name@darkraise",'--json')).stdout | ConvertFrom-Json
     $sourceManifest = Get-Content (Join-Path $market "plugins/$name/.codex-plugin/plugin.json") -Raw
     $installedManifest = Get-Content (Join-Path $installed.installedPath '.codex-plugin/plugin.json') -Raw
@@ -96,7 +96,7 @@ try {
 
   Invoke-Client $Claude @('plugin','marketplace','add','https://github.com/anthropics/claude-plugins-official.git') | Out-Null
   Invoke-Client $Claude @('plugin','marketplace','add',$market) | Out-Null
-  foreach ($name in @('dr-status','dr-forge','darkraise-ui','darkraise-win32ui')) {
+  foreach ($name in @('dr-status','dforge','darkraise-ui','darkraise-win32ui')) {
     Invoke-Client $Claude @('plugin','install',"$name@darkraise") | Out-Null
   }
   $claudeList = (Invoke-Client $Claude @('plugin','list','--json')).stdout | ConvertFrom-Json
@@ -117,7 +117,7 @@ try {
   Invoke-Client $Codex @('plugin','marketplace','add','https://fixture.invalid/market/','--json') | Out-Null
   $gitListing = (Invoke-Client $Codex @('plugin','list','--marketplace','darkraise','--available','--json')).stdout | ConvertFrom-Json
   $gitNames = @($gitListing.available.name) + @($gitListing.installed | Where-Object marketplaceName -eq 'darkraise' | ForEach-Object name)
-  Check ((@($gitNames | Sort-Object -Unique) -join ',') -eq 'darkraise-ui,darkraise-win32ui,dr-forge') 'Codex Git-source registration selects the dedicated catalog'
+  Check ((@($gitNames | Sort-Object -Unique) -join ',') -eq 'darkraise-ui,darkraise-win32ui,dforge') 'Codex Git-source registration selects the dedicated catalog'
 
   $nativeCatalogPath = Join-Path $market '.agents/plugins/marketplace.json'
   $nativeCatalogBytes = [IO.File]::ReadAllText($nativeCatalogPath)
@@ -161,8 +161,8 @@ try {
   Check ($conflict.exit -ne 0) 'Codex detects a changed source with the same marketplace name'
   Invoke-Client $Codex @('plugin','marketplace','remove','darkraise') | Out-Null
   Invoke-Client $Codex @('plugin','marketplace','add',$market,'--json') | Out-Null
-  $reinstalled = (Invoke-Client $Codex @('plugin','add','dr-forge@darkraise','--json')).stdout | ConvertFrom-Json
-  $expectedVersion = (Get-Content (Join-Path $market 'plugins/dr-forge/.codex-plugin/plugin.json') -Raw | ConvertFrom-Json).version
+  $reinstalled = (Invoke-Client $Codex @('plugin','add','dforge@darkraise','--json')).stdout | ConvertFrom-Json
+  $expectedVersion = (Get-Content (Join-Path $market 'plugins/dforge/.codex-plugin/plugin.json') -Raw | ConvertFrom-Json).version
   Check ($reinstalled.version -eq $expectedVersion) 'Supported remove/add/reinstall recovers a Codex source change'
   Invoke-Client $Codex @('plugin','marketplace','remove','darkraise') | Out-Null
   $direct = Invoke-Client $Codex @('plugin','marketplace','add',$claudeCatalogPath,'--json') -AllowFailure

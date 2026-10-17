@@ -9,8 +9,8 @@ an issue first so the scope can be agreed before you write code.
 
 | Path | Contents |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dr-forge`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
-| `.agents/plugins/marketplace.json` | The Codex catalog: `dr-forge` and the two UI plugins. Codex discovers it from the repository root. |
+| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
+| `.agents/plugins/marketplace.json` | The Codex catalog: `dforge` and the two UI plugins. Codex discovers it from the repository root. |
 | `plugins/<name>/` | One plugin: its manifests, skills, hooks, scripts and tests. |
 | `scripts/` | Repository validation and the full test runner. |
 | `tests/` | Repository-level tests (catalog layout, shards, UI discovery). |
@@ -48,14 +48,14 @@ node scripts/validate-repository.mjs
 node scripts/test-all.mjs
 claude plugin validate .
 claude plugin validate plugins/<plugin>
-claude plugin test plugins/dr-forge
+claude plugin test plugins/dforge
 ```
 
 `node scripts/test-all.mjs` runs the full maintained suite and prints each
 suite's duration. Unset `CLAUDE_CONFIG_DIR` first, since a value leaking in from
 your shell changes the budget tests. A suite that runs against the real home
 directory sets `DR_FORGE_NO_SETTINGS=1`, under which every `forge_setting`
-answers its default without reading `~/.dr-forge/config.json`. Installation and upgrade tests use
+answers its default without reading `~/.dforge/config.json`. Installation and upgrade tests use
 disposable profiles, caches and Git repositories; they must never modify your
 installed plugins or call a paid model.
 
@@ -69,8 +69,8 @@ shards.
 
 Add a test with a behavior change, and write it first: watch it fail for the
 expected reason, then make it pass. Put each test at the lowest layer that can
-fail for the change. dr-forge's shell suites live in
-`plugins/dr-forge/tests/*.test.sh` and print only failures, ending with a
+fail for the change. dforge's shell suites live in
+`plugins/dforge/tests/*.test.sh` and print only failures, ending with a
 `N passed, M failed` line.
 
 ## Pull requests

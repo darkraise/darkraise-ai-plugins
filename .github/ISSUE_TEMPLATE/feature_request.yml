@@ -7,7 +7,7 @@ body:
     attributes:
       label: Plugin
       options:
-        - dr-forge
+        - dforge
         - dr-status
         - darkraise-ui
         - darkraise-win32ui

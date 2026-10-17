@@ -12,7 +12,7 @@ const FENCE = '```';
 function task(n, title, files, evaluation, test, code, message) {
   return [
     `### Task ${n}: ${title}`, '', '**Files:**', ...files, '',
-    '**Implementer:** dr-forge:impl-sonnet-low', `**Evaluation:** ${evaluation}`, '',
+    '**Implementer:** dforge:impl-sonnet-low', `**Evaluation:** ${evaluation}`, '',
     '- [ ] **Step 1: Write the test**', '', `${FENCE}bash`, ...test, FENCE, '',
     '- [ ] **Step 2: Implement**', '', `${FENCE}bash`, ...code, FENCE, '',
     '- [ ] **Step 3: Commit**', '', `${FENCE}bash`, `git commit -m "${message}"`, FENCE, '',
@@ -56,7 +56,7 @@ export function fixture() {
   const repo = join(top, 'repo'), data = join(top, 'data'), work = join(top, 'work'), stub = join(top, 'stub');
   for (const dir of [repo, join(data, 'cases/reviews'), work, stub]) mkdirSync(dir, { recursive: true });
   git(repo, 'init', '-q', '-b', 'main');
-  const planned = commit(repo, { [PLAN]: [PLAN_TEXT], 'plugins/dr-forge/marker.txt': ['fixture'], '.gitignore': ['node_modules/'] }, 'docs: plan the fixture');
+  const planned = commit(repo, { [PLAN]: [PLAN_TEXT], 'plugins/dforge/marker.txt': ['fixture'], '.gitignore': ['node_modules/'] }, 'docs: plan the fixture');
   const greet = commit(repo, { 'src/greet.sh': GREET, 'tests/greet.test.sh': GREET_TEST }, 'feat: add greet');
   const shout = commit(repo, { 'src/shout.sh': SHOUT, 'tests/shout.test.sh': SHOUT_TEST }, 'feat: add shout');
   commit(repo, { 'notes.md': ['notes'] }, 'docs: add notes');

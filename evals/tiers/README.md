@@ -1,6 +1,6 @@
 # Tier evaluation harness
 
-Measures whether a dr-forge assignment row or review seat can move to a
+Measures whether a dforge assignment row or review seat can move to a
 cheaper agent, by replaying this repository's own plan history. The design,
 the grading and the decision rules are in
 `docs/superpowers/specs/2026-10-01-dr-superpowers-tier-eval-design.md`.
@@ -30,10 +30,10 @@ Run them from the repository root.
 
 `run-grid.mjs` exits 0 when the stage is complete, 3 when it stopped at a
 rate limit, at the spend cap or at `--minutes`, 1 when cells remain after harness errors, and
-2 when `plugins/dr-forge` differs from the manifest's start commit.
+2 when `plugins/dforge` differs from the manifest's start commit.
 Run the same command again to resume: a cell with a scored row is skipped.
 
-A manifest built before dr-forge 2.0.0 names a start commit without `plugins/dr-forge`, so `run-grid.mjs` refuses it; build a new manifest for a new repetition.
+A manifest built before dforge 2.0.0 names a start commit without `plugins/dforge`, so `run-grid.mjs` refuses it; build a new manifest for a new repetition.
 
 ## Files
 

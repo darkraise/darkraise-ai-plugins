@@ -9,8 +9,8 @@
   },
   "plugins": [
     {
-      "name": "dr-forge",
-      "source": "./plugins/dr-forge",
+      "name": "dforge",
+      "source": "./plugins/dforge",
       "description": "Brainstorm, plan and execute with scored tasks, tiered implementers, criteria-based review and an external Codex executor; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
       "category": "workflow",
       "keywords": [

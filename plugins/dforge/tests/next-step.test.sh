@@ -1,0 +1,801 @@
+#!/usr/bin/env bash
+# next-step must name exactly one next action for every plan state — start,
+# resume, final review, next sub-project, program done, no follow-on — and
+# keep the primary checkout's handoff file pointing at it.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT="$HERE/../scripts/next-step"
+
+pass=0 fail=0
+check() { # check <name> <got> <want>
+  if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+has() { # has <name> <haystack> <needle>
+  if grep -qF -- "$3" <<<"$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+lacks() { # lacks <name> <haystack> <needle>
+  if grep -qF -- "$3" <<<"$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n' "$1" "$3"; fail=$((fail + 1))
+  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
+}
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+export HOME="$TMP/home"
+mkdir -p "$HOME"
+export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+  GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
+
+REPO="$TMP/repo"
+git init -q "$REPO"
+ROOT="$(git -C "$REPO" rev-parse --show-toplevel)"
+PLAN_REL="docs/plans/2026-01-01-demo.md"
+PLAN="$REPO/$PLAN_REL"
+LEDGER_DIR="$REPO/.forge/sdd/2026-01-01-demo"
+LEDGER_SHOWN="$ROOT/.forge/sdd/2026-01-01-demo/progress.md"
+HANDOFF="$REPO/.forge/handoff/latest.md"
+mkdir -p "$REPO/docs/plans"
+
+write_plan() { # write_plan <file> <execution line> <program line or empty>
+  {
+    printf '# Demo Implementation Plan\n\n**Spec:** `docs/specs/demo.md`\n\n'
+    printf '%s\n\n' "$2"
+    [ -n "$3" ] && printf '%s\n\n' "$3"
+    printf '## Task index\n\n1. First\n2. Second\n3. Third\n\n'
+    printf '### Task 1: First thing\n\nBody.\n\n```bash\n### Task 9: fenced, not a task\n```\n\n'
+    printf '### Task 2: Second thing\n\nBody.\n\n### Task 3: Third thing\n\nBody.\n'
+  } > "$1"
+}
+EXEC_SUB='**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4'
+PROG_NEXT='**Program:** `docs/specs/program.md` — sub-project 2 of 5 — next: Session budget'
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm init
+
+ledger() { # ledger <lines...> — first line is the identity line
+  mkdir -p "$LEDGER_DIR"
+  { printf '# SDD ledger — plan: %s\n' "$PLAN_REL"; printf '%s\n' "$@"; } > "$LEDGER_DIR/progress.md"
+}
+run() { # run <dir> <args...>; sets out and status
+  out=$(cd "$1" && bash "$SCRIPT" "${@:2}" 2>"$TMP/stderr")
+  status=$?
+}
+
+# --- not started: no ledger ---
+rm -f "$HANDOFF"
+run "$REPO" "$PLAN_REL"
+check "not started: exits 0" "$status" "0"
+has "not started: block heading" "$out" "## Next session"
+has "not started: status counts tasks outside fences only" "$out" "**Status:** Plan \`$PLAN_REL\`: 0 of 3 tasks complete (no ledger at \`$LEDGER_SHOWN\`)."
+has "not started: next is Task 1" "$out" "**Next:** Start at Task 1 (First thing)."
+has "not started: launch dir is the primary checkout" "$out" "Launch in \`$ROOT\`:"
+has "not started: launch command from Execution line" "$out" "claude --model sonnet --effort high"
+has "not started: prompt names the sdd skill" "$out" "Continue \`$PLAN_REL\` with dforge:subagent-driven-development. Start at Task 1 (First thing)."
+check "not started: writes the handoff file" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
+check "not started: handoff carries the block" "$(grep -c '^\*\*Next:\*\* Start at Task 1' "$HANDOFF")" "1"
+
+# --- mid-plan: tasks 1-2 complete, task 3 mid fix-round ---
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: complete (commits b..c, review clean)' \
+       'Task 3: fix round 2/5 (1 addressed, 1 open — x; commits c..d)'
+printf '# Handoff\n\n## Goal\nKeep me.\n\n## Next session\nOld stale block.\n\n## Do not\nKeep me too.\n' > "$HANDOFF"
+run "$REPO" "$PLAN_REL"
+check "mid-plan: exits 0" "$status" "0"
+has "mid-plan: status counts completions" "$out" "2 of 3 tasks complete (ledger \`$LEDGER_SHOWN\`)."
+has "mid-plan: resumes the fix-round task" "$out" "**Next:** Resume at Task 3 (Third thing)."
+has "mid-plan: prompt points at the ledger" "$out" "Progress ledger: \`$LEDGER_SHOWN\` — trust its \`Task N: complete\` lines."
+has "mid-plan: prompt routes through resume-execution" "$out" "Resume \`$PLAN_REL\` with dforge:resume-execution. Resume at Task 3 (Third thing)."
+hand=$(cat "$HANDOFF")
+has "mid-plan: handoff keeps earlier sections" "$hand" "Keep me."
+has "mid-plan: handoff keeps later sections" "$hand" "## Do not"
+lacks "mid-plan: handoff drops the stale block" "$hand" "Old stale block."
+check "mid-plan: handoff has one Next session section" "$(grep -c '^## Next session' "$HANDOFF")" "1"
+has "mid-plan: handoff carries the new next step" "$hand" "Resume at Task 3 (Third thing)."
+
+# --- a ledger ending on an assigned line warns, and still prints the block ---
+lacks "mid-plan: no assigned-line warning" "$(cat "$TMP/stderr")" "warning"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: implementer impl-sonnet-low (assigned; base bbbbbbb; executor codex gpt-6.1-sol/low, thread pending)'
+run "$REPO" "$PLAN_REL"
+check "thread pending: exits 0" "$status" "0"
+has "thread pending: still prints the block" "$out" "**Next:** Resume at Task 2 (Second thing)."
+has "thread pending: warns on stderr" "$(cat "$TMP/stderr")" "Task 2 is assigned with its thread pending"
+has "thread pending: names handoff step 0" "$(cat "$TMP/stderr")" "dforge:handoff step 0"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: implementer dforge:impl-sonnet-low (assigned; base bbbbbbb)'
+run "$REPO" "$PLAN_REL"
+has "agent assigned: warns on stderr" "$(cat "$TMP/stderr")" "the ledger ends on an assigned line for Task 2"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: implementer inline (assigned; base bbbbbbb)'
+run "$REPO" "$PLAN_REL"
+lacks "inline assigned: no warning, the controller is the implementer" "$(cat "$TMP/stderr")" "warning"
+
+# --- ledger for another plan is ignored ---
+mkdir -p "$LEDGER_DIR"
+printf '# SDD ledger — plan: docs/plans/other.md\nTask 1: complete (x)\n' > "$LEDGER_DIR/progress.md"
+run "$REPO" "$PLAN_REL"
+has "foreign ledger: treated as not started" "$out" "**Next:** Start at Task 1 (First thing)."
+has "foreign ledger: says why" "$out" "belongs to another plan"
+
+# --- all tasks complete, final review not yet run ---
+ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Group 2-3: review round 1/3' 'Task 3: complete (x)'
+run "$REPO" "$PLAN_REL"
+has "tasks done: status" "$out" "**Status:** Plan \`$PLAN_REL\`: all 3 tasks complete."
+has "tasks done: next is final review then finishing" "$out" "**Next:** Run the final whole-branch review, then dforge:finishing-a-development-branch."
+
+# --- --complete with a next sub-project ---
+printf '# Handoff\n\n## Goal\nOld goal.\n\n## Next session\nOld.\n' > "$HANDOFF"
+rm -rf "$LEDGER_DIR"
+run "$REPO" --complete "$PLAN_REL"
+check "complete/next: exits 0" "$status" "0"
+has "complete/next: status" "$out" "**Status:** Plan \`$PLAN_REL\` is complete; sub-project 2 of 5 is done."
+has "complete/next: next sub-project" "$out" "**Next:** Sub-project 3 (Session budget): write its spec in a fresh session."
+has "complete/next: planning launch command" "$out" "claude --model opus --effort high"
+has "complete/next: brainstorming prompt" "$out" "Start sub-project 3 (Session budget) of the program in \`docs/specs/program.md\`: use dforge:brainstorming to write its spec."
+hand=$(cat "$HANDOFF")
+lacks "complete/next: handoff replaced wholesale" "$hand" "Old goal."
+has "complete/next: handoff carries next sub-project" "$hand" "Sub-project 3 (Session budget)"
+
+# --- --complete on the last sub-project ---
+write_plan "$PLAN" "$EXEC_SUB" '**Program:** `docs/specs/program.md` — sub-project 5 of 5 — last'
+run "$REPO" --complete "$PLAN_REL"
+has "complete/last: program done" "$out" "**Next:** Nothing — every sub-project of \`docs/specs/program.md\` is done."
+lacks "complete/last: no launch block" "$out" "Launch in"
+
+# --- --complete with no Program line ---
+write_plan "$PLAN" "$EXEC_SUB" ""
+run "$REPO" --complete "$PLAN_REL"
+has "complete/none: no follow-on" "$out" "**Next:** Nothing — the plan records no follow-on work."
+lacks "complete/none: no launch block" "$out" "Launch in"
+
+# --- --complete with a Program line naming no next step ---
+write_plan "$PLAN" "$EXEC_SUB" '**Program:** `docs/specs/program.md` — sub-project 2 of 5'
+run "$REPO" --complete "$PLAN_REL"
+has "complete/unreadable: points at the program spec" "$out" "**Next:** Read \`docs/specs/program.md\` for the sub-project after 2 — the plan's Program line names no next step."
+
+# --- Execution line variants ---
+write_plan "$PLAN" '**Execution:** inline -- claude --model sonnet --effort medium -- all tasks score <= 3' ""
+run "$REPO" "$PLAN_REL"
+has "inline: prompt names executing-plans" "$out" "with dforge:executing-plans."
+has "inline: command without backticks" "$out" "claude --model sonnet --effort medium"
+write_plan "$PLAN" '**Execution:** subagent — codex gpt-6.1-sol / high — Codex host' ""
+run "$REPO" "$PLAN_REL"
+has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-6.1-sol -c model_reasoning_effort=high"
+lacks "codex pair: no claude command" "$out" "claude --model"
+write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
+run "$REPO" "$PLAN_REL"
+has "an Execution line naming no pair: points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
+
+# --- CRLF plan ---
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+sed 's/$/\r/' "$PLAN" > "$PLAN.tmp" && mv "$PLAN.tmp" "$PLAN"
+run "$REPO" "$PLAN_REL"
+has "crlf: tasks still counted" "$out" "0 of 3 tasks complete"
+lacks "crlf: no carriage return in output" "$out" $'\r'
+
+# --- worktree: ledger in the worktree, handoff in the primary checkout ---
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+WT="$TMP/wt"
+git -C "$REPO" worktree add -q -b feat "$WT"
+WT_ROOT="$(git -C "$WT" rev-parse --show-toplevel)"
+mkdir -p "$WT/.forge/sdd/2026-01-01-demo"
+printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$WT/.forge/sdd/2026-01-01-demo/progress.md"
+rm -f "$HANDOFF"
+run "$WT" "$PLAN_REL"
+has "worktree: reads the worktree ledger" "$out" "1 of 3 tasks complete"
+has "worktree: prompt names the worktree" "$out" "First enter the existing worktree \`$WT_ROOT\`."
+has "worktree: launch dir is still the primary checkout" "$out" "Launch in \`$ROOT\`:"
+check "worktree: handoff written in the primary checkout" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
+check "worktree: no handoff inside the worktree" "$([ -f "$WT/.forge/handoff/latest.md" ] && echo yes || echo no)" "no"
+
+# --- handoff write failure still prints the block ---
+rm -rf "$REPO/.forge/handoff"
+printf 'not a dir' > "$REPO/.forge/handoff"
+run "$REPO" "$PLAN_REL"
+check "unwritable handoff: exits 4" "$status" "4"
+has "unwritable handoff: block still printed" "$out" "**Next:** Start at Task 1 (First thing)."
+has "unwritable handoff: says so on stderr" "$(cat "$TMP/stderr")" "could not write"
+has "unwritable handoff: says so on stdout" "$out" "next-step: could not write"
+rm -f "$REPO/.forge/handoff"
+
+# --- final review clean: finishing is next ---
+ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' 'Final review: clean (commits a1b2c3d..d4e5f6a)'
+run "$REPO" "$PLAN_REL"
+has "final review clean: status" "$out" "**Status:** Plan \`$PLAN_REL\`: all 3 tasks complete; the final review is clean."
+has "final review clean: next is finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+has "final review clean: prompt routes through resume-execution" "$out" "Resume \`$PLAN_REL\` with dforge:resume-execution. Run dforge:finishing-a-development-branch."
+rm -rf "$LEDGER_DIR"
+
+# --- draft mode: a design phase hands off ---
+mkdir -p "$REPO/docs/specs" "$REPO/.forge/handoff"
+printf '# Draft\n' > "$REPO/docs/specs/draft.md"
+printf '# Handoff\n\n## State\nKeep me.\n\n## Next session\nOld block.\n' > "$HANDOFF"
+run "$REPO" --draft docs/specs/draft.md --next "Write the implementation plan with dforge:writing-plans"
+check "draft: exits 0" "$status" "0"
+has "draft: status names the authority" "$out" "**Status:** Design in progress: \`docs/specs/draft.md\` is the authority."
+has "draft: next action gains a full stop" "$out" "**Next:** Write the implementation plan with dforge:writing-plans."
+has "draft: planning launch command" "$out" "claude --model opus --effort high"
+has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dforge:writing-plans. Read \`.forge/handoff/latest.md\` first."
+hand=$(cat "$HANDOFF")
+has "draft: handoff keeps the notes" "$hand" "Keep me."
+lacks "draft: handoff drops the stale block" "$hand" "Old block."
+run "$REPO" --draft docs/specs/draft.md
+check "draft without --next: exits 2" "$status" "2"
+run "$REPO" --draft docs/specs/missing.md --next "x"
+check "draft of a missing file: exits 2" "$status" "2"
+
+# --- adhoc mode: unplanned work hands off, latest.md is the authority ---
+printf '# Handoff\n\n## State\nItem C unscoped.\n\n## Next session\nOld block.\n' > "$HANDOFF"
+run "$REPO" --adhoc --phase design --next "Scope item C with dforge:brainstorming"
+check "adhoc design: exits 0" "$status" "0"
+has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`.forge/handoff/latest.md\` are the authority."
+has "adhoc: next action gains a full stop" "$out" "**Next:** Scope item C with dforge:brainstorming."
+has "adhoc design: opus launch command" "$out" "claude --model opus --effort high"
+has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`.forge/handoff/latest.md\`: Scope item C with dforge:brainstorming."
+hand=$(cat "$HANDOFF")
+has "adhoc: handoff keeps the notes" "$hand" "Item C unscoped."
+lacks "adhoc: handoff drops the stale block" "$hand" "Old block."
+check "adhoc: the state directory ignores itself" "$(git -C "$REPO" status --porcelain --untracked-files=all -- .forge)" ""
+run "$REPO" --adhoc --phase build --next "Commit items A and B"
+check "adhoc build: exits 0" "$status" "0"
+has "adhoc build: sonnet launch command" "$out" "claude --model sonnet --effort high"
+lacks "adhoc build: no opus launch command" "$out" "claude --model opus"
+run "$REPO" --adhoc --next "x"
+check "adhoc without --phase: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase plan --next "x"
+check "adhoc with an unknown phase: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase design
+check "adhoc without --next: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase design --next "x" docs/plans/2026-01-01-demo.md
+check "adhoc with a plan argument: exits 2" "$status" "2"
+
+# --- usage errors ---
+run "$REPO"
+check "no args: exits 2" "$status" "2"
+run "$REPO" docs/plans/missing.md
+check "missing plan: exits 2" "$status" "2"
+printf '# Empty plan\n\nNo tasks here.\n' > "$REPO/docs/plans/empty.md"
+run "$REPO" docs/plans/empty.md
+check "no tasks: exits 3" "$status" "3"
+
+git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
+
+# --- failures are visible on stdout ---
+# Every non-zero exit prints on stdout too: a session that surfaces only
+# stdout would otherwise see nothing at all from the script whose job is
+# saying what happens next. Always go through run(): it cds into the fixture
+# repo, so the script cannot resolve the real checkout and overwrite its
+# handoff file.
+run "$REPO" docs/plans/no-such-plan.md
+check "missing plan: exits 2" "$status" "2"
+has "missing plan: says so on stdout" "$out" "next-step: no such file"
+
+printf '# Empty plan\n\n**Goal:** nothing\n' > "$REPO/docs/plans/2026-01-01-empty.md"
+run "$REPO" docs/plans/2026-01-01-empty.md
+check "no tasks: exits 3 (stdout form)" "$status" "3"
+has "no tasks: says so on stdout" "$out" "next-step: no tasks in"
+
+run "$REPO"
+check "no arguments: exits 2" "$status" "2"
+has "no arguments: prints usage on stdout" "$out" "next-step: usage:"
+
+# --- a plan that escalated out of inline mode ---
+# The ledger, not the Execution line, says which mode a run is in after a
+# switch. The launch command has to follow it, or the resumed session starts at
+# inline mode's model and effort.
+INL="$REPO/docs/plans/2026-01-01-inline.md"
+cat > "$INL" <<'PLAN'
+# Inline plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** inline — `claude --model sonnet --effort low` — every task scores 2
+
+## Task index
+
+1. First
+2. Second
+
+### Task 1: First
+
+### Task 2: Second
+PLAN
+INL_LEDGER="$REPO/.forge/sdd/2026-01-01-inline"
+mkdir -p "$INL_LEDGER"
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-inline.md"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+  echo "Task 2: implementer inline (assigned; base bbbbbbb)"
+  echo "Task 2: fix round 3/3 (build still red; commits bbbbbbb..ccccccc; still failing)"
+  echo "Task 2: escalated inline -> subagent — still failing after fix round 3/3  "
+} > "$INL_LEDGER/progress.md"
+
+run "$REPO" docs/plans/2026-01-01-inline.md
+has "escalated: launches the subagent pair" "$out" "claude --model sonnet --effort high"
+lacks "escalated: drops the inline pair" "$out" "--effort low"
+has "escalated: says the plan escalated" "$out" "This plan escalated to subagent mode at Task 2."
+
+# A later inline assignment means the plan came back; the Execution line rules
+# again.
+echo "Task 2: implementer inline (assigned; base ccccccc)" >> "$INL_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-inline.md
+has "returned to inline: launches the inline pair" "$out" "claude --model sonnet --effort low"
+lacks "returned to inline: drops the escalation sentence" "$out" "This plan escalated to subagent mode"
+
+# --- a mixed ledger: a delegated task mid-loop in an inline plan ---
+# Mixed mode writes subagent grammar for a delegated task. An agent-named
+# assignment is not a switch, and the plan stays in inline mode.
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-inline.md"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+  echo "Task 2: implementer dforge:impl-opus-medium (assigned; base bbbbbbb)"
+  echo "Task 2: fix round 2/5 (1 addressed, 1 open — x; commits bbbbbbb..ccccccc; progress 9 -> 12; resumed)"
+} > "$INL_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-inline.md
+has "mixed ledger: keeps the inline pair" "$out" "claude --model sonnet --effort low"
+lacks "mixed ledger: no mode switch" "$out" "This plan escalated to subagent mode"
+has "mixed ledger: resumes the delegated task" "$out" "Resume at Task 2 (Second)."
+
+# --- a ledger that merely quotes the escalation marker must not escalate ---
+# The marker is its own ledger line, not a substring match anywhere in the
+# ledger; a deferred-minor sentence describing the grammar is not an
+# escalation.
+QUOTE="$REPO/docs/plans/2026-01-01-quote.md"
+cat > "$QUOTE" <<'PLAN'
+# Quote plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** inline — `claude --model sonnet --effort low` — every task scores 2
+
+## Task index
+
+1. First
+
+### Task 1: First
+PLAN
+QUOTE_LEDGER="$REPO/.forge/sdd/2026-01-01-quote"
+mkdir -p "$QUOTE_LEDGER"
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-quote.md"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: minor (deferred): the Recovery row calls this a line \`Task N: escalated inline -> subagent\`, harmless"
+} > "$QUOTE_LEDGER/progress.md"
+
+run "$REPO" docs/plans/2026-01-01-quote.md
+lacks "quoted clause: does not launch the subagent pair" "$out" "--effort high"
+lacks "quoted clause: does not say the plan escalated" "$out" "This plan escalated to subagent mode"
+
+# --- the ledger identity may carry an absolute or Windows-form path ---
+ABS_LEDGER="$REPO/.forge/sdd/2026-01-01-quote"
+abs_plan="$(cd "$REPO" && pwd)/docs/plans/2026-01-01-quote.md"
+{
+  echo "# SDD ledger — plan: $abs_plan"
+  echo "Task 1: implementer inline (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+} > "$ABS_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-quote.md
+has "absolute identity path: ledger recognised" "$out" "all 1 tasks complete"
+lacks "absolute identity path: not treated as another plan's" "$out" "belongs to another plan"
+
+# --- a Program next-title ending in "last" is not the final sub-project ---
+LASTP="$REPO/docs/plans/2026-01-01-lastword.md"
+cat > "$LASTP" <<'PLAN'
+# Last-word plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** subagent — `claude --model sonnet --effort high` — x
+
+**Program:** `docs/spec.md` — sub-project 1 of 3 — next: Cleanup at last
+
+## Task index
+
+1. First
+
+### Task 1: First
+PLAN
+run "$REPO" --complete docs/plans/2026-01-01-lastword.md
+has "next title ending in last: names the next sub-project" "$out" "Sub-project 2 (Cleanup at last)"
+lacks "next title ending in last: not read as the final one" "$out" "every sub-project of"
+
+# --- outside a repository the documented exit is 2 ---
+out=$(cd "$TMP" && bash "$SCRIPT" "$(cd "$REPO" && pwd)/docs/plans/2026-01-01-quote.md" 2>/dev/null); status=$?
+check "outside a repository: exits 2" "$status" "2"
+
+# --- a BLOCKED task is terminal: no launch, a human decides ---
+# The skills say never re-dispatch a BLOCKED task; a resume guide that said
+# "Start at Task 2" would do exactly that.
+BLK="$REPO/docs/plans/2026-01-01-blocked.md"
+cat > "$BLK" <<'PLAN'
+# Blocked plan
+
+**Goal:** demo
+
+**Spec:** docs/spec.md
+
+**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+
+## Task index
+
+1. First
+2. Second
+3. Third
+
+### Task 1: First
+
+### Task 2: Second
+
+### Task 3: Third
+PLAN
+BLK_LEDGER="$REPO/.forge/sdd/2026-01-01-blocked"
+mkdir -p "$BLK_LEDGER"
+{
+  echo "# SDD ledger — plan: docs/plans/2026-01-01-blocked.md"
+  echo "Task 1: implementer impl-sonnet-low (assigned; base aaaaaaa)"
+  echo "Task 1: complete (commits aaaaaaa..bbbbbbb, review clean) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
+  echo "Task 2: implementer impl-sonnet-high (assigned; base bbbbbbb)"
+  echo "Task 2: BLOCKED — ruling seat — whether the export keeps the legacy field"
+} > "$BLK_LEDGER/progress.md"
+
+run "$REPO" docs/plans/2026-01-01-blocked.md
+check "blocked: exits 0" "$status" "0"
+has "blocked: status names the task" "$out" "1 of 3 tasks complete; Task 2 is BLOCKED"
+has "blocked: next carries the decision" "$out" "Your human partner decides: whether the export keeps the legacy field."
+lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
+lacks "blocked: no launch command" "$out" "Launch in"
+has "blocked: latest.md carries the block" "$(cat "$REPO/.forge/handoff/latest.md")" "Task 2 is BLOCKED"
+
+# --- Codex host: the launch command names the Codex client, not Claude ---
+# The session knows its host (native-codex.md identifies it from callable tool
+# schemas, never from an executable), so the adhoc and draft paths take it as a
+# flag. A plan carries `Host: codex` in its header instead.
+CODEX_DESIGN='codex -m gpt-6.1-sol -c model_reasoning_effort=high'
+CODEX_BUILD='codex -m gpt-6.1-sol -c model_reasoning_effort=high'
+
+run "$REPO" --adhoc --phase design --host codex --next "Scope item C with dforge:brainstorming"
+check "adhoc design on codex: exits 0" "$status" "0"
+has "adhoc design on codex: sol launch command" "$out" "$CODEX_DESIGN"
+lacks "adhoc design on codex: no astra launch command" "$out" "gpt-6-astra"
+lacks "adhoc design on codex: no claude launch command" "$out" "claude --model"
+run "$REPO" --adhoc --phase build --host codex --next "Commit items A and B"
+check "adhoc build on codex: exits 0" "$status" "0"
+has "adhoc build on codex: sol launch command" "$out" "$CODEX_BUILD"
+run "$REPO" --draft docs/specs/draft.md --host codex --next "Write the implementation plan with dforge:writing-plans"
+check "draft on codex: exits 0" "$status" "0"
+has "draft on codex: sol launch command" "$out" "$CODEX_DESIGN"
+run "$REPO" --adhoc --phase build --host claude --next "Commit items A and B"
+has "an explicit --host claude: keeps the claude launch command" "$out" "claude --model sonnet --effort high"
+run "$REPO" --adhoc --phase build --host gemini --next "x"
+check "an unknown --host: exits 2" "$status" "2"
+run "$REPO" --adhoc --phase build --host --next "x"
+check "--host without a value: exits 2" "$status" "2"
+
+# A Codex plan's launch command comes from its own Execution line, exactly as a
+# Claude plan's does. The header, not the flag, tells the plan path its host.
+CODEX_PLAN_REL="docs/plans/2026-01-01-codex.md"
+CODEX_PLAN="$REPO/$CODEX_PLAN_REL"
+CODEX_LEDGER_DIR="$REPO/.forge/sdd/2026-01-01-codex"
+EXEC_CODEX='**Host:** codex
+
+**Routing policy:** codex-v4
+
+**Execution:** inline — `codex gpt-6.1-sol / medium` — every task totals 4 or less'
+write_plan "$CODEX_PLAN" "$EXEC_CODEX" "$PROG_NEXT"
+run "$REPO" "$CODEX_PLAN_REL"
+check "codex plan: exits 0" "$status" "0"
+has "codex plan: launch command from the Execution line" "$out" "codex -m gpt-6.1-sol -c model_reasoning_effort=medium"
+lacks "codex plan: no fallback to reading the Execution line" "$out" "Launch: see the"
+
+run "$REPO" --complete "$CODEX_PLAN_REL"
+check "codex plan complete: exits 0" "$status" "0"
+has "codex plan complete: the next sub-project launches the design tier" "$out" "$CODEX_DESIGN"
+lacks "codex plan complete: no claude launch command" "$out" "claude --model"
+
+mkdir -p "$CODEX_LEDGER_DIR"
+{ printf '# SDD ledger — plan: %s
+' "$CODEX_PLAN_REL"
+  printf 'Task 1: complete (commits a..b, review clean)
+'
+  printf 'Task 2: escalated inline -> subagent — fix round 3/3
+'; } > "$CODEX_LEDGER_DIR/progress.md"
+run "$REPO" "$CODEX_PLAN_REL"
+check "codex plan escalated: exits 0" "$status" "0"
+has "codex plan escalated: launches the build tier" "$out" "$CODEX_BUILD"
+lacks "codex plan escalated: no claude launch command" "$out" "claude --model"
+
+
+# --- the same directory under a second POSIX spelling ---
+# Under Git Bash /tmp and /c/Users/…/Temp can name one directory, so stripping
+# pwd output off the plan path degrades the status line to an absolute path
+# wherever the two spellings differ. Git resolves the relative path instead.
+ALIAS_PLAN_REL="docs/plans/2026-01-01-alias.md"
+case $ROOT in
+  [A-Za-z]:/*)
+    ALT="/$(printf '%s' "${ROOT%%:*}" | tr '[:upper:]' '[:lower:]')${ROOT#?:}"
+    if [ -d "$ALT" ] && [ "$ALT" != "$(cd "$REPO" && pwd)" ]; then
+      write_plan "$REPO/$ALIAS_PLAN_REL" "$EXEC_SUB" ""
+      run "$ALT" "$ALIAS_PLAN_REL"
+      check "mount alias: exits 0" "$status" "0"
+      has "mount alias: the plan path stays relative" "$out" "Plan \`$ALIAS_PLAN_REL\`"
+    fi
+    ;;
+esac
+
+# --- item registers outrank the Program line ---
+# The frozen `next:` is copied when the plan is written, so a sub-project split
+# decided later never reaches it. A register with an open row must stop the
+# "every sub-project is done" answer.
+RREPO="$TMP/registers"
+git init -q -b main "$RREPO"
+mkdir -p "$RREPO/docs/forge/plans" "$RREPO/docs/forge/specs" "$RREPO/docs/forge/registers"
+printf '.forge/\n' > "$RREPO/.gitignore"
+: > "$RREPO/docs/forge/specs/prog-design.md"
+cat > "$RREPO/docs/forge/plans/c1.md" <<'PLAN'
+# C1
+
+**Goal:** One
+**Spec:** docs/superpowers/specs/prog-design.md
+**Execution:** inline — `claude --model sonnet --effort high` — small
+**Program:** `docs/superpowers/specs/prog-design.md` — sub-project 3 of 4 — last
+
+### Task 1: One
+PLAN
+git -C "$RREPO" add -A && git -C "$RREPO" commit -qm init
+
+cat > "$RREPO/docs/forge/registers/prog.md" <<'REG'
+# Programme — item register
+
+**Source:** owner list 2026-09-18
+**Covers:** docs/superpowers/specs/prog-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Status bar | - | - | done | - |
+| 4 | Settings tabs | C2 Settings | Radius follows the axis | planned | - |
+| 6 | Editor preview | C2 Settings | - | planned | - |
+| 16 | Stale note | C2 Settings | - | planned | - |
+| 17 | Unused UI font | C2 Settings | - | planned | - |
+REG
+
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: a register with open rows refuses 'Nothing'" "$OUT" "Register rows still open (4) in \`docs/forge/registers/prog.md\`"
+has "next-step: names the first rows" "$OUT" "#4 Settings tabs"
+has "next-step: caps the list at three" "$OUT" "+1 more"
+has "next-step: routes to the assignment" "$OUT" "\`C2 Settings\`: write its spec in a fresh session."
+lacks "next-step: must not claim the program is done" "$OUT" "Nothing — every sub-project"
+
+# An unassigned row routes to brainstorming instead.
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 4 open --assigned -
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 6 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 16 done
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 17 done
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: an unassigned row routes to brainstorming" "$OUT" "Rule on the open rows with dforge:brainstorming."
+has "next-step: one row still reports" "$OUT" "Register rows still open (1) in"
+
+# Every row resolved: the Program line answers again, exactly as before.
+bash "$HERE/../scripts/register" set "$RREPO/docs/forge/registers/prog.md" 4 done
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: a fully resolved register restores the old answer" "$OUT" "Nothing — every sub-project"
+
+# No register at all: unchanged behaviour, which is what keeps every existing
+# plan in this repository working.
+rm "$RREPO/docs/forge/registers/prog.md"
+OUT=$(cd "$RREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/c1.md 2>&1)
+has "next-step: no register means no change" "$OUT" "Nothing — every sub-project"
+
+# --- register routing: the Assigned cell decides the next step ---
+# A row still assigned to the plan that just finished, or to one completed.md
+# records, must not route back to it; an assigned plan is executed, not
+# re-specified; verify rows and other repositories' rows are not work here.
+GREPO="$TMP/routing"
+git init -q -b main "$GREPO"
+mkdir -p "$GREPO/docs/forge/plans" "$GREPO/docs/forge/specs" "$GREPO/docs/forge/registers"
+printf '.forge/\n' > "$GREPO/.gitignore"
+: > "$GREPO/docs/forge/specs/lane-design.md"
+: > "$GREPO/docs/forge/specs/rev-design.md"
+for p in inc1 inc2 inc3; do
+  effort=high
+  [ "$p" = inc3 ] && effort=medium
+  cat > "$GREPO/docs/forge/plans/$p.md" <<PLAN
+# $p
+
+**Goal:** $p
+**Spec:** docs/superpowers/specs/lane-design.md
+**Execution:** inline — \`claude --model sonnet --effort $effort\` — small
+
+### Task 1: One
+PLAN
+done
+printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — merged into `main` at abc1234\n' \
+  > "$GREPO/docs/forge/plans/completed.md"
+cat > "$GREPO/docs/forge/registers/lane.md" <<'REG'
+# Lane — item register
+
+**Source:** owner list 2026-01-01
+**Covers:** docs/superpowers/specs/lane-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Search and UI | docs/superpowers/plans/inc2.md | - | doing | - |
+| 2 | Verbatim bodies | docs/superpowers/plans/inc1.md | - | verify | awaiting deploy |
+| 3 | Sync client | other-repo: docs/superpowers/plans/sync.md | - | planned | - |
+| 4 | Loose end | - | - | open | - |
+| 5 | Revisions | docs/superpowers/plans/inc3.md | - | planned | - |
+| 6 | Leftover | docs/superpowers/plans/inc1.md | - | open | - |
+REG
+git -C "$GREPO" add -A && git -C "$GREPO" commit -qm init
+GREG="$GREPO/docs/forge/registers/lane.md"
+
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: still reports every unresolved row" "$OUT" "Register rows still open (6)"
+has "routing: an assigned plan is executed" "$OUT" "Continue \`docs/superpowers/plans/inc3.md\` with dforge:executing-plans."
+has "routing: launches the assigned plan's Execution pair" "$OUT" "claude --model sonnet --effort medium"
+lacks "routing: never asks for a spec of a plan" "$OUT" "write its spec"
+has "routing: names rows left on finished plans" "$OUT" "Still assigned to a finished plan: #1, #6"
+
+# Either docs prefix names the same plan (spec §7.1): a completed.md entry and
+# an Assigned cell spelled docs/forge/ match the docs/superpowers/ plan.
+printf '# Completed plans\n\n- 2026-01-01 `docs/forge/plans/inc1.md` — merged into `main` at abc1234\n' \
+  > "$GREPO/docs/forge/plans/completed.md"
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/forge/plans/inc2.md >/dev/null
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: either prefix names a finished plan" "$OUT" "Still assigned to a finished plan: #1, #6"
+printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — merged into `main` at abc1234\n' \
+  > "$GREPO/docs/forge/plans/completed.md"
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
+
+# An absolute Assigned cell is named from the roots: one naming the plan being
+# completed and one naming a finished plan are both stale.
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned "$GREPO/docs/forge/plans/inc2.md" >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$GREPO/docs/forge/plans/inc1.md" >/dev/null
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: absolute Assigned cells name finished plans" "$OUT" "Still assigned to a finished plan: #1, #6"
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned docs/superpowers/plans/inc1.md >/dev/null
+
+# From a linked worktree, an Assigned cell naming the primary checkout's copy
+# of a finished plan is stale too. The worktree holds the committed register
+# and completed.md (row 1 on inc2, row 6 on inc1, inc1 recorded).
+GWT="$TMP/routing-wt"
+git -C "$GREPO" worktree add -q -b routing-side "$GWT"
+bash "$HERE/../scripts/register" set "$GWT/docs/forge/registers/lane.md" 6 open --assigned "$GREPO/docs/forge/plans/inc1.md" >/dev/null
+OUT=$(cd "$GWT" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: a worktree names the primary checkout's absolute plan path" "$OUT" "Still assigned to a finished plan: #1, #6"
+git -C "$GREPO" worktree remove --force "$GWT"
+git -C "$GREPO" branch -q -D routing-side
+
+# The deepest root wins, as in the JavaScript mapping: a cell naming a copy in a
+# worktree nested inside the primary checkout is that worktree's plan, not a
+# file of the primary named .nested-wt/docs/….
+NWT="$GREPO/.nested-wt"
+git -C "$GREPO" worktree add -q -b routing-nested "$NWT"
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned "$NWT/docs/forge/plans/inc1.md" >/dev/null
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: a name in a nested worktree is named from that worktree" "$OUT" "Still assigned to a finished plan: #1, #6"
+git -C "$GREPO" worktree remove --force "$NWT"
+git -C "$GREPO" branch -q -D routing-nested
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned docs/superpowers/plans/inc1.md >/dev/null
+
+mkdir -p "$GREPO/.forge/sdd/inc3"
+printf '# SDD ledger — plan: docs/superpowers/plans/inc3.md\n' > "$GREPO/.forge/sdd/inc3/progress.md"
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: an assigned plan with a ledger resumes" "$OUT" "Resume \`docs/superpowers/plans/inc3.md\` with dforge:resume-execution."
+printf '# SDD ledger — plan: docs/forge/plans/inc3.md\nTask 1: complete (x)\n' > "$GREPO/.forge/sdd/inc3/progress.md"
+OUT=$(cd "$GREPO" && bash "$SCRIPT" docs/superpowers/plans/inc3.md 2>&1)
+has "ledger check: an identity line under the other prefix is this plan's" "$OUT" "all 1 tasks complete."
+rm -rf "$GREPO/.forge/sdd/inc3"
+
+bash "$HERE/../scripts/register" set "$GREG" 5 planned --assigned docs/superpowers/specs/rev-design.md
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: an assigned spec gets its plan" "$OUT" "\`docs/superpowers/specs/rev-design.md\`: write its plan with dforge:writing-plans."
+has "routing: planning launches the design pair" "$OUT" "claude --model opus --effort high"
+
+printf '# P\n\n### Task A1: One\n' > "$GREPO/docs/forge/plans/lettered.md"
+bash "$HERE/../scripts/register" set "$GREG" 5 planned --assigned docs/superpowers/plans/lettered.md
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: a plan with lettered headings is a plan, not a spec" "$OUT" "Continue \`docs/superpowers/plans/lettered.md\` with dforge:"
+rm -f "$GREPO/docs/forge/plans/lettered.md"
+
+bash "$HERE/../scripts/register" set "$GREG" 5 done
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: an unassigned row outranks rows on finished plans" "$OUT" "Rule on the open rows with dforge:brainstorming."
+
+bash "$HERE/../scripts/register" set "$GREG" 4 done
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: nothing routable names the stale rows" "$OUT" "Still assigned to a finished plan: #1, #6"
+has "routing: nothing routable names the verify rows" "$OUT" "Awaiting your check (verify): #2."
+has "routing: nothing routable names other repositories' rows" "$OUT" "Assigned outside this repository: #3."
+lacks "routing: nothing routable launches nothing" "$OUT" "Launch in"
+
+# --- a roadmap outranks the Program line ---
+# On a greenfield project the next epic comes from the current milestone's
+# register, never from a copied `next:`; with nothing open the milestone goes
+# to its audit, and only when every milestone is closed is there nothing to do.
+MREPO="$TMP/roadmap"
+git init -q -b main "$MREPO"
+MD="$MREPO/docs/forge"
+mkdir -p "$MD/plans" "$MD/specs" "$MD/registers"
+printf '.forge/\n' > "$MREPO/.gitignore"
+: > "$MD/specs/shop-design.md"
+: > "$MD/specs/billing-design.md"
+cat > "$MD/plans/billing.md" <<'PLAN'
+# Billing
+
+**Goal:** Billing
+**Spec:** docs/superpowers/specs/billing-design.md
+**Execution:** inline — `claude --model sonnet --effort high` — small
+**Program:** `docs/superpowers/specs/shop-design.md` — sub-project 1 of 2 — last
+
+### Task 1: One
+PLAN
+cat > "$MD/registers/m1.md" <<'REG'
+# M1 — item register
+
+**Source:** roadmap
+**Covers:** docs/superpowers/specs/shop-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Billing | docs/superpowers/specs/billing-design.md | - | verify | built; owner confirms at the milestone audit |
+| 2 | Search | Search | - | open | - |
+REG
+cat > "$MD/roadmap.md" <<'RM'
+# Shop — roadmap
+
+**Product:** a shop
+**Spec:** docs/superpowers/specs/shop-design.md
+
+| M | Name | Exit criteria | Register | State | Note |
+|---|---|---|---|---|---|
+| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |
+RM
+git -C "$MREPO" add -A && git -C "$MREPO" commit -qm init
+
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: the forgotten epic is the next step" "$OUT" "\`Search\`: write its spec in a fresh session."
+has "roadmap: the built epic waits on the owner" "$OUT" "#1 Billing"
+lacks "roadmap: the Program line's 'last' is not believed" "$OUT" "Nothing — every sub-project"
+
+bash "$HERE/../scripts/register" set "$MD/registers/m1.md" 2 n/a --note "owner dropped search" >/dev/null
+bash "$HERE/../scripts/register" set "$MD/registers/m1.md" 1 done >/dev/null
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: nothing open goes to the audit" "$OUT" "Milestone M1 (MVP) has nothing open: audit and close it with dforge:closing-a-milestone."
+has "roadmap: the audit gets a launch prompt" "$OUT" "Close milestone M1 (MVP)"
+
+bash "$HERE/../scripts/roadmap" close --root "$MREPO" M1 --note "audit: 1 MET" >/dev/null
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`docs/forge/roadmap.md\` is closed."
+lacks "roadmap: closed launches nothing" "$OUT" "Launch in"
+
+# --- documents and progress kept in darkmem ---
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+SR="$TMP/stores-repo"
+git init -q "$SR"
+git -C "$SR" commit -q --allow-empty -m init
+M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+mkdir -p "$M/forge/plans" "$M/work/sdd/2026-02-02-mirror"
+write_plan "$M/forge/plans/2026-02-02-mirror.md" '**Execution:** subagent — `claude --model sonnet --effort high` — demo' ""
+printf '# SDD ledger — plan: docs/forge/plans/2026-02-02-mirror.md\nTask 1: complete (commits a..b, review clean)\n' \
+  > "$M/work/sdd/2026-02-02-mirror/progress.md"
+out=$(cd "$SR" && HOME=$SH bash "$SCRIPT" docs/forge/plans/2026-02-02-mirror.md)
+check "darkmem: exit 0" "$?" "0"
+has "darkmem: the plan is named" "$out" "docs/forge/plans/2026-02-02-mirror.md"
+has "darkmem: the mirror ledger is read" "$out" "ledger \`$M/work/sdd/2026-02-02-mirror/progress.md\`"
+check "darkmem: latest.md is written to the mirror" \
+  "$(grep -c '^## Next session' "$M/work/handoff/latest.md")" "1"
+check "darkmem: nothing is written in the checkout" "$([ -e "$SR/.forge/handoff/latest.md" ] && echo yes || echo no)" "no"
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

@@ -1,0 +1,512 @@
+#!/usr/bin/env bash
+# Print the one next action — for a plan: start, resume, final review,
+# finishing, next program sub-project or roadmap epic, a milestone audit, or
+# nothing; for a design draft: its
+# next step — as a "## Next session" block, and write the same block into the
+# primary checkout's .forge/handoff/latest.md.
+#
+# Sessions end by pasting this block verbatim, so what comes next is computed
+# here rather than remembered by the model: small executors reliably forget to
+# say it, and a hand-written handoff goes stale the moment work moves on.
+#
+# Usage: next-step [--host claude|codex] [--complete] PLAN_FILE
+#        next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION
+#        next-step [--host claude|codex] --adhoc --phase design|build --next ACTION
+#   --complete  the plan is finished and its branch integrated; the ledger may
+#               already be deleted. Replaces latest.md wholesale.
+#   --draft     a design phase (brainstorming, a spec, a plan being written) is
+#               handing off; DRAFT_FILE is the authority and ACTION names the
+#               next step and its skill.
+#   --adhoc     unplanned work (a chat-approved change or a punch list, with no
+#               plan or draft file) is handing off; the notes in latest.md are
+#               the authority. --phase design launches the planning model,
+#               --phase build the execution model.
+#   --host      which client the next session launches; default claude. A plan
+#               states its own host in its header, so the flag serves the paths
+#               that have no plan to read.
+# Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
+#       latest.md could not be written; 5 background work this session started
+#       is still running (scripts/in-flight): nothing printed or written.
+set -euo pipefail
+
+# Failures print on stdout as well as stderr. A session that surfaces only
+# stdout would otherwise get an empty result from the one script whose whole
+# job is saying what happens next.
+fail() { # fail EXIT MESSAGE
+  printf 'next-step: %s\n' "$2"
+  printf 'next-step: %s\n' "$2" >&2
+  exit "$1"
+}
+
+usage() { fail 2 "usage: next-step [--host claude|codex] [--complete] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
+
+# --host is pulled out wherever it sits so the remaining arguments keep their
+# strict positional contract.
+host=claude
+hostless=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --host)
+      [ $# -ge 2 ] || usage
+      case $2 in claude|codex) host=$2 ;; *) usage ;; esac
+      shift 2
+      ;;
+    *) hostless+=("$1"); shift ;;
+  esac
+done
+set -- ${hostless[@]+"${hostless[@]}"}
+
+# The design tier writes specs and plans; the build tier executes them. Claude's
+# pairs are its ladder's top execution rung and the subagent Execution default.
+# Codex runs both tiers on GPT-6.1 Sol high, the subagent Execution default
+# plan-lint expects: the session runs for hours, and the judgment calls that
+# need Astra go to native judges at the rank-8 floor, not to the session.
+launch_for() { # launch_for design|build
+  case $host:$1 in
+    codex:*)       printf 'codex -m gpt-6.1-sol -c model_reasoning_effort=high' ;;
+    *:design)      printf 'claude --model opus --effort high' ;;
+    *)             printf 'claude --model sonnet --effort high' ;;
+  esac
+}
+
+# execution_launch EXECUTION_LINE — the launch command a plan's Execution line
+# names; nothing when it names none.
+execution_launch() {
+  local cmd pair
+  cmd=$(grep -oE 'claude --model [^ `]+ --effort [^ `]+' <<<"$1" | head -n 1 || true)
+  if [ -z "$cmd" ]; then
+    pair=$(grep -oE 'codex [a-z0-9.-]+ / [a-z]+' <<<"$1" | head -n 1 || true)
+    [ -z "$pair" ] || cmd="codex -m $(awk '{ print $2 }' <<<"$pair") -c model_reasoning_effort=$(awk '{ print $4 }' <<<"$pair")"
+  fi
+  printf '%s' "$cmd"
+}
+
+# plan_finished ROOT NAME — true when the completed.md beside the plan NAME
+# records it. Matched on the backticked name, as plan-revise does, so one
+# plan's name that is a substring of another's cannot claim its outcome; an
+# entry under either docs prefix counts. An absolute NAME is named from the roots
+# first (plan_name); one no root maps never counts.
+plan_finished() {
+  local f s name
+  name=$(plan_name "$1" "$2")
+  case $name in /*|[A-Za-z]:/*|[A-Za-z]:\\*) return 1 ;; esac
+  f="$(dirname "$(forge_resolve "$name" "$1")")/completed.md"
+  [ -f "$f" ] || return 1
+  while IFS= read -r s; do
+    grep -qF "\`$s\`" "$f" && return 0
+  done < <(forge_name_spellings "$name")
+  return 1
+}
+
+# _plan_roots ROOT — "<root>\t<name prefix>" for each place a plan name can be
+# read from: the docs root in use, then the docs directory and top level of the
+# checkout and of every worktree (the primary among them).
+_plan_roots() {
+  local top=${_FORGE_TOP:-$1} tree
+  printf '%s\t%s\n' "$_FORGE_DOCS_ROOT" "$(forge_dir_rel docs "$top")"
+  { printf '%s\n' "$top"; git -C "$top" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p'; } |
+  while IFS= read -r tree; do
+    tree=$(_forge_path "$tree")
+    printf '%s\t%s\n' "$(forge_dir docs "$tree")" "$(forge_dir_rel docs "$tree")"
+    printf '%s\t\n' "$tree"
+  done
+}
+
+# _plan_physical PATH — PATH with symbolic links resolved where its directory
+# exists, else unchanged.
+_plan_physical() {
+  local dir
+  if [ -d "$1" ]; then dir=$(cd "$1" 2>/dev/null && pwd -P) && { _forge_path "$dir"; return 0; }
+  else dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) && { _forge_path "$dir/$(basename "$1")"; return 0; }
+  fi
+  printf '%s\n' "$1"
+}
+
+# plan_name ROOT NAME — NAME; an absolute NAME is named from the roots instead
+# (_plan_roots), as written and then with symbolic links resolved in the name
+# and in each root, the same rule as the JavaScript mapping. The deepest root
+# holding the name wins, so a worktree nested inside the primary checkout is
+# not taken for the primary's own files, and a worktree's register or ledger
+# naming the primary's copy still finds its plan. Never a search for a docs
+# segment; an absolute name under no root is printed unchanged, and
+# plan_finished never counts it.
+plan_name() {
+  local name=${2//\\//} pass candidate root prefix best="" best_len=0
+  case $name in
+    /*|[A-Za-z]:/*) ;;
+    *) printf '%s\n' "$2"; return 0 ;;
+  esac
+  forge_stores_init "$1"
+  name=$(_forge_path "$name")
+  for pass in written physical; do
+    candidate=$name
+    [ "$pass" = written ] || candidate=$(_plan_physical "$name")
+    while IFS=$'\t' read -r root prefix; do
+      [ "$pass" = written ] || root=$(_plan_physical "$root")
+      case $candidate in
+        "$root"/*)
+          if [ "${#root}" -gt "$best_len" ]; then best_len=${#root}; best=${prefix:+$prefix/}${candidate#"$root"/}; fi ;;
+      esac
+    done < <(_plan_roots "$1")
+    if [ -n "$best" ]; then printf '%s\n' "$best"; return 0; fi
+  done
+  printf '%s\n' "$name"
+}
+
+execution_skill() { # execution_skill EXECUTION_LINE
+  if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$1"; then
+    printf 'executing-plans'
+  else
+    printf 'subagent-driven-development'
+  fi
+}
+
+complete=0 draft=0 adhoc=0 phase="" next_action=""
+case "${1:-}" in
+  --complete) complete=1; shift ;;
+  --draft)
+    draft=1; shift
+    { [ $# -eq 3 ] && [ "$2" = "--next" ] && [ -n "$3" ]; } || usage
+    next_action=$3
+    set -- "$1"
+    ;;
+  --adhoc)
+    adhoc=1; shift
+    { [ $# -eq 4 ] && [ "$1" = "--phase" ] && [ "$3" = "--next" ] && [ -n "$4" ]; } || usage
+    case $2 in design|build) phase=$2 ;; *) usage ;; esac
+    next_action=$4
+    ;;
+esac
+
+status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan="" escalated_at=""
+
+if [ "$adhoc" -eq 1 ]; then
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
+  primary=$(plan_primary_root "$root")
+  dir=$primary
+else
+  [ $# -eq 1 ] || usage
+  plan=$(plan_locate "$1")
+  [ -f "$plan" ] || fail 2 "no such file: $plan — run it from the repository root, or check the plan path"
+  repo_err=$(plan_require_same_project "$plan" 2>&1) || fail 2 "${repo_err#next-step: }"
+
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
+  primary=$(plan_primary_root "$root")
+  dir=$primary
+
+  forge_stores_init "$root"
+  rel=$(forge_name "$plan")
+  slug=$(basename "$plan" .md)
+fi
+
+forge_stores_init "$root"
+# Shown repository-relative while progress is local, as before; the mirror's
+# path otherwise, which no checkout-relative name can reach.
+if [ "$(forge_progress_store)" = darkmem ]; then latest_shown=$(forge_latest_file)
+else latest_shown="$(forge_dir_rel state "$primary")/handoff/latest.md"; fi
+
+if [ "$adhoc" -eq 1 ]; then
+  case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
+  status_line="Unplanned work: the notes in \`$latest_shown\` are the authority."
+  next_line=$next_action
+  launch_cmd=$(launch_for "$phase")
+  prompt="Continue the unplanned work recorded in \`$latest_shown\`: $next_action"
+  if [ "$root" != "$primary" ]; then
+    prompt="$prompt First enter the existing worktree \`$root\`."
+  fi
+elif [ "$draft" -eq 1 ]; then
+  case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
+  status_line="Design in progress: \`$rel\` is the authority."
+  next_line=$next_action
+  launch_cmd=$(launch_for design)
+  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$latest_shown\` first."
+else
+  tasks=$(plan_tasks "$plan")
+  [ -n "$tasks" ] || fail 3 "no tasks in ${plan} (no heading matching 'Task N')"
+  total=$(wc -l <<<"$tasks" | tr -d ' ')
+
+  execution=$(plan_header_line "$plan" Execution)
+  program=$(plan_header_line "$plan" Program)
+
+  # A Codex plan states its host in the header and its native pair on the
+  # Execution line; the flag is for the paths with no plan to read.
+  if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then host=codex; fi
+
+  launch_cmd=$(execution_launch "$execution")
+  skill=$(execution_skill "$execution")
+
+  ledger_file="$(forge_ledger_dir "$slug")/progress.md"
+  ledger_note="no ledger at \`$ledger_file\`"
+  ledger_text=""
+  done_tasks=""
+  blocked_tasks=""
+  has_ledger=0
+  if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
+    ledger_text=$(tr -d '\r' < "$ledger_file")
+    # The identity line may carry the path as given on the command line: relative
+    # to the checkout, absolute, or in Windows form. Compare resolved paths.
+    ledger_plan_path=$(ledger_plan "$ledger_file")
+    if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
+      ledger_plan_path=$(cygpath -m "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
+    fi
+    if [ -n "$ledger_plan_path" ] && [ "$(forge_name_key "$(forge_name "$ledger_plan_path")")" = "$(forge_name_key "$rel")" ]; then
+      has_ledger=1
+      ledger_note="ledger \`$ledger_file\`"
+      done_tasks=$(ledger_done "$ledger_file")
+      blocked_tasks=$(ledger_blocked "$ledger_file")
+      # A ledger outranks the Execution line on which mode the run is in: a
+      # switch is recorded there and the plan is never edited. The escalation
+      # holds until a later inline assignment shows the plan came back.
+      escalated_at=$(ledger_left_inline "$ledger_file")
+      # A last line that assigns a task to an agent or an executor means that
+      # run may still be going. The block is still printed, since it is the
+      # resume guide either way, but a handoff over a live run loses its result.
+      last_line=$(grep -v '^[[:space:]]*$' <<<"$ledger_text" | tail -n 1 || true)
+      if [[ $last_line =~ ^Task\ ([0-9]+):\ implementer\ ([^ ]+)\ \(assigned ]] \
+         && [ "${BASH_REMATCH[2]}" != inline ]; then
+        if [[ $last_line == *'thread pending)'* ]]; then
+          printf 'next-step: warning: Task %s is assigned with its thread pending: the executor wrapper has not reported. Wait for it or stop it and record a Ruling before handing off (dforge:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
+        else
+          printf 'next-step: warning: the ledger ends on an assigned line for Task %s. If the run it names is still going, wait for it or stop it and record a Ruling before handing off (dforge:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
+        fi
+      fi
+    else
+      ledger_note="the ledger at \`$ledger_file\` belongs to another plan and is ignored"
+    fi
+  fi
+
+  if [ "$complete" -eq 1 ]; then
+    spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$program")
+    k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
+    n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
+    next_title=$(sed -nE 's/.*( — | – | - | -- )next:[ \t]*(.*[^ \t])[ \t]*$/\2/p' <<<"$program")
+    launch=0
+
+    # An item register outranks the Program line. `next:` is copied from the
+    # program's decomposition when the plan is written, so a split decided in a
+    # child spec never reaches it, and `last` alone cannot end a programme.
+    reg_specs=()
+    plan_spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$(plan_header_line "$plan" Spec)")
+    [ -z "$plan_spec" ] || reg_specs+=("$plan_spec")
+    [ -z "$spec" ] || [ "$spec" = "$plan_spec" ] || reg_specs+=("$spec")
+    # On a roadmap project the current milestone's register (its epics) and
+    # the registers under its epics join them, so the next epic is computed
+    # from the roadmap rather than copied into a Program line.
+    roadmap=$(roadmap_file "$root")
+    current_ms=""
+    [ -z "$roadmap" ] || current_ms=$(roadmap_current "$roadmap")
+    open_rows="" reg_list=""
+    while IFS= read -r reg_file; do
+      [ -n "$reg_file" ] || continue
+      rows=$(register_open "$reg_file")
+      [ -n "$rows" ] || continue
+      # Several registers may cover one spec; every one that has open rows is
+      # named, so the count is never attributed to the wrong file.
+      reg_list="${reg_list:+$reg_list, }\`$(forge_name "$reg_file")\`"
+      open_rows="${open_rows}${rows}
+"
+    done < <(
+      { [ ${#reg_specs[@]} -eq 0 ] || register_for_spec "$root" "${reg_specs[@]}"
+        if [ -n "$current_ms" ]; then
+          roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | while IFS= read -r r; do forge_resolve "$r"; done
+        fi
+      } | awk '!seen[$0]++'
+    )
+    open_rows=$(grep . <<<"$open_rows" || true)
+
+    if [ -n "$open_rows" ]; then
+      open_n=$(grep -c . <<<"$open_rows")
+      row_list=$(awk -F'\t' '
+        NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $1, $2 }
+        END { if (NR > 3) printf " +%d more", NR - 3 }
+      ' <<<"$open_rows")
+      # The Assigned cell decides the route, not the row order. A row still on
+      # a finished plan is the finishing session's to resolve and must never
+      # route back to that plan; a verify row waits on a human check; a .md
+      # path absent here belongs to another repository. Among the rest the
+      # first row of the most concrete kind wins: a plan to execute, a spec to
+      # plan, a label to specify, then a ruling on unassigned rows.
+      stale="" waiting="" elsewhere="" best=9 target="" kind=""
+      while IFS=$'\037' read -r rid _ rassigned _ rstate _; do
+        a=${rassigned#\`}
+        a=${a%\`}
+        if [ "$rstate" = verify ]; then
+          waiting="${waiting:+$waiting, }#$rid"; continue
+        elif [ -z "$a" ] || [ "$a" = "-" ]; then
+          r=4 k=rule
+        elif [ "$(forge_name_key "$(plan_name "$root" "$a")")" = "$(forge_name_key "$rel")" ] || plan_finished "$root" "$a"; then
+          stale="${stale:+$stale, }#$rid"; continue
+        elif [ -f "$(forge_resolve "$a")" ]; then
+          if [ -n "$(plan_tasks "$(forge_resolve "$a")")" ] || [ -n "$(plan_lettered "$(forge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
+        elif [[ $a == *.md ]]; then
+          elsewhere="${elsewhere:+$elsewhere, }#$rid"; continue
+        else
+          r=3 k=label
+        fi
+        if [ "$r" -lt "$best" ]; then best=$r target=$a kind=$k; fi
+      done < <(tr '\t' '\037' <<<"$open_rows")
+
+      stale_note=""
+      [ -z "$stale" ] || stale_note="Still assigned to a finished plan: $stale — resolve or reassign them with \`scripts/register set\`."
+      launch_cmd=$(launch_for design)
+      case $kind in
+        plan)
+          target_exec=$(plan_header_line "$(forge_resolve "$target")" Execution)
+          if [ -n "$(plan_ledger "$(forge_resolve "$target")")" ]; then
+            action="Resume \`$target\` with dforge:resume-execution."
+          else
+            action="Continue \`$target\` with dforge:$(execution_skill "$target_exec")."
+          fi
+          launch_cmd=$(execution_launch "$target_exec") launch_plan=$target
+          ;;
+        spec)  action="\`$target\`: write its plan with dforge:writing-plans." ;;
+        label) action="\`$target\`: write its spec in a fresh session." ;;
+        rule)  action="Rule on the open rows with dforge:brainstorming." ;;
+        *)
+          action=""
+          [ -z "$waiting" ] || action="Awaiting your check (verify): $waiting."
+          [ -z "$elsewhere" ] || action="${action:+$action }Assigned outside this repository: $elsewhere."
+          ;;
+      esac
+      status_line="Plan \`$rel\` is complete."
+      next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
+      if [ -n "$kind" ]; then
+        prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
+        launch=1
+      fi
+    elif [ -n "$roadmap" ]; then
+      # The roadmap outranks the Program line. Nothing is open in the current
+      # milestone, so it is ready for its audit; closing it is the only way on.
+      status_line="Plan \`$rel\` is complete."
+      if [ -n "$current_ms" ]; then
+        ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
+        next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dforge:closing-a-milestone."
+        launch_cmd=$(launch_for design)
+        prompt="Close milestone $ms_id ($ms_name) of \`$(forge_name "$(forge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone."
+        launch=1
+      else
+        next_line="Nothing — every milestone in \`$(forge_name "$(forge_docs_root)")/roadmap.md\` is closed."
+      fi
+    elif [ -z "$program" ]; then
+      status_line="Plan \`$rel\` is complete."
+      next_line="Nothing — the plan records no follow-on work."
+    elif grep -qE '( — | – | - | -- )last[ \t]*$' <<<"$program" || { [ -n "$k" ] && [ "$k" -ge "$n" ]; }; then
+      status_line="Plan \`$rel\` is complete${k:+; sub-project $k of $n is done}."
+      next_line="Nothing — every sub-project of \`$spec\` is done."
+    elif [ -n "$next_title" ] && [ -n "$k" ]; then
+      k1=$((k + 1))
+      status_line="Plan \`$rel\` is complete; sub-project $k of $n is done."
+      next_line="Sub-project $k1 ($next_title): write its spec in a fresh session."
+      launch_cmd=$(launch_for design)
+      prompt="Start sub-project $k1 ($next_title) of the program in \`$spec\`: use dforge:brainstorming to write its spec."
+      launch=1
+    else
+      status_line="Plan \`$rel\` is complete."
+      next_line="Read \`$spec\` for the sub-project after ${k:-this one} — the plan's Program line names no next step."
+    fi
+  else
+    first_open="" open_title="" done_count=0
+    while IFS=$'\t' read -r num title; do
+      if grep -qx "$num" <<<"$done_tasks"; then
+        done_count=$((done_count + 1))
+      elif [ -z "$first_open" ]; then
+        first_open=$num open_title=$title
+      fi
+    done <<<"$tasks"
+
+    blocked_num=$(head -n 1 <<<"$blocked_tasks")
+    if [ -n "$blocked_num" ]; then
+      # BLOCKED is terminal: the next session must not be told to start the
+      # task. The line's last dash-separated field names what a human must
+      # decide (`BLOCKED — <who> — <decision>`).
+      blocked_why=$(grep -E "^Task ${blocked_num}: BLOCKED" <<<"$ledger_text" | tail -n 1 \
+        | awk -F' (—|-) ' '{ sub(/[ \t]+$/, "", $NF); print $NF }')
+      status_line="Plan \`$rel\`: $done_count of $total tasks complete; Task $blocked_num is BLOCKED ($ledger_note)."
+      next_line="Your human partner decides: ${blocked_why:-see the BLOCKED line in the ledger}. Record the ruling in the ledger, then run next-step again."
+      launch=0
+    elif [ -z "$first_open" ]; then
+      if [ "$has_ledger" -eq 1 ] && grep -q '^Final review: clean' <<<"$ledger_text"; then
+        status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
+        next_line="Run dforge:finishing-a-development-branch."
+      else
+        status_line="Plan \`$rel\`: all $total tasks complete."
+        next_line="Run the final whole-branch review, then dforge:finishing-a-development-branch."
+      fi
+    elif [ "$done_count" -eq 0 ]; then
+      status_line="Plan \`$rel\`: 0 of $total tasks complete ($ledger_note)."
+      next_line="Start at Task $first_open ($open_title)."
+    else
+      status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
+      next_line="Resume at Task $first_open ($open_title)."
+    fi
+
+    if [ -n "$escalated_at" ] && [ "$launch" -eq 1 ]; then
+      launch_cmd=$(launch_for build)
+      next_line="$next_line This plan escalated to subagent mode at Task $escalated_at."
+    fi
+
+    # With a ledger there is state to verify before continuing, which is
+    # resume-execution's job; without one the plan simply starts.
+    if [ "$launch" -eq 0 ]; then
+      prompt=""
+    elif [ "$has_ledger" -eq 1 ]; then
+      prompt="Resume \`$rel\` with dforge:resume-execution. $next_line"
+    else
+      prompt="Continue \`$rel\` with dforge:$skill. $next_line"
+    fi
+    if [ "$root" != "$primary" ]; then
+      prompt="$prompt First enter the existing worktree \`$root\`."
+    fi
+    if [ "$has_ledger" -eq 1 ]; then
+      prompt="$prompt Progress ledger: \`$ledger_file\` — trust its \`Task N: complete\` lines."
+    fi
+  fi
+fi
+
+# A block printed over running work invites ending the session it would die
+# with, so nothing is printed while this session still has background work
+# listed. Without a transcript (Codex, tests) there is nothing to check.
+if running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then :; else
+  if [ $? -eq 1 ]; then
+    printf '%s\n' "$running"
+    fail 5 "not printing the next-step block while background work runs; resolve the list above, then run next-step again"
+  fi
+fi
+
+block=$(
+  printf '## Next session\n\n**Status:** %s\n**Next:** %s\n' "$status_line" "$next_line"
+  if [ "$launch" -eq 1 ]; then
+    if [ -n "$launch_cmd" ]; then
+      printf '\nLaunch in `%s`:\n\n```\n%s\n```\n' "$dir" "$launch_cmd"
+    else
+      printf '\nLaunch: see the **Execution:** line in `%s`.\n' "${launch_plan:-$rel}"
+    fi
+    printf '\nPaste as the first prompt:\n\n```\n%s\n```\n' "$prompt"
+  fi
+)
+printf '%s\n' "$block"
+
+handoff=$(forge_latest_file)
+today=$(date -u +%Y-%m-%d)
+write_handoff() {
+  mkdir -p "$(dirname "$handoff")" || return 1
+  case $handoff in */.forge/handoff/latest.md) forge_state_ignore "${handoff%/.forge/handoff/latest.md}" ;; esac
+  if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
+    printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$handoff.tmp" || return 1
+  else
+    # Replace only the Next session section; the rest is the session's own notes.
+    BLOCK="$block" awk '
+      /^## Next session[ \t\r]*$/ { print ENVIRON["BLOCK"]; skip = 1; found = 1; next }
+      skip && /^## / { skip = 0; print "" }
+      !skip { print }
+      END { if (!found) { print ""; print ENVIRON["BLOCK"] } }
+    ' "$handoff" > "$handoff.tmp" || return 1
+  fi
+  mv "$handoff.tmp" "$handoff"
+}
+if ! write_handoff 2>/dev/null; then
+  rm -f "$handoff.tmp" 2>/dev/null || true
+  fail 4 "could not write $handoff — copy the block above into it by hand"
+fi

@@ -9,11 +9,11 @@
         "installation": "AVAILABLE",
         "authentication": "ON_USE"
       },
-      "name": "dr-forge",
+      "name": "dforge",
       "category": "Development",
       "source": {
         "source": "local",
-        "path": "./plugins/dr-forge"
+        "path": "./plugins/dforge"
       }
     },
     {

@@ -47,8 +47,8 @@ const jobs = [
   // tests run on POSIX only.
   ...(process.platform === 'win32' ? [] : [[process.execPath, ['--test', ...readdirSync(resolve(root, 'evals/tiers/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `evals/tiers/tests/${name}`)], 300]]),
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
-  ...readdirSync(resolve(root, 'plugins/dr-forge/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dr-forge/tests/${name}`], 600]),
-  ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dr-forge'], 300]] : []),
+  ...readdirSync(resolve(root, 'plugins/dforge/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dforge/tests/${name}`], 600]),
+  ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300]] : []),
 ];
 let success = true;
 for (const [executable, args, seconds] of selectShard(jobs, options.shard)) {

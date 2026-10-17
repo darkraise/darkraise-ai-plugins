@@ -11,7 +11,7 @@ const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 export const ROOT = process.env.TIER_EVAL_ROOT ?? REPO;
 export const DATA = process.env.TIER_EVAL_DATA ?? resolve(REPO, 'evals/tiers');
 export const WORK = process.env.TIER_EVAL_WORK ?? resolve(homedir(), '.cache/dr-tier-eval');
-export const PLUGIN = resolve(REPO, 'plugins/dr-forge');
+export const PLUGIN = resolve(REPO, 'plugins/dforge');
 
 export function sh(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...opts });

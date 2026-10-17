@@ -1,0 +1,489 @@
+# Measure the running Claude session's context against the handoff budget.
+# Sourced by scripts/context-size; defines functions only.
+#
+# The transcript schema is observed, not documented: main-chain entries carry
+# isSidechain false, assistant entries carry message.usage, and compaction
+# writes a system entry with subtype compact_boundary. A schema change must
+# degrade the verdict to unknown, never produce a wrong number.
+
+. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
+
+# Auto-compaction fires at about 93% of the effective window; the budget sits
+# one worst-case task's growth below that, so a task in flight always lands.
+# The final phase (final review, its one fix wave, finishing) grows far less
+# than a task's fix loop, so it gets its own, higher limit.
+CTX_COMPACT_PCT=93
+CTX_TASK_MARGIN=140000
+CTX_FINAL_PCT=85
+# A plan's last tasks join the final phase: once this many or fewer remain, the
+# brief measures them against the final-phase limit. Finishing them here costs
+# less than a fresh session's baseline plus its reload.
+CTX_TAIL_TASKS=2
+# After a committed spec, the plan is written in the same session while the
+# context is under 150% of the task budget, capped at the final-phase limit so
+# plan writing never starts at the compaction point.
+CTX_PLAN_PCT=150
+
+. "$(dirname "${BASH_SOURCE[0]}")/forge-env.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/auto-run.sh"
+
+ctx_jq() { "${DR_FORGE_JQ:-jq}" "$@"; }
+ctx_have_jq() { command -v "${DR_FORGE_JQ:-jq}" >/dev/null 2>&1; }
+
+# Keys are built from the native path so they match what the hook received from
+# Claude Code (a Windows path under Git Bash).
+ctx_native() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+ctx_posix() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
+}
+ctx_key() { printf '%s' "$(ctx_native "$1")" | tr -c 'A-Za-z0-9' '-'; }
+
+ctx_candidates() {
+  printf '%s\n' "$PWD"
+  local root common
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  printf '%s\n' "$root"
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || true
+}
+
+# Sets CTX_TRANSCRIPT and CTX_SOURCE (record | record? | guessed); returns 1
+# when no transcript is found. The running session's own record, keyed by
+# CLAUDE_CODE_SESSION_ID, goes first: two sessions in one checkout share the cwd
+# record, and the last one started would otherwise measure for both. Then the
+# cwd records go first across every candidate, so a worktree's own old
+# transcript never outranks the running session's record.
+ctx_find_transcript() {
+  CTX_TRANSCRIPT="" CTX_SOURCE=""
+  local cands c key rec tp sid newest own="${CLAUDE_CODE_SESSION_ID:-}"
+  if [ -n "$own" ]; then
+    rec="$HOME/.claude/dforge/sessions/by-id/$(printf '%s' "$own" | tr -c 'A-Za-z0-9' '-').json"
+    if [ -f "$rec" ]; then
+      tp=$(ctx_jq -r '.transcript_path // empty' <"$rec" 2>/dev/null | tr -d '\r')
+      [ -z "$tp" ] || tp=$(ctx_posix "$tp")
+      if [ -n "$tp" ] && [ -f "$tp" ]; then
+        CTX_TRANSCRIPT=$tp CTX_SOURCE=record
+        return 0
+      fi
+    fi
+  fi
+  cands=$(ctx_candidates)
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    key=$(ctx_key "$c")
+    rec="$HOME/.claude/dforge/sessions/$key.json"
+    [ -f "$rec" ] || continue
+    # Read the record on stdin: a native jq cannot open a POSIX path when MSYS
+    # path conversion is off.
+    tp=$(ctx_jq -r '.transcript_path // empty' <"$rec" 2>/dev/null | tr -d '\r')
+    [ -n "$tp" ] || continue
+    tp=$(ctx_posix "$tp")
+    [ -f "$tp" ] || continue
+    CTX_TRANSCRIPT=$tp CTX_SOURCE=record
+    sid=$(ctx_jq -r '.session_id // empty' <"$rec" 2>/dev/null | tr -d '\r')
+    newest=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$key"/*.jsonl 2>/dev/null | head -n 1)
+    if [ -n "$newest" ] && [ -n "$sid" ] && [ "$(basename "$newest" .jsonl)" != "$sid" ]; then
+      CTX_SOURCE='record?'
+    fi
+    # The cwd record belongs to another session in this checkout.
+    if [ -n "$own" ] && [ -n "$sid" ] && [ "$sid" != "$own" ]; then
+      CTX_SOURCE='record?'
+    fi
+    return 0
+  done <<<"$cands"
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    newest=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(ctx_key "$c")"/*.jsonl 2>/dev/null | head -n 1)
+    if [ -n "$newest" ]; then CTX_TRANSCRIPT=$newest CTX_SOURCE=guessed; return 0; fi
+  done <<<"$cands"
+  return 1
+}
+
+# stdin: transcript lines. stdout: token count, or nothing.
+ctx_reduce() {
+  tr -d '\r' | ctx_jq -R -r -n '
+    [inputs | select(length > 0) | (try fromjson catch null) | objects
+     | select((.isSidechain // false) == false)
+     | if .type == "system" and .subtype == "compact_boundary" then {b: .compactMetadata.postTokens}
+       elif .type == "assistant" and (.message.model // "") != "<synthetic>"
+            and ((.message.usage | type) == "object") then
+         ((.message.usage.input_tokens // 0) + (.message.usage.cache_creation_input_tokens // 0)
+          + (.message.usage.cache_read_input_tokens // 0)) as $t
+         | if $t > 0 then {a: $t} else empty end
+       else empty end]
+    | reduce .[] as $e ({}; if ($e | has("b")) then {b: $e.b} else . + {a: $e.a} end)
+    | (.a // .b) // empty' 2>/dev/null
+}
+
+# ctx_measure FILE — the last main-chain assistant usage after the last
+# compaction boundary, else that boundary's postTokens. Reads the tail first:
+# transcripts reach tens of megabytes.
+ctx_measure() {
+  local out
+  out=$(tail -n 400 "$1" | ctx_reduce)
+  [ -n "$out" ] || out=$(ctx_reduce < "$1")
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+
+# ctx_model FILE — the model of the last main-chain assistant entry, or nothing.
+ctx_model_reduce() {
+  tr -d '\r' | ctx_jq -R -r -n '
+    [inputs | select(length > 0) | (try fromjson catch null) | objects
+     | select((.isSidechain // false) == false and .type == "assistant")
+     | .message.model // empty | select(. != "<synthetic>")] | last // empty' 2>/dev/null
+}
+ctx_model() {
+  local out
+  out=$(tail -n 400 "$1" | ctx_model_reduce)
+  [ -n "$out" ] || out=$(ctx_model_reduce < "$1")
+  printf '%s' "$out"
+}
+
+ctx_model_window() {
+  case $1 in
+    *haiku*) echo 200000 ;;
+    *) echo 1000000 ;;
+  esac
+}
+
+# Codex rollout entries are one JSON object per line. The context size is the
+# last token_count event's last_token_usage.input_tokens: it already reflects a
+# compaction, so nothing here reads the compacted record, and total_token_usage
+# is a cumulative counter (28 million in one observed session) that would read
+# as a context size if taken by mistake. An entry whose info is null carries no
+# usage and is skipped.
+ctx_rollout_reduce() {
+  tr -d '\r' | ctx_jq -R -r -n '
+    [inputs | select(length > 0) | (try fromjson catch null) | objects
+     | select(.type == "event_msg")
+     | .payload | objects | select(.type == "token_count")
+     | .info | objects
+     | .last_token_usage | objects
+     | .input_tokens | numbers]
+    | last // empty' 2>/dev/null
+}
+
+# ctx_measure_rollout FILE — the context size, or nothing. Reads the tail first:
+# rollouts reach tens of megabytes and one compacted entry embeds a whole
+# replacement_history.
+ctx_measure_rollout() {
+  local out
+  out=$(tail -n 400 "$1" | ctx_rollout_reduce)
+  [ -n "$out" ] || out=$(ctx_rollout_reduce < "$1")
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+
+# A session being written to is among the very newest files, and the sessions
+# tree holds years of history: an unbounded walk did not finish in 120 seconds
+# on the machine this was measured on.
+CTX_ROLLOUT_SCAN=40
+
+# ctx_rollout_files DIR — rollout paths newest-first. Day directories are
+# walked newest-first, then files by modification time inside each, so the
+# <YYYY>/<MM>/<DD> layout does the coarse ordering without stat-ing the tree.
+ctx_rollout_files() {
+  local day
+  find "$1" -mindepth 3 -maxdepth 3 -type d 2>/dev/null | sort -r | while IFS= read -r day; do
+    ls -t "$day"/rollout-*.jsonl 2>/dev/null
+  done
+}
+
+# Sets CTX_ROLLOUT to this session's rollout; returns 1 when none matches.
+# Only interactive rollouts count. This plugin makes a Claude controller run
+# Codex tasks in its own worktree through run-codex-task.sh, and those runs
+# write rollouts carrying the controller's cwd; selecting one would replace a
+# live Claude session's verdict with an unknown.
+ctx_find_rollout() {
+  CTX_ROLLOUT=""
+  local sessions cands f cwd n=0
+  ctx_have_jq || return 1
+  sessions="${CODEX_HOME:-$HOME/.codex}/sessions"
+  [ -d "$sessions" ] || return 1
+  # ctx_native emits its own newline under Git Bash and none without cygpath,
+  # so the printf keeps one candidate per line on both. A blank line never
+  # matches a non-empty cwd under grep -qxF.
+  cands=$(ctx_candidates | while IFS= read -r c; do
+    [ -n "$c" ] && ctx_native "$c" && printf '\n'
+  done)
+  # One jq per file, with the origin filter inside it: task-brief prints the
+  # budget line before every task, so this walk is on the hot path and a
+  # process spawn per field would be three times the cost on Windows.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    n=$((n + 1))
+    [ "$n" -le "$CTX_ROLLOUT_SCAN" ] || return 1
+    cwd=$(head -n 1 "$f" 2>/dev/null | tr -d '\r' | ctx_jq -r '
+      .payload
+      | select((.originator // "") != "codex_exec" and (.source // "") != "exec")
+      | .cwd // empty' 2>/dev/null)
+    [ -n "$cwd" ] || continue
+    if grep -qxF -- "$cwd" <<<"$cands"; then CTX_ROLLOUT=$f; return 0; fi
+  done < <(ctx_rollout_files "$sessions")
+  return 1
+}
+
+# autoCompactWindow from the user, then project, then local settings, the last
+# file that sets it winning as in Claude Code's own merge; or nothing. Project
+# settings are read only when Claude Code names the project directory. Read
+# without jq so the budget stays printable when jq is missing.
+ctx_auto_compact_window() {
+  local f v acw=""
+  for f in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" \
+           ${CLAUDE_PROJECT_DIR:+"$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json"}; do
+    [ -f "$f" ] || continue
+    v=$(tr -d '\r' <"$f" | grep -oE '"autoCompactWindow"[[:space:]]*:[[:space:]]*[0-9]+' \
+      | head -n 1 | grep -oE '[0-9]+$' || true)
+    [ -z "$v" ] || acw=$v
+  done
+  printf '%s' "$acw"
+}
+
+# ctx_window MODEL — the window compaction is measured against: the model's
+# window, or autoCompactWindow when that is smaller.
+ctx_window() {
+  local window acw
+  window=$(ctx_model_window "$1")
+  acw=$(ctx_auto_compact_window)
+  if [ -n "$acw" ] && [ "$acw" -gt 0 ] && [ "$acw" -lt "$window" ]; then window=$acw; fi
+  echo "$window"
+}
+
+# ctx_budget MODEL — the handoff budget for a session on MODEL (may be empty).
+# A window small enough to put the rule near or below zero holds a fifth of it.
+ctx_budget() {
+  local window budget
+  window=$(ctx_window "$1")
+  budget=$(( window * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
+  [ "$budget" -ge $(( window / 5 )) ] || budget=$(( window / 5 ))
+  echo "$budget"
+}
+
+# ctx_final_budget MODEL — the final phase's limit. DR_FORGE_BUDGET pins
+# the task budget only, so it never moves this one.
+ctx_final_budget() {
+  echo $(( $(ctx_window "$1") * CTX_FINAL_PCT / 100 ))
+}
+
+# ctx_pinned_budget — the task budget someone pinned: DR_FORGE_BUDGET, else the
+# handoffTokens setting; empty when neither names a positive number. The
+# environment is read here, not through the setting, so a machine without Node
+# keeps its override.
+ctx_pinned_budget() {
+  local pinned
+  case ${DR_FORGE_BUDGET:-} in
+    ''|*[!0-9]*) pinned="" ;;
+    *) pinned=$DR_FORGE_BUDGET; [ "$pinned" -gt 0 ] || pinned="" ;;
+  esac
+  if [ -z "$pinned" ]; then
+    pinned=$(forge_setting handoffTokens 0)
+    case $pinned in ''|*[!0-9]*|0) pinned="" ;; esac
+  fi
+  printf '%s' "$pinned"
+}
+
+# ctx_plan_budget MODEL — the limit for writing the plan after the spec:
+# CTX_PLAN_PCT of the task budget (DR_FORGE_BUDGET included), never above
+# the final-phase limit.
+ctx_plan_budget() {
+  local task final plan
+  task=$(ctx_pinned_budget)
+  [ -n "$task" ] || task=$(ctx_budget "$1")
+  final=$(ctx_final_budget "$1")
+  plan=$(( task * CTX_PLAN_PCT / 100 ))
+  [ "$plan" -le "$final" ] || plan=$final
+  echo "$plan"
+}
+
+# The primary checkout's root: a worktree's .forge/ lives with the checkout
+# that owns the repository, so every session logs to one file.
+ctx_primary_root() {
+  local common
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || return 1
+}
+
+# ctx_log_observation TOKENS — append one row, and never fail the caller: the
+# budget line is printed whether or not the observation is recorded.
+#
+# The log lives inside .forge/sdd/ because that directory self-ignores
+# (scripts/sdd-workspace writes * into its .gitignore). Only this repository's
+# root .gitignore lists the state
+# directory, and an untracked-but-not-ignored file
+# would enter scripts/lib/task-state.sh's review snapshot, invalidating a Codex
+# review, and would block initial execution's clean-worktree check.
+ctx_log_observation() {
+  local primary base sid
+  primary=$(ctx_primary_root) || return 0
+  base="$(forge_dir state "$primary")/sdd"
+  mkdir -p "$base" 2>/dev/null || return 0
+  forge_self_ignore "$base"
+  sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
+    | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
+  printf '%s\t%s\t%s\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DR_FORGE_BUDGET_CALLER:-direct}" "$sid" \
+    >> "$base/budget-log.tsv" 2>/dev/null || return 0
+}
+
+ctx_auto_label() { # ctx_auto_label REGIME WIDTH
+  local label="budget (auto"
+  [ "$1" = high ] && label="$label, high"
+  [ "$2" -gt 1 ] && label="$label, wave of $2"
+  printf '%s)' "$label"
+}
+
+# ctx_auto_line TOKENS MODEL WIDTH — the budget line while an auto run is bound
+# to this session (reference/auto-run.md): the run's rule replaces the task
+# budget, the tail, the final-phase limit and relaxed mode. Returns 0 ok,
+# 6 compact, 5 handoff, 3 when the run cannot be read.
+ctx_auto_line() {
+  local tokens=$1 task window out verdict limit regime label
+  task=$(ctx_pinned_budget)
+  [ -n "$task" ] || task=$(ctx_budget "$2")
+  window=$(ctx_window "$2")
+  if ! out=$(ar_verdict "$tokens" "$task" "$window" "$3"); then
+    echo "budget (auto): unknown — unknown — the run's state could not be updated"
+    return 3
+  fi
+  read -r verdict limit regime <<<"$out"
+  label=$(ctx_auto_label "$regime" "$3")
+  echo "$label: $(( (tokens + 500) / 1000 ))k of $(( (limit + 500) / 1000 ))k ($(( tokens * 100 / limit ))%) — $verdict — source: $CTX_SOURCE"
+  case $verdict in
+    compact) return 6 ;;
+    handoff) return 5 ;;
+  esac
+  return 0
+}
+
+# ctx_line [final | tail R | plan | wave W] — print the budget line; return 0 ok, 5
+# handoff, 3 unknown. With final, measure against the final-phase limit instead
+# of the task budget; tail R does the same before one of a plan's last R tasks
+# (CTX_TAIL_TASKS), so the tail of a plan and its final phase share one limit.
+# With wave W, reserve one task's worst growth for each of the W - 1
+# tasks that run beside the first, so a parallel wave that starts under its
+# budget lands before compaction just as one task does
+# (reference/parallel-waves.md). With the handoffMode setting at relaxed, a
+# plain task and a wave measure against the final-phase limit too, and the
+# label says so.
+ctx_line() {
+  local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
+  local label=budget extra=0
+  local limit=task auto=0 width=1 regime
+  [ "${1:-}" = final ] && label="budget (final)" limit=final
+  if [ "${1:-}" = tail ]; then
+    limit=final
+    if [ "${2:-1}" = 1 ]; then label="budget (last task)"; else label="budget (last ${2} tasks)"; fi
+  fi
+  [ "${1:-}" = plan ] && label="budget (plan)" limit=plan
+  if [ "${1:-}" = wave ]; then
+    label="budget (wave of ${2:-1})"
+    extra=$(( (${2:-1} - 1) * CTX_TASK_MARGIN ))
+  fi
+  [ "${1:-}" = wave ] && width=${2:-1}
+  # An auto run bound to this session replaces every limit but the plan's.
+  if [ "${1:-}" != plan ]; then
+    AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
+    if ar_bound; then
+      auto=1
+      label=$(ctx_auto_label normal "$width")
+    fi
+  fi
+  if [ "$limit" = task ] && [ "$(forge_setting handoffMode strict)" = relaxed ]; then
+    limit=relaxed
+    if [ "${1:-}" = wave ]; then label="budget (relaxed, wave of ${2:-1})"; else label="budget (relaxed)"; fi
+  fi
+  if ctx_have_jq; then
+    if ctx_find_transcript; then claude=$CTX_TRANSCRIPT; fi
+    if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
+  fi
+  # The live session is the one still being appended to. Session records are
+  # never deleted, so a record source does not by itself prove a live Claude
+  # session and modification time is the right tiebreak.
+  if [ -n "$rollout" ] && { [ -z "$claude" ] || [ "$rollout" -nt "$claude" ]; }; then
+    CTX_TRANSCRIPT=$rollout CTX_SOURCE=rollout
+    if ! tokens=$(ctx_measure_rollout "$rollout"); then
+      echo "$label: unknown — unknown — no usage entry in $rollout"
+      return 3
+    fi
+    ctx_log_observation "$tokens"
+    tk=$(( (tokens + 500) / 1000 ))
+    # No denominator: no Codex budget has been set yet, and the verdict stays
+    # unknown so reference/session-budget.md's count rule keeps the session.
+    # DR_FORGE_BUDGET stays a Claude override for the same reason.
+    echo "$label: ${tk}k measured — unknown — source: rollout"
+    return 3
+  fi
+  if [ -n "$claude" ]; then
+    found=1
+    CTX_TRANSCRIPT=$claude
+    model=$(ctx_model "$CTX_TRANSCRIPT")
+  fi
+  if [ "$limit" = final ]; then
+    budget=$(ctx_final_budget "$model")
+  elif [ "$limit" = plan ]; then
+    budget=$(ctx_plan_budget "$model")
+  elif [ "$limit" = relaxed ]; then
+    budget=$(( $(ctx_final_budget "$model") - extra ))
+    [ "$budget" -gt 0 ] || budget=1
+  else
+    budget=$(ctx_pinned_budget)
+    [ -n "$budget" ] || budget=$(ctx_budget "$model")
+    budget=$(( budget - extra ))
+    [ "$budget" -gt 0 ] || budget=1
+  fi
+  # A size that cannot be read still names the run's own limit.
+  if [ "$auto" = 1 ]; then
+    regime=$(ar_get regime)
+    regime=${regime:-normal}
+    budget=$(ctx_pinned_budget)
+    [ -n "$budget" ] || budget=$(ctx_budget "$model")
+    budget=$(ar_limit "$budget" "$(ctx_window "$model")" "$width" "$regime")
+    label=$(ctx_auto_label "$regime" "$width")
+  fi
+  bk=$(( (budget + 500) / 1000 ))
+  if ! ctx_have_jq; then echo "$label: unknown of ${bk}k — unknown — no jq"; return 3; fi
+  if [ "$found" -eq 0 ]; then echo "$label: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
+  if ! tokens=$(ctx_measure "$CTX_TRANSCRIPT"); then
+    echo "$label: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
+  fi
+  if [ "$auto" = 1 ]; then
+    ctx_auto_line "$tokens" "$model" "$width"
+    return
+  fi
+  tk=$(( (tokens + 500) / 1000 ))
+  pct=$(( tokens * 100 / budget ))
+  if [ "$tokens" -ge "$budget" ]; then
+    echo "$label: ${tk}k of ${bk}k (${pct}%) — handoff — source: $CTX_SOURCE"
+    return 5
+  fi
+  echo "$label: ${tk}k of ${bk}k (${pct}%) — ok — source: $CTX_SOURCE"
+}
+
+# Pair consecutive task-brief rows within one session: task-brief runs once per
+# task, so the growth between two briefs is one task's cost. A negative delta
+# means a compaction fell between them; it is reported, never averaged into the
+# data, because compaction is what the budget will be calibrated against.
+ctx_observations() {
+  local primary log
+  primary=$(ctx_primary_root) || return 0
+  log="$(forge_dir state "$primary")/sdd/budget-log.tsv"
+  [ -f "$log" ] || return 0
+  tr -d '\r' < "$log" | sort -s -t $'\t' -k4,4 -k1,1 | awk -F'\t' '
+    $3 ~ /^task-brief:[0-9]+$/ && $4 != "" {
+      n = substr($3, 12)
+      if ($4 == sid) {
+        d = $2 - prev
+        if (d < 0) printf "%s  Task %s -> Task %s  compacted\n", $4, pn, n
+        else printf "%s  Task %s -> Task %s  +%dk\n", $4, pn, n, int((d + 500) / 1000)
+      } else {
+        if (sid != "") printf "%s  span  %dk -> %dk\n", sid, int((first + 500) / 1000), int((prev + 500) / 1000)
+        sid = $4; first = $2
+      }
+      prev = $2; pn = n
+    }
+    END { if (sid != "") printf "%s  span  %dk -> %dk\n", sid, int((first + 500) / 1000), int((prev + 500) / 1000) }
+  '
+}

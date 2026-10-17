@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "dforge",
+  "description": "Brainstorm, plan and execute with scored tasks, tiered implementers, criteria-based review and an external Codex executor; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
+  "version": "3.1.0",
+  "author": {
+    "name": "Darkraise"
+  },
+  "homepage": "https://github.com/darkraise/darkraise-ai-plugins/tree/main/plugins/dforge",
+  "repository": "https://github.com/darkraise/darkraise-ai-plugins",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "workflow",
+    "tdd",
+    "debugging",
+    "planning",
+    "subagents",
+    "effort",
+    "model-selection",
+    "verification",
+    "code-review",
+    "codex",
+    "external-executors",
+    "mod",
+    "context-window",
+    "handoff",
+    "rate-limits",
+    "discord"
+  ],
+  "types": "./types/index.d.ts"
+}

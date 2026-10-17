@@ -30,8 +30,8 @@ const deadline = values.minutes === undefined ? Infinity : Date.now() + Number(v
 const pass = Number(values.pass);
 if (!STAGES.includes(stage) || Number.isNaN(deadline) || !Number.isInteger(pass) || pass < 1) { console.error(`usage: run-grid.mjs --stage ${STAGES.join('|')} [--rep N] [--minutes M] [--pass P]`); process.exit(2); }
 const { start, cases } = readManifest();
-if (sh('git', ['diff', '--quiet', start, '--', 'plugins/dr-forge']).code !== 0) {
-  console.error(`run-grid: plugins/dr-forge differs from the manifest's start commit ${start}`);
+if (sh('git', ['diff', '--quiet', start, '--', 'plugins/dforge']).code !== 0) {
+  console.error(`run-grid: plugins/dforge differs from the manifest's start commit ${start}`);
   process.exit(2);
 }
 const arms = JSON.parse(readFileSync(resolve(DATA, 'arms.json'), 'utf8'));

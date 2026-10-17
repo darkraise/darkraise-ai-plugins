@@ -9,15 +9,15 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const json = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
 test('Claude offers four maintained plugins', () => {
   assert.deepEqual(json('.claude-plugin/marketplace.json').plugins.map(p => p.name).sort(),
-    ['darkraise-ui', 'darkraise-win32ui', 'dr-forge', 'dr-status']);
+    ['darkraise-ui', 'darkraise-win32ui', 'dforge', 'dr-status']);
 });
 test('Codex root discovery offers only supported plugins', () => {
   assert.ok(existsSync(resolve(root, '.agents/plugins/marketplace.json')), 'dedicated Codex catalog is required');
   assert.deepEqual(json('.agents/plugins/marketplace.json').plugins.map(p => p.name).sort(),
-    ['darkraise-ui', 'darkraise-win32ui', 'dr-forge']);
+    ['darkraise-ui', 'darkraise-win32ui', 'dforge']);
 });
 test('Codex explicitly suppresses inherited Claude hooks', () => {
-  const path = 'plugins/dr-forge/.codex-plugin/plugin.json';
+  const path = 'plugins/dforge/.codex-plugin/plugin.json';
   assert.ok(existsSync(resolve(root, path)), 'native manifest is required');
   assert.deepEqual(json(path).hooks, {});
 });
@@ -30,18 +30,18 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['missing source', c => { c.plugins[0].source = './plugins/missing'; }, /source/],
     ['duplicate name', c => { c.plugins.push(c.plugins[0]); }, /duplicate/],
     ['name mismatch', c => { c.plugins[0].name = 'wrong'; }, /name|membership/],
-    ['client version mismatch', c => { c.version = '0.9.0'; }, /version mismatch/, 'plugins/dr-forge/.codex-plugin/plugin.json'],
-    ['implicit Claude hooks', c => { delete c.hooks; }, /empty Codex hooks/, 'plugins/dr-forge/.codex-plugin/plugin.json'],
-    ['missing bundled reference', (c, dir) => { rmSync(resolve(dir, 'plugins/dr-forge/reference/native-codex.md')); }, /missing bundled reference/],
-    ['reintroduced dependency', c => { c.dependencies = [{ name: 'superpowers', marketplace: 'claude-plugins-official' }]; }, /must not declare dependencies/, 'plugins/dr-forge/.claude-plugin/plugin.json'],
+    ['client version mismatch', c => { c.version = '0.9.0'; }, /version mismatch/, 'plugins/dforge/.codex-plugin/plugin.json'],
+    ['implicit Claude hooks', c => { delete c.hooks; }, /empty Codex hooks/, 'plugins/dforge/.codex-plugin/plugin.json'],
+    ['missing bundled reference', (c, dir) => { rmSync(resolve(dir, 'plugins/dforge/reference/native-codex.md')); }, /missing bundled reference/],
+    ['reintroduced dependency', c => { c.dependencies = [{ name: 'superpowers', marketplace: 'claude-plugins-official' }]; }, /must not declare dependencies/, 'plugins/dforge/.claude-plugin/plugin.json'],
     ['reintroduced allowlist', c => { c.allowCrossMarketplaceDependenciesOn = ['claude-plugins-official']; }, /allowlist/],
-    ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
-    ['pre-2.0 plugin prefix', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'see dr-superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
-    ['unresolved dr-forge reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'see dr-forge:no-such-skill\n'); }, /unresolved dr-forge reference no-such-skill/],
-    ['retired superpowers name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/scripts/stray.sh'), 'mkdir -p .superpowers/sdd\n'); }, /plugins\/dr-forge\/scripts\/stray\.sh:1: retired superpowers name/],
-    ['retired name in the Claude catalog entry', c => { c.plugins.find(p => p.name === 'dr-forge').keywords.push('superpowers'); }, /\.claude-plugin\/marketplace\.json: dr-forge entry: retired superpowers name/],
-    ['retired name in the Codex catalog entry', c => { c.plugins.find(p => p.name === 'dr-forge').description = 'a superpowers fork'; }, /\.agents\/plugins\/marketplace\.json: dr-forge entry: retired superpowers name/, '.agents/plugins/marketplace.json'],
-    ['retired name in any case', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-forge/reference/stray.md'), 'a Superpowers worktree\n'); }, /plugins\/dr-forge\/reference\/stray\.md:1: retired superpowers name/],
+    ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
+    ['pre-2.0 plugin prefix', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'see dr-superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
+    ['unresolved dforge reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'see dforge:no-such-skill\n'); }, /unresolved dforge reference no-such-skill/],
+    ['retired superpowers name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'mkdir -p .superpowers/sdd\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired superpowers name/],
+    ['retired name in the Claude catalog entry', c => { c.plugins.find(p => p.name === 'dforge').keywords.push('superpowers'); }, /\.claude-plugin\/marketplace\.json: dforge entry: retired superpowers name/],
+    ['retired name in the Codex catalog entry', c => { c.plugins.find(p => p.name === 'dforge').description = 'a superpowers fork'; }, /\.agents\/plugins\/marketplace\.json: dforge entry: retired superpowers name/, '.agents/plugins/marketplace.json'],
+    ['retired name in any case', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'a Superpowers worktree\n'); }, /plugins\/dforge\/reference\/stray\.md:1: retired superpowers name/],
   ]) {
     await t.test(name, () => {
       const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
@@ -66,11 +66,11 @@ test('bundled-link check ignores links inside fenced code blocks', async () => {
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    const file = resolve(dir, 'plugins/dr-forge/skills/selecting-approaches/fenced.md');
+    const file = resolve(dir, 'plugins/dforge/skills/selecting-approaches/fenced.md');
     writeFileSync(file, '````markdown\n```\n[inner](missing-inner.md)\n```\n[example](missing-example.md)\n````\n');
     assert.deepEqual(validateRepository(dir), []);
     writeFileSync(file, '````\n[example](missing-example.md)\n````\n[live](missing-live.md)\n');
-    assert.deepEqual(validateRepository(dir), [`plugins${sep}dr-forge${sep}skills${sep}selecting-approaches${sep}fenced.md: missing bundled reference missing-live.md`]);
+    assert.deepEqual(validateRepository(dir), [`plugins${sep}dforge${sep}skills${sep}selecting-approaches${sep}fenced.md: missing bundled reference missing-live.md`]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -81,13 +81,13 @@ test('the retired superpowers name is allowed only in the allowlisted files', as
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    for (const path of ['plugins/dr-forge/tests/stray.test.sh', 'plugins/dr-forge/LICENSES/stray-LICENSE', 'plugins/dr-forge/scripts/lib/darkmem-migrate.mjs', 'plugins/dr-status/stray.md']) {
+    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/LICENSES/stray-LICENSE', 'plugins/dforge/scripts/lib/darkmem-migrate.mjs', 'plugins/dr-status/stray.md']) {
       writeFileSync(resolve(dir, path), 'superpowers\n');
     }
     const retired = () => validateRepository(dir).filter(error => error.includes('retired superpowers name'));
     assert.deepEqual(retired(), []);
-    writeFileSync(resolve(dir, 'plugins/dr-forge/scripts/lib/darkmem-migrate.sh'), 'superpowers\n');
-    assert.deepEqual(retired(), ['plugins/dr-forge/scripts/lib/darkmem-migrate.sh:1: retired superpowers name']);
+    writeFileSync(resolve(dir, 'plugins/dforge/scripts/lib/darkmem-migrate.sh'), 'superpowers\n');
+    assert.deepEqual(retired(), ['plugins/dforge/scripts/lib/darkmem-migrate.sh:1: retired superpowers name']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -98,8 +98,8 @@ test('reference check skips template placeholders and resolves agents', async ()
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    writeFileSync(resolve(dir, 'plugins/dr-forge/reference/placeholder.md'),
-      'subagent_type: dr-forge:impl-<model>-<effort>\nagent dr-forge:judge-fable\nskill dr-forge:writing-plans\n');
+    writeFileSync(resolve(dir, 'plugins/dforge/reference/placeholder.md'),
+      'subagent_type: dforge:impl-<model>-<effort>\nagent dforge:judge-fable\nskill dforge:writing-plans\n');
     assert.deepEqual(validateRepository(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -111,12 +111,12 @@ test('the settings schema is valid, and broken schemas are caught', async () => 
   const broken = async text => {
     const dir = mkdtempSync(resolve(tmpdir(), 'dr-schema-'));
     try {
-      mkdirSync(resolve(dir, 'plugins/dr-forge/config'), { recursive: true });
-      writeFileSync(resolve(dir, 'plugins/dr-forge/config/schema.mjs'), text);
+      mkdirSync(resolve(dir, 'plugins/dforge/config'), { recursive: true });
+      writeFileSync(resolve(dir, 'plugins/dforge/config/schema.mjs'), text);
       return (await validateSchema(dir)).join('\n');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   };
-  const real = readFileSync(resolve(root, 'plugins/dr-forge/config/schema.mjs'), 'utf8');
+  const real = readFileSync(resolve(root, 'plugins/dforge/config/schema.mjs'), 'utf8');
   assert.match(await broken(real.replace("default: 'auto'", "default: 'tiles'")), /schema layout: default does not fit its type/);
   assert.match(await broken("export default { darkmem: { type: 'string', default: '', group: 'Cockpit', title: 't', description: 'd', target: 'forge' } }\n"), /schema darkmem: the key is reserved/);
   assert.match(await broken('export default [];\n'), /must default-export an object/);

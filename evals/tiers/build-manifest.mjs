@@ -9,8 +9,8 @@ import { DATA, git } from './lib/sh.mjs';
 import { CAP, MANIFEST, candidates, golden, select, slug, strippedRow } from './lib/cases.mjs';
 
 const JOBS = 6;
-if (git(['status', '--porcelain', '--', 'plugins/dr-forge']).trim() !== '') {
-  console.error('build-manifest: plugins/dr-forge has uncommitted changes');
+if (git(['status', '--porcelain', '--', 'plugins/dforge']).trim() !== '') {
+  console.error('build-manifest: plugins/dforge has uncommitted changes');
   process.exit(2);
 }
 const start = git(['rev-parse', 'HEAD']).trim();

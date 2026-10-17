@@ -31,11 +31,11 @@ jobs:
           done
 
       # Mods (hooks modules) need a newer CLI than the pinned validator above.
-      - name: Validate and test dr-forge
+      - name: Validate and test dforge
         timeout-minutes: 3
         run: |
-          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate plugins/dr-forge
-          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.295 plugin test plugins/dr-forge
+          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate plugins/dforge
+          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.295 plugin test plugins/dforge
 
       - name: Run maintained regression suites
         timeout-minutes: 12
