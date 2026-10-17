@@ -60,5 +60,25 @@ names "critic: spec reviewer checks answers" "$P/skills/brainstorming/references
   'a Blocker or High critic finding with neither a fix nor an answer'
 names "critic: the process graph" "$BS" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
 
+FR="$P/reference/final-review.md"
+at() { grep -nF -- "$2" "$1" | head -n 1 | cut -d: -f1; }
+g=$(at "$FR" '0. **Gates.**'); q=$(at "$FR" '0.5 **Acceptance QA.**')
+k=$(at "$FR" 'Run `scripts/review-package PLAN_FILE MERGE_BASE HEAD`'); l=$(at "$FR" 'scripts/lens-route PLAN_FILE --final MERGE_BASE HEAD')
+check "final review: gates, QA, package, lenses in order" \
+  "$([ -n "$g" ] && [ -n "$q" ] && [ -n "$k" ] && [ -n "$l" ] && [ "$g" -lt "$q" ] && [ "$q" -lt "$k" ] && [ "$k" -lt "$l" ] && echo yes || echo no)" "yes"
+names "final review: QA skipped when complete" "$FR" 'the ledger already holds `Acceptance QA: complete`'
+names "final review: recovery from the report" "$FR" '`<workspace>/acceptance-report.md` exists, read it'
+names "final review: recovery re-dispatch" "$FR" 'otherwise re-dispatch once with `[MODE]` `rerun`'
+names "final review: leftover worktree" "$FR" 'git worktree remove --force <workspace>/qa-mutation'
+names "final review: ambiguous goes to the ruling seat" "$FR" '`scripts/review-route PLAN_FILE --ruling acceptance-ambiguous`'
+names "final review: lens replies as files" "$FR" 'save each reply to `<workspace>/lens-<id>.md`'
+names "final review: residual acceptance failure" "$FR" 'is the one edit allowed on an acceptance test'
+for f in "$P/skills/subagent-driven-development/SKILL.md" "$P/skills/executing-plans/SKILL.md"; do
+  s=$(basename "$(dirname "$f")")
+  names "$s: dispatched line" "$f" 'Acceptance QA: dispatched (base <sha7>)'
+  names "$s: complete line" "$f" 'Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo'
+  names "$s: recovery points at step 0.5" "$f" '`Acceptance QA:` lines are written by'
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -330,10 +330,18 @@ Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: complete (commits a..b[; merged <sha7>], review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
+Acceptance QA: dispatched (base <sha7>)
+Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo
 Final fix: implementer <agent> (assigned; base <sha7>)
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
 
+- `Acceptance QA:` lines are written by
+  [final-review.md](../../reference/final-review.md) step 0.5. On recovery:
+  a `complete` line skips step 0.5; a `dispatched` line with no `complete`
+  line and `<workspace>/acceptance-report.md` present means read the report
+  and write `complete`; with no report, re-dispatch QA once with `[MODE]`
+  `rerun`. Step 0.5 holds the rest of the procedure.
 - After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
   at `complete`, also promote the task's durable facts
   ([project-state.md](../../reference/project-state.md) §darkmem sync points).
@@ -377,7 +385,8 @@ without `base`: take the previous task's complete-line head, or the branch's
 merge base for Task 1. An old `(scored at dispatch)` line reads as assigned.
 
 **Plan state.** Every task complete and no `Final review:` line: go to Final
-Review. A `Final fix:` line and no `Final review:` line: the fix wave was
+Review; an `Acceptance QA: dispatched` line with no `complete` line resumes at
+its step 0.5. A `Final fix:` line and no `Final review:` line: the fix wave was
 dispatched; after compaction the agent id is gone, so re-dispatch that agent
 fresh, then continue Final Review at the scoped re-review. A
 `Final review: clean` line: the review is done — go to
