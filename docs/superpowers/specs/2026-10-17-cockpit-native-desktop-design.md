@@ -64,16 +64,25 @@ From the plugin-authoring reference (`types/claude-code.d.ts`), read
   `collapsedToggled(collapsed: readonly Section[], name: Section): string`
   (adds or removes `name`, returns the setting text in `SECTIONS` order,
   `''` when none).
-- Each section's title becomes a `Button` (`plain`) labelled `▾ <Title>`
-  expanded and `▸ <Title>` collapsed; pressing it saves
-  `collapsedToggled(...)` through the cockpit's existing setting writer, so
-  the next session opens the same way.
+- `register.tsx`'s `Options`, `liveFrom` and `Live` (the parsed settings)
+  gain `collapsed` (raw text) and `shownCollapsed: Section[]` (via
+  `collapsedFrom`), as `sections` and `shown` do today.
+- Each section's title is the collapse control; pressing it saves
+  `collapsedToggled(...)` through `setOption($, 'collapsed', …)`, so the next
+  session opens the same way:
+  - desktop: one `<Button plain>` whose only child is
+    `<Text size="heading" weight="semibold" color={lamp}>▾ <Title></Text>`
+    (`▸` when collapsed);
+  - terminal: `<Button plain label="▾ <Title>" />` drawn directly (not through
+    the `button()` helper, whose rounded box and underline children apply
+    only to action buttons), in the card's title colour.
 - A collapsed section draws its title row with its headline (the summary the
-  title row already carries) and nothing else of its body, except its action
-  buttons (Context's Compact and Hand off, the Run card's Stop auto and
-  Resume), which stay below the title row.
+  title row already carries) and nothing else of its body. The one exception
+  is the Context section's `actions` row (Compact, Hand off, Stop auto,
+  Settings, built at the `actions` constant), which stays below the title
+  row. The resume card is outside every section and is unaffected.
 - The settings screen's Cockpit tab draws a `Collapsed` chips row beside
-  `Sections`, built like it.
+  `Sections`, built like it (`custom.collapsed`).
 
 ### 2. Native desktop panels
 
@@ -81,35 +90,46 @@ From the plugin-authoring reference (`types/claude-code.d.ts`), read
   right, lines, ...native`) but renders natively:
   - the card: `Box` column, `borderStyle="round"`, `borderColor="subtle"`,
     `backgroundColor={CARD}`, `paddingX="md"`, `paddingY="sm"`, `gap="xs"`;
-  - the head row: the collapse `Button`, then the title as `Text
-    size="heading" weight="semibold"` in the lamp's theme color, then the
-    headline runs as `Text size="footnote"`, right-aligned;
+  - the head row: the title `Button` (§1), then the headline runs as `Text
+    size="footnote"`, right-aligned;
   - each `PanelLine` through a new `nativeLine(line)`: `text` → a row `Box`
     of `Text` runs (`size="footnote"` when `small`, `wrap="truncate-end"`
-    unless `wrap`, `paddingLeft` from `indent` converted to cells at 7.5 px
-    per cell), `right` runs right-aligned; `chips` → a wrapping row `Box`
-    (`gap="xs"`) of `Text size="caption"` pills with `backgroundColor="subtle"`;
+    unless `wrap`, `paddingLeft` = `Math.round(indent / 7.5)` cells), `right`
+    runs right-aligned; `chips` → a wrapping row `Box` (`gap="xs"`) of pills;
     `badge` → a row `Box` of the badge `Svg` and two `Text` lines; `picture`
-    → the `Svg` unchanged.
+    → the `Svg` unchanged, with its own `alt` (so the picture alts asserted
+    today still hold).
   - each `PanelRun` → `Text` with `color` mapped by `themeColor(name)`,
     `dimColor` for `dim`/`faint`, `weight="semibold"` for `bold`, `mono` for
-    `mono`.
+    `mono`. A run with `chip: true`, in a `chips` line or inside a `text`
+    line (the agents rows' seat pill, the band's head), is a pill:
+    `Text size="caption" backgroundColor="subtle"`.
 - `themeColor(name: string | undefined): Color | undefined` in `lib.ts`:
   `green → success`, `red → error`, `yellow → warning`, `cyan → suggestion`,
-  `blue → suggestion`, `magenta → planMode`, `warning → warning`; a hex or any
-  other name passes through.
+  `blue → suggestion`, `magenta → planMode`, `gray → subtle`, `white → text`;
+  a theme key, a hex or any other name passes through unchanged.
 - The desktop root `Box` gets `gap="md"` between sections and gauge rows; the
   gauges stay `Svg` tiles. The terminal branch keeps its numeric spacing.
-- `panelSvg`, `panelText`, `THEME`, their layout helpers, and the
-  `{ kind: 'head' }` line kind are deleted from `svg.ts` once nothing uses
-  them; the chart drawings (`meterSvg`, `labelledMeterSvg`, `trendSvg`,
-  `stackSvg`, `seatSvg`, `gaugeSvg`, `segmentsSvg`, `avatarSvg`,
-  `gaugeTileSvg`, `bandMetersSvg`) stay.
+- The desktop band (`drawBand`, its `head0` and `rest` lines, today drawn
+  with `panelSvg`/`panelText`) renders those lines through `nativeLine` too;
+  its meters stay `bandMetersSvg`.
+- In `svg.ts`, `panelSvg`, `panelText`, the `{ kind: 'head' }` line kind and
+  the helpers only they use (`wrapRuns`, `drawRunsAt`) are deleted. `THEME`,
+  `cut`, `tspan`, `toneOf`, `measure` and `place` stay, because
+  `gaugeTileSvg` and `bandMetersSvg` use them, as do the chart drawings
+  (`meterSvg`, `labelledMeterSvg`, `trendSvg`, `stackSvg`, `seatSvg`,
+  `gaugeSvg`, `segmentsSvg`, `avatarSvg`). `PanelLine` and `PanelRun` stay as
+  the row description `nativeLine` reads. The panel tests in
+  `tests/cockpit.test.ts` that exercise `panelSvg`/`panelText` (the `draws
+  meters, a trend, a stack, run segments and a badge as SVG` test's panel
+  part) are replaced by `nativeLine` tests.
 
 ### 3. Desktop settings screen
 
-Only where the element table has `Select` (the desktop); the terminal view is
-unchanged.
+Only on the desktop surface: `SettingsModel` gains `isDesktop: boolean`
+(register.tsx passes the `isDesktop` it already derives), and the native
+controls are drawn when `model.isDesktop && 'Select' in table`. The terminal
+table also has `Select` and `Input`, and its view is unchanged.
 
 - A toggle row: `Select` with options `On`/`Off` (values `true`/`false`),
   `onSelect` → `act.set(key, value === 'true')`.
@@ -117,7 +137,10 @@ unchanged.
   `act.set(key, value)`.
 - A number or text row: the existing `Input`, always shown (no Edit button
   step), `label` the row's label, `value` its current value, `onSubmit` →
-  `act.submit(key, text)`.
+  `act.submit(key, text)`; a number row keeps its `−`/`+` step buttons beside
+  the `Input`. A refused entry must be visible: `act.submit` sets `editing`
+  to the key on refusal (as the terminal's Edit step already does), so the
+  row draws `model.error` below its `Input`.
 - The open group's name: `Text size="title" weight="semibold"`; each row: a
   `Box` column with `gap="xs"`: the label `Text weight="medium"`, the
   description `Text size="footnote" dimColor`, the control; rows `gap="md"`.
@@ -131,9 +154,13 @@ unchanged.
   null` (null while running; records loaded from older state read as null
   when not done and `done` when done). The subagent end hook sets `done` for
   `reason: 'answer'` and `failed` for `aborted`, `refusal` or `error`.
-- At render the Agents section reads `$.agent.list()` once; a running spawn
-  whose id is listed with `status: 'waiting'` is waiting. A missing
-  `$.agent.list`, a thrown call or an unlisted id counts as working.
+- A running subagent is waiting on you while it has an approval open: the
+  cockpit already sees each subagent's permission prompt in-process
+  (`tool.check` with `e.agentId`, which starts a wait with `startWait`, and
+  `endWait`, which clears it). The wait entry records that `agentId`, and the
+  Agents section counts a running spawn as waiting while an open wait names
+  it. `$.agent.list()` is not used: its `waiting` status means a subagent
+  waiting on its own background work, not on the person.
 - The section lists four groups, each with a count, in this order, omitting
   an empty one: `Waiting on you`, `Working`, `Failed`, `Done` (the recent
   ones it shows today). The headline keeps today's running count.
@@ -142,8 +169,9 @@ unchanged.
 
 - An unknown name in `collapsed` is ignored; a collapsed section that is also
   hidden by `sections` stays hidden.
-- `$.agent.list()` failing never breaks the render: every running spawn is
-  Working.
+- A wait that ends without `endWait` (a session cleared mid-prompt) leaves
+  its spawn under Waiting only until the spawn ends; a done spawn is never
+  waiting.
 - A `Select` value outside the row's values is ignored by `act.set`'s
   existing validation.
 
@@ -164,9 +192,11 @@ unchanged.
   row, and selecting a value saves it; the terminal settings screen draws no
   `Select`.
 - A subagent ending with `reason: 'error'` is listed under `Failed`; one with
-  `answer` under `Done`; with `$.agent.list()` reporting `waiting` for a
-  running one, it is under `Waiting on you`; with `$.agent.list` absent, under
-  `Working`.
+  `answer` under `Done`; a running one with an open approval prompt under
+  `Waiting on you`, and under `Working` once the prompt is answered.
+- On desktop, a refused number entry in settings shows its error below the
+  `Input`.
+- The desktop band draws its head and rows as native `Text`.
 
 Then the full validation: `node scripts/validate-repository.mjs`, the shell
 suites, `claude plugin validate` on the marketplace and every Claude plugin,
@@ -182,7 +212,9 @@ A5. [test, high] On the desktop surface, the root of the full pane has `gap` `md
 A6. [test, neg, high] On the desktop surface, no section's rows are drawn as an `Svg` (no `Svg` carries a section's row text as its alt).
 A7. [test, high] On the desktop surface, the settings screen draws a `Select` for a toggle row and for a choices row, and choosing a value saves it; the terminal settings screen draws no `Select`.
 A8. [test, high] A subagent whose turn ends with reason `error` is listed under `Failed`, and one ending with `answer` under `Done`.
-A9. [test, high] A running subagent that `$.agent.list()` reports as `waiting` is listed under `Waiting on you`; with `$.agent.list` unavailable it is listed under `Working`.
+A9. [test, high] A running subagent with an open approval prompt is listed under `Waiting on you`, and under `Working` once the prompt is answered.
+A12. [test, neg, high] The terminal settings screen draws no `Select`, and on the desktop a refused number entry shows its error below the `Input`.
+A13. [test, high] On the desktop surface, the band above the prompt draws its head and rows as native `Text`, its meters as `Svg`.
 A10. [demo, high] In the Claude Code desktop app, the cockpit pane shows space between sections, titles and rows in the app's own font and theme colors (switching the app between light and dark recolors them), and a section collapses and expands from its title.
 A11. [demo, high] In the Claude Code desktop app, the cockpit settings screen shows dropdowns for toggles and choices and saves a change.
 
@@ -195,10 +227,22 @@ and `Space`, read 2026-10-17); no desktop has rendered one for this repository
 yet. unverified — the plan's first task verifies it: it renders a probe pane
 and the owner checks it on the desktop app before the panels are rebuilt.
 
-A smaller one: `$.agent.list()` reporting `waiting` for a subagent blocked on
-a permission prompt. The typings define the value (`AgentStatus`); its use for
-a subagent is unverified, and the fallback (Working) keeps the section correct
-if it never appears.
+## Docs
+
+`plugins/dforge/README.md`: a `collapsed` row in the settings table, the
+settings-view paragraph (desktop dropdowns), and the cockpit paragraphs on
+collapsing and the Agents groups.
+
+## Review notes (Fable, round 1)
+
+Issues Found, all seven applied: the deletion list now keeps what the gauges
+and band meters use and converts the desktop band; the settings controls are
+gated on the desktop surface, not on `Select`; a refused desktop entry shows
+its error; one title-button shape per surface; chip runs inside text lines;
+"Waiting on you" comes from the cockpit's own approval waits instead of
+`$.agent.list()`; the collapsed exception names the Context `actions` row.
+Advisory points taken: `Options`/`liveFrom` gain `collapsed`, README rows,
+picture alts kept, `Math.round` on indents, `gray`/`white` mapped.
 
 ## Out of scope
 
