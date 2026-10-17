@@ -22,7 +22,7 @@ check "criteria directory exists" \
 check "TEMPLATE.md exists" \
   "$([ -f "$CRITERIA/TEMPLATE.md" ] && echo yes || echo no)" "yes"
 
-for f in "$CRITERIA"/*.md; do
+for f in "$CRITERIA"/*.md "$CRITERIA"/lenses/*.md; do
   [ -e "$f" ] || continue
   base=$(basename "$f" .md)
 
@@ -54,7 +54,18 @@ for f in "$CRITERIA"/*.md; do
   # grep -P is unavailable here; awk with an octal byte range is portable.
   check "$base: content is ASCII only" \
     "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$f")" "0"
+
+  case $f in
+    */lenses/*)
+      check "$base: one Applies line" "$(grep -c '^Applies: ' "$f")" "1"
+      bad=$(sed -n 's/^Applies: //p' "$f" | sed 's/ ; /\n/g' | grep -cvE '^(always|paths [^ ].*|added .+)$')
+      check "$base: every Applies clause parses" "$bad" "0" ;;
+  esac
 done
+
+got=$(for f in "$CRITERIA"/lenses/*.md; do [ -e "$f" ] && basename "$f" .md; done | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+check "the nine initial lenses exist" "$got" \
+  "docs-comments lang-bash lang-csharp lang-python lang-typescript security silent-failures test-quality type-design"
 
 # The final round's prompt. run-codex-review.sh cats it into every --kind final
 # request, so its presence, its encoding and its two load-bearing instructions
