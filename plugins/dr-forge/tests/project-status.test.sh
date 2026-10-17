@@ -46,7 +46,7 @@ check "exists: skills/project-status/SKILL.md" \
 
 # The one script it may call, and the two it must not. Both forbidden names
 # appear in the body explaining why, so assert the prohibition rather than the
-# absence: sdd-workspace runs mkdir -p and rewrites a .gitignore, and next-step
+# absence: sdd-workspace runs mkdir -p and writes a .gitignore, and next-step
 # rewrites latest.md. This skill writes nothing.
 present "status calls repo-audit" "$SKILL" 'scripts/repo-audit'
 present "status forbids sdd-workspace" "$SKILL" 'never call `scripts/sdd-workspace`'

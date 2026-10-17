@@ -32,6 +32,19 @@ dir=$(cd "$TMP/new" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
 check "new checkout: workspace" "${dir#"$top"}" "/.forge/sdd/p"
 (cd "$TMP/new" && bash "$SCRIPTS/finish-choice" set pr --base main > /dev/null)
 check "new checkout: finish choice" "$([ -f "$TMP/new/.forge/sdd/finish.json" ] && echo yes)" "yes"
+printf '!keep\n' > "$TMP/new/.forge/sdd/.gitignore"
+(cd "$TMP/new" && bash "$SCRIPTS/sdd-workspace" docs/p.md > /dev/null)
+check "new checkout: an existing sdd ignore is kept" "$(cat "$TMP/new/.forge/sdd/.gitignore")" '!keep'
+
+# A cloned repository controls .forge/sdd/, so its ignore is never written
+# through a symbolic link.
+checkout "$TMP/linked"
+mkdir -p "$TMP/linked/.forge/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$TMP/linked/.forge/sdd/.gitignore"
+top=$(cd "$TMP/linked" && pwd)
+dir=$(cd "$TMP/linked" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
+check "linked ignore: workspace" "${dir#"$top"}" "/.forge/sdd/p"
+check "linked ignore: never written through" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
 
 checkout "$TMP/old"
 mkdir -p "$TMP/old/.superpowers"

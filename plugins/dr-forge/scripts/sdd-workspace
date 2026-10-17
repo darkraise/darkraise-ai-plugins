@@ -39,5 +39,5 @@ root=$(git rev-parse --show-toplevel)
 base="$(forge_dir state "$root")/sdd"
 dir="$base/$slug"
 mkdir -p "$dir"
-printf '*\n' > "$base/.gitignore"
+forge_self_ignore "$base"
 cd "$dir" && pwd

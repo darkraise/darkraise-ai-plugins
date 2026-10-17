@@ -11,17 +11,23 @@ forge_dir() {
   printf '%s/%s\n' "$root" "$leaf"
 }
 
-# forge_state_ignore [ROOT] — give ROOT's existing state directory a
-# self-ignoring .gitignore, as .forge/sdd/ has: nothing under it is ever
-# committed, and the host repository need not list it. An existing .gitignore
-# is left as it is. A cloned repository controls both names, so neither is
-# written through a symbolic link, and noclobber refuses a file that appears
-# between the test and the write.
+# forge_self_ignore DIR — give the existing directory DIR a self-ignoring
+# .gitignore: nothing under it is ever committed, and the host repository need
+# not list it. An existing .gitignore is left as it is. A cloned repository
+# controls both names, so neither is written through a symbolic link, and
+# noclobber refuses a file that appears between the test and the write.
+forge_self_ignore() {
+  local dir=$1
+  [ -d "$dir" ] && [ ! -L "$dir" ] && [ ! -e "$dir/.gitignore" ] && [ ! -L "$dir/.gitignore" ] || return 0
+  (set -C; printf '*\n' > "$dir/.gitignore") 2>/dev/null || true
+}
+
+# forge_state_ignore [ROOT] — the same for ROOT's state directory, as
+# .forge/sdd/ has.
 forge_state_ignore() {
   local dir
   dir=$(forge_dir state "${1:-.}") || return
-  [ -d "$dir" ] && [ ! -L "$dir" ] && [ ! -e "$dir/.gitignore" ] && [ ! -L "$dir/.gitignore" ] || return 0
-  (set -C; printf '*\n' > "$dir/.gitignore") 2>/dev/null || true
+  forge_self_ignore "$dir"
 }
 
 # forge_dir_rel state|docs [ROOT] — the same directory, relative to ROOT.

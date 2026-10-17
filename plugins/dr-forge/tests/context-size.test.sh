@@ -459,7 +459,13 @@ LOG="$REPO/.forge/sdd/budget-log.tsv"
 rm -rf "$REPO/.forge/sdd"
 mkroll2() { mkdir -p "$CODEX_HOME/sessions/2026/09/15"; { meta "$REPO_NATIVE"; usage_line "$1" 999999; } > "$CODEX_HOME/sessions/2026/09/15/rollout-log.jsonl"; }
 
+mkdir -p "$REPO/.forge/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$REPO/.forge/sdd/.gitignore"
 mkroll2 150000
+run
+check "log: the ignore is never written through a link" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
+rm -rf "$REPO/.forge/sdd"
+
 run
 check "log: one row after a rollout measurement" "$(wc -l < "$LOG" | tr -d ' ')" "1"
 check "log: the row has four fields" "$(awk -F'\t' 'NR==1 {print NF}' "$LOG")" "4"

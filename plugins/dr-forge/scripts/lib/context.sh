@@ -320,7 +320,7 @@ ctx_log_observation() {
   primary=$(ctx_primary_root) || return 0
   base="$(forge_dir state "$primary")/sdd"
   mkdir -p "$base" 2>/dev/null || return 0
-  [ -f "$base/.gitignore" ] || printf '*\n' > "$base/.gitignore" 2>/dev/null || return 0
+  forge_self_ignore "$base"
   sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
     | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
   printf '%s\t%s\t%s\t%s\n' \
