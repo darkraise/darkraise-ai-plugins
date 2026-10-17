@@ -957,5 +957,15 @@ lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"
 has "darkmem: the lint ran to its summary" "$out" " errors, "
 
+# --- Lenses lines ---
+variant lens-low.md 's/^(\*\*Approach:\*\* inline - skip 2: follows the pattern)$/\1\n**Lenses:** security/'
+lint lens-low.md
+has "a Lenses line below risk 3 is an error" "$out" "ERROR Task 2: a **Lenses:** line needs risk 3 (risk is 2)"
+variant lens-bad.md 's/risk 2 = 4$/risk 3 = 5/; s/^(\*\*Approach:\*\* inline - skip 2: follows the pattern)$/\1\n**Lenses:** security, nope/'
+lint lens-bad.md
+has "an unknown lens id is an error" "$out" "ERROR Task 2: **Lenses:** names no lens file: nope"
+lacks "a known lens id is not flagged" "$out" "names no lens file: security"
+lacks "risk 3 takes a Lenses line" "$out" "a **Lenses:** line needs risk 3"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

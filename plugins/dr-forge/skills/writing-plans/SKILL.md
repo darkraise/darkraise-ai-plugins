@@ -362,6 +362,11 @@ user's inline or delegation preference on either host.
    - `**Approach:**` — only when the task involved an approach decision:
      `inline`, `advisor`, or `best-of-3`, a dash, and a one-line reason; an
      `inline` reason cites a skip condition by number
+   - `**Lenses:**` — only on a task scored risk 3, and optional there: the
+     lens ids under `criteria/lenses/` that match why the task is risky,
+     comma-separated, for example `security` for an authentication change. The
+     task's Claude review seat reads them as defect patterns; `plan-lint`
+     rejects the line below risk 3 and an id with no lens file.
 
    ```markdown
    **Implementer:** dr-forge:impl-sonnet-high

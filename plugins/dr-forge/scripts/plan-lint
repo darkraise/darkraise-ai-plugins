@@ -382,6 +382,15 @@ for n in $nums; do
   for v in "$a" "$b" "$c" "$d"; do
     [ "$v" -le 3 ] || { say ERROR "$where" "each axis must be 0-3"; break; }
   done
+  # A Lenses line names review lenses for a risk-3 task's review seat; below
+  # risk 3 no seat reads it, so it would be a silent no-op.
+  lenses=$(line Lenses)
+  if [ -n "$lenses" ]; then
+    [ "$d" -eq 3 ] || say ERROR "$where" "a **Lenses:** line needs risk 3 (risk is $d)"
+    for lid in $(sed 's/^\*\*Lenses:\*\*//' <<<"$lenses" | tr ',' ' '); do
+      [ -f "$HERE/../criteria/lenses/$lid.md" ] || say ERROR "$where" "**Lenses:** names no lens file: $lid"
+    done
+  fi
   [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] || say "$sev" "$where" "Rule S: files+spec+coupling must be below 4 and spec below 3"
   { [ $((a + b + c + d)) -le 4 ] && [ "$d" -lt 3 ]; } || r5_bad="$r5_bad $n"
   [ $((a + b + c + d)) -le "$max_total" ] || max_total=$((a + b + c + d))
