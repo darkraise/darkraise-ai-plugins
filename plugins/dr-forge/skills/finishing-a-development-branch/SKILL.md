@@ -28,7 +28,7 @@ When `scripts/auto-run status` exits 0
   `none`, `merge` keeps and `pr` opens its request against the forge's default
   branch; and `merge` keeps when the ledger holds a
   `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
-  partial commits never reach the base unreviewed. `merge` also keeps when the `Acceptance QA: complete` line reports any
+  partial commits never reach the base unreviewed. `merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of
   `fail`, `flaky` or `cannot-test`, or when the run added a deferred register
   row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
 - **Where an unattended finish stops** (failing tests at Step 1, a merged

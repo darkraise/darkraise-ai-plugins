@@ -73,11 +73,16 @@ names "final review: leftover worktree" "$FR" 'git worktree remove --force <work
 names "final review: ambiguous goes to the ruling seat" "$FR" '`scripts/review-route PLAN_FILE --ruling acceptance-ambiguous`'
 names "final review: lens replies as files" "$FR" 'save each reply to `<workspace>/lens-<id>.md`'
 names "final review: residual acceptance failure" "$FR" 'is the one edit allowed on an acceptance test'
+names "final review: a spent re-dispatch writes the report" "$FR" 'is spent: write `<workspace>/acceptance-report.md` yourself, with'
+names "final review: qa findings join the Claude list" "$FR" '`[qa]` finding from step 0.5 and every lens finding'
+names "final review: qa findings skip the verifier" "$FR" 'A `[qa]` finding is not given to the verifier: it enters the fix wave as'
 for f in "$P/skills/subagent-driven-development/SKILL.md" "$P/skills/executing-plans/SKILL.md"; do
   s=$(basename "$(dirname "$f")")
   names "$s: dispatched line" "$f" 'Acceptance QA: dispatched (base <sha7>)'
   names "$s: complete line" "$f" 'Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo'
   names "$s: recovery points at step 0.5" "$f" '`Acceptance QA:` lines are written by'
+  names "$s: recovery reads an existing report" "$f" 'line and `<workspace>/acceptance-report.md` present means read the report'
+  names "$s: recovery re-dispatches once without a report" "$f" 'with no report, re-dispatch QA once with `[MODE]`'
 done
 
 names "task review: lens-route per task" "$P/reference/delegated-task.md" 'run `scripts/lens-route PLAN_FILE --task <N>`'

@@ -54,7 +54,8 @@ After your own self-review round and the architecture critic
 against the approved design: the design sections as approved, verbatim, and
 the spec's path. Apply what it rules, and record each ruling with
 `scripts/auto-run ruling add "Fable, spec: <item> — <ruling>"`. Add each item
-it leaves undecided or without a suggestion to the run's register:
+it leaves undecided or without a suggestion to the run's register, except a
+critic Blocker, which takes the note below:
 
     scripts/register add <register> "<item>" --state deferred --note "Fable: <its words>"
 
@@ -66,8 +67,8 @@ Clears with `--phase`.
 **Acceptance statements and critic findings in the spec phase:**
 
 - A statement added or changed while writing the spec and rated below `high`
-  is never asked: it goes up the ladder under Rulings. A seat ruling keeps it
-  `high`; record the ruling with `scripts/auto-run ruling add`.
+  is never asked: it goes up the ladder under Rulings. A seat ruling raises it
+  to `high`; record the ruling with `scripts/auto-run ruling add`.
 - Give Fable the spec's `## Critic findings` section with the spec; it checks
   each answer to a Blocker or High finding. A Blocker it leaves undecided after
   its rounds is added with
@@ -238,7 +239,7 @@ Finishing carries out the `finishAction` setting at once, into the base
 also keeps the branch when the ledger holds a
 `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
 partial commits reach the base only after a person has looked at them.
-`merge` also keeps the branch when the `Acceptance QA: complete` line reports any
+`merge` also keeps the branch when the `Acceptance QA: complete` line reports a nonzero count of
 `fail`, `flaky` or `cannot-test`, or when the run added a deferred register row
 whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`: an
 acceptance statement that failed or went unverified reaches the base only after

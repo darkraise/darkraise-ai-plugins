@@ -50,11 +50,15 @@ names "auto-run.md: an undecided critic Blocker" "$R" '--note "critic Blocker un
 names "auto-run.md: a statement is deferred, not guessed" "$R" '**An acceptance statement in the spec phase:** the statement is deferred, not'
 names "auto-run.md: QA ambiguity is parked" "$R" '**A QA `acceptance-ambiguous` item:** PARK it'
 names "auto-run.md: QA ambiguity batches at once" "$R" 'A batch runs at once for a blocked task and for a QA'
-names "auto-run.md: unverified acceptance keeps the branch" "$R" '`merge` also keeps the branch when the `Acceptance QA: complete` line reports any'
+names "auto-run.md: a critic Blocker takes its own note" "$R" 'it leaves undecided or without a suggestion to the run'"'"'s register, except a'
+names "auto-run.md: unverified acceptance keeps the branch" "$R" '`merge` also keeps the branch when the `Acceptance QA: complete` line reports a nonzero count of'
 names "auto-run.md: failures keep the branch" "$R" '`fail`, `flaky` or `cannot-test`, or when the run added a deferred register row'
+names "auto-run.md: a deferred statement or unresolved Blocker keeps the branch" "$R" 'whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`'
 names "auto-run.md: the final message lists demos and lenses" "$R" 'every `demo` statement of the spec, every lens'
 FIN="$P/skills/finishing-a-development-branch/SKILL.md"
-names "finishing: unverified acceptance keeps the branch" "$FIN" '`merge` also keeps when the `Acceptance QA: complete` line reports any'
+names "finishing: unverified acceptance keeps the branch" "$FIN" '`merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of'
+names "finishing: failures keep the branch" "$FIN" '`fail`, `flaky` or `cannot-test`, or when the run added a deferred register'
+names "finishing: a deferred statement or unresolved Blocker keeps the branch" "$FIN" 'row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.'
 names "finishing: the final message lists demos and lenses" "$FIN" 'every `demo` statement of the spec, every lens'
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

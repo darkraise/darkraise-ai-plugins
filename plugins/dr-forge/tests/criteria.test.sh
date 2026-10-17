@@ -58,7 +58,7 @@ for f in "$CRITERIA"/*.md "$CRITERIA"/lenses/*.md; do
   case $f in
     */lenses/*)
       check "$base: one Applies line" "$(grep -c '^Applies: ' "$f")" "1"
-      bad=$(sed -n 's/^Applies: //p' "$f" | sed 's/ ; /\n/g' | grep -cvE '^(always|paths [^ ].*|added .+)$')
+      bad=$(sed -n 's/^Applies: //p' "$f" | awk '{ gsub(/ ; /, "\n"); print }' | grep -cvE '^(always|paths [^ ].*|added .+)$')
       check "$base: every Applies clause parses" "$bad" "0" ;;
   esac
 done

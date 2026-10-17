@@ -36,7 +36,11 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    `Acceptance QA: dispatched` with no `complete` line, QA was cut off: when
    `<workspace>/acceptance-report.md` exists, read it and go to (c) below;
    otherwise re-dispatch once with `[MODE]` `rerun`, under (b)'s timer, then
-   continue at (c); it counts as this review's one re-dispatch. Otherwise:
+   continue at (c); it counts as this review's one re-dispatch. When the
+   ledger already holds the re-dispatch `Ruling:` line below, that re-dispatch
+   is spent: write `<workspace>/acceptance-report.md` yourself, with
+   `cannot-test: timeout` for every `test` statement, and continue at (c).
+   Otherwise:
 
    (a) Append `Acceptance QA: dispatched (base <sha7>)` (the HEAD you hand QA).
 
@@ -100,9 +104,9 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    the same message as the Claude review, dispatch each printed `seat` with
    the prompt below, so they run in parallel; on a Codex host, a native judge
    at rank 8 or above. Then save each reply to `<workspace>/lens-<id>.md`:
-   the Claude list for step 3 is the Claude review's findings plus every lens
-   finding, tagged `[lens:<id>]`, and the dedupe judge and the fixer receive
-   the lens file paths. `lens-skipped` lines and `lenses off` dispatch
+   the Claude list for step 3 is the Claude review's findings plus every
+   `[qa]` finding from step 0.5 and every lens finding, tagged `[lens:<id>]`,
+   and the dedupe judge and the fixer receive the lens file paths. `lens-skipped` lines and `lenses off` dispatch
    nothing; step 4 names them. Lens seats are read-only, so a recovery may
    dispatch them again.
 
@@ -149,6 +153,9 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    `claude`, `codex`, or `both`, and
    returns `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a
    third seat that wrote neither list, so neither reviewer grades its own work.
+   A `[qa]` finding is not given to the verifier: it enters the fix wave as
+   confirmed, because only the scoped re-review decides a `REJECTED: A<n>`
+   dispute (Fixing what it finds).
 
    **With one list** — Codex off, `TIMEOUT`, `FAILED`, or either reviewer
    returning no findings — there is no step-3 seat. Every finding in the list
