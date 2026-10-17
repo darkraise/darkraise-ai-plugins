@@ -290,11 +290,11 @@ async function main(argv, {
     // the command may not sync, or null. Reconcile calls it after its own
     // refusals and still moves a family back to the checkout, from the mirror.
     const migrate = async () => {
-      if (!cfg.enabled || !cfg.url || !cfg.apiKey || state.prefix !== undefined) return null;
+      if (!cfg.enabled || !cfg.url || !cfg.apiKey || state.prefix === DOC_PREFIX) return null;
       const failures = await migrateServer({ cfg, client, state, persist });
       if (!failures.length) return null;
       report.failures.push(...failures);
-      return `darkmem still holds pre-3.0 superpowers/ documents it could not move to ${DOC_PREFIX}/`;
+      return `darkmem still holds superpowers/ or forge/ documents it could not move to ${DOC_PREFIX}/`;
     };
     if (parsed.command.needsKey) {
       const blocked = await migrate();

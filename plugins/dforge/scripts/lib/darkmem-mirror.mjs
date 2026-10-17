@@ -181,7 +181,8 @@ export function loadState(file) {
     && (raw.checkpointAt === null || (typeof raw.checkpointAt === "string" && !Number.isNaN(Date.parse(raw.checkpointAt))))
     && Array.isArray(raw.conflicts) && raw.conflicts.every(line => typeof line === "string")
     && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")))
-    && (raw.prefix === undefined || raw.prefix === DOC_PREFIX);
+    // dr-forge recorded forge; migrateServer moves its documents on and records dforge.
+    && (raw.prefix === undefined || raw.prefix === DOC_PREFIX || raw.prefix === "forge");
   if (!valid) throw new StateError(`${file} does not hold a valid sync state; ${REBUILD}`);
   const state = {
     version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt: raw.checkpointAt, conflicts: raw.conflicts,

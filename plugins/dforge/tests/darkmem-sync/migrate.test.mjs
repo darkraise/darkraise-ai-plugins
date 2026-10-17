@@ -47,7 +47,7 @@ test("a name darkmem holds under both prefixes refuses push and pull, and is nev
   for (const command of ["pull", "push"]) {
     const result = await s.sync(command);
     assert.equal(result.code, 2, result.stdout + result.stderr);
-    assert.match(result.stderr, new RegExp(`${command} refused: darkmem still holds pre-3\\.0 superpowers/ documents`));
+    assert.match(result.stderr, new RegExp(`${command} refused: darkmem still holds superpowers/ or forge/ documents`));
     assert.match(result.stdout, /^failed: superpowers\/a\.md: darkmem also holds dforge\/a\.md with other content; keep one$/m);
   }
   assert.equal(s.stub.db.documents.get("proj\u0000dforge/a.md").content, "new\n");
@@ -64,8 +64,50 @@ test("reconcile still moves a family back from the mirror while darkmem's uris c
   write(path.join(s.docsRoot, "b.md"), "b\n");
   const result = await s.sync("reconcile");
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local from the mirror, without darkmem \(darkmem still holds pre-3\.0 superpowers\/ documents/m);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local from the mirror, without darkmem \(darkmem still holds superpowers\/ or forge\/ documents/m);
   assert.equal(read(path.join(s.repo, "docs", "dforge", "b.md")), "b\n");
+});
+
+test("a dr-forge mirror and darkmem's forge/ documents move to dforge/, even after the 3.0 move", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "forge/specs/a.md", content: "# A\n" });
+  await s.seed.putDocument({ project: "proj", uri: "forge/archive/20260101T000000Z/old.md", content: "old\n" });
+  write(path.join(s.mirror, "forge", "specs", "a.md"), "# A\n");
+  write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: { "forge/specs/a.md": sha("# A\n") }, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [], prefix: "forge",
+  }));
+  const result = await s.sync("pull");
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /renamed .*'s forge\/ to dforge\//);
+  assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "# A\n");
+  assert.equal(fs.existsSync(path.join(s.mirror, "forge")), false);
+  const uris = [...s.stub.db.documents.keys()].map(key => key.split("\u0000")[1]).sort();
+  assert.deepEqual(uris, ["dforge/archive/20260101T000000Z/old.md", "dforge/specs/a.md"]);
+  const state = JSON.parse(read(path.join(s.mirror, ".sync-state.json")));
+  assert.deepEqual(Object.keys(state.documents), ["dforge/specs/a.md"]);
+  assert.equal(state.prefix, "dforge");
+});
+
+test("one name under superpowers/ and forge/ moves once; the second is refused, never overwritten", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "superpowers/a.md", content: "old\n" });
+  await s.seed.putDocument({ project: "proj", uri: "forge/a.md", content: "new\n" });
+  const result = await s.sync("pull");
+  assert.equal(result.code, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: forge\/a\.md: darkmem also holds dforge\/a\.md with other content; keep one$/m);
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/a.md").content, "old\n");
+  assert.equal(s.stub.db.documents.get("proj\u0000forge/a.md").content, "new\n");
+});
+
+test("a mirror holding two docs folders is refused before anything syncs", async t => {
+  const s = await setup(t);
+  write(path.join(s.mirror, "forge", "a.md"), "a\n");
+  write(path.join(s.mirror, "dforge", "b.md"), "b\n");
+  const result = await s.sync("pull");
+  assert.equal(result.code, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, /holds forge\/ and dforge\/; move all but one aside/);
+  assert.equal(read(path.join(s.mirror, "forge", "a.md")), "a\n");
+  assert.equal(s.stub.db.requests.length, 0);
 });
 
 test("a held lock on a pre-3.0 mirror refuses the command and changes nothing", async t => {
@@ -74,7 +116,7 @@ test("a held lock on a pre-3.0 mirror refuses the command and changes nothing", 
   fs.mkdirSync(path.join(s.mirror, ".sync.lock"), { recursive: true });
   const result = await s.sync("pull");
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /^darkmem-sync: pull refused: .* is still in the pre-3\.0 layout and another darkmem-sync holds its lock/);
+  assert.match(result.stderr, /^darkmem-sync: pull refused: .* is still in an older layout and another darkmem-sync holds its lock/);
   assert.equal(fs.existsSync(s.docsRoot), false);
   assert.equal(s.stub.db.requests.length, 0);
 });

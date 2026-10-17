@@ -1,7 +1,8 @@
-// The move from dforge's pre-3.0 darkmem names to its own: the home
-// ~/.dr-superpowers/ to ~/.dforge/, a mirror's superpowers/ folder and sync
-// state uris to dforge/, and darkmem's superpowers/ documents to dforge/. The
-// only module besides the document-name translation that reads the old names.
+// The moves from dforge's older darkmem names to its own: the homes
+// ~/.dr-superpowers/ and ~/.dr-forge/ to ~/.dforge/, a mirror's superpowers/
+// or forge/ folder and sync state uris to dforge/, and darkmem's superpowers/
+// and forge/ documents to dforge/. The only module besides the document-name
+// translation that reads the old names.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,24 +10,29 @@ import { fileURLToPath } from "node:url";
 import { HttpError } from "./darkmem-client.mjs";
 import { DOC_PREFIX, LEGACY_PREFIX, StateError, acquireLock, loadState, saveState } from "./darkmem-mirror.mjs";
 
-const OLD = `${LEGACY_PREFIX}/`;
-const renamed = uri => (uri.startsWith(OLD) ? `${DOC_PREFIX}/${uri.slice(OLD.length)}` : uri);
+// dr-superpowers wrote superpowers/, dr-forge forge/.
+export const OLD_PREFIXES = [LEGACY_PREFIX, "forge"];
+const oldPrefixOf = uri => OLD_PREFIXES.find(prefix => String(uri).startsWith(`${prefix}/`));
+const renamed = uri => {
+  const prefix = oldPrefixOf(uri);
+  return prefix ? `${DOC_PREFIX}/${uri.slice(prefix.length + 1)}` : uri;
+};
+const heldFolders = mirror => [...OLD_PREFIXES, DOC_PREFIX].filter(prefix => fs.existsSync(path.join(mirror, prefix)));
 
 // A mirror's local half: the docs folder and every uri its state records.
-// Returns whether anything changed; a mirror holding both folders throws.
+// Returns whether anything changed; a mirror holding two docs folders throws.
 export function migrateMirror(mirror, state) {
   let changed = false;
-  const old = path.join(mirror, LEGACY_PREFIX);
-  const next = path.join(mirror, DOC_PREFIX);
-  if (fs.existsSync(old)) {
-    if (fs.existsSync(next)) throw new StateError(`${mirror} holds both ${LEGACY_PREFIX}/ and ${DOC_PREFIX}/; move one aside`);
-    fs.renameSync(old, next);
+  const held = heldFolders(mirror);
+  if (held.length > 1) throw new StateError(`${mirror} holds ${held.map(prefix => `${prefix}/`).join(" and ")}; move all but one aside`);
+  if (held.length === 1 && held[0] !== DOC_PREFIX) {
+    fs.renameSync(path.join(mirror, held[0]), path.join(mirror, DOC_PREFIX));
     changed = true;
   }
   const documents = Object.create(null);
   for (const [uri, hash] of Object.entries(state.documents)) {
     documents[renamed(uri)] = hash;
-    if (uri.startsWith(OLD)) changed = true;
+    if (oldPrefixOf(uri)) changed = true;
   }
   state.documents = documents;
   const links = state.pendingLinks.map(renamed);
@@ -35,9 +41,9 @@ export function migrateMirror(mirror, state) {
   return changed;
 }
 
-// A pre-3.0 mirror: its old folder, or an old uri its state records.
+// A mirror in an older layout: an old folder, or an old uri its state records.
 export function legacyMirror(mirror) {
-  if (fs.existsSync(path.join(mirror, LEGACY_PREFIX))) return true;
+  if (OLD_PREFIXES.some(prefix => fs.existsSync(path.join(mirror, prefix)))) return true;
   let raw;
   try {
     raw = JSON.parse(fs.readFileSync(path.join(mirror, ".sync-state.json"), "utf8"));
@@ -45,47 +51,51 @@ export function legacyMirror(mirror) {
     return false;
   }
   const uris = [...Object.keys(raw?.documents ?? {}), ...(Array.isArray(raw?.pendingLinks) ? raw.pendingLinks : [])];
-  return uris.some(uri => String(uri).startsWith(OLD));
+  return uris.some(uri => oldPrefixOf(uri) !== undefined);
 }
 
 // The local half under the mirror's lock, for a caller that holds none.
 // Answers { line, blocked } saying what happened, or null when nothing needed
-// doing; blocked: a held lock left the mirror in the pre-3.0 layout.
+// doing; blocked: a held lock left the mirror in an older layout.
 export function migrateMirrorLocked(mirror) {
   if (!legacyMirror(mirror)) return null;
   const release = acquireLock(mirror);
-  if (!release) return { line: `${mirror} is still in the pre-3.0 layout and another darkmem-sync holds its lock; try again once it is done`, blocked: true };
+  if (!release) return { line: `${mirror} is still in an older layout and another darkmem-sync holds its lock; try again once it is done`, blocked: true };
   try {
     const statePath = path.join(mirror, ".sync-state.json");
     const state = loadState(statePath);
+    const from = heldFolders(mirror).find(prefix => prefix !== DOC_PREFIX);
     if (!migrateMirror(mirror, state)) return null;
     saveState(statePath, state);
-    return { line: `renamed ${mirror}'s ${LEGACY_PREFIX}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`, blocked: false };
+    return { line: `renamed ${mirror}'s ${from ?? OLD_PREFIXES.join("/ and ")}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`, blocked: false };
   } finally {
     release();
   }
 }
 
-// darkmem's half, once per mirror: every superpowers/ document moves to the
-// same name under dforge/, under its own hash. A name darkmem already holds
-// under dforge/ is a failure, never overwritten. Answers the failure lines;
-// state.prefix is set only when there are none.
+// darkmem's half, once per mirror: every superpowers/ and forge/ document
+// moves to the same name under dforge/, under its own hash. A name darkmem
+// already holds under dforge/ is a failure, never overwritten. Answers the
+// failure lines; state.prefix is set only when there are none.
 export async function migrateServer({ cfg, client, state, persist }) {
   if (state.prefix === DOC_PREFIX) return [];
   const failures = [];
   const held = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
-  const old = (await client.manifest(cfg.project, LEGACY_PREFIX)).filter(item => item.uri.startsWith(OLD));
-  for (const item of old) {
-    const uri = renamed(item.uri);
-    if (held.has(uri)) {
-      failures.push(`${item.uri}: darkmem also holds ${uri}${held.get(uri) === item.content_hash ? " with the same content; delete one" : " with other content; keep one"}`);
-      continue;
-    }
-    try {
-      await client.moveDocument(item.id, { uri, expectedHash: item.content_hash });
-    } catch (error) {
-      if (!(error instanceof HttpError) || error.status === 401) throw error;
-      failures.push(`${item.uri}: darkmem refused the move to ${uri}: ${error.detail}`);
+  for (const prefix of OLD_PREFIXES) {
+    const old = (await client.manifest(cfg.project, prefix)).filter(item => item.uri.startsWith(`${prefix}/`));
+    for (const item of old) {
+      const uri = renamed(item.uri);
+      if (held.has(uri)) {
+        failures.push(`${item.uri}: darkmem also holds ${uri}${held.get(uri) === item.content_hash ? " with the same content; delete one" : " with other content; keep one"}`);
+        continue;
+      }
+      try {
+        await client.moveDocument(item.id, { uri, expectedHash: item.content_hash });
+        held.set(uri, item.content_hash);
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.status === 401) throw error;
+        failures.push(`${item.uri}: darkmem refused the move to ${uri}: ${error.detail}`);
+      }
     }
   }
   if (!failures.length) {
