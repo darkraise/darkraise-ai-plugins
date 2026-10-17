@@ -22,3 +22,4 @@ One line per plan that landed, so project-status can tell a merged plan from one
 - 2026-10-13 `docs/superpowers/plans/2026-10-13-darkmem-store-moves.md` — merged into `main` at 39b0386
 - 2026-10-14 `docs/superpowers/plans/2026-10-14-darkmem-mirror-open-rows.md` — merged into `main` at 29501e5
 - 2026-10-17 `docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md` — merged into `main` at cc8dbbb
+- 2026-10-17 `docs/superpowers/plans/2026-10-17-dforge-rename.md` — merged into `main` at 81df517
