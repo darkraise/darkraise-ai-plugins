@@ -100,13 +100,13 @@ if [ -n "$settings_line" ]; then
   context="${context}\n\n$(escape_for_json "$settings_line")"
 fi
 
-# dforge reads none of the pre-3.0 names, so a repository that still has them
+# dforge reads none of the older names, so a repository that still has them
 # would split its work between the old directories and the new ones unnoticed.
 legacy_line=""
 if [ -n "$roadmap_root" ]; then
   legacy=$(dforge_legacy_layout "$roadmap_root" | paste -sd, - | sed 's/,/, /g' | tr -d '\001-\037')
   if [ -n "$legacy" ]; then
-    legacy_line="dforge: this repository still uses the pre-3.0 layout ($legacy); run bash $plugin_root_shown/scripts/dforge-migrate"
+    legacy_line="dforge: this repository still uses an older layout ($legacy); run the dforge:migrate skill (/dforge:migrate)"
     context="${context}\n\n$(escape_for_json "$legacy_line")"
   fi
 fi

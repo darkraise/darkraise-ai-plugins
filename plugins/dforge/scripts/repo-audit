@@ -32,7 +32,7 @@ echo "- Root: \`$root\`"
 echo "- Branch: \`$branch\` at $head$tracking"
 echo "- $("$here/context-size" 2>/dev/null)"
 legacy=$( { dforge_legacy_layout "$root"; [ "$root" = "$primary" ] || dforge_legacy_layout "$primary"; } | sort -u | paste -sd, - | sed 's/,/, /g')
-[ -z "$legacy" ] || echo "- dforge: this repository still uses the pre-3.0 layout ($legacy); run bash $here/dforge-migrate"
+[ -z "$legacy" ] || echo "- dforge: this repository still uses an older layout ($legacy); run the dforge:migrate skill (/dforge:migrate)"
 
 echo
 echo "## Worktrees"

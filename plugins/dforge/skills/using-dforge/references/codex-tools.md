@@ -39,9 +39,9 @@ disagree.
 ## Pre-3.0 layout check
 
 Codex runs no session-start hook, so nothing reports a repository or home that
-still uses the pre-3.0 names. Run `scripts/repo-audit` once at the start of a
-session; if it prints a `pre-3.0 layout` line, run the `dforge-migrate` command
-that line names before any other work.
+still uses an older layout. Run `scripts/repo-audit` once at the start of a
+session; if it prints an `older layout` line, use the `dforge:migrate` skill
+before any other work.
 
 ## Waiting on children
 

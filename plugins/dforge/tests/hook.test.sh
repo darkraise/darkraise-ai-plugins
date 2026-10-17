@@ -164,13 +164,13 @@ check "roadmap: survives compaction alongside the snapshot" "$(grep -c '^Roadmap
 check "roadmap: still under the 10,000-character hook cap" "$([ "${#rm_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
 check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" "0"
 
-# --- a pre-3.0 directory left behind is named, with the command that moves it ---
-check "3.0 layout: no migration line" "$(grep -c 'pre-3.0 layout' <<<"$rm_ctx")" "0"
+# --- an older directory left behind is named, with the skill that moves it ---
+check "4.0 layout: no migration line" "$(grep -c 'still uses an older layout' <<<"$rm_ctx")" "0"
 mkdir -p "$REPO/.superpowers"
 lg_out=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
 check "pre-3.0: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$lg_out" && echo yes || echo no)" "yes"
 check "pre-3.0: the migration line is injected" \
-  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dforge: this repository still uses the pre-3.0 layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run bash $(cd "$HERE/.." && pwd)/scripts/dforge-migrate")" "1"
+  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dforge: this repository still uses an older layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run the dforge:migrate skill (/dforge:migrate)")" "1"
 rm -rf "$REPO/.superpowers"
 
 # --- workflow settings ride in every session as one line ---

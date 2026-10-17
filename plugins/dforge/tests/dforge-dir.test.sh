@@ -115,7 +115,7 @@ check "dr-forge: a ~/.dr-forge holding anything is named" "$(dforge_legacy_layou
 export HOME=$SAVED_HOME
 
 # Codex runs no session-start hook, so its tool notes carry the check.
-check "codex-tools: names the pre-3.0 check" "$(grep -c 'pre-3.0 layout' "$HERE/../skills/using-dforge/references/codex-tools.md")" "1"
+check "codex-tools: names the older-layout check" "$(grep -c 'an `older layout` line' "$HERE/../skills/using-dforge/references/codex-tools.md")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

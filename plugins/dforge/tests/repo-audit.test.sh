@@ -150,15 +150,15 @@ out=$(cd "$REPO" && bash "$SCRIPT")
 has "lettered: the task total is unknown" "$out" "- \`docs/lettered.md\` in \`$ROOT\`: 0 of ? tasks complete"
 rm -rf "$REPO/docs/lettered.md" "$REPO/.dforge/sdd/lettered"
 
-# --- a pre-3.0 directory is named with the command that moves it ---
-check "3.0 layout: no migration line" "$(grep -c 'pre-3.0 layout' <<<"$out")" "0"
+# --- an older directory is named with the skill that moves it ---
+check "4.0 layout: no migration line" "$(grep -c 'older layout' <<<"$out")" "0"
 W2="$TMP/wt2"
 git -C "$REPO" worktree add -q --detach "$W2"
 W2_ROOT="$(git -C "$W2" rev-parse --show-toplevel)"
 mkdir -p "$REPO/.superpowers" "$W2/docs/superpowers"
 out=$(cd "$W2" && bash "$SCRIPT" 2>&1)
 has "pre-3.0: the worktree's and the primary's directories, and the command" "$out" \
-  "- dforge: this repository still uses the pre-3.0 layout ($ROOT/.superpowers, $W2_ROOT/docs/superpowers); run bash $(cd "$HERE/../scripts" && pwd)/dforge-migrate"
+  "- dforge: this repository still uses an older layout ($ROOT/.superpowers, $W2_ROOT/docs/superpowers); run the dforge:migrate skill (/dforge:migrate)"
 git -C "$REPO" worktree remove --force "$W2" >/dev/null 2>&1
 rm -rf "$REPO/.superpowers"
 
