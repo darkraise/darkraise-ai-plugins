@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# dforge-migrate: a pre-3.0 repository's checkouts move to the 3.0 names.
+# dforge-migrate: a dr-superpowers or dr-forge repository's checkouts move to
+# the dforge 4.0 names.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
