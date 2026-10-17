@@ -20,10 +20,10 @@
 # file: a file or empty directory only the old one has moves, an identical
 # file is dropped, and a file that differs is refused and left. A checkout
 # holding two docs trees, or an older docs tree with uncommitted changes, is
-# refused and left as it is, and its plans are not rewritten. The rest still moves, and a second run
-# finishes the job once the refusal is resolved. A checkout that was refused
-# keeps its old ignore lines and gains the new ones beside them, so a moved
-# directory is never left un-ignored.
+# refused and left as it is, and its plans are not rewritten. The rest still
+# moves, and a second run finishes the job once the refusal is resolved. A
+# checkout that was refused keeps its old ignore lines and gains the new ones
+# beside them, so a moved directory is never left un-ignored.
 #
 # --dry-run writes nothing, in the checkouts or the homes: each line says what
 # would move or be rewritten, and each refusal the files and git can foretell
