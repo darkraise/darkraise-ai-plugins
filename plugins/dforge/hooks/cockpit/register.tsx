@@ -59,6 +59,7 @@ import {
   repoFromPorcelain,
   repoName,
   resumeOfferOf,
+  runList,
   shellAge,
   runsWidth,
   SECTIONS,
@@ -1108,7 +1109,7 @@ export const register: Register = on => {
             {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
           </Text>
         ),
-        runWindow(summary.tasks, 6).map(task => {
+        runList(summary.tasks, 6).map(task => {
           const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
           if (task.state === 'complete') {
             return (
@@ -1622,7 +1623,7 @@ export const register: Register = on => {
             if (summary.plan !== null) lines.push({ kind: 'text', small: true, left: [{ text: summary.plan, mono: true, dim: true }] })
             if (rootsNow !== null) lines.push({ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] })
             if (finishNow !== null && finishLine(finishNow, now).length > 0) lines.push({ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] })
-            for (const task of runWindow(summary.tasks, 6)) {
+            for (const task of runList(summary.tasks, 6)) {
               const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
               const meta =
                 task.state === 'complete' ? (task.isClean ? 'reviewed clean' : null)
@@ -3186,14 +3187,6 @@ function cacheShare(seat: CockpitSeat): number {
 // The round of the task in flight, as the ledger writes it ("2/5"), for the Run card's head.
 function runRound(summary: CockpitRun): string | null {
   return summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null
-}
-
-// The run's tasks around the one in flight, so a long plan shows where it is.
-function runWindow(tasks: CockpitRun['tasks'], size: number): CockpitRun['tasks'] {
-  if (tasks.length <= size) return [...tasks]
-  const at = tasks.findIndex(task => task.state !== 'complete')
-  const start = Math.max(0, Math.min((at === -1 ? tasks.length : at) - 2, tasks.length - size))
-  return tasks.slice(start, start + size)
 }
 
 // What a call asks permission for, in a line: the command, the file, or the URL.
