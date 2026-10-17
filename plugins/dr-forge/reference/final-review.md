@@ -86,9 +86,9 @@ review package, so the package includes the acceptance tests step 0.5 commits.
         [auto-run.md](auto-run.md) §Rulings.
       - `cannot-test: timeout`: no finding; it is reported, and it keeps the
         branch at an auto run's finish.
-      - `demo — not executed`: no finding; finishing lists it.
    (e) Append `Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo`,
-      counted from the final report.
+      counted from the final report, except `<d>`: the number of the spec's
+      statements tagged `demo`, which QA is not given and finishing lists.
 
    QA is re-dispatched at most once per final review, the recovery
    re-dispatch included. Before that re-dispatch, append

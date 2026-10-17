@@ -83,8 +83,7 @@ Command: timeout 300 bash tests/foo.acceptance.sh → 2 passed, 0 failed
 Result is one of `pass`, `fail`, `flaky`, `cannot-test: ambiguous` (the
 statement can be read two ways; name both readings in the Test cell),
 `cannot-test: no-surface` (no public surface reaches the behaviour; say what
-is missing) or `cannot-test: timeout`. List each `demo` statement as
-`demo — not executed`. Mutation is `red`, `green` or `n/a`.
+is missing) or `cannot-test: timeout`. Mutation is `red`, `green` or `n/a`.
 
 ## Never
 
