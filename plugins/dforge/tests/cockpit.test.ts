@@ -2405,15 +2405,16 @@ describe('cockpit roots', () => {
     const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
     const w = { root: '/w', docsDir: '/w/docs/dforge' }
     const p = { root: '/p', docsDir: '/p/docs/dforge' }
-    for (const name of ['docs/superpowers/plans/p.md', 'docs/dforge/plans/p.md', './docs/dforge/plans/p.md']) {
+    for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', 'docs/dforge/plans/p.md', './docs/dforge/plans/p.md']) {
       expect(planCandidates(name, darkmem, [w, p])).toEqual([`${MIRROR}/superpowers/plans/p.md`])
-      // Either prefix names the same document: a pre-3.0 citation reads under each checkout's docs/dforge.
+      // Every prefix names the same document: an older citation reads under each checkout's docs/dforge.
       expect(planCandidates(name, { store: 'local', root: '/p/docs/dforge' }, [w, p])).toEqual(['/w/docs/dforge/plans/p.md', '/p/docs/dforge/plans/p.md'])
       expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/dforge/plans/p.md'])
     }
     expect(planCandidates('docs/plans/p.md', null, [w, p])).toEqual(['/w/docs/plans/p.md', '/p/docs/plans/p.md'])
     expect(planCandidates('/abs/plans/p.md', darkmem, [w])).toEqual(['/abs/plans/p.md'])
     expect(planCandidates('docs/superpowersx/p.md', darkmem, [w])).toEqual(['/w/docs/superpowersx/p.md'])
+    expect(planCandidates('docs/forgex/p.md', darkmem, [w])).toEqual(['/w/docs/forgex/p.md'])
   })
 
   test('reads a plan named under docs/superpowers from a checkout that has only docs/dforge', async ($, on) => {

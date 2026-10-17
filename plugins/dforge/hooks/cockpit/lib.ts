@@ -503,14 +503,14 @@ export function isAbsolutePath(path: string): boolean {
  * §7.1 and §7.3): an absolute name as written; a document name under the docs
  * root while documents are in darkmem, else under each checkout's own docs
  * directory; any other name under each checkout. The session's checkout comes
- * first. A ledger written before 3.0.0 cites its plan as
- * docs/superpowers/<rest>, which still names docs/dforge/<rest>: ledgers are
- * never rewritten.
+ * first. A ledger written before 4.0.0 cites its plan as docs/forge/<rest>,
+ * or before 3.0.0 as docs/superpowers/<rest>; both still name
+ * docs/dforge/<rest>: ledgers are never rewritten.
  */
 export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
   if (isAbsolutePath(plan)) return [plan]
   const name = plan.replace(/^\.\//, '')
-  const doc = /^docs\/(?:dforge|superpowers)(?:\/(.*))?$/.exec(name)
+  const doc = /^docs\/(?:dforge|forge|superpowers)(?:\/(.*))?$/.exec(name)
   const under = (dir: string) => (doc?.[1] ? `${dir}/${doc[1]}` : dir)
   if (doc && docs?.store === 'darkmem') return [under(docs.root)]
   const seen = new Set<string>()

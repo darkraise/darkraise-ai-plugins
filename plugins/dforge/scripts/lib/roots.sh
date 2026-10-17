@@ -114,44 +114,47 @@ dforge_ledger_files() {
   return 0
 }
 
-# dforge_name_key NAME — the one name both docs prefixes share (store options
-# spec §7.1): docs/superpowers/<rest> is docs/dforge/<rest>. dforge has
-# written only docs/dforge since 3.0.0, but plans, specs, ledgers and registers
-# written before it cite the old prefix and are never rewritten, so every
-# comparison of two document names compares their keys.
+# dforge_name_key NAME — the one name every docs prefix shares (store options
+# spec §7.1): docs/superpowers/<rest> (before 3.0) and docs/forge/<rest> (3.x)
+# are docs/dforge/<rest>. dforge has written only docs/dforge since 4.0.0, but
+# plans, specs, ledgers and registers written before it cite an old prefix and
+# are never rewritten, so every comparison of two document names compares
+# their keys.
 dforge_name_key() {
   local name=${1#./}
   case $name in
-    docs/superpowers) printf 'docs/dforge\n' ;;
+    docs/superpowers|docs/forge) printf 'docs/dforge\n' ;;
     docs/superpowers/*) printf 'docs/dforge/%s\n' "${name#docs/superpowers/}" ;;
+    docs/forge/*) printf 'docs/dforge/%s\n' "${name#docs/forge/}" ;;
     *) printf '%s\n' "$name" ;;
   esac
 }
 
 # dforge_name_spellings NAME — the key, then for a document name the same name
-# under the pre-3.0 docs/superpowers. completed.md and register cells keep the
-# spelling they were written with, so a search runs once per line and accepts
-# either.
+# under the 3.x docs/forge and the pre-3.0 docs/superpowers. completed.md and
+# register cells keep the spelling they were written with, so a search runs
+# once per line and accepts any.
 dforge_name_spellings() {
   local key
   key=$(dforge_name_key "$1")
   printf '%s\n' "$key"
   case $key in
-    docs/dforge) printf 'docs/superpowers\n' ;;
-    docs/dforge/*) printf 'docs/superpowers/%s\n' "${key#docs/dforge/}" ;;
+    docs/dforge) printf 'docs/forge\ndocs/superpowers\n' ;;
+    docs/dforge/*) printf 'docs/forge/%s\ndocs/superpowers/%s\n' "${key#docs/dforge/}" "${key#docs/dforge/}" ;;
   esac
 }
 
 # dforge_resolve NAME [DIR] — a document name under the docs root, any other
 # relative name under the worktree, an absolute path unchanged. A historical
-# citation docs/superpowers/… resolves as docs/dforge/… does.
+# citation docs/superpowers/… or docs/forge/… resolves as docs/dforge/… does.
 dforge_resolve() {
   local name=${1#./}
   dforge_stores_init "${2:-}"
   case $name in
     /*|[A-Za-z]:/*|[A-Za-z]:\\*) printf '%s\n' "$1" ;;
-    docs/dforge|docs/superpowers) printf '%s\n' "$_DFORGE_DOCS_ROOT" ;;
+    docs/dforge|docs/forge|docs/superpowers) printf '%s\n' "$_DFORGE_DOCS_ROOT" ;;
     docs/dforge/*) printf '%s/%s\n' "$_DFORGE_DOCS_ROOT" "${name#docs/dforge/}" ;;
+    docs/forge/*) printf '%s/%s\n' "$_DFORGE_DOCS_ROOT" "${name#docs/forge/}" ;;
     docs/superpowers/*) printf '%s/%s\n' "$_DFORGE_DOCS_ROOT" "${name#docs/superpowers/}" ;;
     *) printf '%s/%s\n' "${_DFORGE_TOP:-${2:-$PWD}}" "$name" ;;
   esac
