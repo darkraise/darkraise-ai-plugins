@@ -5,7 +5,7 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | Architecture critic on the spec | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A6, A8, A13 | planned | - |
-| 2 | QA as a separate seat that writes the acceptance tests | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A9, A10, A12, A13 | planned | - |
-| 3 | Specialist QC lenses that run only when they apply | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A1-A6 | planned | includes per-language defect lenses chosen by diff file types; no language implementers (owner ruling 2026-10-17) |
-| 4 | BA confidence and human verdicts | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A7, A8, A13 | planned | - |
+| 1 | Architecture critic on the spec | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A6, A8, A13 | doing | - |
+| 2 | QA as a separate seat that writes the acceptance tests | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A9, A10, A12, A13 | doing | - |
+| 3 | Specialist QC lenses that run only when they apply | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A1-A6 | doing | includes per-language defect lenses chosen by diff file types; no language implementers (owner ruling 2026-10-17) |
+| 4 | BA confidence and human verdicts | docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md | spec A7, A8, A13 | doing | - |
