@@ -48,6 +48,16 @@ plan_tasks() {
   '
 }
 
+# plan_lettered FILE — the task headings outside fences numbered with a letter
+# (`### Task A1: …`), which plan_tasks does not read, so a caller can say why a
+# plan has no tasks instead of passing over it.
+plan_lettered() {
+  tr -d '\r' < "$1" | awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^#+[ \t]+Task[ \t]+[A-Za-z]+[0-9]+/ { print }
+  '
+}
+
 # ledger_done FILE — the task numbers with a "Task N: complete" line, sorted,
 # unique.
 ledger_done() {

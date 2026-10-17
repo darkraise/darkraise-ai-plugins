@@ -63,6 +63,7 @@ while IFS=$'\t' read -r ledger wt; do
   if [ -n "$plan_rel" ]; then
     plan_file=$(forge_resolve "$plan_rel" "$base")
     [ ! -f "$plan_file" ] || total=$(plan_tasks "$plan_file" | grep -c . || true)
+    [ "$total" != 0 ] || [ -z "$(plan_lettered "$plan_file")" ] || total="?"
   fi
   done_n=$(ledger_done "$ledger" | grep -c . || true)
   last=$(tr -d '\r' < "$ledger" | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-160)

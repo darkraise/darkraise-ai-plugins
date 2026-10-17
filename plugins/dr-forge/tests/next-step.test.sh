@@ -701,6 +701,12 @@ OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>
 has "routing: an assigned spec gets its plan" "$OUT" "\`docs/superpowers/specs/rev-design.md\`: write its plan with dr-forge:writing-plans."
 has "routing: planning launches the design pair" "$OUT" "claude --model opus --effort high"
 
+printf '# P\n\n### Task A1: One\n' > "$GREPO/docs/forge/plans/lettered.md"
+bash "$HERE/../scripts/register" set "$GREG" 5 planned --assigned docs/superpowers/plans/lettered.md
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: a plan with lettered headings is a plan, not a spec" "$OUT" "Continue \`docs/superpowers/plans/lettered.md\` with dr-forge:"
+rm -f "$GREPO/docs/forge/plans/lettered.md"
+
 bash "$HERE/../scripts/register" set "$GREG" 5 done
 OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
 has "routing: an unassigned row outranks rows on finished plans" "$OUT" "Rule on the open rows with dr-forge:brainstorming."

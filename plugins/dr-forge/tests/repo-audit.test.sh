@@ -142,6 +142,14 @@ has "darkmem: the mirror's ledger" "$out" "- \`docs/plan.md\` in the darkmem mir
 has "darkmem: the mirror's latest.md" "$out" "- \`$M/work/handoff/latest.md\`"
 has "darkmem: its status" "$out" "**Status:** mirror status"
 
+# --- a plan with lettered headings has an unknown task count, not zero ---
+printf '# Plan\n\n### Task A1: One\n' > "$REPO/docs/lettered.md"
+mkdir -p "$REPO/.forge/sdd/lettered"
+printf '# SDD ledger — plan: docs/lettered.md\n' > "$REPO/.forge/sdd/lettered/progress.md"
+out=$(cd "$REPO" && bash "$SCRIPT")
+has "lettered: the task total is unknown" "$out" "- \`docs/lettered.md\` in \`$ROOT\`: 0 of ? tasks complete"
+rm -rf "$REPO/docs/lettered.md" "$REPO/.forge/sdd/lettered"
+
 # --- a pre-3.0 directory is named with the command that moves it ---
 check "3.0 layout: no migration line" "$(grep -c 'pre-3.0 layout' <<<"$out")" "0"
 W2="$TMP/wt2"

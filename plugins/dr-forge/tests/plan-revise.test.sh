@@ -257,6 +257,10 @@ codex_plan "$SUR/docs/codex.md"
 check "the survey skips a Codex-host plan" "$(row codex)" "plan  codex.md  host=codex  skipped"
 check "the survey still counts it as surveyed" "$(survey | tail -n 1)" "surveyed  plans=4"
 rm -f "$SUR/docs/codex.md"
+printf '# P\n\n### Task A1: One\n\n**Files:**\n- Create: `x`\n' > "$SUR/docs/lettered.md"
+check "the survey names a plan with lettered headings" "$(row lettered)" "plan  lettered.md  headings=lettered  skipped"
+check "the survey counts it as surveyed" "$(survey | tail -n 1)" "surveyed  plans=4"
+rm -f "$SUR/docs/lettered.md"
 
 # --- liveness precedence ---
 check "no ledger and no completed entry is unknown" "$(field live "$(row scored)")" "unknown"

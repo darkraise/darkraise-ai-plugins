@@ -828,6 +828,12 @@ has "a stale parent Executor line is a NOTE" "$out" \
 lacks "a stale parent Executor line is not an error" "$out" "ERROR Task 1"
 check "the stale-parent-exec fixture is otherwise clean" "$status" "0"
 
+lintplan lettered.md "$(printf '### Task A1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lint lettered.md
+has "lettered headings are named" "$out" "ERROR header: task headings must be numbered ('### Task N: <title>'): ### Task A1: One is not read"
+lacks "lettered headings are not a generic missing-heading error" "$out" "no task headings"
+lacks "lettered headings are not an index mismatch" "$out" "Task index does not match"
+
 lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint clean-split.md
 lacks "a clean split earns no NOTE" "$out" "above the first part"

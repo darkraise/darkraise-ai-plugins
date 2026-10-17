@@ -206,7 +206,12 @@ survey() {
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
     tasks=$(plan_tasks "$f" | grep -c .)
-    [ "$tasks" -gt 0 ] || continue
+    if [ "$tasks" -eq 0 ]; then
+      [ -n "$(plan_lettered "$f")" ] || continue
+      rows=$((rows + 1))
+      printf 'plan  %s  headings=lettered  skipped\n' "$(basename "$f")"
+      continue
+    fi
     rows=$((rows + 1))
     if is_codex_plan "$f"; then
       printf 'plan  %s  host=codex  skipped\n' "$(basename "$f")"

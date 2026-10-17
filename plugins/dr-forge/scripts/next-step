@@ -339,7 +339,7 @@ else
         elif [ "$(forge_name_key "$(plan_name "$root" "$a")")" = "$(forge_name_key "$rel")" ] || plan_finished "$root" "$a"; then
           stale="${stale:+$stale, }#$rid"; continue
         elif [ -f "$(forge_resolve "$a")" ]; then
-          if [ -n "$(plan_tasks "$(forge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
+          if [ -n "$(plan_tasks "$(forge_resolve "$a")")" ] || [ -n "$(plan_lettered "$(forge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
         elif [[ $a == *.md ]]; then
           elsewhere="${elsewhere:+$elsewhere, }#$rid"; continue
         else

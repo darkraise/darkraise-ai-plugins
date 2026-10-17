@@ -161,7 +161,12 @@ fi
 
 # --- task headings and index ---
 tasks=$(plan_tasks "$src")
-[ -n "$tasks" ] || say ERROR header "no task headings ('### Task N: <title>')"
+lettered=$(plan_lettered "$src")
+if [ -n "$lettered" ]; then
+  say ERROR header "task headings must be numbered ('### Task N: <title>'): $(head -n 1 <<<"$lettered") is not read"
+elif [ -z "$tasks" ]; then
+  say ERROR header "no task headings ('### Task N: <title>')"
+fi
 nums=$(cut -f1 <<<"$tasks" | grep -v '^$' || true)
 i=0
 for n in $nums; do
@@ -180,7 +185,7 @@ awk "$_PLAN_AWK"'
 
 index_lines=$(awk '$0 == "## Task index" { on = 1; next } on && /^## / { exit } on && /^[0-9]+\. / { print }' <<<"$header" \
   | sed -E 's/^([0-9]+)\. /\1\t/')
-[ "$index_lines" = "$tasks" ] || say ERROR header "Task index does not match the task headings (numbers and titles, in order)"
+[ -n "$lettered" ] || [ "$index_lines" = "$tasks" ] || say ERROR header "Task index does not match the task headings (numbers and titles, in order)"
 
 # --- Execution line (R6) ---
 execution=$(header_line Execution)

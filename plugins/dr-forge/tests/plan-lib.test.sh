@@ -366,6 +366,14 @@ printf '# P\n\n### Task 1: Split\n\n**Executor:** codex gpt-6.1-sol / medium\n\n
 check "plan_executors: a split task takes its part's line over the parent's" \
   "$(plan_executors "$TMP/part-exec.md" | tr '\t\n' ' |')" "1 opencode|"
 
+# --- lettered task headings ---
+# plan_tasks reads numbered headings only; plan_lettered names the ones it
+# skips, so a caller can say why a plan has no tasks.
+printf '# P\n\n### Task A1: One\n\n```markdown\n### Task B2: example\n```\n\n### Task 3: Three\n' > "$TMP/lettered.md"
+check "plan_lettered: an unfenced lettered heading only" \
+  "$(plan_lettered "$TMP/lettered.md")" "### Task A1: One"
+check "plan_lettered: a numbered plan has none" "$(plan_lettered "$TMP/split.md")" ""
+
 # --- the plan functions follow the roots ---
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
