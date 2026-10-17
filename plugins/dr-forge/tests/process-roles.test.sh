@@ -26,5 +26,24 @@ names "qa: report path" "$QA" '`[WORKSPACE]/acceptance-report.md`'
 names "qa: ambiguous result" "$QA" '`cannot-test: ambiguous`'
 names "qa: rerun mode" "$QA" '`rerun`: the acceptance file may already exist'
 
+BS="$P/skills/brainstorming/SKILL.md"
+names "analyst: the checklist step" "$BS" '7. **Draft acceptance** — numbered, tagged, rated statements'
+names "analyst: auto-run offer follows it" "$BS" 'right after the Draft acceptance step and before you'
+names "analyst: the line format" "$BS" '`A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`'
+names "analyst: the verdict options" "$BS" '**Right**, **Wrong, or not wanted** and **Not sure**'
+names "analyst: not sure defers" "$BS" '--state deferred --note "Q: <question>"'
+names "analyst: confirmed is the human's" "$BS" '`confirmed` is reserved for a verdict from your human partner'
+names "analyst: self-review item" "$BS" 'every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>]'
+after=$(grep -n '^## After the Design (architectural path)$' "$BS" | cut -d: -f1)
+draft=$(grep -n '^\*\*Drafting acceptance:\*\*$' "$BS" | cut -d: -f1)
+offer=$(grep -n '^\*\*Offering an auto run:\*\*$' "$BS" | cut -d: -f1)
+check "analyst: drafting sits between After the Design and the auto-run offer" \
+  "$([ -n "$after" ] && [ -n "$draft" ] && [ -n "$offer" ] && [ "$after" -lt "$draft" ] && [ "$draft" -lt "$offer" ] && echo yes || echo no)" "yes"
+names "analyst: the process graph" "$BS" '"Draft acceptance\n(rate; ask below high)" -> "Offer an auto run\n(once, unless autoRun=off)";'
+names "analyst: spec reviewer checks the format" "$P/skills/brainstorming/references/spec-document-reviewer-prompt.md" \
+  'a rating other than `high` or `confirmed`'
+names "analyst: plans never build on a deferred statement" "$P/skills/writing-plans/SKILL.md" \
+  'A row whose Item begins `A<n>:` is a deferred acceptance statement'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -132,11 +132,12 @@ your path and complete them in order.
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Ask the execution strategy** — parallel subagent waves or sequential execution, one question (see Choosing the execution strategy)
 6. **Present design** — in sections scaled to their complexity, get user approval after each section
-7. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the last section is approved (see After the Design)
-8. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
-9. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
-10. **User reviews written spec** — ask user to review the spec file before proceeding (an auto run has Fable review it instead)
-11. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+7. **Draft acceptance** — numbered, tagged, rated statements; ask your human partner about every one rated below `high` (see Drafting acceptance)
+8. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the acceptance statements are settled (see After the Design)
+9. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
+10. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
+11. **User reviews written spec** — ask user to review the spec file before proceeding (an auto run has Fable review it instead)
+12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
@@ -155,6 +156,7 @@ digraph brainstorming {
     "Ask execution strategy\n(parallel or sequential)" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
+    "Draft acceptance\n(rate; ask below high)" [shape=box];
     "Offer an auto run\n(once, unless autoRun=off)" [shape=box];
     "Write design doc" [shape=box];
     "Spec self-review\n(one round, shown)" [shape=box];
@@ -177,7 +179,8 @@ digraph brainstorming {
     "Ask execution strategy\n(parallel or sequential)" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Offer an auto run\n(once, unless autoRun=off)" [label="yes"];
+    "User approves design?" -> "Draft acceptance\n(rate; ask below high)" [label="yes"];
+    "Draft acceptance\n(rate; ask below high)" -> "Offer an auto run\n(once, unless autoRun=off)";
     "Offer an auto run\n(once, unless autoRun=off)" -> "Write design doc";
     "Write design doc" -> "Spec self-review\n(one round, shown)";
     "Spec self-review\n(one round, shown)" -> "User reviews spec?";
@@ -336,11 +339,49 @@ needs another's output waits for it.
 
 ## After the Design (architectural path)
 
+**Drafting acceptance:**
+
+Once your human partner approves the last design section, draft the spec's
+acceptance statements before the auto-run offer, while they are still here to
+answer. Each statement is one line:
+
+`A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`
+
+- `A<n>` numbers are never reused. A deferred statement leaves the line
+  `A<n>. deferred — register row <id>`.
+- `test` means an automated test can check it; `demo` means only a person
+  watching the result can (visual output, an interactive screen).
+- `neg` marks a statement about what must not happen; at least one carries it.
+- Rate each statement while drafting: `high` when it follows directly from what
+  your human partner said, from code you read this session, or from a recorded
+  seat ruling; `medium` or `low` otherwise, each with the exact question that
+  would settle it. `confirmed` is reserved for a verdict from your human partner.
+
+1. Show the whole list in chat.
+2. Ask about every statement rated below `high` with the multiple-choice
+   prompt, at most four per call: the statement, why it is uncertain and the
+   settling question, with the options **Right**, **Wrong, or not wanted** and **Not sure**.
+   Keep a typed note verbatim.
+3. **Right**: the statement becomes `confirmed`. **Wrong**: rewrite it from the
+   note and ask once more; a second **Wrong** or **Not sure** defers it.
+   **Not sure**: defer it.
+4. To defer a statement, run
+   `scripts/register add <register> "A<n>: <statement>" --state deferred --note "Q: <question>"`.
+   With no register open, first open `<docs>/registers/<date>-<spec-slug>.md`
+   as Opening an item register says; its `**Covers:**` stays `-` until the spec
+   is written. A register row whose Item begins `A<n>:` is a deferred acceptance
+   statement wherever dr-forge refers to one.
+
+The step asks nothing when every statement is `high`. A statement you add or
+change while writing the spec, rated below `high`, is asked the same way before
+the spec is committed; in an auto run it goes up the ruling ladder instead
+([auto-run.md](../../reference/auto-run.md) §Rulings).
+
 **Offering an auto run:**
 
 Unless `autoRun=off` (see Settings) or this is a Codex host, ask this once, as
-its own message, right after your human partner approves the last design
-section and before you write the spec. `<finish>` follows the `finishAction`
+its own message, right after the Draft acceptance step and before you
+write the spec. `<finish>` follows the `finishAction`
 setting (`scripts/forge-config get finishAction`): `merge` reads "merge to
 <the current branch>", `pr` reads "open a pull request", and `keep`, `ask` and
 `wait` read "keep the branch".
@@ -367,12 +408,13 @@ without an auto run. On no, continue as below.
 
 - Write the validated design (spec) to `<docs>/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
-- Every spec has an `## Acceptance` section: numbered statements a test or a
-  demo can check, as Given/When/Then or a checklist. Cover the main path, the
-  errors and edge cases, and at least one thing that must not happen. State
-  observable behaviour, not the implementation, and give a word like "fast" its
-  number. When a register covers the spec, a row's Acceptance cell can cite
-  these numbers.
+- Every spec has an `## Acceptance` section holding the statements settled in
+  Drafting acceptance, one per line in the form
+  `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`. Cover the main
+  path, the errors and edge cases, and at least one thing that must not happen
+  (`neg`). State observable behaviour, not the implementation, and give a word
+  like "fast" its number. When a register covers the spec, a row's Acceptance
+  cell can cite these numbers.
 - Every spec has a `## Riskiest assumption` section: the one assumption that,
   if wrong, sinks the design, with its evidence (a command and the date it ran,
   a `file:line`, or a documentation URL). Without evidence, find out before the
@@ -392,7 +434,7 @@ required, and it is yours: run it once, never through a subagent.
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
 5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output.
-6. **Acceptance:** The `## Acceptance` section is present, every statement in it is checkable by a test or a demo, and at least one says what must not happen.
+6. **Acceptance:** The `## Acceptance` section is present, every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>` and is checkable by a test or a demo, at least one carries `neg`, and no rating other than `high` or `confirmed` appears.
 7. **Riskiest assumption:** The `## Riskiest assumption` section is present and names its evidence, or reads `unverified — the plan's first task verifies it`.
 
 Fix any issues inline, then post `Self-review (round 1 of 1):` with one line

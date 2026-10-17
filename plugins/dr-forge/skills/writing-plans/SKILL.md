@@ -405,6 +405,9 @@ work.
    is `scripts/register set <register> <id> deferred --note "<the reason>"`. An
    "Out of scope" heading is read by nothing, which is how design-time
    deferrals were lost.
+4. A row whose Item begins `A<n>:` is a deferred acceptance statement: your
+   human partner or the ruling ladder left it unsettled. No task's `**Items:**`
+   line names it, and no task builds on it.
 
 `plan-lint` then checks both directions: an assigned row no task cites, and a
 task citing a row no register holds.
