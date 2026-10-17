@@ -153,3 +153,91 @@ test("migrateHome copies the darkmem mapping, moves each mirror and renames its 
   const again = migrateHome({ HOME: home });
   assert.ok(again.lines.some(line => line.includes("already has a darkmem section")), again.lines.join("\n"));
 });
+
+test("migrateHome renames ~/.dr-forge whole and points stores.json at the moved mirror", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  write(path.join(forge, "mirror", "p", "forge", "a.md"), "a\n");
+  write(path.join(forge, "mirror", "p", ".sync-state.json"), STATE({ "forge/a.md": sha("a\n") }));
+  write(path.join(forge, "stores.json"), JSON.stringify({ "/r": { project: "p", mirror: path.join(forge, "mirror", "p"), documents: "darkmem" } }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.equal(fs.existsSync(forge), false);
+  assert.equal(JSON.parse(read(path.join(home, ".dforge", "config.json"))).handoffTokens, 325000);
+  assert.equal(JSON.parse(read(path.join(home, ".dforge", "stores.json")))["/r"].mirror, path.join(home, ".dforge", "mirror", "p"));
+  assert.equal(read(path.join(home, ".dforge", "mirror", "p", "dforge", "a.md")), "a\n");
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(home, ".dforge", "mirror", "p", ".sync-state.json"))).documents), ["dforge/a.md"]);
+  assert.deepEqual(migrateHome({ HOME: home }), { lines: [], refused: 0 });
+});
+
+test("migrateHome merges ~/.dr-forge into an existing ~/.dforge entry by entry", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000, layout: "auto" }));
+  write(path.join(dforge, "config.json"), JSON.stringify({ layout: "auto" }));
+  write(path.join(forge, "same.txt"), "same\n");
+  write(path.join(dforge, "same.txt"), "same\n");
+  write(path.join(forge, "only-old.txt"), "old\n");
+  write(path.join(forge, "mirror", "p", "work", "x"), "x\n");
+  write(path.join(dforge, "mirror", "q", "kept"), "kept\n");
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(JSON.parse(read(path.join(dforge, "config.json"))), { layout: "auto", handoffTokens: 325000 });
+  assert.equal(read(path.join(dforge, "only-old.txt")), "old\n");
+  assert.equal(read(path.join(dforge, "mirror", "p", "work", "x")), "x\n");
+  assert.equal(read(path.join(dforge, "mirror", "q", "kept")), "kept\n");
+  assert.equal(fs.existsSync(forge), false);
+});
+
+test("migrateHome refuses a key both configs set differently and keeps the old file", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  write(path.join(dforge, "config.json"), JSON.stringify({ handoffTokens: 200000 }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 1);
+  assert.ok(lines.some(line => line.startsWith("refused: ") && line.includes("set handoffTokens differently")), lines.join("\n"));
+  assert.equal(JSON.parse(read(path.join(forge, "config.json"))).handoffTokens, 325000);
+  assert.equal(JSON.parse(read(path.join(dforge, "config.json"))).handoffTokens, 200000);
+});
+
+test("migrateHome with dryRun writes nothing and says what would happen", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  write(path.join(forge, "mirror", "p", "forge", "a.md"), "a\n");
+  write(path.join(forge, "stores.json"), JSON.stringify({ "/r": { project: "p", mirror: path.join(forge, "mirror", "p") } }));
+  write(path.join(home, ".dr-superpowers", "mirror", "q", "superpowers", "b.md"), "b\n");
+  const before = fs.readdirSync(home, { recursive: true }).sort();
+  const { lines, refused } = migrateHome({ HOME: home }, { dryRun: true });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(fs.readdirSync(home, { recursive: true }).sort(), before);
+  assert.ok(lines.every(line => line.startsWith("would ")), lines.join("\n"));
+  assert.ok(lines.includes(`would move ${forge} to ${path.join(home, ".dforge")}`), lines.join("\n"));
+  assert.ok(lines.some(line => line.startsWith("would point 1 ")), lines.join("\n"));
+  assert.ok(lines.some(line => line.includes(`${path.join(forge, "mirror", "p")}'s forge/ to dforge/`)), lines.join("\n"));
+  assert.ok(lines.some(line => line.includes(`${path.join(home, ".dr-superpowers", "mirror", "q")}'s superpowers/ to dforge/`)), lines.join("\n"));
+});
+
+test("migrateHome with dryRun, merging into an existing ~/.dforge, lists every action the real run takes", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  write(path.join(dforge, "config.json"), JSON.stringify({ layout: "auto" }));
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  write(path.join(forge, "mirror", "p", "forge", "a.md"), "a\n");
+  write(path.join(forge, "stores.json"), JSON.stringify({ "/r": { project: "p", mirror: path.join(forge, "mirror", "p") } }));
+  const before = fs.readdirSync(home, { recursive: true }).sort();
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  assert.equal(dry.refused, 0, dry.lines.join("\n"));
+  assert.deepEqual(fs.readdirSync(home, { recursive: true }).sort(), before);
+  const real = migrateHome({ HOME: home });
+  assert.equal(real.refused, 0, real.lines.join("\n"));
+  const verb = line => line.replace(/^would /, "").split(" ")[0];
+  const done = { merge: "merged", move: "moved", point: "pointed", rename: "renamed" };
+  assert.deepEqual(real.lines.map(verb), ["merged", "moved", "moved", "pointed", "renamed"], real.lines.join("\n"));
+  assert.deepEqual(dry.lines.map(line => done[verb(line)]), real.lines.map(verb), dry.lines.join("\n"));
+});

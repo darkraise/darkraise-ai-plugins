@@ -114,27 +114,129 @@ function readJson(file) {
   }
 }
 
-// The home's half, run by scripts/dforge-migrate: the darkmem mapping into
-// ~/.dforge/config.json when that file has none, each mirror the new home
-// lacks, then every mirror's local half. The old files stay where a copy was
-// made. Answers { lines, refused }.
-export function migrateHome(env = process.env) {
+function writeJson(file, data) {
+  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`);
+  fs.renameSync(temporary, file);
+}
+
+function sameFile(a, b) {
+  try {
+    return fs.statSync(a).isFile() && fs.statSync(b).isFile() && fs.readFileSync(a).equals(fs.readFileSync(b));
+  } catch {
+    return false;
+  }
+}
+
+// The home's half, run by scripts/dforge-migrate. ~/.dr-forge/ becomes
+// ~/.dforge/: renamed whole when ~/.dforge/ is absent, otherwise entry by
+// entry, its config.json merged key by key. ~/.dr-superpowers/ then gives
+// ~/.dforge/config.json its darkmem mapping when that file has none, and each
+// mirror the new home lacks. stores.json follows every mirror that moved, and
+// every mirror gets its local half. The old files stay wherever something was
+// refused. With dryRun nothing is written and each line says what would
+// happen. Answers { lines, refused }.
+export function migrateHome(env = process.env, { dryRun = false } = {}) {
   const home = env.HOME || os.homedir();
+  const forgeHome = path.join(home, ".dr-forge");
   const oldHome = path.join(home, ".dr-superpowers");
   const newHome = path.join(home, ".dforge");
   const lines = [];
   let refused = 0;
+  const refuse = line => {
+    lines.push(`refused: ${line}`);
+    refused += 1;
+  };
+  const did = (done, would) => lines.push(dryRun ? would : done);
+  const moves = [];
+  // In a dry run nothing has moved, so a path in the new home is read where
+  // it still is: under the old entry an earlier line would move there.
+  const pending = [];
+  const view = (...parts) => {
+    const target = path.join(newHome, ...parts);
+    const hit = pending.find(([to]) => target === to || target.startsWith(`${to}${path.sep}`));
+    return hit ? `${hit[1]}${target.slice(hit[0].length)}` : target;
+  };
+  const whole = fs.existsSync(forgeHome) && !fs.existsSync(newHome);
+
+  if (whole) {
+    if (dryRun) pending.push([newHome, forgeHome]);
+    else fs.renameSync(forgeHome, newHome);
+    did(`moved ${forgeHome} to ${newHome}`, `would move ${forgeHome} to ${newHome}`);
+    moves.push([path.join(forgeHome, "mirror"), path.join(newHome, "mirror")]);
+  } else if (fs.existsSync(forgeHome)) {
+    for (const entry of fs.readdirSync(forgeHome, { withFileTypes: true })) {
+      const from = path.join(forgeHome, entry.name);
+      const to = path.join(newHome, entry.name);
+      if (entry.name === "config.json" && entry.isFile() && fs.existsSync(to)) {
+        const old = readJson(from) ?? {};
+        const next = readJson(to) ?? {};
+        const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
+        if (clash.length) {
+          refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dforge-migrate again`);
+          continue;
+        }
+        const copied = Object.keys(old).filter(key => !(key in next));
+        if (!dryRun) {
+          writeJson(to, { ...next, ...old });
+          fs.rmSync(from);
+        }
+        did(`merged ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`,
+          `would merge ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`);
+        continue;
+      }
+      if (entry.name === "mirror" && entry.isDirectory() && fs.existsSync(to)) {
+        for (const child of fs.readdirSync(from, { withFileTypes: true })) {
+          if (!child.isDirectory()) continue;
+          const source = path.join(from, child.name);
+          const target = path.join(to, child.name);
+          if (fs.existsSync(target)) {
+            refuse(`${target} exists, so ${source} was not moved`);
+            continue;
+          }
+          if (!dryRun) fs.renameSync(source, target);
+          did(`moved ${source} to ${target}`, `would move ${source} to ${target}`);
+          moves.push([source, target]);
+        }
+        continue;
+      }
+      if (!fs.existsSync(to)) {
+        if (dryRun) pending.push([to, from]);
+        else fs.renameSync(from, to);
+        did(`moved ${from} to ${to}`, `would move ${from} to ${to}`);
+        if (entry.name === "mirror") moves.push([from, to]);
+        continue;
+      }
+      if (sameFile(from, to)) {
+        if (!dryRun) fs.rmSync(from);
+        did(`dropped ${from}, the same as ${to}`, `would drop ${from}, the same as ${to}`);
+        continue;
+      }
+      refuse(`${from} differs from ${to}; keep one by hand, then run dforge-migrate again`);
+    }
+    if (!dryRun) {
+      for (const dir of [path.join(forgeHome, "mirror"), forgeHome]) {
+        try {
+          fs.rmdirSync(dir);
+        } catch {
+          // Still holds something refused, or already gone.
+        }
+      }
+    }
+  }
+
   const oldConfig = readJson(path.join(oldHome, "config.json"));
   if (oldConfig?.darkmem && typeof oldConfig.darkmem === "object") {
     const file = path.join(newHome, "config.json");
-    const config = readJson(file) ?? {};
+    const config = readJson(view("config.json")) ?? {};
     if (config.darkmem === undefined) {
       config.darkmem = oldConfig.darkmem;
-      fs.mkdirSync(newHome, { recursive: true });
-      const temporary = `${file}.${process.pid}.tmp`;
-      fs.writeFileSync(temporary, `${JSON.stringify(config, null, 2)}\n`);
-      fs.renameSync(temporary, file);
-      lines.push(`copied the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`);
+      if (!dryRun) {
+        fs.mkdirSync(newHome, { recursive: true });
+        writeJson(file, config);
+      }
+      did(`copied the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`,
+        `would copy the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`);
       if (config.darkmemEnabled === undefined) lines.push("darkmem is off until you turn it on: bash <plugin-root>/scripts/dforge-config set darkmemEnabled true");
     } else {
       lines.push(`${file} already has a darkmem section; ${path.join(oldHome, "config.json")} was not copied`);
@@ -144,26 +246,57 @@ export function migrateHome(env = process.env) {
   const newMirrors = path.join(newHome, "mirror");
   for (const entry of fs.existsSync(oldMirrors) ? fs.readdirSync(oldMirrors, { withFileTypes: true }) : []) {
     if (!entry.isDirectory()) continue;
+    const source = path.join(oldMirrors, entry.name);
     const target = path.join(newMirrors, entry.name);
-    if (fs.existsSync(target)) {
-      lines.push(`refused: ${target} exists, so ${path.join(oldMirrors, entry.name)} was not moved`);
-      refused += 1;
+    if (fs.existsSync(view("mirror", entry.name))) {
+      refuse(`${target} exists, so ${source} was not moved`);
       continue;
     }
-    fs.mkdirSync(newMirrors, { recursive: true });
-    fs.renameSync(path.join(oldMirrors, entry.name), target);
-    lines.push(`moved ${path.join(oldMirrors, entry.name)} to ${target}`);
+    if (!dryRun) {
+      fs.mkdirSync(newMirrors, { recursive: true });
+      fs.renameSync(source, target);
+    }
+    did(`moved ${source} to ${target}`, `would move ${source} to ${target}`);
+    moves.push([source, target]);
   }
-  for (const entry of fs.existsSync(newMirrors) ? fs.readdirSync(newMirrors, { withFileTypes: true }) : []) {
-    if (!entry.isDirectory()) continue;
+
+  const stores = view("stores.json");
+  const data = readJson(stores);
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    let pointed = 0;
+    for (const record of Object.values(data)) {
+      if (!record || typeof record.mirror !== "string") continue;
+      const move = moves.find(([from]) => record.mirror === from || record.mirror.startsWith(`${from}${path.sep}`));
+      if (!move) continue;
+      record.mirror = `${move[1]}${record.mirror.slice(move[0].length)}`;
+      pointed += 1;
+    }
+    if (pointed) {
+      if (!dryRun) writeJson(path.join(newHome, "stores.json"), data);
+      did(`pointed ${pointed} ${path.join(newHome, "stores.json")} record(s) at the moved mirrors`,
+        `would point ${pointed} ${path.join(newHome, "stores.json")} record(s) at the moved mirrors`);
+    }
+  }
+
+  const mirrors = new Set();
+  for (const entry of fs.existsSync(view("mirror")) ? fs.readdirSync(view("mirror"), { withFileTypes: true }) : []) {
+    if (entry.isDirectory()) mirrors.add(view("mirror", entry.name));
+  }
+  if (dryRun) for (const [from] of moves) if (!from.endsWith(`${path.sep}mirror`)) mirrors.add(from);
+  for (const mirror of mirrors) {
+    if (dryRun) {
+      const held = heldFolders(mirror);
+      if (held.length > 1) refuse(`${mirror} holds ${held.map(prefix => `${prefix}/`).join(" and ")}; move all but one aside`);
+      else if (legacyMirror(mirror)) lines.push(`would rename ${mirror}'s ${held[0] ?? OLD_PREFIXES.join("/ and ")}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`);
+      continue;
+    }
     try {
-      const result = migrateMirrorLocked(path.join(newMirrors, entry.name));
+      const result = migrateMirrorLocked(mirror);
       if (result?.blocked) refused += 1;
       if (result) lines.push(result.blocked ? `refused: ${result.line}` : result.line);
     } catch (error) {
       if (!(error instanceof StateError)) throw error;
-      lines.push(`refused: ${error.message}`);
-      refused += 1;
+      refuse(error.message);
     }
   }
   return { lines, refused };
@@ -180,7 +313,7 @@ function isMain() {
 
 if (isMain()) {
   try {
-    const { lines, refused } = migrateHome();
+    const { lines, refused } = migrateHome(process.env, { dryRun: process.argv.includes("--dry-run") });
     for (const line of lines) process.stdout.write(`dforge-home-migrate: ${line}\n`);
     process.exitCode = refused ? 1 : 0;
   } catch (error) {
