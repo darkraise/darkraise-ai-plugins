@@ -821,6 +821,13 @@ has "a stale parent score is a NOTE" "$out" \
 lacks "a stale parent score is not an error" "$out" "ERROR Task 1"
 check "the stale-parent fixture is otherwise clean" "$status" "0"
 
+lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lint stale-parent-exec.md
+has "a stale parent Executor line is a NOTE" "$out" \
+  "NOTE Task 1: an **Executor:** line above the first part does not route the task"
+lacks "a stale parent Executor line is not an error" "$out" "ERROR Task 1"
+check "the stale-parent-exec fixture is otherwise clean" "$status" "0"
+
 lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dr-forge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint clean-split.md
 lacks "a clean split earns no NOTE" "$out" "above the first part"

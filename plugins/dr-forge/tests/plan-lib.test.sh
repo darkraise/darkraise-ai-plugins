@@ -357,6 +357,15 @@ check "plan_delegated: an unsplit plan is unchanged by the fix" \
 check "plan_executors: unchanged by the fix" \
   "$(plan_executors "$TMP/exec.md" | tr '\t\n' ' |')" "1 codex|"
 
+# A split task routes on its parts, as it scores on them: an Executor line left
+# above `#### Part A` delegated it while plan-lint and plan-revise ignored it.
+printf '# P\n\n### Task 1: Split\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/stale-exec.md"
+check "plan_executors: a stale parent Executor line does not route a split task" \
+  "$(plan_executors "$TMP/stale-exec.md")" ""
+printf '# P\n\n### Task 1: Split\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Executor:** opencode x / high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/part-exec.md"
+check "plan_executors: a split task takes its part's line over the parent's" \
+  "$(plan_executors "$TMP/part-exec.md" | tr '\t\n' ' |')" "1 opencode|"
+
 # --- the plan functions follow the roots ---
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"

@@ -277,6 +277,11 @@ for n in $nums; do
           -gt "$(plan_eval_lines <<<"$full" | grep -c .)" ]; then
     say NOTE "Task $n" "an **Evaluation:** line above the first part does not score the task"
   fi
+  if [ -n "$parts" ] \
+     && [ "$(plan_lines Executor <<<"$full" | grep -c .)" \
+          -gt "$(for part in $parts; do plan_part_text "$part" <<<"$full"; done | plan_lines Executor | grep -c .)" ]; then
+    say NOTE "Task $n" "an **Executor:** line above the first part does not route the task"
+  fi
   for part in ${parts:--}; do
   if [ "$part" = - ]; then
     where="Task $n" text=$full

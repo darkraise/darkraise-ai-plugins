@@ -192,9 +192,10 @@ plan_scores() {
 }
 
 # plan_executors FILE — `<task>\t<id>` for every task carrying an Executor
-# line outside a fenced block, in any part. One row per task: a split task
-# whose parts each name one takes the first. Exit 0 whether or not any task
-# carries a line: ordinary absence is not a failure.
+# line outside a fenced block. One row per task: a split task takes the first
+# line among its parts, and a line above its first part routes nothing, as
+# plan_eval_lines ignores a stale Evaluation line there. Exit 0 whether or not
+# any task carries a line: ordinary absence is not a failure.
 #
 # The Executor line is the decision the plan already made. Nothing here
 # re-evaluates a gate, because execution time must not second-guess planning.
@@ -207,8 +208,12 @@ plan_executors() {
     # becomes the caller's status - and task-brief runs `set -euo pipefail`.
     id=$(plan_task_text "$1" "$n" | awk "$_PLAN_AWK"'
       in_fence($0) { next }
-      !found && /^\*\*Executor:\*\*/ { sub(/^\*\*Executor:\*\*[ \t]*/, ""); id = $1; found = 1 }
-      END { if (found) print id }')
+      /^#### Part [A-Z]:/ { parts = 1; next }
+      /^\*\*Executor:\*\*/ {
+        sub(/^\*\*Executor:\*\*[ \t]*/, "")
+        if (parts) { if (part == "") part = $1 } else if (pre == "") pre = $1
+      }
+      END { id = parts ? part : pre; if (id != "") print id }')
     # An `if`, not `[ -n "$id" ] && printf`: the last iteration's status becomes
     # the function's, so a final task with no Executor line would return 1 and
     # abort plan_delegated's `execs=` assignment under errexit, emitting no rows
