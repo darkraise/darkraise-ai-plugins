@@ -115,6 +115,23 @@ export function validateRepository(root) {
   const superpowersExempt = rel => superpowersAllowed.has(rel) ||
     /^plugins\/dforge\/(?:LICENSES|tests)\//.test(rel) ||
     /^plugins\/dforge\/scripts\/lib\/(?:darkmem-(?:sync|mirror|reconcile)|dforge-home-migrate)\.mjs$/.test(rel);
+  // dforge 4.0 spells the dr-forge names only where it migrates or translates
+  // them. A dated plan or spec name (2026-10-12-dr-forge-settings) cites
+  // history and is not a retired name.
+  const retiredForge = /dr-forge|DR_FORGE|(?<!D)FORGE|(?<![A-Za-z0-9_d])forge(?![a-z])/;
+  const forgeAllowed = new Set([
+    'plugins/dforge/README.md',
+    'plugins/dforge/hooks/cockpit/lib.ts',
+    'plugins/dforge/scripts/dforge-migrate',
+    'plugins/dforge/scripts/lib/dforge-dir.sh',
+    'plugins/dforge/scripts/lib/roots.sh',
+    'plugins/dforge/scripts/lib/dforge-home-migrate.mjs',
+    'plugins/dforge/scripts/lib/darkmem-mirror.mjs',
+    'plugins/dforge/scripts/lib/darkmem-sync.mjs',
+    'plugins/dforge/scripts/lib/darkmem-reconcile.mjs',
+    'plugins/dforge/skills/migrate/SKILL.md',
+  ]);
+  const forgeExempt = rel => forgeAllowed.has(rel) || /^plugins\/dforge\/(?:LICENSES|tests)\//.test(rel);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;
@@ -124,8 +141,10 @@ export function validateRepository(root) {
         if (item.isDirectory()) { visit(path); continue; }
         const rel = relative(root, path).replaceAll('\\', '/');
         const checksSuperpowers = name === 'dforge' && !superpowersExempt(rel);
+        const checksForge = name === 'dforge' && !forgeExempt(rel);
         readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
           if (checksSuperpowers && /superpowers/i.test(line)) errors.push(`${rel}:${index + 1}: retired superpowers name`);
+          if (checksForge && retiredForge.test(line.replace(/\d{4}-\d{2}-\d{2}-dr-forge/g, ''))) errors.push(`${rel}:${index + 1}: retired dr-forge name`);
           if (legacyAllowed.has(rel)) return;
           if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
           for (const match of line.matchAll(/dforge:([a-z0-9-]+)/g)) {
@@ -142,6 +161,25 @@ export function validateRepository(root) {
     };
     visit(pluginRoot);
   }
+  // The UI plugins dropped their dcc- prefix in 0.3.0; only the migration
+  // notes and the historical plans and specs still spell it.
+  const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs']);
+  const unswept = new Set(['.git', '.claude', 'node_modules', '.worktrees', '.dforge', '.forge', '.superpowers']);
+  const sweep = dir => {
+    for (const item of readdirSync(dir, { withFileTypes: true })) {
+      const path = resolve(dir, item.name);
+      const rel = relative(root, path).replaceAll('\\', '/');
+      if (item.isDirectory()) {
+        if (!unswept.has(item.name) && rel !== 'docs/superpowers') sweep(path);
+        continue;
+      }
+      if (!item.isFile() || dccAllowed.has(rel)) continue;
+      readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+        if (line.includes('dcc-darkraise')) errors.push(`${rel}:${index + 1}: retired dcc- plugin name`);
+      });
+    }
+  };
+  sweep(root);
   return errors;
 }
 
