@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# dforge-migrate [DIR] — move a repository from the older names to dforge
-# 4.0's, which reads only the new ones: dr-superpowers' (before 3.0) and
-# dr-forge's (3.x). For the repository at DIR (default: the working
+# dforge-migrate [--dry-run] [DIR] — move a repository from the older names
+# to dforge 4.0's, which reads only the new ones: dr-superpowers' (before 3.0)
+# and dr-forge's (3.x). For the repository at DIR (default: the working
 # directory), its primary checkout and every linked worktree:
 #   .superpowers/, .forge/                    -> .dforge/      (plain rename)
 #   docs/superpowers/ or docs/forge/          -> docs/dforge/  (git mv when tracked)
@@ -25,13 +25,20 @@
 # keeps its old ignore lines and gains the new ones beside them, so a moved
 # directory is never left un-ignored.
 #
-# Exit: 0 done or nothing to do; 1 something was refused; 2 usage or not
-# inside a git repository.
+# --dry-run writes nothing, in the checkouts or the homes: each line says what
+# would move or be rewritten, and each refusal the files and git can foretell
+# is printed. It treats a directory an earlier line would create as absent, so
+# a second source into it is listed as a move rather than a merge.
+#
+# Exit: 0 done or nothing to do; 1 something was (or, dry, would be) refused;
+# 2 usage or not inside a git repository.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/native-path.sh"
 
-[ $# -le 1 ] || { echo "usage: dforge-migrate [DIR]" >&2; exit 2; }
+dry=0
+if [ "${1:-}" = --dry-run ]; then dry=1; shift; fi
+[ $# -le 1 ] || { echo "usage: dforge-migrate [--dry-run] [DIR]" >&2; exit 2; }
 dir=${1:-$PWD}
 
 if command -v timeout >/dev/null 2>&1; then g() { timeout 60 git "$@"; }; else g() { git "$@"; }; fi
@@ -41,13 +48,16 @@ root=$(g -C "$dir" rev-parse --show-toplevel 2>/dev/null) \
 common=$(g -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
   || { echo "dforge-migrate: cannot read the git directory of $root" >&2; exit 2; }
 
-refused=0 moved=0 checkout_refused=0
+refused=0 moved=0 checkout_refused=0 docs_ok=1 docs_at=""
 checkouts=()
 clean=()
 commit_notes=()
 
 refuse() { printf 'dforge-migrate: refused: %s\n' "$1" >&2; refused=1; checkout_refused=1; }
-done_move() { printf 'moved %s -> %s\n' "$1" "$2"; moved=1; }
+done_move() {
+  if [ "$dry" -eq 1 ]; then printf 'would move %s -> %s\n' "$1" "$2"; else printf 'moved %s -> %s\n' "$1" "$2"; fi
+  moved=1
+}
 
 # same_entry A B — whether two files, or two symlinks, hold the same thing.
 same_entry() {
@@ -62,6 +72,15 @@ same_entry() {
 # lacks moves, an identical one is dropped, a differing one is refused and left.
 merge_into() {
   local from=$1 to=$2 file rel conflicts=0 touched=0
+  if [ "$dry" -eq 1 ]; then
+    while IFS= read -r -d '' file; do
+      rel=${file#"$from"/}
+      if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1
+      elif same_entry "$file" "$to/$rel"; then printf 'would drop %s, the same as %s\n' "$file" "$to/$rel"; moved=1
+      else refuse "$file differs from $to/$rel; keep one by hand, then run dforge-migrate again"; fi
+    done < <(find "$from" \( -type f -o -type l \) -print0)
+    return 0
+  fi
   while IFS= read -r -d '' file; do
     rel=${file#"$from"/}
     if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then
@@ -97,7 +116,7 @@ mv_plain() {
     if [ -d "$1" ] && [ -d "$2" ]; then merge_into "$1" "$2"; else refuse "$1 and $2 both exist and are not both directories; merge them by hand, then run dforge-migrate again"; fi
     return 0
   fi
-  if mv -- "$1" "$2"; then done_move "$1" "$2"; else refuse "could not rename $1"; fi
+  if [ "$dry" -eq 1 ] || mv -- "$1" "$2"; then done_move "$1" "$2"; else refuse "could not rename $1"; fi
 }
 
 # docs_trees CHECKOUT — each docs tree the checkout holds, one per line.
@@ -106,26 +125,35 @@ docs_trees() {
   for name in superpowers forge dforge; do [ ! -e "$1/docs/$name" ] || printf '%s\n' "$1/docs/$name"; done
 }
 
-migrate_docs() { # CHECKOUT
+# migrate_docs CHECKOUT — the one docs tree to docs/dforge/. Sets docs_ok to 0
+# when it refused, and docs_at to where the plans are once it is done: the new
+# tree, or in a dry run the tree that would move.
+migrate_docs() {
   local wt=$1 trees name old new="$1/docs/dforge"
+  docs_ok=1 docs_at=""
   trees=$(docs_trees "$wt")
   [ -n "$trees" ] || return 0
   if [ "$(wc -l <<<"$trees")" -gt 1 ]; then
     refuse "$(paste -sd, - <<<"$trees" | sed 's/,/ and /g') all exist; merge them by hand, then run dforge-migrate again"
+    docs_ok=0
     return 0
   fi
+  docs_at=$new
   [ "$trees" != "$new" ] || return 0
   old=$trees name=${trees##*/}
+  [ "$dry" -eq 0 ] || docs_at=$old
   if [ -z "$(g -C "$wt" ls-files -- "docs/$name" | head -n 1)" ]; then mv_plain "$old" "$new"; return 0; fi
   if [ -n "$(g -C "$wt" status --porcelain --untracked-files=all -- "docs/$name")" ]; then
     refuse "$old has uncommitted changes; commit or stash them, then run dforge-migrate again"
+    docs_ok=0
     return 0
   fi
-  if g -C "$wt" mv "docs/$name" docs/dforge; then
+  if [ "$dry" -eq 1 ] || g -C "$wt" mv "docs/$name" docs/dforge; then
     done_move "$old" "$new"
     commit_notes+=("$wt: the staged rename docs/$name/ -> docs/dforge/")
   else
     refuse "git mv docs/$name docs/dforge failed in $wt"
+    docs_ok=0
   fi
 }
 
@@ -156,10 +184,10 @@ rewrite_names() {
         }
       }' "$file" "$renamed" > "$tmp" \
     && ! cmp -s -- "$tmp" "$file" \
-    && cat "$tmp" > "$file" \
+    && { [ "$dry" -eq 1 ] || cat "$tmp" > "$file"; } \
     || { rm -f -- "$tmp" "$renamed"; return 1; }
   rm -f -- "$tmp" "$renamed"
-  printf 'rewrote the older names in %s\n' "$file"
+  if [ "$dry" -eq 1 ]; then printf 'would rewrite the older names in %s\n' "$file"; else printf 'rewrote the older names in %s\n' "$file"; fi
   moved=1
 }
 
@@ -182,6 +210,11 @@ rewrite_prefixes() {
   local file=$1 tmp
   writable "$2" "$file" || return 1
   grep -qE "$PREFIX_RE" "$file" 2>/dev/null || return 1
+  if [ "$dry" -eq 1 ]; then
+    printf 'would rewrite the plugin prefixes in %s\n' "$file"
+    moved=1
+    return 0
+  fi
   tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || { refuse "could not rewrite the plugin prefixes in $file"; return 1; }
   if sed -E "s#$PREFIX_RE#\\1dforge:\\3#g" "$file" > "$tmp" && cat "$tmp" > "$file"; then
     rm -f -- "$tmp"
@@ -205,21 +238,23 @@ plan_done() {
   return 1
 }
 
-# rewrite_active_plans CHECKOUT — every plan under docs/dforge/plans/ that is
+# rewrite_active_plans CHECKOUT DOCS — every plan under DOCS/plans/ that is
 # still active, and the checkout's handoff note.
 rewrite_active_plans() {
-  local wt=$1 docs="$1/docs/dforge" plan rel
-  if [ -d "$docs/plans" ]; then
+  local wt=$1 docs=$2 plan rel state
+  if [ -n "$docs" ] && [ -d "$docs/plans" ]; then
     while IFS= read -r -d '' plan; do
       rel=${plan#"$docs"/}
       [ "${rel##*/}" != completed.md ] || continue
       plan_done "$docs" "$rel" && continue
-      if rewrite_prefixes "$plan" "$wt" && g -C "$wt" ls-files --error-unmatch -- "docs/dforge/$rel" >/dev/null 2>&1; then
+      if rewrite_prefixes "$plan" "$wt" && g -C "$wt" ls-files --error-unmatch -- "${docs#"$wt"/}/$rel" >/dev/null 2>&1; then
         commit_notes+=("$wt: docs/dforge/$rel")
       fi
     done < <(find "$docs/plans" -type f -name '*.md' -print0)
   fi
-  [ ! -f "$wt/.dforge/handoff/latest.md" ] || rewrite_prefixes "$wt/.dforge/handoff/latest.md" "$wt" || true
+  for state in .dforge .forge .superpowers; do
+    [ ! -f "$wt/$state/handoff/latest.md" ] || rewrite_prefixes "$wt/$state/handoff/latest.md" "$wt" || true
+  done
 }
 
 while IFS= read -r wt; do
@@ -236,7 +271,7 @@ for wt in "${checkouts[@]}"; do
     mv_plain "$wt/$old" "$wt/.dforge"
   done
   migrate_docs "$wt"
-  [ -n "$(docs_trees "$wt" | grep -vxF "$wt/docs/dforge")" ] || rewrite_active_plans "$wt"
+  [ "$docs_ok" -eq 0 ] || rewrite_active_plans "$wt" "$docs_at"
   if gitdir=$(g -C "$wt" rev-parse --absolute-git-dir 2>/dev/null); then
     for old in dr-superpowers dr-forge; do mv_plain "$gitdir/$old" "$gitdir/dforge"; done
   else
@@ -267,13 +302,15 @@ if [ -f "$HERE/lib/dforge-home-migrate.mjs" ]; then
       refuse "node is not on PATH, so the homes (~/.dr-superpowers/, ~/.dr-forge/) were not migrated"
     fi
   else
-    home_out=$(cd "$root" && node "$(dr_native_path "$HERE/lib/dforge-home-migrate.mjs")")
+    home_args=()
+    [ "$dry" -eq 0 ] || home_args=(--dry-run)
+    home_out=$(cd "$root" && node "$(dr_native_path "$HERE/lib/dforge-home-migrate.mjs")" "${home_args[@]+"${home_args[@]}"}")
     home_status=$?
     if [ -n "$home_out" ]; then printf '%s\n' "$home_out"; moved=1; fi
     [ "$home_status" -eq 0 ] || refuse "scripts/lib/dforge-home-migrate.mjs did not finish; see its output above"
   fi
 fi
 
-for note in "${commit_notes[@]+"${commit_notes[@]}"}"; do printf 'commit: %s\n' "$note"; done
+[ "$dry" -eq 1 ] || for note in "${commit_notes[@]+"${commit_notes[@]}"}"; do printf 'commit: %s\n' "$note"; done
 [ "$moved" -eq 1 ] || [ "$refused" -eq 1 ] || echo "dforge-migrate: nothing to migrate in $root"
 exit "$refused"

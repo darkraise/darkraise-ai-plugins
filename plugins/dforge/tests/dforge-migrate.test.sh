@@ -265,6 +265,49 @@ check "links: a linked handoff note is not rewritten" "$(cat "$TMP/outside/note.
 check "links: a linked .gitignore is not rewritten" "$(cat "$TMP/outside/ignore")" ".forge/"
 check "links: a state directory linked outside is not rewritten" "$(cat "$TMP/outside/state/handoff/latest.md")" "dr-forge:resume-execution"
 
+# --- --dry-run: every action listed, nothing written in the checkout or the home ---
+snapshot() { # snapshot DIR... — every path and file checksum under DIR, the git index aside
+  find "$@" -not -path '*/.git/index' -not -path '*/.git/objects/*' -print | sort
+  find "$@" -type f -not -path '*/.git/index' -not -path '*/.git/objects/*' -exec cksum {} + | sort
+}
+DR="$TMP/dry"
+repo "$DR"
+mkdir -p "$DR/.forge/sdd/p1" "$DR/docs/forge/plans" "$DR/.git/dr-forge"
+echo ledger > "$DR/.forge/sdd/p1/progress.md"
+printf '**Implementer:** dr-forge:impl-sonnet-low\n' > "$DR/docs/forge/plans/active.md"
+printf '.forge/\n' > "$DR/.gitignore"
+git -C "$DR" add .gitignore docs
+git -C "$DR" commit -q -m docs
+DH="$TMP/dry-home"
+mkdir -p "$DH/.dr-forge"
+printf '{"handoffTokens":325000}\n' > "$DH/.dr-forge/config.json"
+before=$(snapshot "$DR" "$DH")
+out=$(HOME="$DH" bash "$FM" --dry-run "$DR" 2>&1); code=$?
+check "dry: exit 0" "$code" "0"
+check "dry: nothing written" "$(snapshot "$DR" "$DH")" "$before"
+check "dry: the state move listed" "$(grep -cxF "would move $DR/.forge -> $DR/.dforge" <<<"$out")" "1"
+check "dry: the docs move listed" "$(grep -cxF "would move $DR/docs/forge -> $DR/docs/dforge" <<<"$out")" "1"
+check "dry: the git dir move listed" "$(grep -cxF "would move $DR/.git/dr-forge -> $DR/.git/dforge" <<<"$out")" "1"
+check "dry: the ignore rewrite listed" "$(grep -cxF "would rewrite the older names in $DR/.gitignore" <<<"$out")" "1"
+check "dry: the plan rewrite listed" "$(grep -cxF "would rewrite the plugin prefixes in $DR/docs/forge/plans/active.md" <<<"$out")" "1"
+check "dry: the home move listed" "$(grep -cxF "dforge-home-migrate: would move $DH/.dr-forge to $DH/.dforge" <<<"$out")" "1"
+check "dry: no commit lines" "$(grep -c '^commit:' <<<"$out")" "0"
+out=$(HOME="$DH" bash "$FM" "$DR" 2>&1); code=$?
+check "after the dry run, the real run: exit 0" "$code" "0"
+check "after the dry run, the real run: the plan rewritten" "$(cat "$DR/docs/dforge/plans/active.md")" "**Implementer:** dforge:impl-sonnet-low"
+
+DB="$TMP/dry-both-docs"
+repo "$DB"
+mkdir -p "$DB/docs/forge" "$DB/docs/dforge"
+before=$(snapshot "$DB")
+out=$(bash "$FM" --dry-run "$DB" 2>&1); code=$?
+check "dry, two docs trees: exit 1" "$code" "1"
+check "dry, two docs trees: the refusal foretold" "$(grep -c "refused: $DB/docs/forge and $DB/docs/dforge all exist" <<<"$out")" "1"
+check "dry, two docs trees: nothing written" "$(snapshot "$DB")" "$before"
+
+bash "$FM" --dry-run "$DB" extra > /dev/null 2>&1
+check "dry: a second directory is a usage error" "$?" "2"
+
 # --- the home step runs when dforge-home-migrate.mjs is installed ---
 P="$TMP/plugin/scripts"
 mkdir -p "$P/lib"
