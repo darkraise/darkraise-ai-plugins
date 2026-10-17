@@ -51,18 +51,27 @@ records `wait`.
 
 ### At finishing
 
-Finishing Step 4 runs `scripts/finish-choice get [--plan PLAN_FILE]`:
+Finishing Step 4 keeps its in-flight check (`scripts/in-flight`) first: an
+immediate finish waits for running launches exactly as the menu does today,
+since the Stop hook holds a `## Next session` ending over running work. Then
+it runs `scripts/finish-choice get [--plan PLAN_FILE]`:
 
-- **`merge`, `pr` or `keep`** (attended or not): show no menu. Carry the
-  option out from Step 5 by name, with the recorded base branch, exactly as
-  if your human partner had chosen it, and record it with
-  `finish-choice answer <action>` first so the cockpit stops showing it as
-  pending. The overrides finishing §Auto run already applies hold here too:
-  on a detached HEAD `merge` keeps and `pr` pushes a new branch
-  (`git push origin HEAD:refs/heads/<new-branch>`); when the base is null or
-  `none`, determine it as Step 3 does, and if none can be determined `merge`
-  keeps and `pr` opens its request against the repository's default branch.
-  Never discard.
+- **`merge`, `pr` or `keep` with no `answer` field** (attended or not): show
+  no menu. Record it with `finish-choice answer <action>` first, then carry
+  the option out from Step 5 by name, exactly as if your human partner had
+  chosen it. Never discard. The base branch, and the overrides finishing
+  §Auto run already applies:
+  - Base: the recorded `base`; when it is null (always so for a choice the
+    `finishAction` setting supplied) or `none`, take it from the plan, the
+    conversation or the branch's upstream as Step 3 does, **without asking
+    or confirming**. When none of those names one, `merge` keeps the branch
+    and `pr` opens its request against the repository's default branch.
+  - Detached HEAD: `merge` keeps and `pr` pushes a new branch
+    (`git push origin HEAD:refs/heads/<new-branch>`).
+- **A record whose `answer` field is set** (a previous immediate finish
+  stopped, or the menu was answered, and the session came back to
+  finishing): the choice is consumed. Show the menu and wait; never re-run
+  the action unattended.
 - **`wait`, or exit 3 (nothing recorded)**: show the menu as today and wait
   for the answer. No timer, no wake.
 
@@ -111,15 +120,22 @@ fields are ignored.
 ### Stop hook (`scripts/turn-end.sh`)
 
 The marker that recognises the question as a valid ending,
-`If it gets none within `, becomes `what should I do?` in both places that
-list it. The header comment drops "unanswered".
+`If it gets none within `, becomes `Ask me then: show the finish menu` (option
+4's line, present in both the normal and the detached-HEAD question) in both
+places that list it. The clean-review hold reason (around line 171) says "the
+finishing menu, or the next-step block once a recorded choice is carried
+out" instead of "the integration menu", and the header comments (lines 2-3 and
+126-131) drop "unanswered" and say the same.
 
 ### Cockpit (`hooks/cockpit/`)
 
 - `types/index.d.ts` `CockpitFinish`: drop `dueAt` and `firedAt`.
 - `lib.ts`: `parseFinish` drops those fields; `isFinishArmed` is deleted;
-  `finishLine` shows `Finish <label> when done` before an answer and nothing
-  after, with `Finish ask me when done` for `wait`. No countdown.
+  `finishLine(finish)` drops its `at` parameter (all call sites in
+  `register.tsx` change) and shows `Finish <label> when done` before an answer
+  and nothing after, with `Finish ask me when done` for `wait`. No countdown.
+  An old record with `firedAt` set and no `answer` renders as unanswered;
+  harmless, since the file goes with the run's workspace.
 - `register.tsx`: the once-a-second ticker no longer considers the finish
   choice; the Run card, Plan card and desktop chips keep calling `finishLine`.
 
@@ -130,19 +146,29 @@ list it. The header comment drops "unanswered".
   where an immediate finish stops. The §At the finishing menu, §When your
   human partner answers (beyond recording) and §When the wake fires sections
   go.
-- `skills/finishing-a-development-branch/SKILL.md`: Step 4 gains the
-  recorded-choice rule above and loses "Arm the finish preference"; Step 5's
-  "Whose choice it is" drops the wake; §Auto run's Step 4 bullet points to the
-  shared rule and keeps only its auto-run overrides; the Common
-  Rationalizations row about the wake goes.
+- `skills/finishing-a-development-branch/SKILL.md`:
+  - the Core principle (line 10) reads "Carry out the recorded choice, or
+    present options";
+  - Step 4 gains the recorded-choice rule above and loses "Arm the finish
+    preference"; Step 5's "Whose choice it is" drops the wake;
+  - §Auto run's Step 4 bullet points to the shared rule and keeps only its
+    auto-run overrides;
+  - Common Rationalizations: the wake row (line 446) goes; the "obviously want
+    it merged" row (line 445) ends "only the choice they made before the run
+    acts for them, and it acts at once"; the "three options close the message"
+    row (line 457) applies to a run with no recorded choice, and a run that
+    carried out its choice ends on the next-step block.
+- `reference/auto-run.md`: "No menu, no wake." (line 251) becomes "No menu.";
+  nothing else changes.
 - `skills/subagent-driven-development/SKILL.md`, `skills/executing-plans/SKILL.md`,
   `skills/using-git-worktrees/SKILL.md`,
   `skills/using-dforge/references/codex-tools.md`: the sentence describing
   the question ("if its menu goes unanswered for the configured wait") states
   the new meaning; codex-tools drops the no-scheduler fallback.
-- `reference/auto-run.md`: unchanged (it names only the question, which an
-  auto run still skips).
-- `README.md`: the finish-preference paragraphs and the settings table.
+- `README.md`: the finish-preference paragraphs (around lines 421-436), the
+  settings table (around 783-784), and the cockpit Run card's Finish row
+  paragraph (around 624-627), which describes the countdown and becomes the
+  new chip text.
 
 Historical plans, specs and registers are not edited.
 
@@ -180,9 +206,10 @@ A3. [test, high] `finish-choice arm`, `finish-choice job x` and `finish-choice d
 A4. [test, high] A `finish.json` written by an older version, carrying `armedAt`, `dueAt`, `job` and `firedAt`, is printed by `finish-choice get` with exit 0 and parsed by the cockpit into its action and base.
 A5. [test, high] The Run card's finish chip reads `Finish merge into main when done` for an unanswered `merge` choice with base `main`, `Finish ask me when done` for `wait`, and is absent once the choice is answered.
 A6. [test, neg, high] With a recorded `merge`, `pr` or `keep` choice and no turn, shell or subagent live, the cockpit starts no once-a-second redraw and shows no countdown.
-A7. [test, high] The Stop hook lets a turn that wrote a new, unfinished ledger end on a message containing `what should I do?`, and holds one that ends on neither that nor `## Next session`.
+A7. [test, high] The Stop hook lets a turn that wrote a new, unfinished ledger end on a message containing `Ask me then: show the finish menu`, and holds one that ends on neither that nor `## Next session`.
+A12. [test, high] Finishing's Step 4 text states that a record whose `answer` field is set shows the menu and is never re-run, and that a null base is taken from the plan, conversation or upstream without asking; a skills test pins both.
 A8. [test, high] `dforge-config get finishTimeout` exits 2, and with `finishTimeout: 45` still stored in `~/.dforge/config.json`, `dforge-config get --json` exits 0 and omits the key.
-A9. [test, neg, high] No file under `plugins/dforge/skills` or `plugins/dforge/reference` names `finish-choice arm`, `finish-choice due`, `finishTimeout` or CronCreate in connection with finishing.
+A9. [test, neg, high] No file under `plugins/dforge/skills` or `plugins/dforge/reference`, nor `plugins/dforge/README.md`, names `finish-choice arm`, `finish-choice due`, `finishTimeout`, `configured wait`, or CronCreate in connection with finishing.
 A10. [demo, high] In a plan run whose recorded choice is `merge` into `main`, a clean final review leads finishing to merge into `main` with no menu; the final message opens `Finished with Merge back to main locally, as chosen before the run.` and ends with the `## Next session` block.
 A11. [demo, neg, high] In a plan run whose recorded choice is `pr`, a rejected push leaves the branch and worktree in place, is never retried with force, and the message ends on the finish menu.
 
@@ -207,3 +234,14 @@ final review, so an immediate finish ends a turn cleanly. Evidence:
 - Moving the question into plan writing: a plan can execute in a later
   session, and `finish.json` lives beside the run's ledger.
 - A release version bump: a separate release commit when the owner asks.
+
+## Review notes (Fable, round 1)
+
+Issues Found, all four applied: finishing's Core principle and two
+Rationalizations rows named; README's Finish-row paragraph named; an answered
+record counts as consumed and shows the menu (A12); a null base is taken
+without asking, and with none found `merge` keeps and `pr` targets the
+default branch. Advisory points taken: the in-flight check still gates an
+immediate finish, the Stop hook's hold text and comments, a distinctive
+question marker, `finishLine` drops `at`, `auto-run.md`'s "no wake". Noted,
+not acted on: an old `firedAt` record renders as unanswered (harmless).
