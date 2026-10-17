@@ -30,10 +30,12 @@ const storesOf = (home, repo) => {
   return { documents, progress };
 };
 
-test("a document name has one key under either prefix", () => {
-  assert.deepEqual(nameSpellings("docs/superpowers/plans/p.md"), ["docs/dforge/plans/p.md", "docs/superpowers/plans/p.md"]);
-  assert.deepEqual(nameSpellings("./docs/dforge/plans/p.md"), ["docs/dforge/plans/p.md", "docs/superpowers/plans/p.md"]);
-  assert.deepEqual(nameSpellings("docs/superpowers"), ["docs/dforge", "docs/superpowers"]);
+test("a document name has one key under every prefix", () => {
+  assert.deepEqual(nameSpellings("docs/superpowers/plans/p.md"), ["docs/dforge/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
+  assert.deepEqual(nameSpellings("docs/forge/plans/p.md"), ["docs/dforge/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
+  assert.deepEqual(nameSpellings("./docs/dforge/plans/p.md"), ["docs/dforge/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
+  assert.deepEqual(nameSpellings("docs/superpowers"), ["docs/dforge", "docs/forge", "docs/superpowers"]);
+  assert.deepEqual(nameSpellings("docs/forgex/a.md"), ["docs/forgex/a.md"]);
   assert.deepEqual(nameSpellings("docs/superpowersx/a.md"), ["docs/superpowersx/a.md"]);
   assert.deepEqual(nameSpellings("/abs/docs/superpowers/a.md"), ["/abs/docs/superpowers/a.md"]);
 });
@@ -405,7 +407,7 @@ test("a failing citation search is named in the move's details", { skip: process
   fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "grep" ] && { echo "fatal: grep refused by the test" >&2; exit 128; }; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
   const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /git grep failed: fatal: grep refused by the test; check for docs\/superpowers\/ and docs\/dforge\/ citations before you commit/);
+  assert.match(result.stdout, /git grep failed: fatal: grep refused by the test; check for docs\/superpowers\/, docs\/forge\/ and docs\/dforge\/ citations before you commit/);
 });
 
 for (const { arg, reason } of [

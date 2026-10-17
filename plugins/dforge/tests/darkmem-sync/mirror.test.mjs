@@ -128,10 +128,12 @@ test("paths name their uris; plans and drafts name their properties; a handoff n
     worktreeRoot: "/w/dforge",
   };
   assert.equal(pathToUri(named, "docs/superpowers/plans/p1.md"), "dforge/plans/p1.md");
+  assert.equal(pathToUri(named, "docs/forge/plans/p1.md"), "dforge/plans/p1.md");
   assert.equal(pathToUri(named, "./docs/dforge/plans/p1.md"), "dforge/plans/p1.md");
   assert.equal(pathToUri(named, "/home/u/.dforge/mirror/dforge/dforge/plans/p1.md"), "dforge/plans/p1.md");
   assert.equal(pathToUri(named, "/w/dforge/docs/dforge/specs/s.md"), "dforge/specs/s.md");
   assert.equal(pathToUri(named, "/w/dforge/docs/superpowers/specs/s.md"), null);
+  assert.equal(pathToUri(named, "/w/dforge/docs/forge/specs/s.md"), null);
   assert.equal(pathToUri(named, "/w/dforge/.dforge/sdd/p1/progress.md"), null);
   assert.equal(pathToUri(named, "/elsewhere/dforge/plans/p1.md"), null);
   assert.equal(pathToUri(named, "plans/p1.md"), null);

@@ -13,7 +13,8 @@ import { progressToDarkmem, progressToLocal } from "./darkmem-progress-move.mjs"
 import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
-const LEGACY = "docs/superpowers";
+// dr-forge wrote docs/forge, dr-superpowers docs/superpowers.
+const LEGACY = ["docs/forge", "docs/superpowers"];
 const DOCS = "docs/dforge";
 
 // Each move, under "<family>:<target store>". A move answers
@@ -41,13 +42,15 @@ function dirEntries(dir) {
   }
 }
 
-// One document name under either docs prefix (spec §7.1), as dforge_name_key
-// and dforge_name_spellings spell it in roots.sh. The pre-3.0 docs/superpowers
-// spelling stays readable because historical plans and ledgers cite it.
+// One document name under any docs prefix (spec §7.1), as dforge_name_key
+// and dforge_name_spellings spell it in roots.sh. The older docs/forge and
+// docs/superpowers spellings stay readable because historical plans and
+// ledgers cite them.
 export function nameSpellings(name) {
   const text = String(name).replace(/^\.\//, "");
-  const key = text === LEGACY || text.startsWith(`${LEGACY}/`) ? `${DOCS}${text.slice(LEGACY.length)}` : text;
-  return key === DOCS || key.startsWith(`${DOCS}/`) ? [key, `${LEGACY}${key.slice(DOCS.length)}`] : [key];
+  const old = LEGACY.find(prefix => text === prefix || text.startsWith(`${prefix}/`));
+  const key = old ? `${DOCS}${text.slice(old.length)}` : text;
+  return key === DOCS || key.startsWith(`${DOCS}/`) ? [key, ...LEGACY.map(prefix => `${prefix}${key.slice(DOCS.length)}`)] : [key];
 }
 
 export function pendingFamilies(cfg) {
@@ -356,11 +359,11 @@ async function documentsToDarkmem(context) {
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
   if (removed.status !== 0) return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details: [] };
   const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
-  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/dforge/", "--", ".", `:(exclude)${rel}`]);
+  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "-e", "docs/dforge/", "--", ".", `:(exclude)${rel}`]);
   const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
-  if (cites.status > 1) details.push(`git grep failed: ${cites.stderr.trim()}; check for docs/superpowers/ and docs/dforge/ citations before you commit`);
+  if (cites.status > 1) details.push(`git grep failed: ${cites.stderr.trim()}; check for docs/superpowers/, docs/forge/ and docs/dforge/ citations before you commit`);
   if (citing.length) {
-    details.push("these tracked files cite docs/superpowers/ or docs/dforge/ names; rewrite them before you commit the deletion:");
+    details.push("these tracked files cite docs/superpowers/, docs/forge/ or docs/dforge/ names; rewrite them before you commit the deletion:");
     details.push(...citing.slice(0, 20).map(file => `  ${file}`));
     if (citing.length > 20) details.push(`and ${citing.length - 20} more`);
   }

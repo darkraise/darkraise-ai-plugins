@@ -532,12 +532,12 @@ export function ledgerEntries(text) {
 }
 
 // The darkmem uri a document's name or path stands for: a name under
-// docs/dforge/ or docs/superpowers/ (as a ledger or a **Spec:** line writes
+// docs/dforge/, docs/forge/ or docs/superpowers/ (as a ledger or a **Spec:** line writes
 // it), or an absolute path under the docs root or the worktree's docs
 // directory. Computed from the roots, never by searching for a segment.
 export function pathToUri(roots, file) {
   const text = String(file).replace(/\\/g, "/");
-  const name = /^(?:\.\/)?docs\/(?:dforge|superpowers)\/(.+)$/.exec(text);
+  const name = /^(?:\.\/)?docs\/(?:dforge|forge|superpowers)\/(.+)$/.exec(text);
   if (name) return name[1].split("/").some(segment => segment === ".." || segment === ".") ? null : `${DOC_PREFIX}/${name[1]}`;
   if (!path.isAbsolute(String(file))) return null;
   const bases = [roots.docsRoot];

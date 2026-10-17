@@ -61,10 +61,11 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
 }
 
 // A document name as ledgers and plans write it, docs/dforge/<rest> or the
-// pre-3.0 docs/superpowers/<rest> that historical plans cite, as its uri dforge/<rest>; null for a
+// older docs/forge/<rest> and docs/superpowers/<rest> that historical plans
+// cite, as its uri dforge/<rest>; null for a
 // path, a handoff note, an archived copy, or a name that climbs.
 function documentUri(name) {
-  const match = /^(?:\.\/)?docs\/(?:dforge|superpowers)\/(.+)$/.exec(name);
+  const match = /^(?:\.\/)?docs\/(?:dforge|forge|superpowers)\/(.+)$/.exec(name);
   if (!match || match[1].split("/").some(segment => segment === "" || segment === "." || segment === "..")) return null;
   const uri = `${DOC_PREFIX}/${match[1]}`;
   return uriFamily(uri) === "documents" && !isArchiveUri(uri) ? uri : null;
