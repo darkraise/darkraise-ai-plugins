@@ -91,7 +91,8 @@ try {
   Copy-Item -LiteralPath (Join-Path $repository 'plugins/darkraise-ui/.codex-plugin/plugin.json') -Destination (Join-Path $uiRoot '.codex-plugin/plugin.json') -Force
   Copy-Item -LiteralPath (Join-Path $repository 'plugins/darkraise-ui/skills/darkraise-ui/SKILL.md') -Destination (Join-Path $uiRoot 'skills/darkraise-ui/SKILL.md') -Force
   $newUi = (Invoke-Client $Codex @('plugin','add','darkraise-ui@darkraise','--json')).stdout | ConvertFrom-Json
-  Check ($newUi.version -eq '0.2.0') 'Codex upgrades UI cache version'
+  $expectedUiVersion = (Get-Content (Join-Path $uiRoot '.codex-plugin/plugin.json') -Raw | ConvertFrom-Json).version
+  Check ($newUi.version -eq $expectedUiVersion) 'Codex upgrades UI cache version'
   Check ((Get-Content (Join-Path $newUi.installedPath 'skills/darkraise-ui/SKILL.md') -Raw) -eq (Get-Content (Join-Path $uiRoot 'skills/darkraise-ui/SKILL.md') -Raw)) 'Codex upgrade refreshes actual skill bytes'
 
   Invoke-Client $Claude @('plugin','marketplace','add','https://github.com/anthropics/claude-plugins-official.git') | Out-Null

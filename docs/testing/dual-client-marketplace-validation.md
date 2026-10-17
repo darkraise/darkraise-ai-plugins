@@ -24,7 +24,9 @@ Verified outcomes:
 - Claude installs all four repository plugins and resolves the declared
   `superpowers@claude-plugins-official` dependency. Dependency entries are counted
   separately from the four repository plugins.
-- Codex upgrades a seeded UI `0.1.0` cache to `0.2.0`, replacing actual skill bytes.
+- Codex upgrades a seeded UI `0.1.0` cache to the version the repository's
+  `darkraise-ui` Codex manifest names (`0.2.0` at this run), replacing actual
+  skill bytes.
 - Git-source registration selects the dedicated Codex catalog. Git's process-local
   URL mapping routes a fixture HTTPS URL to a disposable local repository; the
   future published GitHub URL was not contacted.
