@@ -138,6 +138,26 @@ sed 's/$/\r/' b11.md > b11-crlf.md
 run docs/plan.md b11-crlf.md
 check "CRLF block, builds on A1: output" "$out" "amended: A3 Task 2"
 
+# --- a split into parts, as the ruling seat's AMEND writes it ---
+cp docs/plan.md docs/split.md
+SPLIT_LEDGER="$REPO/.forge/sdd/split/amendments.md"
+part() { # part <letter> [evaluation line]
+  printf '#### Part %s: half %s\n\n**Files:**\n- Modify: `a.sh`\n\n**Implementer:** dr-forge:impl-sonnet-low\n%s' "$1" "$1" "${2-}"
+}
+split_old=$(printf '**Implementer:** dr-forge:impl-sonnet-medium\n**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4')
+ev='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1'
+entry s1.md '## A? — Task 2' "$split_old" "$(printf '%s\n\n%s' "$(part A "$ev")" "$(part B)")"
+run docs/split.md s1.md
+check "split, a part without its Evaluation line: rejected" "$status" "1"
+has "split, a part without its Evaluation line: named" "$out" "ERROR Task 2 part B: missing **Evaluation:** line"
+entry s2.md '## A? — Task 2' "$split_old" "$(printf '%s\n\n%s' "$(part A "$ev")" "$(part B "$ev")")"
+run docs/split.md s2.md
+check "split: applied" "$out" "amended: A1 Task 2"
+check "split: the amended plan holds both parts" \
+  "$(. "$HERE/../scripts/lib/plan.sh"; plan_apply_amendments docs/split.md "$SPLIT_LEDGER" | grep -c '^#### Part [AB]: ')" "2"
+out=$(bash "$HERE/../scripts/plan-lint" docs/split.md --no-probe 2>&1)
+check "split: plan-lint accepts the amended plan" "$(grep -c '^ERROR' <<<"$out")" "0"
+
 run docs/plan.md
 check "usage: exit 2" "$status" "2"
 
