@@ -88,11 +88,12 @@ export function validateRepository(root) {
   }
   const legacyPattern = /(?:^|[^\w-])superpowers:|dr-superpowers:|dcc-superpower-companions:/;
   // dforge-migrate rewrites the older prefixes in active plans, so it and its
-  // tests must spell them.
+  // tests and the migrate skill must spell them.
   const legacyAllowed = new Set([
     'plugins/dforge/tests/cockpit.test.ts',
     'plugins/dforge/scripts/dforge-migrate',
     'plugins/dforge/tests/dforge-migrate.test.sh',
+    'plugins/dforge/skills/migrate/SKILL.md',
   ]);
   // dforge 3.0 spells the retired name only where it translates historical
   // citations, migrates a pre-3.0 layout, cites this repository's historical
@@ -109,6 +110,7 @@ export function validateRepository(root) {
     'plugins/dforge/reference/auto-run.md',
     'plugins/dforge/reference/parallel-waves.md',
     'plugins/dforge/reference/session-budget.md',
+    'plugins/dforge/skills/migrate/SKILL.md',
   ]);
   const superpowersExempt = rel => superpowersAllowed.has(rel) ||
     /^plugins\/dforge\/(?:LICENSES|tests)\//.test(rel) ||

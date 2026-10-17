@@ -40,6 +40,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | Before the final review or merge, when `gates.md` exists | dforge:running-gates |
 | Session notes have accumulated | dforge:distilling-docs |
 | Slow or heavy tests | dforge:test-simplifier |
+| A repository or home on an older layout | dforge:migrate |
 
 ## Principles
 
