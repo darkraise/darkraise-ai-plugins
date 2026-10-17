@@ -281,8 +281,12 @@ git -C "$DR" commit -q -m docs
 DH="$TMP/dry-home"
 mkdir -p "$DH/.dr-forge"
 printf '{"handoffTokens":325000}\n' > "$DH/.dr-forge/config.json"
+NM="$TMP/no-mktemp"
+mkdir -p "$NM"
+printf '#!/bin/sh\necho "$*" >> "%s/mktemp-calls"\nexit 1\n' "$TMP" > "$NM/mktemp"
+chmod +x "$NM/mktemp"
 before=$(snapshot "$DR" "$DH")
-out=$(HOME="$DH" bash "$FM" --dry-run "$DR" 2>&1); code=$?
+out=$(HOME="$DH" PATH="$NM:$PATH" bash "$FM" --dry-run "$DR" 2>&1); code=$?
 check "dry: exit 0" "$code" "0"
 check "dry: nothing written" "$(snapshot "$DR" "$DH")" "$before"
 check "dry: the state move listed" "$(grep -cxF "would move $DR/.forge -> $DR/.dforge" <<<"$out")" "1"
@@ -292,6 +296,7 @@ check "dry: the ignore rewrite listed" "$(grep -cxF "would rewrite the older nam
 check "dry: the plan rewrite listed" "$(grep -cxF "would rewrite the plugin prefixes in $DR/docs/forge/plans/active.md" <<<"$out")" "1"
 check "dry: the home move listed" "$(grep -cxF "dforge-home-migrate: would move $DH/.dr-forge to $DH/.dforge" <<<"$out")" "1"
 check "dry: no commit lines" "$(grep -c '^commit:' <<<"$out")" "0"
+check "dry: no temporary file made" "$(cat "$TMP/mktemp-calls" 2>/dev/null)" ""
 out=$(HOME="$DH" bash "$FM" "$DR" 2>&1); code=$?
 check "after the dry run, the real run: exit 0" "$code" "0"
 check "after the dry run, the real run: the plan rewritten" "$(cat "$DR/docs/dforge/plans/active.md")" "**Implementer:** dforge:impl-sonnet-low"

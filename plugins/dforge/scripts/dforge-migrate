@@ -143,7 +143,7 @@ migrate_docs() {
   old=$trees name=${trees##*/}
   [ "$dry" -eq 0 ] || docs_at=$old
   if [ -z "$(g -C "$wt" ls-files -- "docs/$name" | head -n 1)" ]; then mv_plain "$old" "$new"; return 0; fi
-  if [ -n "$(g -C "$wt" status --porcelain --untracked-files=all -- "docs/$name")" ]; then
+  if [ -n "$(g --no-optional-locks -C "$wt" status --porcelain --untracked-files=all -- "docs/$name")" ]; then
     refuse "$old has uncommitted changes; commit or stash them, then run dforge-migrate again"
     docs_ok=0
     return 0
@@ -157,21 +157,11 @@ migrate_docs() {
   fi
 }
 
-# rewrite_names FILE MODE — the ignore and attribute lines that name an
-# older directory. MODE replace renames them in place, dropping a renamed
-# line the file already holds; MODE add keeps each line and puts the renamed
-# one after it, skipping comments and lines already present.
-rewrite_names() {
-  local file=$1 mode=$2 renamed tmp
-  [ -f "$file" ] && [ ! -L "$file" ] || return 1
-  grep -qE '(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
-  # mktemp creates each name exclusively, so a link planted at it is never
-  # written through.
-  renamed=$(mktemp "$file.dforge-migrate.XXXXXX") || return 1
-  tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || { rm -f -- "$renamed"; return 1; }
+# renamed_lines FILE MODE — what rewrite_names would leave in FILE.
+renamed_lines() {
   sed -E -e 's#(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)#\1.dforge\3#g' \
-         -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dforge\2#g' "$file" > "$renamed" \
-    && awk -v mode="$mode" '
+         -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dforge\2#g' "$1" \
+    | awk -v mode="$2" '
       NR == FNR { old[FNR] = $0; have[$0] = 1; n = FNR; next }
       { new[FNR] = $0 }
       END {
@@ -182,12 +172,32 @@ rewrite_names() {
             if (old[i] !~ /^[[:space:]]*#/ && !(new[i] in have)) { print new[i]; have[new[i]] = 1 }
           } else if (!(new[i] in have)) { print new[i]; have[new[i]] = 1 }
         }
-      }' "$file" "$renamed" > "$tmp" \
+      }' "$1" -
+}
+
+# rewrite_names FILE MODE — the ignore and attribute lines that name an
+# older directory. MODE replace renames them in place, dropping a renamed
+# line the file already holds; MODE add keeps each line and puts the renamed
+# one after it, skipping comments and lines already present.
+rewrite_names() {
+  local file=$1 mode=$2 tmp
+  [ -f "$file" ] && [ ! -L "$file" ] || return 1
+  grep -qE '(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
+  if [ "$dry" -eq 1 ]; then
+    ! renamed_lines "$file" "$mode" | cmp -s -- - "$file" || return 1
+    printf 'would rewrite the older names in %s\n' "$file"
+    moved=1
+    return 0
+  fi
+  # mktemp creates each name exclusively, so a link planted at it is never
+  # written through.
+  tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || return 1
+  renamed_lines "$file" "$mode" > "$tmp" \
     && ! cmp -s -- "$tmp" "$file" \
-    && { [ "$dry" -eq 1 ] || cat "$tmp" > "$file"; } \
-    || { rm -f -- "$tmp" "$renamed"; return 1; }
-  rm -f -- "$tmp" "$renamed"
-  if [ "$dry" -eq 1 ]; then printf 'would rewrite the older names in %s\n' "$file"; else printf 'rewrote the older names in %s\n' "$file"; fi
+    && cat "$tmp" > "$file" \
+    || { rm -f -- "$tmp"; return 1; }
+  rm -f -- "$tmp"
+  printf 'rewrote the older names in %s\n' "$file"
   moved=1
 }
 
