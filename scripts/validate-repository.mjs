@@ -2,7 +2,7 @@ import { readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const names = ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-forge', 'dr-status'];
+const names = ['darkraise-ui', 'darkraise-win32ui', 'dr-forge', 'dr-status'];
 const claudeOnly = ['dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 
-const readSkill = name => readFileSync(new URL(`../plugins/dcc-${name}/skills/${name}/SKILL.md`, import.meta.url), 'utf8');
+const readSkill = name => readFileSync(new URL(`../plugins/${name}/skills/${name}/SKILL.md`, import.meta.url), 'utf8');
 // The documented command needs a ripgrep binary on PATH.
 const hasRg = spawnSync(process.env.DR_TEST_BASH ?? 'bash', ['-c', 'command -v rg'], { stdio: 'ignore', timeout: 10000 }).status === 0;
 test('documented Win32 discovery finds centrally managed versions', { skip: !hasRg && 'rg is not installed' }, () => {

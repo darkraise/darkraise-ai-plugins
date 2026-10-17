@@ -64,39 +64,39 @@ try {
   Invoke-Client $Codex @('--version') | Out-Null
   $market = Join-Path $fixture 'market'
   [void](New-Item -ItemType Directory -Path $market)
-  foreach ($path in @('.claude-plugin','.agents/plugins','plugins/dr-status','plugins/dr-forge','plugins/dcc-darkraise-ui','plugins/dcc-darkraise-win32ui')) {
+  foreach ($path in @('.claude-plugin','.agents/plugins','plugins/dr-status','plugins/dr-forge','plugins/darkraise-ui','plugins/darkraise-win32ui')) {
     $destination = Join-Path $market $path
     [void](New-Item -ItemType Directory -Path (Split-Path $destination) -Force)
     Copy-Item -LiteralPath (Join-Path $repository $path) -Destination $destination -Recurse
   }
   Invoke-Client $Codex @('plugin','marketplace','add',$market,'--json') | Out-Null
   $listing = (Invoke-Client $Codex @('plugin','list','--marketplace','darkraise','--available','--json')).stdout | ConvertFrom-Json
-  Check ((@($listing.available.name | Sort-Object) -join ',') -eq 'dcc-darkraise-ui,dcc-darkraise-win32ui,dr-forge') 'Codex root catalog has exactly three supported entries'
+  Check ((@($listing.available.name | Sort-Object) -join ',') -eq 'darkraise-ui,darkraise-win32ui,dr-forge') 'Codex root catalog has exactly three supported entries'
   $rejected = Invoke-Client $Codex @('plugin','add','dr-status@darkraise','--json') -AllowFailure
   Check ($rejected.exit -ne 0) 'Codex rejects statusline installation by name'
-  foreach ($name in @('dr-forge','dcc-darkraise-ui','dcc-darkraise-win32ui')) {
+  foreach ($name in @('dr-forge','darkraise-ui','darkraise-win32ui')) {
     $installed = (Invoke-Client $Codex @('plugin','add',"$name@darkraise",'--json')).stdout | ConvertFrom-Json
     $sourceManifest = Get-Content (Join-Path $market "plugins/$name/.codex-plugin/plugin.json") -Raw
     $installedManifest = Get-Content (Join-Path $installed.installedPath '.codex-plugin/plugin.json') -Raw
     Check ($sourceManifest -eq $installedManifest) "Codex installed manifest bytes match $name"
   }
-  $uiRoot = Join-Path $market 'plugins/dcc-darkraise-ui'
+  $uiRoot = Join-Path $market 'plugins/darkraise-ui'
   $uiManifest = Get-Content (Join-Path $uiRoot '.codex-plugin/plugin.json') -Raw | ConvertFrom-Json
   $uiManifest.version = '0.1.0'
   Write-Json (Join-Path $uiRoot '.codex-plugin/plugin.json') $uiManifest
   [IO.File]::WriteAllText((Join-Path $uiRoot 'skills/darkraise-ui/SKILL.md'), "---`nname: darkraise-ui`ndescription: Old fixture skill`n---`nOld fixture bytes.`n")
-  Invoke-Client $Codex @('plugin','remove','dcc-darkraise-ui@darkraise') | Out-Null
-  $oldUi = (Invoke-Client $Codex @('plugin','add','dcc-darkraise-ui@darkraise','--json')).stdout | ConvertFrom-Json
+  Invoke-Client $Codex @('plugin','remove','darkraise-ui@darkraise') | Out-Null
+  $oldUi = (Invoke-Client $Codex @('plugin','add','darkraise-ui@darkraise','--json')).stdout | ConvertFrom-Json
   Check ($oldUi.version -eq '0.1.0') 'Codex seeds an old UI cache version'
-  Copy-Item -LiteralPath (Join-Path $repository 'plugins/dcc-darkraise-ui/.codex-plugin/plugin.json') -Destination (Join-Path $uiRoot '.codex-plugin/plugin.json') -Force
-  Copy-Item -LiteralPath (Join-Path $repository 'plugins/dcc-darkraise-ui/skills/darkraise-ui/SKILL.md') -Destination (Join-Path $uiRoot 'skills/darkraise-ui/SKILL.md') -Force
-  $newUi = (Invoke-Client $Codex @('plugin','add','dcc-darkraise-ui@darkraise','--json')).stdout | ConvertFrom-Json
+  Copy-Item -LiteralPath (Join-Path $repository 'plugins/darkraise-ui/.codex-plugin/plugin.json') -Destination (Join-Path $uiRoot '.codex-plugin/plugin.json') -Force
+  Copy-Item -LiteralPath (Join-Path $repository 'plugins/darkraise-ui/skills/darkraise-ui/SKILL.md') -Destination (Join-Path $uiRoot 'skills/darkraise-ui/SKILL.md') -Force
+  $newUi = (Invoke-Client $Codex @('plugin','add','darkraise-ui@darkraise','--json')).stdout | ConvertFrom-Json
   Check ($newUi.version -eq '0.2.0') 'Codex upgrades UI cache version'
   Check ((Get-Content (Join-Path $newUi.installedPath 'skills/darkraise-ui/SKILL.md') -Raw) -eq (Get-Content (Join-Path $uiRoot 'skills/darkraise-ui/SKILL.md') -Raw)) 'Codex upgrade refreshes actual skill bytes'
 
   Invoke-Client $Claude @('plugin','marketplace','add','https://github.com/anthropics/claude-plugins-official.git') | Out-Null
   Invoke-Client $Claude @('plugin','marketplace','add',$market) | Out-Null
-  foreach ($name in @('dr-status','dr-forge','dcc-darkraise-ui','dcc-darkraise-win32ui')) {
+  foreach ($name in @('dr-status','dr-forge','darkraise-ui','darkraise-win32ui')) {
     Invoke-Client $Claude @('plugin','install',"$name@darkraise") | Out-Null
   }
   $claudeList = (Invoke-Client $Claude @('plugin','list','--json')).stdout | ConvertFrom-Json
@@ -117,7 +117,7 @@ try {
   Invoke-Client $Codex @('plugin','marketplace','add','https://fixture.invalid/market/','--json') | Out-Null
   $gitListing = (Invoke-Client $Codex @('plugin','list','--marketplace','darkraise','--available','--json')).stdout | ConvertFrom-Json
   $gitNames = @($gitListing.available.name) + @($gitListing.installed | Where-Object marketplaceName -eq 'darkraise' | ForEach-Object name)
-  Check ((@($gitNames | Sort-Object -Unique) -join ',') -eq 'dcc-darkraise-ui,dcc-darkraise-win32ui,dr-forge') 'Codex Git-source registration selects the dedicated catalog'
+  Check ((@($gitNames | Sort-Object -Unique) -join ',') -eq 'darkraise-ui,darkraise-win32ui,dr-forge') 'Codex Git-source registration selects the dedicated catalog'
 
   $nativeCatalogPath = Join-Path $market '.agents/plugins/marketplace.json'
   $nativeCatalogBytes = [IO.File]::ReadAllText($nativeCatalogPath)

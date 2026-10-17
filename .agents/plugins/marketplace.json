@@ -21,11 +21,11 @@
         "installation": "AVAILABLE",
         "authentication": "ON_USE"
       },
-      "name": "dcc-darkraise-ui",
+      "name": "darkraise-ui",
       "category": "Development",
       "source": {
         "source": "local",
-        "path": "./plugins/dcc-darkraise-ui"
+        "path": "./plugins/darkraise-ui"
       }
     },
     {
@@ -33,11 +33,11 @@
         "installation": "AVAILABLE",
         "authentication": "ON_USE"
       },
-      "name": "dcc-darkraise-win32ui",
+      "name": "darkraise-win32ui",
       "category": "Development",
       "source": {
         "source": "local",
-        "path": "./plugins/dcc-darkraise-win32ui"
+        "path": "./plugins/darkraise-win32ui"
       }
     }
   ]

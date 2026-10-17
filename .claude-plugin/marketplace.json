@@ -44,8 +44,8 @@
       ]
     },
     {
-      "name": "dcc-darkraise-ui",
-      "source": "./plugins/dcc-darkraise-ui",
+      "name": "darkraise-ui",
+      "source": "./plugins/darkraise-ui",
       "description": "Teaches coding agents to write idiomatic darkraise-ui code: the 17-axis theme system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",
       "category": "development",
       "keywords": [
@@ -58,8 +58,8 @@
       ]
     },
     {
-      "name": "dcc-darkraise-win32ui",
-      "source": "./plugins/dcc-darkraise-win32ui",
+      "name": "darkraise-win32ui",
+      "source": "./plugins/darkraise-win32ui",
       "description": "Teaches coding agents to write idiomatic Darkraise.Win32UI code: token-resolved visuals, the raise ladder and overlay-hover rule, the fluent View builder, convention-based MVVM and draml markup, plus the framework limits it must never promise past.",
       "category": "development",
       "keywords": [

@@ -1,4 +1,4 @@
-# dcc-darkraise-win32ui
+# darkraise-win32ui
 
 Teaches Claude Code and Codex the design rules and API conventions of the `Darkraise.Win32UI`
 desktop framework.
@@ -20,7 +20,7 @@ support.
 The skill auto-triggers on `Darkraise.Win32UI` being referenced. To force it:
 
 ```
-/dcc-darkraise-win32ui:darkraise-win32ui
+/darkraise-win32ui:darkraise-win32ui
 ```
 
 The bare `/darkraise-win32ui` also works, but only while no other installed plugin
@@ -46,7 +46,7 @@ globally cached version is not evidence of the consumer's installed version.
 
 Use the active client's shell and file-reading tools. No Claude-only inline
 preprocessing is required. Missing packages or restore assets produce an explicit
-prerequisite result. Install `dcc-darkraise-win32ui@darkraise` from the repository
+prerequisite result. Install `darkraise-win32ui@darkraise` from the repository
 root marketplace in either client. The slash examples above describe Claude Code;
 Codex can select or explicitly invoke the bundled skill.
 
@@ -54,7 +54,7 @@ In Claude Code:
 
 ```text
 /plugin marketplace add darkraise/darkraise-ai-plugins
-/plugin install dcc-darkraise-win32ui@darkraise
+/plugin install darkraise-win32ui@darkraise
 ```
 
 ## Contents

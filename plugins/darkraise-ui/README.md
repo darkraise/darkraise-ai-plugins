@@ -1,4 +1,4 @@
-# dcc-darkraise-ui
+# darkraise-ui
 
 Teaches Claude Code and Codex the conventions of the `darkraise-ui` React kit.
 
@@ -18,7 +18,7 @@ The skill auto-triggers on `darkraise-ui` being present. To force it, use the
 qualified slash form:
 
 ```
-/dcc-darkraise-ui:darkraise-ui
+/darkraise-ui:darkraise-ui
 ```
 
 The bare `/darkraise-ui` also works, but only while no other installed plugin
@@ -40,7 +40,7 @@ two required keys along the way.
 
 The consumer package, shell access, and file-reading tools are required. Missing
 packages produce an explicit prerequisite result. Claude-only inline command
-preprocessing is not needed. Install `dcc-darkraise-ui@darkraise` from the root
+preprocessing is not needed. Install `darkraise-ui@darkraise` from the root
 marketplace in either client; use the client's skill picker or explicit skill
 invocation. The slash examples above describe Claude Code.
 
@@ -48,7 +48,7 @@ In Claude Code:
 
 ```text
 /plugin marketplace add darkraise/darkraise-ai-plugins
-/plugin install dcc-darkraise-ui@darkraise
+/plugin install darkraise-ui@darkraise
 ```
 
 ## Contents

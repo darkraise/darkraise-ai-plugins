@@ -25,7 +25,7 @@ lands — the criteria themselves are the part worth keeping.
 ## Running it, once enabled
 
 ```bash
-cd plugins/dcc-darkraise-win32ui
+cd plugins/darkraise-win32ui
 claude plugin eval --ablation with-without --runs 1 --max-cost-usd 5
 ```
 

@@ -23,8 +23,8 @@ account-aware status line and coding-agent skills for two design systems.
 | --- | --- | :---: | :---: |
 | [dr-forge](plugins/dr-forge/README.md) | Turns a request into a reviewed spec, a scored plan and a tiered execution run. On Claude Code it adds the cockpit pane, Discord notifications and an attribution guard. | ✓ | ✓ (no cockpit) |
 | [dr-status](plugins/dr-status/README.md) | A status line with git detail and usage meters, framed in the color of the Claude account. | ✓ | |
-| [dcc-darkraise-ui](plugins/dcc-darkraise-ui/README.md) | Teaches agents to write idiomatic darkraise-ui code. | ✓ | ✓ |
-| [dcc-darkraise-win32ui](plugins/dcc-darkraise-win32ui/README.md) | Teaches agents to write idiomatic Darkraise.Win32UI code. | ✓ | ✓ |
+| [darkraise-ui](plugins/darkraise-ui/README.md) | Teaches agents to write idiomatic darkraise-ui code. | ✓ | ✓ |
+| [darkraise-win32ui](plugins/darkraise-win32ui/README.md) | Teaches agents to write idiomatic Darkraise.Win32UI code. | ✓ | ✓ |
 
 ## Install
 
@@ -36,7 +36,7 @@ account-aware status line and coding-agent skills for two design systems.
 ```
 
 The other plugins install the same way (`dr-status@darkraise`,
-`dcc-darkraise-ui@darkraise`, `dcc-darkraise-win32ui@darkraise`). Start a new
+`darkraise-ui@darkraise`, `darkraise-win32ui@darkraise`). Start a new
 session, or run `/reload-plugins`, afterwards. An installed copy stays at the
 version it was installed at; take a new release with
 `claude plugin update <plugin>@darkraise`.

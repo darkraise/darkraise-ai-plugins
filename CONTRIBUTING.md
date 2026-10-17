@@ -9,7 +9,7 @@ an issue first so the scope can be agreed before you write code.
 
 | Path | Contents |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dr-forge`, `dr-status`, `dcc-darkraise-ui`, `dcc-darkraise-win32ui`. |
+| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dr-forge`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
 | `.agents/plugins/marketplace.json` | The Codex catalog: `dr-forge` and the two UI plugins. Codex discovers it from the repository root. |
 | `plugins/<name>/` | One plugin: its manifests, skills, hooks, scripts and tests. |
 | `scripts/` | Repository validation and the full test runner. |

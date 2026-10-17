@@ -9,12 +9,12 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const json = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
 test('Claude offers four maintained plugins', () => {
   assert.deepEqual(json('.claude-plugin/marketplace.json').plugins.map(p => p.name).sort(),
-    ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-forge', 'dr-status']);
+    ['darkraise-ui', 'darkraise-win32ui', 'dr-forge', 'dr-status']);
 });
 test('Codex root discovery offers only supported plugins', () => {
   assert.ok(existsSync(resolve(root, '.agents/plugins/marketplace.json')), 'dedicated Codex catalog is required');
   assert.deepEqual(json('.agents/plugins/marketplace.json').plugins.map(p => p.name).sort(),
-    ['dcc-darkraise-ui', 'dcc-darkraise-win32ui', 'dr-forge']);
+    ['darkraise-ui', 'darkraise-win32ui', 'dr-forge']);
 });
 test('Codex explicitly suppresses inherited Claude hooks', () => {
   const path = 'plugins/dr-forge/.codex-plugin/plugin.json';

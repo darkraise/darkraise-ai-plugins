@@ -5,7 +5,7 @@ A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise
 ## Conventions
 
 - Claude's `.claude-plugin/marketplace.json` lists `dr-forge`, `dr-status`,
-  `dcc-darkraise-ui`, and `dcc-darkraise-win32ui`.
+  `darkraise-ui`, and `darkraise-win32ui`.
 - `dr-status` is Claude-only: no `.codex-plugin` manifest.
 - `dr-forge` carries a mod (`hooks/cockpit/`); test it with
   `claude plugin test plugins/dr-forge`.

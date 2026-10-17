@@ -17,8 +17,8 @@ dependency over HTTPS; no paid model or Telegram calls are made.
 
 Verified outcomes:
 
-- Codex local-root registration lists exactly `dr-forge`, `dcc-darkraise-ui`,
-  and `dcc-darkraise-win32ui`, and rejects `dr-status` installation by name.
+- Codex local-root registration lists exactly `dr-forge`, `darkraise-ui`,
+  and `darkraise-win32ui`, and rejects `dr-status` installation by name.
 - All three Codex plugins install; installed native manifest bytes match source.
   Superpowers' native manifest explicitly contains `"hooks": {}`.
 - Claude installs all four repository plugins and resolves the declared
