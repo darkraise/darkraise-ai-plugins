@@ -28,7 +28,7 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
-unset DR_FORGE_BUDGET DR_FORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
+unset DFORGE_BUDGET DFORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -95,11 +95,11 @@ check "no usage: line" "$out" "budget: unknown of 465k — unknown — no usage 
 
 # --- budget override ---
 asst 285000 > "$T"
-DR_FORGE_BUDGET=300000 run
+DFORGE_BUDGET=300000 run
 check "override: line" "$out" "budget: 285k of 300k (95%) — ok — source: record"
 DR_SUPERPOWERS_BUDGET=300000 run
 check "the pre-2.0 override name is not read" "$out" "budget: 285k of 465k (61%) — ok — source: record"
-DR_FORGE_BUDGET=380000 DR_SUPERPOWERS_BUDGET=300000 run
+DFORGE_BUDGET=380000 DR_SUPERPOWERS_BUDGET=300000 run
 check "the dforge name wins" "$out" "budget: 285k of 380k (75%) — ok — source: record"
 
 # --- the budget follows the model's window and autoCompactWindow ---
@@ -129,7 +129,7 @@ run
 check "a small window holds a fifth of it" "$out" "budget: 15k of 20k (75%) — ok — source: record"
 asst 285000 false claude-sonnet-5 > "$T"
 settings 650000
-DR_FORGE_BUDGET=junk run
+DFORGE_BUDGET=junk run
 check "invalid override is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 run --plan docs/p.md
 check "arguments: exit 2" "$status" "2"
@@ -167,7 +167,7 @@ check "no transcript: exit 3" "$status" "3"
 check "no transcript: line, no settings" "$out" "budget: unknown of 790k — unknown — no transcript found"
 
 # --- no jq ---
-DR_FORGE_JQ=no-such-jq run
+DFORGE_JQ=no-such-jq run
 check "no jq: exit 3" "$status" "3"
 check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
 
@@ -186,12 +186,12 @@ run --final
 check "final: over: exit 5" "$status" "5"
 check "final: over: line" "$out" "budget (final): 560k of 553k (101%) — handoff — source: record"
 asst 500000 > "$T"
-DR_FORGE_BUDGET=300000 run --final
+DFORGE_BUDGET=300000 run --final
 check "final: the task override does not move it" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
 settings 800000
-DR_FORGE_BUDGET=465000 run
+DFORGE_BUDGET=465000 run
 check "800k window, pinned task budget: tasks still hand off at 465k" "$out" "budget: 500k of 465k (107%) — handoff — source: record"
-DR_FORGE_BUDGET=465000 run --final
+DFORGE_BUDGET=465000 run --final
 check "800k window, pinned task budget: the final phase continues" "$out" "budget (final): 500k of 680k (73%) — ok — source: record"
 settings 650000
 
@@ -200,7 +200,7 @@ asst 500000 > "$T"
 run --tail 1
 check "tail of 1: past the task budget, below the final limit: exit 0" "$status" "0"
 check "tail of 1: line" "$out" "budget (last task): 500k of 553k (90%) — ok — source: record"
-DR_FORGE_BUDGET=300000 run --tail 2
+DFORGE_BUDGET=300000 run --tail 2
 check "tail of 2: the task override does not move it" "$out" "budget (last 2 tasks): 500k of 553k (90%) — ok — source: record"
 asst 560000 > "$T"
 run --tail 2
@@ -215,12 +215,12 @@ asst 500000 > "$T"
 run --plan
 check "plan: past the task budget, under the final cap: exit 0" "$status" "0"
 check "plan: capped at the final-phase limit" "$out" "budget (plan): 500k of 553k (90%) — ok — source: record"
-DR_FORGE_BUDGET=300000 run --plan
+DFORGE_BUDGET=300000 run --plan
 check "plan: 150% of a pinned task budget" "$out" "budget (plan): 500k of 450k (111%) — handoff — source: record"
-DR_FORGE_BUDGET=300000 run --plan
+DFORGE_BUDGET=300000 run --plan
 check "plan: over: exit 5" "$status" "5"
 settings 800000
-DR_FORGE_BUDGET=465000 run --plan
+DFORGE_BUDGET=465000 run --plan
 check "800k window, pinned 465k: capped at 680k, not 698k" "$out" "budget (plan): 500k of 680k (73%) — ok — source: record"
 settings 650000
 run --plan extra
@@ -240,7 +240,7 @@ check "wave of 0: usage" "$status" "2"
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run --final
 check "final: haiku's 200k window" "$out" "budget (final): 30k of 170k (17%) — ok — source: record"
-DR_FORGE_JQ=no-such-jq run --final
+DFORGE_JQ=no-such-jq run --final
 check "final: no jq: line" "$out" "budget (final): unknown of 553k — unknown — no jq"
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
@@ -269,15 +269,15 @@ asst 560000 > "$T"
 run
 check "relaxed: past the final-phase limit: exit 5" "$status" "5"
 check "relaxed: past the final-phase limit: line" "$out" "budget (relaxed): 560k of 553k (101%) — handoff — source: record"
-# The handoffTokens setting pins the task budget; DR_FORGE_BUDGET still wins.
+# The handoffTokens setting pins the task budget; DFORGE_BUDGET still wins.
 printf '{"handoffTokens":300000}\n' > "$HOME/.dforge/config.json"
 asst 285000 > "$T"
 run
 check "handoffTokens pins the task budget" "$out" "budget: 285k of 300k (95%) — ok — source: record"
-export DR_FORGE_BUDGET=600000
+export DFORGE_BUDGET=600000
 run
-check "DR_FORGE_BUDGET wins over the setting" "$out" "budget: 285k of 600k (47%) — ok — source: record"
-unset DR_FORGE_BUDGET
+check "DFORGE_BUDGET wins over the setting" "$out" "budget: 285k of 600k (47%) — ok — source: record"
+unset DFORGE_BUDGET
 printf 'not json' > "$HOME/.dforge/config.json"
 run
 check "a broken settings file falls back to the rule" "$out" "budget: 285k of 465k (61%) — ok — source: record"
@@ -417,8 +417,8 @@ run
 check "rollout: exit 3" "$status" "3"
 has "rollout: measured line" "$out" "budget: 187k measured — unknown — source: rollout"
 
-DR_FORGE_BUDGET=100000 run
-has "rollout: DR_FORGE_BUDGET does not make a verdict" "$out" "measured — unknown"
+DFORGE_BUDGET=100000 run
+has "rollout: DFORGE_BUDGET does not make a verdict" "$out" "measured — unknown"
 
 { meta "$REPO_NATIVE"; printf 'not json\n'; } > "$RB"
 run
@@ -451,20 +451,20 @@ rm -rf "$CODEX_HOME"
 unset CODEX_HOME
 
 # --- the observation log ---
-# It lives inside .forge/sdd/, which self-ignores: an untracked file
+# It lives inside .dforge/sdd/, which self-ignores: an untracked file
 # elsewhere in the checkout enters task-state.sh's review snapshot.
 export CODEX_HOME="$TMP/codex3"
 mkdir -p "$CODEX_HOME"
-LOG="$REPO/.forge/sdd/budget-log.tsv"
-rm -rf "$REPO/.forge/sdd"
+LOG="$REPO/.dforge/sdd/budget-log.tsv"
+rm -rf "$REPO/.dforge/sdd"
 mkroll2() { mkdir -p "$CODEX_HOME/sessions/2026/09/15"; { meta "$REPO_NATIVE"; usage_line "$1" 999999; } > "$CODEX_HOME/sessions/2026/09/15/rollout-log.jsonl"; }
 
-mkdir -p "$REPO/.forge/sdd" "$TMP/outside"
-ln -s "$TMP/outside/planted" "$REPO/.forge/sdd/.gitignore"
+mkdir -p "$REPO/.dforge/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$REPO/.dforge/sdd/.gitignore"
 mkroll2 150000
 run
 check "log: the ignore is never written through a link" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
-rm -rf "$REPO/.forge/sdd"
+rm -rf "$REPO/.dforge/sdd"
 
 run
 check "log: one row after a rollout measurement" "$(wc -l < "$LOG" | tr -d ' ')" "1"
@@ -472,10 +472,10 @@ check "log: the row has four fields" "$(awk -F'\t' 'NR==1 {print NF}' "$LOG")" "
 check "log: tokens land in field 2" "$(awk -F'\t' 'NR==1 {print $2}' "$LOG")" "150000"
 check "log: an unset caller writes direct" "$(awk -F'\t' 'NR==1 {print $3}' "$LOG")" "direct"
 check "log: the session id lands in field 4" "$(awk -F'\t' 'NR==1 {print $4}' "$LOG")" "01a0a58e-8e6c-72b0-92a3-b1586a8ca0ec"
-check "log: the directory self-ignores" "$(cat "$REPO/.forge/sdd/.gitignore")" "*"
+check "log: the directory self-ignores" "$(cat "$REPO/.dforge/sdd/.gitignore")" "*"
 check "log: the checkout stays clean" "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)" ""
 
-DR_FORGE_BUDGET_CALLER=task-brief:3 run
+DFORGE_BUDGET_CALLER=task-brief:3 run
 check "log: the caller tag lands in field 3" "$(awk -F'\t' 'END {print $3}' "$LOG")" "task-brief:3"
 check "log: a second measurement appends" "$(wc -l < "$LOG" | tr -d ' ')" "2"
 
@@ -501,8 +501,8 @@ check "log: a Claude measurement writes no row" "$([ -f "$LOG" ] && echo yes || 
 # --- reading the observations back ---
 # The growth between two briefs is one task's cost. A negative delta is a
 # compaction, which is the event phase two calibrates against, never data.
-mkdir -p "$REPO/.forge/sdd"
-LOG="$REPO/.forge/sdd/budget-log.tsv"
+mkdir -p "$REPO/.dforge/sdd"
+LOG="$REPO/.dforge/sdd/budget-log.tsv"
 { printf '2026-09-20T10:00:00Z\t40000\ttask-brief:1\tsess-a\n'
   printf '2026-09-20T10:05:00Z\t78000\ttask-brief:2\tsess-a\n'
   printf '2026-09-20T10:06:00Z\t79000\treview-package\tsess-a\n'
@@ -556,10 +556,10 @@ settings 800000
 asst 300000 > "$AUTO_T"; record auto-1 "$AUTO_T"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md >/dev/null)
 export CLAUDE_CODE_SESSION_ID=auto-1
-unset DR_FORGE_BUDGET
+unset DFORGE_BUDGET
 run
 check "auto, unpinned: the derived budget at an 800k window" "$status:$out" "0:budget (auto): 300k of 604k (49%) — ok — source: record"
-export DR_FORGE_BUDGET=465000
+export DFORGE_BUDGET=465000
 run
 check "auto: ok, exit 0" "$status:$out" "0:budget (auto): 300k of 465k (64%) — ok — source: record"
 run --plan
@@ -593,7 +593,7 @@ has "auto: an unreadable size in a wave names the run's limit" "$out" "budget (a
 run
 has "auto, normal: an unreadable size names the task budget" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"
 # A state the run cannot write: the lock file is a directory.
-AUTO_STATE="$REPO/.forge/sdd/auto-run.json"
+AUTO_STATE="$REPO/.dforge/sdd/auto-run.json"
 asst 470000 > "$AUTO_T"
 rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"
 run
@@ -605,7 +605,7 @@ run
 check "auto: a compaction it cannot settle is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
 rmdir "$AUTO_STATE.lock"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 stop)
-unset DR_FORGE_BUDGET CLAUDE_CODE_SESSION_ID
+unset DFORGE_BUDGET CLAUDE_CODE_SESSION_ID
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -55,7 +55,7 @@ printf '{broken' > "$DR_TASK_DIR/state.json"
 (dr_task_open "$fixture/work" task-1 "$fixture/scope.json") >/dev/null 2>&1
 check 'malformed state cannot become a fresh task' "$?" 2
 
-# The pre-3.0 dr-superpowers task directory is left to scripts/forge-migrate.
+# The pre-3.0 dr-superpowers task directory is left to scripts/dforge-migrate.
 git -C "$fixture/primary" worktree add -q -b legacy "$fixture/legacy"
 legacy_gitdir="$(git -C "$fixture/legacy" rev-parse --absolute-git-dir)"
 mkdir -p "$legacy_gitdir/dr-superpowers"

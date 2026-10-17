@@ -329,12 +329,12 @@ _plan_ctx() {
 }
 
 # plan_locate PLAN — PLAN when it is a file; otherwise the file its name
-# resolves to, so docs/forge/plans/x.md finds the mirror's copy while
+# resolves to, so docs/dforge/plans/x.md finds the mirror's copy while
 # documents live in darkmem; otherwise PLAN, for the caller's own message.
 plan_locate() {
   local found
   if [ -f "$1" ]; then printf '%s\n' "$1"; return 0; fi
-  found=$(forge_resolve "$1")
+  found=$(dforge_resolve "$1")
   if [ -f "$found" ]; then printf '%s\n' "$found"; else printf '%s\n' "$1"; fi
 }
 
@@ -345,15 +345,15 @@ plan_locate() {
 plan_ledger() {
   local ctx want file named
   ctx=$(_plan_ctx "$1")
-  want=$(forge_name_key "$(forge_name "$1" "$ctx")")
-  file="$(forge_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
+  want=$(dforge_name_key "$(dforge_name "$1" "$ctx")")
+  file="$(dforge_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
   [ -f "$file" ] || return 0
   named=$(ledger_plan "$file")
   [ -n "$named" ] || return 0
   if command -v cygpath >/dev/null 2>&1; then
     named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
   fi
-  [ "$(forge_name_key "$(forge_name "$named" "$ctx")")" != "$want" ] || printf '%s\n' "$file"
+  [ "$(dforge_name_key "$(dforge_name "$named" "$ctx")")" != "$want" ] || printf '%s\n' "$file"
   return 0
 }
 
@@ -438,7 +438,7 @@ plan_amendments_file() {
   local ctx file
   ctx=$(_plan_ctx "$1")
   git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
-  file="$(forge_workspace "$(basename "$1" .md)" "$ctx")/amendments.md"
+  file="$(dforge_workspace "$(basename "$1" .md)" "$ctx")/amendments.md"
   [ -s "$file" ] && printf '%s\n' "$file"
   return 0
 }
@@ -458,10 +458,10 @@ plan_require_same_project() {
     || { printf '%s: not inside a git repository\n' "$me" >&2; exit 2; }
   plan_top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || plan_top=""
   [ "$plan_top" != "$cwd_top" ] || return 0
-  forge_stores_init
-  if [ "$_FORGE_DOCS_STORE" = darkmem ]; then
+  dforge_stores_init
+  if [ "$_DFORGE_DOCS_STORE" = darkmem ]; then
     dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || dir=""
-    docs=$(cd "$_FORGE_DOCS_ROOT" 2>/dev/null && pwd -P) || docs=""
+    docs=$(cd "$_DFORGE_DOCS_ROOT" 2>/dev/null && pwd -P) || docs=""
     if [ -n "$dir" ] && [ -n "$docs" ]; then
       case "$dir/" in "$docs"/*) return 0 ;; esac
     fi

@@ -18,11 +18,11 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DR_FORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DFORGE_BUDGET CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
-WS="$REPO/.forge/sdd/2026-10-08-example"
+WS="$REPO/.dforge/sdd/2026-10-08-example"
 mkdir -p "$WS"
 LEDGER="$WS/progress.md"
 
@@ -73,7 +73,7 @@ check "finishing menu: passes" "$(stop s-1 $'1. Merge back to main locally\n2. P
 check "finishing test failure: passes" "$(stop s-1 'Tests failing (2 failures). Must fix before completing:')" ""
 
 # --- two ledgers written this turn: each needs its own ending ---
-WS2="$REPO/.forge/sdd/2026-10-09-other"
+WS2="$REPO/.dforge/sdd/2026-10-09-other"
 mkdir -p "$WS2"
 printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-09-other.md\nTask 2: complete (commits c..d, review clean)\n' > "$WS2/progress.md"
 out=$(stop s-1 $'1. Merge back to main locally\n\nWhich option?')
@@ -204,7 +204,7 @@ done
 AR="$HERE/../scripts/auto-run"
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
 (cd "$REPO" && bash "$AR" --session s-1 start --spec docs/s.md --register docs/r.md >/dev/null)
-STATE="$REPO/.forge/sdd/auto-run.json"
+STATE="$REPO/.dforge/sdd/auto-run.json"
 pend() { jq --arg p "$1" '.pending = $p' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
 stop_in() { # stop_in <cwd> <session> <last message>
   jq -n --arg cwd "$1" --arg sid "$2" --arg msg "$3" \
@@ -252,22 +252,22 @@ check "a stopped run: back to the plain rules" "$(stop s-1 'Here is the answer.'
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---
 . "$HERE/fixtures/darkmem-stores.sh"
 M=$(stores_home "$HOME" "$REPO" proj local darkmem)
-mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.forge/sdd/2026-10-10-mirror"
+mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.dforge/sdd/2026-10-10-mirror"
 sleep 1; prompt s-2; sleep 1
-printf '# SDD ledger — plan: docs/forge/plans/2026-10-10-mirror.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-10-mirror/progress.md"
+printf '# SDD ledger — plan: docs/dforge/plans/2026-10-10-mirror.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-10-mirror/progress.md"
 out=$(stop s-2 'Task 1 is done.')
 check "darkmem progress: a mirror ledger blocks a bare summary" "$(decision "$out")" "block"
 check "darkmem progress: names the plan" \
-  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/forge/plans/2026-10-10-mirror.md')" "1"
+  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/dforge/plans/2026-10-10-mirror.md')" "1"
 mkdir -p "$M/work/sdd/2026-10-11-other"
 sleep 1; prompt s-3; sleep 1
-printf '# SDD ledger — plan: docs/forge/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
+printf '# SDD ledger — plan: docs/dforge/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
 check "darkmem progress: another worktree's ledger does not block" "$(stop s-3 'Task 1 is done.')" ""
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
 # --- unplanned work: a turn that moved a branch without writing a ledger ---
 commit_in() { git -C "$1" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "$2"; }
-mkdir -p "$REPO/docs/forge"
+mkdir -p "$REPO/docs/dforge"
 sleep 1; prompt s-4
 check "unplanned: turn-start records the branch heads" \
   "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "yes"
@@ -300,7 +300,7 @@ commit_in "$OTHER" more
 check "unplanned: a stop in another repository than the prompt's: passes" "$(stop_in "$OTHER" s-4 'Done.')" ""
 sleep 1; prompt s-4 "$OTHER"
 commit_in "$OTHER" again
-check "unplanned: a repository without forge docs: passes" "$(stop_in "$OTHER" s-4 'Done.')" ""
+check "unplanned: a repository without dforge docs: passes" "$(stop_in "$OTHER" s-4 'Done.')" ""
 sleep 1; prompt s-4 "$outside"
 check "unplanned: a prompt outside git records no heads" \
   "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"

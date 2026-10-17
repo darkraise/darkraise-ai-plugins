@@ -25,7 +25,7 @@ printf '{"autoCompactWindow": 650000}
 ' > "$HOME/.claude/settings.json"
 export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DR_FORGE_BUDGET DR_FORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
+unset DFORGE_BUDGET DFORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -64,7 +64,7 @@ check "task-brief: budget line says handoff" "$(tail -n 1 <<<"$out")" \
 # --- the plan's last two tasks measure against the final-phase limit ---
 # 553k is 85% of the 650k window: the tail finishes here rather than paying a
 # fresh session's baseline and reload for one or two tasks.
-L="$REPO/.forge/sdd/plan/progress.md"
+L="$REPO/.dforge/sdd/plan/progress.md"
 mkdir -p "$(dirname "$L")"
 printf '# SDD ledger — plan: docs/plan.md
 Task 1: complete (commit abc1234)
@@ -186,18 +186,18 @@ check "task-brief: fenced-heading excerpt omits Task index" "$(grep -c '^## Task
 out=$(bash "$P/scripts/task-brief" --header docs/full.md 2>/dev/null); status=$?
 check "task-brief --header: exit 0" "$status" "0"
 check "task-brief --header: default path" "$(sed -n 1p <<<"$out" | grep -c 'plan-header.md: ')" "1"
-check "task-brief --header: stops before Task 1" "$(tail -n 1 "$REPO/.forge/sdd/full/plan-header.md")" ""
-check "task-brief --header: carries Task index" "$(grep -c '^## Task index$' "$REPO/.forge/sdd/full/plan-header.md")" "1"
-mkdir -p "$REPO/.forge/sdd/full"
+check "task-brief --header: stops before Task 1" "$(tail -n 1 "$REPO/.dforge/sdd/full/plan-header.md")" ""
+check "task-brief --header: carries Task index" "$(grep -c '^## Task index$' "$REPO/.dforge/sdd/full/plan-header.md")" "1"
+mkdir -p "$REPO/.dforge/sdd/full"
 printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nPrint `hello NAME`.\n````\n### New\n````text\nPrint `hi NAME`.\n````\n\n## A2 — Header\nReason: r\nCost if wrong: c\n### Old\n````text\n- Bash only.\n````\n### New\n````text\n- Bash 4 or later.\n````\n' \
-  > "$REPO/.forge/sdd/full/amendments.md"
+  > "$REPO/.dforge/sdd/full/amendments.md"
 bash "$P/scripts/task-brief" docs/full.md 1 "$TMP/b2.md" >/dev/null 2>&1
 check "task-brief: amendment applied to the task, explicit OUTFILE" "$(grep -c '^Print `hi NAME`.$' "$TMP/b2.md")" "1"
 check "task-brief: amendment applied to the excerpt" "$(grep -c '^- Bash 4 or later.$' "$TMP/b2.md")" "1"
 bash "$P/scripts/task-brief" --header docs/full.md >/dev/null 2>&1
-check "task-brief --header: amendment applied" "$(grep -c '^- Bash 4 or later.$' "$REPO/.forge/sdd/full/plan-header.md")" "1"
+check "task-brief --header: amendment applied" "$(grep -c '^- Bash 4 or later.$' "$REPO/.dforge/sdd/full/plan-header.md")" "1"
 printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nnot there\n````\n### New\n````text\nx\n````\n' \
-  > "$REPO/.forge/sdd/full/amendments.md"
+  > "$REPO/.dforge/sdd/full/amendments.md"
 err=$(bash "$P/scripts/task-brief" docs/full.md 1 "$TMP/b3.md" 2>&1 >/dev/null); status=$?
 check "task-brief: non-applying amendment exits 4" "$status" "4"
 check "task-brief: names the amendment" "$err" "amendment A1 does not apply"

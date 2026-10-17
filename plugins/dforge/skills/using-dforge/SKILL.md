@@ -1,5 +1,5 @@
 ---
-name: using-forge
+name: using-dforge
 description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
 ---
 
@@ -60,7 +60,7 @@ When the darkmem MCP is configured, prefer its `code_search` over Explore subage
 - The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok` means continue at any percentage; `handoff` means finish the task in flight, then use dforge:handoff. See [session-budget.md](../../reference/session-budget.md).
 - Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dforge:resume-execution.
 - After compaction, trust the snapshot, ledger and `git log` over the summary.
-- `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/forge-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` or `progressSource` keeps it ([project-state.md](../../reference/project-state.md)).
+- `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/dforge-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` or `progressSource` keeps it ([project-state.md](../../reference/project-state.md)).
 
 ## Platform and Precedence
 

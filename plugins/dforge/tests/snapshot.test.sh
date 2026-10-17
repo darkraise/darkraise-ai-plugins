@@ -32,25 +32,25 @@ export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DR_FORGE_JQ DR_SUPERPOWERS_JQ
+unset DFORGE_JQ DR_SUPERPOWERS_JQ
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
-printf '.forge/\n' > "$REPO/.gitignore"
+printf '.dforge/\n' > "$REPO/.gitignore"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
 WT="$TMP/wt"
 git -C "$REPO" worktree add -q -b feat "$WT"
-mkdir -p "$WT/.forge/sdd/plan"
+mkdir -p "$WT/.dforge/sdd/plan"
 {
   printf '# SDD ledger — plan: docs/plan.md\n'
   printf 'Ruling: translated old -> new — legacy plugin name — none\n'
   printf 'Task 1: complete (commits a..b, review clean)\n'
   printf 'Task 2: Ruling: kept the retry — spec 4.2 — a second fix round\n'
   printf 'Task 2: fix round 1/5 (1 addressed, 1 open — x)\n'
-} > "$WT/.forge/sdd/plan/progress.md"
-mkdir -p "$REPO/.forge/handoff"
+} > "$WT/.dforge/sdd/plan/progress.md"
+mkdir -p "$REPO/.dforge/handoff"
 printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** Resume at Task 2 (Two).\n\n## Do not\nKeep out of the snapshot.\n' \
-  > "$REPO/.forge/handoff/latest.md"
+  > "$REPO/.dforge/handoff/latest.md"
 
 prompt() { jq -cn --arg c "$1" '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:$c}}'; }
 tool() { # tool <name> <path> [isSidechain]
@@ -114,7 +114,7 @@ lacks "commands: a foreground Bash call excluded" "$out" "Foreground test run"
 has "agents and commands share one heading" "$out" "### Background agents and commands"
 
 # --- no jq: transcript sections skipped, the rest kept ---
-out=$(DR_FORGE_JQ=no-such-jq snapshot_build "$T" "$REPO")
+out=$(DFORGE_JQ=no-such-jq snapshot_build "$T" "$REPO")
 has "no jq: ledger kept" "$out" "Task 2: fix round 1/5"
 lacks "no jq: no transcript sections" "$out" "### Files edited"
 
@@ -138,7 +138,7 @@ has "explicit cap: ledger kept" "$out" "Task 2: fix round 1/5"
 # --- an oversized Next session block: s1+s2 alone still fits under cap ---
 LONG_NEXT=$(printf '%08000d' 0)
 printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** %s\n\n## Do not\nKeep out.\n' "$LONG_NEXT" \
-  > "$REPO/.forge/handoff/latest.md"
+  > "$REPO/.dforge/handoff/latest.md"
 out=$(snapshot_build "$T" "$REPO")
 check "oversized handoff: at most 5500 characters" "$([ "${#out}" -le 5500 ] && echo yes || echo no)" "yes"
 check "oversized handoff: heading kept" "$(sed -n 1p <<<"$out")" "## Compaction snapshot"
@@ -150,10 +150,10 @@ git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
 SH="$TMP/stores-home"; mkdir -p "$SH"
 M=$(stores_home "$SH" "$REPO" proj local darkmem)
 mkdir -p "$M/work/sdd/mp"
-printf '# SDD ledger — plan: docs/forge/plans/mp.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/mp/progress.md"
+printf '# SDD ledger — plan: docs/dforge/plans/mp.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/mp/progress.md"
 printf '# Handoff\n\n## Next session\n\n**Next:** the mirror note\n' > "$M/work/handoff/latest.md"
 out=$(HOME=$SH snapshot_ledgers "$REPO")
-has "darkmem progress: the mirror's ledger" "$out" "### Ledger \`$M/work/sdd/mp/progress.md\` (plan \`docs/forge/plans/mp.md\`)"
+has "darkmem progress: the mirror's ledger" "$out" "### Ledger \`$M/work/sdd/mp/progress.md\` (plan \`docs/dforge/plans/mp.md\`)"
 check "darkmem progress: listed once" "$(grep -c '^### Ledger' <<<"$out")" "1"
 has "darkmem progress: the mirror's latest.md" "$(HOME=$SH snapshot_latest "$REPO")" "**Next:** the mirror note"
 

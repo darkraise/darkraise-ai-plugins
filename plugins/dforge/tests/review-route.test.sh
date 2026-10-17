@@ -312,7 +312,7 @@ present "writing-plans states the heavy-majority rule" "$WP" '`subagent` when mo
 present "writing-plans raises a delegating inline effort" "$WP" 'raised to `high` when any task is'
 present "writing-plans falls back to Opus on exit 2" "$WP" 'On any other exit 2, review with `dforge:judge-opus`'
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
-present "using-forge states the mixed-mode rule" "$P/skills/using-forge/SKILL.md" 'an inline plan delegates those'
+present "using-dforge states the mixed-mode rule" "$P/skills/using-dforge/SKILL.md" 'an inline plan delegates those'
 present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
 present "README caps plan review" "$P/README.md" 'capped by the plan'"'"'s highest task total'
 absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'
@@ -455,7 +455,7 @@ check "final: --task with no id still exits 2" "$rc" "2"
 # --- the final fix wave's implementer ---
 FF="$TMP/ff"
 git init -q "$FF"
-mkdir -p "$FF/docs" "$FF/.forge/sdd/plan"
+mkdir -p "$FF/docs" "$FF/.dforge/sdd/plan"
 sed 's/^|//' > "$FF/docs/plan.md" <<'EOF'
 |# Fix Wave Fixture
 |
@@ -529,7 +529,7 @@ sed 's/^|//' > "$FF/docs/plan.md" <<'EOF'
 |**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 0 = 3
 EOF
-sed 's/^|//' > "$FF/.forge/sdd/plan/progress.md" <<'EOF'
+sed 's/^|//' > "$FF/.dforge/sdd/plan/progress.md" <<'EOF'
 |# SDD ledger — plan: docs/plan.md
 |Task 1: implementer impl-sonnet-low (assigned; base aaaaaaa)
 |Task 3: implementer dforge:impl-sonnet-medium (assigned; base bbbbbbb)
@@ -565,7 +565,7 @@ fix g.txt
 check "final-fix: a split task's parts count as the task" "$out" "$FIXSEAT:impl-opus-low fallback=- reason=tasks:6"
 fix zzz.txt c.txt
 check "final-fix: an unmatched file beside a matched one" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:3"
-sed 's/^|//' > "$FF/.forge/sdd/plan/amendments.md" <<'EOF'
+sed 's/^|//' > "$FF/.dforge/sdd/plan/amendments.md" <<'EOF'
 |## A1 — Task 1
 |
 |### Old
@@ -584,7 +584,7 @@ fix a2.txt
 check "final-fix: an amended Files block is read" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:1"
 fix a.txt
 check "final-fix: a file amended away no longer matches" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=floor"
-rm -f "$FF/.forge/sdd/plan/amendments.md"
+rm -f "$FF/.dforge/sdd/plan/amendments.md"
 fix
 check "final-fix: no file exits 2" "$rc" "2"
 

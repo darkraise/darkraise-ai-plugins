@@ -265,14 +265,14 @@ rm -f "$SUR/docs/lettered.md"
 # --- liveness precedence ---
 check "no ledger and no completed entry is unknown" "$(field live "$(row scored)")" "unknown"
 
-mkdir -p "$SUR/.forge/sdd/scored"
+mkdir -p "$SUR/.dforge/sdd/scored"
 printf '# SDD ledger — plan: docs/scored.md\nTask 1: complete (x)\n' \
-  > "$SUR/.forge/sdd/scored/progress.md"
+  > "$SUR/.dforge/sdd/scored/progress.md"
 check "a ledger naming the plan is live" "$(field live "$(row scored)")" "yes"
 
-printf '# SDD ledger — plan: docs/other.md\n' > "$SUR/.forge/sdd/scored/progress.md"
+printf '# SDD ledger — plan: docs/other.md\n' > "$SUR/.dforge/sdd/scored/progress.md"
 check "a ledger naming another plan is not this plan's" "$(field live "$(row scored)")" "unknown"
-rm -rf "$SUR/.forge"
+rm -rf "$SUR/.dforge"
 
 # completed.md names the plan by its recorded path, so a shorter basename that
 # is a substring of a longer one must not match it.
@@ -286,10 +286,10 @@ check "a via-PR entry is unknown, not done" "$(field live "$(row scored)")" "unk
 printf -- '- 2026-09-20 `docs/scored.md` — merged into `main` at abc1234\n- 2026-09-21 `docs/scored.md` — via PR\n' > "$SUR/docs/completed.md"
 check "merged outranks a later via-PR entry" "$(field live "$(row scored)")" "no"
 
-mkdir -p "$SUR/.forge/sdd/scored"
-printf '# SDD ledger — plan: docs/scored.md\n' > "$SUR/.forge/sdd/scored/progress.md"
+mkdir -p "$SUR/.dforge/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$SUR/.dforge/sdd/scored/progress.md"
 check "a ledger outranks a completed entry" "$(field live "$(row scored)")" "yes"
-rm -rf "$SUR/.forge"
+rm -rf "$SUR/.dforge"
 rm -f "$SUR/docs/completed.md"
 
 # A ledger may live in a linked worktree while the plan is read from the primary
@@ -298,8 +298,8 @@ rm -f "$SUR/docs/completed.md"
 git -C "$SUR" add -A >/dev/null 2>&1
 git -C "$SUR" commit -qm base >/dev/null 2>&1
 git -C "$SUR" worktree add -q "$TMP/wt" -b feature >/dev/null 2>&1
-mkdir -p "$TMP/wt/.forge/sdd/scored"
-printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.forge/sdd/scored/progress.md"
+mkdir -p "$TMP/wt/.dforge/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.dforge/sdd/scored/progress.md"
 check "a ledger in a linked worktree is found" "$(field live "$(row scored)")" "yes"
 # Git reports native paths on Windows; mktemp uses Git Bash's POSIX spelling.
 WT_ROOT="$(git -C "$TMP/wt" rev-parse --show-toplevel)"
@@ -333,7 +333,7 @@ present "the skill re-runs the report before settling execution" "$SK" "Re-run p
 present "the skill reconciles an existing Executor line" "$SK" "replace it with the printed rung"
 present "the skill leaves a thin task unscored" "$SK" "A guessed score is worse than a visible gap"
 present "the skill allows the split Rule S requires" "$SK" "Splitting a task Rule S rejects is part of this skill"
-present "the routing table lists the skill" "$HERE/../skills/using-forge/SKILL.md" "dforge:revising-plans"
+present "the routing table lists the skill" "$HERE/../skills/using-dforge/SKILL.md" "dforge:revising-plans"
 present "the skill pushes the revised plan" "$SK" '10. **Push the revised plan.** Run `bash <plugin-root>/scripts/darkmem-sync push`'
 
 # --- documents and progress kept in darkmem: the survey finds the mirror's ledger ---
@@ -343,19 +343,19 @@ SR="$TMP/stores-repo"
 git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/forge/plans" "$M/work/sdd/mp"
-printf '**Goal:** demo\n\n### Task 1: One\n' > "$M/forge/plans/mp.md"
-printf '# SDD ledger — plan: docs/forge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/forge/plans" | grep '^plan  mp\.md')
+mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
+printf '**Goal:** demo\n\n### Task 1: One\n' > "$M/dforge/plans/mp.md"
+printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dforge/plans" | grep '^plan  mp\.md')
 check "darkmem survey: live" "$(field live "$row")" "yes"
 check "darkmem survey: the evidence names the mirror" "$(grep -c 'ledger in mirror' <<<"$row")" "1"
 
 printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/forge/plans" | grep '^plan  mp\.md')
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dforge/plans" | grep '^plan  mp\.md')
 check "darkmem survey: a ledger under the other prefix is live" "$(field live "$row")" "yes"
 rm -f "$M/work/sdd/mp/progress.md"
-printf -- '- 2026-10-13 `docs/superpowers/plans/mp.md` — merged into `main` at abc1234\n' > "$M/forge/plans/completed.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/forge/plans" | grep '^plan  mp\.md')
+printf -- '- 2026-10-13 `docs/superpowers/plans/mp.md` — merged into `main` at abc1234\n' > "$M/dforge/plans/completed.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dforge/plans" | grep '^plan  mp\.md')
 check "darkmem survey: a completed entry under the other prefix" "$(field live "$row")" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

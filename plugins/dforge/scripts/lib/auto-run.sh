@@ -13,7 +13,7 @@ AR_LOCK_TENTHS=100
 AR_RESUME_CAP=3
 AR_FAILURE_CAP=2
 
-ar_jq() { "${DR_FORGE_JQ:-jq}" "$@"; }
+ar_jq() { "${DFORGE_JQ:-jq}" "$@"; }
 
 ar_primary_root() {
   local common
@@ -25,7 +25,7 @@ ar_primary_root() {
 ar_path() {
   local primary
   primary=$(ar_primary_root) || return 1
-  printf '%s/sdd/auto-run.json\n' "$(forge_dir state "$primary")"
+  printf '%s/sdd/auto-run.json\n' "$(dforge_dir state "$primary")"
 }
 
 # ar_state — the state file's JSON; fails when there is none.
@@ -48,9 +48,9 @@ ar_bound() {
 ar_update() {
   local path status
   path=$(ar_path) || return 1
-  if command -v "${DR_FORGE_FLOCK:-flock}" >/dev/null 2>&1; then
+  if command -v "${DFORGE_FLOCK:-flock}" >/dev/null 2>&1; then
     (
-      "${DR_FORGE_FLOCK:-flock}" -w 10 9 || exit 1
+      "${DFORGE_FLOCK:-flock}" -w 10 9 || exit 1
       ar_write "$path" "$@"
     ) 9>>"$path.lock"
     return
@@ -128,13 +128,13 @@ ar_start() {
     return 4
   fi
   top=$(git rev-parse --show-toplevel)
-  forge_stores_init "$top"
+  dforge_stores_init "$top"
   if [ -z "$register" ]; then
     slug=$(basename "$spec" .md)
     slug=${slug%-design}
     slug=$(sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}-//' <<<"$slug")
-    register="$(forge_name "$(forge_docs_root "$top")" "$top")/registers/$(date +%Y-%m-%d)-$slug-auto.md"
-    regfile=$(forge_resolve "$register" "$top")
+    register="$(dforge_name "$(dforge_docs_root "$top")" "$top")/registers/$(date +%Y-%m-%d)-$slug-auto.md"
+    regfile=$(dforge_resolve "$register" "$top")
     if [ ! -f "$regfile" ]; then
       mkdir -p "$(dirname "$regfile")" || return 1
       printf '# Auto run: %s\n\n**Source:** items the auto run for `%s` deferred\n**Covers:** %s\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' \
@@ -187,8 +187,8 @@ ar_fenced() {
 ar_clear() {
   local is_phase=$1 primary latest prompt="" launch model="" effort="" resumes
   primary=$(ar_primary_root) || return 1
-  forge_stores_init "$primary"
-  latest=$(forge_latest_file "$primary")
+  dforge_stores_init "$primary"
+  latest=$(dforge_latest_file "$primary")
   [ -f "$latest" ] && prompt=$(ar_fenced "$latest" 'Paste as the first prompt:')
   [ -n "$prompt" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
   launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)

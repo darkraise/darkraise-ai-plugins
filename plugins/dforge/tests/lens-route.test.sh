@@ -5,8 +5,8 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROUTE="$HERE/../scripts/lens-route"
-export DR_FORGE_NO_SETTINGS=1
-unset DR_FORGE_LENS_CAP CLAUDE_CONFIG_DIR
+export DFORGE_NO_SETTINGS=1
+unset DFORGE_LENS_CAP CLAUDE_CONFIG_DIR
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -67,13 +67,13 @@ check "final: the reason names the glob" "$(grep -c '^lens lang-bash .* reason=p
 commit_file tests/a.test.ts 'try { run() } catch (e) {}'
 commit_file README.md 'Docs.'
 HEAD2=$(git rev-parse HEAD)
-out=$(DR_FORGE_LENS_CAP=2 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
+out=$(DFORGE_LENS_CAP=2 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "cap 2: two lenses, the rest skipped in order" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens-skipped test-quality reason=cap;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 out=$(bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "default cap 4" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
-out=$(DR_FORGE_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
+out=$(DFORGE_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "cap 0: lenses off" "$out" "lenses off"
 
 # A4: per-task lenses.

@@ -18,15 +18,15 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
-export MSYS_NO_PATHCONV=1 DR_FORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+export MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DR_FORGE_BUDGET DR_FORGE_JQ DR_FORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
+unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
-STATE="$REPO/.forge/sdd/auto-run.json"
-SPEC=docs/forge/specs/2026-10-13-widget-design.md
+STATE="$REPO/.dforge/sdd/auto-run.json"
+SPEC=docs/dforge/specs/2026-10-13-widget-design.md
 ar() { (cd "$REPO" && bash "$AR" "$@"); }
 field() { jq -r --arg f "$1" '.[$f] | tostring' "$STATE"; }
 # A session's by-id record and transcript, written now or at a touch -d time.
@@ -44,15 +44,15 @@ check "start without a session: exit 2" "$status" "2"
 check "start without a session: says why" "$(grep -c 'no session id' <<<"$out")" "1"
 out=$(ar --session s-1 start --spec "$SPEC" 2>&1); status=$?
 check "start: exit 0" "$status" "0"
-reg="docs/forge/registers/$(date +%Y-%m-%d)-widget-auto.md"
+reg="docs/dforge/registers/$(date +%Y-%m-%d)-widget-auto.md"
 check "start: prints the register it created" "$out" "$reg"
 check "start: the register has the table header" "$(grep -c '^| # | Item | Assigned | Acceptance | State | Note |$' "$REPO/$reg")" "1"
 check "start: the register covers the spec" "$(grep -c "^\*\*Covers:\*\* $SPEC$" "$REPO/$reg")" "1"
 check "start: active, bound, based on main" "$(field active) $(field session) $(field base)" "true s-1 main"
 check "start: phase spec, regime normal" "$(field phase) $(field regime)" "spec normal"
 check "start: nothing pending" "$(field pending)" "null"
-check "start: the state file is ignored by git" "$(git -C "$REPO" status --porcelain -- .forge | grep -c .)" "0"
-check "start: sdd ignores everything in it" "$(cat "$REPO/.forge/sdd/.gitignore")" "*"
+check "start: the state file is ignored by git" "$(git -C "$REPO" status --porcelain -- .dforge | grep -c .)" "0"
+check "start: sdd ignores everything in it" "$(cat "$REPO/.dforge/sdd/.gitignore")" "*"
 
 # --- binding ---
 ar --session s-2 status >/dev/null 2>&1; status=$?
@@ -115,8 +115,8 @@ check "ruling list" "$(ar --session s-1 ruling list | paste -sd'|' -)" "Fable: k
 # --- clears ---
 ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
 check "clear without a handoff file: exit 1, nothing pending" "$status:$(field pending)" "1:null"
-mkdir -p "$REPO/.forge/handoff"
-cat > "$REPO/.forge/handoff/latest.md" <<'EOF'
+mkdir -p "$REPO/.dforge/handoff"
+cat > "$REPO/.dforge/handoff/latest.md" <<'EOF'
 # Handoff
 
 ## Next session
@@ -185,19 +185,19 @@ printf '#!/usr/bin/env bash\ncase " $* " in *" f failures "*|*" f resumes "*) sl
 chmod +x "$SLOW_JQ"
 for lock in flock no-such-flock; do
   ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
-  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
-  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
+  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
+  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
   wait
   check "$lock: two failures at once stop the run" "$(field failures):$(field active)" "2:false"
   ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
-  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
-  DR_FORGE_JQ=$SLOW_JQ DR_FORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
+  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
+  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
   wait
   check "$lock: two clears at once count two self-resumes" "$(field resumes):$(field pending)" "2:clear"
 done
 check "no flock: the lock directory is gone" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 mkdir "$STATE.lockd"
-DR_FORGE_FLOCK=no-such-flock ar --session s-1 task-complete; status=$?
+DFORGE_FLOCK=no-such-flock ar --session s-1 task-complete; status=$?
 check "no flock: a lock its holder left behind is taken after the wait" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 
@@ -265,7 +265,7 @@ printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"
 live s-1
 T="$HOME/.claude/projects/p/s-1.jsonl"
 asst() { printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' "$1"; }
-after() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-other DR_FORGE_BUDGET=465000 bash "$AR" --session s-1 after-compact); }
+after() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-other DFORGE_BUDGET=465000 bash "$AR" --session s-1 after-compact); }
 ar --session s-1 compacted
 asst 30000 > "$T"
 out=$(after); status=$?

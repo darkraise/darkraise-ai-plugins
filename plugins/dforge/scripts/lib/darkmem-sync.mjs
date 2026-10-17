@@ -14,7 +14,7 @@ import { importRepository } from "./darkmem-import.mjs";
 import { pull, pullDocuments } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
 import { leftoverLines, pendingFamilies, reconcile, stayLine } from "./darkmem-reconcile.mjs";
-import { migrateMirrorLocked, migrateServer } from "./darkmem-migrate.mjs";
+import { migrateMirrorLocked, migrateServer } from "./dforge-home-migrate.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
 
@@ -60,11 +60,11 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
   out(`${name}@r${String(newest.id)}`);
 }
 
-// A document name as ledgers and plans write it, docs/forge/<rest> or the
-// pre-3.0 docs/superpowers/<rest> that historical plans cite, as its uri forge/<rest>; null for a
+// A document name as ledgers and plans write it, docs/dforge/<rest> or the
+// pre-3.0 docs/superpowers/<rest> that historical plans cite, as its uri dforge/<rest>; null for a
 // path, a handoff note, an archived copy, or a name that climbs.
 function documentUri(name) {
-  const match = /^(?:\.\/)?docs\/(?:forge|superpowers)\/(.+)$/.exec(name);
+  const match = /^(?:\.\/)?docs\/(?:dforge|superpowers)\/(.+)$/.exec(name);
   if (!match || match[1].split("/").some(segment => segment === "" || segment === "." || segment === "..")) return null;
   const uri = `${DOC_PREFIX}/${match[1]}`;
   return uriFamily(uri) === "documents" && !isArchiveUri(uri) ? uri : null;
@@ -85,7 +85,7 @@ async function restore(context) {
   const rest = uri.slice(DOC_PREFIX.length + 1);
   const items = await client.manifest(cfg.project, DOC_PREFIX);
   if (items.some(item => item.uri === uri)) return refuse(`${uri} is occupied on darkmem; move or rename that document first`);
-  // forge/archive/<stamp>/<rest>: a stamp sorts by time.
+  // dforge/archive/<stamp>/<rest>: a stamp sorts by time.
   const newest = items
     .filter(item => isArchiveUri(item.uri) && item.uri.slice(ARCHIVE_PREFIX.length + 1).replace(/^[^/]+\//, "") === rest)
     .sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0))
@@ -212,7 +212,7 @@ async function main(argv, {
   const cfg = {
     ...stores.sync, reason: stores.reason, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress,
   };
-  // A command must not run on a pre-3.0 mirror: a pull would fill forge/
+  // A command must not run on a pre-3.0 mirror: a pull would fill dforge/
   // beside superpowers/ and every later run would refuse.
   try {
     const migrated = migrateMirrorLocked(cfg.mirror);
@@ -286,7 +286,7 @@ async function main(argv, {
     });
     const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
     // darkmem's pre-3.0 uris move before anything syncs: a pull would read a
-    // document still under superpowers/ as deleted from forge/. Answers why
+    // document still under superpowers/ as deleted from dforge/. Answers why
     // the command may not sync, or null. Reconcile calls it after its own
     // refusals and still moves a family back to the checkout, from the mirror.
     const migrate = async () => {

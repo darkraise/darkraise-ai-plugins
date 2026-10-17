@@ -25,7 +25,7 @@ F="$P/reference/finish-preference.md"
 # Each check is a whole instruction, not a keyword: where the settings come
 # from, what outranks them, and what each value changes at its decision point.
 names "brainstorming has a Settings section" "$B" '## Settings'
-names "brainstorming loads the settings when no line is in context" "$B" '`scripts/forge-config workflow` once before your first question'
+names "brainstorming loads the settings when no line is in context" "$B" '`scripts/dforge-config workflow` once before your first question'
 names "brainstorming: instructions outrank a setting, and the gate stays" "$B" 'setting, and no setting removes the approval gate.'
 names "brainstorming: processBias" "$B" 'plainly holds; doubt resolves to bounded.'
 names "brainstorming: questionStyle" "$B" '`questionStyle=batched`: ask all the clarifying questions in one message'
@@ -38,12 +38,12 @@ names "brainstorming: the question rule points at questionStyle" "$B" '(`questio
 names "brainstorming: the strategy question is skipped by the setting" "$B" 'When `executionStrategy` is `sequential` or `parallel` (see Settings), skip the'
 names "brainstorming: the section rule points at designApproval" "$B" 'with `designApproval=whole`, present every section in one message and ask once (see Settings)'
 names "brainstorming: the review gate is skipped by the setting" "$B" 'With `specReview=false` (see Settings), skip this gate and go to Implementation.'
-names "writing-plans loads the settings when no line is in context" "$W" 'run `scripts/forge-config workflow` before you choose the Execution line'
+names "writing-plans loads the settings when no line is in context" "$W" 'run `scripts/dforge-config workflow` before you choose the Execution line'
 names "writing-plans: instructions outrank a setting" "$W" 'own instructions outrank a setting.'
 names "writing-plans: executionMode fixes the line" "$W" 'line when it is `inline` or `subagent`, in place of the majority rule.'
 names "writing-plans: an inline plan is sequential" "$W" '`**Parallelism:** sequential — executionMode is inline`'
 names "writing-plans: executionStrategy answers the question" "$W" 'that value and do not ask. On a Codex host do not ask:'
-names "using-git-worktrees loads the settings when no line is in context" "$G" 'run `scripts/forge-config workflow` when no such line is in context'
+names "using-git-worktrees loads the settings when no line is in context" "$G" 'run `scripts/dforge-config workflow` when no such line is in context'
 names "using-git-worktrees: what each value does" "$G" '`worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2'
 names "using-git-worktrees: the setting decides only when no preference was stated" "$G" 'If not, the `worktree` setting decides'
 names "finish-preference: finishAction" "$F" 'finishAction'
@@ -67,7 +67,7 @@ names "finishing: failing tests at Step 1 stop the run" "$P/skills/finishing-a-d
 H="$P/skills/handoff/SKILL.md"
 names "handoff: a design phase writes the Draft line" "$H" '- Draft: `<spec path>`'
 names "handoff: pushes once latest.md is written" "$H" 'run `scripts/darkmem-sync push` and promote'
-CT="$P/skills/using-forge/references/codex-tools.md"
+CT="$P/skills/using-dforge/references/codex-tools.md"
 names "codex-tools: session start reconciles, then pulls" "$CT" 'bash <plugin-root>/scripts/darkmem-sync reconcile`, then'
 names "codex-tools: nothing pushes at the end of a turn" "$CT" 'nothing pushes for you at the end of a turn'
 

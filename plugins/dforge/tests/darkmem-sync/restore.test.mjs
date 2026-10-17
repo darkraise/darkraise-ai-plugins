@@ -24,8 +24,8 @@ test("revision prints the newest revision of a synced, unchanged document under 
   await s.sync("push");
   write(path.join(s.docsRoot, "notes", "n.md"), "two\n");
   await s.sync("push");
-  const newest = s.stub.db.documents.get("proj\u0000forge/notes/n.md").revisions.at(-1).id;
-  for (const name of ["docs/forge/notes/n.md", "docs/superpowers/notes/n.md"]) {
+  const newest = s.stub.db.documents.get("proj\u0000dforge/notes/n.md").revisions.at(-1).id;
+  for (const name of ["docs/dforge/notes/n.md", "docs/superpowers/notes/n.md"]) {
     const result = await s.sync("revision", name);
     assert.equal(result.code, 0, result.stdout + result.stderr);
     assert.equal(result.stdout, `${name}@r${newest}\n`);
@@ -35,18 +35,18 @@ test("revision prints the newest revision of a synced, unchanged document under 
 test("revision refuses a document that is unsynced, edited, behind darkmem, missing or local", async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "a.md"), "a\n");
-  const unsynced = await s.sync("revision", "docs/forge/a.md");
+  const unsynced = await s.sync("revision", "docs/dforge/a.md");
   assert.equal(unsynced.code, 1);
-  assert.equal(unsynced.stdout, "refused: docs/forge/a.md is not synced and unchanged: it was never synced\n");
+  assert.equal(unsynced.stdout, "refused: docs/dforge/a.md is not synced and unchanged: it was never synced\n");
   await s.sync("push");
   write(path.join(s.docsRoot, "a.md"), "edited\n");
-  assert.match((await s.sync("revision", "docs/forge/a.md")).stdout, /: it changed since the last sync; push first\n$/);
+  assert.match((await s.sync("revision", "docs/dforge/a.md")).stdout, /: it changed since the last sync; push first\n$/);
   write(path.join(s.docsRoot, "a.md"), "a\n");
-  await s.seed.putDocument({ project: "proj", uri: "forge/a.md", content: "remote\n" });
-  assert.match((await s.sync("revision", "docs/forge/a.md")).stdout, /: darkmem's copy differs; pull first\n$/);
-  assert.match((await s.sync("revision", "docs/forge/missing.md")).stdout, /missing\.md does not exist\n$/);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "remote\n" });
+  assert.match((await s.sync("revision", "docs/dforge/a.md")).stdout, /: darkmem's copy differs; pull first\n$/);
+  assert.match((await s.sync("revision", "docs/dforge/missing.md")).stdout, /missing\.md does not exist\n$/);
   fs.writeFileSync(path.join(s.home, ".dforge", "stores.json"), JSON.stringify({ [s.repo]: { documents: "local", progress: "darkmem" } }));
-  const local = await s.sync("revision", "docs/forge/a.md");
+  const local = await s.sync("revision", "docs/dforge/a.md");
   assert.equal(local.code, 1);
   assert.match(local.stdout, /: documents are applied local\n$/);
 });
@@ -54,10 +54,10 @@ test("revision refuses a document that is unsynced, edited, behind darkmem, miss
 test("revision refuses a name that is a directory", async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "notes", "n.md"), "n\n");
-  const result = await s.sync("revision", "docs/forge/notes");
+  const result = await s.sync("revision", "docs/dforge/notes");
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.equal(result.stderr, "");
-  assert.match(result.stdout, /^refused: docs\/forge\/notes is not synced and unchanged: .*notes is not a file\n$/);
+  assert.match(result.stdout, /^refused: docs\/dforge\/notes is not synced and unchanged: .*notes is not a file\n$/);
 });
 
 test("revision refuses when darkmem files a newer version between the manifest read and the revisions read", async t => {
@@ -66,7 +66,7 @@ test("revision refuses when darkmem files a newer version between the manifest r
     onRequest: (request, db) => {
       if (!armed || !request.path.endsWith("/revisions")) return;
       armed = false;
-      const doc = db.documents.get("proj\u0000forge/a.md");
+      const doc = db.documents.get("proj\u0000dforge/a.md");
       Object.assign(doc, { content: "newer\n", content_hash: sha("newer\n") });
       doc.revisions.push({ id: db.nextRevision++, content_hash: sha("newer\n"), actor: "stub", api_key_id: null, created_at: new Date().toISOString() });
     },
@@ -74,17 +74,17 @@ test("revision refuses when darkmem files a newer version between the manifest r
   write(path.join(s.docsRoot, "a.md"), "a\n");
   await s.sync("push");
   armed = true;
-  const result = await s.sync("revision", "docs/forge/a.md");
+  const result = await s.sync("revision", "docs/dforge/a.md");
   assert.equal(result.code, 1);
-  assert.equal(result.stdout, "refused: docs/forge/a.md is not synced and unchanged: darkmem's newest revision differs; pull first\n");
+  assert.equal(result.stdout, "refused: docs/dforge/a.md is not synced and unchanged: darkmem's newest revision differs; pull first\n");
 });
 
 test("revision refuses in an unmapped repository", async () => {
   const repo = makeRepo();
   const { env } = makeHome({ repo, config: null, stores: null });
-  const result = await run(["revision", "docs/forge/a.md"], { cwd: repo, env });
+  const result = await run(["revision", "docs/dforge/a.md"], { cwd: repo, env });
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^refused: docs\/forge\/a\.md is not synced and unchanged: local mode — darkmem is disabled \(darkmemEnabled is false\)\n$/);
+  assert.match(result.stdout, /^refused: docs\/dforge\/a\.md is not synced and unchanged: local mode — darkmem is disabled \(darkmemEnabled is false\)\n$/);
 });
 
 test("a missing or extra argument is a usage error", async t => {
@@ -102,15 +102,15 @@ test("restore moves the newest archived copy back under its hash and pulls it", 
   await s.sync("push");
   fs.rmSync(path.join(s.docsRoot, "specs", "a.md"));
   await s.sync("push");
-  await s.seed.putDocument({ project: "proj", uri: "forge/archive/20000101T000000Z/specs/a.md", content: "ancient\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/archive/20000101T000000Z/specs/a.md", content: "ancient\n" });
   const result = await s.sync("restore", "docs/superpowers/specs/a.md");
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /^restored: forge\/specs\/a\.md from forge\/archive\/\d{8}T\d{6}Z\/specs\/a\.md$/m);
+  assert.match(result.stdout, /^restored: dforge\/specs\/a\.md from dforge\/archive\/\d{8}T\d{6}Z\/specs\/a\.md$/m);
   assert.doesNotMatch(result.stdout, /20000101T000000Z/);
   assert.match(result.stdout, /^darkmem-sync restore: 1 documents; 0 conflicts, 0 failures$/m);
   assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "one\n");
   const patch = s.stub.db.requests.filter(r => r.method === "PATCH").at(-1);
-  assert.deepEqual(patch.body, { uri: "forge/specs/a.md", expected_hash: sha("one\n") });
+  assert.deepEqual(patch.body, { uri: "dforge/specs/a.md", expected_hash: sha("one\n") });
 });
 
 test("restore brings the document back even when the sync state still holds the hash of the archived one", async t => {
@@ -121,37 +121,37 @@ test("restore brings the document back even when the sync state still holds the 
   await s.sync("push");
   const statePath = path.join(s.mirror, ".sync-state.json");
   const state = JSON.parse(read(statePath));
-  state.documents["forge/specs/a.md"] = sha("one\n");
+  state.documents["dforge/specs/a.md"] = sha("one\n");
   fs.writeFileSync(statePath, JSON.stringify(state));
-  const result = await s.sync("restore", "docs/forge/specs/a.md");
+  const result = await s.sync("restore", "docs/dforge/specs/a.md");
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "one\n");
   const again = await s.sync("push");
   assert.equal(again.code, 0, again.stdout + again.stderr);
-  assert.ok(s.stub.db.documents.has("proj\u0000forge/specs/a.md"), "the next push does not archive it again");
+  assert.ok(s.stub.db.documents.has("proj\u0000dforge/specs/a.md"), "the next push does not archive it again");
 });
 
 test("restore refuses an occupied uri or a name with no archived copy, and needs documents applied darkmem", async t => {
   const s = await setup(t);
-  await s.seed.putDocument({ project: "proj", uri: "forge/a.md", content: "live\n" });
-  await s.seed.putDocument({ project: "proj", uri: "forge/archive/20261013T091502Z/a.md", content: "old\n" });
-  const occupied = await s.sync("restore", "docs/forge/a.md");
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "live\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/archive/20261013T091502Z/a.md", content: "old\n" });
+  const occupied = await s.sync("restore", "docs/dforge/a.md");
   assert.equal(occupied.code, 1);
-  assert.match(occupied.stdout, /^refused: forge\/a\.md is occupied on darkmem; move or rename that document first$/m);
-  const none = await s.sync("restore", "docs/forge/b.md");
+  assert.match(occupied.stdout, /^refused: dforge\/a\.md is occupied on darkmem; move or rename that document first$/m);
+  const none = await s.sync("restore", "docs/dforge/b.md");
   assert.equal(none.code, 1);
-  assert.match(none.stdout, /^refused: no archived copy of forge\/b\.md on darkmem$/m);
+  assert.match(none.stdout, /^refused: no archived copy of dforge\/b\.md on darkmem$/m);
   assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
   fs.writeFileSync(path.join(s.home, ".dforge", "stores.json"), JSON.stringify({ [s.repo]: { documents: "local", progress: "darkmem" } }));
-  const local = await s.sync("restore", "docs/forge/a.md");
+  const local = await s.sync("restore", "docs/dforge/a.md");
   assert.equal(local.code, 2);
   assert.equal(local.stderr, "darkmem-sync: restore needs documents synced with darkmem (documents are applied local)\n");
 });
 
 test("restore takes only a document name and refuses in an unmapped repository", async t => {
   const s = await setup(t);
-  await s.seed.putDocument({ project: "proj", uri: "forge/archive/20261013T091502Z/a.md", content: "old\n" });
-  for (const name of [path.join(s.docsRoot, "a.md"), "a.md", "docs/forge/../a.md", "docs/forge/./a.md", "docs/forge/handoff/p1.md", "docs/forge/archive/20261013T091502Z/a.md"]) {
+  await s.seed.putDocument({ project: "proj", uri: "dforge/archive/20261013T091502Z/a.md", content: "old\n" });
+  for (const name of [path.join(s.docsRoot, "a.md"), "a.md", "docs/dforge/../a.md", "docs/dforge/./a.md", "docs/dforge/handoff/p1.md", "docs/dforge/archive/20261013T091502Z/a.md"]) {
     const result = await s.sync("restore", name);
     assert.equal(result.code, 2, name);
     assert.equal(result.stderr, `darkmem-sync: ${name} does not name a document\n`);
@@ -159,7 +159,7 @@ test("restore takes only a document name and refuses in an unmapped repository",
   assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
   const repo = makeRepo();
   const { env } = makeHome({ repo, config: null, stores: null });
-  const unmapped = await run(["restore", "docs/forge/a.md"], { cwd: repo, env });
+  const unmapped = await run(["restore", "docs/dforge/a.md"], { cwd: repo, env });
   assert.equal(unmapped.code, 2);
   assert.equal(unmapped.stderr, "darkmem-sync: restore needs documents synced with darkmem (local mode — darkmem is disabled (darkmemEnabled is false))\n");
 });

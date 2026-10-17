@@ -12,7 +12,7 @@
 # block or finishing menu printed over running work would invite the human to
 # end a session whose work is still in flight.
 # A turn that wrote no ledger but moved a local branch (a commit, a merge, a
-# deleted branch) in a project with forge docs is unplanned work, and owes the
+# deleted branch) in a project with dforge docs is unplanned work, and owes the
 # same ending: the next-step block (`next-step --adhoc`) or finishing's menu.
 # An auto run is the exception to holding once: nobody is watching to send the
 # next prompt, so its retries are held too, up to AUTO_HOLD_CAP in a row; past
@@ -43,7 +43,7 @@ stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr 
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
-sdd=$(forge_ledger_root "$root") || sdd=""
+sdd=$(dforge_ledger_root "$root") || sdd=""
 # An auto run bound to this session (reference/auto-run.md) lives in the
 # primary checkout, whichever worktree the turn ran in: its pending action.
 auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
@@ -132,7 +132,7 @@ fi
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
-ws="$(forge_dir state "$root")/sdd"
+ws="$(dforge_dir state "$root")/sdd"
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
   # While progress is darkmem every worktree shares the mirror's work/sdd, and a
@@ -152,10 +152,10 @@ done < <([ -z "$sdd" ] || find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md 
 
 if [ -z "$ledger" ]; then
   [ "$moved" = 1 ] || exit 0
-  # Forge docs in the primary checkout mark a project that uses this flow; in
+  # Dforge docs in the primary checkout mark a project that uses this flow; in
   # a subshell, so a malformed config costs only this check.
   primary=$(dirname "$(head -n 1 <<<"$now_refs")")
-  docs=$(forge_docs_root "$primary") || docs=""
+  docs=$(dforge_docs_root "$primary") || docs=""
   [ -n "$docs" ] && [ -d "$docs" ] || exit 0
   ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' \
             'Worktree removal refused' 'If it gets none within ' 'No plan file — no follow-on work recorded.' && exit 0

@@ -39,7 +39,7 @@ import {
   isAtLeast,
   isFinishArmed,
   isGitWriteTool,
-  isForge,
+  isDforge,
   kTokens,
   levelOf,
   limitForecast,
@@ -109,7 +109,7 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? '.forge/handoff/latest.md'} with the dforge resume-execution skill.`
+  return `Resume the work in ${S.latestName ?? '.dforge/handoff/latest.md'} with the dforge resume-execution skill.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
@@ -399,7 +399,7 @@ export const register: Register = on => {
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.deny !== undefined || started.agentId === undefined) return started
-    if (isForge(e.subagentType)) {
+    if (isDforge(e.subagentType)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -431,7 +431,7 @@ export const register: Register = on => {
   // A skill typed as a slash command makes no Skill tool call; its prompt is expanded on every path.
   on('skill.prompt', async ($, e, next) => {
     const expanded = await next(e)
-    if (isForge(e.skill)) {
+    if (isDforge(e.skill)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -614,7 +614,7 @@ export const register: Register = on => {
       await endWait($, id, ran.deny !== undefined ? '✗ Denied' : ASKING_TOOLS.includes(tool) ? '✓ Answered' : '✓ Approved')
     }
     if ((await read($, activity)).tool === tool) await setActivity($, now => (now.kind === 'running' ? { ...now, tool: null, agent: null } : now))
-    if (tool === 'Skill' && isForge(String((e as { skill?: unknown }).skill ?? ''))) {
+    if (tool === 'Skill' && isDforge(String((e as { skill?: unknown }).skill ?? ''))) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -625,7 +625,7 @@ export const register: Register = on => {
       await trackAutoRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       // The controller writes its ledger with its own tool calls.
-      if (/\.forge|\.dforge|finish-choice/.test(JSON.stringify(e))) await readRun($)
+      if (/\.dforge|\.dforge|finish-choice/.test(JSON.stringify(e))) await readRun($)
     }
 
     return ran
@@ -2205,7 +2205,7 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
 async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return null
-  const text = await $.fs.read(`${root}/.forge/sdd/auto-run.json`).catch(() => null)
+  const text = await $.fs.read(`${root}/.dforge/sdd/auto-run.json`).catch(() => null)
   if (typeof text !== 'string') return null
   return autoRunFor(text, await $.session.id())
 }
@@ -2332,7 +2332,7 @@ async function userDefaults($: EngineInterface): Promise<{ model: unknown; model
 async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; modelSettings: unknown }): Promise<boolean> {
   for (let write = 0; write < RESTORE_WRITES; write++) {
     const ran = await $.process
-      .run(['node', `${$.plugin.root}/scripts/lib/forge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
+      .run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
       .catch(() => null)
     if (ran?.exitCode !== 0) return false
     for (let waited = 0; ; waited += RESTORE_POLL_MS) {
@@ -2415,7 +2415,7 @@ async function readRoots($: EngineInterface, primary: string): Promise<CockpitRo
 async function finishPath($: EngineInterface, checkouts: readonly string[], slug: string | null): Promise<string> {
   const paths: string[] = []
   for (const dir of checkouts) {
-    paths.push(slug === null ? `${dir}/.forge/sdd/finish.json` : `${dir}/.forge/sdd/${slug}/finish.json`)
+    paths.push(slug === null ? `${dir}/.dforge/sdd/finish.json` : `${dir}/.dforge/sdd/${slug}/finish.json`)
   }
   for (const path of paths) {
     if ((await $.fs.stat(path).catch(() => null))?.kind === 'file') return path
@@ -2448,13 +2448,13 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
 }
 
 // The run's ledger, its plan's tasks, and the newest handoff, read where the
-// roots put them (store options spec §7.3): the primary checkout's .forge/
+// roots put them (store options spec §7.3): the primary checkout's .dforge/
 // while progress is local, the darkmem mirror while it is not.
 async function readRun($: EngineInterface) {
   const session = (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
-  const state = `${root}/.forge`
+  const state = `${root}/.dforge`
   const roots = await readRoots($, root)
   const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
   S.latestName = roots?.progress.store === 'darkmem' ? latest : null
@@ -2485,7 +2485,7 @@ async function readRun($: EngineInterface) {
     let titles: { n: number; title: string }[] = []
     if (ledger.plan !== null) {
       const places: { root: string; docsDir: string }[] = []
-      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/forge` })
+      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/dforge` })
       for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
@@ -2573,7 +2573,7 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
 // The webhook and mention, from the environment or the mod's own store.
 async function readNotifier($: EngineInterface) {
   try {
-    const fromEnv = ((await $.env.get('DR_FORGE_NOTIFY_URL')) || (await $.env.get('DR_COCKPIT_NOTIFY_URL')) || '').trim()
+    const fromEnv = ((await $.env.get('DFORGE_NOTIFY_URL')) || (await $.env.get('DR_COCKPIT_NOTIFY_URL')) || '').trim()
     const stored = await $.store.get(STORE_URL)
     const url = isDiscordWebhook(fromEnv) ? fromEnv : typeof stored === 'string' && isDiscordWebhook(stored) ? stored : null
     const mention = await $.store.get(STORE_MENTION)
@@ -2607,7 +2607,7 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
-  // A worktree's .forge/ lives in the primary checkout.
+  // A worktree's .dforge/ lives in the primary checkout.
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   S.where.primary = common === null ? null : common.replace(/[\\/]\.git[\\/]?$/, '') || null
 }
@@ -2789,7 +2789,7 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
 
 /** Puts a settings file in force: the atom every hook reads through live(), the locked rows, and the notifier. */
 async function applySettings($: EngineInterface, file: SettingsFile) {
-  const env = { DR_FORGE_BUDGET: await $.env.get('DR_FORGE_BUDGET') }
+  const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET') }
   const engineUser = ((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>
   // The engine's snapshot can predate a save: until it shows the saved value the merged read is overlaid too, then a project or managed override shows through.
   const awaited = Object.fromEntries(Object.entries(S.claudeSaved).filter(([key, saved]) => engineUser[key] !== saved))
@@ -2854,10 +2854,10 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
   const file = path === null ? null : await readSettingsFile($, path)
   try {
     if (spec?.target === 'claude') {
-      // Claude's settings file holds far more than these keys, so only forge-config, which rewrites it in one rename, writes it.
-      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/forge-config.mjs`, 'set', key, String(value)])
-      if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^forge-config: /, '') || `forge-config exited ${ran.exitCode}`)
-      // forge-config removes a floored key saved as 0, so the user file then lacks it.
+      // Claude's settings file holds far more than these keys, so only dforge-config, which rewrites it in one rename, writes it.
+      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)])
+      if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
+      // dforge-config removes a floored key saved as 0, so the user file then lacks it.
       S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
       await applySettings($, file ?? {})
       return true

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { HttpError } from "./darkmem-client.mjs";
-import { forgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
+import { dforgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
   unsupportedPlanDirs, uriToLocal,
@@ -120,7 +120,7 @@ async function verify(context, roots, snapshot) {
 export async function importRepository(context) {
   const { cfg, client, report, options, env } = context;
   Object.assign(report.counts, { documents: 0, workstreams: 0 });
-  const roots = { docsRoot: forgeDir("docs", cfg.repoRoot), workRoot: forgeDir("state", cfg.repoRoot), worktreeRoot: cfg.repoRoot };
+  const roots = { docsRoot: dforgeDir("docs", cfg.repoRoot), workRoot: dforgeDir("state", cfg.repoRoot), worktreeRoot: cfg.repoRoot };
   const snapshot = readSources(roots);
   if (snapshot.problems.length) {
     report.failures.push(...snapshot.problems);

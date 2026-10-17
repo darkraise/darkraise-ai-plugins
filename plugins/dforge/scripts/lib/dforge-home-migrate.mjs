@@ -1,6 +1,6 @@
 // The move from dforge's pre-3.0 darkmem names to its own: the home
 // ~/.dr-superpowers/ to ~/.dforge/, a mirror's superpowers/ folder and sync
-// state uris to forge/, and darkmem's superpowers/ documents to forge/. The
+// state uris to dforge/, and darkmem's superpowers/ documents to dforge/. The
 // only module besides the document-name translation that reads the old names.
 import fs from "node:fs";
 import os from "node:os";
@@ -67,8 +67,8 @@ export function migrateMirrorLocked(mirror) {
 }
 
 // darkmem's half, once per mirror: every superpowers/ document moves to the
-// same name under forge/, under its own hash. A name darkmem already holds
-// under forge/ is a failure, never overwritten. Answers the failure lines;
+// same name under dforge/, under its own hash. A name darkmem already holds
+// under dforge/ is a failure, never overwritten. Answers the failure lines;
 // state.prefix is set only when there are none.
 export async function migrateServer({ cfg, client, state, persist }) {
   if (state.prefix === DOC_PREFIX) return [];
@@ -104,7 +104,7 @@ function readJson(file) {
   }
 }
 
-// The home's half, run by scripts/forge-migrate: the darkmem mapping into
+// The home's half, run by scripts/dforge-migrate: the darkmem mapping into
 // ~/.dforge/config.json when that file has none, each mirror the new home
 // lacks, then every mirror's local half. The old files stay where a copy was
 // made. Answers { lines, refused }.
@@ -125,7 +125,7 @@ export function migrateHome(env = process.env) {
       fs.writeFileSync(temporary, `${JSON.stringify(config, null, 2)}\n`);
       fs.renameSync(temporary, file);
       lines.push(`copied the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`);
-      if (config.darkmemEnabled === undefined) lines.push("darkmem is off until you turn it on: bash <plugin-root>/scripts/forge-config set darkmemEnabled true");
+      if (config.darkmemEnabled === undefined) lines.push("darkmem is off until you turn it on: bash <plugin-root>/scripts/dforge-config set darkmemEnabled true");
     } else {
       lines.push(`${file} already has a darkmem section; ${path.join(oldHome, "config.json")} was not copied`);
     }
@@ -171,10 +171,10 @@ function isMain() {
 if (isMain()) {
   try {
     const { lines, refused } = migrateHome();
-    for (const line of lines) process.stdout.write(`darkmem-migrate: ${line}\n`);
+    for (const line of lines) process.stdout.write(`dforge-home-migrate: ${line}\n`);
     process.exitCode = refused ? 1 : 0;
   } catch (error) {
-    process.stderr.write(`darkmem-migrate: ${error.message}\n`);
+    process.stderr.write(`dforge-home-migrate: ${error.message}\n`);
     process.exitCode = 1;
   }
 }

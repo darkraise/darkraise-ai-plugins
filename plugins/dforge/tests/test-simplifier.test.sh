@@ -60,7 +60,7 @@ present "fault prompt names concrete edits" "$JUDGE" 'the exact edit'
 present "judge names the SHA" "$JUDGE" '[COMMIT] in your report'
 
 # Routing and regrowth.
-present "entry point routes to the skill" "$P/skills/using-forge/SKILL.md" 'dforge:test-simplifier'
+present "entry point routes to the skill" "$P/skills/using-dforge/SKILL.md" 'dforge:test-simplifier'
 present "TDD folds variants into a table" "$P/skills/test-driven-development/SKILL.md" "into the sibling's table as a row"
 present "TDD asks for the lowest layer" "$P/skills/test-driven-development/SKILL.md" '**Lowest layer**'
 present "plans keep e2e for user journeys" "$P/skills/writing-plans/SKILL.md" 'only for a new user journey'

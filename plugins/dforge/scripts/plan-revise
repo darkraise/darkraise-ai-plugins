@@ -149,7 +149,7 @@ ledger_for() {
   local ctx slug want ledger where named best wt roots
   ctx=$(_plan_ctx "$1")
   slug=$(basename "$1" .md)
-  want=$(forge_name_key "$(forge_name "$1" "$ctx")")
+  want=$(dforge_name_key "$(dforge_name "$1" "$ctx")")
   roots=$(git -C "$ctx" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
   while IFS=$'\t' read -r ledger where; do
     [ -n "$ledger" ] || continue
@@ -162,12 +162,12 @@ ledger_for() {
         [ -n "$wt" ] || continue
         case $named in "$wt"/*) [ "${#wt}" -gt "${#best}" ] && best=$wt ;; esac
       done <<<"$roots"
-      if [ -n "$best" ]; then named=${named#"$best"/}; else named=$(forge_name "$named" "$ctx"); fi ;;
+      if [ -n "$best" ]; then named=${named#"$best"/}; else named=$(dforge_name "$named" "$ctx"); fi ;;
     esac
-    [ "$(forge_name_key "$named")" = "$want" ] || continue
+    [ "$(dforge_name_key "$named")" = "$want" ] || continue
     printf '%s\t%s\n' "$where" "$ledger"
     return 0
-  done < <(forge_ledger_files "$ctx")
+  done < <(dforge_ledger_files "$ctx")
 }
 
 # completed_form PLAN — "merged", "pr" or nothing, from the completed.md beside
@@ -180,8 +180,8 @@ completed_form() {
   local f rel hits s
   f="$(cd "$(dirname "$1")" && pwd)/completed.md"
   [ -f "$f" ] || return 0
-  rel=$(forge_name "$1" "$(_plan_ctx "$1")")
-  hits=$(while IFS= read -r s; do grep -F "\`$s\`" "$f" 2>/dev/null; done < <(forge_name_spellings "$rel"))
+  rel=$(dforge_name "$1" "$(_plan_ctx "$1")")
+  hits=$(while IFS= read -r s; do grep -F "\`$s\`" "$f" 2>/dev/null; done < <(dforge_name_spellings "$rel"))
   [ -n "$hits" ] || return 0
   if grep -qF 'merged into' <<<"$hits"; then printf 'merged\n'
   elif grep -qF 'via PR' <<<"$hits"; then printf 'pr\n'
@@ -202,7 +202,7 @@ steps() {
 survey() {
   local dir=$1 f rows=0 a score risk fl sp cp
   local tasks scored unparsed eligible live evidence lf form execution exec_mode ok
-  forge_stores_init "$(_plan_ctx "$dir/x")"
+  dforge_stores_init "$(_plan_ctx "$dir/x")"
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
     tasks=$(plan_tasks "$f" | grep -c .)

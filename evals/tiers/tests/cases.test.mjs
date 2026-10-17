@@ -63,7 +63,7 @@ test('readManifest reads the start commit and typed rows, and refuses a file wit
 
 test('slug drops the date and the plugin prefix', () => {
   assert.deepEqual(
-    [slug('docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md'), slug('docs/forge/plans/2026-11-01-dr-forge-settings.md'), slug(PLAN)],
+    [slug('docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md'), slug('docs/dforge/plans/2026-11-01-dr-forge-settings.md'), slug(PLAN)],
     ['review-routing', 'settings', 'fixture'],
   );
 });

@@ -153,7 +153,7 @@ cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
 report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
 case "$report" in
   "$cwd"/*)
-    case "$report" in "$cwd"/.forge/*) ;; *) die 'report must be outside checkout or in ignored .forge workspace' ;; esac
+    case "$report" in "$cwd"/.dforge/*) ;; *) die 'report must be outside checkout or in ignored .dforge workspace' ;; esac
     git -C "$cwd" check-ignore -q -- "$report" || die 'report workspace is not ignored'
     [ -z "$(git -C "$cwd" ls-files -- "$report")" ] || die 'report cannot be tracked' ;;
 esac

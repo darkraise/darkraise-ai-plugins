@@ -110,7 +110,7 @@ async function pushDocument(context, { uri, buffer, local, recorded }, remote) {
 }
 
 // Every synced document whose mirror file is gone moves on darkmem to
-// forge/archive/<stamp>/<rest> under its recorded hash, so an edit made
+// dforge/archive/<stamp>/<rest> under its recorded hash, so an edit made
 // on darkmem since the last sync is never archived unseen; restore moves it
 // back. A missing docs root archives nothing: a lost mirror is not a request
 // to archive every document.
@@ -334,7 +334,7 @@ function planFinished(roots, named) {
   } catch {
     return false;
   }
-  return nameSpellings(`docs/forge/${uri.slice(DOC_PREFIX.length + 1)}`).some(name => text.includes(`\`${name}\``));
+  return nameSpellings(`docs/dforge/${uri.slice(DOC_PREFIX.length + 1)}`).some(name => text.includes(`\`${name}\``));
 }
 
 // A finished plan's workstream is closed once its ledger is fully pushed, so

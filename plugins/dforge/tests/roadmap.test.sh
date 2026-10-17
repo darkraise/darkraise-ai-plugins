@@ -26,7 +26,7 @@ mkdir -p "$HOME"
 
 ROOT="$TMP/repo"
 git init -q -b main "$ROOT"
-D="$ROOT/docs/forge"
+D="$ROOT/docs/dforge"
 mkdir -p "$D/registers" "$D/specs"
 printf '# Product design\n' > "$D/specs/2026-10-07-shop-design.md"
 printf '# Billing design\n' > "$D/specs/2026-10-08-billing-design.md"
@@ -98,7 +98,7 @@ run bash "$RM" open --root "$ROOT"
 check "open: rows open exits 1" "$RC" "1"
 check "open: epic and requirement rows" "$(grep -c '^M1: ' <<<"$OUT")" "4"
 check "open: a requirement row is attributed to its register" \
-  "$(grep -c 'docs/forge/registers/billing.md #2 Refund — open' <<<"$OUT")" "1"
+  "$(grep -c 'docs/dforge/registers/billing.md #2 Refund — open' <<<"$OUT")" "1"
 run bash "$RM" open --root "$ROOT" M0
 check "open: a closed milestone with nothing open exits 0" "$RC" "0"
 run bash "$RM" open --root "$ROOT" M9
@@ -123,7 +123,7 @@ bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: refuses while the spec's register is open" "$(grep -c '^not settled' <<<"$OUT")" "1"
 check "settle: the epic is untouched" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "doing"
-run bash "$RM" settle --root "$ROOT" --spec docs/forge/specs/2026-10-08-billing-design.md
+run bash "$RM" settle --root "$ROOT" --spec docs/dforge/specs/2026-10-08-billing-design.md
 check "settle: the other docs prefix still refuses while open" "$(grep -c '^not settled' <<<"$OUT")" "1"
 bash "$REG" set "$D/registers/billing.md" 1 done >/dev/null
 bash "$REG" set "$D/registers/billing.md" 2 done >/dev/null
@@ -134,7 +134,7 @@ check "settle: with the owner note" "$(register_rows "$D/registers/m1.md" | awk 
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: idempotent" "$(grep -c '^no open epic row' <<<"$OUT")" "1"
 bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
-run bash "$RM" settle --root "$ROOT" --spec docs/forge/specs/2026-10-08-billing-design.md
+run bash "$RM" settle --root "$ROOT" --spec docs/dforge/specs/2026-10-08-billing-design.md
 check "settle: an epic matches its spec under the other docs prefix" \
   "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
 
@@ -156,22 +156,22 @@ check "close: written" "$RC" "0"
 check "close: state" "$(roadmap_row "$D/roadmap.md" M1 | cut -f5)" "closed"
 check "close: note" "$(roadmap_row "$D/roadmap.md" M1 | cut -f6)" "audit 2026-10-09: 2 MET"
 run bash "$RM" status --root "$ROOT" --line
-check "all closed: the hook line" "$OUT" "Roadmap: every milestone is closed (docs/forge/roadmap.md)."
+check "all closed: the hook line" "$OUT" "Roadmap: every milestone is closed (docs/dforge/roadmap.md)."
 run bash "$RM" check --root "$ROOT"
 check "close: the written roadmap checks clean" "$RC" "0"
 
-# --- a dforge checkout keeps its roadmap in docs/forge ---
-FROOT="$TMP/forge"
+# --- a dforge checkout keeps its roadmap in docs/dforge ---
+FROOT="$TMP/dforge"
 git init -q -b main "$FROOT"
 mkdir -p "$FROOT/docs"
-cp -R "$D" "$FROOT/docs/forge"
-for f in "$FROOT"/docs/forge/roadmap.md "$FROOT"/docs/forge/registers/*.md; do
-  sed 's#docs/superpowers/#docs/forge/#g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+cp -R "$D" "$FROOT/docs/dforge"
+for f in "$FROOT"/docs/dforge/roadmap.md "$FROOT"/docs/dforge/registers/*.md; do
+  sed 's#docs/superpowers/#docs/dforge/#g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 run bash "$RM" status --root "$FROOT" --line
-check "docs/forge: the hook line names its roadmap" "$OUT" "Roadmap: every milestone is closed (docs/forge/roadmap.md)."
+check "docs/dforge: the hook line names its roadmap" "$OUT" "Roadmap: every milestone is closed (docs/dforge/roadmap.md)."
 run bash "$RM" check --root "$FROOT"
-check "docs/forge: the roadmap checks clean" "$RC" "0"
+check "docs/dforge: the roadmap checks clean" "$RC" "0"
 
 # --- add, order and reopen ---
 register "$D/registers/m2.md" "$PRODUCT" '| 1 | Hardening review | - | - | open | - |'
@@ -213,23 +213,23 @@ check "usage: unknown verb" "$RC" "2"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q -b main "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem local)
-mkdir -p "$M/forge/registers"
-printf '# Roadmap\n' > "$M/forge/roadmap.md"
-register "$M/forge/registers/m1.md" "docs/forge/specs/x.md" \
+mkdir -p "$M/dforge/registers"
+printf '# Roadmap\n' > "$M/dforge/roadmap.md"
+register "$M/dforge/registers/m1.md" "docs/dforge/specs/x.md" \
   '| 1 | A | - | - | done | - |' '| 2 | B | - | - | open | - |'
-check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/forge/roadmap.md"
+check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/dforge/roadmap.md"
 check "roadmap_epic_counts: a register name resolves in the mirror" \
-  "$(HOME=$SH roadmap_epic_counts "$SR" docs/forge/registers/m1.md)" "1 2"
+  "$(HOME=$SH roadmap_epic_counts "$SR" docs/dforge/registers/m1.md)" "1 2"
 check "roadmap_unresolved: rows named by register name" \
-  "$(HOME=$SH roadmap_unresolved "$SR" docs/forge/registers/m1.md | cut -f1,2)" "$(printf 'docs/forge/registers/m1.md\t2')"
+  "$(HOME=$SH roadmap_unresolved "$SR" docs/dforge/registers/m1.md | cut -f1,2)" "$(printf 'docs/dforge/registers/m1.md\t2')"
 
-mkdir -p "$M/forge/specs"
-printf '# X\n' > "$M/forge/specs/x.md"
-register "$M/forge/registers/m9.md" "docs/forge/specs/x.md" \
-  '| 1 | Epic | docs/forge/specs/x.md | - | open | - |'
+mkdir -p "$M/dforge/specs"
+printf '# X\n' > "$M/dforge/specs/x.md"
+register "$M/dforge/registers/m9.md" "docs/dforge/specs/x.md" \
+  '| 1 | Epic | docs/dforge/specs/x.md | - | open | - |'
 check "roadmap_unresolved: the milestone register under the other prefix is not listed twice" \
   "$(HOME=$SH roadmap_unresolved "$SR" docs/superpowers/registers/m9.md | cut -f1,2 | tr '\n' '|')" \
-  "$(printf 'docs/superpowers/registers/m9.md\t1|docs/forge/registers/m1.md\t2|')"
+  "$(printf 'docs/superpowers/registers/m9.md\t1|docs/dforge/registers/m1.md\t2|')"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

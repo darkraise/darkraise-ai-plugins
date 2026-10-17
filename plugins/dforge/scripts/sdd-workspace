@@ -4,7 +4,7 @@
 # and, while progress is local, the progress ledger. Print the plan
 # directory's absolute path.
 #
-# One directory per plan (.forge/sdd/<plan-basename>/) so a follow-up
+# One directory per plan (.dforge/sdd/<plan-basename>/) so a follow-up
 # plan in the same working tree can never read or overwrite another plan's
 # artifacts. A stale ledger misread as current progress makes controllers
 # skip whole task sequences — plan-scoping removes that failure structurally.
@@ -12,7 +12,7 @@
 # The workspace lives in the working tree (not under .git/) because Claude Code
 # treats .git/ as a protected path and denies agent writes there — which blocks
 # an implementer subagent from writing its report file. A self-ignoring
-# .gitignore at .forge/sdd/ keeps every plan's workspace out of
+# .gitignore at .dforge/sdd/ keeps every plan's workspace out of
 # `git status` and out of accidental commits without modifying any tracked file.
 #
 # Single source of truth for the workspace location, so task-brief and
@@ -36,8 +36,8 @@ slug=$(basename "$plan" .md)
   || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
 
 root=$(git rev-parse --show-toplevel)
-base="$(forge_dir state "$root")/sdd"
+base="$(dforge_dir state "$root")/sdd"
 dir="$base/$slug"
 mkdir -p "$dir"
-forge_self_ignore "$base"
+dforge_self_ignore "$base"
 cd "$dir" && pwd

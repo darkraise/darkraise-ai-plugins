@@ -245,7 +245,7 @@ usable Codex is still used only on a surface whose shipping gate passed,
 recorded per surface in `reference/codex-plugin.json`: the calibration replay
 opens the review seats, and the executor-lane smoke test opens the lane.
 
-**Project state.** `docs/forge/` holds what a project knows about
+**Project state.** `docs/dforge/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
   gates in order, `plans/completed.md` indexes merged plans, and `distilled/`
   holds four durable files — constraints, gotchas, reference, rejected —
@@ -274,12 +274,12 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   a repository's planning documents and progress in a darkmem instance over
   its keyed REST routes. It does nothing until you opt in: turn on **Use
   darkmem** (`darkmemEnabled`) in the cockpit's darkmem settings or with
-  `bash <plugin-root>/scripts/forge-config set darkmemEnabled true`, and map
+  `bash <plugin-root>/scripts/dforge-config set darkmemEnabled true`, and map
   the repository's primary checkout in `~/.dforge/config.json` —
   `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
   — and export a `dmk_` key in that variable. The repository then syncs a
   mirror at `~/.dforge/mirror/<project>/`, whose documents live under the
-  darkmem uri prefix `forge/`. The key needs the `read` and `capture` scopes,
+  darkmem uri prefix `dforge/`. The key needs the `read` and `capture` scopes,
   and `import --replace` also `admin`. Two settings choose each family's
   store while darkmem is on: `documentStore` (specs, plans, registers, notes)
   and `progressSource` (ledgers and handoffs), `local` or `darkmem`, both
@@ -287,12 +287,12 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   `{"project": "plugins", "documentStore": "local"}`. `~/.dforge/stores.json`
   records where each family actually lives, with its project and mirror, and
   the scripts and skills read and write there through `scripts/lib/roots.sh`
-  and `scripts/forge-path`.
+  and `scripts/dforge-path`.
   `pull` fetches what changed; `push` sends documents under their last synced
   hash and each new ledger line as its own entry, with `task`, `state` and
   `commit` properties a progress board can read; `status` lists each family's
   store and local changes;
-  `import` files an existing `docs/forge/` and its ledgers once, verified byte
+  `import` files an existing `docs/dforge/` and its ledgers once, verified byte
   for byte. A store that changes moves its family at the next session start
   with no plan in progress and no auto run active:
   `reconcile` copies the files across, verifies every hash, records the new
@@ -311,7 +311,7 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   remove the mapping, and the next session start with no plan in progress
   moves every family back into the repository from the mirror alone, without
   asking darkmem, naming each file darkmem does not hold as the mirror does and keeping the mirror
-  as a dated `forge-moved-<stamp>` / `work-moved-<stamp>` backup; until then
+  as a dated `dforge-moved-<stamp>` / `work-moved-<stamp>` backup; until then
   the scripts keep reading the mirror, and `push` and `pull` do nothing. A
   store set back to `local` while darkmem is on and reachable is pulled from
   darkmem first. A repository a 2.x release moved into darkmem stays there,
@@ -332,9 +332,9 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   sends what it missed. A
   move stopped part-way through filing a ledger resumes it at the next session
   start. A document deleted from the mirror is archived on darkmem under
-  `forge/archive/<stamp>/` and `restore <name>` brings it back;
+  `dforge/archive/<stamp>/` and `restore <name>` brings it back;
   `revision <name>` prints the `<name>@r<id>` a distilled `Source:` line
-  cites. `docs/superpowers/<rest>` and `docs/forge/<rest>` name the same
+  cites. `docs/superpowers/<rest>` and `docs/dforge/<rest>` name the same
   document everywhere names are compared, so historical plans keep resolving.
   A conflict is reported, never merged. Without a mapping every command but
   `import` prints one line and does nothing.
@@ -348,7 +348,7 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 frontmatter, and writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.forge/handoff/latest.md` pointing at it. Disable the
+action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -369,7 +369,7 @@ message instead.
 ## How it fires
 
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
-`dforge:using-forge` entry point as `additionalContext`, so every
+`dforge:using-dforge` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
 `selecting-approaches`, implementer assignment in `writing-plans`, and tiered
 dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same
@@ -389,7 +389,7 @@ clean, otherwise the `## Next session` block from `next-step`. Controllers,
 Sonnet especially, tend to summarize the run and stop instead. A
 `UserPromptSubmit` hook stamps the start of each turn under
 `~/.claude/dforge/sessions/turns/`, and a `Stop` hook checks whether
-that turn wrote a plan ledger (`.forge/sdd/*/progress.md`). If it did and
+that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`). If it did and
 the last message carries neither ending, the hook blocks the stop once and
 tells Claude which one is missing. The retry always passes, and without `jq`,
 a stamp or a ledger written this turn, the hook does nothing. While an agent or
@@ -411,7 +411,7 @@ on.
 Unplanned work gets the same hold. The prompt hook also records which commits
 the repository's local branches point at. A turn that wrote no ledger but
 changed that set (a commit, a merge, or deleting a branch's only pointer to a
-commit) in a project with forge docs must end on the `## Next session` block
+commit) in a project with dforge docs must end on the `## Next session` block
 from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
 line. Otherwise the hook holds the stop once and tells Claude to continue
 remaining work, finish a branch that is ready to integrate, or print the block. Creating
@@ -422,7 +422,7 @@ A run also asks one question before its first task: what finishing should do
 if its menu goes unanswered for the configured wait, 30 minutes by default
 (merge locally, push and open a pull request, keep the branch, or wait).
 `scripts/finish-choice` keeps the answer beside the ledger
-(`.forge/sdd/<plan>/finish.json`, or `.forge/sdd/finish.json` for work done
+(`.dforge/sdd/<plan>/finish.json`, or `.dforge/sdd/finish.json` for work done
 without a plan). When finishing
 shows its menu, it arms that choice and schedules a one-shot wake with
 CronCreate; the menu's last line says what happens and when. An answer to the
@@ -596,7 +596,7 @@ desktop window joins the session, unless you closed it.
   the budget at the pace of the last few. **Hand off** appears in
   `dforge` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when `.forge/handoff/latest.md` is under three days old and its
+  color, when `.dforge/handoff/latest.md` is under three days old and its
   `## Next session` block has a first prompt to paste (a finished plan, or a
   task blocked on your ruling, has none). It names the note's age and its
   **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The
@@ -617,7 +617,7 @@ desktop window joins the session, unless you closed it.
   tokens, the share served from the prompt cache and output tokens. Use it to see where a plan's tokens go.
 - **Plan** follows the main session's todo list or task list, centred on the
   item in progress. In a `dforge` run it becomes **Run**, read from the
-  run's ledger (`.forge/sdd/<run>/progress.md`) and its plan: the review
+  run's ledger (`.dforge/sdd/<run>/progress.md`) and its plan: the review
   round in flight, the tasks done, which were reviewed clean, and a blocked
   task in red with its reason. A run whose tasks were all done before the
   session started is left out, so a new session starts without it. Its
@@ -702,7 +702,7 @@ session needs you, which works the same over ssh and tmux. Create a webhook
 (channel settings → Integrations → Webhooks → copy URL) and paste it in the
 settings view's **Notifications** group, or run `/cockpit notify url <url>`.
 It is kept in the plugin's own store, not in `settings.json`, and only ever
-shows masked; `DR_FORGE_NOTIFY_URL` in the environment wins over it (`DR_COCKPIT_NOTIFY_URL` still read). **Send
+shows masked; `DFORGE_NOTIFY_URL` in the environment wins over it (`DR_COCKPIT_NOTIFY_URL` still read). **Send
 test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
 (**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
 that need you; everything else posts silently.
@@ -746,15 +746,15 @@ a project or managed Claude settings file) shows what forces it and no
 controls.
 
 The same settings can be set with
-`bash <plugin-root>/scripts/forge-config set <key> <value>` or by editing
+`bash <plugin-root>/scripts/dforge-config set <key> <value>` or by editing
 `~/.dforge/config.json`:
 
 ```json
 { "layout": "compact", "handoffMode": "relaxed", "finishAction": "pr" }
 ```
 
-`forge-config get --json` prints every value in force, and
-`forge-config workflow` prints the line the skills read.
+`dforge-config get --json` prints every value in force, and
+`dforge-config workflow` prints the line the skills read.
 
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
@@ -763,7 +763,7 @@ The same settings can be set with
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band always draws its own lines. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
-| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DR_FORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
+| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
 | Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
 | Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
 | Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dforge` sessions. |
@@ -771,7 +771,7 @@ The same settings can be set with
 | Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
 | Workflow | `codexLane` | `true` | Give plan tasks to Codex when its gate passes. `false` makes `scripts/codex-gate` report `lane=false`. |
 | Workflow | `codexReview` | `true` | Let Codex take review seats when its gate passes. `false` makes the gate report `review=false`; with both off it does not probe Codex at all. |
-| Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DR_FORGE_LENS_CAP` overrides it. |
+| Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `executionStrategy` | `ask` | `sequential` or `parallel` answers the "how should the plan execute" question. `parallel` still falls back to sequential when the parts share files, and on Codex. |
 | Workflow | `executionMode` | `auto` | `auto` follows the planner's rule; `inline` and `subagent` fix the plan's Execution line, and `inline` also makes the plan sequential. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
@@ -857,17 +857,17 @@ dr-superpowers names are no longer read: see Migrating to 3.0.
 
 ## Migrating to 3.0
 
-dforge 3.0.0 reads and writes only its own names: `.forge/`, `docs/forge/`,
-the git directory's `dforge/`, `~/.dforge/`, the `DR_FORGE_*` variables
+dforge 3.0.0 reads and writes only its own names: `.dforge/`, `docs/dforge/`,
+the git directory's `dforge/`, `~/.dforge/`, the `DFORGE_*` variables
 and the `dforge:` prefix. The pre-2.0 `.superpowers/`, `docs/superpowers/`,
 `dr-superpowers/` and `DR_SUPERPOWERS_*` names and the `dr-superpowers`
 prefix are no longer read. Session start and `repo-audit` print one line naming
 any pre-3.0 directory a repository still has; run, once per repository:
 
-    bash <plugin-root>/scripts/forge-migrate [DIR]
+    bash <plugin-root>/scripts/dforge-migrate [DIR]
 
 In the primary checkout and every linked worktree it moves `.superpowers/` to
-`.forge/`, `docs/superpowers/` to `docs/forge/` (with `git mv` when the
+`.dforge/`, `docs/superpowers/` to `docs/dforge/` (with `git mv` when the
 directory is tracked) and `<git dir>/dr-superpowers/` to `<git dir>/dforge/`,
 then rewrites the lines of `.gitignore`, `.gitattributes` and
 `.git/info/exclude` that name the old directories. It prints each move and what
@@ -879,19 +879,19 @@ refused.
 
 No other file is edited: plans, specs and ledgers that cite
 `docs/superpowers/<rest>` keep that spelling, and dforge still reads it as
-`docs/forge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
+`docs/dforge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
 older plugin prefix fails `scripts/plan-lint` until they name `dforge:`.
-Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
-`DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
+Rename any `DR_SUPERPOWERS_*` variable you set to its `DFORGE_*` name.
+`DFORGE_DOCUMENT_STORE` and `DFORGE_PROGRESS_SOURCE`, which 2.x read, are
 no longer read at all: set `documentStore` and `progressSource` instead.
 
-`forge-migrate` also moves the home: the darkmem mapping in
+`dforge-migrate` also moves the home: the darkmem mapping in
 `~/.dr-superpowers/config.json` into `~/.dforge/config.json` when that file
 has none, and each `~/.dr-superpowers/mirror/<project>/` that
 `~/.dforge/mirror/` lacks. darkmem itself is off in 3.0 until you set
-`darkmemEnabled`. A mirror's `superpowers/` folder becomes `forge/` at the next
+`darkmemEnabled`. A mirror's `superpowers/` folder becomes `dforge/` at the next
 `darkmem-sync` run, and the first online run moves darkmem's `superpowers/`
-documents to `forge/`; upgrade every machine that shares a darkmem project,
+documents to `dforge/`; upgrade every machine that shares a darkmem project,
 since a 2.x client no longer sees the moved documents.
 
 ## What a plan looks like
@@ -1075,7 +1075,7 @@ review, `codex-review-schema.json` for the Codex task seats, and
 A register is the list of source items a body of work must answer, and the
 authority on whether that work is finished. One file per incoming list —
 an owner's list, a review's findings, a batch — at
-`docs/forge/registers/YYYY-MM-DD-<slug>.md`, committed, and required whenever a request carries two or more
+`docs/dforge/registers/YYYY-MM-DD-<slug>.md`, committed, and required whenever a request carries two or more
 distinct items.
 
 Each row carries an identifier, the requester's words, an assignment, an
@@ -1102,7 +1102,7 @@ surface behaves exactly as it did before.
 A project built from scratch spans many specs and many sessions, and what goes
 missing there is whole epics: decided once in prose, then forgotten when a later
 session calls the phase done. `planning-a-product` runs discovery first and
-writes `docs/forge/roadmap.md`, the milestones in order (by default M0
+writes `docs/dforge/roadmap.md`, the milestones in order (by default M0
 Discovery, M1 Foundations, the feature milestones, Hardening, Release), each
 with exit criteria and one item register whose rows are its epics. Each epic's
 spec then gets its own register of requirements, which `plan-lint` already ties

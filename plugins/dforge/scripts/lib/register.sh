@@ -90,7 +90,7 @@ register_covers() {
 # register_files ROOT — every register in the repository.
 register_files() {
   local dir f
-  dir="$(forge_docs_root "$1")/registers"
+  dir="$(dforge_docs_root "$1")/registers"
   [ -d "$dir" ] || return 0
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
@@ -111,9 +111,9 @@ register_for_spec() {
     [ -n "$f" ] || continue
     while IFS= read -r cov; do
       [ -n "$cov" ] || continue
-      cov=$(forge_name_key "$cov")
+      cov=$(dforge_name_key "$cov")
       for want in "$@"; do
-        if [ "$cov" = "$(forge_name_key "$want")" ]; then
+        if [ "$cov" = "$(dforge_name_key "$want")" ]; then
           printf '%s\n' "$f"
           break 2
         fi

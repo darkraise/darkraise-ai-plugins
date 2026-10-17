@@ -151,7 +151,7 @@ and errors on an inline pair below that score.
 **Read the settings first.** Two workflow settings shape a plan,
 `executionMode` and `executionStrategy`. They arrive in the session-start line
 `dforge settings in force (…)`. With no such line in context,
-run `scripts/forge-config workflow` before you choose the Execution line
+run `scripts/dforge-config workflow` before you choose the Execution line
 or ask the strategy question; it prints nothing when both are at their
 defaults. A key the line does not name is at its default, and your human partner's
 own instructions outrank a setting.
@@ -445,7 +445,7 @@ If you find issues, fix them inline. If you find a spec requirement with no task
 
 ## Lint and Review
 
-1. **Lint.** Run `scripts/plan-lint PLAN_FILE` (see using-forge §Session Budget)
+1. **Lint.** Run `scripts/plan-lint PLAN_FILE` (see using-dforge §Session Budget)
    until it reports `0 errors`. Fix each
    WARN, or explain it in one line of the plan's Assumptions. The checker
    covers the header sections, the task headings and index, the Execution

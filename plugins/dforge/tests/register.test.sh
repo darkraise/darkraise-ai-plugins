@@ -72,26 +72,26 @@ check "register_rows: a short row is not a row" "$(register_rows "$TMP/short.md"
 # look for these specs in the checkout running the suite.
 ROOT="$TMP/repo"
 git init -q -b main "$ROOT"
-mkdir -p "$ROOT/docs/forge/registers" "$ROOT/docs/forge/specs"
-: > "$ROOT/docs/forge/specs/a-design.md"
-: > "$ROOT/docs/forge/specs/b-design.md"
-reg "$ROOT/docs/forge/registers/one.md" '| 1 | A | - | - | open | - |'
+mkdir -p "$ROOT/docs/dforge/registers" "$ROOT/docs/dforge/specs"
+: > "$ROOT/docs/dforge/specs/a-design.md"
+: > "$ROOT/docs/dforge/specs/b-design.md"
+reg "$ROOT/docs/dforge/registers/one.md" '| 1 | A | - | - | open | - |'
 printf '# Two — item register\n\n**Source:** s\n**Covers:** docs/superpowers/specs/z-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | B | - | - | open | - |\n' \
-  > "$ROOT/docs/forge/registers/two.md"
+  > "$ROOT/docs/dforge/registers/two.md"
 check "register_files: both" "$(register_files "$ROOT" | wc -l | tr -d ' ')" "2"
 check "register_for_spec: matches one" \
   "$(register_for_spec "$ROOT" docs/superpowers/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: no spec argument prints nothing" "$(register_for_spec "$ROOT")" ""
 check "register_for_spec: the other docs prefix matches" \
-  "$(register_for_spec "$ROOT" docs/forge/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
+  "$(register_for_spec "$ROOT" docs/dforge/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: a leading ./ and the other prefix match" \
-  "$(register_for_spec "$ROOT" ./docs/forge/specs/b-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
+  "$(register_for_spec "$ROOT" ./docs/dforge/specs/b-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: docs/superpowersx is another name" \
   "$(register_for_spec "$ROOT" docs/superpowersx/specs/a-design.md)" ""
 check "register_files: no directory prints nothing" "$(register_files "$TMP/absent")" ""
-mkdir -p "$TMP/forge/docs/forge/registers"
-reg "$TMP/forge/docs/forge/registers/one.md" '| 1 | A | - | - | open | - |'
-check "register_files: a docs/forge checkout" "$(register_files "$TMP/forge" | xargs -n1 basename)" "one.md"
+mkdir -p "$TMP/dforge/docs/dforge/registers"
+reg "$TMP/dforge/docs/dforge/registers/one.md" '| 1 | A | - | - | open | - |'
+check "register_files: a docs/dforge checkout" "$(register_files "$TMP/dforge" | xargs -n1 basename)" "one.md"
 
 # --- register check ---
 REG="$HERE/../scripts/register"
@@ -227,15 +227,15 @@ done < <(register_files "$REPO_ROOT")
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem local)
-mkdir -p "$M/forge/registers" "$M/forge/specs"
-printf '# A\n' > "$M/forge/specs/a-design.md"
-printf '# B\n' > "$M/forge/specs/b-design.md"
-reg "$M/forge/registers/r.md" '| 1 | One | - | - | planned | - |'
-check "register_files: the mirror's registers" "$(HOME=$SH register_files "$SR")" "$M/forge/registers/r.md"
-out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" check "$M/forge/registers/r.md" 2>&1)
+mkdir -p "$M/dforge/registers" "$M/dforge/specs"
+printf '# A\n' > "$M/dforge/specs/a-design.md"
+printf '# B\n' > "$M/dforge/specs/b-design.md"
+reg "$M/dforge/registers/r.md" '| 1 | One | - | - | planned | - |'
+check "register_files: the mirror's registers" "$(HOME=$SH register_files "$SR")" "$M/dforge/registers/r.md"
+out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" check "$M/dforge/registers/r.md" 2>&1)
 check "register check: Covers names resolve in the mirror" "$(tail -n 1 <<<"$out")" "register: 0 errors"
 out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" open --spec docs/superpowers/specs/a-design.md 2>&1)
-check "register open: the register is named, not pathed" "$out" "docs/forge/registers/r.md: #1 One — planned, assigned -"
+check "register open: the register is named, not pathed" "$out" "docs/dforge/registers/r.md: #1 One — planned, assigned -"
 
 # --- a ConfigError stops register instead of reporting nothing open ---
 BH="$TMP/bad-home"; mkdir -p "$BH/.dforge"

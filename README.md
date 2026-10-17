@@ -97,9 +97,9 @@ A feature, start to finish:
 
 1. **Describe the change.** "Add CSV export to the reports page." `brainstorming`
    asks clarifying questions one at a time, proposes approaches and writes a
-   spec under `docs/forge/specs/`.
+   spec under `docs/dforge/specs/`.
 2. **Approve the spec.** `writing-plans` turns it into a plan under
-   `docs/forge/plans/`. Each task is scored on four axes (files, spec
+   `docs/dforge/plans/`. Each task is scored on four axes (files, spec
    completeness, coupling, risk), and the score picks its implementer, such as
    `impl-sonnet-low` or `impl-opus-high`. `plan-lint` checks the plan and a judge
    reviews it before it is saved. Saving a plan ends the session.
@@ -107,7 +107,7 @@ A feature, start to finish:
    the mode the plan's `**Execution:**` line names: inline, where the session
    implements the tasks itself, or subagent, where each task goes to its
    implementer and is reviewed against scored criteria.
-4. **Let it run.** Progress goes to `.forge/sdd/<plan>/progress.md`. A
+4. **Let it run.** Progress goes to `.dforge/sdd/<plan>/progress.md`. A
    whole-branch review follows the last task, then
    `finishing-a-development-branch` offers to merge, open a pull request, keep
    the branch or wait.

@@ -37,7 +37,7 @@ An example entry, from `gotchas.md`:
 Cause: ripgrep is not on PATH in Git Bash on this machine; the suite assumes it
 Workaround: use the Grep tool, or `fd`; this one discovery failure is environmental
 Verified: 2026-09-11
-Source: docs/forge/notes/2026-09-11-test-env.md@e4f5a6b
+Source: docs/dforge/notes/2026-09-11-test-env.md@e4f5a6b
 ```
 
 Every entry carries a `Source:` line: the file it came from and the short SHA of
@@ -155,13 +155,13 @@ having checked it.
 
 ## Documents in darkmem
 
-While `bash <plugin-root>/scripts/forge-path store` prints `documents darkmem`,
+While `bash <plugin-root>/scripts/dforge-path store` prints `documents darkmem`,
 `<docs>` is the darkmem mirror, which git does not track. Five rules above
 change; everything else stands.
 
 - **Eligible** replaces tracked and clean: `bash <plugin-root>/scripts/darkmem-sync revision <name>`
   exits 0, which it does only for a file synced and unchanged since the last
-  push. `<name>` is the file's name (`forge-path name <path>`). Unreferenced is
+  push. `<name>` is the file's name (`dforge-path name <path>`). Unreferenced is
   checked as above, over the checkout's tracked files, the mirror's documents
   outside those two directories, and `<latest.md>`.
 - **`Source:`** cites `<name>@r<id>`, the line `revision` printed, captured
@@ -170,7 +170,7 @@ change; everything else stands.
   `darkmem-sync push`; give the judge each distilled file's `revision` line
   where it expects the SHA, and hold the mirror unedited until the verdicts
   return. Then delete exactly the `CARRIED` sources from the mirror and push
-  again: push moves each deleted document to `forge/archive/<stamp>/`
+  again: push moves each deleted document to `dforge/archive/<stamp>/`
   on darkmem. Never add entries and delete sources in one push.
 - **Recovery** is `bash <plugin-root>/scripts/darkmem-sync restore <name>`,
   which moves the newest archived copy back and pulls it, in place of

@@ -29,7 +29,7 @@ test("a new document goes up without a precondition, then only when it changes, 
   assert.equal(first.code, 0, first.stdout + first.stderr);
   assert.match(first.stdout, /darkmem-sync push: 1 documents, 0 ledger entries, 0 checkpoints; 0 conflicts, 0 failures/);
   const [created] = s.posts("/api/v1/documents");
-  assert.deepEqual(created.body, { project: "proj", uri: "forge/specs/a.md", content: "# A\n" });
+  assert.deepEqual(created.body, { project: "proj", uri: "dforge/specs/a.md", content: "# A\n" });
   assert.equal((await s.push()).code, 0);
   assert.equal(s.posts("/api/v1/documents").length, 1, "an unchanged document is not sent again");
   write(path.join(s.docsRoot, "specs", "a.md"), "# A2\n");
@@ -41,44 +41,44 @@ test("a document moved on darkmem is a conflict and the local file stays", async
   const s = await setup(t);
   write(path.join(s.docsRoot, "a.md"), "one\n");
   await s.push();
-  await s.seed.putDocument({ project: "proj", uri: "forge/a.md", content: "theirs\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "theirs\n" });
   write(path.join(s.docsRoot, "a.md"), "mine\n");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^conflict: forge\/a\.md: changed on darkmem since the last sync \(darkmem said: expected_hash [0-9a-f]{64} does not match[^)]*\); pull, reconcile, then push$/m);
+  assert.match(result.stdout, /^conflict: dforge\/a\.md: changed on darkmem since the last sync \(darkmem said: expected_hash [0-9a-f]{64} does not match[^)]*\); pull, reconcile, then push$/m);
   assert.equal(read(path.join(s.docsRoot, "a.md")), "mine\n");
-  assert.equal(s.stub.db.documents.get("proj\u0000forge/a.md").content, "theirs\n");
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/a.md").content, "theirs\n");
 });
 
 test("a document deleted on darkmem since the last sync is a conflict and the local file stays", async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "a.md"), "one\n");
   await s.push();
-  s.stub.db.documents.delete("proj\u0000forge/a.md");
+  s.stub.db.documents.delete("proj\u0000dforge/a.md");
   write(path.join(s.docsRoot, "a.md"), "two\n");
   const result = await s.push();
   assert.equal(result.code, 1, result.stderr);
-  assert.match(result.stdout, /^conflict: forge\/a\.md: deleted on darkmem since the last sync; pull, reconcile, then push$/m);
+  assert.match(result.stdout, /^conflict: dforge\/a\.md: deleted on darkmem since the last sync; pull, reconcile, then push$/m);
   assert.equal(read(path.join(s.docsRoot, "a.md")), "two\n");
 });
 
 test("an unrecorded file darkmem already holds is adopted when equal and a conflict when not", async t => {
   const s = await setup(t);
-  await s.seed.putDocument({ project: "proj", uri: "forge/same.md", content: "same\n" });
-  await s.seed.putDocument({ project: "proj", uri: "forge/diff.md", content: "theirs\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/same.md", content: "same\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/diff.md", content: "theirs\n" });
   write(path.join(s.docsRoot, "same.md"), "same\n");
   write(path.join(s.docsRoot, "diff.md"), "mine\n");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /conflict: forge\/diff\.md: darkmem already holds different content/);
+  assert.match(result.stdout, /conflict: dforge\/diff\.md: darkmem already holds different content/);
   assert.equal(s.posts("/api/v1/documents").length, 2, "only the two seeding puts");
 });
 
 test("a ledger whose plan completed.md records has its workstream closed once, and an unfinished one stays open", async t => {
   const s = await setup(t);
-  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: complete (abc)\n");
-  write(path.join(s.workRoot, "sdd", "p2", "progress.md"), "# SDD ledger — plan: docs/forge/plans/p2.md\nTask 1: complete (abc)\n");
-  write(path.join(s.docsRoot, "plans", "completed.md"), "- `docs/forge/plans/p1.md` — merged\n");
+  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: complete (abc)\n");
+  write(path.join(s.workRoot, "sdd", "p2", "progress.md"), "# SDD ledger — plan: docs/dforge/plans/p2.md\nTask 1: complete (abc)\n");
+  write(path.join(s.docsRoot, "plans", "completed.md"), "- `docs/dforge/plans/p1.md` — merged\n");
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const ws = key => s.stub.db.workstreams.find(w => w.key === key);
@@ -97,12 +97,12 @@ test("handoff notes go up as documents and are linked from their workstream", as
   write(path.join(s.workRoot, "sdd", "p1", "handoff.md"), "# Handoff p1\n");
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout);
-  assert.equal(s.stub.db.documents.get("proj\u0000forge/handoff/p1.md").content, "# Handoff p1\n");
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "forge/handoff/p1.md");
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/handoff/p1.md").content, "# Handoff p1\n");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "dforge/handoff/p1.md");
   delete s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri;
   fs.rmSync(path.join(s.mirror, ".sync-state.json"));
   assert.equal((await s.push()).code, 0);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "forge/handoff/p1.md", "an adopted handoff note is linked too");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "dforge/handoff/p1.md", "an adopted handoff note is linked too");
 });
 
 test("an empty document fails the push and keeps its record; a reserved file is a note", async t => {
@@ -113,24 +113,24 @@ test("an empty document fails the push and keeps its record; a reserved file is 
   write(path.join(s.docsRoot, "handoff", "x.md"), "x");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /failed: forge\/a\.md: empty or not UTF-8 text, which darkmem cannot store; not pushed/);
+  assert.match(result.stdout, /failed: dforge\/a\.md: empty or not UTF-8 text, which darkmem cannot store; not pushed/);
   assert.match(result.stdout, /note: handoff\/x\.md: the docs root's handoff\/ directory is reserved, not pushed/);
-  assert.equal(s.stub.db.documents.get("proj\u0000forge/a.md").content, "a\n");
-  assert.match((await run(["status"], { cwd: s.repo, env: s.env })).stdout, /^modified: forge\/a\.md$/m);
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/a.md").content, "a\n");
+  assert.match((await run(["status"], { cwd: s.repo, env: s.env })).stdout, /^modified: dforge\/a\.md$/m);
 });
 
 test("a document another client files during the push is reported as replaced", async t => {
   const s = await setup(t, {
     onRequest: (request, db) => {
-      if (request.method === "POST" && request.path === "/api/v1/documents" && request.body.uri === "forge/race.md") {
-        db.documents.set("proj\u0000forge/race.md", storedDocument("proj", "forge/race.md", "theirs\n"));
+      if (request.method === "POST" && request.path === "/api/v1/documents" && request.body.uri === "dforge/race.md") {
+        db.documents.set("proj\u0000dforge/race.md", storedDocument("proj", "dforge/race.md", "theirs\n"));
       }
     },
   });
   write(path.join(s.docsRoot, "race.md"), "mine\n");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /failed: forge\/race\.md: another client filed it during this push, and this push replaced its content/);
+  assert.match(result.stdout, /failed: dforge\/race\.md: another client filed it during this push, and this push replaced its content/);
 });
 
 test("a document put whose answer was lost is recorded on the next push, not reported as a conflict", async t => {
@@ -141,10 +141,10 @@ test("a document put whose answer was lost is recorded on the next push, not rep
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 502, commit: true });
   const lost = await s.push();
   assert.equal(lost.code, 1);
-  assert.match(lost.stdout, /^failed: forge\/a\.md: darkmem answered 502: injected failure$/m);
+  assert.match(lost.stdout, /^failed: dforge\/a\.md: darkmem answered 502: injected failure$/m);
   const retry = await s.push();
   assert.equal(retry.code, 0, retry.stdout);
-  assert.equal(s.stub.db.documents.get("proj\u0000forge/a.md").content, "two\n");
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/a.md").content, "two\n");
   assert.equal((await run(["status"], { cwd: s.repo, env: s.env })).stdout.split("\n").filter(Boolean).length, 3);
 });
 
@@ -168,7 +168,7 @@ test("a ledger goes up one entry per complete line, with the line's properties, 
   ]);
   assert.equal(entries[0].run_key, "sess-1");
   const ws = s.stub.db.workstreams.find(w => w.key === "p1");
-  assert.deepEqual(ws.properties, { plan_uri: "forge/plans/p1.md", spec_uri: "forge/specs/s.md" });
+  assert.deepEqual(ws.properties, { plan_uri: "dforge/plans/p1.md", spec_uri: "dforge/specs/s.md" });
   fs.appendFileSync(file, "\n");
   assert.equal((await s.push()).code, 0);
   assert.equal((await s.ledger("p1")).map(e => e.body).join(""), read(file));
@@ -275,7 +275,7 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
   assert.equal((await s.push()).code, 0);
   const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
   assert.deepEqual(p1.entries.map(e => e.kind), ["checkpoint"]);
-  assert.deepEqual(p1.properties, { plan_uri: "forge/plans/p1.md" });
+  assert.deepEqual(p1.properties, { plan_uri: "dforge/plans/p1.md" });
   assert.equal((await s.push()).code, 0);
   assert.equal(p1.entries.length, 1, "an unchanged checkpoint is not sent again");
   write(latest, "# Handoff\n\n## State\n- unplanned work\n");
@@ -293,7 +293,7 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
   assert.equal((await s.push()).code, 0);
   const draft = s.stub.db.workstreams.find(w => w.key === "d-design");
   assert.equal(draft.entries.length, 2, "a checkpoint whose answer was lost is not filed twice, even behind another client's");
-  assert.deepEqual(draft.properties, { spec_uri: "forge/specs/d-design.md" });
+  assert.deepEqual(draft.properties, { spec_uri: "dforge/specs/d-design.md" });
   const bad = await s.push("--workstream", "../x");
   assert.equal(bad.code, 2);
   assert.match(bad.stderr, /--workstream "\.\.\/x" is not a workstream key/);
@@ -301,7 +301,7 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
 
 test("without a declared session the run key falls back to the machine and day", async t => {
   const s = await setup(t);
-  delete s.env.DR_FORGE_SESSION_ID;
+  delete s.env.DFORGE_SESSION_ID;
   delete s.env.DR_SUPERPOWERS_SESSION_ID;
   write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
   assert.equal((await s.push()).code, 0);
@@ -318,7 +318,7 @@ test("status is clean after a push and names an edit made after it", async t => 
   assert.equal(clean.stdout.split("\n").filter(Boolean).length, 3);
   write(path.join(s.docsRoot, "a.md"), "b\n");
   const dirty = await run(["status"], { cwd: s.repo, env: s.env });
-  assert.match(dirty.stdout, /^modified: forge\/a\.md$/m);
+  assert.match(dirty.stdout, /^modified: dforge\/a\.md$/m);
 });
 
 test("every ledger append names the seq it follows; another mirror's append is a 409 reconciled once", async t => {
@@ -417,12 +417,12 @@ test("a 503 on one document names its uri, and the other documents, the ledger a
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 503 });
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^failed: forge\/a\.md: darkmem answered 503: injected failure$/m);
-  assert.equal(s.stub.db.documents.has("proj\u0000forge/a.md"), false);
-  assert.equal(s.stub.db.documents.get("proj\u0000forge/b.md").content, "b\n");
+  assert.match(result.stdout, /^failed: dforge\/a\.md: darkmem answered 503: injected failure$/m);
+  assert.equal(s.stub.db.documents.has("proj\u0000dforge/a.md"), false);
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/b.md").content, "b\n");
   assert.deepEqual(s.stub.db.workstreams.find(w => w.key === "p1").entries.map(e => e.kind), ["ledger", "checkpoint"]);
   assert.equal((await s.push()).code, 0);
-  assert.equal(s.stub.db.documents.get("proj\u0000forge/a.md").content, "a\n");
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/a.md").content, "a\n");
 });
 
 test("a 401 on a document stops the push before the ledgers", async t => {
@@ -456,15 +456,15 @@ test("a failed handoff link stays pending and the next push links it; a pending 
   s.stub.db.failures.push({ method: "PATCH", path: "/api/v1/worklog/workstreams/", status: 503 });
   const failed = await s.push();
   assert.equal(failed.code, 1);
-  assert.match(failed.stdout, /^failed: forge\/handoff\/p1\.md: linking it from workstream p1: darkmem answered 503: injected failure$/m);
+  assert.match(failed.stdout, /^failed: dforge\/handoff\/p1\.md: linking it from workstream p1: darkmem answered 503: injected failure$/m);
   const stateFile = path.join(s.mirror, ".sync-state.json");
-  assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, ["forge/handoff/p1.md"]);
+  assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, ["dforge/handoff/p1.md"]);
   const retried = await s.push();
   assert.equal(retried.code, 0, retried.stdout);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "forge/handoff/p1.md");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "dforge/handoff/p1.md");
   assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, []);
   const state = JSON.parse(read(stateFile));
-  state.pendingLinks = ["forge/handoff/ghost.md"];
+  state.pendingLinks = ["dforge/handoff/ghost.md"];
   fs.writeFileSync(stateFile, JSON.stringify(state));
   const dropped = await s.push();
   assert.equal(dropped.code, 0, dropped.stdout);
@@ -494,23 +494,23 @@ test("push refuses a uri Windows cannot hold", { skip: process.platform === "win
   write(path.join(s.docsRoot, "notes", "CON.md"), "y\n");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^failed: forge\/notes\/a:b\.md: the name "a:b\.md" holds a character Windows refuses, so not every mirror can hold it as a file; not pushed$/m);
-  assert.match(result.stdout, /^failed: forge\/notes\/CON\.md: the name "CON\.md" is a Windows device name/m);
+  assert.match(result.stdout, /^failed: dforge\/notes\/a:b\.md: the name "a:b\.md" holds a character Windows refuses, so not every mirror can hold it as a file; not pushed$/m);
+  assert.match(result.stdout, /^failed: dforge\/notes\/CON\.md: the name "CON\.md" is a Windows device name/m);
   assert.equal(s.posts("/api/v1/documents").length, 0);
 });
 
 test("push refuses a uri that differs only in case from one darkmem holds", async t => {
   const s = await setup(t);
-  await s.seed.putDocument({ project: "proj", uri: "forge/notes/A.md", content: "theirs\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/notes/A.md", content: "theirs\n" });
   write(path.join(s.docsRoot, "notes", "a.md"), "mine\n");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^conflict: forge\/notes\/a\.md: darkmem holds forge\/notes\/A\.md, which differ only in case from it; not pushed — rename the local file, or rename or delete the others on darkmem by hand \(the sync has no rename or delete route\)$/m);
+  assert.match(result.stdout, /^conflict: dforge\/notes\/a\.md: darkmem holds dforge\/notes\/A\.md, which differ only in case from it; not pushed — rename the local file, or rename or delete the others on darkmem by hand \(the sync has no rename or delete route\)$/m);
   assert.equal(s.posts("/api/v1/documents").length, 1, "only the seeding put");
-  await s.seed.putDocument({ project: "proj", uri: "forge/notes/a.md", content: "also theirs\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/notes/a.md", content: "also theirs\n" });
   const pair = await s.push();
   assert.equal(pair.code, 1);
-  assert.match(pair.stdout, /^conflict: forge\/notes\/a\.md: darkmem holds forge\/notes\/A\.md, which differ only in case/m, "a local file matching one of a remote pair still collides with the other");
+  assert.match(pair.stdout, /^conflict: dforge\/notes\/a\.md: darkmem holds dforge\/notes\/A\.md, which differ only in case/m, "a local file matching one of a remote pair still collides with the other");
   assert.equal(s.posts("/api/v1/documents").length, 2, "only the two seeding puts");
 });
 
@@ -520,7 +520,7 @@ test("push refuses local files that differ only in case", { skip: process.platfo
   write(path.join(s.docsRoot, "a.md"), "two\n");
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^conflict: forge\/A\.md, forge\/a\.md: differ only in case, which a case-insensitive file system holds as one file; none of them pushed — rename all but one$/m);
+  assert.match(result.stdout, /^conflict: dforge\/A\.md, dforge\/a\.md: differ only in case, which a case-insensitive file system holds as one file; none of them pushed — rename all but one$/m);
   assert.equal(s.posts("/api/v1/documents").length, 0);
 });
 
@@ -528,12 +528,12 @@ test("a 409 whose read answers darkmem's own 404 is a deletion; any other 404 is
   const s = await setup(t);
   write(path.join(s.docsRoot, "a.md"), "one\n");
   await s.push();
-  await s.seed.putDocument({ project: "proj", uri: "forge/a.md", content: "theirs\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "theirs\n" });
   write(path.join(s.docsRoot, "a.md"), "two\n");
   s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/by-uri", status: 404, detail: "Not Found" });
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^failed: forge\/a\.md: darkmem answered 404: Not Found$/m);
+  assert.match(result.stdout, /^failed: dforge\/a\.md: darkmem answered 404: Not Found$/m);
   assert.doesNotMatch(result.stdout, /deleted on darkmem/);
 });
 
@@ -561,7 +561,7 @@ test("a pending link that names no handoff note is dropped", async t => {
   assert.equal((await s.push()).code, 0);
   const stateFile = path.join(s.mirror, ".sync-state.json");
   const state = JSON.parse(read(stateFile));
-  state.pendingLinks = ["forge/notes/x.md"];
+  state.pendingLinks = ["dforge/notes/x.md"];
   fs.writeFileSync(stateFile, JSON.stringify(state));
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout);
@@ -578,7 +578,7 @@ test("push sends only the applied families, a plan's handoff.md with progress, a
   write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
   const documents = await s.push();
   assert.equal(documents.code, 0, documents.stdout + documents.stderr);
-  assert.deepEqual(uris(), ["forge/specs/a.md"]);
+  assert.deepEqual(uris(), ["dforge/specs/a.md"]);
   assert.equal(s.stub.db.workstreams.length, 0);
   const refused = await s.push("--workstream", "p1");
   assert.equal(refused.code, 2);
@@ -586,7 +586,7 @@ test("push sends only the applied families, a plan's handoff.md with progress, a
   records({ documents: "local", progress: "darkmem" });
   const progress = await s.push();
   assert.equal(progress.code, 0, progress.stdout + progress.stderr);
-  assert.deepEqual(uris(), ["forge/handoff/p1.md", "forge/specs/a.md"]);
+  assert.deepEqual(uris(), ["dforge/handoff/p1.md", "dforge/specs/a.md"]);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n"]);
 });
 
@@ -596,15 +596,15 @@ test("a synced document deleted from the mirror is archived under its recorded h
   write(path.join(s.docsRoot, "specs", "b.md"), "# B\n");
   assert.equal((await s.push()).code, 0);
   fs.rmSync(path.join(s.docsRoot, "specs", "a.md"));
-  assert.match((await run(["status"], { cwd: s.repo, env: s.env })).stdout, /^deleted: forge\/specs\/a\.md$/m);
+  assert.match((await run(["status"], { cwd: s.repo, env: s.env })).stdout, /^deleted: dforge\/specs\/a\.md$/m);
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /darkmem-sync push: 0 documents, 0 ledger entries, 0 checkpoints, 1 archived; 0 conflicts, 0 failures/);
   const patch = s.stub.db.requests.find(r => r.method === "PATCH");
   assert.equal(patch.body.expected_hash, sha("# A\n"));
-  assert.match(patch.body.uri, /^forge\/archive\/\d{8}T\d{6}Z\/specs\/a\.md$/);
-  assert.deepEqual([...s.stub.db.documents.values()].map(d => d.uri).sort(), [patch.body.uri, "forge/specs/b.md"]);
-  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), ["forge/specs/b.md"]);
+  assert.match(patch.body.uri, /^dforge\/archive\/\d{8}T\d{6}Z\/specs\/a\.md$/);
+  assert.deepEqual([...s.stub.db.documents.values()].map(d => d.uri).sort(), [patch.body.uri, "dforge/specs/b.md"]);
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), ["dforge/specs/b.md"]);
   assert.doesNotMatch((await run(["status"], { cwd: s.repo, env: s.env })).stdout, /deleted:/);
   assert.doesNotMatch((await s.push()).stdout, /archived/, "nothing is archived twice");
 });
@@ -614,15 +614,15 @@ test("a deleted document darkmem changed is a conflict that keeps its record; on
   write(path.join(s.docsRoot, "a.md"), "a\n");
   write(path.join(s.docsRoot, "b.md"), "b\n");
   await s.push();
-  await s.seed.putDocument({ project: "proj", uri: "forge/a.md", content: "remote\n", expectedHash: sha("a\n") });
-  s.stub.db.documents.delete("proj\u0000forge/b.md");
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "remote\n", expectedHash: sha("a\n") });
+  s.stub.db.documents.delete("proj\u0000dforge/b.md");
   fs.rmSync(path.join(s.docsRoot, "a.md"));
   fs.rmSync(path.join(s.docsRoot, "b.md"));
   const result = await s.push();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /^conflict: forge\/a\.md: deleted locally and changed on darkmem; pull to bring darkmem's copy back$/m);
+  assert.match(result.stdout, /^conflict: dforge\/a\.md: deleted locally and changed on darkmem; pull to bring darkmem's copy back$/m);
   assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
-  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), ["forge/a.md"]);
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), ["dforge/a.md"]);
 });
 
 test("a refused move is a conflict that keeps the record; a move whose answer was lost is settled by the next push", async t => {
@@ -636,8 +636,8 @@ test("a refused move is a conflict that keeps the record; a move whose answer wa
   s.stub.db.failures.push({ method: "PATCH", path: "/api/v1/documents/", status: 503, detail: "busy", commit: true });
   const first = await s.push();
   assert.equal(first.code, 1);
-  assert.match(first.stdout, /^conflict: forge\/a\.md: deleted locally, but darkmem refused to archive it \(darkmem said: uri is taken\); pull, then delete it again$/m);
-  assert.match(first.stdout, /^failed: forge\/b\.md: darkmem answered 503: busy$/m);
+  assert.match(first.stdout, /^conflict: dforge\/a\.md: deleted locally, but darkmem refused to archive it \(darkmem said: uri is taken\); pull, then delete it again$/m);
+  assert.match(first.stdout, /^failed: dforge\/b\.md: darkmem answered 503: busy$/m);
   const second = await s.push();
   assert.equal(second.code, 0, second.stdout + second.stderr);
   assert.match(second.stdout, /, 1 archived;/);
@@ -654,7 +654,7 @@ test("a missing docs root, documents applied local, or a deleted handoff note ar
   fs.rmSync(s.docsRoot, { recursive: true });
   const gone = await s.push();
   assert.equal(gone.code, 0, gone.stdout + gone.stderr);
-  assert.match(gone.stdout, /^note: 1 synced documents are missing because .*forge is gone; none archived — pull to bring them back$/m);
+  assert.match(gone.stdout, /^note: 1 synced documents are missing because .*dforge is gone; none archived — pull to bring them back$/m);
   write(path.join(s.docsRoot, "b.md"), "b\n");
   fs.writeFileSync(path.join(s.home, ".dforge", "stores.json"), JSON.stringify({ [s.repo]: { documents: "local", progress: "darkmem" } }));
   assert.equal((await s.push()).code, 0);

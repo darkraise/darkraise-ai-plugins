@@ -40,7 +40,7 @@ disagree.
 
 Codex runs no session-start hook, so nothing reports a repository or home that
 still uses the pre-3.0 names. Run `scripts/repo-audit` once at the start of a
-session; if it prints a `pre-3.0 layout` line, run the `forge-migrate` command
+session; if it prints a `pre-3.0 layout` line, run the `dforge-migrate` command
 that line names before any other work.
 
 ## Waiting on children
@@ -124,8 +124,8 @@ menu, say which option was chosen before the run and wait for a reply
 ## darkmem at session start
 
 Codex runs no hooks. In a repository that syncs with darkmem
-(`bash <plugin-root>/scripts/forge-path project` prints its project), or one
-with a family still in the mirror (`bash <plugin-root>/scripts/forge-path store`
+(`bash <plugin-root>/scripts/dforge-path project` prints its project), or one
+with a family still in the mirror (`bash <plugin-root>/scripts/dforge-path store`
 names `darkmem`), start each session with
 `bash <plugin-root>/scripts/darkmem-sync reconcile`, then `bash <plugin-root>/scripts/darkmem-sync pull`,
 and read what they print: a `darkmem-sync reconcile:` line names a family

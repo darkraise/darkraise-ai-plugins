@@ -18,14 +18,14 @@ When `scripts/auto-run status` exits 0
 `scripts/auto-run phase finish`, then follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is the base `scripts/auto-run status` names.
-- **Step 4 shows no menu.** Read `scripts/forge-config get finishAction` and
+- **Step 4 shows no menu.** Read `scripts/dforge-config get finishAction` and
   carry out the matching option as if your human partner had chosen it, by
   name, since the detached-HEAD menu renumbers them: `merge` is Merge Locally
   into that base, `pr` is Push and Create PR, and `keep`, `ask` and `wait` are
   Keep As-Is. Never discard. Arm no wake. Three cases override this: on a
   detached HEAD (Step 2) there is no merge, so `merge` keeps and `pr` pushes a
   new branch (`git push origin HEAD:refs/heads/<new-branch>`); when the base is
-  `none`, `merge` keeps and `pr` opens its request against the forge's default
+  `none`, `merge` keeps and `pr` opens its request against the dforge's default
   branch; and `merge` keeps when the ledger holds a
   `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
   partial commits never reach the base unreviewed. `merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of
@@ -223,7 +223,7 @@ git push -u origin <feature-branch>
 # git push origin HEAD:refs/heads/<new-branch>
 ```
 
-Then create the pull/merge request against <base-branch> with the forge's
+Then create the pull/merge request against <base-branch> with the dforge's
 tooling — its CLI if one is available, or the creation URL most forges
 print when you push — following the repo's PR template and conventions if
 present, and report the URL to your human partner.
@@ -275,12 +275,12 @@ for a confirmed discard, and never runs for Options 2 and 3.
 The two line forms:
 
 ```markdown
-- 2026-09-12 `docs/forge/plans/2026-09-12-example.md` — merged into `main` at 6a4619a
-- 2026-09-12 `docs/forge/plans/2026-09-12-example.md` — via PR
+- 2026-09-12 `docs/dforge/plans/2026-09-12-example.md` — merged into `main` at 6a4619a
+- 2026-09-12 `docs/dforge/plans/2026-09-12-example.md` — via PR
 ```
 
 Either prefix names the same document: an entry spelled `docs/superpowers/<rest>`
-already records the plan `docs/forge/<rest>`, so never add a second line for it.
+already records the plan `docs/dforge/<rest>`, so never add a second line for it.
 
 | Path | When | Which form |
 |---|---|---|
@@ -409,7 +409,7 @@ a workspace-exit tool, use it.
 gone, so nothing follows from it.
 
 If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`
-(see using-forge §Session Budget), with the
+(see using-dforge §Session Budget), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
 the next program sub-project or roadmap epic with its launch command and

@@ -135,7 +135,7 @@ dr_task_scope_valid() {
   jq -e 'type == "array" and all(.[]; type == "string" and length > 0)' "$1" >/dev/null || return 2
   local path target
   while IFS= read -r -d '' path; do
-    case "$path" in /*|[A-Za-z]:*|*\\*|..|../*|*/../*|*/..|.git|.git/*|.forge|.forge/*) return 2 ;; esac
+    case "$path" in /*|[A-Za-z]:*|*\\*|..|../*|*/../*|*/..|.git|.git/*|.dforge|.dforge/*) return 2 ;; esac
     target="$(realpath -m -- "$DR_WORKTREE/$path")" || return 2
     case "$target" in "$DR_WORKTREE"/*) ;; *) return 2 ;; esac
   done < <(jq -j '.[] + "\u0000"' "$1")

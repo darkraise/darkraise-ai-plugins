@@ -49,7 +49,7 @@ _darkmem_bounded() {
 
 # _darkmem_run DIR SID SECONDS COMMAND — darkmem-sync COMMAND in DIR, bounded.
 _darkmem_run() {
-  (cd "$1" 2>/dev/null && export DR_FORGE_SESSION_ID=$2 && _darkmem_bounded "$3" bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
+  (cd "$1" 2>/dev/null && export DFORGE_SESSION_ID=$2 && _darkmem_bounded "$3" bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
 }
 
 # _darkmem_fit MAXLINES MAXCHARS — the lines on stdin, fitted. Every unindented
@@ -95,12 +95,12 @@ _darkmem_fit() {
 darkmem_session_lines() {
   local reason status end grace bound
   _darkmem_configured || return 0
-  reason=$( (forge_docs_store "$1" >/dev/null) 2>&1 )
+  reason=$( (dforge_docs_store "$1" >/dev/null) 2>&1 )
   status=$?
   [ "$status" = 0 ] || { printf '%s\n' "$reason" | head -n 1; return 0; }
-  (forge_project "$1") >/dev/null 2>&1 \
-    || [ "$( (forge_docs_store "$1") 2>/dev/null)" = darkmem ] \
-    || [ "$( (forge_progress_store "$1") 2>/dev/null)" = darkmem ] \
+  (dforge_project "$1") >/dev/null 2>&1 \
+    || [ "$( (dforge_docs_store "$1") 2>/dev/null)" = darkmem ] \
+    || [ "$( (dforge_progress_store "$1") 2>/dev/null)" = darkmem ] \
     || return 0
   end=$(( SECONDS + ${4:-270} )) grace=${DARKMEM_KILL_GRACE:-5}
   {
@@ -133,7 +133,7 @@ darkmem_session_lines() {
 # the next session's reconcile; the next stop pushes what this one missed.
 darkmem_push_quietly() {
   _darkmem_configured || return 0
-  (forge_project "$1") >/dev/null 2>&1 || return 0
+  (dforge_project "$1") >/dev/null 2>&1 || return 0
   DARKMEM_SYNC_LOCK_WAIT_MS=1 _darkmem_run "$1" "$2" 100 push >/dev/null 2>&1
   return 0
 }

@@ -33,7 +33,7 @@ rate limit, at the spend cap or at `--minutes`, 1 when cells remain after harnes
 2 when `plugins/dforge` differs from the manifest's start commit.
 Run the same command again to resume: a cell with a scored row is skipped.
 
-A manifest built before dforge 2.0.0 names a start commit without `plugins/dforge`, so `run-grid.mjs` refuses it; build a new manifest for a new repetition.
+A manifest built before dforge 4.0.0 names a start commit without `plugins/dforge`, so `run-grid.mjs` refuses it; build a new manifest for a new repetition.
 
 ## Files
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# forge-config: environment over file over default, set/unset, refusals, and
+# dforge-config: environment over file over default, set/unset, refusals, and
 # the one-time import of the pre-2.0 settings.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CMD="$HERE/../scripts/forge-config"
-command -v node > /dev/null 2>&1 || { echo "forge-config tests: node is required but not on PATH" >&2; exit 2; }
+CMD="$HERE/../scripts/dforge-config"
+command -v node > /dev/null 2>&1 || { echo "dforge-config tests: node is required but not on PATH" >&2; exit 2; }
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -16,7 +16,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 if command -v cygpath > /dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
-unset CLAUDE_CONFIG_DIR DR_FORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 fc() { bash "$CMD" "$@" 2> "$TMP/stderr"; }
 fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dforge/config.json"; }
 
@@ -50,10 +50,10 @@ check "refusals change nothing" "$(cat "$FILE")" "$before"
 # --- environment over file ---
 fc set handoffTokens 300000
 check "file value" "$(fc get handoffTokens)" "300000"
-check "DR_FORGE_BUDGET wins" "$(DR_FORGE_BUDGET=400000 fc get handoffTokens)" "400000"
+check "DFORGE_BUDGET wins" "$(DFORGE_BUDGET=400000 fc get handoffTokens)" "400000"
 check "the pre-2.0 DR_SUPERPOWERS_BUDGET is not read" "$(DR_SUPERPOWERS_BUDGET=450000 fc get handoffTokens)" "300000"
-check "an invalid override is ignored" "$(DR_FORGE_BUDGET=junk fc get handoffTokens)" "300000"
-check "and warned about" "$(grep -c 'DR_FORGE_BUDGET' "$TMP/stderr")" "1"
+check "an invalid override is ignored" "$(DFORGE_BUDGET=junk fc get handoffTokens)" "300000"
+check "and warned about" "$(grep -c 'DFORGE_BUDGET' "$TMP/stderr")" "1"
 
 # --- a file that is not JSON is refused, not overwritten ---
 printf 'not json' > "$FILE"
@@ -127,7 +127,7 @@ progressSource darkmem local remote
 ROWS
 
 fresh lens-env
-check "lensCap: the environment wins" "$(DR_FORGE_LENS_CAP=1 fc get lensCap)" "1"
+check "lensCap: the environment wins" "$(DFORGE_LENS_CAP=1 fc get lensCap)" "1"
 
 # --- Claude's own settings file: one key changed, everything else kept ---
 fresh k
@@ -142,7 +142,7 @@ fc set autoCompactWindow 800000; check "claude set: exit 0" "$?" "0"
 check "claude set: the value" "$(at "$CS" autoCompactWindow)" "800000"
 check "claude set: every other key and the order kept" "$(keys "$CS")" "permissions,autoCompactWindow,hooks"
 check "claude set: the permissions untouched" "$(at "$CS" permissions)" '{"allow":["Bash(ls:*)"]}'
-check "claude set: nothing in the forge file" "$(keys "$FILE")" ""
+check "claude set: nothing in the dforge file" "$(keys "$FILE")" ""
 fc set autoCompactWindow 50000; check "claude: below the floor: exit 2" "$?" "2"
 fc set autoCompactWindow 1050000; check "claude: above the maximum: exit 2" "$?" "2"
 check "claude: a refusal changes nothing" "$(at "$CS" autoCompactWindow)" "800000"
@@ -156,12 +156,12 @@ fc unset autoCompactEnabled
 check "claude: unset removes the key" "$(keys "$CS")" "permissions,hooks"
 check "claude: get --json carries both" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.autoCompactWindow, v.autoCompactEnabled, v.warnAt)')" "0 true 80"
 
-# A file that cannot be parsed is never replaced, and the forge keys still resolve.
+# A file that cannot be parsed is never replaced, and the dforge keys still resolve.
 printf 'not json' > "$CS"
 fc set autoCompactWindow 800000; check "claude: an unparseable file: exit 1" "$?" "1"
 check "claude: an unparseable file is left byte-identical" "$(cat "$CS")" "not json"
 check "claude: the file is named" "$(grep -c 'settings.json is not valid JSON' "$TMP/stderr")" "1"
-check "claude: forge keys still resolve" "$(fc get warnAt)" "80"
+check "claude: dforge keys still resolve" "$(fc get warnAt)" "80"
 check "claude: the unreadable file reads as the default" "$(fc get autoCompactWindow)" "0"
 rm -f "$CS"
 fc set autoCompactWindow 800000
@@ -231,18 +231,18 @@ check "workflow: only skill keys, in schema order" "$(fc workflow)" \
   "dforge settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole"
 fc workflow extra; check "workflow takes no argument: exit 2" "$?" "2"
 
-# --- forge_setting: the value in force, or the default when the command cannot answer ---
-. "$HERE/../scripts/lib/forge-env.sh"
-check "forge_setting reads the file" "$(forge_setting worktree ask)" "always"
-check "forge_setting: an unknown key gives the default" "$(forge_setting nope fallback)" "fallback"
+# --- dforge_setting: the value in force, or the default when the command cannot answer ---
+. "$HERE/../scripts/lib/dforge-env.sh"
+check "dforge_setting reads the file" "$(dforge_setting worktree ask)" "always"
+check "dforge_setting: an unknown key gives the default" "$(dforge_setting nope fallback)" "fallback"
 printf 'not json' > "$FILE"
-check "forge_setting: a broken file gives the default" "$(forge_setting worktree ask)" "ask"
-forge_setting worktree ask > /dev/null; check "forge_setting never fails" "$?" "0"
+check "dforge_setting: a broken file gives the default" "$(dforge_setting worktree ask)" "ask"
+dforge_setting worktree ask > /dev/null; check "dforge_setting never fails" "$?" "0"
 fresh y
-check "forge_setting: a first read answers the default" "$(forge_setting worktree ask)" "ask"
-check "forge_setting: a read never creates the settings file" "$([ -e "$FILE" ] && echo created || echo absent)" "absent"
+check "dforge_setting: a first read answers the default" "$(dforge_setting worktree ask)" "ask"
+check "dforge_setting: a read never creates the settings file" "$([ -e "$FILE" ] && echo created || echo absent)" "absent"
 fc set worktree never
-check "DR_FORGE_NO_SETTINGS answers the default" "$(DR_FORGE_NO_SETTINGS=1 forge_setting worktree ask)" "ask"
+check "DFORGE_NO_SETTINGS answers the default" "$(DFORGE_NO_SETTINGS=1 dforge_setting worktree ask)" "ask"
 # Git Bash with path conversion off hands node the module path as written.
 check "the command runs with path conversion off" "$(MSYS_NO_PATHCONV=1 fc get worktree)" "never"
 # A number setting is a whole number.

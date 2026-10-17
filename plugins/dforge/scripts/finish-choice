@@ -5,7 +5,7 @@
 # ends while its human is away and the menu would otherwise wait forever.
 #
 # One JSON file holds it: `<workspace>/finish.json` beside a plan's ledger, or
-# `.forge/sdd/finish.json` for work done without a plan. Both are
+# `.dforge/sdd/finish.json` for work done without a plan. Both are
 # git-ignored; the cockpit Run card reads the file to show the choice.
 #
 # Usage: finish-choice <command> [--plan PLAN_FILE] [args]
@@ -29,8 +29,8 @@
 # FINISH_CHOICE_NOW (epoch seconds) stands in for the clock in tests.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-. "$HERE/lib/forge-dir.sh"
-. "$HERE/lib/forge-env.sh"
+. "$HERE/lib/dforge-dir.sh"
+. "$HERE/lib/dforge-env.sh"
 
 usage() { sed -n '/^# Usage:/,/^# FINISH_CHOICE_NOW/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "finish-choice needs jq" >&2; exit 2; }
@@ -51,7 +51,7 @@ if [ -n "$plan" ]; then
   dir=$(bash "$HERE/sdd-workspace" "$plan")
 else
   root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "not inside a git repository" >&2; exit 2; }
-  dir="$(forge_dir state "$root")/sdd"
+  dir="$(dforge_dir state "$root")/sdd"
   mkdir -p "$dir"
   printf '*\n' > "$dir/.gitignore"
 fi
@@ -75,7 +75,7 @@ need_file() { [ -s "$file" ] || { echo "no finish action chosen" >&2; exit 3; };
 from_setting() {
   [ ! -s "$file" ] || return 0
   local action
-  action=$(forge_setting finishAction ask)
+  action=$(dforge_setting finishAction ask)
   valid_action "$action" || return 0
   jq -n --arg action "$action" --argjson now "$now" \
     '{action: $action, base: null, chosenAt: $now, source: "setting"}' > "$file"
@@ -100,7 +100,7 @@ case $cmd in
   arm)
     from_setting
     need_file
-    minutes=$(forge_setting finishTimeout 30)
+    minutes=$(dforge_setting finishTimeout 30)
     [[ $minutes =~ ^[1-9][0-9]*$ ]] || minutes=30
     if [ $# -ge 2 ] && [ "$1" = "--minutes" ]; then minutes=$2; shift 2; fi
     [ $# -eq 0 ] && [[ $minutes =~ ^[1-9][0-9]*$ ]] || usage

@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
-import { forgeDir } from "./darkmem-config.mjs";
+import { dforgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
   DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerFiles, ledgerPieces, listDocumentFiles, propertiesFor, sha256, unsupportedPlanDirs,
@@ -36,7 +36,7 @@ export function gatherLocalProgress(cfg) {
   const problems = [];
   const files = [];
   for (const checkout of listed.dirs) {
-    const stateDir = forgeDir("state", checkout);
+    const stateDir = dforgeDir("state", checkout);
     const sdd = path.join(stateDir, "sdd");
     // A linked plan directory is not listed as one, so its progress would be
     // left behind without a word.
@@ -54,7 +54,7 @@ export function gatherLocalProgress(cfg) {
       files.push({ kind: "handoff", slug, uri, file, stateDir, rel: `sdd/${slug}/handoff.md` });
     }
   }
-  const primaryState = forgeDir("state", cfg.repoRoot);
+  const primaryState = dforgeDir("state", cfg.repoRoot);
   const latest = path.join(primaryState, "handoff", "latest.md");
   if (fs.existsSync(latest)) files.push({ kind: "latest", file: latest, stateDir: primaryState, rel: "handoff/latest.md" });
   const sources = [];
@@ -151,7 +151,7 @@ const scratchReport = () => ({ conflicts: [], failures: [], notes: [], counts: {
 // own docs directory while documents are local, since a plan may exist only
 // on its branch; the mirror's while they are darkmem.
 const checkoutRoots = (cfg, stateDir) => ({
-  docsRoot: cfg.documents.applied === "darkmem" ? cfg.documents.root : forgeDir("docs", path.dirname(stateDir)),
+  docsRoot: cfg.documents.applied === "darkmem" ? cfg.documents.root : dforgeDir("docs", path.dirname(stateDir)),
   workRoot: stateDir,
   worktreeRoot: path.dirname(stateDir),
 });
@@ -306,7 +306,7 @@ export async function progressToDarkmem(context) {
     fs.renameSync(item.file, target);
     backups.add(path.join(item.stateDir, aside));
   }
-  // The checkout's state directory ignores itself, as .forge/sdd/ does, so a
+  // The checkout's state directory ignores itself, as .dforge/sdd/ does, so a
   // backup never shows as untracked in a repository that does not list it.
   // "wx" never writes through a link or over a file already there.
   for (const stateDir of new Set(files.map(item => item.stateDir))) {
@@ -404,7 +404,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
     const busy = inProgressReason(context);
     if (busy) return refuse(busy.reason, busy.details);
   }
-  const stateDir = forgeDir("state", cfg.repoRoot);
+  const stateDir = dforgeDir("state", cfg.repoRoot);
   const problems = unsupportedPlanDirs(workRoot).map(dir => `${dir}: not a usable workstream key`);
   const sources = [
     ...ledgerFiles(workRoot).map(({ slug, file }) => ({ file, rel: `sdd/${slug}/progress.md` })),

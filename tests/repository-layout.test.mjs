@@ -81,13 +81,13 @@ test('the retired superpowers name is allowed only in the allowlisted files', as
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/LICENSES/stray-LICENSE', 'plugins/dforge/scripts/lib/darkmem-migrate.mjs', 'plugins/dr-status/stray.md']) {
+    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/LICENSES/stray-LICENSE', 'plugins/dforge/scripts/lib/dforge-home-migrate.mjs', 'plugins/dr-status/stray.md']) {
       writeFileSync(resolve(dir, path), 'superpowers\n');
     }
     const retired = () => validateRepository(dir).filter(error => error.includes('retired superpowers name'));
     assert.deepEqual(retired(), []);
-    writeFileSync(resolve(dir, 'plugins/dforge/scripts/lib/darkmem-migrate.sh'), 'superpowers\n');
-    assert.deepEqual(retired(), ['plugins/dforge/scripts/lib/darkmem-migrate.sh:1: retired superpowers name']);
+    writeFileSync(resolve(dir, 'plugins/dforge/scripts/lib/dforge-home-migrate.sh'), 'superpowers\n');
+    assert.deepEqual(retired(), ['plugins/dforge/scripts/lib/dforge-home-migrate.sh:1: retired superpowers name']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -118,10 +118,10 @@ test('the settings schema is valid, and broken schemas are caught', async () => 
   };
   const real = readFileSync(resolve(root, 'plugins/dforge/config/schema.mjs'), 'utf8');
   assert.match(await broken(real.replace("default: 'auto'", "default: 'tiles'")), /schema layout: default does not fit its type/);
-  assert.match(await broken("export default { darkmem: { type: 'string', default: '', group: 'Cockpit', title: 't', description: 'd', target: 'forge' } }\n"), /schema darkmem: the key is reserved/);
+  assert.match(await broken("export default { darkmem: { type: 'string', default: '', group: 'Cockpit', title: 't', description: 'd', target: 'dforge' } }\n"), /schema darkmem: the key is reserved/);
   assert.match(await broken('export default [];\n'), /must default-export an object/);
-  assert.match(await broken("export default { n: { type: 'number', default: Infinity, group: 'Cockpit', title: 't', description: 'd', target: 'forge' } }\n"), /schema n: default does not fit its type/);
-  const entry = extra => `export default { n: { type: 'number', default: 0, min: 0, max: 10, group: 'Cockpit', label: 'N', title: 't', description: 'd', target: 'forge', ${extra} } }\n`;
+  assert.match(await broken("export default { n: { type: 'number', default: Infinity, group: 'Cockpit', title: 't', description: 'd', target: 'dforge' } }\n"), /schema n: default does not fit its type/);
+  const entry = extra => `export default { n: { type: 'number', default: 0, min: 0, max: 10, group: 'Cockpit', label: 'N', title: 't', description: 'd', target: 'dforge', ${extra} } }\n`;
   assert.match(await broken(real.replace("label: 'Layout'", "label: 'A label that is far too long'")), /schema layout: label is required, at most 16 characters/);
   assert.match(await broken(real.replace("group: 'Finish'", "group: 'Elsewhere'")), /group must be one of Cockpit, Context, Workflow, Process, Finish, Notifications/);
   assert.match(await broken(entry("unit: 'parsecs'")), /schema n: unit must be one of k, %, s, min, on a number/);

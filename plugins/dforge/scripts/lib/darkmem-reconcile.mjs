@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
-import { forgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
+import { dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
@@ -14,7 +14,7 @@ import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
 const LEGACY = "docs/superpowers";
-const DOCS = "docs/forge";
+const DOCS = "docs/dforge";
 
 // Each move, under "<family>:<target store>". A move answers
 // { moved: true, details } or { moved: false, reason, details }.
@@ -41,8 +41,8 @@ function dirEntries(dir) {
   }
 }
 
-// One document name under either docs prefix (spec §7.1), as forge_name_key
-// and forge_name_spellings spell it in roots.sh. The pre-3.0 docs/superpowers
+// One document name under either docs prefix (spec §7.1), as dforge_name_key
+// and dforge_name_spellings spell it in roots.sh. The pre-3.0 docs/superpowers
 // spelling stays readable because historical plans and ledgers cite it.
 export function nameSpellings(name) {
   const text = String(name).replace(/^\.\//, "");
@@ -87,7 +87,7 @@ export function refreshContext(context) {
 
 export function leftoverLines(cfg) {
   if (cfg.documents.applied !== "darkmem" || !cfg.worktreeRoot) return [];
-  return [path.join(cfg.worktreeRoot, "docs", "forge")]
+  return [path.join(cfg.worktreeRoot, "docs", "dforge")]
     .filter(dir => fs.existsSync(dir))
     .map(dir => `darkmem-sync reconcile: ${dir} is not read while documents are applied darkmem`);
 }
@@ -103,14 +103,14 @@ function worktreeTops(cfg) {
 // local, the mirror's work tree while it is darkmem.
 function ledgerSources(cfg) {
   if (cfg.progress.applied === "darkmem") return [{ sdd: path.join(cfg.mirror, "work", "sdd"), checkout: cfg.repoRoot }];
-  return worktreeTops(cfg).map(tree => ({ sdd: path.join(forgeDir("state", tree), "sdd"), checkout: tree }));
+  return worktreeTops(cfg).map(tree => ({ sdd: path.join(dforgeDir("state", tree), "sdd"), checkout: tree }));
 }
 
 function planFile(cfg, checkout, name) {
   if (path.isAbsolute(name)) return name;
   const [key] = nameSpellings(name);
   if (key === DOCS || key.startsWith(`${DOCS}/`)) {
-    const docsRoot = cfg.documents.applied === "darkmem" ? path.join(cfg.mirror, DOC_PREFIX) : forgeDir("docs", checkout);
+    const docsRoot = cfg.documents.applied === "darkmem" ? path.join(cfg.mirror, DOC_PREFIX) : dforgeDir("docs", checkout);
     return path.join(docsRoot, ...key.slice(DOCS.length).split("/").filter(Boolean));
   }
   return path.join(checkout, key);
@@ -136,11 +136,11 @@ const realOr = file => {
 function rootedName(cfg, checkout, name) {
   if (!path.isAbsolute(name)) return name;
   const bases = [
-    [forgeDir("docs", checkout), DOCS],
+    [dforgeDir("docs", checkout), DOCS],
     [checkout, null],
-    [forgeDir("docs", cfg.repoRoot), DOCS],
+    [dforgeDir("docs", cfg.repoRoot), DOCS],
     [cfg.repoRoot, null],
-    ...worktreeTops(cfg).flatMap(tree => [[forgeDir("docs", tree), DOCS], [tree, null]]),
+    ...worktreeTops(cfg).flatMap(tree => [[dforgeDir("docs", tree), DOCS], [tree, null]]),
   ];
   if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, DOC_PREFIX), DOCS]);
   for (const resolve of [file => path.resolve(file), realOr]) {
@@ -182,7 +182,7 @@ function planFinished(cfg, checkout, identity) {
 export function inProgress(cfg) {
   const found = [];
   try {
-    const run = JSON.parse(fs.readFileSync(path.join(forgeDir("state", cfg.repoRoot), "sdd", "auto-run.json"), "utf8"));
+    const run = JSON.parse(fs.readFileSync(path.join(dforgeDir("state", cfg.repoRoot), "sdd", "auto-run.json"), "utf8"));
     if (run?.active === true) found.push("an auto run is active");
   } catch {
     // No auto run, or an unreadable record, which auto-run.sh reads as inactive too.
@@ -281,7 +281,7 @@ function worktreeOnlyDocuments(cfg) {
   const found = [];
   for (const tree of worktreeTops(cfg)) {
     if (realOr(tree) === realOr(cfg.repoRoot)) continue;
-    const rel = slash(path.relative(tree, forgeDir("docs", tree)));
+    const rel = slash(path.relative(tree, dforgeDir("docs", tree)));
     const committed = runGit(tree, ["diff", "--name-only", "-z", "--diff-filter=ACMR", `${head.stdout.trim()}...HEAD`, "--", rel]);
     if (committed.status !== 0) return { failed: `git diff failed in ${tree}: ${committed.stderr.trim()}` };
     const pending = runGit(tree, ["status", "--porcelain", "-z", "--untracked-files=all", "--", rel]);
@@ -306,7 +306,7 @@ function worktreeOnlyDocuments(cfg) {
 // A missing or empty docs directory has nothing tracked and moves as is.
 async function documentsToDarkmem(context) {
   const { cfg, client } = context;
-  const docsDir = forgeDir("docs", cfg.repoRoot);
+  const docsDir = dforgeDir("docs", cfg.repoRoot);
   const rel = slash(path.relative(cfg.repoRoot, docsDir));
   const dirty = runGit(cfg.repoRoot, ["status", "--porcelain", "--untracked-files=all", "--", rel]);
   if (dirty.status !== 0) return { moved: false, reason: `git status failed: ${dirty.stderr.trim()}`, details: [] };
@@ -356,11 +356,11 @@ async function documentsToDarkmem(context) {
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
   if (removed.status !== 0) return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details: [] };
   const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
-  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "--", ".", `:(exclude)${rel}`]);
+  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/dforge/", "--", ".", `:(exclude)${rel}`]);
   const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
-  if (cites.status > 1) details.push(`git grep failed: ${cites.stderr.trim()}; check for docs/superpowers/ and docs/forge/ citations before you commit`);
+  if (cites.status > 1) details.push(`git grep failed: ${cites.stderr.trim()}; check for docs/superpowers/ and docs/dforge/ citations before you commit`);
   if (citing.length) {
-    details.push("these tracked files cite docs/superpowers/ or docs/forge/ names; rewrite them before you commit the deletion:");
+    details.push("these tracked files cite docs/superpowers/ or docs/dforge/ names; rewrite them before you commit the deletion:");
     details.push(...citing.slice(0, 20).map(file => `  ${file}`));
     if (citing.length > 20) details.push(`and ${citing.length - 20} more`);
   }
@@ -368,7 +368,7 @@ async function documentsToDarkmem(context) {
 }
 
 // Documents, darkmem -> repository (spec §4): the mirror, brought up to
-// darkmem and matching darkmem's hashes, is copied into docs/forge untracked;
+// darkmem and matching darkmem's hashes, is copied into docs/dforge untracked;
 // darkmem keeps its copy, and the mirror tree is set aside so a later move
 // back cannot meet stale files. Offline (darkmem disabled, unmapped or not
 // answering) the mirror is copied as it stands, and every file darkmem does
@@ -390,7 +390,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
   const unpushed = Object.keys(state.documents).sort().filter(uri => uriFamily(uri) === "documents" && !isArchiveUri(uri)
     && !fs.existsSync(path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"))));
   if (unpushed.length && !offline) return { moved: false, reason: "the mirror holds deletions not yet pushed; push first", details: unpushed };
-  const target = path.join(cfg.repoRoot, "docs", "forge");
+  const target = path.join(cfg.repoRoot, "docs", "dforge");
   // A file under the docs root's handoff/ or archive/ has uri null: never synced, not carried.
   const files = listDocumentFiles(mirror).filter(item => item.uri).map(({ file, uri }) => {
     const dest = path.join(target, path.relative(mirror.docsRoot, file));
@@ -442,7 +442,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
   if (links.length) {
     return {
       moved: false,
-      reason: "docs/forge is reached through symbolic links; nothing was copied",
+      reason: "docs/dforge is reached through symbolic links; nothing was copied",
       details: links.map(rel => `${rel}: a symbolic link, which the move will not write through`),
     };
   }
@@ -450,7 +450,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
   const differing = files
     .filter(({ file, dest }) => fs.existsSync(dest) && !fs.readFileSync(dest).equals(fs.readFileSync(file)))
     .map(({ name }) => `${name}: already exists with different content`);
-  if (differing.length) return { moved: false, reason: "docs/forge already holds different copies; nothing was copied", details: differing };
+  if (differing.length) return { moved: false, reason: "docs/dforge already holds different copies; nothing was copied", details: differing };
   // A repository moved under the parent spec's §6 ignored its docs directory.
   // Asked before anything is copied so a git failure (exit above 1) can still refuse.
   const ignored = runGit(cfg.repoRoot, ["check-ignore", "--stdin"], files.map(({ name }) => name).join("\n"));
@@ -468,7 +468,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
   persist();
   const aside = path.join(cfg.mirror, `${DOC_PREFIX}-moved-${utcStamp()}`);
   if (fs.existsSync(mirror.docsRoot)) fs.renameSync(mirror.docsRoot, aside);
-  const details = [`copied ${files.length} files into docs/forge, untracked; commit them`];
+  const details = [`copied ${files.length} files into docs/dforge, untracked; commit them`];
   if (notes.length) {
     details.push(`darkmem was not consulted; the mirror is kept at ${aside}. These differ from darkmem's last known copy:`);
     details.push(...notes.map(line => `  ${line}`));

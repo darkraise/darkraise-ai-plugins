@@ -8,7 +8,7 @@
 #
 # Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
 #        task-brief --header PLAN_FILE [OUTFILE]
-# Default OUTFILE: <repo-root>/.forge/sdd/<plan-basename>/task-<N>-brief.md
+# Default OUTFILE: <repo-root>/.dforge/sdd/<plan-basename>/task-<N>-brief.md
 # or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
 # plan in the same working tree share it).
 # Exit: 0 ok; 2 usage; 3 no such task; 4 an amendment does not apply.
@@ -28,7 +28,7 @@ fi
 
 plan=$(plan_locate "$1")
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-forge_stores_init "$(_plan_ctx "$plan")"
+dforge_stores_init "$(_plan_ctx "$plan")"
 if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
 
 if [ -n "$given" ]; then
@@ -95,7 +95,7 @@ echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
 budget_mode=()
 if [ -n "$n" ]; then
   . "$HERE/lib/context.sh"
-  ledger="$(forge_ledger_dir "$(basename "$plan" .md)")/progress.md"
+  ledger="$(dforge_ledger_dir "$(basename "$plan" .md)")/progress.md"
   done_tasks=""
   [ ! -f "$ledger" ] || done_tasks=$(ledger_done "$ledger" || true)
   remaining=$(plan_tasks "$src" | cut -f1 | DONE="$done_tasks" awk '
@@ -105,4 +105,4 @@ if [ -n "$n" ]; then
     budget_mode=(--tail "$remaining")
   fi
 fi
-DR_FORGE_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true
+DFORGE_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true

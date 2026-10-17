@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const DOC_PREFIX = "forge";
+export const DOC_PREFIX = "dforge";
 // The pre-3.0 prefix, read only to migrate a mirror and darkmem's documents.
 export const LEGACY_PREFIX = "superpowers";
 export const MAX_ENTRY_CHARS = 65536;
@@ -33,9 +33,9 @@ export function validKey(key) {
   return typeof key === "string" && KEY.test(key) && key !== "." && key !== "..";
 }
 
-// uri -> absolute file. `forge/handoff/<slug>.md` is reserved for a
+// uri -> absolute file. `dforge/handoff/<slug>.md` is reserved for a
 // plan's handoff.md, which lives beside its ledger; any other
-// `forge/<path>` lives under the docs root. A uri that would climb out
+// `dforge/<path>` lives under the docs root. A uri that would climb out
 // of the mirror, or name a dotfile, maps nowhere: dotfiles are never synced.
 export function uriToLocal(roots, uri) {
   const parts = String(uri).split("/");
@@ -70,8 +70,8 @@ export function utcStamp(date = new Date()) {
   return date.toISOString().replace(/\.\d+Z$/, "Z").replace(/[-:]/g, "");
 }
 
-// Where a deleted document is archived: forge/<rest> becomes
-// forge/archive/<stamp>/<rest>, so a name deleted twice never collides.
+// Where a deleted document is archived: dforge/<rest> becomes
+// dforge/archive/<stamp>/<rest>, so a name deleted twice never collides.
 export function archiveUri(uri, stamp) {
   return `${ARCHIVE_PREFIX}/${stamp}/${String(uri).slice(DOC_PREFIX.length + 1)}`;
 }
@@ -187,7 +187,7 @@ export function loadState(file) {
     version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt: raw.checkpointAt, conflicts: raw.conflicts,
     pendingLinks: raw.pendingLinks ?? [],
   };
-  // Set once darkmem was checked for pre-3.0 uris (darkmem-migrate.mjs).
+  // Set once darkmem was checked for pre-3.0 uris (dforge-home-migrate.mjs).
   if (raw.prefix !== undefined) state.prefix = raw.prefix;
   return state;
 }
@@ -531,16 +531,16 @@ export function ledgerEntries(text) {
 }
 
 // The darkmem uri a document's name or path stands for: a name under
-// docs/forge/ or docs/superpowers/ (as a ledger or a **Spec:** line writes
+// docs/dforge/ or docs/superpowers/ (as a ledger or a **Spec:** line writes
 // it), or an absolute path under the docs root or the worktree's docs
 // directory. Computed from the roots, never by searching for a segment.
 export function pathToUri(roots, file) {
   const text = String(file).replace(/\\/g, "/");
-  const name = /^(?:\.\/)?docs\/(?:forge|superpowers)\/(.+)$/.exec(text);
+  const name = /^(?:\.\/)?docs\/(?:dforge|superpowers)\/(.+)$/.exec(text);
   if (name) return name[1].split("/").some(segment => segment === ".." || segment === ".") ? null : `${DOC_PREFIX}/${name[1]}`;
   if (!path.isAbsolute(String(file))) return null;
   const bases = [roots.docsRoot];
-  if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "forge"));
+  if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "dforge"));
   for (const base of bases) {
     if (!base) continue;
     const rel = path.relative(path.resolve(base), path.resolve(String(file)));

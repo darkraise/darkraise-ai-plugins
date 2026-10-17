@@ -14,39 +14,39 @@ async function withStub(options, body) {
 }
 
 test("every call carries the key and names the client; an append declares the run", () => withStub({}, async (stub, client) => {
-  await client.append({ project: "p", workstream: "w", entries: [{ kind: "ledger", body: "line\n" }], properties: { plan_uri: "forge/plans/w.md" } });
+  await client.append({ project: "p", workstream: "w", entries: [{ kind: "ledger", body: "line\n" }], properties: { plan_uri: "dforge/plans/w.md" } });
   const [request] = stub.db.requests;
   assert.equal(request.headers.authorization, `Bearer ${STUB_KEY}`);
   assert.equal(request.headers["x-darkmem-client"], "dforge");
   assert.equal(request.body.run_key, "run-1");
   assert.equal(request.body.client, "dforge");
-  assert.deepEqual(request.body.properties, { plan_uri: "forge/plans/w.md" });
+  assert.deepEqual(request.body.properties, { plan_uri: "dforge/plans/w.md" });
 }));
 
 test("a filed document reads back with its content and hash", () => withStub({}, async (stub, client) => {
-  const put = await client.putDocument({ project: "p", uri: "forge/specs/a.md", content: "# A\n" });
+  const put = await client.putDocument({ project: "p", uri: "dforge/specs/a.md", content: "# A\n" });
   assert.equal(put.outcome, "created");
-  const doc = await client.getDocument("p", "forge/specs/a.md");
+  const doc = await client.getDocument("p", "dforge/specs/a.md");
   assert.equal(doc.content, "# A\n");
   assert.equal(doc.content_hash, put.content_hash);
   assert.equal("expected_hash" in stub.db.requests[0].body, false);
 }));
 
 test("a stale expected hash is an HttpError 409", () => withStub({}, async (stub, client) => {
-  await client.putDocument({ project: "p", uri: "forge/a.md", content: "one" });
+  await client.putDocument({ project: "p", uri: "dforge/a.md", content: "one" });
   await assert.rejects(
-    client.putDocument({ project: "p", uri: "forge/a.md", content: "two", expectedHash: "0".repeat(64) }),
+    client.putDocument({ project: "p", uri: "dforge/a.md", content: "two", expectedHash: "0".repeat(64) }),
     error => error instanceof HttpError && error.status === 409,
   );
 }));
 
 test("manifest, workstreams and entries follow every page", () => withStub({ pageSize: 2 }, async (stub, client) => {
   for (const name of ["a", "b", "c", "d", "e"]) {
-    await client.putDocument({ project: "p", uri: `forge/${name}.md`, content: name });
+    await client.putDocument({ project: "p", uri: `dforge/${name}.md`, content: name });
     await client.append({ project: "p", workstream: `w${name}`, entries: [{ kind: "ledger", body: name }] });
   }
   await client.putDocument({ project: "p", uri: "other/x.md", content: "x" });
-  assert.deepEqual((await client.manifest("p", "forge")).map(i => i.uri), ["a", "b", "c", "d", "e"].map(n => `forge/${n}.md`));
+  assert.deepEqual((await client.manifest("p", "dforge")).map(i => i.uri), ["a", "b", "c", "d", "e"].map(n => `dforge/${n}.md`));
   assert.equal((await client.workstreams("p", "open")).length, 5);
   const ws = (await client.resume("p", "wa")).workstream;
   await client.append({ project: "p", workstream: "wa", entries: ["2", "3", "4", "5"].map(body => ({ kind: "ledger", body })) });
@@ -61,7 +61,7 @@ test("resume on an absent workstream is null; purge removes one", () => withStub
   assert.equal(await client.resume("p", "w"), null);
   const answering = fetchImpl => createClient({ url: "http://x.invalid", apiKey: "k", runKey: "r", timeoutMs: 1000, fetchImpl });
   await assert.rejects(
-    answering(async () => new Response("<html>not darkmem</html>", { status: 200 })).manifest("p", "forge"),
+    answering(async () => new Response("<html>not darkmem</html>", { status: 200 })).manifest("p", "dforge"),
     error => error instanceof TransportError && /not JSON/.test(error.message),
   );
   await assert.rejects(
@@ -72,13 +72,13 @@ test("resume on an absent workstream is null; purge removes one", () => withStub
 
 test("a refused connection and a silent server are TransportErrors within the timeout", async () => {
   const refused = createClient({ url: "http://127.0.0.1:9", apiKey: "k", runKey: "r", timeoutMs: 2000 });
-  await assert.rejects(refused.manifest("p", "forge"), TransportError);
+  await assert.rejects(refused.manifest("p", "dforge"), TransportError);
   const silent = http.createServer(() => {});
   await new Promise(resolve => silent.listen(0, "127.0.0.1", resolve));
   try {
     const client = createClient({ url: `http://127.0.0.1:${silent.address().port}`, apiKey: "k", runKey: "r", timeoutMs: 300 });
     const started = Date.now();
-    await assert.rejects(client.manifest("p", "forge"), /no answer within 300 ms/);
+    await assert.rejects(client.manifest("p", "dforge"), /no answer within 300 ms/);
     assert.ok(Date.now() - started < 3000);
   } finally {
     silent.closeAllConnections();
@@ -113,26 +113,26 @@ test("an append with expected_last_seq writes only when it names the newest seq 
 }));
 
 test("a document moves to a free uri under its hash; a stale hash or a taken uri is a 409, an unknown id a 404", () => withStub({}, async (stub, client) => {
-  const a = await client.putDocument({ project: "p", uri: "forge/a.md", content: "a" });
-  await client.putDocument({ project: "p", uri: "forge/b.md", content: "b" });
+  const a = await client.putDocument({ project: "p", uri: "dforge/a.md", content: "a" });
+  await client.putDocument({ project: "p", uri: "dforge/b.md", content: "b" });
   const status = promise => promise.then(() => 200, error => (error instanceof HttpError ? error.status : -1));
-  assert.equal(await status(client.moveDocument(a.document_id, { uri: "forge/x.md", expectedHash: "0".repeat(64) })), 409);
-  assert.equal(await status(client.moveDocument(a.document_id, { uri: "forge/b.md", expectedHash: a.content_hash })), 409);
-  assert.equal(await status(client.moveDocument("no-such-id", { uri: "forge/x.md" })), 404);
-  const archived = "forge/archive/20261013T091502Z/a.md";
+  assert.equal(await status(client.moveDocument(a.document_id, { uri: "dforge/x.md", expectedHash: "0".repeat(64) })), 409);
+  assert.equal(await status(client.moveDocument(a.document_id, { uri: "dforge/b.md", expectedHash: a.content_hash })), 409);
+  assert.equal(await status(client.moveDocument("no-such-id", { uri: "dforge/x.md" })), 404);
+  const archived = "dforge/archive/20261013T091502Z/a.md";
   assert.deepEqual(await client.moveDocument(a.document_id, { uri: archived, expectedHash: a.content_hash }), { document_id: a.document_id });
   const [unknown, moved] = stub.db.requests.slice(-2);
   assert.equal("expected_hash" in unknown.body, false);
   assert.equal(moved.method, "PATCH");
   assert.equal(moved.path, `/api/v1/documents/${a.document_id}`);
   assert.deepEqual(moved.body, { uri: archived, expected_hash: a.content_hash });
-  assert.deepEqual((await client.manifest("p", "forge")).map(i => i.uri), [archived, "forge/b.md"]);
+  assert.deepEqual((await client.manifest("p", "dforge")).map(i => i.uri), [archived, "dforge/b.md"]);
 }));
 
 test("revisions list a document's content writes newest first, one page at a time", () => withStub({}, async (stub, client) => {
-  const first = await client.putDocument({ project: "p", uri: "forge/a.md", content: "one" });
-  await client.putDocument({ project: "p", uri: "forge/a.md", content: "one" });
-  const second = await client.putDocument({ project: "p", uri: "forge/a.md", content: "two" });
+  const first = await client.putDocument({ project: "p", uri: "dforge/a.md", content: "one" });
+  await client.putDocument({ project: "p", uri: "dforge/a.md", content: "one" });
+  const second = await client.putDocument({ project: "p", uri: "dforge/a.md", content: "two" });
   const page = await client.revisions(first.document_id, { limit: 1 });
   assert.equal(page.document_id, first.document_id);
   assert.deepEqual(page.items.map(r => r.content_hash), [second.content_hash]);
@@ -144,9 +144,9 @@ test("revisions list a document's content writes newest first, one page at a tim
 
 test("failItem records any darkmem answer but a 401 as one item's failure and rethrows everything else", () => {
   const report = { failures: [] };
-  failItem(report, "forge/a.md", new HttpError("GET", "/x", 503, "busy"));
+  failItem(report, "dforge/a.md", new HttpError("GET", "/x", 503, "busy"));
   failItem(report, "document manifest", new HttpError("GET", "/x", 403, "forbidden"), "; no document pushed");
-  assert.deepEqual(report.failures, ["forge/a.md: darkmem answered 503: busy", "document manifest: darkmem answered 403: forbidden; no document pushed"]);
+  assert.deepEqual(report.failures, ["dforge/a.md: darkmem answered 503: busy", "document manifest: darkmem answered 403: forbidden; no document pushed"]);
   for (const error of [new HttpError("GET", "/x", 401, "Not authenticated"), new TransportError("GET /x: no answer within 10 ms"), new Error("bug")]) {
     assert.throws(() => failItem(report, "x", error), error);
   }

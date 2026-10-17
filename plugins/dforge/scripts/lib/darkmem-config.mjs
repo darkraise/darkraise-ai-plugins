@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolve as resolveSettings } from "./forge-config.mjs";
+import { resolve as resolveSettings } from "./dforge-config.mjs";
 import { DOC_PREFIX } from "./darkmem-mirror.mjs";
 
 export class ConfigError extends Error {}
@@ -22,13 +22,13 @@ function homeOf(env) {
   return env.HOME || os.homedir();
 }
 
-export function forgeHome(env = process.env) {
+export function dforgeHome(env = process.env) {
   return path.join(homeOf(env), ".dforge");
 }
 
-// A repository's dforge directory: docs/forge/ or .forge/.
-export function forgeDir(kind, root) {
-  return kind === "docs" ? path.join(root, "docs", "forge") : path.join(root, ".forge");
+// A repository's dforge directory: docs/dforge/ or .dforge/.
+export function dforgeDir(kind, root) {
+  return kind === "docs" ? path.join(root, "docs", "dforge") : path.join(root, ".dforge");
 }
 
 function git(cwd, args) {
@@ -57,7 +57,7 @@ const OPTION = { documents: "documentStore", progress: "progressSource" };
 // Each primary checkout's applied store per family (darkmem store options
 // spec §4), written once a move or an import verifies.
 export function storesPath(env = process.env) {
-  return path.join(forgeHome(env), "stores.json");
+  return path.join(dforgeHome(env), "stores.json");
 }
 
 function readRecord(env) {
@@ -114,17 +114,17 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
     documents: {
       configured: configured.documents,
       applied: applied.documents,
-      root: applied.documents === "darkmem" ? path.join(sync.mirror, DOC_PREFIX) : worktreeRoot && forgeDir("docs", worktreeRoot),
+      root: applied.documents === "darkmem" ? path.join(sync.mirror, DOC_PREFIX) : worktreeRoot && dforgeDir("docs", worktreeRoot),
     },
     progress: {
       configured: configured.progress,
       applied: applied.progress,
       ledgerRoot: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "sdd")
-        : worktreeRoot && path.join(forgeDir("state", worktreeRoot), "sdd"),
+        : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "sdd"),
       latestFile: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "handoff", "latest.md")
-        : (repoRoot ?? worktreeRoot) && path.join(forgeDir("state", repoRoot ?? worktreeRoot), "handoff", "latest.md"),
+        : (repoRoot ?? worktreeRoot) && path.join(dforgeDir("state", repoRoot ?? worktreeRoot), "handoff", "latest.md"),
     },
     sync,
   });
@@ -153,23 +153,23 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
       ? "darkmem is off by default since dforge 3.0 and darkmemEnabled is unset"
       : !enabled ? "darkmem is disabled (darkmemEnabled is false)" : mapped.reason;
     const project = recorded.project ?? mapped.entry?.project;
-    const mirror = recorded.mirror ?? (mapped.entry && path.join(forgeHome(env), "mirror", mapped.entry.project));
+    const mirror = recorded.mirror ?? (mapped.entry && path.join(dforgeHome(env), "mirror", mapped.entry.project));
     if (typeof project !== "string" || !PROJECT.test(project) || typeof mirror !== "string" || !path.isAbsolute(mirror)) {
-      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dforge/config.json again (or run scripts/forge-migrate if it was mapped before 3.0) so reconcile can move it back`);
+      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dforge/config.json again (or run scripts/dforge-migrate if it was mapped before 3.0) so reconcile can move it back`);
     }
     return result(reason, undecided ? applied : LOCAL, applied, syncOf(env, mapped, project, mirror, false));
   }
   const entry = mapped.entry;
   const configured = {};
   for (const family of FAMILIES) configured[family] = entry[OPTION[family]] ?? settings[OPTION[family]];
-  const mirror = path.join(forgeHome(env), "mirror", entry.project);
+  const mirror = path.join(dforgeHome(env), "mirror", entry.project);
   return result(`project ${entry.project}`, configured, applied, syncOf(env, mapped, entry.project, mirror, true));
 }
 
 // The repository's darkmem mapping: { file, entry, url, keyEnv }, or
 // { reason } when there is none. A malformed file or entry throws.
 function readMapping(env, repoRoot) {
-  const file = path.join(forgeHome(env), "config.json");
+  const file = path.join(dforgeHome(env), "config.json");
   let text;
   try {
     text = fs.readFileSync(file, "utf8");
@@ -231,11 +231,11 @@ export function modeLines(stores) {
 }
 
 // The run a sync declares; darkmem refuses an undeclared one.
-// DR_FORGE_SESSION_ID lets a hook pass the id it holds; otherwise the
+// DFORGE_SESSION_ID lets a hook pass the id it holds; otherwise the
 // record scripts/session-start.sh writes for this directory; otherwise one run
 // per machine per day, which is what a Codex session (no hooks) gets.
 export function runKey({ cwd = process.cwd(), env = process.env, now = new Date() } = {}) {
-  const declared = env.DR_FORGE_SESSION_ID?.trim();
+  const declared = env.DFORGE_SESSION_ID?.trim();
   if (declared) return declared;
   const sessions = path.join(homeOf(env), ".claude", "dforge", "sessions");
   for (const dir of [cwd, git(cwd, ["rev-parse", "--show-toplevel"]), primaryRoot(cwd)]) {

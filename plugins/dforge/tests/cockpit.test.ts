@@ -8,7 +8,7 @@ import {
   autoLimitFor,
   autoRunFor,
   isAbsolutePath,
-  isForge,
+  isDforge,
   attributionIn,
   bar,
   billingLabel,
@@ -138,7 +138,7 @@ const RESUMABLE = [
   '',
   '## Next session',
   '',
-  '**Status:** Plan `docs/forge/plans/2026-10-14-band.md`: 3 of 6 tasks complete.',
+  '**Status:** Plan `docs/dforge/plans/2026-10-14-band.md`: 3 of 6 tasks complete.',
   '**Next:** Task 4 — wire the band into the pane.',
   '',
   'Launch in `/home/me/code/shop`:',
@@ -150,7 +150,7 @@ const RESUMABLE = [
   'Paste as the first prompt:',
   '',
   '```',
-  'Execute docs/forge/plans/2026-10-14-band.md.',
+  'Execute docs/dforge/plans/2026-10-14-band.md.',
   '```',
   '',
   '## State',
@@ -158,9 +158,9 @@ const RESUMABLE = [
   'Worktree: /home/me/code/shop-wt',
   '',
 ].join('\n')
-const FINISHED = '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/forge/plans/x.md` is complete.\n**Next:** Nothing — the plan records no follow-on work.\n'
+const FINISHED = '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/x.md` is complete.\n**Next:** Nothing — the plan records no follow-on work.\n'
 const BLOCKED =
-  '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/forge/plans/x.md`: 2 of 5 tasks complete; Task 3 is BLOCKED (needs a key).\n**Next:** Your human partner decides: needs a key.\n'
+  '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/x.md`: 2 of 5 tasks complete; Task 3 is BLOCKED (needs a key).\n**Next:** Your human partner decides: needs a key.\n'
 
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
@@ -179,10 +179,10 @@ type World = {
   settings?: Record<string, unknown>
   /** What the user's own Claude settings file holds, when it differs from the merged `settings`. */
   userSettings?: Record<string, unknown>
-  /** Each forge-config command the plugin runs, as one line. */
+  /** Each dforge-config command the plugin runs, as one line. */
   runs?: string[]
-  /** forge-config refuses, as on a Claude settings file it cannot parse. */
-  isForgeConfigRefusing?: boolean
+  /** dforge-config refuses, as on a Claude settings file it cannot parse. */
+  isDforgeConfigRefusing?: boolean
   /** How many claude-restore writes the engine misses, as one landing right after its own save. */
   missedRestores?: number
   /** The session refuses every row the plugin appends. */
@@ -331,10 +331,10 @@ function world(on: On, w: World) {
       }
       return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    if (argv.includes('/scripts/lib/forge-config.mjs ')) {
+    if (argv.includes('/scripts/lib/dforge-config.mjs ')) {
       w.runs?.push(argv)
       const restore = e.argv[e.argv.indexOf('claude-restore') + 1]
-      if (e.argv.includes('claude-restore') && !w.isForgeConfigRefusing && w.userSettings !== undefined) {
+      if (e.argv.includes('claude-restore') && !w.isDforgeConfigRefusing && w.userSettings !== undefined) {
         if ((w.missedRestores ?? 0) > 0) w.missedRestores = (w.missedRestores ?? 0) - 1
         else {
           const next: Record<string, unknown> = { ...w.userSettings }
@@ -345,8 +345,8 @@ function world(on: On, w: World) {
           w.userSettings = next
         }
       }
-      const stderr = w.isForgeConfigRefusing ? 'forge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
-      return { value: { exitCode: w.isForgeConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
+      const stderr = w.isDforgeConfigRefusing ? 'dforge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
+      return { value: { exitCode: w.isDforgeConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
     }
     if (argv.includes('/scripts/lib/darkmem-config.mjs ')) {
       w.modeRuns?.push(e.argv[e.argv.length - 1] ?? '')
@@ -441,9 +441,9 @@ function signedIn(on: On, files: World['files'] = {}) {
 }
 
 test('only a dforge name marks a workflow session', () => {
-  expect(isForge('dforge:brainstorming')).toBe(true)
-  expect(isForge('dr-superpowers:brainstorming')).toBe(false)
-  expect(isForge('feature-dev:code-reviewer')).toBe(false)
+  expect(isDforge('dforge:brainstorming')).toBe(true)
+  expect(isDforge('dr-superpowers:brainstorming')).toBe(false)
+  expect(isDforge('feature-dev:code-reviewer')).toBe(false)
 })
 
 describe('budget rule', () => {
@@ -825,7 +825,7 @@ describe('settings', () => {
   })
 
   test('a budget override above the schema maximum is ignored', async ($, on) => {
-    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '3000000' } })
+    world(on, { tokens: 340_000, config: {}, env: { DFORGE_BUDGET: '3000000' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
@@ -840,8 +840,8 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
   })
 
-  test('DR_FORGE_BUDGET sets the budget', async ($, on) => {
-    world(on, { tokens: 340_000, config: {}, env: { DR_FORGE_BUDGET: '500000' } })
+  test('DFORGE_BUDGET sets the budget', async ($, on) => {
+    world(on, { tokens: 340_000, config: {}, env: { DFORGE_BUDGET: '500000' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
@@ -870,11 +870,11 @@ describe('settings', () => {
   })
 
   const STORE_FILE = '/home/me/.claude/plugins/store/dr-cockpit_darkraise-abc123.json'
-  const OLD_FORGE = '/home/me/.dr-superpowers/config.json'
+  const OLD_DFORGE = '/home/me/.dr-superpowers/config.json'
   const DARKMEM = { url: 'http://d.test', repos: {} }
   const OLD_FILES = {
     [STORE_FILE]: JSON.stringify({ notifyUrl: 'https://discord.com/api/webhooks/1/abc', notifyMention: '42' }),
-    [OLD_FORGE]: JSON.stringify({ darkmem: DARKMEM }),
+    [OLD_DFORGE]: JSON.stringify({ darkmem: DARKMEM }),
   }
   /** A file system that keeps what the plugin writes, over these starting files. */
   function disk(on: On, written: Record<string, string>, files: Record<string, string>) {
@@ -939,7 +939,7 @@ describe('settings', () => {
     expect(store.get('notifyUrl')).toBe('https://discord.com/api/webhooks/2/mine')
   })
 
-  test('a settings file forge-config wrote first is kept, and the webhook still comes over', async ($, on) => {
+  test('a settings file dforge-config wrote first is kept, and the webhook still comes over', async ($, on) => {
     const written: Record<string, string> = { [CONFIG]: JSON.stringify({ layout: 'full' }) }
     world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
     disk(on, written, OLD_FILES)
@@ -1967,9 +1967,9 @@ describe('discord', () => {
     expect(JSON.stringify(await ui.drawn())).not.toContain('abcDEF_token')
   })
 
-  test('sends to the webhook named by DR_FORGE_NOTIFY_URL alone', async ($, on) => {
+  test('sends to the webhook named by DFORGE_NOTIFY_URL alone', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DR_FORGE_NOTIFY_URL: WEBHOOK } })
+    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
     mock.store(on, {})
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -1977,7 +1977,7 @@ describe('discord', () => {
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
   })
 
-  test('sends to the webhook named by DR_COCKPIT_NOTIFY_URL when DR_FORGE_NOTIFY_URL is unset', async ($, on) => {
+  test('sends to the webhook named by DR_COCKPIT_NOTIFY_URL when DFORGE_NOTIFY_URL is unset', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DR_COCKPIT_NOTIFY_URL: WEBHOOK } })
     mock.store(on, {})
@@ -1987,9 +1987,9 @@ describe('discord', () => {
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
   })
 
-  test('prefers DR_FORGE_NOTIFY_URL over DR_COCKPIT_NOTIFY_URL', async ($, on) => {
+  test('prefers DFORGE_NOTIFY_URL over DR_COCKPIT_NOTIFY_URL', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DR_FORGE_NOTIFY_URL: WEBHOOK, DR_COCKPIT_NOTIFY_URL: 'https://discord.com/api/webhooks/2/old' } })
+    world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK, DR_COCKPIT_NOTIFY_URL: 'https://discord.com/api/webhooks/2/old' } })
     mock.store(on, {})
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -2019,7 +2019,7 @@ describe('run card', () => {
   ].join('\n')
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n\n### Task 3: Ship it\n'
   const runFiles = (ledger: string): World['files'] => ({
-    '/home/me/code/shop/.forge/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 },
+    '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 },
     '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
   })
 
@@ -2080,10 +2080,10 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
     expect(fetches).toHaveLength(0)
-    const ledger = files?.['/home/me/code/shop/.forge/sdd/p/progress.md']
+    const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
     if (ledger !== undefined) ledger.text += '\nTask 2: BLOCKED — impl exhausted — pick a meter width rule'
-    await $.tool.call({ tool: 'Bash', command: 'echo x >> .forge/sdd/p/progress.md' })
-    await $.tool.call({ tool: 'Bash', command: 'cat .forge/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'echo x >> .dforge/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     expect(fetches).toHaveLength(1)
     expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('🛑 Task 2 blocked')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -2105,9 +2105,9 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: 'Run' })).toBeUndefined()
     await ui.unmount()
     // A run still open from before keeps its card.
-    const ledger = files?.['/home/me/code/shop/.forge/sdd/p/progress.md']
+    const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
     if (ledger !== undefined) ledger.text = LEDGER
-    await $.tool.call({ tool: 'Bash', command: 'cat .forge/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
   })
@@ -2130,7 +2130,7 @@ describe('run card', () => {
   test('shows the finish choice on the Run card', async ($, on) => {
     const files = {
       ...runFiles(LEDGER),
-      '/home/me/code/shop/.forge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
+      '/home/me/code/shop/.dforge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
@@ -2142,7 +2142,7 @@ describe('run card', () => {
   })
 
   test('shows the finish choice for work without a plan or a todo list', async ($, on) => {
-    const files = { '/home/me/code/shop/.forge/sdd/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' } }
+    const files = { '/home/me/code/shop/.dforge/sdd/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' } }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
     await $.session.start(START)
@@ -2162,8 +2162,8 @@ describe('run card', () => {
     expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
   })
 
-  test('offers Resume for a handoff under .forge', async ($, on) => {
-    const files: World['files'] = { '/home/me/code/shop/.forge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
+  test('offers Resume for a handoff under .dforge', async ($, on) => {
+    const files: World['files'] = { '/home/me/code/shop/.dforge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const prompts: string[] = []
     world(on, { ...SIGNED_IN, files, prompts })
     signedIn(on, files)
@@ -2171,12 +2171,12 @@ describe('run card', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
     await ui.press({ key: 'pane-resume' })
-    expect(prompts).toEqual([expect.stringContaining('.forge/handoff/latest.md')])
+    expect(prompts).toEqual([expect.stringContaining('.dforge/handoff/latest.md')])
   })
 })
 
 describe('resume offer', () => {
-  const LATEST = '/home/me/code/shop/.forge/handoff/latest.md'
+  const LATEST = '/home/me/code/shop/.dforge/handoff/latest.md'
   const COMPACT = configured({ layout: 'compact' })
   const start = async ($: Parameters<TestBody>[0], on: On, text: string, more: World['files'] = {}, mtimeMs = 900_000) => {
     const files: World['files'] = { [LATEST]: { text, mtimeMs }, ...more }
@@ -2306,8 +2306,8 @@ describe('cockpit roots', () => {
   const LEDGER = '# SDD ledger — plan: docs/superpowers/plans/p.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)\n'
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
   const checkoutFiles = (): NonNullable<World['files']> => ({
-    '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-    '/home/me/code/shop/docs/forge/plans/p.md': { text: PLAN },
+    '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+    '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
   })
 
   test('reads the roots --mode prints', () => {
@@ -2316,9 +2316,9 @@ describe('cockpit roots', () => {
       progress: { store: 'darkmem', ledgerRoot: `${MIRROR}/work/sdd`, latestFile: `${MIRROR}/work/handoff/latest.md` },
       project: 'shop',
     })
-    expect(parseModeLines('documents\tlocal\t/r/docs/forge\nprogress\tlocal\t/r/.forge/sdd\t/r/.forge/handoff/latest.md\n')?.project).toBeNull()
+    expect(parseModeLines('documents\tlocal\t/r/docs/dforge\nprogress\tlocal\t/r/.dforge/sdd\t/r/.dforge/handoff/latest.md\n')?.project).toBeNull()
     expect(parseModeLines(PORCELAIN)).toBeNull()
-    expect(parseModeLines('documents\tlocal\t/r/docs/forge\n')).toBeNull()
+    expect(parseModeLines('documents\tlocal\t/r/docs/dforge\n')).toBeNull()
     expect(parseModeLines('documents\telsewhere\t/r\nprogress\tlocal\t/a\t/b\n')).toBeNull()
   })
 
@@ -2403,23 +2403,23 @@ describe('cockpit roots', () => {
 
   test('resolves a plan under the docs root in darkmem, under the docs directory of each checkout otherwise', () => {
     const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
-    const w = { root: '/w', docsDir: '/w/docs/forge' }
-    const p = { root: '/p', docsDir: '/p/docs/forge' }
-    for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', './docs/forge/plans/p.md']) {
+    const w = { root: '/w', docsDir: '/w/docs/dforge' }
+    const p = { root: '/p', docsDir: '/p/docs/dforge' }
+    for (const name of ['docs/superpowers/plans/p.md', 'docs/dforge/plans/p.md', './docs/dforge/plans/p.md']) {
       expect(planCandidates(name, darkmem, [w, p])).toEqual([`${MIRROR}/superpowers/plans/p.md`])
-      // Either prefix names the same document: a pre-3.0 citation reads under each checkout's docs/forge.
-      expect(planCandidates(name, { store: 'local', root: '/p/docs/forge' }, [w, p])).toEqual(['/w/docs/forge/plans/p.md', '/p/docs/forge/plans/p.md'])
-      expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/forge/plans/p.md'])
+      // Either prefix names the same document: a pre-3.0 citation reads under each checkout's docs/dforge.
+      expect(planCandidates(name, { store: 'local', root: '/p/docs/dforge' }, [w, p])).toEqual(['/w/docs/dforge/plans/p.md', '/p/docs/dforge/plans/p.md'])
+      expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/dforge/plans/p.md'])
     }
     expect(planCandidates('docs/plans/p.md', null, [w, p])).toEqual(['/w/docs/plans/p.md', '/p/docs/plans/p.md'])
     expect(planCandidates('/abs/plans/p.md', darkmem, [w])).toEqual(['/abs/plans/p.md'])
     expect(planCandidates('docs/superpowersx/p.md', darkmem, [w])).toEqual(['/w/docs/superpowersx/p.md'])
   })
 
-  test('reads a plan named under docs/superpowers from a checkout that has only docs/forge', async ($, on) => {
+  test('reads a plan named under docs/superpowers from a checkout that has only docs/dforge', async ($, on) => {
     const files: World['files'] = {
-      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/forge/plans/p.md': { text: PLAN },
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
@@ -2431,7 +2431,7 @@ describe('cockpit roots', () => {
 
   test('reads no plan from a pre-3.0 docs/superpowers directory', async ($, on) => {
     const files: World['files'] = {
-      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: LEDGER.replace('docs/superpowers', 'docs/forge'), mtimeMs: 2_000_000 },
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER.replace('docs/superpowers', 'docs/dforge'), mtimeMs: 2_000_000 },
       '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
     }
     world(on, { ...SIGNED_IN, files })
@@ -2470,11 +2470,11 @@ describe('cockpit roots', () => {
 
   test("reads finish.json and a local plan from the session's worktree before the primary", async ($, on) => {
     const files: World['files'] = {
-      '/home/me/code/main/.forge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-      '/home/me/code/main/.forge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900}' },
-      '/home/me/code/main/docs/forge/plans/p.md': { text: '# Plan\n\n### Task 1: Old title\n' },
-      '/home/me/code/shop/.forge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900}' },
-      '/home/me/code/shop/docs/forge/plans/p.md': { text: PLAN },
+      '/home/me/code/main/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/main/.dforge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900}' },
+      '/home/me/code/main/docs/dforge/plans/p.md': { text: '# Plan\n\n### Task 1: Old title\n' },
+      '/home/me/code/shop/.dforge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900}' },
+      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
     }
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
     signedIn(on, files)
@@ -2519,7 +2519,7 @@ describe('flight deck', () => {
     ].join('\n')
     const now = 1_000_000
     const files: World['files'] = {
-      '/home/me/code/shop/.forge/sdd/p/progress.md': { text: ledger, mtimeMs: now },
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: ledger, mtimeMs: now },
       '/home/me/code/shop/docs/plans/cockpit.md': { text: '# Plan\n\n### Task 1: Read the budget\n\n### Task 2: Draw the strip\n\n### Task 3: Draw the context section\n\n### Task 4: Draw usage and agents\n\n### Task 5: Track the plan and repo\n\n### Task 6: Write the README\n' },
     }
     const w: World = { ...SIGNED_IN, files, remoteControl: 'true' }
@@ -2590,14 +2590,14 @@ describe('flight deck', () => {
 
 describe('settings file', () => {
   const FAKE: Schema = {
-    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', label: 'Layout', title: 'Layout', description: 'd', target: 'forge' },
-    warnAt: { type: 'number', default: 80, min: 1, max: 99, group: 'Context', label: 'Warn at', title: 'Warn', description: 'd', target: 'forge' },
-    handoffTokens: { type: 'number', default: 0, min: 0, max: 2_000_000, env: 'DR_FORGE_BUDGET', group: 'Context', label: 'Handoff budget', title: 'Budget', description: 'd', target: 'forge' },
-    nudgeModel: { type: 'boolean', default: true, group: 'Context', label: 'Handoff note', title: 'Nudge', description: 'd', target: 'forge' },
+    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', label: 'Layout', title: 'Layout', description: 'd', target: 'dforge' },
+    warnAt: { type: 'number', default: 80, min: 1, max: 99, group: 'Context', label: 'Warn at', title: 'Warn', description: 'd', target: 'dforge' },
+    handoffTokens: { type: 'number', default: 0, min: 0, max: 2_000_000, env: 'DFORGE_BUDGET', group: 'Context', label: 'Handoff budget', title: 'Budget', description: 'd', target: 'dforge' },
+    nudgeModel: { type: 'boolean', default: true, group: 'Context', label: 'Handoff note', title: 'Nudge', description: 'd', target: 'dforge' },
   }
 
   test('resolves the environment, then the file, then the default', () => {
-    expect(resolveSettings(FAKE, { layout: 'full', warnAt: 500, handoffTokens: 300_000 }, { DR_FORGE_BUDGET: '400000' })).toEqual({
+    expect(resolveSettings(FAKE, { layout: 'full', warnAt: 500, handoffTokens: 300_000 }, { DFORGE_BUDGET: '400000' })).toEqual({
       layout: 'full',
       warnAt: 80,
       handoffTokens: 400_000,
@@ -2606,13 +2606,13 @@ describe('settings file', () => {
   })
 
   test('ignores an environment value that does not fit', () => {
-    expect(resolveSettings(FAKE, { handoffTokens: 300_000 }, { DR_FORGE_BUDGET: 'junk' }).handoffTokens).toBe(300_000)
+    expect(resolveSettings(FAKE, { handoffTokens: 300_000 }, { DFORGE_BUDGET: 'junk' }).handoffTokens).toBe(300_000)
   })
 
   test('says which values it ignored', () => {
-    expect(settingProblems(FAKE, { warnAt: 500, layout: 'full' }, { DR_FORGE_BUDGET: 'junk' })).toEqual([
+    expect(settingProblems(FAKE, { warnAt: 500, layout: 'full' }, { DFORGE_BUDGET: 'junk' })).toEqual([
       'warnAt in ~/.dforge/config.json is not valid; ignored',
-      'DR_FORGE_BUDGET=junk is not a valid handoffTokens; ignored',
+      'DFORGE_BUDGET=junk is not a valid handoffTokens; ignored',
     ])
     expect(settingProblems(FAKE, { layout: 'full' }, {})).toEqual([])
   })
@@ -2624,7 +2624,7 @@ describe('settings file', () => {
   })
 
   test('a keepDefault key is saved even at its default', () => {
-    const KEEP: Schema = { on: { type: 'boolean', default: false, keepDefault: true, group: 'darkmem', label: 'On', title: 'On', description: 'd', target: 'forge' } }
+    const KEEP: Schema = { on: { type: 'boolean', default: false, keepDefault: true, group: 'darkmem', label: 'On', title: 'On', description: 'd', target: 'dforge' } }
     expect(settingWritten(KEEP, { on: true }, 'on', false)).toEqual({ on: false })
   })
 
@@ -2646,12 +2646,12 @@ describe('settings file', () => {
 
 describe('settings rows', () => {
   const ROWS: Schema = {
-    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', label: 'Layout', title: 'Layout', description: 'd', target: 'forge' },
-    warnAt: { type: 'number', default: 80, min: 1, max: 99, step: 5, unit: '%', group: 'Context', label: 'Warn at', title: 'Warn', description: 'd', target: 'forge' },
-    budget: { type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DR_FORGE_BUDGET', group: 'Context', label: 'Handoff budget', title: 'Budget', description: 'd', target: 'forge' },
-    note: { type: 'boolean', default: true, group: 'Context', label: 'Handoff note', title: 'Note', description: 'd', target: 'forge' },
+    layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', label: 'Layout', title: 'Layout', description: 'd', target: 'dforge' },
+    warnAt: { type: 'number', default: 80, min: 1, max: 99, step: 5, unit: '%', group: 'Context', label: 'Warn at', title: 'Warn', description: 'd', target: 'dforge' },
+    budget: { type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', label: 'Handoff budget', title: 'Budget', description: 'd', target: 'dforge' },
+    note: { type: 'boolean', default: true, group: 'Context', label: 'Handoff note', title: 'Note', description: 'd', target: 'dforge' },
     compactAt: { type: 'number', default: 0, min: 0, floor: 100_000, max: 1_000_000, step: 50_000, unit: 'k', zero: 'unset', group: 'Context', label: 'Auto-compact at', title: 'Compact', description: 'd', target: 'claude' },
-    wait: { type: 'number', default: 30, min: 5, max: 240, step: 5, unit: 'min', group: 'Finish', label: 'Menu waits', title: 'Wait', description: 'd', target: 'forge' },
+    wait: { type: 'number', default: 30, min: 5, max: 240, step: 5, unit: 'min', group: 'Finish', label: 'Menu waits', title: 'Wait', description: 'd', target: 'dforge' },
   }
   const spec = (key: string) => ROWS[key] as SettingSpec
 
@@ -2713,25 +2713,25 @@ describe('settings rows', () => {
       lockedBy: null,
     })
     expect(rowOf('layout', spec('layout'), 'auto')).toMatchObject({ kind: 'choices', values: ['auto', 'full', 'compact'], isChanged: false })
-    expect(rowOf('budget', spec('budget'), 465_000, 'set by DR_FORGE_BUDGET')).toMatchObject({ shown: '465k', isChanged: false, lockedBy: 'set by DR_FORGE_BUDGET' })
-    expect(rowsOf(ROWS, { warnAt: 70 }, 'Context', { budget: 'set by DR_FORGE_BUDGET' }).map(row => [row.key, row.isChanged, row.lockedBy])).toEqual([
+    expect(rowOf('budget', spec('budget'), 465_000, 'set by DFORGE_BUDGET')).toMatchObject({ shown: '465k', isChanged: false, lockedBy: 'set by DFORGE_BUDGET' })
+    expect(rowsOf(ROWS, { warnAt: 70 }, 'Context', { budget: 'set by DFORGE_BUDGET' }).map(row => [row.key, row.isChanged, row.lockedBy])).toEqual([
       ['warnAt', true, null],
-      ['budget', false, 'set by DR_FORGE_BUDGET'],
+      ['budget', false, 'set by DFORGE_BUDGET'],
       ['note', false, null],
       ['compactAt', false, null],
     ])
   })
 
   test('says which keys something outside the file forces', () => {
-    expect(envLocks(ROWS, { DR_FORGE_BUDGET: '400000' })).toEqual({ budget: 'set by DR_FORGE_BUDGET' })
-    expect(envLocks(ROWS, { DR_FORGE_BUDGET: 'junk' })).toEqual({})
+    expect(envLocks(ROWS, { DFORGE_BUDGET: '400000' })).toEqual({ budget: 'set by DFORGE_BUDGET' })
+    expect(envLocks(ROWS, { DFORGE_BUDGET: 'junk' })).toEqual({})
     expect(envLocks(ROWS, {})).toEqual({})
     expect(claudeLocks(ROWS, { compactAt: 500_000 }, { compactAt: 650_000 })).toEqual({ compactAt: 'set by a project or managed settings file' })
     expect(claudeLocks(ROWS, { compactAt: 650_000 }, { compactAt: 650_000 })).toEqual({})
     expect(claudeLocks(ROWS, {}, {})).toEqual({})
   })
 
-  test('a Claude key resolves from the Claude settings and never enters the forge file', () => {
+  test('a Claude key resolves from the Claude settings and never enters the dforge file', () => {
     expect(resolveSettings(ROWS, { compactAt: 300_000 }, {}, { compactAt: 650_000 }).compactAt).toBe(650_000)
     expect(resolveSettings(ROWS, { compactAt: 300_000 }, {}, { compactAt: 50_000 }).compactAt).toBe(0)
     expect(resolveSettings(ROWS, { compactAt: 300_000 }, {}).compactAt).toBe(0)
@@ -2749,12 +2749,12 @@ describe('settings held outside the file', () => {
 
   test('a value the environment forces shows locked, and a group reset leaves it alone', async ($, on) => {
     const written: Record<string, string> = {}
-    world(on, { tokens: 284_000, config: { warnAt: 70, handoffTokens: 300_000 }, written, env: { DR_FORGE_BUDGET: '465000' } })
+    world(on, { tokens: 284_000, config: { warnAt: 70, handoffTokens: 300_000 }, written, env: { DFORGE_BUDGET: '465000' } })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Context' })
-    expect(await ui.find({ type: 'Text', text: 'set by DR_FORGE_BUDGET' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'set by DFORGE_BUDGET' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^465k/ })).toBeDefined()
     expect(await ui.find({ key: 'set-handoffTokens-more' })).toBeUndefined()
     expect(await ui.find({ key: 'set-warnAt-more' })).toBeDefined()
@@ -2773,7 +2773,7 @@ describe('settings held outside the file', () => {
     expect(await ui.find({ type: 'Text', text: /set by DR_/ })).toBeUndefined()
   })
 
-  test('a Claude key is saved through forge-config, never into the forge file', async ($, on) => {
+  test('a Claude key is saved through dforge-config, never into the dforge file', async ($, on) => {
     const written: Record<string, string> = {}
     const runs: string[] = []
     world(on, { tokens: 284_000, config: {}, written, runs, settings: { autoCompactWindow: 650_000 } })
@@ -2784,7 +2784,7 @@ describe('settings held outside the file', () => {
     expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
     await ui.press({ key: 'set-autoCompactWindow-more' })
     expect(runs).toHaveLength(1)
-    expect(runs[0]).toMatch(/^node .*\/scripts\/lib\/forge-config\.mjs set autoCompactWindow 700000$/)
+    expect(runs[0]).toMatch(/^node .*\/scripts\/lib\/dforge-config\.mjs set autoCompactWindow 700000$/)
     // The row shows what was saved, and the next step starts from it.
     expect(await ui.find({ type: 'Text', text: /^700k/ })).toBeDefined()
     await ui.press({ key: 'set-autoCompactWindow-more' })
@@ -2799,7 +2799,7 @@ describe('settings held outside the file', () => {
 
   test('says why a Claude key was not saved', async ($, on) => {
     const toasts: string[] = []
-    world(on, { tokens: 284_000, config: {}, toasts, isForgeConfigRefusing: true })
+    world(on, { tokens: 284_000, config: {}, toasts, isDforgeConfigRefusing: true })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
@@ -2844,7 +2844,7 @@ describe('settings held outside the file', () => {
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Context' })
     await ui.press({ key: 'set-autoCompactWindow-reset' })
-    // forge-config removed the key from the user file; the project file still sets it.
+    // dforge-config removed the key from the user file; the project file still sets it.
     w.userSettings = {}
     await ui.press({ key: 'set-autoCompactEnabled-toggle' })
     expect(await ui.find({ type: 'Text', text: 'set by a project or managed settings file' })).toBeDefined()
@@ -2949,7 +2949,7 @@ describe('settings held outside the file', () => {
 })
 
 // An auto run's state file in the primary checkout the world names.
-const AUTO = '/home/me/code/shop/.forge/sdd/auto-run.json'
+const AUTO = '/home/me/code/shop/.dforge/sdd/auto-run.json'
 const SENTINEL = 'Task 3: complete.\n\nAuto run: compacting'
 function autoFiles(fields: Record<string, unknown> = {}): NonNullable<World['files']> {
   return {
@@ -3102,7 +3102,7 @@ describe('auto run', () => {
 
   test('tells the cleared session when its default model could not be put back', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isForgeConfigRefusing: true, autoFile: files[AUTO] }
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
     const clock = world(on, w)
     signedIn(on, files)
     await $.session.start(START)
@@ -3364,7 +3364,7 @@ describe('auto run in the pane', () => {
   })
 
   test('hides Resume while a run is active and brings it back when the run stops', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), '/home/me/code/shop/.forge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
+    const files = { ...autoFiles({ pending: null }), '/home/me/code/shop/.dforge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const w: World = { ...SIGNED_IN, files, autoRuns: [], autoFile: files[AUTO] }
     world(on, w)
     signedIn(on, files)

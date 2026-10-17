@@ -11,7 +11,8 @@ Thumbs.db
 node_modules/
 npm-debug.log*
 
-# dr-forge agent scratch (ledgers, briefs, review packages); .superpowers/ before 2.0
+# dforge agent scratch (ledgers, briefs, review packages); .forge/ before 4.0, .superpowers/ before 2.0
+.dforge/
 .forge/
 .superpowers/
 .worktrees/

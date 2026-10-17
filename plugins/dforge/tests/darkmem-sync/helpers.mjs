@@ -63,10 +63,10 @@ export function makeHome({
     ...process.env,
     HOME: home,
     DARKMEM_API_KEY: KEY,
-    DR_FORGE_SESSION_ID: "sess-1",
+    DFORGE_SESSION_ID: "sess-1",
     DARKMEM_SYNC_TIMEOUT_MS: "3000",
   };
-  return { home, env, mirror, docsRoot: path.join(mirror, "forge"), workRoot: path.join(mirror, "work") };
+  return { home, env, mirror, docsRoot: path.join(mirror, "dforge"), workRoot: path.join(mirror, "work") };
 }
 
 // Runs scripts/darkmem-sync asynchronously: a stub server in this process
@@ -92,6 +92,6 @@ export function read(file) {
 // first injected failure meets the command, not that check.
 export function markMigrated(mirror) {
   write(path.join(mirror, ".sync-state.json"), JSON.stringify({
-    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [], prefix: "forge",
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [], prefix: "dforge",
   }));
 }

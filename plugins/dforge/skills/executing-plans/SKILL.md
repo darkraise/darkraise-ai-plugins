@@ -11,7 +11,7 @@ If this session was compacted - a compaction snapshot or summary sits above -
 your memory of the run is gone, and only the start of this file may have come
 back. Before anything else:
 
-1. Run `scripts/sdd-workspace PLAN_FILE` (see using-forge §Session Budget),
+1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dforge §Session Budget),
    and read `progress.md` and `handoff.md` in
    the directory it prints.
 2. Trust the ledger and `git log` over the summary. For each task the last
@@ -126,7 +126,7 @@ the plan is finished - one of those four stops, a context-budget handoff, a
 switch to subagent mode, or your human partner asking you to stop - first
 reconcile live children exactly as dforge:handoff step 0 says: wait
 for them, or `TaskStop` them and record a Ruling. Tell your partner which you
-did. Then run `scripts/next-step PLAN_FILE` (see using-forge §Session
+did. Then run `scripts/next-step PLAN_FILE` (see using-dforge §Session
 Budget) as your last action. The
 last thing in your final message is the block it prints, verbatim. It also
 rewrites the `## Next session` section of
@@ -154,7 +154,7 @@ Conversation memory does not survive compaction. Track progress in a ledger
 file, not only in todos.
 
 - Each plan owns a workspace: run `scripts/sdd-workspace PLAN_FILE`
-  (see using-forge §Session Budget), and it prints the plan's git-ignored directory
+  (see using-dforge §Session Budget), and it prints the plan's git-ignored directory
   (`<repo-root>/<state>/sdd/<plan-basename>/`), home to every artifact for
   THIS plan except its ledger and handoff note, which live in `<ledger dir>`.
   Another plan's directory is never yours to read or write.
@@ -164,7 +164,7 @@ file, not only in todos.
   at the old flat path `<state>/sdd/progress.md` - is another plan's
   progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
-  `# SDD ledger — plan: <plan name>` — `bash <plugin-root>/scripts/forge-path name PLAN_FILE`,
+  `# SDD ledger — plan: <plan name>` — `bash <plugin-root>/scripts/dforge-path name PLAN_FILE`,
   so the ledger names the plan in either store.
 - When a register covers this plan's spec, mark the rows this plan carries as
   in flight once, at the start of the run, skipping any row already at `verify`
@@ -182,7 +182,7 @@ file, not only in todos.
   that happens, recover from `git log`.
 
 Read the plan's header, never the whole plan: run
-`scripts/task-brief --header PLAN_FILE` (see using-forge §Session Budget), and read the
+`scripts/task-brief --header PLAN_FILE` (see using-dforge §Session Budget), and read the
 file it prints (`<workspace>/plan-header.md`). Note the Execution line, the
 Global Constraints and the Contracts, and create a todo per Task index entry. A
 plan written before 1.4.0 may have no Task index: then run

@@ -28,7 +28,7 @@ EOF
   exit 2
 }
 
-command -v "${DR_FORGE_JQ:-jq}" >/dev/null 2>&1 || { echo "auto-run: jq is required" >&2; exit 2; }
+command -v "${DFORGE_JQ:-jq}" >/dev/null 2>&1 || { echo "auto-run: jq is required" >&2; exit 2; }
 
 AR_SESSION=${CLAUDE_CODE_SESSION_ID:-}
 if [ "${1:-}" = --session ]; then

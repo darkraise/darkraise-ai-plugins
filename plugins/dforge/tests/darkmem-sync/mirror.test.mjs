@@ -14,16 +14,16 @@ import { scratch, write } from "./helpers.mjs";
 
 function mirror() {
   const root = scratch("dms-mirror-");
-  return { root, roots: { docsRoot: path.join(root, "forge"), workRoot: path.join(root, "work") } };
+  return { root, roots: { docsRoot: path.join(root, "dforge"), workRoot: path.join(root, "work") } };
 }
 
 test("uris map to the docs root, handoff uris to the plan's directory, and nothing climbs out or names a dotfile", () => {
   const { roots } = mirror();
-  assert.equal(uriToLocal(roots, "forge/specs/a.md"), path.join(roots.docsRoot, "specs", "a.md"));
-  assert.equal(uriToLocal(roots, "forge/handoff/p1.md"), path.join(roots.workRoot, "sdd", "p1", "handoff.md"));
+  assert.equal(uriToLocal(roots, "dforge/specs/a.md"), path.join(roots.docsRoot, "specs", "a.md"));
+  assert.equal(uriToLocal(roots, "dforge/handoff/p1.md"), path.join(roots.workRoot, "sdd", "p1", "handoff.md"));
   for (const bad of [
-    "forge/../x.md", "forge//a.md", "other/a.md", "forge", "forge/handoff/a/b.md",
-    "forge/handoff/x.txt", "forge/.hidden.md", "forge/notes/.x/a.md",
+    "dforge/../x.md", "dforge//a.md", "other/a.md", "dforge", "dforge/handoff/a/b.md",
+    "dforge/handoff/x.txt", "dforge/.hidden.md", "dforge/notes/.x/a.md",
   ]) {
     assert.equal(uriToLocal(roots, bad), null, bad);
   }
@@ -38,30 +38,30 @@ test("document files list docs and handoff notes, skip dotfiles, and reserve doc
   write(path.join(roots.workRoot, "sdd", "p1", "handoff.md"), "h");
   write(path.join(roots.workRoot, "sdd", "p1", "progress.md"), "l");
   write(path.join(roots.workRoot, "sdd", "bad name", "progress.md"), "l");
-  assert.deepEqual(listDocumentFiles(roots).map(f => f.uri), [null, null, "forge/specs/a.md", "forge/handoff/p1.md"]);
+  assert.deepEqual(listDocumentFiles(roots).map(f => f.uri), [null, null, "dforge/specs/a.md", "dforge/handoff/p1.md"]);
   assert.deepEqual(ledgerFiles(roots.workRoot).map(f => f.slug), ["p1"]);
   assert.deepEqual(unsupportedPlanDirs(roots.workRoot), [path.join(roots.workRoot, "sdd", "bad name")]);
 });
 
-test("archive uris carry a UTC stamp under forge/archive/", () => {
+test("archive uris carry a UTC stamp under dforge/archive/", () => {
   assert.equal(utcStamp(new Date("2026-10-13T09:15:02.789Z")), "20261013T091502Z");
   assert.match(utcStamp(), /^\d{8}T\d{6}Z$/);
-  assert.equal(archiveUri("forge/specs/a.md", "20261013T091502Z"), "forge/archive/20261013T091502Z/specs/a.md");
-  for (const uri of ["forge/archive", "forge/archive/20261013T091502Z/specs/a.md"]) assert.equal(isArchiveUri(uri), true, uri);
-  for (const uri of ["forge/archives/a.md", "forge/specs/archive/a.md", "forge/a.md"]) assert.equal(isArchiveUri(uri), false, uri);
+  assert.equal(archiveUri("dforge/specs/a.md", "20261013T091502Z"), "dforge/archive/20261013T091502Z/specs/a.md");
+  for (const uri of ["dforge/archive", "dforge/archive/20261013T091502Z/specs/a.md"]) assert.equal(isArchiveUri(uri), true, uri);
+  for (const uri of ["dforge/archives/a.md", "dforge/specs/archive/a.md", "dforge/a.md"]) assert.equal(isArchiveUri(uri), false, uri);
 });
 
 test("localChanges names a synced document deleted from the mirror, only while documents sync", () => {
   const { roots } = mirror();
   const state = emptyState();
   write(path.join(roots.docsRoot, "kept.md"), "k");
-  state.documents["forge/kept.md"] = sha256("k");
-  state.documents["forge/specs/gone.md"] = sha256("g");
-  state.documents["forge/handoff/p1.md"] = sha256("h");
+  state.documents["dforge/kept.md"] = sha256("k");
+  state.documents["dforge/specs/gone.md"] = sha256("g");
+  state.documents["dforge/handoff/p1.md"] = sha256("h");
   write(path.join(roots.docsRoot, "archive", "x.md"), "x");
   assert.deepEqual(localChanges(roots, state), [
     `reserved: ${path.join("archive", "x.md")} (the docs root's archive/ directory is not synced)`,
-    "deleted: forge/specs/gone.md",
+    "deleted: dforge/specs/gone.md",
   ]);
   assert.deepEqual(localChanges({ ...roots, families: { documents: false, progress: true } }, state), []);
 });
@@ -101,7 +101,7 @@ test("a ledger line yields its task, state and commit; a blank line joins the en
     ["Task 7: implementer (assigned)\n", { task: 7 }],
     ["Task 8: minor (deferred): complete (later)\n", { task: 8 }],
     ["Group 1-2: review round 1/5 (commits a..b)\n", {}],
-    ["# SDD ledger — plan: docs/forge/plans/p.md\n", {}],
+    ["# SDD ledger — plan: docs/dforge/plans/p.md\n", {}],
   ];
   for (const [line, want] of rows) assert.deepEqual(lineProperties(line), want, line);
   assert.deepEqual(ledgerEntries("# L\n\nTask 1: complete (x)\n\n\nTask 2: BLOCKED — y\r\n"), [
@@ -120,30 +120,30 @@ test("decodeUtf8 refuses invalid bytes and keeps a byte order mark", () => {
 
 test("paths name their uris; plans and drafts name their properties; a handoff note names its target", () => {
   const { roots } = mirror();
-  // A checkout and a project both named forge; the uri comes from the
-  // roots, never from the leftmost forge/ segment.
+  // A checkout and a project both named dforge; the uri comes from the
+  // roots, never from the leftmost dforge/ segment.
   const named = {
-    docsRoot: "/home/u/.dforge/mirror/forge/forge",
-    workRoot: "/home/u/.dforge/mirror/forge/work",
-    worktreeRoot: "/w/forge",
+    docsRoot: "/home/u/.dforge/mirror/dforge/dforge",
+    workRoot: "/home/u/.dforge/mirror/dforge/work",
+    worktreeRoot: "/w/dforge",
   };
-  assert.equal(pathToUri(named, "docs/superpowers/plans/p1.md"), "forge/plans/p1.md");
-  assert.equal(pathToUri(named, "./docs/forge/plans/p1.md"), "forge/plans/p1.md");
-  assert.equal(pathToUri(named, "/home/u/.dforge/mirror/forge/forge/plans/p1.md"), "forge/plans/p1.md");
-  assert.equal(pathToUri(named, "/w/forge/docs/forge/specs/s.md"), "forge/specs/s.md");
-  assert.equal(pathToUri(named, "/w/forge/docs/superpowers/specs/s.md"), null);
-  assert.equal(pathToUri(named, "/w/forge/.forge/sdd/p1/progress.md"), null);
-  assert.equal(pathToUri(named, "/elsewhere/forge/plans/p1.md"), null);
+  assert.equal(pathToUri(named, "docs/superpowers/plans/p1.md"), "dforge/plans/p1.md");
+  assert.equal(pathToUri(named, "./docs/dforge/plans/p1.md"), "dforge/plans/p1.md");
+  assert.equal(pathToUri(named, "/home/u/.dforge/mirror/dforge/dforge/plans/p1.md"), "dforge/plans/p1.md");
+  assert.equal(pathToUri(named, "/w/dforge/docs/dforge/specs/s.md"), "dforge/specs/s.md");
+  assert.equal(pathToUri(named, "/w/dforge/docs/superpowers/specs/s.md"), null);
+  assert.equal(pathToUri(named, "/w/dforge/.dforge/sdd/p1/progress.md"), null);
+  assert.equal(pathToUri(named, "/elsewhere/dforge/plans/p1.md"), null);
   assert.equal(pathToUri(named, "plans/p1.md"), null);
-  assert.equal(pathToUri(named, "docs/forge/../../x.md"), null);
+  assert.equal(pathToUri(named, "docs/dforge/../../x.md"), null);
   assert.equal(ledgerPlanPath("# SDD ledger — plan: docs/superpowers/plans/p1.md\nTask 1: x\n"), "docs/superpowers/plans/p1.md");
   assert.equal(ledgerPlanPath("Task 1: x\n"), null);
   write(path.join(roots.docsRoot, "plans", "p1.md"), "# P\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
   write(path.join(roots.workRoot, "sdd", "p1", "handoff.md"), "h");
   assert.deepEqual(propertiesFor(roots, "p1", "docs/superpowers/plans/p1.md"), {
-    plan_uri: "forge/plans/p1.md", spec_uri: "forge/specs/s.md", handoff_uri: "forge/handoff/p1.md",
+    plan_uri: "dforge/plans/p1.md", spec_uri: "dforge/specs/s.md", handoff_uri: "dforge/handoff/p1.md",
   });
-  assert.deepEqual(propertiesFor(roots, "d-design", "docs/superpowers/specs/d-design.md"), { spec_uri: "forge/specs/d-design.md" });
+  assert.deepEqual(propertiesFor(roots, "d-design", "docs/superpowers/specs/d-design.md"), { spec_uri: "dforge/specs/d-design.md" });
   assert.deepEqual(propertiesFor(roots, "adhoc", null), {});
   assert.deepEqual(
     checkpointTarget("# Handoff\n\n## State\n- Worktree: `/r`\n- Plan: `docs/superpowers/plans/p1.md`; ledger: `x`\n\n## Gotchas\n- Plan: `other.md`\n"),
@@ -161,20 +161,20 @@ test("each family lists, reports and links only when the roots sync it", () => {
   write(path.join(roots.workRoot, "handoff", "latest.md"), "x");
   const only = (documents, progress) => ({ ...roots, families: { documents, progress } });
   const uris = r => listDocumentFiles(r).map(f => f.uri);
-  assert.deepEqual(uris(roots), ["forge/specs/a.md", "forge/handoff/p1.md"]);
-  assert.deepEqual(uris(only(true, false)), ["forge/specs/a.md"]);
-  assert.deepEqual(uris(only(false, true)), ["forge/handoff/p1.md"]);
+  assert.deepEqual(uris(roots), ["dforge/specs/a.md", "dforge/handoff/p1.md"]);
+  assert.deepEqual(uris(only(true, false)), ["dforge/specs/a.md"]);
+  assert.deepEqual(uris(only(false, true)), ["dforge/handoff/p1.md"]);
   assert.deepEqual(uris(only(false, false)), []);
-  assert.deepEqual(localChanges(only(true, false), emptyState()), ["new: forge/specs/a.md"]);
+  assert.deepEqual(localChanges(only(true, false), emptyState()), ["new: dforge/specs/a.md"]);
   assert.deepEqual(localChanges(only(false, true), emptyState()), [
-    "new: forge/handoff/p1.md", "unpushed: sdd/p1/progress.md (2 bytes, never synced)", "modified: handoff/latest.md",
+    "new: dforge/handoff/p1.md", "unpushed: sdd/p1/progress.md (2 bytes, never synced)", "modified: handoff/latest.md",
   ]);
   assert.deepEqual(propertiesFor(only(true, false), "p1", null), {});
-  assert.deepEqual(propertiesFor(only(false, true), "p1", null), { handoff_uri: "forge/handoff/p1.md" });
+  assert.deepEqual(propertiesFor(only(false, true), "p1", null), { handoff_uri: "dforge/handoff/p1.md" });
   assert.deepEqual(familiesOf(roots), { documents: true, progress: true });
-  assert.equal(uriFamily("forge/handoff/p1.md"), "progress");
-  assert.equal(uriFamily("forge/specs/a.md"), "documents");
-  assert.equal(uriFamily("forge/handoff/sub/x.md"), "documents");
+  assert.equal(uriFamily("dforge/handoff/p1.md"), "progress");
+  assert.equal(uriFamily("dforge/specs/a.md"), "documents");
+  assert.equal(uriFamily("dforge/handoff/sub/x.md"), "documents");
 });
 
 test("state round-trips, including keys an ordinary object would inherit", () => {
@@ -182,7 +182,7 @@ test("state round-trips, including keys an ordinary object would inherit", () =>
   const file = path.join(root, ".sync-state.json");
   assert.deepEqual(loadState(file), emptyState());
   const state = emptyState();
-  state.documents["forge/a.md"] = sha256("a");
+  state.documents["dforge/a.md"] = sha256("a");
   for (const slug of ["constructor", "toString", "__proto__"]) state.ledgers[slug] = { offset: 3, prefix: sha256("abc") };
   state.checkpoint = sha256("c");
   state.checkpointAt = "2026-09-24T10:00:00.000Z";
@@ -190,7 +190,7 @@ test("state round-trips, including keys an ordinary object would inherit", () =>
   const loaded = loadState(file);
   assert.deepEqual(Object.keys(loaded.ledgers).sort(), ["__proto__", "constructor", "toString"]);
   assert.deepEqual(loaded.ledgers.constructor, { offset: 3, prefix: sha256("abc") });
-  assert.equal(loaded.documents["forge/a.md"], sha256("a"));
+  assert.equal(loaded.documents["dforge/a.md"], sha256("a"));
   assert.equal(loaded.checkpointAt, "2026-09-24T10:00:00.000Z");
 });
 
@@ -202,7 +202,7 @@ test("an unreadable or malformed state file is an error rather than a fresh star
     "{broken",
     JSON.stringify({ ...good, version: 2 }),
     JSON.stringify({ ...good, documents: null }),
-    JSON.stringify({ ...good, documents: { "forge/a.md": "not-a-hash" } }),
+    JSON.stringify({ ...good, documents: { "dforge/a.md": "not-a-hash" } }),
     JSON.stringify({ ...good, ledgers: { p1: { offset: -1, prefix: EMPTY_SHA } } }),
     JSON.stringify({ ...good, ledgers: { p1: { offset: "3", prefix: EMPTY_SHA } } }),
     JSON.stringify({ ...good, ledgers: { "../x": { offset: 0, prefix: EMPTY_SHA } } }),
@@ -211,7 +211,7 @@ test("an unreadable or malformed state file is an error rather than a fresh star
     JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: -1 } } }),
     JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: "3" } } }),
     JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: 1.5 } } }),
-    JSON.stringify({ ...good, pendingLinks: "forge/handoff/p1.md" }),
+    JSON.stringify({ ...good, pendingLinks: "dforge/handoff/p1.md" }),
     JSON.stringify({ ...good, pendingLinks: [1] }),
   ]) {
     fs.writeFileSync(file, bad);
@@ -224,7 +224,7 @@ test("localChanges names new, modified, unpushed, rewritten, unsupported and che
   const state = emptyState();
   write(path.join(roots.docsRoot, "a.md"), "a");
   write(path.join(roots.docsRoot, "b.md"), "b");
-  state.documents["forge/b.md"] = sha256("old");
+  state.documents["dforge/b.md"] = sha256("old");
   write(path.join(roots.workRoot, "sdd", "p1", "progress.md"), "one\ntwo\n");
   state.ledgers.p1 = { offset: 4, prefix: sha256("one\n") };
   write(path.join(roots.workRoot, "sdd", "p2", "progress.md"), "changed\n");
@@ -232,8 +232,8 @@ test("localChanges names new, modified, unpushed, rewritten, unsupported and che
   write(path.join(roots.workRoot, "sdd", "bad name", "handoff.md"), "h");
   write(path.join(roots.workRoot, "handoff", "latest.md"), "# H\n");
   assert.deepEqual(localChanges(roots, state), [
-    "new: forge/a.md",
-    "modified: forge/b.md",
+    "new: dforge/a.md",
+    "modified: dforge/b.md",
     "unpushed: sdd/p1/progress.md (4 bytes)",
     "rewritten: sdd/p2/progress.md",
     `unsupported: ${path.join(roots.workRoot, "sdd", "bad name")} (not a usable workstream key)`,
@@ -297,11 +297,11 @@ test("a ledger's lastSeq and the pending handoff links survive a save, and an ol
   const state = emptyState();
   assert.deepEqual(state.pendingLinks, []);
   state.ledgers.p1 = { offset: 3, prefix: sha256("abc"), lastSeq: 7 };
-  state.pendingLinks.push("forge/handoff/p1.md");
+  state.pendingLinks.push("dforge/handoff/p1.md");
   saveState(file, state);
   const loaded = loadState(file);
   assert.deepEqual(loaded.ledgers.p1, { offset: 3, prefix: sha256("abc"), lastSeq: 7 });
-  assert.deepEqual(loaded.pendingLinks, ["forge/handoff/p1.md"]);
+  assert.deepEqual(loaded.pendingLinks, ["dforge/handoff/p1.md"]);
   fs.writeFileSync(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [] }));
   assert.deepEqual(loadState(file).pendingLinks, []);
 });
@@ -344,18 +344,18 @@ test("isoMicros orders darkmem's timestamps to the microsecond, offsets applied"
 
 test("uriProblem refuses names Windows cannot hold, and caseGroups finds uris that differ only in case", () => {
   for (const bad of [
-    "forge/notes/a:b.md", "forge/notes/a?.md", "forge/notes/a\u0001.md", "forge/notes/a.",
-    "forge/notes/a\u007f.md", "forge/notes/a\u0085.md", "forge/notes/a ", "forge/notes/CON.md", "forge/con/a.md", "forge/notes/lpt9", "forge/Aux.tar.gz",
-    "forge/notes/COM¹.md", "forge/notes/lpt²", "forge/LPT³.tar.gz",
+    "dforge/notes/a:b.md", "dforge/notes/a?.md", "dforge/notes/a\u0001.md", "dforge/notes/a.",
+    "dforge/notes/a\u007f.md", "dforge/notes/a\u0085.md", "dforge/notes/a ", "dforge/notes/CON.md", "dforge/con/a.md", "dforge/notes/lpt9", "dforge/Aux.tar.gz",
+    "dforge/notes/COM¹.md", "dforge/notes/lpt²", "dforge/LPT³.tar.gz",
   ]) {
     assert.notEqual(uriProblem(bad), null, bad);
   }
-  for (const good of ["forge/notes/a.md", "forge/notes/console.md", "forge/notes/com10.md", "forge/handoff/p1.md"]) {
+  for (const good of ["dforge/notes/a.md", "dforge/notes/console.md", "dforge/notes/com10.md", "dforge/handoff/p1.md"]) {
     assert.equal(uriProblem(good), null, good);
   }
-  assert.match(uriProblem("forge/notes/CON.md"), /"CON\.md" is a Windows device name/);
-  assert.deepEqual(caseGroups(["forge/A.md", "forge/b.md", "forge/a.md", "forge/A.md"]), [["forge/A.md", "forge/a.md"]]);
-  assert.deepEqual(caseGroups(["forge/a.md", "forge/b.md"]), []);
+  assert.match(uriProblem("dforge/notes/CON.md"), /"CON\.md" is a Windows device name/);
+  assert.deepEqual(caseGroups(["dforge/A.md", "dforge/b.md", "dforge/a.md", "dforge/A.md"]), [["dforge/A.md", "dforge/a.md"]]);
+  assert.deepEqual(caseGroups(["dforge/a.md", "dforge/b.md"]), []);
 });
 
 test("a takeover that moved a live lock aside and cannot give it back leaves it there, and a later acquire clears it once stale", () => {

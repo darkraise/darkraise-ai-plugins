@@ -40,7 +40,7 @@ Report with branch state:
 
 In an auto run (`scripts/auto-run status` exits 0), create the worktree without asking, as `worktree=always` does ([auto-run.md](../../reference/auto-run.md)).
 
-Has the user already indicated their worktree preference in your instructions? If not, the `worktree` setting decides (read it from the session-start line `dforge settings in force (…)`, or run `scripts/forge-config workflow` when no such line is in context): `worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2, and `ask`, the default and the value when the line does not name the key, asks for consent before creating a worktree:
+Has the user already indicated their worktree preference in your instructions? If not, the `worktree` setting decides (read it from the session-start line `dforge settings in force (…)`, or run `scripts/dforge-config workflow` when no such line is in context): `worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2, and `ask`, the default and the value when the line does not name the key, asks for consent before creating a worktree:
 
 > "Would you like me to set up an isolated worktree? It protects your current branch from changes."
 

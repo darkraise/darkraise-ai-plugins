@@ -54,7 +54,7 @@ claude plugin test plugins/dforge
 `node scripts/test-all.mjs` runs the full maintained suite and prints each
 suite's duration. Unset `CLAUDE_CONFIG_DIR` first, since a value leaking in from
 your shell changes the budget tests. A suite that runs against the real home
-directory sets `DR_FORGE_NO_SETTINGS=1`, under which every `forge_setting`
+directory sets `DFORGE_NO_SETTINGS=1`, under which every `dforge_setting`
 answers its default without reading `~/.dforge/config.json`. Installation and upgrade tests use
 disposable profiles, caches and Git repositories; they must never modify your
 installed plugins or call a paid model.

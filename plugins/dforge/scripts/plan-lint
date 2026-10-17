@@ -30,7 +30,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-forge_stores_init "$(_plan_ctx "$plan")"
+dforge_stores_init "$(_plan_ctx "$plan")"
 [ "$amend_given" -eq 1 ] || amend=$(plan_amendments_file "$plan")
 
 TMP=$(mktemp -d)
@@ -46,7 +46,7 @@ if ! plan_apply_amendments "$plan" "$amend" > "$src" 2> "$TMP/amend.err"; then
 fi
 
 root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
-forge_stores_init "$root"
+dforge_stores_init "$root"
 SEP='( — | – | - | -- )'
 header=$(plan_header "$src")
 
@@ -93,7 +93,7 @@ done
 spec_line=$(header_line Spec)
 if [ -n "$spec_line" ]; then
   spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$spec_line")
-  [ -f "$(forge_resolve "$spec_path" "$root")" ] || say ERROR header "Spec path does not exist: $spec_path"
+  [ -f "$(dforge_resolve "$spec_path" "$root")" ] || say ERROR header "Spec path does not exist: $spec_path"
 fi
 
 program=$(header_line Program)
@@ -101,7 +101,7 @@ if [ -n "$program" ]; then
   if [[ "$program" =~ ^\*\*Program:\*\*\ \`?([^\`\ ]+)\`?$SEP"sub-project "([0-9]+)" of "([0-9]+)$SEP(next:\ .+|last)$ ]]; then
     ppath=${BASH_REMATCH[1]} k=${BASH_REMATCH[3]} n=${BASH_REMATCH[4]}
     [ "$k" -le "$n" ] || say ERROR header "Program line: sub-project $k of $n"
-    [ -f "$(forge_resolve "$ppath" "$root")" ] || say ERROR header "Program path does not exist: $ppath"
+    [ -f "$(dforge_resolve "$ppath" "$root")" ] || say ERROR header "Program path does not exist: $ppath"
   else
     say ERROR header "Program line does not match '**Program:** <path> — sub-project <k> of <n> — next: <title>' or '… — last'"
   fi
@@ -114,8 +114,8 @@ reg_specs=()
 [ -z "${spec_path:-}" ] || reg_specs+=("$spec_path")
 [ -z "${ppath:-}" ] || [ "${ppath:-}" = "${spec_path:-}" ] || reg_specs+=("$ppath")
 if [ ${#reg_specs[@]} -gt 0 ]; then
-  plan_rel=$(forge_name "$plan" "$root")
-  plan_key=$(forge_name_key "$plan_rel")
+  plan_rel=$(dforge_name "$plan" "$root")
+  plan_key=$(dforge_name_key "$plan_rel")
   : > "$TMP/reg-ids"
   : > "$TMP/reg-open"
   while IFS= read -r reg_file; do
@@ -138,7 +138,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
       || say WARN header "a register covers this plan's spec but no task carries an **Items:** line"
 
     while IFS=$'\t' read -r rid ritem rassigned _ _ _; do
-      [ "$(forge_name_key "$rassigned")" = "$plan_key" ] || continue
+      [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || continue
       grep -qx "$rid" <<<"$cited" \
         || say ERROR header "register row #$rid is assigned to this plan but no task cites it"
     done < "$TMP/reg-open"
@@ -151,7 +151,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
     if grep -qE "$SEP"'last[ \t]*$' <<<"$program"; then
       others=""
       while IFS=$'\t' read -r rid _ rassigned _; do
-        [ "$(forge_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }#$rid"
+        [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }#$rid"
       done < "$TMP/reg-open"
       [ -z "$others" ] \
         || say ERROR header "Program line says 'last' while register rows are open: $others"

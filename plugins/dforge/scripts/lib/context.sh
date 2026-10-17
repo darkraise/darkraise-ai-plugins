@@ -6,7 +6,7 @@
 # writes a system entry with subtype compact_boundary. A schema change must
 # degrade the verdict to unknown, never produce a wrong number.
 
-. "$(dirname "${BASH_SOURCE[0]}")/forge-dir.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/dforge-dir.sh"
 
 # Auto-compaction fires at about 93% of the effective window; the budget sits
 # one worst-case task's growth below that, so a task in flight always lands.
@@ -24,11 +24,11 @@ CTX_TAIL_TASKS=2
 # plan writing never starts at the compaction point.
 CTX_PLAN_PCT=150
 
-. "$(dirname "${BASH_SOURCE[0]}")/forge-env.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/dforge-env.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/auto-run.sh"
 
-ctx_jq() { "${DR_FORGE_JQ:-jq}" "$@"; }
-ctx_have_jq() { command -v "${DR_FORGE_JQ:-jq}" >/dev/null 2>&1; }
+ctx_jq() { "${DFORGE_JQ:-jq}" "$@"; }
+ctx_have_jq() { command -v "${DFORGE_JQ:-jq}" >/dev/null 2>&1; }
 
 # Keys are built from the native path so they match what the hook received from
 # Claude Code (a Windows path under Git Bash).
@@ -262,31 +262,31 @@ ctx_budget() {
   echo "$budget"
 }
 
-# ctx_final_budget MODEL — the final phase's limit. DR_FORGE_BUDGET pins
+# ctx_final_budget MODEL — the final phase's limit. DFORGE_BUDGET pins
 # the task budget only, so it never moves this one.
 ctx_final_budget() {
   echo $(( $(ctx_window "$1") * CTX_FINAL_PCT / 100 ))
 }
 
-# ctx_pinned_budget — the task budget someone pinned: DR_FORGE_BUDGET, else the
+# ctx_pinned_budget — the task budget someone pinned: DFORGE_BUDGET, else the
 # handoffTokens setting; empty when neither names a positive number. The
 # environment is read here, not through the setting, so a machine without Node
 # keeps its override.
 ctx_pinned_budget() {
   local pinned
-  case ${DR_FORGE_BUDGET:-} in
+  case ${DFORGE_BUDGET:-} in
     ''|*[!0-9]*) pinned="" ;;
-    *) pinned=$DR_FORGE_BUDGET; [ "$pinned" -gt 0 ] || pinned="" ;;
+    *) pinned=$DFORGE_BUDGET; [ "$pinned" -gt 0 ] || pinned="" ;;
   esac
   if [ -z "$pinned" ]; then
-    pinned=$(forge_setting handoffTokens 0)
+    pinned=$(dforge_setting handoffTokens 0)
     case $pinned in ''|*[!0-9]*|0) pinned="" ;; esac
   fi
   printf '%s' "$pinned"
 }
 
 # ctx_plan_budget MODEL — the limit for writing the plan after the spec:
-# CTX_PLAN_PCT of the task budget (DR_FORGE_BUDGET included), never above
+# CTX_PLAN_PCT of the task budget (DFORGE_BUDGET included), never above
 # the final-phase limit.
 ctx_plan_budget() {
   local task final plan
@@ -298,7 +298,7 @@ ctx_plan_budget() {
   echo "$plan"
 }
 
-# The primary checkout's root: a worktree's .forge/ lives with the checkout
+# The primary checkout's root: a worktree's .dforge/ lives with the checkout
 # that owns the repository, so every session logs to one file.
 ctx_primary_root() {
   local common
@@ -309,7 +309,7 @@ ctx_primary_root() {
 # ctx_log_observation TOKENS — append one row, and never fail the caller: the
 # budget line is printed whether or not the observation is recorded.
 #
-# The log lives inside .forge/sdd/ because that directory self-ignores
+# The log lives inside .dforge/sdd/ because that directory self-ignores
 # (scripts/sdd-workspace writes * into its .gitignore). Only this repository's
 # root .gitignore lists the state
 # directory, and an untracked-but-not-ignored file
@@ -318,13 +318,13 @@ ctx_primary_root() {
 ctx_log_observation() {
   local primary base sid
   primary=$(ctx_primary_root) || return 0
-  base="$(forge_dir state "$primary")/sdd"
+  base="$(dforge_dir state "$primary")/sdd"
   mkdir -p "$base" 2>/dev/null || return 0
-  forge_self_ignore "$base"
+  dforge_self_ignore "$base"
   sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
     | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
   printf '%s\t%s\t%s\t%s\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DR_FORGE_BUDGET_CALLER:-direct}" "$sid" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DFORGE_BUDGET_CALLER:-direct}" "$sid" \
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
@@ -391,7 +391,7 @@ ctx_line() {
       label=$(ctx_auto_label normal "$width")
     fi
   fi
-  if [ "$limit" = task ] && [ "$(forge_setting handoffMode strict)" = relaxed ]; then
+  if [ "$limit" = task ] && [ "$(dforge_setting handoffMode strict)" = relaxed ]; then
     limit=relaxed
     if [ "${1:-}" = wave ]; then label="budget (relaxed, wave of ${2:-1})"; else label="budget (relaxed)"; fi
   fi
@@ -412,7 +412,7 @@ ctx_line() {
     tk=$(( (tokens + 500) / 1000 ))
     # No denominator: no Codex budget has been set yet, and the verdict stays
     # unknown so reference/session-budget.md's count rule keeps the session.
-    # DR_FORGE_BUDGET stays a Claude override for the same reason.
+    # DFORGE_BUDGET stays a Claude override for the same reason.
     echo "$label: ${tk}k measured — unknown — source: rollout"
     return 3
   fi
@@ -469,7 +469,7 @@ ctx_line() {
 ctx_observations() {
   local primary log
   primary=$(ctx_primary_root) || return 0
-  log="$(forge_dir state "$primary")/sdd/budget-log.tsv"
+  log="$(dforge_dir state "$primary")/sdd/budget-log.tsv"
   [ -f "$log" ] || return 0
   tr -d '\r' < "$log" | sort -s -t $'\t' -k4,4 -k1,1 | awk -F'\t' '
     $3 ~ /^task-brief:[0-9]+$/ && $4 != "" {

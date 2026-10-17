@@ -116,10 +116,10 @@ REPO="$TMP/repo"
 git init -q "$REPO"
 cp "$TMP/h.md" "$REPO/plan.md"
 check "amendments_file: none yet" "$(plan_amendments_file "$REPO/plan.md")" ""
-mkdir -p "$REPO/.forge/sdd/plan"
-cp "$TMP/am.md" "$REPO/.forge/sdd/plan/amendments.md"
+mkdir -p "$REPO/.dforge/sdd/plan"
+cp "$TMP/am.md" "$REPO/.dforge/sdd/plan/amendments.md"
 got=$(plan_amendments_file "$REPO/plan.md")
-check "amendments_file: the plan's workspace file" "${got##*/.forge/}" "sdd/plan/amendments.md"
+check "amendments_file: the plan's workspace file" "${got##*/.dforge/}" "sdd/plan/amendments.md"
 check "amendments_file: outside a repository" "$(plan_amendments_file "$TMP/h.md")" ""
 
 # --- plan_scores and plan_heavy ---
@@ -202,16 +202,16 @@ check "plan_delegated: the scores fixture" "$(deleg "$TMP/scores.md")" "2 heavy|
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
 git init -q "$REPO"
-mkdir -p "$REPO/docs" "$REPO/.forge/sdd/demo"
+mkdir -p "$REPO/docs" "$REPO/.dforge/sdd/demo"
 printf '# Demo\n' > "$REPO/docs/demo.md"
-L="$REPO/.forge/sdd/demo/progress.md"
+L="$REPO/.dforge/sdd/demo/progress.md"
 check "plan_ledger: no ledger prints nothing" "$(plan_ledger "$REPO/docs/demo.md")" ""
 printf '# SDD ledger — plan: docs/demo.md\n' > "$L"
 check "plan_ledger: a relative identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
-  "$(git -C "$REPO" rev-parse --show-toplevel)/.forge/sdd/demo/progress.md"
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.dforge/sdd/demo/progress.md"
 printf '# SDD ledger — plan: %s/docs/demo.md\n' "$(git -C "$REPO" rev-parse --show-toplevel)" > "$L"
 check "plan_ledger: an absolute identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
-  "$(git -C "$REPO" rev-parse --show-toplevel)/.forge/sdd/demo/progress.md"
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.dforge/sdd/demo/progress.md"
 printf '# SDD ledger — plan: docs/other.md\n' > "$L"
 check "plan_ledger: another plan's ledger is ignored" "$(plan_ledger "$REPO/docs/demo.md")" ""
 printf '# SDD ledger — plan: docs/demo.md\nTask 1: implementer inline (assigned; base a)\nTask 2: escalated inline -> subagent — still failing\n' > "$L"
@@ -382,40 +382,40 @@ git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 STOP=$(git -C "$SR" rev-parse --show-toplevel)
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/forge/plans" "$M/work/sdd/mp"
-printf '# MP\n' > "$M/forge/plans/mp.md"
-printf '# SDD ledger — plan: docs/forge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
+printf '# MP\n' > "$M/dforge/plans/mp.md"
+printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
 check "plan_ledger: a mirror plan finds its mirror ledger by name" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/forge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
-printf '# SDD ledger — plan: %s\n' "$M/forge/plans/mp.md" > "$M/work/sdd/mp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+printf '# SDD ledger — plan: %s\n' "$M/dforge/plans/mp.md" > "$M/work/sdd/mp/progress.md"
 check "plan_ledger: an absolute mirror path names it too" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/forge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
 printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
 check "plan_ledger: the pre-2.0 prefix names a mirror plan" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/forge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
 check "plan_locate: a document name finds the mirror's copy" \
-  "$(cd "$SR" && HOME=$SH plan_locate docs/forge/plans/mp.md)" "$M/forge/plans/mp.md"
+  "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
 check "plan_locate: an existing file stays" "$(cd "$REPO" && plan_locate docs/demo.md)" "docs/demo.md"
-check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/forge/plans/none.md)" "docs/forge/plans/none.md"
-mkdir -p "$STOP/.forge/sdd/mp"
-printf '## A1 — Task 1\n' > "$STOP/.forge/sdd/mp/amendments.md"
+check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/none.md)" "docs/dforge/plans/none.md"
+mkdir -p "$STOP/.dforge/sdd/mp"
+printf '## A1 — Task 1\n' > "$STOP/.dforge/sdd/mp/amendments.md"
 check "amendments_file: a mirror plan's workspace stays in the checkout" \
-  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/forge/plans/mp.md")" "$STOP/.forge/sdd/mp/amendments.md"
-(cd "$SR" && HOME=$SH plan_require_same_project "$M/forge/plans/mp.md" 2>/dev/null)
+  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/dforge/plans/mp.md")" "$STOP/.dforge/sdd/mp/amendments.md"
+(cd "$SR" && HOME=$SH plan_require_same_project "$M/dforge/plans/mp.md" 2>/dev/null)
 check "same project: a mirror plan while documents are in darkmem" "$?" "0"
 (cd "$SR" && HOME=$SH plan_require_same_project "$REPO/docs/demo.md" 2>/dev/null)
 check "same project: another checkout's plan is refused" "$?" "2"
 M=$(stores_home "$SH" "$SR" proj local darkmem)
-mkdir -p "$STOP/docs/forge/plans"
-printf '# LP\n' > "$STOP/docs/forge/plans/lp.md"
+mkdir -p "$STOP/docs/dforge/plans"
+printf '# LP\n' > "$STOP/docs/dforge/plans/lp.md"
 mkdir -p "$M/work/sdd/lp"
-printf '# SDD ledger — plan: docs/forge/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
+printf '# SDD ledger — plan: docs/dforge/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
 check "plan_ledger: a checkout plan finds its mirror ledger" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/forge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dforge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
 printf '# SDD ledger — plan: docs/superpowers/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
 check "plan_ledger: the pre-2.0 prefix names a checkout plan" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/forge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
-(cd "$SR" && HOME=$SH plan_require_same_project "$M/forge/plans/mp.md" 2>/dev/null)
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dforge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
+(cd "$SR" && HOME=$SH plan_require_same_project "$M/dforge/plans/mp.md" 2>/dev/null)
 check "same project: a mirror plan while documents are local is refused" "$?" "2"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

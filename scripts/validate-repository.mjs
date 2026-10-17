@@ -96,8 +96,8 @@ export function validateRepository(root) {
   const superpowersAllowed = new Set([
     'plugins/dforge/README.md',
     'plugins/dforge/hooks/cockpit/lib.ts',
-    'plugins/dforge/scripts/forge-migrate',
-    'plugins/dforge/scripts/lib/forge-dir.sh',
+    'plugins/dforge/scripts/dforge-migrate',
+    'plugins/dforge/scripts/lib/dforge-dir.sh',
     'plugins/dforge/scripts/lib/roots.sh',
     'plugins/dforge/reference/project-state.md',
     'plugins/dforge/skills/project-status/SKILL.md',
@@ -108,7 +108,7 @@ export function validateRepository(root) {
   ]);
   const superpowersExempt = rel => superpowersAllowed.has(rel) ||
     /^plugins\/dforge\/(?:LICENSES|tests)\//.test(rel) ||
-    /^plugins\/dforge\/scripts\/lib\/darkmem-(?:sync|migrate|mirror|reconcile)\.mjs$/.test(rel);
+    /^plugins\/dforge\/scripts\/lib\/(?:darkmem-(?:sync|mirror|reconcile)|dforge-home-migrate)\.mjs$/.test(rel);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;
@@ -157,7 +157,7 @@ export async function validateSchema(root) {
     if (!GROUPS.includes(spec.group)) errors.push(`${at}: group must be one of ${GROUPS.join(', ')}`);
     if (typeof spec.title !== 'string' || !spec.title) errors.push(`${at}: title is required`);
     if (typeof spec.description !== 'string' || !spec.description) errors.push(`${at}: description is required`);
-    if (!['forge', 'claude'].includes(spec.target)) errors.push(`${at}: target must be forge or claude`);
+    if (!['dforge', 'claude'].includes(spec.target)) errors.push(`${at}: target must be dforge or claude`);
     if (spec.env !== undefined && !/^[A-Z][A-Z0-9_]*$/.test(spec.env)) errors.push(`${at}: env must name an environment variable`);
     if (spec.step !== undefined && !(typeof spec.step === 'number' && spec.step > 0)) errors.push(`${at}: step must be a positive number`);
     if (typeof spec.label !== 'string' || !spec.label || spec.label.length > 16) errors.push(`${at}: label is required, at most 16 characters`);

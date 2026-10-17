@@ -13,7 +13,7 @@
 # Usage: codex-gate [--refresh]
 # Output: codex-gate usable=<bool> reason=<r> review=<bool> lane=<bool> resets_at=<iso|-> source=<probe|cache|setting>
 #
-# The codexReview and codexLane settings (scripts/forge-config) switch a surface
+# The codexReview and codexLane settings (scripts/dforge-config) switch a surface
 # off whatever the probe says; with both off the gate answers `reason=setting`
 # without probing.
 # Exit: 0 answered, either way; 2 usage error or missing jq or node.
@@ -23,7 +23,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 POLICY="${DR_CODEX_POLICY:-$HERE/../reference/codex-plugin.json}"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
-. "$HERE/lib/forge-env.sh"
+. "$HERE/lib/dforge-env.sh"
 
 die() { printf 'codex-gate: %s\n' "$1" >&2; exit 2; }
 
@@ -37,8 +37,8 @@ command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
-want_review=$(forge_setting codexReview true)
-want_lane=$(forge_setting codexLane true)
+want_review=$(dforge_setting codexReview true)
+want_lane=$(dforge_setting codexLane true)
 
 usable="" reason="" resets="" epoch="" version="" source=probe
 file=$(executor_session_file codex) || file=""

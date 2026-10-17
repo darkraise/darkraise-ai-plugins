@@ -1,51 +1,51 @@
-# Sourced. A repository's dforge directories: .forge/ and docs/forge/.
+# Sourced. A repository's dforge directories: .dforge/ and docs/dforge/.
 
-# forge_dir state|docs [ROOT] — the directory under ROOT (default: .).
-forge_dir() {
+# dforge_dir state|docs [ROOT] — the directory under ROOT (default: .).
+dforge_dir() {
   local root=${2:-.} leaf
   case ${1:-} in
-    state) leaf=.forge ;;
-    docs) leaf=docs/forge ;;
-    *) printf 'forge_dir: unknown kind %s (state or docs)\n' "${1:-}" >&2; return 2 ;;
+    state) leaf=.dforge ;;
+    docs) leaf=docs/dforge ;;
+    *) printf 'dforge_dir: unknown kind %s (state or docs)\n' "${1:-}" >&2; return 2 ;;
   esac
   printf '%s/%s\n' "$root" "$leaf"
 }
 
-# forge_self_ignore DIR — give the existing directory DIR a self-ignoring
+# dforge_self_ignore DIR — give the existing directory DIR a self-ignoring
 # .gitignore: nothing under it is ever committed, and the host repository need
 # not list it. An existing .gitignore is left as it is. A cloned repository
 # controls both names, so neither is written through a symbolic link, and
 # noclobber refuses a file that appears between the test and the write.
-forge_self_ignore() {
+dforge_self_ignore() {
   local dir=$1
   [ -d "$dir" ] && [ ! -L "$dir" ] && [ ! -e "$dir/.gitignore" ] && [ ! -L "$dir/.gitignore" ] || return 0
   (set -C; printf '*\n' > "$dir/.gitignore") 2>/dev/null || true
 }
 
-# forge_state_ignore [ROOT] — the same for ROOT's state directory, as
-# .forge/sdd/ has.
-forge_state_ignore() {
+# dforge_state_ignore [ROOT] — the same for ROOT's state directory, as
+# .dforge/sdd/ has.
+dforge_state_ignore() {
   local dir
-  dir=$(forge_dir state "${1:-.}") || return
-  forge_self_ignore "$dir"
+  dir=$(dforge_dir state "${1:-.}") || return
+  dforge_self_ignore "$dir"
 }
 
-# forge_dir_rel state|docs [ROOT] — the same directory, relative to ROOT.
-forge_dir_rel() {
+# dforge_dir_rel state|docs [ROOT] — the same directory, relative to ROOT.
+dforge_dir_rel() {
   local dir
-  dir=$(forge_dir "$@") || return
+  dir=$(dforge_dir "$@") || return
   printf '%s\n' "${dir#"${2:-.}"/}"
 }
 
-# forge_legacy_layout [ROOT] — each pre-3.0 path of the checkout at ROOT
+# dforge_legacy_layout [ROOT] — each pre-3.0 path of the checkout at ROOT
 # (default: .) that still exists, one per line: its .superpowers/ and
 # docs/superpowers/, its git dir's dr-superpowers/, and the primary checkout's
 # .superpowers/, which holds a linked worktree's handoff. It also names
 # ~/.dr-superpowers when that home is unmigrated: its config holds a darkmem
 # mapping the new config lacks, or its mirror folder still holds a mirror.
-# dforge reads none of them since 3.0.0, so scripts/forge-migrate must move
+# dforge reads none of them since 3.0.0, so scripts/dforge-migrate must move
 # them first.
-forge_legacy_layout() {
+dforge_legacy_layout() {
   local root=${1:-.} gitdir common primary home=${HOME:-}/.dr-superpowers
   if [ -n "${HOME:-}" ] && {
     { grep -qs '"darkmem"[[:space:]]*:' "$home/config.json" && ! grep -qs '"darkmem"[[:space:]]*:' "${HOME}/.dforge/config.json"; } ||

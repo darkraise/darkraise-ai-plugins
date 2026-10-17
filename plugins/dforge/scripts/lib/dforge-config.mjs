@@ -11,7 +11,7 @@ import SCHEMA from "../../config/schema.mjs";
 
 export class SettingError extends Error {}
 
-const USAGE = "usage: forge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
+const USAGE = "usage: dforge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
 
 function homeOf(env) {
   return env.HOME || os.homedir();
@@ -96,7 +96,7 @@ export function claudeSettingsPath(env = process.env) {
 }
 
 // Claude's user settings as far as they can be read: a file that cannot be
-// parsed is warned about and read as empty, so the forge keys still resolve.
+// parsed is warned about and read as empty, so the dforge keys still resolve.
 function claudeValues(env, warn) {
   try {
     return readFile(claudeSettingsPath(env)) ?? {};
@@ -174,7 +174,7 @@ function need(key) {
   return SCHEMA[key];
 }
 
-export function resolve(env = process.env, warn = message => process.stderr.write(`forge-config: ${message}\n`)) {
+export function resolve(env = process.env, warn = message => process.stderr.write(`dforge-config: ${message}\n`)) {
   const file = configPath(env);
   const data = readFile(file) ?? {};
   let claude;
@@ -250,7 +250,7 @@ export function importLegacy(env = process.env) {
   const options = readJson(claudeSettingsPath(env))?.pluginConfigs?.["dr-cockpit@darkraise"]?.options;
   if (options && typeof options === "object") {
     for (const [key, spec] of Object.entries(SCHEMA)) {
-      if (spec.target === "forge" && key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
+      if (spec.target === "dforge" && key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
     }
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -273,7 +273,7 @@ export function main(argv, env = process.env, out = process.stdout) {
   const [command, ...rest] = argv;
   try {
     // A script reading one setting must not be what creates the settings file.
-    if (!env.DR_FORGE_NO_IMPORT) importLegacy(env);
+    if (!env.DFORGE_NO_IMPORT) importLegacy(env);
     if (command === "get" && rest.length === 1 && rest[0] === "--json") {
       out.write(`${JSON.stringify(resolve(env))}\n`);
       return 0;
@@ -294,7 +294,7 @@ export function main(argv, env = process.env, out = process.stdout) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   } catch (error) {
-    process.stderr.write(`forge-config: ${error.message}\n`);
+    process.stderr.write(`dforge-config: ${error.message}\n`);
     return error instanceof SettingError ? 2 : 1;
   }
 }

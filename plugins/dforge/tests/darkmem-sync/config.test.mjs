@@ -18,10 +18,10 @@ test("no config file and no record keep both families local in the checkout", ()
   const stores = resolveStores({ cwd: repo, env });
   assert.equal(stores.sync, null);
   assert.match(stores.reason, /^darkmem is disabled/);
-  assert.deepEqual(stores.documents, { configured: "local", applied: "local", root: path.join(repo, "docs", "forge") });
+  assert.deepEqual(stores.documents, { configured: "local", applied: "local", root: path.join(repo, "docs", "dforge") });
   assert.deepEqual(stores.progress, {
     configured: "local", applied: "local",
-    ledgerRoot: path.join(repo, ".forge", "sdd"), latestFile: path.join(repo, ".forge", "handoff", "latest.md"),
+    ledgerRoot: path.join(repo, ".dforge", "sdd"), latestFile: path.join(repo, ".dforge", "handoff", "latest.md"),
   });
 });
 
@@ -30,10 +30,10 @@ test("a mapped repository applies each family as its record says", () => {
   const { env, mirror } = makeHome({ repo, url: "http://darkmem.test:8000/", stores: { documents: "darkmem", progress: "local" } });
   const stores = resolveStores({ cwd: repo, env });
   assert.equal(stores.reason, "project proj");
-  assert.deepEqual(stores.documents, { configured: "darkmem", applied: "darkmem", root: path.join(mirror, "forge") });
+  assert.deepEqual(stores.documents, { configured: "darkmem", applied: "darkmem", root: path.join(mirror, "dforge") });
   assert.deepEqual(stores.progress, {
     configured: "darkmem", applied: "local",
-    ledgerRoot: path.join(repo, ".forge", "sdd"), latestFile: path.join(repo, ".forge", "handoff", "latest.md"),
+    ledgerRoot: path.join(repo, ".dforge", "sdd"), latestFile: path.join(repo, ".dforge", "handoff", "latest.md"),
   });
   assert.deepEqual(stores.sync, {
     project: "proj", enabled: true, url: "http://darkmem.test:8000", apiKey: KEY, keyEnv: "DARKMEM_API_KEY",
@@ -54,11 +54,11 @@ test("the configured store: the mapping entry, then the global key, then darkmem
   ];
   for (const [global, entry, want] of rows) {
     const { env } = makeHome({ repo, config: mapped(repo, entry, global) });
-    env.DR_FORGE_DOCUMENT_STORE = want === "local" ? "darkmem" : "local";
+    env.DFORGE_DOCUMENT_STORE = want === "local" ? "darkmem" : "local";
     assert.equal(resolveStores({ cwd: repo, env }).documents.configured, want, JSON.stringify({ global, entry }));
   }
   const { env } = makeHome({ repo, config: mapped(repo, { progressSource: "local" }) });
-  env.DR_FORGE_PROGRESS_SOURCE = "darkmem";
+  env.DFORGE_PROGRESS_SOURCE = "darkmem";
   assert.equal(resolveStores({ cwd: repo, env }).progress.configured, "local");
 });
 
@@ -75,7 +75,7 @@ test("with no record both families are applied local, whatever the mirror's sync
   const repo = makeRepo();
   const { env, mirror } = makeHome({ repo, stores: null });
   write(path.join(mirror, ".sync-state.json"), JSON.stringify({
-    version: 1, documents: { "forge/specs/a.md": "0".repeat(64), "forge/handoff/p1.md": "0".repeat(64) },
+    version: 1, documents: { "dforge/specs/a.md": "0".repeat(64), "dforge/handoff/p1.md": "0".repeat(64) },
     ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [],
   }));
   assert.deepEqual(applied(resolveStores({ cwd: repo, env })), ["local", "local"]);
@@ -88,7 +88,7 @@ test("darkmemEnabled false configures both families local; a family in the mirro
   assert.equal(stores.reason, "darkmem is disabled (darkmemEnabled is false)");
   assert.deepEqual([stores.documents.configured, stores.progress.configured], ["local", "local"]);
   assert.deepEqual(applied(stores), ["darkmem", "local"]);
-  assert.equal(stores.documents.root, path.join(mirror, "forge"));
+  assert.equal(stores.documents.root, path.join(mirror, "dforge"));
   assert.equal(stores.sync.enabled, false);
   assert.equal(stores.sync.url, "http://127.0.0.1:9");
   const off = makeHome({ repo, enabled: "off", stores: { documents: "local", progress: "local" } });
@@ -133,7 +133,7 @@ test("a missing key keeps an applied-darkmem family on the mirror", () => {
   delete env.DARKMEM_API_KEY;
   const stores = resolveStores({ cwd: repo, env });
   assert.equal(stores.sync.apiKey, null);
-  assert.equal(stores.documents.root, path.join(mirror, "forge"));
+  assert.equal(stores.documents.root, path.join(mirror, "dforge"));
 });
 
 test("writeApplied records one family and keeps the other, with the project and mirror", () => {
@@ -154,8 +154,8 @@ test("a pre-2.0 checkout's directories and home are not read", () => {
   write(path.join(home, ".dforge", "config.json"), JSON.stringify({ darkmemEnabled: true }));
   const stores = resolveStores({ cwd: repo, env: { ...process.env, HOME: home } });
   assert.equal(stores.sync, null);
-  assert.equal(stores.documents.root, path.join(repo, "docs", "forge"));
-  assert.equal(stores.progress.ledgerRoot, path.join(repo, ".forge", "sdd"));
+  assert.equal(stores.documents.root, path.join(repo, "docs", "dforge"));
+  assert.equal(stores.progress.ledgerRoot, path.join(repo, ".dforge", "sdd"));
 });
 
 test("a linked worktree keeps local families in itself and latest.md in the primary checkout", () => {
@@ -165,9 +165,9 @@ test("a linked worktree keeps local families in itself and latest.md in the prim
   git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
   const stores = resolveStores({ cwd: worktree, env });
   assert.equal(stores.sync.project, "proj");
-  assert.equal(stores.documents.root, path.join(worktree, "docs", "forge"));
-  assert.equal(stores.progress.ledgerRoot, path.join(worktree, ".forge", "sdd"));
-  assert.equal(stores.progress.latestFile, path.join(repo, ".forge", "handoff", "latest.md"));
+  assert.equal(stores.documents.root, path.join(worktree, "docs", "dforge"));
+  assert.equal(stores.progress.ledgerRoot, path.join(worktree, ".dforge", "sdd"));
+  assert.equal(stores.progress.latestFile, path.join(repo, ".dforge", "handoff", "latest.md"));
 });
 
 test("an unmapped repository and no git repository are local", () => {
@@ -194,7 +194,7 @@ test("--mode prints each family's applied store and roots and the project; a Con
   const result = mode(repo, env);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, [
-    `documents\tlocal\t${path.join(repo, "docs", "forge")}`,
+    `documents\tlocal\t${path.join(repo, "docs", "dforge")}`,
     `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff", "latest.md")}`,
     "project\tproj",
     "",
@@ -214,7 +214,7 @@ test("--mode DIR resolves that checkout from anywhere; an unmapped one prints no
   const result = mode(elsewhere, ["--mode", repo]);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, [
-    `documents\tdarkmem\t${path.join(mirror, "forge")}`,
+    `documents\tdarkmem\t${path.join(mirror, "dforge")}`,
     `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff", "latest.md")}`,
     "project\tproj",
     "",
@@ -246,14 +246,14 @@ test("--mode in a submodule falls back to the worktree for latest.md", () => {
   const sub = path.join(outer, "sub");
   const result = spawnSync(process.execPath, [MODULE, "--mode"], { cwd: sub, env: makeHome({ repo: sub }).env, encoding: "utf8", timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.split("\n")[1].split("\t")[3], path.join(sub, ".forge", "handoff", "latest.md"));
+  assert.equal(result.stdout.split("\n")[1].split("\t")[3], path.join(sub, ".dforge", "handoff", "latest.md"));
 });
 
 test("the run key prefers the declared id, then the session record, then a day key", () => {
   const repo = makeRepo();
   const { home, env } = makeHome({ repo });
   assert.equal(runKey({ cwd: repo, env }), "sess-1");
-  delete env.DR_FORGE_SESSION_ID;
+  delete env.DFORGE_SESSION_ID;
   const now = new Date("2026-09-24T10:00:00Z");
   assert.equal(runKey({ cwd: repo, env, now }), `codex:${os.hostname()}:2026-09-24`);
   const sessions = path.join(home, ".claude", "dforge", "sessions");
@@ -266,5 +266,5 @@ test("the pre-2.0 session id variable no longer declares the run", () => {
   const cwd = makeRepo();
   const HOME = scratch("dms-home-");
   assert.match(runKey({ cwd, env: { HOME, DR_SUPERPOWERS_SESSION_ID: "old-1" } }), /^codex:/);
-  assert.equal(runKey({ cwd, env: { HOME, DR_FORGE_SESSION_ID: "new-1" } }), "new-1");
+  assert.equal(runKey({ cwd, env: { HOME, DFORGE_SESSION_ID: "new-1" } }), "new-1");
 });

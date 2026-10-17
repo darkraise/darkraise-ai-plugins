@@ -15,7 +15,7 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
 ## Steps
 
 1. **Orient in one call.** Run `scripts/repo-audit`
-   (see using-forge §Session Budget). It gives branch and HEAD, worktrees, dirty files, plans with
+   (see using-dforge §Session Budget). It gives branch and HEAD, worktrees, dirty files, plans with
    ledgers, the handoff file, and recent commits.
 2. **Route out if execution is live.** If a ledger has incomplete tasks and no
    task's last line is `BLOCKED`, name the plan and the task reached and route
@@ -39,7 +39,7 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
      item register answers that. A ledger showing every task complete is not a
      completion signal either — the work may be unmerged.
      Either prefix names the same document: `docs/superpowers/<rest>` in a
-     ledger, a `completed.md` entry or a register cell matches `docs/forge/<rest>`.
+     ledger, a `completed.md` entry or a register cell matches `docs/dforge/<rest>`.
    - **Not started** — neither, and only when `completed.md` exists. "No ledger"
      never means "never ran": dforge:finishing-a-development-branch
      deletes the workspace on integration.

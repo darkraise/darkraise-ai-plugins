@@ -74,7 +74,7 @@ A fresh session reloads only its baseline plus these files. The numbers are in
      `Task N: complete`, a fix-round line, or an assigned line whose run is
      over, per step 0). Update
      `<ledger dir>/handoff.md` (below; `<ledger dir>` per
-     using-forge §Session Budget).
+     using-dforge §Session Budget).
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
      file. It is the authority.
    - Unplanned work (a change designed in chat, or a punch list, with no plan
@@ -104,12 +104,12 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 
    In a design phase, `State` names the draft instead of a plan and ledger,
    on the line ``- Draft: `<spec path>` `` in place of the `- Plan:` line, where
-   `<spec path>` is the draft's name (`forge-path name`). darkmem files the
+   `<spec path>` is the draft's name (`dforge-path name`). darkmem files the
    checkpoint under the workstream either line names.
    For unplanned work, `State` lists each item with its state: implemented
    and uncommitted, committed, awaiting feedback (with the link), or
    unscoped.
-4. **Run `scripts/next-step`** (see using-forge §Session Budget):
+4. **Run `scripts/next-step`** (see using-dforge §Session Budget):
    - Execution: `scripts/next-step PLAN_FILE`.
    - Design phase: `scripts/next-step --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
      for example `--next "Write the implementation plan with dforge:writing-plans."`

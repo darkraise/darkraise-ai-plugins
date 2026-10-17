@@ -10,8 +10,8 @@ export const WARN_AT = 0.8
  * (reference/session-budget.md): the compaction point minus one task's worst
  * growth, min(autoCompactWindow, window) × 93% − 140,000. Small windows, where
  * that comes out near zero, hold a fifth of the window. `configured` is
- * handoffTokens as the settings resolve it, where DR_FORGE_BUDGET already
- * overrides the file; `env` is a raw DR_FORGE_BUDGET for a caller without them.
+ * handoffTokens as the settings resolve it, where DFORGE_BUDGET already
+ * overrides the file; `env` is a raw DFORGE_BUDGET for a caller without them.
  */
 export function budgetFor(configured: number, env: string | undefined, window: number, compactWindow?: number): number {
   if (configured > 0) return Math.round(configured)
@@ -115,7 +115,7 @@ export function isGitWriteTool(tool: string): boolean {
 }
 
 /** Whether a subagent type or skill name belongs to dforge. */
-export function isForge(name: string): boolean {
+export function isDforge(name: string): boolean {
   return name.startsWith('dforge:')
 }
 
@@ -504,13 +504,13 @@ export function isAbsolutePath(path: string): boolean {
  * root while documents are in darkmem, else under each checkout's own docs
  * directory; any other name under each checkout. The session's checkout comes
  * first. A ledger written before 3.0.0 cites its plan as
- * docs/superpowers/<rest>, which still names docs/forge/<rest>: ledgers are
+ * docs/superpowers/<rest>, which still names docs/dforge/<rest>: ledgers are
  * never rewritten.
  */
 export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
   if (isAbsolutePath(plan)) return [plan]
   const name = plan.replace(/^\.\//, '')
-  const doc = /^docs\/(?:forge|superpowers)(?:\/(.*))?$/.exec(name)
+  const doc = /^docs\/(?:dforge|superpowers)(?:\/(.*))?$/.exec(name)
   const under = (dir: string) => (doc?.[1] ? `${dir}/${doc[1]}` : dir)
   if (doc && docs?.store === 'darkmem') return [under(docs.root)]
   const seen = new Set<string>()

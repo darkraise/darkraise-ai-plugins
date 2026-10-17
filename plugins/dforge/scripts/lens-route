@@ -18,7 +18,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
-. "$HERE/lib/forge-env.sh"
+. "$HERE/lib/dforge-env.sh"
 LENSES="$(cd "$HERE/../criteria/lenses" 2>/dev/null && pwd)"
 SEAT=dforge:judge-sonnet-high
 
@@ -88,7 +88,7 @@ case $1 in
     base=$2 head=$3
     git rev-parse --verify --quiet "$base^{commit}" >/dev/null || die "bad BASE: $base"
     git rev-parse --verify --quiet "$head^{commit}" >/dev/null || die "bad HEAD: $head"
-    cap=${DR_FORGE_LENS_CAP:-$(forge_setting lensCap 4)}
+    cap=${DFORGE_LENS_CAP:-$(dforge_setting lensCap 4)}
     [[ "$cap" =~ ^[0-9]$ ]] || cap=4
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
     changed=$(git diff --name-only "$base..$head")

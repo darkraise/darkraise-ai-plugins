@@ -9,7 +9,7 @@ stores_home() {
   common=$(git -C "$2" rev-parse --path-format=absolute --git-common-dir)
   top=$(git -C "$(dirname "$common")" rev-parse --show-toplevel)
   dir="$home/.dforge"
-  mkdir -p "$dir/mirror/$project/forge" "$dir/mirror/$project/work/sdd" "$dir/mirror/$project/work/handoff"
+  mkdir -p "$dir/mirror/$project/dforge" "$dir/mirror/$project/work/sdd" "$dir/mirror/$project/work/handoff"
   printf '{"darkmemEnabled":true,"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"%s"}}}}\n' "$top" "$project" > "$dir/config.json"
   printf '{"%s":{"documents":"%s","progress":"%s"}}\n' "$top" "$4" "$5" > "$dir/stores.json"
   printf '%s\n' "$dir/mirror/$project"

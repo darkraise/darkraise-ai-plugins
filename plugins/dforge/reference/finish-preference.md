@@ -7,7 +7,7 @@ dforge:finishing-a-development-branch carries it out when its menu goes
 unanswered for the configured wait. An answer to the menu inside that wait always
 wins over the choice made here.
 
-`scripts/finish-choice` keeps the choice (see using-forge §Session
+`scripts/finish-choice` keeps the choice (see using-dforge §Session
 Budget). Pass `--plan PLAN_FILE` in a plan run; leave it out for work done
 without a plan.
 
@@ -20,7 +20,7 @@ there is no base, with no menu and no wake.
 
 ## The settings
 
-Two settings (`scripts/forge-config`, or the cockpit's Finish tab) shape this:
+Two settings (`scripts/dforge-config`, or the cockpit's Finish tab) shape this:
 
 - `finishAction`: `ask`, the default, keeps the question below. With `merge`,
   `pr`, `keep` or `wait`, `scripts/finish-choice get` records and prints that
@@ -30,7 +30,7 @@ Two settings (`scripts/forge-config`, or the cockpit's Finish tab) shape this:
   when the wake fires, as finishing Step 3 does.
 - `finishTimeout`: how many minutes the menu waits, 30 minutes by default.
   `scripts/finish-choice arm` uses it; wherever this file says `<N> minutes`,
-  N is `bash <plugin-root>/scripts/forge-config get finishTimeout`.
+  N is `bash <plugin-root>/scripts/dforge-config get finishTimeout`.
 
 ## When to ask
 

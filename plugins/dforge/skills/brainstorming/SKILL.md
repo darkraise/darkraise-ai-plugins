@@ -25,7 +25,7 @@ Before your first question, classify the request and say it in one
 line — `Process: <spike|bounded|architectural>, <inline|subagent> —
 <trigger | no trigger>` — so your human partner can override it. The mode
 slot is your expectation only; the plan's Execution line decides. The
-triggers are the seven in dforge:using-forge's Process Depth:
+triggers are the seven in dforge:using-dforge's Process Depth:
 a new project or subsystem; an interface that something outside its own
 files depends on changes; the files touched cannot be enumerated after
 exploring; a load-bearing approach question is open; irreducible risk
@@ -58,7 +58,7 @@ stop, say so, and step up. Nothing downgrades mid-task.
 
 The workflow settings in force arrive as one line at session start, `dforge
 settings in force (…): key=value; …`. With no such line in context, run
-`scripts/forge-config workflow` once before your first question; it prints the
+`scripts/dforge-config workflow` once before your first question; it prints the
 same line, or nothing when every setting is at its default. A key the line does
 not name is at its default. Your human partner's own instructions outrank a
 setting, and no setting removes the approval gate.
@@ -385,7 +385,7 @@ the spec is committed; in an auto run it goes up the ruling ladder instead
 Unless `autoRun=off` (see Settings) or this is a Codex host, ask this once, as
 its own message, right after the Draft acceptance step and before you
 write the spec. `<finish>` follows the `finishAction`
-setting (`scripts/forge-config get finishAction`): `merge` reads "merge to
+setting (`scripts/dforge-config get finishAction`): `merge` reads "merge to
 <the current branch>", `pr` reads "open a pull request", and `keep`, `ask` and
 `wait` read "keep the branch".
 
@@ -471,7 +471,7 @@ Wait for the user's response. If they request changes, make them and run one new
 
 **Implementation:**
 
-- Run `scripts/context-size --plan` (see using-forge §Session Budget).
+- Run `scripts/context-size --plan` (see using-dforge §Session Budget).
   It measures against 150% of the task budget, capped at the final-phase
   limit: writing the plan here costs less than a fresh session's baseline
   and reload. On exit 5 (handoff), invoke dforge:handoff with

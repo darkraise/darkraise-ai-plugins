@@ -199,7 +199,7 @@ present "project-state: the sync points section" "$STATE" "## darkmem sync point
 present "project-state: stop points push" "$STATE" 'Run `bash <plugin-root>/scripts/darkmem-sync push` at each stop point'
 present "project-state: the hooks reconcile, pull and push" "$STATE" 'runs `darkmem-sync reconcile`, then `pull`'
 present "project-state: promotion uses memory_add" "$STATE" 'file each with `memory_add`,'
-present "project-state: promotion keys on the mapping" "$STATE" '`forge-path project` prints a project (darkmem is on and the repository'
+present "project-state: promotion keys on the mapping" "$STATE" '`dforge-path project` prints a project (darkmem is on and the repository'
 present "project-state: promotion falls back to a notes file" "$STATE" '`<docs>/notes/<YYYY-MM-DD>-facts.md`'
 present "project-state: the facts note is committed, so distilling-docs can absorb it" "$STATE" 'commit it in a `docs(notes): …`'
 for skill in subagent-driven-development executing-plans; do

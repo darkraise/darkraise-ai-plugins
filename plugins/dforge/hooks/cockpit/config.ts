@@ -12,7 +12,7 @@ export type SettingSpec = {
   label: string
   title: string
   description: string
-  target: 'forge' | 'claude'
+  target: 'dforge' | 'claude'
   env?: string
   min?: number
   max?: number
@@ -42,7 +42,7 @@ export function isValidSetting(spec: SettingSpec, value: unknown): value is Sett
     case 'boolean':
       return typeof value === 'boolean'
     case 'number':
-      // A number setting is whole, as scripts/lib/forge-config.mjs holds it too.
+      // A number setting is whole, as scripts/lib/dforge-config.mjs holds it too.
       if (typeof value !== 'number' || !Number.isInteger(value)) return false
       // A floor leaves 0 as the one value below it: "unset".
       if (spec.floor !== undefined) return value === 0 || (value >= spec.floor && (spec.max === undefined || value <= spec.max))
@@ -72,7 +72,7 @@ export function settingFromText(spec: SettingSpec, text: string): SettingValue |
 }
 
 /**
- * Every setting in force. A forge key: the environment variable it names, then the file, then the default.
+ * Every setting in force. A dforge key: the environment variable it names, then the file, then the default.
  * A Claude key: Claude's own settings as the engine merged them, then the default.
  */
 export function resolveSettings(
@@ -108,7 +108,7 @@ export function settingProblems(
     if (raw !== undefined && raw !== '' && settingFromText(spec, raw) === undefined) {
       problems.push(`${spec.env}=${raw} is not a valid ${key}; ignored`)
     }
-    if (spec.target === 'forge' && Object.prototype.hasOwnProperty.call(file, key) && !isValidSetting(spec, file[key])) {
+    if (spec.target === 'dforge' && Object.prototype.hasOwnProperty.call(file, key) && !isValidSetting(spec, file[key])) {
       problems.push(`${key} in ~/.dforge/config.json is not valid; ignored`)
     }
   }
@@ -133,7 +133,7 @@ export function importedSettings(schema: Schema, claudeSettings: unknown): Setti
   const options = objectAt(objectAt(objectAt(claudeSettings, 'pluginConfigs'), 'dr-cockpit@darkraise'), 'options')
   for (const [key, spec] of Object.entries(schema)) {
     const value = options?.[key]
-    if (spec.target === 'forge' && isValidSetting(spec, value) && value !== spec.default) file[key] = value
+    if (spec.target === 'dforge' && isValidSetting(spec, value) && value !== spec.default) file[key] = value
   }
   return file
 }

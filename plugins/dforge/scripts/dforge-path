@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# dforge-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG | latest | store | name PATH | project
+# Where this repository's dforge files live: the state directory (.dforge/,
+# always in the checkout), the docs root and a
+# plan's ledger directory and latest.md (in the checkout or in the darkmem
+# mirror, as documentStore and progressSource apply them), each family's
+# applied store, the repository-relative name of a path, or the darkmem
+# project the repository syncs with (exit 1 when darkmem is off or the
+# repository is unmapped).
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/lib/roots.sh"
+usage() { echo "usage: dforge-path state|docs [RELATIVE] | ledger SLUG | latest | store | name PATH | project" >&2; exit 2; }
+[ $# -ge 1 ] || usage
+[ "$1" = state ] || dforge_stores_init
+case $1 in
+  state)
+    [ $# -le 2 ] || usage
+    dir=$(dforge_dir state "$(git rev-parse --show-toplevel 2>/dev/null || pwd)") || exit 2
+    ;;
+  docs) [ $# -le 2 ] || usage; dir=$(dforge_docs_root) ;;
+  ledger) [ $# -eq 2 ] || usage; dforge_ledger_dir "$2"; exit 0 ;;
+  latest) [ $# -eq 1 ] || usage; dforge_latest_file; exit 0 ;;
+  store) [ $# -eq 1 ] || usage; printf 'documents %s\nprogress %s\n' "$(dforge_docs_store)" "$(dforge_progress_store)"; exit 0 ;;
+  name) [ $# -eq 2 ] || usage; dforge_name "$2"; exit 0 ;;
+  project) [ $# -eq 1 ] || usage; dforge_project; exit $? ;;
+  *) usage ;;
+esac
+if [ $# -eq 2 ]; then printf '%s/%s\n' "$dir" "$2"; else printf '%s\n' "$dir"; fi

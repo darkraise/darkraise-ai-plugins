@@ -300,7 +300,7 @@ uncapped. For the final review, read each `criteria/lenses/*.md` `Applies:`
 line against the branch diff and run the matching lenses in priority order
 (security, silent-failures, test-quality, the `lang-*` lenses
 alphabetically, type-design, docs-comments), at most `lensCap` of them
-(`scripts/forge-config get lensCap`; `0` runs none), and name the rest as
+(`scripts/dforge-config get lensCap`; `0` runs none), and name the rest as
 skipped in the report.
 
 ## Claude plans

@@ -63,7 +63,7 @@ present "darkmem: follows the document store" "$SKILL" 'prints `documents darkme
 present "darkmem: eligible means synced and unchanged" "$SKILL" 'bash <plugin-root>/scripts/darkmem-sync revision <name>'
 present "darkmem: Source cites the revision" "$SKILL" '`<name>@r<id>`'
 present "darkmem: two pushes" "$SKILL" 'The two commits become two pushes.'
-present "darkmem: deletions are archived" "$SKILL" 'forge/archive/<stamp>/'
+present "darkmem: deletions are archived" "$SKILL" 'dforge/archive/<stamp>/'
 present "darkmem: restore replaces git revert" "$SKILL" 'bash <plugin-root>/scripts/darkmem-sync restore <name>'
 present "darkmem: a rewrite reads the restored source" "$SKILL" 'restore <name>` brings the newest archived copy back'
 present "darkmem: a restored source is quoted only at the cited revision" "$SKILL" 'only when the `@r<id>` it prints equals the cited one'

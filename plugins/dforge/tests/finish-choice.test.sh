@@ -30,9 +30,9 @@ T0=1760000000
 
 # --- a plan run ---
 FINISH_CHOICE_NOW=$T0 fc set pr --base main --plan docs/plans/p.md >/dev/null
-file=".forge/sdd/p/finish.json"
+file=".dforge/sdd/p/finish.json"
 check "set: beside the plan's ledger" "$(jq -r '[.action, .base, .chosenAt] | join(" ")' "$file")" "pr main $T0"
-check "set: git-ignored" "$(git status --porcelain --untracked-files=all | grep -c forge)" "0"
+check "set: git-ignored" "$(git status --porcelain --untracked-files=all | grep -c dforge)" "0"
 fc set later --plan docs/plans/p.md >/dev/null 2>&1
 check "set: refuses an unknown action" "$?" "2"
 
@@ -63,7 +63,7 @@ check "arm: nothing to arm once answered" "$?" "3"
 
 # --- wait, and work without a plan ---
 fc set wait >/dev/null
-check "no plan: under .forge/sdd" "$(jq -r .action .forge/sdd/finish.json)" "wait"
+check "no plan: under .dforge/sdd" "$(jq -r .action .dforge/sdd/finish.json)" "wait"
 fc arm >/dev/null 2>&1
 check "arm: wait arms nothing" "$?" "3"
 fc clear
@@ -81,16 +81,16 @@ printf '{"finishAction":"merge","finishTimeout":45}\n' > "$HOME/.dforge/config.j
 out=$(FINISH_CHOICE_NOW=$T0 fc get --plan docs/plans/s.md)
 check "setting: get exits 0" "$?" "0"
 check "setting: get records the configured action" \
-  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .forge/sdd/s/finish.json)" "merge null setting $T0"
+  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .dforge/sdd/s/finish.json)" "merge null setting $T0"
 has "setting: get prints the choice" "$out" '"action": "merge"'
 FINISH_CHOICE_NOW=$T0 fc arm --plan docs/plans/s.md >/dev/null
-check "setting: arm waits finishTimeout minutes" "$(jq -r '.dueAt - .armedAt' .forge/sdd/s/finish.json)" "2700"
+check "setting: arm waits finishTimeout minutes" "$(jq -r '.dueAt - .armedAt' .dforge/sdd/s/finish.json)" "2700"
 FINISH_CHOICE_NOW=$T0 fc arm --minutes 10 --plan docs/plans/s.md >/dev/null
-check "setting: --minutes still overrides" "$(jq -r '.dueAt - .armedAt' .forge/sdd/s/finish.json)" "600"
+check "setting: --minutes still overrides" "$(jq -r '.dueAt - .armedAt' .dforge/sdd/s/finish.json)" "600"
 fc set keep --plan docs/plans/r.md >/dev/null
 check "a recorded choice wins over the setting" "$(fc get --plan docs/plans/r.md | jq -r '[.action, (.source // "asked")] | join(" ")')" "keep asked"
 FINISH_CHOICE_NOW=$T0 fc arm --plan docs/plans/a.md >/dev/null
-check "arm with nothing chosen records the setting first" "$(jq -r '[.action, .source] | join(" ")' .forge/sdd/a/finish.json)" "merge setting"
+check "arm with nothing chosen records the setting first" "$(jq -r '[.action, .source] | join(" ")' .dforge/sdd/a/finish.json)" "merge setting"
 printf '{"finishAction":"wait"}\n' > "$HOME/.dforge/config.json"
 check "setting wait: recorded" "$(fc get --plan docs/plans/w.md | jq -r .action)" "wait"
 fc arm --plan docs/plans/w.md >/dev/null 2>&1

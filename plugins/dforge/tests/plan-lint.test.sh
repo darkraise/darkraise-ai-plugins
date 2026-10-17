@@ -529,9 +529,9 @@ check "CRLF plan: exit 0" "$status" "0"
 # --- item registers ---
 LREPO="$TMP/lint-registers"
 git init -q -b main "$LREPO"
-mkdir -p "$LREPO/docs/forge/plans" "$LREPO/docs/forge/specs" "$LREPO/docs/forge/registers"
-: > "$LREPO/docs/forge/specs/s-design.md"
-cat > "$LREPO/docs/forge/registers/r.md" <<'REG'
+mkdir -p "$LREPO/docs/dforge/plans" "$LREPO/docs/dforge/specs" "$LREPO/docs/dforge/registers"
+: > "$LREPO/docs/dforge/specs/s-design.md"
+cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** review 2026-09-20
@@ -544,7 +544,7 @@ cat > "$LREPO/docs/forge/registers/r.md" <<'REG'
 REG
 
 write_plan() { # write_plan <program-suffix> <items-line>
-  cat > "$LREPO/docs/forge/plans/p.md" <<PLAN
+  cat > "$LREPO/docs/dforge/plans/p.md" <<PLAN
 # P Implementation Plan
 
 **Goal:** g
@@ -611,10 +611,10 @@ OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 has "plan-lint: 'last' with another sub-project's open row is an error" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
-# Either docs prefix names this plan: an Assigned cell spelled docs/forge/ is
+# Either docs prefix names this plan: an Assigned cell spelled docs/dforge/ is
 # its row (spec §7.1).
 mkdir -p "$TMP/name-key-home"
-cat > "$LREPO/docs/forge/registers/r.md" <<'REG'
+cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** review 2026-09-20
@@ -622,7 +622,7 @@ cat > "$LREPO/docs/forge/registers/r.md" <<'REG'
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | Covered | docs/forge/plans/p.md | - | planned | - |
+| 1 | Covered | docs/dforge/plans/p.md | - | planned | - |
 | 2 | Someone else's | C2 | - | planned | - |
 REG
 write_plan "next: Two" ""
@@ -635,7 +635,7 @@ has "plan-lint: 'last' leaves out this plan's row under the other prefix" "$OUT"
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
 # A plan with no covering register lints exactly as it did before.
-rm "$LREPO/docs/forge/registers/r.md"
+rm "$LREPO/docs/dforge/registers/r.md"
 write_plan "last" ""
 OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
@@ -962,10 +962,10 @@ has "waves: the integration check is required" "$out" "ERROR header: a waves pla
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/forge/specs" "$M/forge/plans"
-printf '# Spec\n' > "$M/forge/specs/s.md"
-printf '# P\n\n**Spec:** docs/forge/specs/s.md\n\n### Task 1: One\n' > "$M/forge/plans/p.md"
-out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/forge/plans/p.md --no-probe 2>&1)
+mkdir -p "$M/dforge/specs" "$M/dforge/plans"
+printf '# Spec\n' > "$M/dforge/specs/s.md"
+printf '# P\n\n**Spec:** docs/dforge/specs/s.md\n\n### Task 1: One\n' > "$M/dforge/plans/p.md"
+out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
 lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"
 has "darkmem: the lint ran to its summary" "$out" " errors, "

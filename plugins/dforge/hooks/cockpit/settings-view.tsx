@@ -95,7 +95,7 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
       <Text key={`set-${row.key}-value`} dimColor={row.shown === ''}>{`${row.shown || '(empty)'} `}</Text>,
       edit || (
         <Text key={`set-${row.key}-cli`} dimColor>
-          {`forge-config set ${row.key}`}
+          {`dforge-config set ${row.key}`}
         </Text>
       ),
     ]

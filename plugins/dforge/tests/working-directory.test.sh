@@ -35,8 +35,8 @@ run() { # run <dir> <script> <args...>; sets out, err and status
   out=$(cd "$1" && bash "$S/$2" "${@:3}" 2>"$TMP/err"); status=$?
   err=$(cat "$TMP/err")
 }
-state() { # state <dir> — yes when a .forge directory exists there
-  if [ -d "$1/.forge" ]; then echo yes; else echo no; fi
+state() { # state <dir> — yes when a .dforge directory exists there
+  if [ -d "$1/.dforge" ]; then echo yes; else echo no; fi
 }
 
 X="$TMP/x" Y="$TMP/y"
@@ -83,7 +83,7 @@ check "worktree: no state in the worktree" "$(state "$WT")" "no"
 check "worktree: no state in the primary checkout" "$(state "$X")" "no"
 run "$WT" sdd-workspace docs/plan.md
 check "worktree: its own plan passes" "$status" "0"
-has "worktree: the workspace is in the worktree" "$out" "/wt/.forge/sdd/plan"
+has "worktree: the workspace is in the worktree" "$out" "/wt/.dforge/sdd/plan"
 git -C "$X" worktree remove --force "$WT" >/dev/null 2>&1
 
 # --- the same repository keeps working ---
@@ -103,10 +103,10 @@ check "same repository: next-step exits 0" "$status" "0"
 # every script a run takes it through, from lint to the next-step block.
 U="$TMP/r3 é x" UP="docs/a b/ñ/plan.md"
 git init -q "$U"
-mkdir -p "$U/docs/a b/ñ" "$U/docs/forge/registers"
+mkdir -p "$U/docs/a b/ñ" "$U/docs/dforge/registers"
 printf '# Spec\n' > "$U/docs/a b/ñ/spec.md"
 printf '# Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/a b/ñ/spec.md`\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Files:**\n- Create: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nPrint `hello NAME`.\n' > "$U/$UP"
-printf '# R\n\n**Source:** s\n**Covers:** `docs/a b/ñ/spec.md`\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Spaced item | - | - | open | - |\n' > "$U/docs/forge/registers/spaced.md"
+printf '# R\n\n**Source:** s\n**Covers:** `docs/a b/ñ/spec.md`\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Spaced item | - | - | open | - |\n' > "$U/docs/dforge/registers/spaced.md"
 git -C "$U" add -A && git -C "$U" commit -qm plan
 run "$U" plan-lint "$UP" --no-probe
 check "spaced path: plan-lint finds the spec" "$(grep '^ERROR' <<<"$out")" ""
@@ -136,7 +136,7 @@ check "no skill or reference re-explains where the plugin root is" \
 check "the compaction snapshot names the contract" \
   "$(grep -cF 'plugin-root path, with the working directory inside the project;' "$P/scripts/lib/snapshot.sh")" "1"
 check "nine skill and reference files cite the contract" \
-  "$(grep -rlF '(see using-forge §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "9"
+  "$(grep -rlF '(see using-dforge §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "9"
 
 # A script that execs a sibling depends on the executable bit, which a Windows
 # checkout cannot carry: core.filemode is false there, so a new script lands as
@@ -152,12 +152,12 @@ git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 STOP=$(git -C "$SR" rev-parse --show-toplevel)
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/forge/plans"
-printf '# Mirror plan\n\n### Task 1: One\n' > "$M/forge/plans/mp.md"
+mkdir -p "$M/dforge/plans"
+printf '# Mirror plan\n\n### Task 1: One\n' > "$M/dforge/plans/mp.md"
 check "sdd-workspace: a mirror plan by name gets a local workspace" \
-  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/forge/plans/mp.md)" "$STOP/.forge/sdd/mp"
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/dforge/plans/mp.md)" "$STOP/.dforge/sdd/mp"
 check "sdd-workspace: a mirror plan by path" \
-  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/forge/plans/mp.md")" "$STOP/.forge/sdd/mp"
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/dforge/plans/mp.md")" "$STOP/.dforge/sdd/mp"
 
 # --- a ConfigError stops a plan reader instead of dropping its amendments ---
 BH="$TMP/bad-home"; mkdir -p "$BH/.dforge"

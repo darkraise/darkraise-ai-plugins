@@ -36,7 +36,7 @@ usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R
 [ $# -ge 2 ] || usage
 plan=$(plan_locate "$1"); shift
 [ -f "$plan" ] || die "no such plan file: $plan"
-forge_stores_init "$(_plan_ctx "$plan")"
+dforge_stores_init "$(_plan_ctx "$plan")"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

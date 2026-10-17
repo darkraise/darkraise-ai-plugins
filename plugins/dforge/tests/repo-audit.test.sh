@@ -23,29 +23,29 @@ export HOME="$TMP/home"
 mkdir -p "$HOME"
 export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DR_FORGE_BUDGET DR_FORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
+unset DFORGE_BUDGET DFORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
 mkdir -p "$REPO/docs"
 printf '# Plan\n\n### Task 1: One\n\n### Task 2: Two\n\n### Task 3: Three\n' > "$REPO/docs/plan.md"
 printf '# Project\n\nNo compaction notes.\n' > "$REPO/CLAUDE.md"
-printf '.forge/\n' > "$REPO/.gitignore"
+printf '.dforge/\n' > "$REPO/.gitignore"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
 ROOT="$(git -C "$REPO" rev-parse --show-toplevel)"
 
 WT="$TMP/wt"
 git -C "$REPO" worktree add -q -b feat "$WT"
 WT_ROOT="$(git -C "$WT" rev-parse --show-toplevel)"
-WS="$WT/.forge/sdd/plan"
+WS="$WT/.dforge/sdd/plan"
 mkdir -p "$WS"
 printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\nTask 2: fix round 1/5 (1 addressed, 1 open — x)\n' > "$WS/progress.md"
 printf '# Handoff notes\n' > "$WS/handoff.md"
 
-mkdir -p "$REPO/.forge/handoff"
+mkdir -p "$REPO/.dforge/handoff"
 printf '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/plan.md`: 1 of 3 tasks complete.\n**Next:** Resume at Task 2 (Two).\n' \
-  > "$REPO/.forge/handoff/latest.md"
-touch -d '1 hour ago' "$REPO/.forge/handoff/latest.md"
+  > "$REPO/.dforge/handoff/latest.md"
+touch -d '1 hour ago' "$REPO/.dforge/handoff/latest.md"
 printf 'later\n' > "$REPO/later.txt"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm second
 
@@ -95,8 +95,8 @@ has "audit: the section exists" "$OUT" "## Item registers"
 SECTION=$(sed -n '/## Item registers/,/^$/p' <<<"$OUT")
 has "audit: no registers says so" "$SECTION" "- none"
 
-mkdir -p "$REPO/docs/forge/registers"
-cat > "$REPO/docs/forge/registers/r.md" <<'REG'
+mkdir -p "$REPO/docs/dforge/registers"
+cat > "$REPO/docs/dforge/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** owner list
@@ -112,19 +112,19 @@ OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
 has "audit: counts open rows" "$OUT" "2 open"
 has "audit: counts rows awaiting the owner" "$OUT" "1 awaiting your check"
 has "audit: counts the whole register" "$OUT" "of 3 rows"
-has "audit: names the register" "$OUT" "docs/forge/registers/r.md"
+has "audit: names the register" "$OUT" "docs/dforge/registers/r.md"
 
 # --- roadmap ---
 OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
 SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
 has "audit: the roadmap section exists" "$OUT" "## Roadmap"
 has "audit: no roadmap says so" "$SECTION" "- none"
-mkdir -p "$REPO/docs/forge/specs" "$REPO/docs/forge/registers"
-: > "$REPO/docs/forge/specs/shop-design.md"
+mkdir -p "$REPO/docs/dforge/specs" "$REPO/docs/dforge/registers"
+: > "$REPO/docs/dforge/specs/shop-design.md"
 printf '# M1 — item register\n\n**Source:** roadmap\n**Covers:** docs/superpowers/specs/shop-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Search | - | - | open | - |\n' \
-  > "$REPO/docs/forge/registers/m1.md"
+  > "$REPO/docs/dforge/registers/m1.md"
 printf '# Shop — roadmap\n\n**Product:** a shop\n**Spec:** docs/superpowers/specs/shop-design.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |\n' \
-  > "$REPO/docs/forge/roadmap.md"
+  > "$REPO/docs/dforge/roadmap.md"
 OUT=$(cd "$REPO" && bash "$SCRIPT" 2>&1)
 SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
 has "audit: lists the milestone" "$SECTION" "- M1 MVP — open — 0 of 1 epics resolved; open: #1 Search (open)"
@@ -144,11 +144,11 @@ has "darkmem: its status" "$out" "**Status:** mirror status"
 
 # --- a plan with lettered headings has an unknown task count, not zero ---
 printf '# Plan\n\n### Task A1: One\n' > "$REPO/docs/lettered.md"
-mkdir -p "$REPO/.forge/sdd/lettered"
-printf '# SDD ledger — plan: docs/lettered.md\n' > "$REPO/.forge/sdd/lettered/progress.md"
+mkdir -p "$REPO/.dforge/sdd/lettered"
+printf '# SDD ledger — plan: docs/lettered.md\n' > "$REPO/.dforge/sdd/lettered/progress.md"
 out=$(cd "$REPO" && bash "$SCRIPT")
 has "lettered: the task total is unknown" "$out" "- \`docs/lettered.md\` in \`$ROOT\`: 0 of ? tasks complete"
-rm -rf "$REPO/docs/lettered.md" "$REPO/.forge/sdd/lettered"
+rm -rf "$REPO/docs/lettered.md" "$REPO/.dforge/sdd/lettered"
 
 # --- a pre-3.0 directory is named with the command that moves it ---
 check "3.0 layout: no migration line" "$(grep -c 'pre-3.0 layout' <<<"$out")" "0"
@@ -158,7 +158,7 @@ W2_ROOT="$(git -C "$W2" rev-parse --show-toplevel)"
 mkdir -p "$REPO/.superpowers" "$W2/docs/superpowers"
 out=$(cd "$W2" && bash "$SCRIPT" 2>&1)
 has "pre-3.0: the worktree's and the primary's directories, and the command" "$out" \
-  "- dforge: this repository still uses the pre-3.0 layout ($ROOT/.superpowers, $W2_ROOT/docs/superpowers); run bash $(cd "$HERE/../scripts" && pwd)/forge-migrate"
+  "- dforge: this repository still uses the pre-3.0 layout ($ROOT/.superpowers, $W2_ROOT/docs/superpowers); run bash $(cd "$HERE/../scripts" && pwd)/dforge-migrate"
 git -C "$REPO" worktree remove --force "$W2" >/dev/null 2>&1
 rm -rf "$REPO/.superpowers"
 

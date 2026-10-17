@@ -42,7 +42,7 @@ test("status in darkmem mode names the mirror and its local changes", async () =
     `darkmem-sync: project proj at http://127.0.0.1:9; mirror ${mirror}`,
     "documents: configured darkmem, applied darkmem",
     "progress: configured darkmem, applied darkmem",
-    "new: forge/specs/a.md",
+    "new: dforge/specs/a.md",
     "unpushed: sdd/p1/progress.md (52 bytes, never synced)",
     "",
   ].join("\n"));
@@ -85,7 +85,7 @@ test("status names a local family as not synced and leaves its files out", async
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /^documents: configured darkmem, applied darkmem$/m);
   assert.match(result.stdout, /^progress: configured darkmem, applied local, not synced$/m);
-  assert.match(result.stdout, /^new: forge\/specs\/a\.md$/m);
+  assert.match(result.stdout, /^new: dforge\/specs\/a\.md$/m);
   assert.doesNotMatch(result.stdout, /sdd\/p1/);
 });
 
@@ -117,7 +117,7 @@ test("push waits for a held lock and then runs; past its wait it refuses as befo
   t.after(() => stub.close());
   const repo = makeRepo();
   const { env, mirror, workRoot } = makeHome({ repo, url: stub.url });
-  const ledger = "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: a\n";
+  const ledger = "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: a\n";
   write(path.join(workRoot, "sdd", "p1", "progress.md"), ledger);
   const appended = () => stub.db.workstreams.find(w => w.key === "p1")?.entries.map(e => e.body).join("") ?? null;
   const lock = path.join(mirror, ".sync.lock");
@@ -147,7 +147,7 @@ test("a negative or infinite lock wait falls back to the default wait", async t 
   t.after(() => stub.close());
   const repo = makeRepo();
   const { env, mirror, workRoot } = makeHome({ repo, url: stub.url });
-  const ledger = "# SDD ledger — plan: docs/forge/plans/p1.md\nTask 1: a\n";
+  const ledger = "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: a\n";
   write(path.join(workRoot, "sdd", "p1", "progress.md"), ledger);
   const lock = path.join(mirror, ".sync.lock");
   fs.mkdirSync(lock, { recursive: true });
