@@ -152,6 +152,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   // In a dry run nothing has moved, so a path in the new home is read where
   // it still is: under the old entry an earlier line would move there.
   const pending = [];
+  let merged;
   const view = (...parts) => {
     const target = path.join(newHome, ...parts);
     const hit = pending.find(([to]) => target === to || target.startsWith(`${to}${path.sep}`));
@@ -177,8 +178,9 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
           continue;
         }
         const copied = Object.keys(old).filter(key => !(key in next));
+        merged = { ...next, ...old };
         if (!dryRun) {
-          writeJson(to, { ...next, ...old });
+          writeJson(to, merged);
           fs.rmSync(from);
         }
         did(`merged ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`,
@@ -194,7 +196,8 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
             refuse(`${target} exists, so ${source} was not moved`);
             continue;
           }
-          if (!dryRun) fs.renameSync(source, target);
+          if (dryRun) pending.push([target, source]);
+          else fs.renameSync(source, target);
           did(`moved ${source} to ${target}`, `would move ${source} to ${target}`);
           moves.push([source, target]);
         }
@@ -228,7 +231,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   const oldConfig = readJson(path.join(oldHome, "config.json"));
   if (oldConfig?.darkmem && typeof oldConfig.darkmem === "object") {
     const file = path.join(newHome, "config.json");
-    const config = readJson(view("config.json")) ?? {};
+    const config = (dryRun && merged) ? { ...merged } : readJson(view("config.json")) ?? {};
     if (config.darkmem === undefined) {
       config.darkmem = oldConfig.darkmem;
       if (!dryRun) {

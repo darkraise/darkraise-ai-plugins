@@ -241,3 +241,28 @@ test("migrateHome with dryRun, merging into an existing ~/.dforge, lists every a
   assert.deepEqual(real.lines.map(verb), ["merged", "moved", "moved", "pointed", "renamed"], real.lines.join("\n"));
   assert.deepEqual(dry.lines.map(line => done[verb(line)]), real.lines.map(verb), dry.lines.join("\n"));
 });
+
+test("migrateHome with dryRun foretells the refusals and darkmem lines a merge into ~/.dforge causes", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  const superpowers = path.join(home, ".dr-superpowers");
+  write(path.join(dforge, "config.json"), JSON.stringify({ layout: "auto" }));
+  write(path.join(dforge, "mirror", "q", "kept"), "kept\n");
+  write(path.join(forge, "config.json"), JSON.stringify({ darkmem: { repos: {} } }));
+  write(path.join(forge, "mirror", "p", "work", "x"), "x\n");
+  write(path.join(superpowers, "config.json"), JSON.stringify({ darkmem: { repos: {} } }));
+  write(path.join(superpowers, "mirror", "p", "work", "y"), "y\n");
+  const refusal = `refused: ${path.join(dforge, "mirror", "p")} exists, so ${path.join(superpowers, "mirror", "p")} was not moved`;
+  const before = fs.readdirSync(home, { recursive: true }).sort();
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  assert.deepEqual(fs.readdirSync(home, { recursive: true }).sort(), before);
+  assert.equal(dry.refused, 1, dry.lines.join("\n"));
+  assert.ok(dry.lines.includes(refusal), dry.lines.join("\n"));
+  assert.ok(dry.lines.some(line => line.includes("already has a darkmem section")), dry.lines.join("\n"));
+  assert.ok(!dry.lines.some(line => line.startsWith("would copy the darkmem mapping")), dry.lines.join("\n"));
+  assert.ok(!dry.lines.some(line => line.includes("darkmem is off")), dry.lines.join("\n"));
+  const real = migrateHome({ HOME: home });
+  assert.equal(real.refused, 1, real.lines.join("\n"));
+  assert.ok(real.lines.includes(refusal), real.lines.join("\n"));
+});
