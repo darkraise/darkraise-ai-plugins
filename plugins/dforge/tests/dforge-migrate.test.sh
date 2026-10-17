@@ -357,6 +357,20 @@ check "dry, two docs trees: nothing written" "$(snapshot "$DB")" "$before"
 bash "$FM" --dry-run "$DB" extra > /dev/null 2>&1
 check "dry: a second directory is a usage error" "$?" "2"
 
+# --- a home note that is no action still leaves nothing to migrate ---
+SH="$TMP/settled-home"
+mkdir -p "$SH/.dr-superpowers" "$SH/.dforge"
+printf '{"darkmem":{"repos":{}}}\n' > "$SH/.dr-superpowers/config.json"
+printf '{"darkmem":{"repos":{}}}\n' > "$SH/.dforge/config.json"
+SR="$TMP/settled-repo"
+repo "$SR"
+for mode in --dry-run ""; do
+  out=$(HOME="$SH" bash "$FM" $mode "$SR" 2>&1); code=$?
+  check "settled home ${mode:-real}: exit 0" "$code" "0"
+  check "settled home ${mode:-real}: the darkmem note shown" "$(grep -c "already has a darkmem section" <<<"$out")" "1"
+  check "settled home ${mode:-real}: nothing to migrate" "$(grep -cxF "dforge-migrate: nothing to migrate in $SR" <<<"$out")" "1"
+done
+
 # --- the home step runs when dforge-home-migrate.mjs is installed ---
 P="$TMP/plugin/scripts"
 mkdir -p "$P/lib"

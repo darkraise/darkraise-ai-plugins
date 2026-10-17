@@ -332,7 +332,12 @@ if [ -f "$HERE/lib/dforge-home-migrate.mjs" ]; then
     [ "$dry" -eq 0 ] || home_args=(--dry-run)
     home_out=$(cd "$root" && node "$(dr_native_path "$HERE/lib/dforge-home-migrate.mjs")" "${home_args[@]+"${home_args[@]}"}")
     home_status=$?
-    if [ -n "$home_out" ]; then printf '%s\n' "$home_out"; moved=1; fi
+    if [ -n "$home_out" ]; then
+      printf '%s\n' "$home_out"
+      # Refusals and the darkmem notes are no action; the "already has a
+      # darkmem section" note prints on every run while ~/.dr-superpowers stays.
+      if grep -qvE '^dforge-home-migrate: (refused: |darkmem is off until you turn it on: |.* already has a darkmem section; )' <<<"$home_out"; then moved=1; fi
+    fi
     [ "$home_status" -eq 0 ] || refuse "scripts/lib/dforge-home-migrate.mjs did not finish; see its output above"
   fi
 fi
