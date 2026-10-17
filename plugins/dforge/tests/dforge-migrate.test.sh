@@ -193,6 +193,23 @@ check "two states: exit 0" "$code" "0"
 check "two states: both merged" "$(cat "$T/.dforge/a.md" "$T/.dforge/b.md" 2>/dev/null | tr '\n' ' ')" "a b "
 check "two states: both gone" "$(exists "$T/.superpowers")$(exists "$T/.forge")" "nono"
 
+# --- a tracked state directory: named for the commit only once it has moved ---
+TS="$TMP/tracked-state"
+repo "$TS"
+mkdir -p "$TS/.forge" "$TS/.dforge"
+echo old > "$TS/.forge/clash.md"
+git -C "$TS" add .forge
+git -C "$TS" commit -q -m state
+echo new > "$TS/.dforge/clash.md"
+out=$(bash "$FM" "$TS" 2>&1); code=$?
+check "tracked state refused: exit 1" "$code" "1"
+check "tracked state refused: no commit line for it" "$(grep -c "^commit: $TS: the rename .forge/" <<<"$out")" "0"
+rm "$TS/.forge/clash.md"
+out=$(bash "$FM" "$TS" 2>&1); code=$?
+check "tracked state resolved: exit 0" "$code" "0"
+check "tracked state resolved: .forge gone" "$(exists "$TS/.forge")" "no"
+check "tracked state resolved: the commit line names it" "$(grep -c "^commit: $TS: the rename .forge/ -> .dforge/ (git add -A .forge .dforge)$" <<<"$out")" "1"
+
 # --- docs/forge/ beside docs/dforge/: refused, and no plan is rewritten ---
 K="$TMP/forge-both-docs"
 repo "$K"

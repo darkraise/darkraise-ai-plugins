@@ -275,10 +275,12 @@ done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -
 for wt in "${checkouts[@]}"; do
   checkout_refused=0
   for old in .superpowers .forge; do
-    if [ -e "$wt/$old" ] && [ -n "$(g -C "$wt" ls-files -- "$old" | head -n 1)" ]; then
+    tracked=0
+    if [ -e "$wt/$old" ] && [ -n "$(g -C "$wt" ls-files -- "$old" | head -n 1)" ]; then tracked=1; fi
+    mv_plain "$wt/$old" "$wt/.dforge"
+    if [ "$tracked" -eq 1 ] && [ ! -e "$wt/$old" ] && [ ! -L "$wt/$old" ]; then
       commit_notes+=("$wt: the rename $old/ -> .dforge/ (git add -A $old .dforge)")
     fi
-    mv_plain "$wt/$old" "$wt/.dforge"
   done
   migrate_docs "$wt"
   [ "$docs_ok" -eq 0 ] || rewrite_active_plans "$wt" "$docs_at"
