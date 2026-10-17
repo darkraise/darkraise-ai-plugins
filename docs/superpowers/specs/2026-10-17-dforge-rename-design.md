@@ -103,6 +103,18 @@ repository at `DIR`, its primary checkout and every linked worktree:
   in each checkout's `.gitignore` and `.gitattributes` and in the shared
   `info/exclude`, with the existing replace/add modes (a refused checkout keeps
   its old line and gains the new one).
+- **Active plans:** once a checkout's docs sit at `docs/dforge/`, every plan
+  under `docs/dforge/plans/` (`completed.md` aside) that the `completed.md`
+  beside it does not record, under any of the three docs spellings, as
+  `plan_finished` matches it, is active. In each active plan, and in the
+  checkout's `.dforge/handoff/latest.md`, the plugin prefixes `dr-superpowers:`
+  and `dr-forge:` before a skill or agent name become `dforge:`, so its
+  `**Implementer:**` lines pass `plan-lint` and dispatch, and its header names
+  dforge's execution skill. Finished plans, specs, ledgers and registers are
+  history and keep their text. A checkout whose docs move was refused is not
+  rewritten. A tracked plan it rewrote gets a `commit:` line. Plans kept in a
+  darkmem mirror are not rewritten (the mirror syncs to a shared store; the
+  human edits them through darkmem).
 - **Home:** runs `scripts/lib/dforge-home-migrate.mjs` as today, refused when
   node is missing and an old home exists.
 - **`--dry-run`:** usage becomes `dforge-migrate [--dry-run] [DIR]`. It prints one `would move A -> B` or
@@ -123,6 +135,10 @@ repository at `DIR`, its primary checkout and every linked worktree:
   refused when it differs. The old home is removed only when it is empty.
   A first dforge session can already have created `~/.dforge/config.json`
   (the `importLegacy` write), which is why the merge exists.
+- **`stores.json`:** each record's `mirror`, an absolute path, is rewritten
+  from `~/.dr-forge/mirror/<rest>` or `~/.dr-superpowers/mirror/<rest>` to
+  `~/.dforge/mirror/<rest>` once that mirror has moved, so a family applied
+  darkmem still finds its mirror.
 - **`~/.dr-superpowers/`:** its darkmem mapping and mirrors move as
   `migrateHome` moves them today, into `~/.dforge/`.
 - **Mirrors:** each mirror's local `superpowers/` or `forge/` folder becomes
@@ -169,7 +185,7 @@ The skill writes nothing itself; every change goes through `dforge-migrate`.
   `docs/forge/<rest>`, both to `docs/dforge/<rest>`; darkmem's document-name
   translation maps both to `dforge/<rest>`.
 
-## 7. Old-name guard (closes register `2026-10-11-dr-forge.md` row 16)
+## 7. Old-name guard (extends the existing retired superpowers-name check)
 
 `scripts/validate-repository.mjs` fails when an old name appears outside an
 allowlist:
@@ -204,10 +220,13 @@ sections), and `docs/migration.md`.
   dr-forge repository; both state directories present and merged; two docs
   trees refused; uncommitted docs refused; `--dry-run` lists every action and
   leaves the tree, git dir and home byte-identical; dr-forge ignore lines
-  renamed; a linked worktree migrated with the primary.
+  renamed; a linked worktree migrated with the primary; an active plan's
+  `dr-forge:` and `dr-superpowers:` prefixes rewritten while a finished plan
+  and a spec keep theirs.
 - Home migration tests: `~/.dr-forge/` renamed whole; `config.json` merged
   into an existing `~/.dforge/config.json`; a conflicting key refused and the
-  old file kept; a mirror's `forge/` folder and state uris renamed;
+  old file kept; a `stores.json` mirror path rewritten; a mirror's `forge/`
+  folder and state uris renamed;
   `migrateServer` moving `forge/` documents and refusing a uri already held.
 - A static test for `skills/migrate/SKILL.md` asserts it runs `--dry-run`
   first, asks before migrating and before committing, and names the plugin
@@ -228,8 +247,10 @@ sections), and `docs/migration.md`.
    passes.
 4. `dforge-migrate` on a scratch copy of a dr-forge-layout repository with
    history, a linked worktree and a home holding `config.json`, `stores.json`
-   and a mirror leaves only dforge names, a staged `git mv`, rewritten ignore
-   lines, and exit 0; a second run prints that nothing is left to migrate.
+   and a mirror, and one active plan naming `dr-forge:` agents, leaves only
+   dforge names, a staged `git mv`, rewritten ignore lines, an active plan
+   that passes `plan-lint`, and exit 0; a second run prints that nothing is
+   left to migrate.
 5. `dforge-migrate --dry-run` on the same copy lists every action of criterion
    4 and changes nothing.
 6. A session in a repository still on the dr-forge layout prints the
