@@ -240,10 +240,12 @@ also keeps the branch when the ledger holds a
 `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
 partial commits reach the base only after a person has looked at them.
 `merge` also keeps the branch when the `Acceptance QA: complete` line reports a nonzero count of
-`fail`, `flaky` or `cannot-test`, or when the run added a deferred register row
+`cannot-test`, or when the run added a deferred register row
 whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`: an
 acceptance statement that failed or went unverified reaches the base only after
-a person has looked at it. On a
+a person has looked at it. The line's `fail` and `flaky` counts are not read: they are taken
+before the fix wave, a failure that survives it is a deferred `A<n>:` row or a
+red test at finishing's first step, and one the fix wave fixed does not keep the branch. On a
 detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
 branch from the detached HEAD. A `pr` with base `none` opens its request
 against the forge's default branch. No menu, no wake. Its final message lists

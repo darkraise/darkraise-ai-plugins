@@ -29,8 +29,11 @@ When `scripts/auto-run status` exits 0
   branch; and `merge` keeps when the ledger holds a
   `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
   partial commits never reach the base unreviewed. `merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of
-  `fail`, `flaky` or `cannot-test`, or when the run added a deferred register
+  `cannot-test`, or when the run added a deferred register
   row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
+  The line's `fail` and `flaky` counts are not read: they are taken before the
+  fix wave, a failure that survives it is a deferred `A<n>:` row or a red test
+  at Step 1, and one the fix wave fixed does not keep the branch.
 - **Where an unattended finish stops** (failing tests at Step 1, a merged
   result failing its tests, a rejected push, a refused worktree removal), run
   `scripts/auto-run stop --reason "<what stopped it>"` first, then stop as
