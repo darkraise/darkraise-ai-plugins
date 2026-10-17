@@ -37,6 +37,7 @@ import {
   repoFromPorcelain,
   repoName,
   resumeOfferOf,
+  runList,
   runsWidth,
   sectionsToggled,
   sparkline,
@@ -2043,6 +2044,13 @@ describe('run card', () => {
     ])
   })
 
+  test('lists running, blocked and pending tasks before done ones', () => {
+    const states = ['complete', 'assigned', 'pending', 'blocked', 'pending', 'complete', 'assigned', 'pending'] as const
+    const tasks = states.map((state, i) => ({ n: i + 1, state }))
+    expect(runList(tasks, 6).map(task => task.n)).toEqual([2, 7, 4, 3, 5, 8])
+    expect(runList(tasks.slice(0, 3), 6).map(task => task.n)).toEqual([2, 3, 1])
+  })
+
   test('replaces the plan card in a dforge run', async ($, on) => {
     const files = runFiles(LEDGER)
     world(on, { ...SIGNED_IN, files })
@@ -2056,6 +2064,9 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /round 2\/5 · impl-sonnet-low/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
+    const drawn = JSON.stringify(await ui.drawn())
+    expect(drawn.indexOf('Task 2: Draw the card')).toBeLessThan(drawn.indexOf('Task 3: Ship it'))
+    expect(drawn.indexOf('Task 3: Ship it')).toBeLessThan(drawn.indexOf('Task 1: Add the helpers'))
   })
 
   test('reads no ledger left under the pre-3.0 .superpowers', async ($, on) => {

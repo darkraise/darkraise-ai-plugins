@@ -680,6 +680,13 @@ export function planTasks(text: string): { n: number; title: string }[] {
   return out
 }
 
+const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, blocked: 1, pending: 2, complete: 3 }
+
+/** The first `size` of a run's tasks as the Run card lists them: in flight, blocked, not started, then done, each in plan order. */
+export function runList<T extends { n: number; state: string }>(tasks: readonly T[], size: number): T[] {
+  return [...tasks].sort((a, b) => (RUN_ORDER[a.state] ?? 2) - (RUN_ORDER[b.state] ?? 2) || a.n - b.n).slice(0, size)
+}
+
 /** Milliseconds → "42s", "2m14s", "1h05m": a turn's clock, to the second under an hour. */
 export function elapsed(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))
