@@ -290,6 +290,19 @@ For native final branch review use independent native reviewer contexts; do not
 invoke a Codex CLI round. Independence here does not guarantee cross-provider
 review. Record the restriction mode and this limitation in the ledger.
 
+The process roles take native seats too. The architecture critic and every review lens are native judges at rank 8 (Astra high) or above, with no
+file writes. Acceptance QA is a native implementer at `gpt-6.1-sol / high`
+(the `impl-sonnet-high` row), dispatched with
+[acceptance-qa.md](acceptance-qa.md). `scripts/lens-route` exits 2 on a
+`Host: codex` plan, as `review-route` does, so pick the lenses by hand. For
+a risk-3 task review they are the ids on the task's `**Lenses:**` line,
+uncapped. For the final review, read each `criteria/lenses/*.md` `Applies:`
+line against the branch diff and run the matching lenses in priority order
+(security, silent-failures, test-quality, the `lang-*` lenses
+alphabetically, type-design, docs-comments), at most `lensCap` of them
+(`scripts/forge-config get lensCap`; `0` runs none), and name the rest as
+skipped in the report.
+
 ## Claude plans
 
 Claude plans carry no Host or Routing policy line: `scripts/plan-lint` reads a

@@ -45,3 +45,17 @@ Evidence: output
 Applies: always
 Why: <why this gate exists, so a later session does not delete it>
 ```
+
+```markdown
+An optional gate for projects that install the official claude-security
+plugin. Its documented launch is interactive
+(`claude --agent claude-security:claude-security`); the headless `-p` form
+below is unverified, so run it once by hand before relying on it.
+
+## 5. Security scan of the branch
+Command: `timeout 1800 claude --agent claude-security:claude-security -p "Scan this branch's changes"`
+Green: the scan reports no finding at High severity or above
+Evidence: judgment
+Applies: always
+Why: the review lenses read a diff; this scan traces data flow across the codebase
+```

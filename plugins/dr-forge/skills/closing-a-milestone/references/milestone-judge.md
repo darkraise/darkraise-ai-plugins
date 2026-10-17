@@ -21,7 +21,10 @@ stop and say so.
 2. **Find evidence per item.** For each numbered item, locate concrete
    evidence: the file and symbol that implement it, the test that exercises it,
    or the gate output line that proves it. Read the code; do not trust names,
-   commit messages or plan text.
+   commit messages or plan text. An Acceptance cell citing spec statement
+   `A<n>` is evidenced by the committed test whose name starts with `A<n>:` (or
+   `a<n>_`) and the test or gate output that ran it; a statement tagged `demo`
+   is `UNVERIFIABLE` unless a recorded note says a person observed it.
 3. **Rule per item.**
    - `MET` — evidence exists and satisfies the Acceptance cell (or the
      criterion) as written.

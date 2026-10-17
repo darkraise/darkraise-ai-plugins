@@ -91,5 +91,13 @@ names "code reviewer: the A<n> question" "$P/skills/requesting-code-review/refer
   'would it fail if the code violated spec statement A<n>?'
 names "requesting review: security lens" "$P/skills/requesting-code-review/SKILL.md" 'criteria/lenses/security.md'
 
+names "milestone judge: A<n> tests are evidence" "$P/skills/closing-a-milestone/references/milestone-judge.md" \
+  'is evidenced by the committed test whose name starts with `A<n>:`'
+names "gates template: claude-security example" "$P/skills/running-gates/references/gates-template.md" \
+  'claude --agent claude-security:claude-security'
+NC="$P/reference/native-codex.md"
+names "codex: critic and lens seats" "$NC" 'The architecture critic and every review lens are native judges at rank 8'
+names "codex: QA seat" "$NC" 'Acceptance QA is a native implementer at `gpt-6.1-sol / high`'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
