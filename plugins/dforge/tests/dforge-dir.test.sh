@@ -100,6 +100,20 @@ check "home: reported once beside a repository path" "$(mkdir -p "$R/.superpower
 rm -rf "$R/.superpowers" "$OLDH"
 export HOME=$SAVED_HOME
 
+# --- dforge_legacy_layout: dr-forge's 3.x names ---
+mkdir -p "$R/.forge" "$R/docs/forge"
+check "dr-forge: state and docs" "$(dforge_legacy_layout "$R" | tr '\n' '|')" "$R/.forge|$R/docs/forge|"
+rm -rf "$R/.forge" "$R/docs/forge"
+mkdir -p "$WG/dr-forge" "$G/.forge"
+check "dr-forge: a worktree's git dir and the primary's state" "$(dforge_legacy_layout "$W" | tr '\n' '|')" "$WG/dr-forge|$TOP/.forge|"
+rm -rf "$WG/dr-forge" "$G/.forge"
+SAVED_HOME=$HOME
+export HOME="$TMP/home3"; mkdir -p "$HOME/.dr-forge"
+check "dr-forge: an empty ~/.dr-forge is not named" "$(dforge_legacy_layout "$R")" ""
+printf '{}\n' > "$HOME/.dr-forge/config.json"
+check "dr-forge: a ~/.dr-forge holding anything is named" "$(dforge_legacy_layout "$R")" "$HOME/.dr-forge"
+export HOME=$SAVED_HOME
+
 # Codex runs no session-start hook, so its tool notes carry the check.
 check "codex-tools: names the pre-3.0 check" "$(grep -c 'pre-3.0 layout' "$HERE/../skills/using-dforge/references/codex-tools.md")" "1"
 

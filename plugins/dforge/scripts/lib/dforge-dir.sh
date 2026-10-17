@@ -37,27 +37,34 @@ dforge_dir_rel() {
   printf '%s\n' "${dir#"${2:-.}"/}"
 }
 
-# dforge_legacy_layout [ROOT] — each pre-3.0 path of the checkout at ROOT
-# (default: .) that still exists, one per line: its .superpowers/ and
-# docs/superpowers/, its git dir's dr-superpowers/, and the primary checkout's
-# .superpowers/, which holds a linked worktree's handoff. It also names
-# ~/.dr-superpowers when that home is unmigrated: its config holds a darkmem
-# mapping the new config lacks, or its mirror folder still holds a mirror.
-# dforge reads none of them since 3.0.0, so scripts/dforge-migrate must move
-# them first.
+# dforge_legacy_layout [ROOT] — each older path of the checkout at ROOT
+# (default: .) that still exists, one per line: dr-superpowers' (before 3.0)
+# and dr-forge's (3.x) state directories .superpowers/ and .forge/, docs trees
+# docs/superpowers/ and docs/forge/, its git dir's dr-superpowers/ and
+# dr-forge/, and the primary checkout's .superpowers/ and .forge/, which hold a
+# linked worktree's handoff. It also names ~/.dr-superpowers when that home is
+# unmigrated (its config holds a darkmem mapping the new config lacks, or its
+# mirror folder still holds a mirror) and ~/.dr-forge while it holds anything.
+# dforge reads none of them, so the migrate skill must move them first.
 dforge_legacy_layout() {
-  local root=${1:-.} gitdir common primary home=${HOME:-}/.dr-superpowers
+  local root=${1:-.} gitdir common primary home=${HOME:-}/.dr-superpowers name
   if [ -n "${HOME:-}" ] && {
     { grep -qs '"darkmem"[[:space:]]*:' "$home/config.json" && ! grep -qs '"darkmem"[[:space:]]*:' "${HOME}/.dforge/config.json"; } ||
     [ -n "$(ls -A "$home/mirror" 2>/dev/null)" ]
   }; then printf '%s\n' "$home"; fi
-  [ ! -e "$root/.superpowers" ] || printf '%s\n' "$root/.superpowers"
-  [ ! -e "$root/docs/superpowers" ] || printf '%s\n' "$root/docs/superpowers"
+  [ -z "${HOME:-}" ] || [ -z "$(ls -A "$HOME/.dr-forge" 2>/dev/null)" ] || printf '%s\n' "$HOME/.dr-forge"
+  for name in .superpowers .forge docs/superpowers docs/forge; do
+    [ ! -e "$root/$name" ] || printf '%s\n' "$root/$name"
+  done
   gitdir=$(git -C "$root" rev-parse --absolute-git-dir 2>/dev/null) || return 0
-  [ ! -e "$gitdir/dr-superpowers" ] || printf '%s\n' "$gitdir/dr-superpowers"
+  for name in dr-superpowers dr-forge; do
+    [ ! -e "$gitdir/$name" ] || printf '%s\n' "$gitdir/$name"
+  done
   common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
   [ "$common" != "$gitdir" ] || return 0
   primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || return 0
-  [ ! -e "$primary/.superpowers" ] || printf '%s\n' "$primary/.superpowers"
+  for name in .superpowers .forge; do
+    [ ! -e "$primary/$name" ] || printf '%s\n' "$primary/$name"
+  done
   return 0
 }
