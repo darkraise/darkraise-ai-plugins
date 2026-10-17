@@ -189,7 +189,7 @@ case "$1" in
       # existing caller's output.
       preflight|plan-conflict|cannot-verify|breaker|blocked-plan) ;;
       executor-empty-diff|codex-empty-diff) ;;
-      final-residual) ;;
+      final-residual|acceptance-ambiguous) ;;
       *) die "not a ruling kind: $kind" ;;
     esac
     plan_shape

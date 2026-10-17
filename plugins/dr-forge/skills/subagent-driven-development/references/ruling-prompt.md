@@ -38,13 +38,17 @@ Subagent ([JUDGE]):
     Return exactly one block per item, in item order:
 
         ### Item <id>
-        Verdict: CONFIRMED-GAP | PARK | AMEND | BLOCKED
+        Verdict: CONFIRMED-GAP | PARK | AMEND | REWORD | BLOCKED
         Ruling: <what> — <why> — <cost if wrong>
 
     - CONFIRMED-GAP: the finding or gap is real. The Ruling names the
       smallest change that fixes it, precisely enough for an implementer.
     - PARK: the code stands. The finding is wrong, contestable, or real but
       built on by nothing downstream; the Ruling says which and why.
+    - REWORD: the spec statement is what is wrong (acceptance-ambiguous items
+      only). After the Ruling line, write one line at column 0,
+      `New statement: <the statement, reworded so it reads one way>`. PARK on
+      an acceptance-ambiguous item defers the statement to the register.
     - AMEND: the plan's text is what is wrong. After the Ruling line, write
       one amendment entry, starting at column 0, in exactly this shape
       (heading `## A? — Task <N>`, or `## A? — Header` for the header):
@@ -106,6 +110,9 @@ Subagent ([JUDGE]):
       accepts the argument.
     - final-residual: findings still open after the final review's one fix
       wave.
+    - acceptance-ambiguous: the final review's QA seat could not test a spec
+      acceptance statement because it reads two ways; the item names both
+      readings. REWORD picks one; PARK defers the statement.
 
     ## Items
 

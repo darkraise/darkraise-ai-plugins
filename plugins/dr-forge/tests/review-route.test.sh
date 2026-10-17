@@ -722,5 +722,14 @@ seat "$TMP/ev-rexec.md" 1
 check "a real Executor line still routes to a Claude judge" "$out" \
   "review-seat task=1 primary=dr-forge:judge-sonnet-high fallback=- reason=executor"
 
+out=$(bash "$ROUTE" "$TMP/round.md" --ruling acceptance-ambiguous 2>&1); status=$?
+check "acceptance-ambiguous: exit 0" "$status" "0"
+check "acceptance-ambiguous goes to the ruling seat" "$out" \
+  "review-seat ruling=acceptance-ambiguous tasks=plan primary=dr-forge:judge-opus fallback=- reason=routine"
+present "ruling prompt: the REWORD verdict" "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
+  'REWORD: the spec statement is what is wrong'
+present "ruling prompt: the kind" "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
+  '- acceptance-ambiguous: the final review'"'"'s QA seat could not test a spec'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
