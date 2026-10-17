@@ -79,10 +79,21 @@ merge_into() {
   if [ ! -e "$from" ]; then done_move "$from" "$to"; elif [ "$touched" -eq 1 ]; then moved=1; fi
 }
 
+# dir_link_in DIR — DIR is a symbolic link or holds one to a directory, so a
+# merge into it could land outside the checkout.
+dir_link_in() {
+  local link
+  [ ! -L "$1" ] || return 0
+  while IFS= read -r -d '' link; do [ ! -d "$link" ] || return 0; done < <(find "$1" -mindepth 1 -type l -print0)
+  return 1
+}
+
 # mv_plain FROM TO — the rename; merged file by file when both exist.
 mv_plain() {
   [ -e "$1" ] || return 0
+  if [ -L "$(dirname -- "$1")" ] || [ -L "$(dirname -- "$2")" ]; then refuse "$1 or $2 lies in a linked directory; move it by hand, then run dforge-migrate again"; return 0; fi
   if [ -e "$2" ]; then
+    if [ -L "$1" ] || dir_link_in "$2"; then refuse "$1 or $2 is or holds a symbolic link to a directory; merge them by hand, then run dforge-migrate again"; return 0; fi
     if [ -d "$1" ] && [ -d "$2" ]; then merge_into "$1" "$2"; else refuse "$1 and $2 both exist and are not both directories; merge them by hand, then run dforge-migrate again"; fi
     return 0
   fi

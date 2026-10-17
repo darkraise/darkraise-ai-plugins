@@ -202,6 +202,40 @@ check "forge and dforge docs: exit 1" "$code" "1"
 check "forge and dforge docs: refusal names both" "$(grep -c "refused: $K/docs/forge and $K/docs/dforge all exist" <<<"$out")" "1"
 check "forge and dforge docs: the plan is untouched" "$(cat "$K/docs/forge/plans/p.md")" "dr-forge:impl-sonnet-low"
 
+# --- a link in a merge or a docs move: refused, nothing lands outside ---
+LM="$TMP/linked-merge"
+repo "$LM"
+mkdir -p "$TMP/outside-merge" "$LM/.forge"
+echo planted > "$LM/.forge/planted.md"
+ln -s "$TMP/outside-merge" "$LM/.dforge"
+out=$(bash "$FM" "$LM" 2>&1); code=$?
+check "linked .dforge: exit 1" "$code" "1"
+check "linked .dforge: nothing lands outside" "$(exists "$TMP/outside-merge/planted.md")" "no"
+check "linked .dforge: .forge kept" "$(cat "$LM/.forge/planted.md")" "planted"
+LS="$TMP/linked-source"
+repo "$LS"
+mkdir -p "$TMP/outside-source" "$LS/.dforge"
+echo kept > "$TMP/outside-source/kept.md"
+ln -s "$TMP/outside-source" "$LS/.forge"
+out=$(bash "$FM" "$LS" 2>&1); code=$?
+check "linked .forge beside .dforge: exit 1" "$code" "1"
+check "linked .forge beside .dforge: the outside file stays" "$(cat "$TMP/outside-source/kept.md")" "kept"
+LI="$TMP/linked-inner"
+repo "$LI"
+mkdir -p "$TMP/outside-inner" "$LI/.forge/sub" "$LI/.dforge"
+echo planted > "$LI/.forge/sub/planted.md"
+ln -s "$TMP/outside-inner" "$LI/.dforge/sub"
+out=$(bash "$FM" "$LI" 2>&1); code=$?
+check "a link inside .dforge: exit 1" "$code" "1"
+check "a link inside .dforge: nothing lands outside" "$(exists "$TMP/outside-inner/planted.md")" "no"
+LD="$TMP/linked-docs"
+repo "$LD"
+mkdir -p "$TMP/outside-docs/forge"
+ln -s "$TMP/outside-docs" "$LD/docs"
+out=$(bash "$FM" "$LD" 2>&1); code=$?
+check "linked docs: exit 1" "$code" "1"
+check "linked docs: the outside tree is not renamed" "$(exists "$TMP/outside-docs/forge")$(exists "$TMP/outside-docs/dforge")" "yesno"
+
 # --- a cloned repository controls these names: nothing is written through a link ---
 L="$TMP/links"
 repo "$L"
