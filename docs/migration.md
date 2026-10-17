@@ -1,8 +1,8 @@
 # Migration
 
 Notes for moving to the current plugin names and for re-registering the
-marketplace. dr-forge's own upgrade steps live in its README:
-[Migrating to 3.0](../plugins/dr-forge/README.md#migrating-to-30).
+marketplace. dforge's own upgrade steps live in its README:
+[Migrating to 4.0](../plugins/dforge/README.md#migrating-to-40).
 
 ## Re-registering the marketplace
 
@@ -17,14 +17,23 @@ marketplace keeps its installations.
 ## Replaced plugins
 
 Disable the old Claude `dcc-statusline` and `dcc-superpower-companions` plugins
-before enabling `dr-status` and `dr-forge`, so their hooks do not run twice.
+before enabling `dr-status` and `dforge`, so their hooks do not run twice.
 
 `dr-forge` 2.0.0 replaces `dr-superpowers` and `dr-cockpit`: install it, start
 one session so it imports their settings, then uninstall both (see
-[Migrating from dr-superpowers and dr-cockpit](../plugins/dr-forge/README.md#migrating-from-dr-superpowers-and-dr-cockpit)).
+[Migrating from dr-superpowers and dr-cockpit](../plugins/dforge/README.md#migrating-from-dr-superpowers-and-dr-cockpit)).
 `dr-forge` 3.0.0 then renames the pre-3.0 repository directories and the home
 with `forge-migrate` (see
-[Migrating to 3.0](../plugins/dr-forge/README.md#migrating-to-30)).
+[Migrating to 3.0](../plugins/dforge/README.md#migrating-to-30)).
+
+`dforge` 4.0.0 replaces `dr-forge`: install `dforge@darkraise`, uninstall
+`dr-forge@darkraise`, and run `/dforge:migrate` in each repository. It takes a
+dr-superpowers repository straight to 4.0 as well (see
+[Migrating to 4.0](../plugins/dforge/README.md#migrating-to-40)).
+
+`darkraise-ui` and `darkraise-win32ui` 0.3.0 replace `dcc-darkraise-ui` and
+`dcc-darkraise-win32ui`, with the same skills: install the new names, then
+uninstall the old ones.
 
 ## Status line
 

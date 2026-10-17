@@ -146,7 +146,7 @@ See the [cockpit section](plugins/dforge/README.md#cockpit) and
 Releases are versioned per plugin. Renamed plugins, retired plugins and
 re-registering the marketplace are covered in [docs/migration.md](docs/migration.md);
 dforge's own steps are in its README under
-[Migrating to 3.0](plugins/dforge/README.md#migrating-to-30).
+[Migrating to 4.0](plugins/dforge/README.md#migrating-to-40).
 
 ## Contributing
 

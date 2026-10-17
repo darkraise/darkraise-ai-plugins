@@ -823,6 +823,48 @@ The last loads the working copy into a session and reloads it on save. The
 engine lays its type declarations under `.claude-plugin/types/` when it loads
 the folder; they are not committed.
 
+## Migrating to 4.0
+
+dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
+3.x names:
+
+| 3.x | 4.0 |
+|---|---|
+| plugin `dr-forge@darkraise`, skills and agents `dr-forge:<name>` | `dforge@darkraise`, `dforge:<name>` |
+| `.forge/`, `docs/forge/`, `<git dir>/dr-forge/` | `.dforge/`, `docs/dforge/`, `<git dir>/dforge/` |
+| `~/.dr-forge/` | `~/.dforge/` |
+| `DR_FORGE_*` environment variables | `DFORGE_*` |
+| `scripts/forge-config`, `scripts/forge-path`, `scripts/forge-migrate` | `scripts/dforge-config`, `scripts/dforge-path`, `scripts/dforge-migrate` |
+| darkmem documents under `forge/` | `dforge/` |
+
+1. Install dforge, then uninstall dr-forge, so their hooks do not run twice:
+
+       /plugin install dforge@darkraise
+       /plugin uninstall dr-forge@darkraise
+
+   On Codex: `codex plugin add dforge@darkraise`, then
+   `codex plugin remove dr-forge@darkraise`.
+   The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
+   `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
+   `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
+   them before you uninstall, then set them in a dforge session with
+   `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
+2. In each repository, run `/dforge:migrate` (on Codex, ask for the
+   `dforge:migrate` skill). It shows what `scripts/dforge-migrate --dry-run`
+   would move, asks once, then moves every checkout and the home, rewrites the
+   old plugin prefixes (`dr-forge`, `dr-superpowers`) in plans still in
+   progress, and offers to commit what moved. It takes a dr-superpowers
+   repository straight to 4.0 as well. Session start and `repo-audit` name
+   any older path still present.
+3. Rename any `DR_FORGE_*` variable a shell profile sets to `DFORGE_*`.
+
+darkmem's documents move from `forge/` to `dforge/` at the first sync after
+the mirror moved. A name darkmem already holds under `dforge/` is refused,
+never overwritten.
+
+The sections below record the earlier migrations under the names of their
+day; their steps now run through `/dforge:migrate`.
+
 ## Migrating from 0.x
 
 1.0.0 is standalone and breaking. On a machine with the old setup:
@@ -842,33 +884,33 @@ the folder; they are not committed.
 
 ## Migrating from dr-superpowers and dr-cockpit
 
-dforge 2.0.0 replaces both plugins. Install dforge and start one session
+dr-forge 2.0.0 replaces both plugins. Install dr-forge and start one session
 before you uninstall the old plugins, because the first session reads their
 saved settings:
 
-    /plugin install dforge@darkraise
+    /plugin install dr-forge@darkraise
     /plugin uninstall dr-superpowers@darkraise
     /plugin uninstall dr-cockpit@darkraise
 
 The first session imports the cockpit's options into
-`~/.dforge/config.json`, and the cockpit's Discord webhook and mention into
-dforge's own plugin store, once; the old files stay. Since 3.0.0 the
+`~/.dr-forge/config.json`, and the cockpit's Discord webhook and mention into
+dr-forge's own plugin store, once; the old files stay. Since 3.0.0 the
 dr-superpowers names are no longer read: see Migrating to 3.0.
 
 ## Migrating to 3.0
 
-dforge 3.0.0 reads and writes only its own names: `.dforge/`, `docs/dforge/`,
-the git directory's `dforge/`, `~/.dforge/`, the `DFORGE_*` variables
-and the `dforge:` prefix. The pre-2.0 `.superpowers/`, `docs/superpowers/`,
+dr-forge 3.0.0 reads and writes only its own names: `.forge/`, `docs/forge/`,
+the git directory's `dr-forge/`, `~/.dr-forge/`, the `DR_FORGE_*` variables
+and the `dr-forge:` prefix. The pre-2.0 `.superpowers/`, `docs/superpowers/`,
 `dr-superpowers/` and `DR_SUPERPOWERS_*` names and the `dr-superpowers`
 prefix are no longer read. Session start and `repo-audit` print one line naming
 any pre-3.0 directory a repository still has; run, once per repository:
 
-    bash <plugin-root>/scripts/dforge-migrate [DIR]
+    bash <plugin-root>/scripts/forge-migrate [DIR]
 
 In the primary checkout and every linked worktree it moves `.superpowers/` to
-`.dforge/`, `docs/superpowers/` to `docs/dforge/` (with `git mv` when the
-directory is tracked) and `<git dir>/dr-superpowers/` to `<git dir>/dforge/`,
+`.forge/`, `docs/superpowers/` to `docs/forge/` (with `git mv` when the
+directory is tracked) and `<git dir>/dr-superpowers/` to `<git dir>/dr-forge/`,
 then rewrites the lines of `.gitignore`, `.gitattributes` and
 `.git/info/exclude` that name the old directories. It prints each move and what
 you must commit. A checkout that has both the old and the new directory, or a
@@ -878,20 +920,20 @@ exits 0 when done or when there was nothing to do, and 1 when something was
 refused.
 
 No other file is edited: plans, specs and ledgers that cite
-`docs/superpowers/<rest>` keep that spelling, and dforge still reads it as
-`docs/dforge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
-older plugin prefix fails `scripts/plan-lint` until they name `dforge:`.
-Rename any `DR_SUPERPOWERS_*` variable you set to its `DFORGE_*` name.
-`DFORGE_DOCUMENT_STORE` and `DFORGE_PROGRESS_SOURCE`, which 2.x read, are
+`docs/superpowers/<rest>` keep that spelling, and dr-forge still reads it as
+`docs/forge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
+older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
+Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
+`DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
 no longer read at all: set `documentStore` and `progressSource` instead.
 
-`dforge-migrate` also moves the home: the darkmem mapping in
-`~/.dr-superpowers/config.json` into `~/.dforge/config.json` when that file
+`forge-migrate` also moves the home: the darkmem mapping in
+`~/.dr-superpowers/config.json` into `~/.dr-forge/config.json` when that file
 has none, and each `~/.dr-superpowers/mirror/<project>/` that
-`~/.dforge/mirror/` lacks. darkmem itself is off in 3.0 until you set
-`darkmemEnabled`. A mirror's `superpowers/` folder becomes `dforge/` at the next
+`~/.dr-forge/mirror/` lacks. darkmem itself is off in 3.0 until you set
+`darkmemEnabled`. A mirror's `superpowers/` folder becomes `forge/` at the next
 `darkmem-sync` run, and the first online run moves darkmem's `superpowers/`
-documents to `dforge/`; upgrade every machine that shares a darkmem project,
+documents to `forge/`; upgrade every machine that shares a darkmem project,
 since a 2.x client no longer sees the moved documents.
 
 ## What a plan looks like
