@@ -112,6 +112,7 @@ done <<'ROWS'
 handoffMode strict relaxed loose
 codexLane true false maybe
 codexReview true false 0
+lensCap 4 2 10
 executionStrategy ask parallel fast
 executionMode auto subagent agent
 worktree ask always sometimes
@@ -124,6 +125,9 @@ finishTimeout 30 45 3
 documentStore darkmem local remote
 progressSource darkmem local remote
 ROWS
+
+fresh lens-env
+check "lensCap: the environment wins" "$(DR_FORGE_LENS_CAP=1 fc get lensCap)" "1"
 
 # --- Claude's own settings file: one key changed, everything else kept ---
 fresh k

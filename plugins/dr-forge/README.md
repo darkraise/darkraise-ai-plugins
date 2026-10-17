@@ -771,6 +771,7 @@ The same settings can be set with
 | Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
 | Workflow | `codexLane` | `true` | Give plan tasks to Codex when its gate passes. `false` makes `scripts/codex-gate` report `lane=false`. |
 | Workflow | `codexReview` | `true` | Let Codex take review seats when its gate passes. `false` makes the gate report `review=false`; with both off it does not probe Codex at all. |
+| Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DR_FORGE_LENS_CAP` overrides it. |
 | Workflow | `executionStrategy` | `ask` | `sequential` or `parallel` answers the "how should the plan execute" question. `parallel` still falls back to sequential when the parts share files, and on Codex. |
 | Workflow | `executionMode` | `auto` | `auto` follows the planner's rule; `inline` and `subagent` fix the plan's Execution line, and `inline` also makes the plan sequential. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |

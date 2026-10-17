@@ -77,6 +77,11 @@ export default {
     label: 'Codex reviews', title: 'Let Codex review',
     description: 'Let Codex take review seats when its gate passes. Off keeps every review on Claude.',
   },
+  lensCap: {
+    type: 'number', default: 4, min: 0, max: 9, step: 1, zero: 'off', env: 'DR_FORGE_LENS_CAP', enforcedBy: 'script', group: 'Workflow', target: 'forge',
+    label: 'Review lenses', title: 'Final-review lens cap',
+    description: 'How many specialist review lenses the final review runs at most, highest priority first. 0 turns them off. DR_FORGE_LENS_CAP overrides it.',
+  },
   executionStrategy: {
     type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'forge',
     label: 'Strategy', title: 'Execution strategy',
