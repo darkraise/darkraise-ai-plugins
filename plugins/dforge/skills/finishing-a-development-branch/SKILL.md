@@ -7,7 +7,7 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
-**Core principle:** Verify tests → Detect environment → Present options (armed with the choice made before the run) → Execute choice → Record the plan → Clean up → Report the next step.
+**Core principle:** Verify tests → Detect environment → Carry out the choice made before the run, or present options → Execute choice → Record the plan → Clean up → Report the next step.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -22,7 +22,8 @@ When `scripts/auto-run status` exits 0
   carry out the matching option as if your human partner had chosen it, by
   name, since the detached-HEAD menu renumbers them: `merge` is Merge Locally
   into that base, `pr` is Push and Create PR, and `keep`, `ask` and `wait` are
-  Keep As-Is. Never discard. Arm no wake. Three cases override this: on a
+  Keep As-Is. Never discard. In an auto run this mapping replaces Step 4's
+  recorded-choice block. Three cases override this: on a
   detached HEAD (Step 2) there is no merge, so `merge` keeps and `pr` pushes a
   new branch (`git push origin HEAD:refs/heads/<new-branch>`); when the base is
   `none`, `merge` keeps and `pr` opens its request against the dforge's default
@@ -37,7 +38,7 @@ When `scripts/auto-run status` exits 0
 - **Where an unattended finish stops** (failing tests at Step 1, a merged
   result failing its tests, a rejected push, a refused worktree removal), run
   `scripts/auto-run stop --reason "<what stopped it>"` first, then stop as
-  Step 1 or [finish-preference.md](../../reference/finish-preference.md) says.
+  Step 1 or Step 5's "Whose choice it is" says.
 - **The rulings** printed at Step 3 also include every line of
   `scripts/auto-run ruling list`, and Step 7's final message lists every
   deferred row the run added to its register (`scripts/auto-run status` names
@@ -89,8 +90,9 @@ This determines which menu to show and how cleanup works:
 The base branch is whatever this work forked from — usually named in the
 plan, the conversation, or the branch's upstream. A finish preference
 recorded before the run (`scripts/finish-choice get [--plan PLAN_FILE]`) names
-the base your human partner confirmed then; use it. Otherwise, if it is not
-already known, ask: "This branch split from <your best guess> - is that
+the base your human partner confirmed then; use it. When Step 4 carries out
+a recorded choice, never ask here: Step 4 says where its base comes from.
+Otherwise, if it is not already known, ask: "This branch split from <your best guess> - is that
 correct?" Confirm before merging: merging into the wrong base is expensive to
 undo.
 
@@ -111,8 +113,30 @@ launch, not only the reports. Run `scripts/in-flight` first. Exit 1 lists
 background shells and agents this session started that are still running,
 including an agent that sent its report but left work of its own alive. Wait
 for each, or stop it with `TaskStop` (a reported agent's report stands), as
-dforge:handoff step 0 says, and run it again. Present the menu only on
-exit 0, or on exit 3 after checking by hand.
+dforge:handoff step 0 says, and run it again. Go on only on exit 0, or on
+exit 3 after checking by hand.
+
+**A choice recorded before the run.** Then run
+`scripts/finish-choice get [--plan PLAN_FILE]`
+([finish-preference.md](../../reference/finish-preference.md)):
+
+- It prints `merge`, `pr` or `keep` with no `answer` field: show no menu.
+  Run `scripts/finish-choice answer <action> [--plan PLAN_FILE]`, then carry
+  the option out from Step 5 by name, exactly as if your human partner had
+  chosen it; never discard. The base is the recorded `base`. When that is
+  null or `none`, take it from the plan, the conversation or the branch's
+  upstream, as Step 3 does, without asking or confirming; when none of those
+  names one, `merge` keeps the branch and `pr` opens its request against the
+  repository's default branch. On a detached HEAD, `merge` keeps the branch
+  and `pr` pushes a new branch (`git push origin HEAD:refs/heads/<new-branch>`).
+  Write no "After integration" line: Step 7's block says what follows. Open
+  the final message with `Finished with <the option, as worded in the menu
+  below>, as chosen before the run.`
+- A record whose `answer` field is set has been used: an earlier immediate
+  finish stopped, or the menu was answered. Show the menu and wait; never
+  re-run the action unattended.
+- It prints `wait`, exits 3 (nothing recorded), or fails any other way (no
+  jq, outside a repository): show the menu below and wait.
 
 **Normal repo and named-branch worktree — present exactly these 3 options:**
 
@@ -153,15 +177,6 @@ complete` when it is the last sub-project, and `After integration: no
 follow-on work recorded` when there is no Program line or no plan. Step 7 turns
 this into the launch block once the choice is made.
 
-**Arm the finish preference.** When a choice was recorded before the run
-([finish-preference.md](../../reference/finish-preference.md)), run
-`scripts/finish-choice arm [--plan PLAN_FILE]` as you present the menu. Unless
-it exits 3, schedule the wake it prints (CronCreate on Claude Code), and make
-the menu's last line before `Which option?` say what happens without an answer:
-`No answer by <due>: I'll <option> (chosen before the run).` Without a
-scheduler, say `Chosen before the run: <option>. Reply to confirm or pick
-another.` instead.
-
 Present the menu exactly as written — concise, with every option coming
 from the list above. The menu is the last thing in your message: rulings,
 findings and the summary go above it, never after, and never replace it with
@@ -174,13 +189,12 @@ is theirs.
 
 **Whose choice it is.** When your human partner answers the menu, run
 `scripts/finish-choice answer <merge|pr|keep|discard> [--plan PLAN_FILE]`
-first and cancel the wake it names with CronDelete: their answer overrides
-the one chosen before the run. When the wake fires instead, the action
-`scripts/finish-choice due` prints is the choice; follow
-[finish-preference.md](../../reference/finish-preference.md) §When the wake
-fires. An unattended finish never asks: where a step would ask (a refused
-worktree removal, a failing merged result), it stops, leaves everything in
-place and shows the menu again.
+first, then carry out their answer. When Step 4 carries out a recorded
+choice, it is theirs, made before the run. An immediate finish never asks:
+where a step would ask (a refused worktree removal, a failing merged result,
+a rejected push), it stops, leaves everything in place, reports what stopped
+it and shows the menu; never pick a destructive answer for your human
+partner.
 
 ### Option 1: Merge Locally
 
@@ -442,8 +456,7 @@ follow-on work recorded."
 | Excuse | Reality |
 |--------|---------|
 | "Tests passed earlier this session" | Run the suite on the tree you are about to integrate. A green run only proves the tree it ran on. |
-| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait; only the choice they made before the run acts for them, and only after the configured wait goes unanswered. |
-| "The wake fired, but they replied a minute ago — the timer still says merge" | Their reply wins. `scripts/finish-choice answer` disarms the timer; a wake after it finds nothing due. |
+| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait; only the choice they made before the run acts for them, and it acts at once. |
 | "I'll ask for the merge in prose" | A request buried in a long report goes unseen. The three-option menu, verbatim, is the last thing in the message. |
 | "The open findings are in my report" | The report scrolls away and Step 6 deletes the ledger. Commit them in the followups note. |
 | "They seem done with this feature — I'll offer to discard it" | The menu is complete as written. Discard happens only when your human partner asks for it in so many words. |
@@ -452,7 +465,7 @@ follow-on work recorded."
 | "This other worktree looks stale — I'll clean it too" | Clean up only worktrees under `.worktrees/` or `worktrees/`. Everything else belongs to the host. |
 | "Removal refused — `--force` is just finishing the cleanup" | The refusal means files exist only in that worktree. `--force` destroys them permanently. Show your human partner and ask. |
 | "The merged-result failure is probably flaky" | A failing merged result stops everything. Branch and worktree stay put while you investigate. |
-| "The base branch is obviously main" | Confirm the fork point or ask. Merging into the wrong base is expensive to undo. |
+| "The base branch is obviously main" | Confirm the fork point or ask, unless Step 4 carries out a choice recorded before the run, which takes its base from the record, the plan, the conversation or the upstream. Merging into the wrong base is expensive to undo. |
 | "The push was rejected — force-push will fix it" | A rejected push means the remote moved. Investigate; force-push only on your human partner's explicit request. |
-| "I printed the rulings and the review — that wraps up the run" | Without the menu nothing integrates. The three options close the message, every time. |
+| "I printed the rulings and the review — that wraps up the run" | Without the menu or a recorded choice nothing integrates. With no recorded choice the options close the message, every time; a run that carried out its choice ends on the next-step block. |
 | "I summarized the outcome — the next step is obvious" | Not to a fresh session or a partner who stepped away. End with the `next-step` block, verbatim. |

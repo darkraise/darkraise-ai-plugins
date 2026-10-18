@@ -47,7 +47,12 @@ names "using-git-worktrees loads the settings when no line is in context" "$G" '
 names "using-git-worktrees: what each value does" "$G" '`worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2'
 names "using-git-worktrees: the setting decides only when no preference was stated" "$G" 'If not, the `worktree` setting decides'
 names "finish-preference: finishAction" "$F" 'finishAction'
-names "finish-preference: finishTimeout" "$F" 'finishTimeout'
+names "finish-preference: the question offers Ask me then" "$F" '4. Ask me then: show the finish menu and wait for my answer'
+FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+names "finishing: a recorded choice runs with no menu" "$FIN" '**A choice recorded before the run.**'
+names "finishing: an answered record is never re-run" "$FIN" 'A record whose `answer` field is set has been used'
+names "finishing: a null base is found without asking" "$FIN" 'upstream, as Step 3 does, without asking or confirming'
+names "finishing: Step 3 asks nothing for a recorded choice" "$FIN" 'never ask here: Step 4 says where its base comes from'
 names "finish-preference: a setting's choice has no base branch" "$F" '`base` is null'
 
 # The auto run (reference/auto-run.md) where each skill would otherwise ask.
