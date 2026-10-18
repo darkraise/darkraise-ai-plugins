@@ -91,6 +91,7 @@ case $cmd in
     ;;
   answer)
     [ $# -eq 1 ] || usage
+    case $1 in merge|pr|keep|discard) ;; *) echo "answer takes one of: merge pr keep discard" >&2; exit 2 ;; esac
     need_file
     write '.answer = $answer | .answeredAt = $now' --arg answer "$1" --argjson now "$now"
     ;;

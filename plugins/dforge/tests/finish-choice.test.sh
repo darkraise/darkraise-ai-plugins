@@ -38,6 +38,8 @@ check "set: refuses an unknown action" "$?" "2"
 check "get: prints the choice" "$(fc get --plan docs/plans/p.md | jq -r '[.action, .base] | join(" ")')" "pr main"
 
 # --- finishing acts on it ---
+fc answer later --plan docs/plans/p.md >/dev/null 2>&1
+check "answer: refuses an unknown action" "$?" "2"
 check "answer: prints nothing" "$(FINISH_CHOICE_NOW=$((T0 + 60)) fc answer pr --plan docs/plans/p.md)" ""
 check "answer: recorded" "$(jq -r '[.answer, .answeredAt] | join(" ")' "$file")" "pr $((T0 + 60))"
 check "answer: get shows it" "$(fc get --plan docs/plans/p.md | jq -r .answer)" "pr"
