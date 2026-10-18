@@ -88,6 +88,38 @@ export function collapsedToggled(collapsed: readonly Section[], name: Section): 
   return SECTIONS.filter(one => next.includes(one)).join(',')
 }
 
+export type AgentGroupKey = 'waiting' | 'working' | 'failed' | 'done'
+const AGENT_GROUPS: readonly { key: AgentGroupKey; name: string }[] = [
+  { key: 'waiting', name: 'Waiting on you' },
+  { key: 'working', name: 'Working' },
+  { key: 'failed', name: 'Failed' },
+  { key: 'done', name: 'Done' },
+]
+
+/**
+ * The Agents section's groups in order, each left out while empty: the
+ * running agents an open approval names, the other running ones, then the
+ * recent ended ones (up to `shown` rows with the running) as failed or done.
+ * A record without an outcome that ended reads as done.
+ */
+export function agentGroups<T extends { agentId: string; isDone: boolean; outcome?: 'done' | 'failed' | null }>(
+  spawns: readonly T[],
+  waiting: readonly string[],
+  shown = 6,
+): { key: AgentGroupKey; name: string; spawns: T[] }[] {
+  const running = spawns.filter(one => !one.isDone)
+  const room = Math.max(0, shown - running.length)
+  // slice(-0) would keep every ended agent.
+  const ended = room === 0 ? [] : spawns.filter(one => one.isDone).slice(-room)
+  const members: Record<AgentGroupKey, T[]> = {
+    waiting: running.filter(one => waiting.includes(one.agentId)),
+    working: running.filter(one => !waiting.includes(one.agentId)),
+    failed: ended.filter(one => one.outcome === 'failed'),
+    done: ended.filter(one => one.outcome !== 'failed'),
+  }
+  return AGENT_GROUPS.map(group => ({ ...group, spawns: members[group.key] })).filter(group => group.spawns.length > 0)
+}
+
 /** 465000 → "465k"; 1234567 → "1.2M". */
 export function kTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

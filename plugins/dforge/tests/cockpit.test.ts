@@ -5,6 +5,7 @@ import type { CommandRunInput, On, RenderElement, SessionMeasureInput, SessionMe
 import {
   accountColor,
   accountKey,
+  agentGroups,
   autoLimitFor,
   autoRunFor,
   isAbsolutePath,
@@ -674,6 +675,24 @@ describe('cockpit pane', () => {
       }
       await ui.unmount()
     }
+  })
+
+  test('groups agents in order, an ended record without an outcome done', () => {
+    const one = (agentId: string, isDone: boolean, outcome?: 'done' | 'failed' | null) => ({ agentId, isDone, outcome })
+    const keys = (spawns: ReturnType<typeof one>[], waiting: string[]) => agentGroups(spawns, waiting).map(group => [group.key, group.name, group.spawns.map(spawn => spawn.agentId)])
+    expect(keys([one('a', false, null), one('b', false, null), one('c', true, 'failed'), one('d', true)], ['a'])).toEqual([
+      ['waiting', 'Waiting on you', ['a']],
+      ['working', 'Working', ['b']],
+      ['failed', 'Failed', ['c']],
+      ['done', 'Done', ['d']],
+    ])
+    // A wait left open on an ended agent never keeps it waiting.
+    expect(keys([one('a', true, 'done')], ['a'])).toEqual([['done', 'Done', ['a']]])
+    // The ended ones take only the rows the running ones leave.
+    const many = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'].map(id => one(id, false, null))
+    expect(keys([one('old', true, 'done'), ...many], [])).toEqual([['working', 'Working', ['r1', 'r2', 'r3', 'r4', 'r5', 'r6']]])
+    expect(keys([one('d1', true, 'done'), one('d2', true, 'failed'), one('d3', true, 'done'), one('r', false, null)], []).map(group => group[2])).toEqual([['r'], ['d2'], ['d1', 'd3']])
+    expect(agentGroups([one('d1', true, 'done'), one('d2', true, 'done'), one('r', false, null)], [], 2).map(group => group.spawns.map(spawn => spawn.agentId))).toEqual([['r'], ['d2']])
   })
 
   test('shows the context, limits, cost and repo', async ($, on) => {
