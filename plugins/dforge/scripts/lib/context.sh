@@ -455,7 +455,9 @@ ctx_line() {
   fi
   tk=$(( (tokens + 500) / 1000 ))
   pct=$(( tokens * 100 / budget ))
-  if [ "$tokens" -ge "$budget" ]; then
+  # The final phase never hands off (reference/session-budget.md §Stops): an
+  # over-limit --final line still says ok.
+  if [ "$tokens" -ge "$budget" ] && [ "${1:-}" != final ]; then
     echo "$label: ${tk}k of ${bk}k (${pct}%) — handoff — source: $CTX_SOURCE"
     return 5
   fi

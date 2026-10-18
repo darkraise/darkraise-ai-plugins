@@ -183,8 +183,8 @@ check "final: past the task budget, below the final limit: exit 0" "$status" "0"
 check "final: line" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
 asst 560000 > "$T"
 run --final
-check "final: over: exit 5" "$status" "5"
-check "final: over: line" "$out" "budget (final): 560k of 553k (101%) — handoff — source: record"
+check "final: over: exit 0, the final phase never hands off" "$status" "0"
+check "final: over: line" "$out" "budget (final): 560k of 553k (101%) — ok — source: record"
 asst 500000 > "$T"
 DFORGE_BUDGET=300000 run --final
 check "final: the task override does not move it" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"

@@ -6,7 +6,8 @@
 # Exit: 0 ok; 5 handoff due; 6 compact (an auto run, reference/auto-run.md);
 # 3 unknown; 2 usage.
 #   --final         measure against the final-phase limit, the check after the
-#                   last task's complete line. Finishing itself is never checked.
+#                   last task's complete line; it never exits 5, since the final
+#                   phase never hands off. Finishing itself is never checked.
 #   --tail R        the check before one of a plan's last R tasks (R at most
 #                   CTX_TAIL_TASKS): the final-phase limit, since the tail of a
 #                   plan costs less to finish here than a fresh session does.
