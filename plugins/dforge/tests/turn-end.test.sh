@@ -218,6 +218,7 @@ out=$(stop s-1 'Task 2 is done. Everything looks good.')
 check "auto run: a summary is held" "$(decision "$out")" "block"
 check "auto run: the reason names the sentinel" "$(jq -r .reason <<<"$out" | grep -c 'Auto run: compacting')" "1"
 check "auto run: the hold tells the user" "$(jq -r .systemMessage <<<"$out" | grep -c 'auto run, hold 1 of 3')" "1"
+check "auto run: the reason names the switching line" "$(jq -r .reason <<<"$out" | grep -c 'end with `Auto run: switching`')" "1"
 check "auto run: the retry is held again" "$(decision "$(stop s-1 'Task 2 is done.' true)")" "block"
 pend compact
 check "auto run: the compacting line passes" "$(stop s-1 $'Task 2 is done.\n\nAuto run: compacting\n')" ""
@@ -225,6 +226,15 @@ check "auto run: the clearing line does not answer compact" "$(decision "$(stop 
 check "auto run: the sentinel must be the last line" "$(decision "$(stop s-1 $'Auto run: compacting\n\nMore words.')")" "block"
 pend clear
 check "auto run: the clearing line passes a clear" "$(stop s-1 $'Handed off.\n\nAuto run: clearing')" ""
+pend switch
+check "auto run: the switching line passes a switch" "$(stop s-1 $'Plan saved.\n\nAuto run: switching')" ""
+out=$(stop s-1 $'Plan saved.\n\nAuto run: compacting')
+check "auto run: the compacting line does not answer a switch" "$(decision "$out")" "block"
+check "auto run: the switch hold names the switching line" "$(jq -r .reason <<<"$out" | grep -c 'end your message with the line `Auto run: switching`')" "1"
+pend compact
+check "auto run: the switching line does not answer compact" "$(decision "$(stop s-1 $'Done.\n\nAuto run: switching')")" "block"
+pend switch-resume
+check "auto run: a pending switch-resume is held" "$(decision "$(stop s-1 $'Done.\n\nAuto run: switching')")" "block"
 pend after-compact
 check "auto run: after a booked compaction the hold says to settle it" "$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting' | jq -r .reason | grep -c 'auto-run after-compact')" "1"
 pend handoff

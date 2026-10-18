@@ -94,12 +94,12 @@ An agent that already sent its report is still running when work it started is a
 fi
 
 # A turn of an auto run ends only on the sentinel line that answers its pending
-# action; the cockpit compacts or clears on that line. Any other ending is held
+# action; the cockpit compacts, clears or switches on that line. Any other ending is held
 # once.
 if [ -n "$auto_pending" ]; then
   final_line=$(printf '%s\n' "$last" | sed -e 's/[[:space:]]*$//' -e '/^$/d' | tail -n 1)
   case "$auto_pending:$final_line" in
-    'compact:Auto run: compacting' | 'clear:Auto run: clearing') rm -f "$stamp.holds"; exit 0 ;;
+    'compact:Auto run: compacting' | 'clear:Auto run: clearing' | 'switch:Auto run: switching') rm -f "$stamp.holds"; exit 0 ;;
   esac
   holds=0
   [ "$is_retry" = true ] && holds=$(cat "$stamp.holds" 2>/dev/null || echo 0)
@@ -113,7 +113,10 @@ if [ -n "$auto_pending" ]; then
     exit 0
   fi
   printf '%s\n' "$holds" > "$stamp.holds" 2>/dev/null || true
-  reason="An auto run is bound to this session (pending: ${auto_pending}; see reference/auto-run.md), so its turns end only on a sentinel line. Do not stop: continue the run. When a budget line said compact, finish the task in flight, then end your message with the line \`Auto run: compacting\`. After \`auto-run clear\` exits 0, end with \`Auto run: clearing\`. If the run must stop (your human partner asked, or a stop the reference names), run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
+  reason="An auto run is bound to this session (pending: ${auto_pending}; see reference/auto-run.md), so its turns end only on a sentinel line. Do not stop: continue the run. When a budget line said compact, finish the task in flight, then end your message with the line \`Auto run: compacting\`. After \`auto-run clear\` exits 0, end with \`Auto run: clearing\`. After \`auto-run switch\` exits 0, end with \`Auto run: switching\`. If the run must stop (your human partner asked, or a stop the reference names), run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
+  if [ "$auto_pending" = switch ]; then
+    reason="An auto run is bound to this session and the plan is saved (pending: switch; see reference/auto-run.md §The switch), so this turn ends only on the switching line. Do not stop: end your message with the line \`Auto run: switching\`; the cockpit then compacts and moves this session to the plan's launch model. If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
+  fi
   if [ "$auto_pending" = after-compact ]; then
     reason="An auto run is bound to this session and a compaction already ran (pending: after-compact; see reference/auto-run.md), so no sentinel ends this turn. Do not stop: run \`bash ${root_shown}/scripts/auto-run after-compact\` now and follow what it prints (continue with the next task, or hand off and clear). If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
   fi
