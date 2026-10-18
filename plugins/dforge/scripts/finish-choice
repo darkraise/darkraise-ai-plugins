@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The finish action your human partner chose before execution started: what
-# dforge:finishing-a-development-branch carries out when its menu goes
-# unanswered. The choice is asked once, before the first task, because a run
-# ends while its human is away and the menu would otherwise wait forever.
+# dforge:finishing-a-development-branch carries out, with no menu, as soon as
+# the final review is clean (`wait` asks for the menu instead). The choice is
+# asked once, before the first task, so a finished run never stops to ask.
 #
 # One JSON file holds it: `<workspace>/finish.json` beside a plan's ledger, or
 # `.dforge/sdd/finish.json` for work done without a plan. Both are
@@ -13,17 +13,9 @@
 #   get                         print the file; exit 3 when nothing is chosen.
 #                               With nothing chosen and the finishAction setting
 #                               at anything but ask, record that action first.
-#   arm [--minutes N]           start the clock as the menu is shown (default:
-#                               the finishTimeout setting, 30 unless changed);
-#                               print the cron line, the due time and the
-#                               wake prompt. Exit 3 when no action is armed:
-#                               nothing chosen, `wait`, or already answered.
-#   job ID                      record the scheduler's job id
-#   answer ACTION               your human partner answered the menu: disarm,
-#                               and print the job id to cancel (if any)
-#   due                         at the wake: print the action and mark it
-#                               fired when armed, unanswered and due. Exit 3
-#                               when there is nothing to do, 4 when not due.
+#   answer ACTION               record that finishing acted on the choice, or
+#                               that the menu was answered (merge | pr | keep |
+#                               discard); an answered choice is never re-run
 #   clear                       forget the choice
 #
 # FINISH_CHOICE_NOW (epoch seconds) stands in for the clock in tests.
@@ -97,49 +89,10 @@ case $cmd in
     need_file
     cat "$file"
     ;;
-  arm)
-    from_setting
-    need_file
-    minutes=$(dforge_setting finishTimeout 30)
-    [[ $minutes =~ ^[1-9][0-9]*$ ]] || minutes=30
-    if [ $# -ge 2 ] && [ "$1" = "--minutes" ]; then minutes=$2; shift 2; fi
-    [ $# -eq 0 ] && [[ $minutes =~ ^[1-9][0-9]*$ ]] || usage
-    action=$(jq -r '.action' "$file")
-    if [ "$action" = "wait" ] || [ "$(jq -r '.answer // empty' "$file")" != "" ]; then
-      echo "no finish action to arm ($action)" >&2; exit 3
-    fi
-    due=$((now + minutes * 60))
-    write '.armedAt = $now | .dueAt = $due | del(.job, .firedAt)' --argjson now "$now" --argjson due "$due"
-    # Cron reads local time and has no seconds: round up to the next minute.
-    at=$(( (due + 59) / 60 * 60 ))
-    jq -rn --argjson t "$at" '$t | localtime | "cron: \(.[4]) \(.[3]) \(.[2]) \(.[1] + 1) *", "due: \(strftime("%H:%M"))"'
-    where=${plan:+ --plan $plan}
-    printf 'prompt: dforge finish timer: the finishing menu went unanswered. Run `bash %s/finish-choice due%s` with the working directory in this worktree. If it prints an action, carry it out from dforge:finishing-a-development-branch Step 5 as if your human partner had chosen it; if it exits non-zero, do nothing and end the turn in one line.\n' "$HERE" "$where"
-    ;;
-  job)
-    [ $# -eq 1 ] || usage
-    need_file
-    write '.job = $id' --arg id "$1"
-    ;;
   answer)
     [ $# -eq 1 ] || usage
     need_file
-    jq -r '.job // empty' "$file"
     write '.answer = $answer | .answeredAt = $now' --arg answer "$1" --argjson now "$now"
-    ;;
-  due)
-    [ $# -eq 0 ] || usage
-    [ -s "$file" ] || exit 3
-    state=$(jq -r --argjson now "$now" '
-      if (.answer // null) != null or (.firedAt // null) != null or (.dueAt // null) == null or .action == "wait" then "none"
-      elif $now + 90 < .dueAt then "early"
-      else "due" end' "$file")
-    case $state in
-      none) echo "nothing to do: the menu was answered, already handled, or never armed" >&2; exit 3 ;;
-      early) echo "not due until $(jq -r '.dueAt | localtime | strftime("%H:%M")' "$file")" >&2; exit 4 ;;
-    esac
-    write '.firedAt = $now' --argjson now "$now"
-    jq -r '.action' "$file"
     ;;
   clear)
     rm -f "$file"
