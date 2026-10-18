@@ -11,17 +11,17 @@
 | 4 | Analyze the nested sessions architecture of claude code desktop, to see if we can adapt anything | docs/superpowers/notes/2026-10-17-desktop-nested-sessions.md | note maps the desktop session model onto dforge and ranks adoption candidates | done | no plugin-drivable nesting API; ranks 1-2 (wave tasks grouped by state, other sessions list) feed item 5 |
 | 5 | Improve UI with collapsible section and enhance the UI, comtibility with claude code desktop app | docs/superpowers/plans/2026-10-17-cockpit-native-desktop.md | spec A1-A13: sections collapse from their titles on both surfaces; desktop panels, band and settings use native text, theme colors and controls; Agents groups subagents by state; A10-A11 demos in the desktop app | verify | merged at 0c3ab53; owner still runs the A10 and A11 demos in the desktop app: Context legend colors, a failed subagent in the Agents headline, and whether the desktop settings text field draws its label twice (drop label from the Input if so) |
 | 6 | cockpit native desktop: collapsing the plan section also collapses the Run card (shared 'plan' key) and the README does not say so | - | - | done | kept the shared key: the Run card is the plan section during a run, and a separate key would add a ninth section to two settings; README says so |
-| 7 | cockpit native desktop: no test mounts a collapsed section without canUnderline | - | - | open | - |
-| 8 | cockpit native desktop: title absence checks look only for the expanded label, so a wrongly collapsed section would still pass them | - | - | open | - |
-| 9 | cockpit native desktop: unnamed 7.5 cell-width constant in hooks/cockpit/native.tsx | - | - | open | - |
-| 10 | cockpit native desktop: no tests for a text line without right, undefined indent, dim, or a badge without Svg | - | - | open | - |
+| 7 | cockpit native desktop: no test mounts a collapsed section without canUnderline | - | - | done | covered in tests/cockpit.test.ts |
+| 8 | cockpit native desktop: title absence checks look only for the expanded label, so a wrongly collapsed section would still pass them | - | - | done | covered in tests/cockpit.test.ts |
+| 9 | cockpit native desktop: unnamed 7.5 cell-width constant in hooks/cockpit/native.tsx | - | - | done | CELL_PX in svg.ts, used by svg.ts, native.tsx and register.tsx |
+| 10 | cockpit native desktop: no tests for a text line without right, undefined indent, dim, or a badge without Svg | - | - | done | covered in tests/cockpit.test.ts |
 | 11 | cockpit native desktop: JSX props and RenderChildren accepting false are unchecked by any typecheck (nothing type-checks the mod) | - | - | deferred | type-checking the mod is a separate tooling decision |
-| 12 | cockpit native desktop: no test checks the desktop band's chips row or warning row after they moved to nativeLine | - | - | open | - |
-| 13 | cockpit native desktop: drawNativeRow duplicates drawRow's custom-or-label branch and help lines | - | - | open | - |
+| 12 | cockpit native desktop: no test checks the desktop band's chips row or warning row after they moved to nativeLine | - | - | done | covered in tests/cockpit.test.ts |
+| 13 | cockpit native desktop: drawNativeRow duplicates drawRow's custom-or-label branch and help lines | - | - | done | drawRow and drawNativeRow share customBox, help and defaultLine |
 | 14 | cockpit native desktop: register.tsx decides isDesktop by Svg alone while the settings view also requires Select, so a host with Svg and no Select gets desktop spacing around terminal controls | - | - | deferred | no host surface has Svg without Select (the desktop table carries both), so the case cannot occur or be tested on this build |
-| 15 | cockpit native desktop: the desktop settings test covers a number row only, not free-text, locked or custom rows | - | - | open | - |
-| 16 | cockpit native desktop: no agentGroups case with more running spawns than shown, which would exercise the Math.max clamp | - | - | open | - |
-| 17 | cockpit native desktop: agentGroups assumes spawns arrive oldest-first; the caller must keep satisfying it | - | - | open | - |
+| 15 | cockpit native desktop: the desktop settings test covers a number row only, not free-text, locked or custom rows | - | - | done | covered in tests/cockpit.test.ts |
+| 16 | cockpit native desktop: no agentGroups case with more running spawns than shown, which would exercise the Math.max clamp | - | - | done | covered in tests/cockpit.test.ts |
+| 17 | cockpit native desktop: agentGroups assumes spawns arrive oldest-first; the caller must keep satisfying it | - | - | done | the requirement is stated in agentGroups' doc comment |
 | 18 | cockpit native desktop: an approved subagent call stays under Waiting on you until its call returns | - | - | deferred | the plan's documented out-of-scope limit |
 | 19 | cockpit native desktop: Task 2 recorded no RED run and the plan said main reads 220 tests when it read 219 | - | - | deferred | historical count note, no work owed |
 | 20 | finish without wait: no test runs scripts/finish-choice directly, so a missing executable bit would go unnoticed | - | - | n/a | every documented call runs it through bash, and 42 of 64 tracked scripts carry no executable bit, so nothing depends on the bit |
