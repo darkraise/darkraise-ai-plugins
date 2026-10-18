@@ -709,6 +709,9 @@ describe('cockpit pane', () => {
     await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 'turn-4', agentId: 'agent-4', reason: 'answer' })
     // Task 1's subagent asks to run a command; Task 2's keeps working.
     await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf build' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    // The main loop ending a turn and starting another leaves that approval open.
+    await $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 'turn-5', reason: 'answer' })
+    await $.turn.start({ text: 'next', turnId: 't2' })
     const order = async (ui: { findAll: (query: { type: string }) => Promise<{ text: string }[]> }, surface: string, patterns: RegExp[]) => {
       const texts = surface === 'desktop' ? await boxTexts(ui) : (await ui.findAll({ type: 'Text' })).map(one => one.text)
       return patterns.map(pattern => texts.findIndex(text => pattern.test(text)))
@@ -723,6 +726,12 @@ describe('cockpit pane', () => {
       ])
       expect(at.every(index => index >= 0)).toBe(true)
       expect([...at].sort((a, b) => a - b)).toEqual(at)
+      // The headline counts a failed agent apart from a finished one.
+      if (surface === 'desktop') expect((await ui.find({ key: 'agents-headline' }))?.text).toBe('2 running · 1 done · 1 failed')
+      else {
+        expect(await ui.find({ type: 'Text', text: /✓ 1/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /✗ 1/ })).toBeDefined()
+      }
       await ui.unmount()
     }
     // The approval is given: the call runs, and Task 1's subagent is working again.
@@ -730,6 +739,16 @@ describe('cockpit pane', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await order(ui, 'terminal', [/^Waiting on you/, /^Working · 2$/])).toEqual([-1, expect.any(Number)])
     expect((await order(ui, 'terminal', [/^Working · 2$/]))[0]).toBeGreaterThan(-1)
+  })
+
+  test('the desktop context legend squares carry the stack bar colors', async ($, on) => {
+    world(on, { tokens: 284_000 })
+    await $.session.start(START)
+    await $.session.measure({ ...MEASURE, breakdown: true } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    const squares = (await ui.findAll({ type: 'Text' })).filter(one => one.text === '■ ').map(one => one.props.color)
+    expect(squares).toEqual(['#1fa8c9', '#c056d6'])
+    await ui.unmount()
   })
 
   test('shows the context, limits, cost and repo', async ($, on) => {

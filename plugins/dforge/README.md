@@ -571,8 +571,9 @@ panels; a narrow pane moves the context to its own row, then stacks every
 tile. Every other section follows as a softly filled panel, a space apart,
 its title in the section's color; the usage panel says how far each window has
 run. Titles, rows and chips are the desktop's own text in your theme's colors,
-so switching the app between light and dark recolors them; the gauges, bars
-and meters are drawings. A panel's title collapses it, as in the terminal.
+so most of them follow the app between light and dark; the gauges, bars,
+meters and a few fixed accent colors are drawings. A panel's title collapses
+it, as in the terminal.
 The buttons are the desktop's own. With **Show at start** on it opens once the
 desktop window joins the session, unless you closed it.
 

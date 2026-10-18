@@ -95,7 +95,7 @@ import {
   notifyKindsToggled,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
-import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
 import type { BandMeter, PanelLine, PanelRun, Segment } from './svg'
 
 const PANE = 'dforge'
@@ -477,7 +477,7 @@ export const register: Register = on => {
   // A main turn begins: the Now row starts its clock.
   on('turn.start', async ($, e, next) => {
     const stamp = await $.clock.now()
-    for (const id of [...S.waits.keys()]) await settleWait($, id, '⏹ Turn ended')
+    for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
     await setActivity($, now => ({
       ...IDLE,
       kind: 'running',
@@ -537,7 +537,7 @@ export const register: Register = on => {
       }
       const head = await read($, budget)
       if (head !== null) await update($, turnTokens, list => [...list, head.tokens].slice(-TURN_READINGS))
-      for (const id of [...S.waits.keys()]) await settleWait($, id, '⏹ Turn ended')
+      for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
       const stamp = await $.clock.now()
       const failed = e.reason === 'error' || e.reason === 'refusal'
       const why = failed ? failureOf(e) : null
@@ -578,6 +578,7 @@ export const register: Register = on => {
     if (spawn === undefined) return done
     const outcome = e.reason === 'answer' ? 'done' : 'failed'
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true, outcome } : one)))
+    for (const [id, wait] of [...S.waits]) if (wait.agentId === agentId) await endWait($, id, '⏹ Agent ended')
     await syncTicker($)
     if (e.usage !== undefined) await update($, seats, all => addRun(all, spawn.seat, e.usage as TurnUsage))
     await notify($, {
@@ -960,6 +961,7 @@ export const register: Register = on => {
     ].filter(Boolean)
     const actNow = act.kind === 'interrupted' ? { ...act, detail: kept.length === 0 ? 'nothing left running' : `${kept.join(' and ')} still running` } : act
     const finished = all.filter(one => one.isDone)
+    const failedCount = finished.filter(one => one.outcome === 'failed').length
     const doneCount = items.filter(item => item.status === 'completed').length
     const limits = spend?.limits ?? []
     const cost = head?.usd == null ? null : `$${head.usd.toFixed(2)}`
@@ -1359,7 +1361,8 @@ export const register: Register = on => {
         'magenta',
         <Text key="agents-head">
           {running.length > 0 && <Text color="cyan">● {running.length} running </Text>}
-          {finished.length > 0 && <Text color="green">✓ {finished.length}</Text>}
+          {finished.length > failedCount && <Text color="green">✓ {finished.length - failedCount} </Text>}
+          {failedCount > 0 && <Text color="red">✗ {failedCount}</Text>}
         </Text>,
         all.length === 0 && (
           <Text key="agents-none" dimColor>
@@ -1606,7 +1609,7 @@ export const register: Register = on => {
             for (const [index, row] of breakdownShown.entries()) {
               lines.push({
                 kind: 'text',
-                left: [{ text: '■ ', color: colorOf(index) }, { text: row.name }],
+                left: [{ text: '■ ', color: paint(colorOf(index)) }, { text: row.name }],
                 right: [{ text: kTokens(row.tokens), bold: true }, { text: `${String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(4)}%`, dim: true, mono: true }],
               })
             }
@@ -1644,7 +1647,7 @@ export const register: Register = on => {
           'agents',
           'Agents',
           'magenta',
-          [{ text: [running.length > 0 ? `${running.length} running` : '', finished.length > 0 ? `${finished.length} done` : ''].filter(Boolean).join(' · ') }],
+          [{ text: [running.length > 0 ? `${running.length} running` : '', finished.length > failedCount ? `${finished.length - failedCount} done` : '', failedCount > 0 ? `${failedCount} failed` : ''].filter(Boolean).join(' · ') }],
           [
             ...(all.length === 0 ? [{ kind: 'text', left: [{ text: 'No subagents yet.', dim: true }] } as PanelLine] : []),
             ...groups.flatMap((group): PanelLine[] => [
@@ -2142,9 +2145,9 @@ const S = {
     tmux: string | null
     primary: string | null
   },
-  // An approval or question the person has not answered yet: its timer, and
-  // the Discord message sent for it, edited once it is answered.
-  // Each open wait on the person, by tool call; `agentId` names the subagent whose approval it is.
+  // An approval or question the person has not answered yet, by tool call: its
+  // timer, the Discord message sent for it (edited once it is answered), and
+  // the subagent whose approval it is.
   waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null }>(),
   ticker: null as Timer | null,
   isTurnLive: false,
