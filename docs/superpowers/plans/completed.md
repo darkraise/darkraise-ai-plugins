@@ -24,3 +24,4 @@ One line per plan that landed, so project-status can tell a merged plan from one
 - 2026-10-17 `docs/superpowers/plans/2026-10-17-dr-forge-process-roles.md` — merged into `main` at cc8dbbb
 - 2026-10-17 `docs/superpowers/plans/2026-10-17-dforge-rename.md` — merged into `main` at 81df517
 - 2026-10-18 `docs/superpowers/plans/2026-10-17-cockpit-native-desktop.md` — merged into `main` at 0c3ab53
+- 2026-10-18 `docs/superpowers/plans/2026-10-17-finish-without-wait.md` — merged into `main` at 0913724
