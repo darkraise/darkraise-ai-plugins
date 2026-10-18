@@ -129,13 +129,8 @@ export default {
   },
   finishAction: {
     type: 'enum', values: ['ask', 'merge', 'pr', 'keep', 'wait'], default: 'ask', enforcedBy: 'script', group: 'Finish', target: 'dforge',
-    label: 'When done', title: 'When the finish menu goes unanswered',
-    description: 'ask keeps the question before the first task. Any other value skips it: merge, pr or keep runs after the wait below; wait never acts.',
-  },
-  finishTimeout: {
-    type: 'number', default: 30, min: 5, max: 240, step: 5, unit: 'min', enforcedBy: 'script', group: 'Finish', target: 'dforge',
-    label: 'Menu waits', title: 'Finish menu wait (minutes)',
-    description: 'How long the finish menu waits before the action above runs.',
+    label: 'When done', title: 'When the work is done',
+    description: 'ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.',
   },
   limitAlertAt: {
     type: 'number', default: 90, min: 0, max: 100, step: 5, unit: '%', zero: 'off', group: 'Notifications', target: 'dforge',

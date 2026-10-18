@@ -98,8 +98,8 @@ check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dforge" | gr
 
 # --- the workflow keys: defaults and refusals ---
 fresh w
-check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.finishTimeout].join(" "))')" \
-  "strict true true ask auto ask standard sections true single ask 30"
+check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction].join(" "))')" \
+  "strict true true ask auto ask standard sections true single ask"
 # Each key: its default, a value it accepts, and one it refuses.
 while read -r key default valid invalid; do
   fresh "m-$key"
@@ -121,7 +121,6 @@ designApproval sections whole none
 specReview true false no
 questionStyle single batched many
 finishAction ask merge discard
-finishTimeout 30 45 3
 documentStore darkmem local remote
 progressSource darkmem local remote
 ROWS
@@ -246,7 +245,14 @@ check "DFORGE_NO_SETTINGS answers the default" "$(DFORGE_NO_SETTINGS=1 dforge_se
 # Git Bash with path conversion off hands node the module path as written.
 check "the command runs with path conversion off" "$(MSYS_NO_PATHCONV=1 fc get worktree)" "never"
 # A number setting is a whole number.
-fc set finishTimeout 5.5; check "a fraction: exit 2" "$?" "2"
+fc set notifyAfter 5.5; check "a fraction: exit 2" "$?" "2"
+# finishTimeout is retired: a value left in the file is ignored, and naming it is an error.
+fresh retired
+mkdir -p "$HOME/.dforge"
+printf '{"finishAction":"merge","finishTimeout":45}\n' > "$FILE"
+check "retired finishTimeout: get --json reads the rest" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.finishAction + " " + ("finishTimeout" in v))')" "merge false"
+fc get finishTimeout > /dev/null 2>&1; check "retired finishTimeout: get exits 2" "$?" "2"
+check "finishAction: the title and description" "$(node --input-type=module -e "const { default: schema } = await import(process.argv[1]); console.log(schema.finishAction.title + ' | ' + schema.finishAction.description)" "$(cd "$HERE/../config" && pwd)/schema.mjs")" 'When the work is done | ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.'
 fc set warnAt 72.5; check "a fraction of an older key: exit 2" "$?" "2"
 
 # The settings view gives each group a tab and the tabs the hotkeys 1, 2, ….
