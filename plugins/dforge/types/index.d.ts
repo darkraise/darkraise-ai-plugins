@@ -181,18 +181,14 @@ export type CockpitRun = {
 }
 
 /**
- * What dforge finishing does if its menu goes unanswered, as its
- * `finish-choice` script keeps it (finish.json). Times in milliseconds.
+ * What dforge finishing does once the final review is clean, as its
+ * `finish-choice` script keeps it (finish.json).
  */
 export type CockpitFinish = {
   action: 'merge' | 'pr' | 'keep' | 'wait'
   base: string | null
-  /** When the menu's wait runs out, once finishing armed the choice. */
-  dueAt: number | null
-  /** Your own answer to the menu, which overrides the choice. */
+  /** Set once finishing carried the choice out or you answered the menu. */
   answer: string | null
-  /** When the wake carried the choice out. */
-  firedAt: number | null
 }
 
 /** Where a repository's documents and progress live, as `darkmem-config.mjs --mode` prints them. */

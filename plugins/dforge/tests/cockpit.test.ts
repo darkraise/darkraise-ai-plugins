@@ -2341,19 +2341,19 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
   })
 
-  test('reads the finish choice and counts it down', () => {
+  test('reads the finish choice', () => {
     const chosen = parseFinish('{"action":"pr","base":"main","chosenAt":900}')
-    expect(chosen).toEqual({ action: 'pr', base: 'main', dueAt: null, answer: null, firedAt: null })
+    expect(chosen).toEqual({ action: 'pr', base: 'main', answer: null })
+    expect(parseFinish('{"action":"merge","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800,"job":"cron-7","firedAt":2800}')).toEqual({ action: 'merge', base: 'main', answer: null })
     expect(parseFinish('{"action":"later"}')).toBeNull()
     expect(parseFinish('{broken')).toBeNull()
     if (chosen === null) return
-    expect(runsText(finishLine(chosen, 0))).toBe('Finish push and open a PR if the menu goes unanswered')
-    const armed = { ...chosen, action: 'merge' as const, dueAt: 1_800_000 }
-    expect(runsText(finishLine(armed, 420_000))).toBe('⏱ Finish merge into main · in 23m')
-    expect(runsText(finishLine(armed, 1_800_000))).toBe('⏱ Finish merge into main · due now')
-    expect(runsText(finishLine({ ...armed, firedAt: 1_800_000 }, 1_900_000))).toBe('✓ Finish merge into main · no answer, so done')
-    expect(finishLine({ ...armed, answer: 'keep' }, 420_000)).toEqual([])
-    expect(runsText(finishLine({ ...chosen, action: 'wait' }, 0))).toBe('Finish wait for your answer')
+    expect(runsText(finishLine(chosen))).toBe('Finish push and open a PR when done')
+    expect(runsText(finishLine({ ...chosen, action: 'merge' }))).toBe('Finish merge into main when done')
+    expect(runsText(finishLine({ ...chosen, action: 'merge', base: null }))).toBe('Finish merge into the base branch when done')
+    expect(runsText(finishLine({ ...chosen, action: 'keep' }))).toBe('Finish keep the branch when done')
+    expect(runsText(finishLine({ ...chosen, action: 'wait' }))).toBe('Finish ask me when done')
+    expect(finishLine({ ...chosen, answer: 'keep' })).toEqual([])
   })
 
   test('shows the finish choice on the Run card', async ($, on) => {
@@ -2366,8 +2366,9 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    // The world's clock reads 1,000,000 ms; the menu's 30 minutes end at 2,800 s.
-    expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
+    // A file an older version armed shows the choice, with no countdown.
+    expect(await ui.find({ type: 'Text', text: /Finish push and open a PR when done/ })).toBeDefined()
+    expect(JSON.stringify(await ui.drawn())).not.toContain('⏱')
   })
 
   test('shows the finish choice for work without a plan or a todo list', async ($, on) => {
@@ -2376,10 +2377,12 @@ describe('run card', () => {
     signedIn(on, files)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /⏱ Finish push and open a PR · in 30m/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Finish push and open a PR when done/ })).toBeDefined()
     await ui.unmount()
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    expect(JSON.stringify(await desk.drawn())).toContain('⏱ Finish push and open a PR · in 30m')
+    const drawn = JSON.stringify(await desk.drawn())
+    expect(drawn).toContain('Finish push and open a PR when done')
+    expect(drawn).not.toContain('⏱')
   })
 
   test('offers no Resume for a handoff left under the pre-3.0 .superpowers', async ($, on) => {

@@ -40,7 +40,6 @@ import {
   folderRuns,
   handedOff,
   isAtLeast,
-  isFinishArmed,
   isGitWriteTool,
   isDforge,
   kTokens,
@@ -1145,9 +1144,9 @@ export const register: Register = on => {
           </Text>
         ),
         rootsLine,
-        finishNow !== null && finishLine(finishNow, now).length > 0 && (
+        finishNow !== null && finishLine(finishNow).length > 0 && (
           <Text key="plan-finish" wrap="truncate-end">
-            {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+            {drawRuns('plan-finish-runs', finishLine(finishNow))}
           </Text>
         ),
         runList(summary.tasks, 6).map(task => {
@@ -1436,15 +1435,15 @@ export const register: Register = on => {
               </Text>
             </Text>
           )),
-          finishNow !== null && finishLine(finishNow, now).length > 0 && (
+          finishNow !== null && finishLine(finishNow).length > 0 && (
             <Text key="plan-finish" wrap="truncate-end">
-              {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+              {drawRuns('plan-finish-runs', finishLine(finishNow))}
             </Text>
           ),
           rootsLine,
         )
         ) : (
-          (rootsLine !== false || (finishNow !== null && finishLine(finishNow, now).length > 0)) &&
+          (rootsLine !== false || (finishNow !== null && finishLine(finishNow).length > 0)) &&
           section(
             'plan',
             'Plan',
@@ -1452,9 +1451,9 @@ export const register: Register = on => {
             <Text key="plan-head" dimColor>
               {rootsLine !== false ? 'checkout paths' : 'no plan'}
             </Text>,
-            finishNow !== null && finishLine(finishNow, now).length > 0 && (
+            finishNow !== null && finishLine(finishNow).length > 0 && (
               <Text key="plan-finish" wrap="truncate-end">
-                {drawRuns('plan-finish-runs', finishLine(finishNow, now))}
+                {drawRuns('plan-finish-runs', finishLine(finishNow))}
               </Text>
             ),
             rootsLine,
@@ -1684,7 +1683,7 @@ export const register: Register = on => {
             const lines: PanelLine[] = [{ kind: 'picture', svg: segmentsSvg(summary.tasks.map(task => RUN_SEGMENTS[task.state] ?? 'todo'), width, 6) }]
             if (summary.plan !== null) lines.push({ kind: 'text', small: true, left: [{ text: summary.plan, mono: true, dim: true }] })
             if (rootsNow !== null) lines.push({ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] })
-            if (finishNow !== null && finishLine(finishNow, now).length > 0) lines.push({ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] })
+            if (finishNow !== null && finishLine(finishNow).length > 0) lines.push({ kind: 'chips', chips: [{ ...pill(finishLine(finishNow).map(run => run.text).join('')), color: 'yellow' }] })
             for (const task of runList(summary.tasks, 6)) {
               const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
               const meta =
@@ -1716,7 +1715,7 @@ export const register: Register = on => {
               lines,
             )
           }
-          const finishChips: PanelLine[] = finishNow !== null && finishLine(finishNow, now).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow, now).map(run => run.text).join('')), color: 'yellow' }] }] : []
+          const finishChips: PanelLine[] = finishNow !== null && finishLine(finishNow).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow).map(run => run.text).join('')), color: 'yellow' }] }] : []
           if (items.length === 0) {
             return (rootsNow !== null || finishChips.length > 0) && panel('plan', 'Plan', rootsNow !== null ? 'red' : 'yellow', [{ text: rootsNow !== null ? 'checkout paths' : 'no plan' }], [
               ...finishChips,
@@ -2225,7 +2224,7 @@ async function syncTicker($: EngineInterface) {
   const now = await read($, activity)
   S.isTurnLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
   const isTicking =
-    S.isTurnLive || (await read($, shells)).length > 0 || (await read($, spawns)).some(one => !one.isDone) || isFinishArmed(await read($, finish))
+    S.isTurnLive || (await read($, shells)).length > 0 || (await read($, spawns)).some(one => !one.isDone)
   if (isTicking && S.ticker === null) {
     S.ticker = $.clock.every(1000, () => $.ui.invalidate('ui.render'))
   } else if (!isTicking && S.ticker !== null) {
