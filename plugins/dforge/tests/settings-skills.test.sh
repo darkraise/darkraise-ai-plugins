@@ -53,6 +53,8 @@ names "finishing: a recorded choice runs with no menu" "$FIN" '**A choice record
 names "finishing: an answered record is never re-run" "$FIN" 'A record whose `answer` field is set has been used'
 names "finishing: a null base is found without asking" "$FIN" 'upstream, as Step 3 does, without asking or confirming'
 names "finishing: an upstream base must be another local branch" "$FIN" 'a local branch other than this one'
+names "finishing: Step 3 qualifies an upstream base as Step 4 does" "$FIN" 'An upstream names the base only as Step 4 qualifies it'
+names "finishing: a remote prefix is dropped only for a configured remote" "$FIN" 'when no local branch has the whole name and its first segment is a configured remote'
 names "finishing: a fired legacy record is consumed" "$FIN" 'with no `answer` or `firedAt` field'
 names "finish-preference: a fired legacy record is consumed" "$F" 'with no `answer` or `firedAt` field'
 names "finishing: Step 3 asks nothing for a recorded choice" "$FIN" 'never ask here: Step 4 says where its base comes from'

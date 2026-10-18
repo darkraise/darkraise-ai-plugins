@@ -88,7 +88,9 @@ This determines which menu to show and how cleanup works:
 ## Step 3: Determine Base Branch
 
 The base branch is whatever this work forked from — usually named in the
-plan, the conversation, or the branch's upstream. A finish preference
+plan, the conversation, or the branch's upstream.
+An upstream names the base only as Step 4 qualifies it: a local branch other
+than this one. A finish preference
 recorded before the run (`scripts/finish-choice get [--plan PLAN_FILE]`) names
 the base your human partner confirmed then; use it. When Step 4 carries out
 a recorded choice, never ask here: Step 4 says where its base comes from.
@@ -127,9 +129,11 @@ exit 3 after checking by hand.
   chosen it; never discard. The base is the recorded `base`. When that is
   null or `none`, take it from the plan, the conversation or the branch's
   upstream, as Step 3 does, without asking or confirming. A name counts only
-  when it is a local branch other than this one: drop a remote prefix
-  (`origin/main` is `main`) and check it with
-  `git show-ref --verify --quiet refs/heads/<name>`. When none of those
+  when it is a local branch other than this one, checked with
+  `git show-ref --verify --quiet refs/heads/<name>`. Drop a remote prefix
+  (`origin/main` is `main`) only
+  when no local branch has the whole name and its first segment is a configured remote
+  (`git remote`), so a local `feature/x` stays `feature/x`. When none of those
   names one, `merge` keeps the branch and `pr` opens its request against the
   repository's default branch. On a detached HEAD, `merge` keeps the branch
   and `pr` pushes a new branch (`git push origin HEAD:refs/heads/<new-branch>`).
