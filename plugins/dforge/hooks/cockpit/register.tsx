@@ -71,6 +71,7 @@ import {
   stackedRuns,
   tasksEnded,
   termColor,
+  themeColor,
   track,
   turnsToBudget,
   windowElapsed,
@@ -80,6 +81,7 @@ import {
 import type { BandInput, Run, Section, TrackPart } from './lib'
 import { SCHEMA, claudeLocks, envLocks, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
 import type { SettingValue, SettingsFile } from './config'
+import { nativeLine, nativeRun } from './native'
 import { drawSettings } from './settings-view'
 import {
   discordBody,
@@ -1501,18 +1503,30 @@ export const register: Register = on => {
 
     if (isDesktop) {
       // The flight deck: the account, what Claude is doing, then gauges for
-      // the context and the two usage windows, then a panel per section. Each
-      // panel's rows are one drawing laid out at the preview's sizes and gaps
-      // (desktop text has one size and whole-line spacing); its buttons stay
-      // the desktop's own.
+      // the context and the two usage windows, then a panel per section. A
+      // panel's rows are the desktop's own text in its theme's colors, its
+      // charts drawings; its title collapses it as the terminal's does.
       const width = svgWidth(inner)
-      const panel = (key: string, title: string, lamp: string, right: PanelRun[], lines: PanelLine[], ...native: RenderChildren[]) => {
-        const all: PanelLine[] = [{ kind: 'head', lamp, title, right }, ...lines]
+      const panel = (key: Section, title: string, lamp: string, right: PanelRun[], lines: PanelLine[], ...native: RenderChildren[]) => {
+        const isCollapsed = o.shownCollapsed.includes(key)
+        const label = `${isCollapsed ? '▸' : '▾'} ${title}`
         return (
-          <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
-            {picture(`${key}-panel`, panelSvg(all, width), panelText(all))}
+          <Box key={key} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX="md" paddingY="sm" gap="xs">
+            <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between" alignItems="center" columnGap="sm">
+              <Button key={`${key}-title`} label={label} plain onPress={() => toggle(key)}>
+                <Text size="heading" weight="semibold" color={themeColor(lamp)}>
+                  {label}
+                </Text>
+              </Button>
+              <Box key={`${key}-headline`} flexShrink={1}>
+                <Text size="footnote" wrap="truncate-end">
+                  {right.map((run, index) => nativeRun(table, `${key}-headline-${index}`, { ...run, dim: run.color === undefined ? true : run.dim }))}
+                </Text>
+              </Box>
+            </Box>
+            {!isCollapsed && lines.map((line, index) => nativeLine(table, `${key}-line-${index}`, line))}
             {native.length > 0 && (
-              <Box key={`${key}-native`} flexDirection="column" paddingBottom={1}>
+              <Box key={`${key}-native`} flexDirection="column">
                 {native}
               </Box>
             )}
@@ -1798,7 +1812,7 @@ export const register: Register = on => {
         )
       }
       return (
-        <Box flexDirection="column" rowGap={1}>
+        <Box flexDirection="column" gap="md">
           {resumeCard}
           {o.shown.includes('account') && panels.account}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
@@ -1810,7 +1824,7 @@ export const register: Register = on => {
             {button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
           </Box>
           {tiles.length > 0 && (
-            <Box key="gauges" flexDirection="column" rowGap={1}>
+            <Box key="gauges" flexDirection="column" gap="md">
               {gaugeRows.map(gaugeRow)}
             </Box>
           )}
