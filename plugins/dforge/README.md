@@ -419,21 +419,18 @@ a branch on an existing commit, or a stop in another repository than the
 prompt's, does not count.
 
 A run also asks one question before its first task: what finishing should do
-if its menu goes unanswered for the configured wait, 30 minutes by default
-(merge locally, push and open a pull request, keep the branch, or wait).
-`scripts/finish-choice` keeps the answer beside the ledger
-(`.dforge/sdd/<plan>/finish.json`, or `.dforge/sdd/finish.json` for work done
-without a plan). When finishing
-shows its menu, it arms that choice and schedules a one-shot wake with
-CronCreate; the menu's last line says what happens and when. An answer to the
-menu inside that wait disarms the wake and wins; otherwise the wake
-carries out the chosen option as if it had been picked, and stops wherever an
-attended finish would ask. The cockpit Run card shows the choice and the
-deadline. Codex has no scheduler, so there the menu names the choice and waits.
+once the final review is clean (merge locally, push and open a pull request,
+keep the branch, or ask then). `scripts/finish-choice` keeps the answer beside
+the ledger (`.dforge/sdd/<plan>/finish.json`, or `.dforge/sdd/finish.json` for
+work done without a plan). Finishing carries out that choice at once, with no
+menu, and stops wherever an attended finish would ask (failing tests, a
+rejected push, a refused worktree removal), ending on the menu. "Ask me then"
+shows the menu and waits for your answer. The cockpit Run card shows the
+choice.
 
 With the `finishAction` setting at `merge`, `pr`, `keep` or `wait`, the run does
 not ask that question: `scripts/finish-choice` records the configured action
-the first time it is read, and `finishTimeout` sets the wait.
+the first time it is read.
 
 See [reference/finish-preference.md](reference/finish-preference.md).
 
@@ -625,11 +622,10 @@ desktop window joins the session, unless you closed it.
   round in flight, the tasks done, which were reviewed clean, and a blocked
   task in red with its reason. A run whose tasks were all done before the
   session started is left out, so a new session starts without it. Its
-  **Finish** row shows what dforge will do if the finishing menu goes
-  unanswered (the option chosen before the run), then counts down the menu's
-  wait (`⏱ Finish push and open a PR · in 23m`) and says once it was
-  carried out. It disappears when you answer the menu yourself. Work done
-  without a plan shows the row on the Plan card.
+  **Finish** row shows what dforge will do once the final review is clean
+  (the option chosen before the run: `Finish push and open a PR when done`).
+  It disappears once finishing carries the choice out or you answer the menu
+  yourself. Work done without a plan shows the row on the Plan card.
 - **Repo** names the repository (`owner/name` from its remote, else its folder)
   and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
@@ -794,8 +790,7 @@ The same settings can be set with
 | Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. |
 | Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. |
 | Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |
-| Finish | `finishAction` | `ask` | What happens when the finish menu goes unanswered. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs after the wait; `wait` skips it and never acts. |
-| Finish | `finishTimeout` | `30` | Minutes the finish menu waits before that action runs (5-240). |
+| Finish | `finishAction` | `ask` | What finishing does once the final review is clean. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs that action at once; `wait` skips it and shows the finish menu then. |
 | Notifications | `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
 | Notifications | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. |
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |

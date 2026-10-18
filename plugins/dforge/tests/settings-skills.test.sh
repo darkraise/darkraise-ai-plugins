@@ -83,10 +83,10 @@ for key in $keys; do
   check "a skill names $key" "$(grep -lF -- "$key" "$P"/skills/*/SKILL.md | head -n 1 | grep -c .)" "1"
 done
 
-# The finish menu's wait is a setting now: 30 minutes may appear only as its default.
-for file in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md" "$G" \
-  "$P/skills/finishing-a-development-branch/SKILL.md" "$F"; do
-  check "${file#"$P"/} states no fixed finish wait" "$(grep '30 minutes' "$file" | grep -vc 'by default')" "0"
+# The finish menu has no timer: no skill, reference or README names its machinery.
+# Each file is read as one line, so a phrase wrapped across lines still counts.
+for file in "$P"/skills/*/SKILL.md "$P"/skills/*/references/*.md "$P"/reference/*.md "$P/README.md"; do
+  check "${file#"$P"/} names no finish timer" "$(tr '\n' ' ' < "$file" | tr -s ' ' | grep -cE 'finish-choice (arm|due|job)|finishTimeout|configured wait|CronCreate|CronDelete|no wake')" "0"
 done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

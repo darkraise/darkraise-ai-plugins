@@ -248,7 +248,7 @@ before the fix wave, a failure that survives it is a deferred `A<n>:` row or a
 red test at finishing's first step, and one the fix wave fixed does not keep the branch. On a
 detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
 branch from the detached HEAD. A `pr` with base `none` opens its request
-against the dforge's default branch. No menu, no wake. Its final message lists
+against the dforge's default branch. No menu. Its final message lists
 every `Ruling:` ledger line, every line of `scripts/auto-run ruling list`,
 every deferred row the run added, every `demo` statement of the spec, every lens
 `scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`, and

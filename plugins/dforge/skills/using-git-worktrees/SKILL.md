@@ -145,8 +145,7 @@ Ready to implement <feature-name>
 
 When no plan drives this work (it goes straight from the chat to
 dforge:finishing-a-development-branch), ask the finish preference now,
-before the first change: what finishing should do if its menu goes unanswered
-for the configured wait (the `finishTimeout` setting, 30 minutes by default). See
+before the first change: what finishing should do once the work is done. See
 [finish-preference.md](../../reference/finish-preference.md).
 A plan's execution skill asks it itself.
 
