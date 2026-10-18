@@ -79,7 +79,7 @@ pause this adds: a run never stops again for it.
 ## At finishing
 
 finishing-a-development-branch Step 4 reads the choice after its in-flight
-check. A `merge`, `pr` or `keep` with no `answer` field is carried out at once,
+check. A `merge`, `pr` or `keep` with no `answer` or `firedAt` field is carried out at once,
 with no menu: the step records it with `scripts/finish-choice answer`, finds
 the base without asking, and stops wherever an attended finish would ask.
 `wait`, nothing recorded, or a record already answered shows the menu. Step 4

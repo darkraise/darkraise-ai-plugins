@@ -120,12 +120,16 @@ exit 3 after checking by hand.
 `scripts/finish-choice get [--plan PLAN_FILE]`
 ([finish-preference.md](../../reference/finish-preference.md)):
 
-- It prints `merge`, `pr` or `keep` with no `answer` field: show no menu.
+- It prints `merge`, `pr` or `keep` with no `answer` or `firedAt` field: show
+  no menu.
   Run `scripts/finish-choice answer <action> [--plan PLAN_FILE]`, then carry
   the option out from Step 5 by name, exactly as if your human partner had
   chosen it; never discard. The base is the recorded `base`. When that is
   null or `none`, take it from the plan, the conversation or the branch's
-  upstream, as Step 3 does, without asking or confirming; when none of those
+  upstream, as Step 3 does, without asking or confirming. A name counts only
+  when it is a local branch other than this one: drop a remote prefix
+  (`origin/main` is `main`) and check it with
+  `git show-ref --verify --quiet refs/heads/<name>`. When none of those
   names one, `merge` keeps the branch and `pr` opens its request against the
   repository's default branch. On a detached HEAD, `merge` keeps the branch
   and `pr` pushes a new branch (`git push origin HEAD:refs/heads/<new-branch>`).
@@ -133,8 +137,9 @@ exit 3 after checking by hand.
   the final message with `Finished with <the option, as worded in the menu
   below>, as chosen before the run.`
 - A record whose `answer` field is set has been used: an earlier immediate
-  finish stopped, or the menu was answered. Show the menu and wait; never
-  re-run the action unattended.
+  finish stopped, or the menu was answered. So has one with `firedAt` set,
+  which an older version's timer wrote when it carried the choice out. Show
+  the menu and wait; never re-run the action unattended.
 - It prints `wait`, exits 3 (nothing recorded), or fails any other way (no
   jq, outside a repository): show the menu below and wait.
 
