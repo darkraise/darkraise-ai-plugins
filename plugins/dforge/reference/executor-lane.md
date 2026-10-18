@@ -106,6 +106,14 @@ executor is an override on a second line, never a replacement on the first:
 several tasks, which a per-task `**Executor:**` line and per-task thread id
 cannot represent. Do not write an `**Executor:**` line on a batched task.
 
+**Tasks whose tests spawn piped Node child processes stay on the Claude lane.**
+Codex runs every task turn in its `workspace-write` sandbox, where Node's
+`spawnSync`, `execSync` and `execFileSync` with piped stdio fail with `EPERM`:
+the child runs but its output never arrives, so such a test cannot pass there
+and the task ends in a handback. Bash pipes, and child processes with stdio
+`inherit` or `ignore`, are unaffected. Do not write an `**Executor:**` line on
+such a task.
+
 ## Dispatch
 
 A task carrying an `**Executor:**` line runs on that CLI instead of its

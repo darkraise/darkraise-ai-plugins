@@ -199,6 +199,11 @@ check "no doc says a background call is unbounded" "${unbounded:-NONE}" "NONE"
 formula=$(grep -cE '\((rung|row) bound \+ 120\) × 1000 ms' "$REF/executor-lane.md")
 check "executor-lane states the timeout formula for the wrapper and both runners" "$formula" "3"
 
+# Codex's workspace-write sandbox fails Node's piped spawnSync with EPERM, so a
+# task whose tests spawn that way can never reach green on the lane.
+piped=$(grep -c 'Tasks whose tests spawn piped Node child processes stay on the Claude lane' "$REF/executor-lane.md")
+check "executor-lane keeps piped Node spawns off the Codex lane" "$piped" "1"
+
 # The judge block must not leak into execution admission.
 leak=NONE
 printf '%s\n' "$assignment" | awk '{print $2}' | grep -qxF gpt-6-astra && leak=assignment
