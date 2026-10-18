@@ -12,6 +12,7 @@ One line per plan that landed, so project-status can tell a merged plan from one
 - 2026-09-21 `docs/superpowers/plans/2026-09-21-dr-superpowers-revising-plans.md` — merged into `main` at 17b2b1e
 - 2026-09-23 `docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md` — merged into `main` at e686abc
 - 2026-09-24 `docs/superpowers/plans/2026-09-24-darkmem-sync-client.md` — merged into `docs/darkmem-mirror-spec` at 2965b67
+- 2026-09-26 `docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md` — merged into `main` at f81f34c
 - 2026-09-30 `docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md` — merged into `main` at 40c28a1
 - 2026-10-02 `docs/superpowers/plans/2026-10-01-dr-superpowers-tier-eval.md` — merged into `main` at 8cc81d2
 - 2026-10-02 `docs/superpowers/plans/2026-10-02-dr-superpowers-ladder-update.md` — merged into `main` at 127bdc3
