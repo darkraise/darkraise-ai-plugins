@@ -1,6 +1,7 @@
 // node evals/controller/pilot-report.mjs
 // Measures every plan pilot.tsv lists and prints one row per plan, then the
 // Stage 1 decision over the rows whose status is ok. Reads only; calls no model.
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, isAbsolute, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -28,11 +29,18 @@ function planTasks(text) {
 }
 
 // complete REPO PLAN DONE — yes when every task of PLAN, as committed at
-// REPO's HEAD, has a complete line among DONE; unknown when the plan cannot
-// be read there or has no task.
+// REPO's HEAD (or read from disk when PLAN is an absolute path, as a plan kept
+// outside the checkout is), has a complete line among DONE; unknown when the
+// plan cannot be read or has no task.
 function complete(repo, plan, done) {
-  const shown = spawnSync('git', ['-C', repo, 'show', `HEAD:${plan}`], { encoding: 'utf8' });
-  const tasks = shown.status === 0 ? planTasks(shown.stdout) : [];
+  let text = null;
+  if (isAbsolute(plan)) {
+    if (existsSync(plan)) text = readFileSync(plan, 'utf8');
+  } else {
+    const shown = spawnSync('git', ['-C', repo, 'show', `HEAD:${plan}`], { encoding: 'utf8' });
+    if (shown.status === 0) text = shown.stdout;
+  }
+  const tasks = text === null ? [] : planTasks(text);
   if (tasks.length === 0) return 'unknown';
   return tasks.every(n => done.includes(n)) ? 'yes' : 'no';
 }

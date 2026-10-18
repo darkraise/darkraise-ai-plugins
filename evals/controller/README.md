@@ -44,7 +44,10 @@ included, that invoked `subagent-driven-development` and ran `task-brief`,
 `review-route` or `review-package` on that plan. A plan is complete when every
 `### Task N` heading of the plan, as committed at the repository's `HEAD`, has a
 `Task N: complete (` ledger line written in those sessions; a line the auto run
-marked `deferred by the auto run` does not count.
+marked `deferred by the auto run` does not count. Commit each pilot plan, or
+give its absolute path in `pilot.tsv` (a repository that keeps its documents in
+the darkmem mirror has uncommitted plans): an absolute path is read from disk
+instead of from `HEAD`.
 
 Only rows whose `status` is `ok` enter the decision:
 
@@ -55,20 +58,20 @@ Only rows whose `status` is `ok` enter the decision:
 | `shared` | A session also executed another plan, so its cost cannot be split |
 | `mismatch` | A controller session ran on a model or effort other than the arm's |
 | `unpriced` | A model has no price in `lib/transcript.mjs` |
-| `no-plan` | The plan cannot be read at the repository's `HEAD`, or has no task |
+| `no-plan` | The plan cannot be read at the repository's `HEAD` (or at its absolute path), or has no task |
 
 ## Metrics
 
 | Metric | Meaning |
 |---|---|
 | `controllerCost`, `subagentCost` | Transcript tokens priced per meter at the rates in `lib/transcript.mjs` |
-| `dispatches` | Agent dispatches plus Codex task and review runs |
+| `dispatches` | Agent dispatches plus Codex task and review runs; a run is a command that carries `--brief` (task) or `--kind` (review), so reading a runner, `--release` and `--handback` do not count |
 | `calls` | Controller API calls, one per message; the note's baseline is 5.8 per dispatch |
 | `costPerDispatch` | `controllerCost / dispatches` |
 | `sleeps`, `listAgents` | Busy-wait calls: bare `sleep N` commands and ListAgents calls |
 | `nudges` | Messages typed by a person asking about status or running work |
 | `seatMisses` | Routes `review-route` printed whose next review (or, for a final fix, next implementer) dispatch went to another seat, or never came |
-| `inFlight` | Background launches still running at a handoff or at the end of a session, as `scripts/in-flight` counts them |
+| `inFlight` | Background launches still running at a handoff or at the end of a session, as `scripts/in-flight` counts them. No `SINCE` is passed, so a launch made before a resume in the same transcript counts as running at its end |
 
 A plan's failures are `inFlight + seatMisses + nudges`, plus one when
 `sleeps + listAgents` reaches 20.

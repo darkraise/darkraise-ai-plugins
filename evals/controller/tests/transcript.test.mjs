@@ -49,18 +49,28 @@ test('dispatches, busy waits, monitors and nudges are counted', () => {
   const m = measureTranscript(jsonl([
     said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [
       use('t1', 'Agent', { subagent_type: 'dforge:impl-sonnet-low' }),
-      use('t2', 'Bash', { command: 'bash /p/scripts/run-codex-task.sh --task 3' }),
+      use('t2', 'Bash', { command: 'bash /p/scripts/run-codex-task.sh --brief b.md --task 3' }),
       use('t3', 'Bash', { command: 'sleep 1' }),
       use('t4', 'Bash', { command: 'sleep 30; echo done' }),
       use('t5', 'ListAgents', {}),
       use('t6', 'Monitor', { command: 'tail -f x' }),
+      use('t7', 'Bash', { command: 'bash "$(bash /p/scripts/executors path codex wrapper)" --brief b.md --task-id t' }),
     ]),
     said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [use('t1', 'Agent', { subagent_type: 'dforge:impl-sonnet-low' })]),
     typed('check status, I see that there are still agent and shell running'),
     typed('<command-name>/status</command-name> still running'),
     typed('the skill says check status', { isMeta: true }),
+    { type: 'user', message: { content: [{ type: 'text', text: 'anything running?' }, { type: 'image', source: {} }] } },
   ]));
-  assert.deepEqual([m.dispatches, m.sleeps, m.listAgents, m.monitors, m.nudges], [2, 1, 1, 1, 1]);
+  assert.deepEqual([m.dispatches, m.sleeps, m.listAgents, m.monitors, m.nudges], [3, 1, 1, 1, 2]);
+});
+
+test('the Task tool is a dispatch, and the latest timestamp is kept', () => {
+  const a = measureTranscript(jsonl([said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [use('k1', 'Task', { subagent_type: 'dforge:impl-sonnet-low' })])]));
+  const b = measureTranscript(jsonl([said('msg_bb', 'claude-sonnet-5-5', usage(1, 1))]));
+  assert.equal(a.dispatches, 1);
+  assert.equal(a.last, '2026-10-18T00:00:05Z');
+  assert.equal(sumMetrics([a, b]).last, '2026-10-18T00:00:06Z');
 });
 
 test('each routed review is the next review dispatched, and must reach the printed seat', () => {
@@ -73,7 +83,7 @@ test('each routed review is the next review dispatched, and must reach the print
     call('a2', { subagent_type: 'dforge:judge-sonnet-high' }),
     ...route('r2', 'codex:light', 'dforge:judge-opus'),
     ...route('r3', 'codex:light', 'dforge:judge-opus'),
-    call('b1', { command: 'bash /p/scripts/run-codex-review.sh --kind code' }, 'Bash'),
+    call('b1', { command: 'bash /p/scripts/run-codex-review.sh --kind task --tier light' }, 'Bash'),
     call('b2', { subagent_type: 'dforge:judge-opus' }),
     call('b3', { subagent_type: 'dforge:judge-opus' }),
     ...route('r4', 'dforge:judge-opus', '-'),
@@ -94,6 +104,39 @@ test('each routed review is the next review dispatched, and must reach the print
   assert.equal(m.seatMisses, 1);
   const open = measureTranscript(jsonl([...route('r5', 'dforge:judge-opus', '-'), call('i1', { subagent_type: 'dforge:impl-sonnet-low' })]));
   assert.equal(open.seatMisses, 1);
+});
+
+test('a Codex review must run at the routed tier, and a command that launches no run answers no route', () => {
+  const routed = (id, primary, fallback) => [said(`m${id}`, 'claude-sonnet-5-5', usage(1, 1), [use(id, 'Bash', { command: 'bash /p/scripts/review-route plan.md --task 1' })]), result(id, `review-seat task=1 primary=${primary} fallback=${fallback} reason=band`)];
+  const run = (id, command) => said(`c${id}`, 'claude-sonnet-5-5', usage(1, 1), [use(id, 'Bash', { command })]);
+  const at = (tier, extra = []) => measureTranscript(jsonl([...routed('r1', 'codex:heavy+judge-opus', 'dforge:judge-opus'), ...extra, run('b1', `bash /p/scripts/run-codex-review.sh --kind task --tier ${tier}`)]));
+  assert.equal(at('heavy').seatMisses, 0);
+  assert.equal(at('light').seatMisses, 1);
+  const reading = at('heavy', [run('x1', 'cat /p/scripts/run-codex-review.sh'), run('x2', 'ps aux | grep run-codex-review.sh')]);
+  assert.deepEqual([reading.seatMisses, reading.dispatches], [0, 1]);
+  const fix = measureTranscript(jsonl([
+    ...routed('f1', 'dforge:impl-sonnet-high', '-'),
+    run('x3', 'bash /p/scripts/run-codex-task.sh --cwd w --task-id t --release'),
+    run('x4', 'bash /p/scripts/run-codex-task.sh --brief b.md --dry-run'),
+    said('d', 'claude-sonnet-5-5', usage(1, 1), [use('d1', 'Agent', { subagent_type: 'dforge:impl-sonnet-high' })]),
+  ]));
+  assert.deepEqual([fix.seatMisses, fix.dispatches], [0, 1]);
+});
+
+test('a ledger check that only redirects stderr, and a write that failed, are not completions', () => {
+  const ledger = '/w/.dforge/sdd/p/progress.md';
+  const m = measureTranscript(jsonl([
+    said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [
+      use('g1', 'Bash', { command: "grep -q 'Task 7: complete (' .dforge/sdd/p/progress.md 2>/dev/null && echo yes" }),
+      use('g2', 'Bash', { command: "grep -c 'Task 8: complete (' .dforge/sdd/p/progress.md > /dev/null || true" }),
+      use('e1', 'Edit', { file_path: ledger, old_string: 'x', new_string: 'Task 1: complete (commits a..b)' }),
+      use('e2', 'Edit', { file_path: ledger, old_string: 'y', new_string: 'Task 2: complete (commits c..d)' }),
+      use('t1', 'Bash', { command: "echo 'Task 3: complete (x)' | tee -a .dforge/sdd/p/progress.md" }),
+      use('m1', 'MultiEdit', { file_path: ledger, edits: [{ old_string: 'a', new_string: 'Task 5: complete (x)' }] }),
+    ]),
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'e1', is_error: true, content: 'String to replace not found' }] } },
+  ]));
+  assert.deepEqual(m.completed, ['2', '3', '5']);
 });
 
 test('ledger complete lines the controller wrote are collected, deferred ones left out', () => {

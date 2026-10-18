@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { after, test } from 'node:test';
 import { flatten, inFlight, measureSessions, planSessions, planSlugs, projectFolder } from '../lib/sessions.mjs';
 
@@ -31,6 +32,11 @@ write(join(top, '-r-app-two/s6.jsonl'), [skill(SDD), brief('2026-10-18-alpha')])
 write(join(own, 's7.jsonl'), [skill(SDD), brief('2026-10-18-alpha'), brief('2026-10-18-beta')]);
 write(join(own, 's9.jsonl'), [skill(SDD), bash('ff', 'bash /p/scripts/review-route docs/plans/2026-10-18-alpha.md --final-fix README.md docs/guide.md && cat .dforge/handoff/latest.md'), bash('pk', "bash /p/scripts/review-package 'docs/plans/2026-10-18-alpha.md' a1 b2 out/package.md; cat notes.md"), bash('vr', 'PLAN=docs/plans/2026-10-18-alpha.md\nbash $P/scripts/task-brief "$PLAN" 2 > $W/task-2-brief.md\ncp x/task-3-report.md $W/task-3-report.md')]);
 write(join(own, 's8.jsonl'), [...launch('early'), done('early'), ...launch('late'), bash('next', 'bash /p/scripts/next-step docs/plans/x.md'), done('late')]);
+// A plain worktrees/ directory maps to <repo>-worktrees-…, not <repo>--….
+const plain = join(top, '-r-app-worktrees-y');
+write(join(plain, 's10.jsonl'), [skill(SDD), bash('q', 'bash "/p/scripts/task-brief" docs/plans/2026-10-18-delta.md 1')]);
+write(join(plain, 's11.jsonl'), [skill(SDD), brief('2026-10-18-delta'), bash('rg', 'rg task-brief docs/plans/2026-10-18-epsilon.md')]);
+const MEASURE = fileURLToPath(new URL('../measure.mjs', import.meta.url));
 
 test('projectFolder spells a path as Claude Code names its project folder', () => {
   assert.equal(projectFolder('/root/repositories/darkraise-ai-plugins'), '-root-repositories-darkraise-ai-plugins');
@@ -40,6 +46,11 @@ test('planSessions finds the repository\'s sessions that ran a task script on th
   assert.deepEqual(planSessions('2026-10-18-alpha', REPO, top).map(f => f.slice(top.length)).sort(), ['/-r-app--worktrees-x/s4.jsonl', '/-r-app/s1.jsonl', '/-r-app/s7.jsonl', '/-r-app/s9.jsonl']);
   assert.deepEqual(planSessions('2026-10-18-gamma', REPO, top), []);
   assert.deepEqual(planSessions('x', REPO, join(top, 'missing')), []);
+});
+
+test('planSessions admits a plain worktrees/ directory and a quoted script path', () => {
+  assert.deepEqual(planSessions('2026-10-18-delta', REPO, top).map(f => f.slice(top.length)).sort(), ['/-r-app-worktrees-y/s10.jsonl', '/-r-app-worktrees-y/s11.jsonl']);
+  assert.deepEqual(planSlugs(join(plain, 's11.jsonl')), ['2026-10-18-delta']);
 });
 
 test('planSlugs names every plan a session executed', () => {
@@ -55,6 +66,16 @@ test('inFlight counts launches running at a handoff or at the end', () => {
   assert.equal(inFlight(join(own, 's8.jsonl')), 1);
 });
 
+test('inFlight fails when jq is missing instead of reporting nothing running', () => {
+  const path = process.env.PATH;
+  process.env.PATH = join(top, 'empty-bin');
+  try {
+    assert.throws(() => inFlight(join(own, 's1.jsonl')), /needs jq/);
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
 test('measureSessions sums controllers and subagents, and flatten rounds the costs', () => {
   const row = flatten(measureSessions([join(own, 's1.jsonl'), join(tree, 's4.jsonl')]));
   assert.equal(row.sessions, 2);
@@ -68,11 +89,12 @@ test('measureSessions sums controllers and subagents, and flatten rounds the cos
 });
 
 test('measure.mjs prints a plan\'s row, and exits 1 when no session matches', () => {
-  const run = (...args) => spawnSync(process.execPath, ['evals/controller/measure.mjs', ...args], { encoding: 'utf8', env: { ...process.env, CONTROLLER_EVAL_PROJECTS: top } });
+  const run = (...args) => spawnSync(process.execPath, [MEASURE, ...args], { encoding: 'utf8', env: { ...process.env, CONTROLLER_EVAL_PROJECTS: top } });
   const ok = run('--plan', '2026-10-18-beta', '--repo', REPO);
   assert.equal(ok.status, 0, ok.stderr);
   assert.equal(JSON.parse(ok.stdout).sessions, 3);
   assert.equal(run('--plan', '2026-10-18-gamma', '--repo', REPO).status, 1);
   assert.equal(run('--plan', '2026-10-18-beta').status, 2);
+  assert.equal(run('--session', join(top, 'no-such.jsonl')).status, 2);
   assert.equal(run().status, 2);
 });

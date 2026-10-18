@@ -12,7 +12,9 @@ export const REPOS = process.env.CONTROLLER_EVAL_REPOS ?? fileURLToPath(new URL(
 
 // Every per-task script takes the plan as its first argument, often as a
 // variable the same command assigned (PLAN=docs/…/x.md … task-brief "$PLAN").
-const PER_TASK = /\b(?:task-brief|review-route|review-package)[ \t]+([^\s;&|]+)/g;
+// The scripts/ prefix keeps a search for the script name (rg task-brief …) from
+// counting as running it, and the optional quote admits a quoted script path.
+const PER_TASK = /scripts\/(?:task-brief|review-route|review-package)['"]?[ \t]+(['"]?[^\s;&|]+)/g;
 const ASSIGN = /\b([A-Za-z_]\w*)=(['"]?)([^\s'";&|]+)\2/g;
 
 function planArgs(cmd) {
@@ -32,13 +34,15 @@ export const projectFolder = repo => resolve(repo).replace(/[^A-Za-z0-9]/g, '-')
 
 // transcripts REPO [DIR] — every main-session transcript of REPO and of the
 // worktrees inside it. Subagent transcripts sit one level deeper and are not
-// listed; a sibling repository whose name starts with REPO's is not REPO.
+// listed. Hidden worktree directories (.worktrees, .claude/worktrees) map to
+// `<REPO>--…`, a plain worktrees/ directory to `<REPO>-worktrees-…`; any other
+// sibling repository whose name starts with REPO's is not REPO.
 export function transcripts(repo, dir = PROJECTS) {
   if (!existsSync(dir)) return [];
   const own = projectFolder(repo);
   return readdirSync(dir).flatMap(project => {
     const folder = join(dir, project);
-    if ((project !== own && !project.startsWith(`${own}--`)) || !statSync(folder).isDirectory()) return [];
+    if ((project !== own && !project.startsWith(`${own}--`) && !project.startsWith(`${own}-worktrees-`)) || !statSync(folder).isDirectory()) return [];
     return readdirSync(folder).filter(name => name.endsWith('.jsonl')).map(name => join(folder, name));
   });
 }
@@ -72,6 +76,8 @@ export function planSessions(slug, repo, dir = PROJECTS) {
 // at a handoff is a slip however it is reported, and a notification after it
 // does not undo that.
 export function inFlight(file) {
+  // inflight_scan hides jq's absence and prints nothing, which would read as no launch running.
+  if (spawnSync('jq', ['--version'], { encoding: 'utf8', timeout: 10000 }).status !== 0) throw new Error('inFlight needs jq on PATH');
   const lines = readFileSync(file, 'utf8').split('\n');
   const cuts = [];
   lines.forEach((line, i) => {
@@ -86,8 +92,8 @@ export function inFlight(file) {
     for (const cut of cuts) {
       const part = join(tmp, 'part.jsonl');
       writeFileSync(part, lines.slice(0, cut).join('\n') + '\n');
-      const r = spawnSync('bash', ['-c', '. "$1/scripts/lib/in-flight.sh"; inflight_scan "$2"', 'in-flight', PLUGIN, part], { encoding: 'utf8' });
-      if (r.status !== 0) throw new Error(`inflight_scan ${file}: ${r.stderr.trim()}`);
+      const r = spawnSync('bash', ['-c', '. "$1/scripts/lib/in-flight.sh"; inflight_scan "$2"', 'in-flight', PLUGIN, part], { encoding: 'utf8', timeout: 120000 });
+      if (r.status !== 0) throw new Error(`inflight_scan ${file}: ${String(r.stderr ?? r.error?.message ?? '').trim()}`);
       for (const launch of r.stdout.split('\n').filter(Boolean)) running.add(launch.split(' ')[1]);
     }
   } finally {

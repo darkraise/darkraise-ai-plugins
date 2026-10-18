@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { after, test } from 'node:test';
 import { projectFolder } from '../lib/sessions.mjs';
 
@@ -37,13 +38,19 @@ write(join(folder, 'eight.jsonl'), session(['2026-10-18-eight'], SONNET, 'high',
 // Task 9 is quoted inside a fence and is not one of the plan's tasks.
 const PLAN_TEXT = '# P\n\n### Task 1: A\n\n````markdown\n```js\n### Task 9: quoted\n```\n````\n\n### Task 2: B\n';
 for (const slug of ['one', 'two', 'three', 'four', 'five', 'six']) write(join(repo, `docs/plans/2026-10-18-${slug}.md`), PLAN_TEXT);
-spawnSync('git', ['init', '-q', repo]);
-spawnSync('git', ['-C', repo, 'add', '-A']);
-spawnSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '-m', 'init']);
+// A plan kept outside the checkout, as a darkmem-mapped repository keeps its plans.
+const mirrored = join(top, 'mirror/2026-10-18-nine.md');
+write(mirrored, PLAN_TEXT);
+write(join(folder, 'nine.jsonl'), session(['2026-10-18-nine'], SONNET, 'high', [1, 2]));
+for (const args of [['init', '-q', repo], ['-C', repo, 'add', '-A'], ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '-m', 'init']]) {
+  const git = spawnSync('git', args, { encoding: 'utf8' });
+  assert.equal(git.status, 0, `git ${args.join(' ')}: ${git.stderr}`);
+}
 
+const REPORT = fileURLToPath(new URL('../pilot-report.mjs', import.meta.url));
 const report = rows => {
   write(join(data, 'pilot.tsv'), ['plan\trepo\tarm\tnote', ...rows].join('\n') + '\n');
-  return spawnSync(process.execPath, ['evals/controller/pilot-report.mjs'], { encoding: 'utf8', env: { ...process.env, CONTROLLER_EVAL_PROJECTS: projects, CONTROLLER_EVAL_DATA: data, CONTROLLER_EVAL_REPOS: join(top, 'repos') } });
+  return spawnSync(process.execPath, [REPORT], { encoding: 'utf8', env: { ...process.env, CONTROLLER_EVAL_PROJECTS: projects, CONTROLLER_EVAL_DATA: data, CONTROLLER_EVAL_REPOS: join(top, 'repos') } });
 };
 
 test('pilot-report prints a row per plan with its status, and decides on the usable ones', () => {
@@ -72,6 +79,12 @@ test('pilot-report prints a row per plan with its status, and decides on the usa
   assert.deepEqual(rows[0].slice(4, 8), ['1', '0', SONNET, 'high']);
   assert.deepEqual([rows[0][11], rows[0][13]], ['4', '1']);
   assert.equal(lines[8], 'stage1: incomplete — 2 of 7 plans usable; opus@low costs 1.50x sonnet@high per dispatch; failures sonnet@high 1, opus@low 1');
+});
+
+test('pilot-report reads a plan given by an absolute path from disk', () => {
+  const r = report([`${mirrored}\tapp\tsonnet@high\tplan kept outside the checkout`]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.trim().split('\n')[1].split('\t').slice(0, 4), ['2026-10-18-nine', 'sonnet@high', 'ok', 'yes']);
 });
 
 test('pilot-report refuses an arm the pilot does not run', () => {

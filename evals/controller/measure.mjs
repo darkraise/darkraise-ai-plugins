@@ -2,6 +2,7 @@
 // Prints the controller metrics of a plan's controller sessions in the
 // repository at PATH, or of the transcripts named, as one JSON object. Reads
 // only; calls no model.
+import { existsSync } from 'node:fs';
 import { flatten, measureSessions, planSessions } from './lib/sessions.mjs';
 
 const args = process.argv.slice(2);
@@ -10,6 +11,11 @@ if (args.length === 4 && args[0] === '--plan' && args[2] === '--repo') files = p
 else if (args[0] === '--session' && args.length > 1) files = args.slice(1);
 else {
   console.error('usage: measure.mjs --plan SLUG --repo PATH | --session FILE [FILE ...]');
+  process.exit(2);
+}
+const missing = args[0] === '--session' ? files.filter(file => !existsSync(file)) : [];
+if (missing.length > 0) {
+  console.error(`measure: no such transcript: ${missing.join(', ')}`);
   process.exit(2);
 }
 if (files.length === 0) {

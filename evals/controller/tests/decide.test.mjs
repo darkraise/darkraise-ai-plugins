@@ -22,6 +22,12 @@ test('stage1 keeps Sonnet when Opus costs too much or fixes nothing', () => {
   assert.ok(Math.abs(even.ratio - 1.4) < 1e-9);
 });
 
+test('stage1 keeps Sonnet only above 1.5x, not at it', () => {
+  const at = stage1([...three('sonnet@high', 2, [{ nudges: 2 }, {}, {}]), ...three('opus@low', 3)]);
+  assert.ok(Math.abs(at.ratio - 1.5) < 1e-9);
+  assert.equal(at.decision, 'switch');
+});
+
 test('stage1 switches on a clear margin and is ambiguous on a narrow one', () => {
   assert.equal(stage1([...three('sonnet@high', 2, [{ nudges: 1 }, { inFlight: 1 }, {}]), ...three('opus@low', 2.8)]).decision, 'switch');
   assert.equal(stage1([...three('sonnet@high', 2, [{ nudges: 1 }, {}, {}]), ...three('opus@low', 2.8)]).decision, 'ambiguous');
