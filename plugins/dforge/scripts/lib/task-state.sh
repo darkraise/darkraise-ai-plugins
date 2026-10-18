@@ -142,7 +142,7 @@ dr_task_scope_valid() {
 }
 
 dr_task_open() {
-  local root="$1" task="$2" scope="${3:-}" gitdir common prefix key owner record
+  local root="$1" task="$2" scope="${3:-}" accept="${4:-}" gitdir common prefix key owner record
   [ -n "$task" ] || { dr_state_error 'task ID is required'; return 2; }
   DR_WORKTREE="$(dr_canonical "$root")" || return 2
   prefix="$(git -C "$DR_WORKTREE" rev-parse --show-prefix)" || return 2
@@ -158,13 +158,13 @@ dr_task_open() {
   mkdir -p -- "$DR_TASK_ROOT" || return 2
   dr_task_lock || return 2
   owner="$DR_TASK_ROOT/owner.json"
-  if [ -e "$owner" ] && ! jq -e --arg task "$task" --arg root "$DR_WORKTREE" \
-    '.task_id == $task and .root == $root and .holder == "external"' "$owner" >/dev/null 2>&1; then
+  if [ -e "$owner" ] && ! jq -e --arg task "$task" --arg root "$DR_WORKTREE" --arg accept "$accept" \
+    '.task_id == $task and .root == $root and (.holder == "external" or ($accept == "handed-back" and .holder == "claude"))' "$owner" >/dev/null 2>&1; then
     dr_task_unlock; dr_state_error 'worktree is reserved by another task or handed back'; return 2
   fi
   if [ -e "$DR_TASK_DIR/state.json" ]; then
-    if ! dr_task_schema_valid "$DR_TASK_DIR/state.json" || ! jq -e --arg task "$task" --arg root "$DR_WORKTREE" --arg gitdir "$gitdir" --arg repository "$common" \
-      '.task_id == $task and .root == $root and .gitdir == $gitdir and .repository == $repository and .phase != "handed-back" and (.released // false) == false' "$DR_TASK_DIR/state.json" >/dev/null; then
+    if ! dr_task_schema_valid "$DR_TASK_DIR/state.json" || ! jq -e --arg task "$task" --arg root "$DR_WORKTREE" --arg gitdir "$gitdir" --arg repository "$common" --arg accept "$accept" \
+      '.task_id == $task and .root == $root and .gitdir == $gitdir and .repository == $repository and (.phase != "handed-back" or $accept == "handed-back") and (.released // false) == false' "$DR_TASK_DIR/state.json" >/dev/null; then
       dr_task_unlock; dr_state_error 'invalid task state or identity'; return 2
     fi
     if [ -n "$scope" ] && ! jq -e --slurpfile scope "$scope" '.write_set == $scope[0]' "$DR_TASK_DIR/state.json" >/dev/null; then
@@ -187,6 +187,9 @@ dr_task_open() {
         phase:"ready",prior_phase:null,history:[],pending:null,candidate:null,artifacts:{}}' > "$record" && dr_task_write "$record" || { dr_task_unlock; return 2; }
     rm -f "$record"
   fi
+  # A handed-back task belongs to Claude; reopening it must not hand the
+  # worktree back to the external executor.
+  [ -e "$DR_TASK_DIR/state.json" ] && jq -e '.phase == "handed-back"' "$DR_TASK_DIR/state.json" >/dev/null && return 0
   local owner_tmp
   owner_tmp="$(mktemp "$owner.XXXXXX")" || { dr_task_unlock; return 2; }
   jq -n --arg task "$task" --arg root "$DR_WORKTREE" --arg gitdir "$gitdir" \

@@ -120,6 +120,17 @@ bash "$SCRIPT" --cwd "$fixture/handback" --task-id task-one --handback > "$fixtu
 check 'handback transfers stopped pending task' "$?" 0
 run --cwd "$fixture/handback"
 check 'handed-back task cannot resume' "$?" 2
+bash "$SCRIPT" --cwd "$fixture/handback" --task-id task-one --release > "$fixture/out" 2> "$fixture/err"
+check 'handed-back task with uncommitted work keeps ownership' "$?" 2
+# The Claude implementer finishes the handed-back task with its own commit,
+# which moves HEAD past every snapshot the record holds.
+printf 'claude finished\n' > "$fixture/handback/produced.txt"
+git -C "$fixture/handback" add produced.txt
+git -C "$fixture/handback" commit -qm 'feat(test): finish handed-back task'
+bash "$SCRIPT" --cwd "$fixture/handback" --task-id task-one --release > "$fixture/out" 2> "$fixture/err"
+check 'finished handed-back task releases ownership' "$?" 0
+run --cwd "$fixture/handback" --task-id task-two
+check 'released handed-back worktree accepts a new task' "$?" 0
 
 git -C "$fixture/primary" worktree add -qb release-case "$fixture/release"
 STUB_WRITE_PATH= run --cwd "$fixture/release"
@@ -227,6 +238,8 @@ check 'the release resolves the wrapper through the registry' \
   "$(grep -cF 'executors" path <id> wrapper' "$LOOP")" 1
 check 'a HANDBACK reconciles instead of releasing' \
   "$(grep -c 'reconcile rather than release' "$LOOP")" 1
+check 'a finished HANDBACK task is released' \
+  "$(grep -c 'release the handed-back task' "$LOOP")" 1
 
 present() { # present <name> <file> <needle>
   if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'ok - %s\n' "$1"; pass=$((pass+1))

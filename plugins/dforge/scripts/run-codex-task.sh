@@ -64,7 +64,7 @@ done
 
 if [ -n "$operation" ]; then
   [ "$dry" -eq 0 ] && [ -n "$cwd" ] && [ -n "$task_id" ] || die 'control operations require --cwd and --task-id'
-  dr_task_open "$cwd" "$task_id" || die 'cannot open task for recovery'
+  dr_task_open "$cwd" "$task_id" '' "$([ "$operation" = release ] && echo handed-back)" || die 'cannot open task for recovery'
   trap 'dr_task_unlock' EXIT
   dr_task_control "$operation" "$operation_value" "$approval" || die "control operation failed: $operation"
   exit 0

@@ -46,7 +46,8 @@ backwards, and neither clarification nor transport retries reset review history.
 - `blocked`: preserve files and inspect the error, prior phase, process records,
   and snapshot. Do not start another writer or delete this worktree.
 - `handed-back`: ownership was transferred to Claude; the external task ID can
-  never resume. Subsequent Claude work follows its own verification protocol.
+  never resume. Subsequent Claude work follows its own verification protocol;
+  release the task once that work is reviewed, committed and the worktree clean.
 
 Control operations never launch the executor:
 
@@ -60,7 +61,8 @@ Commit recovery revalidates the pending snapshot and candidate. A commit already
 created before a crash is adopted only on exact tree, parent, and subject match
 with a clean worktree. Hook or staging failures preserve actual state for review.
 Handback validates a complete/pending snapshot and confirmed child termination.
-Release requires completed review and a clean complete task.
+Release requires completed review and a clean complete task, or a handed-back
+task whose worktree is clean after Claude's commits.
 
 For scope amendments use `--amend-write-set <paths.json> --approval <approval.json>`.
 For a manually repaired baseline use `--accept-baseline <snapshot.json> --approval

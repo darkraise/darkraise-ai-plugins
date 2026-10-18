@@ -105,6 +105,13 @@ dr_task_control() {
       fi
       dr_task_commit ;;
     handback|release)
+      if [ "$operation" = release ] && jq -e '.phase == "handed-back"' "$record" >/dev/null; then
+        # Claude finishes a handed-back task with its own commits, which move
+        # HEAD past every recorded snapshot, so only a clean worktree is checked.
+        [ -z "$(git -C "$DR_WORKTREE" status --porcelain)" ] || return 2
+        dr_task_update '.released = true' && rm -f -- "$DR_TASK_ROOT/owner.json"
+        return
+      fi
       jq -e '.phase == "complete" or .phase == "pending"' "$record" >/dev/null || return 2
       jq '.pending // .baseline' "$record" > "$snapshot" && dr_task_assert_snapshot "$snapshot" || return 2
       if [ "$operation" = release ]; then

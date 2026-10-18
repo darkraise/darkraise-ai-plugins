@@ -403,7 +403,10 @@ inherits the worktree, its commits and its report, so ownership passes to a
 task that is still in flight. Follow
 [external-task-recovery.md](external-task-recovery.md) before the
 implementer is dispatched; a bare `--release` there would drop the record the
-recovery procedure reads.
+recovery procedure reads. Once that implementer's task reaches its reviewed
+complete line with a clean worktree, release the handed-back task with the
+same `--release` command, or every later offload into that worktree fails
+preflight.
 
 Then mark the todo complete and move on. Never move to the next task while
 the review has open Critical/Important issues that are neither fixed nor
