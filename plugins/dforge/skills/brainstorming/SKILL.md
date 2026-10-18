@@ -70,16 +70,21 @@ setting, and no setting removes the approval gate.
 - `questionStyle=batched`: ask all the clarifying questions in one message
   instead of one per message.
 - `designApproval=whole`: present every design section in one message and ask
-  for approval once, instead of after each section.
+  for approval once, instead of after each section. It has no effect under
+  `autoRun=on`, which presents no design.
 - `executionStrategy=sequential` or `executionStrategy=parallel`: do not ask
   the execution-strategy question; record the value as the answer. `parallel`
   still becomes sequential when you cannot name two parts that share no file,
   on a Codex host,
   and when `executionMode=inline`, which makes the plan sequential.
 - `specReview=false`: after the spec self-review block, skip the User Review
-  Gate and go on to Implementation.
-- `autoRun=off`: never offer an auto run (see After the Design). `ask`, the
-  default, offers it once on the architectural path.
+  Gate and go on to Implementation. It has no effect under `autoRun=on`:
+  the spec review always happens.
+- `autoRun=on`, the default: the architectural path runs as Auto by default
+  says, and its one stop is the spec review. `autoRun=ask` offers an auto run
+  once on the architectural path (see After the Design).
+  `autoRun=off`: never offer an auto run. On a Codex host `on` behaves as
+  `off`; say so in one line.
 
 ## Anti-Pattern: "Too Simple To Need Approval"
 
@@ -124,7 +129,8 @@ your path and complete them in order.
 5. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
 6. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
 
-**Architectural:**
+**Architectural:** (under `autoRun=on`, the default on Claude Code, steps 6-8
+and 12-13 run as Auto by default says)
 1. **Open the item register** — when the request or a review carries two or
    more distinct items, before the spec
 2. **Explore project context** — check files, docs, recent commits
@@ -222,7 +228,7 @@ and its self-review is the whole process.
   months ago is a decision this design inherits; a findings file nobody reopens
   is how it was lost before.
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
-- If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
+- Under `autoRun=ask` or `autoRun=off` only (under `on`, one spec covers the whole request): if the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - A new product built from scratch, or a request naming several subsystems in a repository with no `<docs>/roadmap.md`, goes to dforge:planning-a-product instead: its epics and milestones become register rows before any feature is designed, rather than prose in a program spec.
 - When `<docs>/roadmap.md` exists, this spec is an epic. Find its row with `scripts/roadmap status`, set the row's Assigned cell to this spec's path once the spec is written (`scripts/register set <milestone register> <id> doing --assigned <spec path>`), and open the spec's requirement register below even when the request was one sentence: the roadmap is the list the requirements came from.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
@@ -321,7 +327,7 @@ needs another's output waits for it.
 
 - Once you believe you understand what you're building, present the design
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
-- Ask after each section whether it looks right so far; with `designApproval=whole`, present every section in one message and ask once (see Settings)
+- Ask after each section whether it looks right so far; with `designApproval=whole`, present every section in one message and ask once (see Settings); under `autoRun=on` present no design (see Auto by default)
 - Cover: architecture, components, data flow, error handling, testing, how the
   work will be accepted, and the riskiest assumption
 - On Claude Code, when an option is genuinely clearer shown than described, present it visually with the Artifact tool
@@ -340,9 +346,64 @@ needs another's output waits for it.
 - Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
 - Don't propose unrelated refactoring. Stay focused on what serves the current goal.
 
+## Auto by default (`autoRun=on`)
+
+The default on Claude Code. Only the architectural path changes: a spike or a
+bounded task runs as above, and on a Codex host `on` behaves as `off`. Steps 1-5
+of the checklist run as written; the execution-strategy question is asked only
+when the setting is `ask`. Then:
+
+1. **Write the spec directly.** Present no design section and ask no
+   acceptance question first. One spec covers the whole request: no
+   sub-project decomposition, no program spec, no `**Program:**` line. A new
+   product still goes to dforge:planning-a-product.
+2. **Record the decisions.** Below its `**Execution strategy:**` line the spec
+   carries a `## Decisions` section: every clarifying question and approach
+   choice, with your human partner's answer quoted. The critic and Fable check
+   the spec against it in place of approved design sections.
+3. **Acceptance in the spec.** Draft and rate the statements as Drafting
+   acceptance says, but ask nothing yet: a statement rated below `high` keeps
+   its `Q:` until the spec review.
+4. **Reviews before the stop.** Run the spec self-review round, then the
+   architecture critic, then `dforge:judge-fable` on the spec against its
+   `## Decisions`, at most two rounds (review, revise, re-review). Apply what
+   Fable rules and list each ruling as one line in a `## Review rulings`
+   section of the spec.
+5. **The spec review**, the one stop: one message, its questions asked with the
+   multiple-choice prompt, at most four per call:
+   - the spec path, the `Critic: …` counts and the number of Fable rulings;
+   - every statement rated below `high`, asked as Drafting acceptance asks it;
+     a deferral writes the same `A<n>:` register row;
+   - every item Fable left undecided, and every critic Blocker it did not
+     settle, with the recommended option first;
+   - when `finishAction` is `ask`: merge into `<current branch>`, open a pull
+     request, or keep the branch, recorded as a
+     `Finish: <merge|pr|keep>` line in `## Decisions`;
+   - **Approve and run unattended**, **Approve, keep the normal stops**, or
+     **Changes needed**.
+
+   Apply the answers to the spec. **Changes needed** gets the revision and one
+   new self-review round; the critic and Fable do not run again.
+   `specReview=false` does not skip this stop.
+6. **Start the run.** On **Approve and run unattended**, commit the spec and
+   the register, run `scripts/auto-run start --spec <spec>` (add
+   `--register <path>` when a register is open), then import each
+   `## Review rulings` line with
+   `scripts/auto-run ruling add "Fable, spec: <line>"`. Invoke
+   dforge:writing-plans in this session: `scripts/context-size --plan` does not
+   run. On exit 2 or 4 from `start`, say why in one line and continue as
+   **Approve, keep the normal stops**.
+7. **Approve, keep the normal stops** commits the spec and the register and
+   continues at Implementation below, with no run.
+
+From step 6 on, [auto-run.md](../../reference/auto-run.md) applies.
+
 ## After the Design (architectural path)
 
 **Drafting acceptance:**
+
+Under `autoRun=on` skip this step and the offer below: the statements are
+drafted in the spec and settled at the spec review (see Auto by default).
 
 Once your human partner approves the last design section, draft the spec's
 acceptance statements before the auto-run offer, while they are still here to
@@ -437,7 +498,7 @@ required, and it is yours: run it once, never through a subagent.
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
 5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output.
-6. **Acceptance:** The `## Acceptance` section is present, every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>` and is checkable by a test or a demo, at least one carries `neg`, and no rating other than `high` or `confirmed` appears.
+6. **Acceptance:** The `## Acceptance` section is present, every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>` and is checkable by a test or a demo, at least one carries `neg`, and no rating other than `high` or `confirmed` appears. Under `autoRun=on`, a statement rated `medium` or `low` passes when it carries its `Q:`; the spec review settles it.
 7. **Riskiest assumption:** The `## Riskiest assumption` section is present and names its evidence, or reads `unverified — the plan's first task verifies it`.
 
 Fix any issues inline, then post `Self-review (round 1 of 1):` with one line
@@ -448,7 +509,8 @@ A revision your human partner asks for gets one new round.
 
 After the self-review block, dispatch the critic once with
 [architecture-critic-prompt.md](references/architecture-critic-prompt.md): the
-spec path, the approved design sections verbatim and the repository root. It
+spec path, the approved design sections verbatim (under `autoRun=on`, the
+spec's `## Decisions` section) and the repository root. It
 runs in an auto run too, before the Fable review. A revision of the spec does
 not earn a second critic round.
 
@@ -460,6 +522,7 @@ not earn a second critic round.
   `Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium`.
 
 **User Review Gate:**
+Under `autoRun=on`, this gate is the spec review message in Auto by default.
 In an auto run (`scripts/auto-run status` exits 0), skip this gate: run the
 Fable spec review in [auto-run.md](../../reference/auto-run.md) §The spec, then
 go to Implementation.
@@ -477,8 +540,7 @@ Wait for the user's response. If they request changes, make them and run one new
   and reload. On exit 5 (handoff), invoke dforge:handoff with
   the spec as the draft and the next action "Write the implementation plan
   with dforge:writing-plans." — the plan is written in a fresh session. In
-  an auto run this step owns the clear: run `scripts/auto-run clear --phase`
-  and end as [auto-run.md](../../reference/auto-run.md) §Clears says.
+  an auto run skip this check: the plan is always written in this session.
 - Otherwise invoke the writing-plans skill to create a detailed implementation plan.
 - Do NOT invoke any other skill. writing-plans is the next step — in this
   session or, after a handoff, the next one.

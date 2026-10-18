@@ -34,5 +34,6 @@ Subagent (dforge:judge-opus; on a Codex host, a native judge at rank 8 or above)
 ```
 
 **Placeholders:** `[SPEC_FILE_PATH]` and `[REPO_ROOT]` are paths; `[DESIGN_SECTIONS]`
-is the approved design sections, verbatim; `[PLUGIN_ROOT]` is the resolved
+is the approved design sections, verbatim, or under `autoRun=on` the spec's
+`## Decisions` section, verbatim; `[PLUGIN_ROOT]` is the resolved
 dforge plugin directory.
