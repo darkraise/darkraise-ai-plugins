@@ -47,6 +47,7 @@ import {
   shellAge,
   tasksEnded,
   termColor,
+  themeColor,
   track,
   turnsToBudget,
   windowElapsed,
@@ -81,6 +82,7 @@ import {
   tabsOf,
   typedNumber,
 } from '../hooks/cockpit/config'
+import { nativeLine, nativeRun } from '../hooks/cockpit/native'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -1590,6 +1592,53 @@ describe('desktop', () => {
     await $.session.start(START)
     await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' } as never)
     expect(opened).toEqual([])
+  })
+})
+
+describe('native rows', () => {
+  // A stand-in element table: what native.tsx draws comes back as plain
+  // objects. A Text keeps no key, as on a real surface.
+  const TABLE = { Box: 'Box', Text: 'Text', Svg: 'Svg' } as never
+  const PICTURE = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>'
+
+  test('maps the named colors to theme keys and passes the rest through', () => {
+    expect(['green', 'red', 'yellow', 'cyan', 'blue', 'magenta', 'gray', 'white'].map(name => themeColor(name))).toEqual(['success', 'error', 'warning', 'suggestion', 'suggestion', 'planMode', 'subtle', 'text'])
+    expect(themeColor('#ff8700')).toBe('#ff8700')
+    expect(themeColor('permission')).toBe('permission')
+    expect(themeColor(undefined)).toBeUndefined()
+  })
+
+  test('draws a run as the desktop text, a chip on a pill', () => {
+    expect(nativeRun(TABLE, 'run', { text: '12m', color: 'green', bold: true, mono: true })).toEqual({ type: 'Text', props: { color: 'success', weight: 'semibold', mono: true }, children: ['12m'] })
+    expect(nativeRun(TABLE, 'run', { text: 'Opus 5.5', color: 'cyan', chip: true })).toEqual({ type: 'Text', props: { color: 'suggestion', size: 'caption', backgroundColor: 'subtle' }, children: ['Opus 5.5'] })
+    expect(nativeRun(TABLE, 'run', { text: 'done', faint: true })).toEqual({ type: 'Text', props: { dimColor: true }, children: ['done'] })
+  })
+
+  test('draws each kind of panel line', () => {
+    // Text: its left cut at the end beside its right, an indent in cells.
+    expect(nativeLine(TABLE, 'row', { kind: 'text', small: true, indent: 15, left: [{ text: 'a' }], right: [{ text: 'b' }] })).toEqual({
+      type: 'Box',
+      props: { key: 'row', flexDirection: 'row', justifyContent: 'space-between', columnGap: 'sm', paddingLeft: 2 },
+      children: [
+        { type: 'Box', props: { key: 'row-left', flexGrow: 1, flexShrink: 1 }, children: [{ type: 'Text', props: { size: 'footnote', wrap: 'truncate-end' }, children: [{ type: 'Text', children: ['a'] }] }] },
+        { type: 'Box', props: { key: 'row-right', flexShrink: 0 }, children: [{ type: 'Text', props: { size: 'footnote' }, children: [{ type: 'Text', children: ['b'] }] }] },
+      ],
+    })
+    expect(nativeLine(TABLE, 'note', { kind: 'text', wrap: true, left: [{ text: 'a long note' }] })).toMatchObject({ children: [{ children: [{ props: { wrap: 'wrap' } }] }] })
+    expect(nativeLine(TABLE, 'chips', { kind: 'chips', chips: [{ text: 'one' }, { text: 'two', color: 'red' }] })).toEqual({
+      type: 'Box',
+      props: { key: 'chips', flexDirection: 'row', flexWrap: 'wrap', gap: 'xs' },
+      children: [
+        { type: 'Text', props: { size: 'caption', backgroundColor: 'subtle' }, children: ['one'] },
+        { type: 'Text', props: { color: 'error', size: 'caption', backgroundColor: 'subtle' }, children: ['two'] },
+      ],
+    })
+    const badge = nativeLine(TABLE, 'who', { kind: 'badge', svg: PICTURE, lines: [[{ text: 'me@example.com' }], [{ text: 'Me' }]] })
+    expect(badge).toMatchObject({ type: 'Box', props: { key: 'who', flexDirection: 'row' }, children: [{ type: 'Svg', props: { source: PICTURE } }, { type: 'Box', props: { key: 'who-lines' } }] })
+    expect((badge as { children: { children?: unknown[] }[] }).children[1]?.children).toMatchObject([{ type: 'Text', props: { wrap: 'truncate-end' } }, { type: 'Text', props: { size: 'footnote' } }])
+    expect(nativeLine(TABLE, 'bar', { kind: 'picture', svg: PICTURE, alt: 'a bar' })).toEqual({ type: 'Svg', props: { source: PICTURE, alt: 'a bar' } })
+    // A surface without pictures draws none.
+    expect(nativeLine({ Box: 'Box', Text: 'Text' } as never, 'bar', { kind: 'picture', svg: PICTURE })).toBe(false)
   })
 })
 

@@ -452,6 +452,14 @@ export function runsCut(runs: readonly Run[], width: number): Run[] {
   return out
 }
 
+// The named colors the rows use, as the theme keys that mean the same.
+const THEME_KEYS: Record<string, string> = { green: 'success', red: 'error', yellow: 'warning', cyan: 'suggestion', blue: 'suggestion', magenta: 'planMode', gray: 'subtle', white: 'text' }
+
+/** A named color as the theme key that means the same, so the desktop's theme draws it; a theme key, a hex or any other name passes through. */
+export function themeColor(name: string | undefined): string | undefined {
+  return name === undefined ? undefined : (THEME_KEYS[name] ?? name)
+}
+
 /** A terminal color: a 256-color number becomes hex, orange its own hex, a name stays. */
 export function termColor(name: string | null | undefined): string | undefined {
   if (name === null || name === undefined || name === '' || name === 'default') return undefined
