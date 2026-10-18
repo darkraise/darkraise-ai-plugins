@@ -28,6 +28,8 @@ import {
   bar,
   billingLabel,
   budgetFor,
+  collapsedFrom,
+  collapsedToggled,
   duration,
   elapsed,
   endsOnSentinel,
@@ -201,6 +203,7 @@ type Options = {
   warnAt: number
   layout: string
   sections: string
+  collapsed: string
   breakdownRows: number
   openAtStart: boolean
   limitAlertAt: number
@@ -218,6 +221,7 @@ type Live = Omit<Options, 'layout'> & {
   layout: 'auto' | 'full' | 'compact'
   tuning: Tuning
   shown: Section[]
+  shownCollapsed: Section[]
   isMinimized: boolean
 }
 
@@ -230,6 +234,7 @@ function liveFrom(values: Partial<Options>): Live {
     warnAt = 80,
     layout: layoutSetting = 'auto',
     sections = '',
+    collapsed = '',
     breakdownRows = 6,
     openAtStart = true,
     limitAlertAt = 90,
@@ -248,6 +253,7 @@ function liveFrom(values: Partial<Options>): Live {
     warnAt,
     layout,
     sections,
+    collapsed,
     breakdownRows,
     openAtStart,
     limitAlertAt,
@@ -257,6 +263,7 @@ function liveFrom(values: Partial<Options>): Live {
     notifyDetail,
     tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt), isRelaxed: handoffMode === 'relaxed' },
     shown: sectionsFrom(sections),
+    shownCollapsed: collapsedFrom(collapsed),
     isMinimized: layout === 'compact',
   }
 }
@@ -854,6 +861,18 @@ export const register: Register = on => {
             )}
           </Box>
         ),
+        collapsed: (
+          <Box key="set-collapsed-chips" flexDirection="column">
+            <Box key="set-collapsed-label"><Text>Collapsed</Text></Box>
+            {chips(
+              'set-collapsed',
+              SECTIONS,
+              name => o.shownCollapsed.includes(name as Section),
+              name => name,
+              name => save('collapsed', collapsedToggled(o.shownCollapsed, name as Section)),
+            )}
+          </Box>
+        ),
         notifyOn: (
           <Box key="set-notifyOn-chips" flexDirection="column">
             <Box key="set-notifyOn-label"><Text>Send on</Text></Box>
@@ -957,19 +976,32 @@ export const register: Register = on => {
 
     // Each section is a card: a rounded frame in its own color, its title and
     // headline on the first line, its rows below, and a row's details two cells in.
+    // Its title collapses it to that line, saved in the collapsed setting; a
+    // collapsed Context card keeps its buttons.
     const inner = Math.max(20, room - 4)
     const wide = Math.max(10, inner - 2 * INDENT)
-    const section = (key: string, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) => (
-      <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
-        <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
-          <Text color={color} bold>
-            {title}
-          </Text>
-          {headline}
+    const toggle = (name: Section) => setOption($, 'collapsed', collapsedToggled(o.shownCollapsed, name))
+    const section = (key: Section, title: string, color: string, headline: RenderChildren, ...body: RenderChildren[]) => {
+      const isCollapsed = o.shownCollapsed.includes(key)
+      const label = `${isCollapsed ? '▸' : '▾'} ${title}`
+      return (
+        <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
+          <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
+            {S.canUnderline ? (
+              <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)}>
+                <Text color={color} bold>
+                  {label}
+                </Text>
+              </Button>
+            ) : (
+              <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)} />
+            )}
+            {headline}
+          </Box>
+          {isCollapsed ? body.filter(part => part === actions) : body}
         </Box>
-        {body}
-      </Box>
-    )
+      )
+    }
     const details = (key: string, ...body: RenderChildren[]) => (
       <Box key={key} flexDirection="column" paddingLeft={INDENT}>
         {body}

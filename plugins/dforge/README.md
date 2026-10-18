@@ -630,6 +630,12 @@ desktop window joins the session, unless you closed it.
   and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** lists commits and pull requests the attribution guard refused.
 
+**Collapsing.** Each section's title is a button: `▾ Usage` collapses the
+section to its title row and headline, and `▸ Usage` expands it again. Each
+press saves the `collapsed` setting, so the next session opens the same way. A
+collapsed Context section keeps its buttons, and the resumable-work card never
+collapses.
+
 **Minimize** (`m`) closes the pane and draws the cockpit as a band directly
 above the prompt, across the transcript's width. **Expand** on the band's top
 rule opens the pane again, and so does `/cockpit`. Each saves the `layout`
@@ -761,6 +767,7 @@ The same settings can be set with
 | Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
 | Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band always draws its own lines. |
+| Cockpit | `collapsed` | empty | Sections drawn as their title row and headline only, comma-separated, from the same eight names. Pressing a section's title collapses or expands it and saves this setting. Empty expands all eight. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |

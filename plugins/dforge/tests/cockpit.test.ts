@@ -783,13 +783,35 @@ describe('settings', () => {
     })
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: 'Usage' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Usage' })).toBeUndefined()
     const drawn = JSON.stringify(await ui.drawn())
-    expect(drawn.indexOf('"Plan"')).toBeGreaterThan(-1)
-    expect(drawn.indexOf('"Plan"')).toBeLessThan(drawn.indexOf('feat/pane'))
+    expect(drawn.indexOf('"▾ Plan"')).toBeGreaterThan(-1)
+    expect(drawn.indexOf('"▾ Plan"')).toBeLessThan(drawn.indexOf('feat/pane'))
     // Without the Context section the buttons still show, at the end.
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+  })
+
+  test('collapsed draws a section as its title row, and its title toggles it', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' }, written })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    // Usage keeps its title and headline and loses every row.
+    expect((await ui.find({ key: 'usage-title' }))?.props).toMatchObject({ label: '▸ Usage', plain: true })
+    expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
+    expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
+    // Context loses its meter but keeps its buttons.
+    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+    await ui.press({ key: 'usage-title' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'context' })
+    expect((await ui.find({ key: 'usage-title' }))?.props.label).toBe('▾ Usage')
+    expect(await ui.find({ key: 'limit-five_hour' })).toBeDefined()
+    await ui.press({ key: 'repo-title' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'context,repo' })
   })
 
   test('breakdownRows limits the context rows', async ($, on) => {
@@ -962,7 +984,7 @@ describe('minimized band', () => {
     await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
     expect(await ui.find({ key: 'band-expand' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
@@ -1005,7 +1027,7 @@ describe('minimized band', () => {
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%/ })).toBeDefined()
   })
 
@@ -1165,7 +1187,7 @@ describe('minimized band', () => {
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Context' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeDefined()
   })
 
   test('an unknown layout reads as auto', async ($, on) => {
@@ -1173,10 +1195,10 @@ describe('minimized band', () => {
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const docked = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await docked.find({ type: 'Text', text: 'Context' })).toBeDefined()
+    expect(await docked.find({ type: 'Button', text: '▾ Context' })).toBeDefined()
     await docked.unmount()
     const inline = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await inline.find({ type: 'Text', text: 'Context' })).toBeUndefined()
+    expect(await inline.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
   })
 })
 
@@ -1231,6 +1253,8 @@ describe('buttons', () => {
     expect(compact?.props).toMatchObject({ label: 'Compact', plain: true })
     expect(compact?.props.hotkey).toBeUndefined()
     expect(JSON.stringify(compact?.children)).toContain('{"type":"Text","props":{"underline":true},"children":["C"]}')
+    // A section's title is drawn in its card's color.
+    expect((await ui.find({ key: 'context-title' }))?.children[0]).toMatchObject({ type: 'Text', props: { color: 'cyan', bold: true }, children: ['▾ Context'] })
     // The hotkey rides on a hidden twin that presses the same thing.
     expect((await ui.find({ key: 'pane-settings-hotkey-box' }))?.props.display).toBe('none')
     expect((await ui.find({ key: 'pane-settings-hotkey' }))?.props.hotkey).toBe('s')
@@ -1283,6 +1307,18 @@ describe('settings view', () => {
     expect(collapsedToggled(['usage', 'repo'], 'context')).toBe('context,usage,repo')
     expect(collapsedToggled(['usage', 'repo'], 'usage')).toBe('repo')
     expect(collapsedToggled(['usage'], 'usage')).toBe('')
+  })
+
+  test('the Collapsed chips save the collapsed setting', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect((await ui.find({ key: 'set-collapsed-usage' }))?.props).toMatchObject({ label: '○ usage', dimColor: true })
+    await ui.press({ key: 'set-collapsed-usage' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'usage' })
+    expect((await ui.find({ key: 'set-collapsed-usage' }))?.props.label).toBe('✓ usage')
   })
 
   test('/cockpit settings opens the settings', async ($, on) => {
@@ -1606,7 +1642,7 @@ describe('account', () => {
     signedIn(on)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Account' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Account' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /● me@example\.com/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Me · Acme \(admin\)/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Opus 5\.5 · xhigh effort/ })).toBeDefined()
@@ -1618,7 +1654,7 @@ describe('account', () => {
     world(on, { tokens: 284_000 })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Account' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Account' })).toBeUndefined()
   })
 })
 
@@ -1774,7 +1810,7 @@ describe('shells and remote', () => {
     // Shells is a card of its own, ahead of Agents, and Agents lists no shell.
     expect((await ui.find({ key: 'shells' }))?.props.borderColor).toBe('yellow')
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev 0s$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^Agents$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Agents' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /No subagents yet\./ })).toBeDefined()
     // Idle, the pane still ticks each second while the shell runs.
     await clock.advance(65_000)
@@ -2068,7 +2104,7 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^1\/3$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
@@ -2123,14 +2159,14 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
     await $.session.start(START)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
     await ui.unmount()
     // A run still open from before keeps its card.
     const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
     if (ledger !== undefined) ledger.text = LEDGER
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
   })
 
   test('reads the finish choice and counts it down', () => {
@@ -2474,7 +2510,7 @@ describe('cockpit roots', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
     expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
   })
@@ -2519,13 +2555,13 @@ describe('cockpit roots', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
     await ui.unmount()
     w.modeOut = { exitCode: 0, stdout: MODE, stderr: '' }
     files['/home/me/.dforge/stores.json']!.mtimeMs = 2
     await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/stores.json' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: 'Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
   })
 })
 
