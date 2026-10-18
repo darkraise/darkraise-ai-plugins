@@ -84,6 +84,7 @@ import {
   typedNumber,
 } from '../hooks/cockpit/config'
 import { nativeLine, nativeRun } from '../hooks/cockpit/native'
+import { drawSettings } from '../hooks/cockpit/settings-view'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -697,6 +698,14 @@ describe('cockpit pane', () => {
     expect(agentGroups([one('d1', true, 'done'), one('d2', true, 'done'), one('r', false, null)], [], 2).map(group => group.spawns.map(spawn => spawn.agentId))).toEqual([['r'], ['d2']])
   })
 
+  test('keeps every running agent when more run than are shown, and no ended one', () => {
+    const ended = [{ agentId: 'd1', isDone: true, outcome: 'done' as const }, { agentId: 'd2', isDone: true, outcome: 'failed' as const }]
+    const running = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'].map(agentId => ({ agentId, isDone: false }))
+    const keys = (shown?: number) => agentGroups([...ended, ...running], [], shown).map(group => [group.key, group.spawns.map(spawn => spawn.agentId)])
+    expect(keys()).toEqual([['working', ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7']]])
+    expect(keys(2)).toEqual([['working', ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7']]])
+  })
+
   test('lists subagents waiting on you, working, failed and done', async ($, on) => {
     world(on, { tokens: 50_000, agentIds: ['agent-1', 'agent-2', 'agent-3', 'agent-4'] })
     on('tool.check', () => ({ decision: 'ask' }))
@@ -865,7 +874,9 @@ describe('settings', () => {
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▸ Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Button', text: '▾ Usage' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▸ Usage' })).toBeUndefined()
     const drawn = JSON.stringify(await ui.drawn())
     expect(drawn.indexOf('"▾ Plan"')).toBeGreaterThan(-1)
     expect(drawn.indexOf('"▾ Plan"')).toBeLessThan(drawn.indexOf('feat/pane'))
@@ -893,6 +904,34 @@ describe('settings', () => {
     expect(await ui.find({ key: 'limit-five_hour' })).toBeDefined()
     await ui.press({ key: 'repo-title' })
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'context,repo' })
+  })
+
+  test('a collapsed title is a bare label on a Claude Code without styled labels', async ($, on) => {
+    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' }, version: '2.1.292' })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const title = await ui.find({ key: 'usage-title' })
+    expect(title?.props).toMatchObject({ label: '▸ Usage', plain: true })
+    expect(title?.children).toEqual([])
+    expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
+    expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
+    expect((await ui.find({ key: 'context-title' }))?.children).toEqual([])
+    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+  })
+
+  test('a collapsed title is drawn in its card color where Claude Code styles labels', async ($, on) => {
+    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' }, version: '2.1.295' })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'usage-title' }))?.children[0]).toMatchObject({ type: 'Text', props: { color: 'blue', bold: true }, children: ['▸ Usage'] })
+    expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
+    expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
 
   test('breakdownRows limits the context rows', async ($, on) => {
@@ -1066,6 +1105,7 @@ describe('minimized band', () => {
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▸ Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
     expect(await ui.find({ key: 'band-expand' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
@@ -1110,6 +1150,7 @@ describe('minimized band', () => {
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▸ Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%/ })).toBeDefined()
   })
 
@@ -1281,6 +1322,7 @@ describe('minimized band', () => {
     await docked.unmount()
     const inline = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await inline.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect(await inline.find({ type: 'Button', text: '▸ Context' })).toBeUndefined()
   })
 })
 
@@ -1554,6 +1596,51 @@ describe('settings view', () => {
     expect(await term.find({ key: 'set-warnAt-edit' })).toBeDefined()
   })
 
+  test('the desktop draws a locked row as text and a custom row with its mark and default', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: { sections: 'plan,repo', handoffTokens: 300_000 }, written, env: { DFORGE_BUDGET: '465000' } })
+    await $.session.start(START)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await desk.press({ key: 'pane-settings' })
+    // Sections is the pane's own chips: no dropdown or field, but the mark and the default still show.
+    expect((await desk.find({ key: 'set-sections' }))?.props).toMatchObject({ flexDirection: 'row', columnGap: 'sm' })
+    expect(await desk.find({ key: 'set-section-usage' })).toBeDefined()
+    expect(await desk.find({ key: 'set-sections-controls' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-sections-input' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-sections-mark' })).toBeDefined()
+    expect((await desk.find({ key: 'set-sections-default' }))?.text).toBe('changed from the defaultReset')
+    await desk.press({ key: 'set-section-usage' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ sections: 'plan,repo,usage', handoffTokens: 300_000 })
+    await desk.press({ key: 'settings-tab-Context' })
+    // The budget is forced by the environment: its value and the reason, nothing to change.
+    expect((await desk.find({ key: 'set-handoffTokens-controls' }))?.text).toBe('465k set by DFORGE_BUDGET')
+    expect(await desk.find({ key: 'set-handoffTokens-input' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-handoffTokens-less' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-handoffTokens-mark' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-handoffTokens-default' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-warnAt-input' })).toBeDefined()
+  })
+
+  test('the desktop draws a free-text row as an open field alone', () => {
+    const TABLE = { Box: 'Box', Text: 'Text', Button: 'Button', Input: 'Input', Select: 'Select' } as never
+    const spec = { type: 'string', default: '', group: 'Cockpit', target: 'dforge', label: 'Note', title: 'A note', description: 'Free text.' } as never
+    const model = { tabs: ['Cockpit'], tab: 'Cockpit', hint: null, rows: [rowOf('note', spec, 'hello')], isHelpShown: false, editing: null, error: null, isConfirmingReset: false, canType: true, isDesktop: true, problems: [], custom: {}, top: null }
+    const found: { props: Record<string, unknown> }[] = []
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) node.forEach(walk)
+      else if (node !== null && typeof node === 'object') {
+        const one = node as { props?: Record<string, unknown>; children?: unknown }
+        if (typeof one.props?.key === 'string') found.push(one as { props: Record<string, unknown> })
+        walk(one.children)
+      }
+    }
+    const act = Object.fromEntries(['openTab', 'set', 'step', 'edit', 'submit', 'reset', 'toggleHelp', 'askResetGroup', 'resetGroup', 'cancelReset', 'back'].map(name => [name, () => undefined])) as never
+    walk(drawSettings(TABLE, model, act))
+    const keys = found.map(one => one.props.key)
+    expect(found.find(one => one.props.key === 'set-note-input')).toMatchObject({ props: { label: 'Note', value: 'hello', submitLabel: 'save' } })
+    expect(keys.filter(key => /^set-note-(select|edit|less|more)/.test(String(key)))).toEqual([])
+  })
+
   test('a group resets only after a second press', async ($, on) => {
     const written: Record<string, string> = {}
     world(on, { tokens: 284_000, config: { warnAt: 70, nudgeModel: false, layout: 'full' }, written })
@@ -1763,6 +1850,29 @@ describe('native rows', () => {
     // A surface without pictures draws none.
     expect(nativeLine({ Box: 'Box', Text: 'Text' } as never, 'bar', { kind: 'picture', svg: PICTURE })).toBe(false)
   })
+
+  test('draws a text line without its right half or indent, and a badge without pictures', () => {
+    // No right half draws no box for it, and no indent no padding; a dim run is dimmed.
+    expect(nativeLine(TABLE, 'row', { kind: 'text', left: [{ text: 'a', dim: true }] })).toEqual({
+      type: 'Box',
+      props: { key: 'row', flexDirection: 'row', justifyContent: 'space-between', columnGap: 'sm' },
+      children: [{ type: 'Box', props: { key: 'row-left', flexGrow: 1, flexShrink: 1 }, children: [{ type: 'Text', props: { wrap: 'truncate-end' }, children: [{ type: 'Text', props: { dimColor: true }, children: ['a'] }] }] }],
+    })
+    expect(nativeLine({ Box: 'Box', Text: 'Text' } as never, 'who', { kind: 'badge', svg: PICTURE, lines: [[{ text: 'me@example.com' }], [{ text: 'Me' }]] })).toEqual({
+      type: 'Box',
+      props: { key: 'who', flexDirection: 'row', alignItems: 'center', columnGap: 'sm' },
+      children: [
+        {
+          type: 'Box',
+          props: { key: 'who-lines', flexDirection: 'column', flexShrink: 1 },
+          children: [
+            { type: 'Text', props: { wrap: 'truncate-end' }, children: [{ type: 'Text', children: ['me@example.com'] }] },
+            { type: 'Text', props: { size: 'footnote', wrap: 'truncate-end' }, children: [{ type: 'Text', children: ['Me'] }] },
+          ],
+        },
+      ],
+    })
+  })
 })
 
 describe('pane graphics', () => {
@@ -1827,6 +1937,7 @@ describe('account', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Account' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▸ Account' })).toBeUndefined()
   })
 })
 
@@ -2320,6 +2431,33 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: /BLOCKED · impl exhausted/ })).toBeDefined()
   })
 
+  test('the desktop band draws its git chips and its blocked and refused warning as rows', async ($, on) => {
+    const files = runFiles(`${LEDGER}\nTask 2: BLOCKED — impl exhausted — pick a meter width rule`)
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
+    await $.session.measure(MEASURE)
+    const desk = await $.ui.mount({ ...INLINE, surface: 'desktop' })
+    // The chips follow the facts row, each on a pill: the branch, then the changes.
+    const chips = await desk.find({ key: 'band-rest-1' })
+    expect(chips?.props).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', gap: 'xs' })
+    expect(chips?.children).toMatchObject([
+      { type: 'Text', props: { color: 'planMode', size: 'caption', backgroundColor: 'subtle' }, children: ['⎇ feat/pane ↑2 ↓1'] },
+      { type: 'Text', props: { color: 'warning', size: 'caption', backgroundColor: 'subtle' }, children: ['~1 changed'] },
+      { type: 'Text', props: { size: 'caption', backgroundColor: 'subtle' }, children: ['?1 untracked'] },
+    ])
+    // The warning is one red line below them, its separator dim.
+    const warning = await desk.find({ key: 'band-rest-2-left' })
+    expect(warning?.text).toBe('✗ Task 2 blocked  ·  ✗ 1 refused')
+    expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"color":"error"},"children":["Task 2 blocked"]}')
+    expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"dimColor":true},"children":["  ·  "]}')
+    expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"color":"error"},"children":["1 refused"]}')
+    expect(await desk.find({ key: 'band-rest-3' })).toBeUndefined()
+  })
+
   test('clears a run finished before the session started', async ($, on) => {
     const done = [
       '# SDD ledger — plan: docs/plans/p.md',
@@ -2332,6 +2470,7 @@ describe('run card', () => {
     await $.session.start(START)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▸ Run' })).toBeUndefined()
     await ui.unmount()
     // A run still open from before keeps its card.
     const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
@@ -2731,6 +2870,7 @@ describe('cockpit roots', () => {
     await $.session.start(START)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▸ Run' })).toBeUndefined()
     await ui.unmount()
     w.modeOut = { exitCode: 0, stdout: MODE, stderr: '' }
     files['/home/me/.dforge/stores.json']!.mtimeMs = 2
