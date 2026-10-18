@@ -180,21 +180,46 @@ ar_fenced() {
   ' "$1"
 }
 
+# ar_handoff — the first prompt and launch from the handoff scripts/next-step
+# just wrote, into AR_PROMPT, AR_MODEL and AR_EFFORT.
+ar_handoff() {
+  local primary latest launch
+  AR_PROMPT="" AR_MODEL="" AR_EFFORT=""
+  primary=$(ar_primary_root) || return 1
+  dforge_stores_init "$primary"
+  latest=$(dforge_latest_file "$primary")
+  [ -f "$latest" ] && AR_PROMPT=$(ar_fenced "$latest" 'Paste as the first prompt:')
+  [ -n "$AR_PROMPT" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
+  launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)
+  if [[ $launch =~ claude\ --model\ ([^ ]+)\ --effort\ ([^ ]+) ]]; then
+    AR_MODEL=${BASH_REMATCH[1]} AR_EFFORT=${BASH_REMATCH[2]}
+  fi
+}
+
+# ar_switch — at plan saved, the in-place move to execution: the first prompt
+# and launch as ar_clear reads them. Refuses (return 4) without an attached
+# plan, or when the first prompt names another plan. Never a self-resume. The
+# phase moves to execute, so the switch's compaction is measured under
+# execution's rules and an oversized one still hands off.
+ar_switch() {
+  local plan
+  plan=$(ar_get plan)
+  [ -n "$plan" ] || { echo "auto-run: no plan is attached; run auto-run attach --plan first" >&2; return 4; }
+  ar_handoff || return 1
+  [[ $AR_PROMPT == *"$(basename "$plan")"* ]] \
+    || { echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2; return 4; }
+  ar_update '.pending = "switch" | .phase = "execute" | .resumePrompt = $p
+    | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
+    --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT"
+}
+
 # ar_clear PHASE — the cleared session's first prompt and launch, from the
 # handoff scripts/next-step just wrote. PHASE 1 for a phase clear; otherwise
 # the clear is a self-resume, and the AR_RESUME_CAP-th in a row stops the run
 # (return 5).
 ar_clear() {
-  local is_phase=$1 primary latest prompt="" launch model="" effort="" resumes
-  primary=$(ar_primary_root) || return 1
-  dforge_stores_init "$primary"
-  latest=$(dforge_latest_file "$primary")
-  [ -f "$latest" ] && prompt=$(ar_fenced "$latest" 'Paste as the first prompt:')
-  [ -n "$prompt" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
-  launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)
-  if [[ $launch =~ claude\ --model\ ([^ ]+)\ --effort\ ([^ ]+) ]]; then
-    model=${BASH_REMATCH[1]} effort=${BASH_REMATCH[2]}
-  fi
+  local is_phase=$1 resumes
+  ar_handoff || return 1
   if [ "$is_phase" != 1 ]; then
     ar_update '.resumes = ((.resumes // 0) + 1)' || return 1
     resumes=$(ar_get resumes)
@@ -206,7 +231,7 @@ ar_clear() {
   fi
   ar_update '.pending = "clear" | .rebind = true | .resumePrompt = $p
     | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
-    --arg p "$prompt" --arg m "$model" --arg e "$effort"
+    --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT"
 }
 
 ar_rebind() { # ar_rebind ID
@@ -215,9 +240,24 @@ ar_rebind() { # ar_rebind ID
   ar_update '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$1"
 }
 
-ar_resumed() { ar_update '.failures = 0 | if .pending == "resume" then .pending = null else . end'; }
+# ar_resumed — the cockpit submitted its stage's prompt. After a switch the
+# compaction is still to be measured, so after-compact becomes due.
+ar_resumed() {
+  ar_update '.failures = 0
+    | if .pending == "resume" then .pending = null
+      elif .pending == "switch-resume" then .pending = "after-compact"
+      else . end'
+}
 
-ar_compacted() { ar_update '.compactions += 1 | .failures = 0 | .pending = "after-compact"'; }
+# ar_compacted [--switch] — book a compaction; the switch's own leaves its
+# resume stage due. One in the final or finish phase sets finalCompacted, after
+# which every budget line of the run says ok.
+ar_compacted() {
+  local next=after-compact
+  [ "${1:-}" = --switch ] && next=switch-resume
+  ar_update '.compactions += 1 | .failures = 0 | .pending = $n
+    | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")' --arg n "$next"
+}
 
 ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the run
   local n
@@ -271,12 +311,20 @@ ar_after() {
   fi
 }
 
+# ar_holds_session — true in the phases no compaction hands off from: the plan
+# is written, and the final review and finishing run, in this session.
+ar_holds_session() {
+  ar_state | ar_jq -e '.phase == "plan" or .phase == "final" or .phase == "finish"' >/dev/null 2>&1
+}
+
 # ar_settle P BUDGET WINDOW — apply the after-compaction rule to the run: set
 # the regime, clear pending, print continue; a handoff keeps the regime and
-# stays pending until clear.
+# stays pending until clear. A phase that holds the session takes the high
+# regime instead of a handoff.
 ar_settle() {
   local result
   result=$(ar_after "$1" "$2" "$3")
+  if [ "$result" = handoff ] && ar_holds_session; then result=high; fi
   if [ "$result" = handoff ]; then
     ar_update '.pending = "handoff"' || return 1
     echo handoff
@@ -289,7 +337,8 @@ ar_settle() {
 # ar_verdict TOKENS BUDGET WINDOW [N] — prints "<ok|compact|handoff> <limit>
 # <regime>". A compaction not yet measured is settled first with TOKENS as its
 # size; a pending clear is a handoff in progress. An ok clears a compaction a
-# wider wave probe requested.
+# wider wave probe requested. Once a compaction ran in the final phases
+# (finalCompacted) it never asks for another: Claude Code's own is the backstop.
 ar_verdict() {
   local tokens=$1 budget=$2 window=$3 n=${4:-1} pending regime limit settled
   pending=$(ar_get pending)
@@ -302,7 +351,7 @@ ar_verdict() {
   limit=$(ar_limit "$budget" "$window" "$n" "$regime")
   if [ "$pending" = handoff ] || [ "$pending" = clear ]; then
     echo "handoff $limit $regime"
-  elif [ "$tokens" -ge "$limit" ]; then
+  elif [ "$tokens" -ge "$limit" ] && ! ar_state | ar_jq -e '.finalCompacted == true' >/dev/null 2>&1; then
     ar_update '.pending = "compact"' || return 1
     echo "compact $limit $regime"
   else

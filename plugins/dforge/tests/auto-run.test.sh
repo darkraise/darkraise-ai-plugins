@@ -325,5 +325,68 @@ check "a failure after a rebind is counted" "$(field failures)" "1"
 ar --session s-1 resumed
 check "resumed resets the failures" "$(field failures):$(field pending)" "0:null"
 
+# --- the switch (reference/auto-run.md §The switch) ---
+ar --session s-1 stop
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 switch >/dev/null 2>&1; status=$?
+check "switch without a plan: exit 4, nothing pending" "$status:$(field pending)" "4:null"
+ar --session s-1 attach --plan docs/other.md
+ar --session s-1 switch >/dev/null 2>&1; status=$?
+check "switch: a first prompt naming another plan: exit 4" "$status:$(field pending)" "4:null"
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase plan
+ar --session s-1 switch; status=$?
+check "switch: exit 0, switch pending" "$status:$(field pending)" "0:switch"
+check "switch: the phase moves to execute" "$(field phase)" "execute"
+check "switch: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dforge:subagent-driven-development."
+check "switch: the launch" "$(jq -r '.launch | "\(.model) \(.effort)"' "$STATE")" "sonnet high"
+check "switch: not a self-resume, no rebind" "$(field resumes):$(field rebind)" "0:false"
+check "pending prints switch" "$(ar --session s-1 pending)" "switch"
+ar --session s-1 compacted --switch
+check "compacted --switch: counted, switch-resume pending" "$(field compactions):$(field pending)" "1:switch-resume"
+check "the switch's compaction is not a final-phase one" "$(field finalCompacted)" "false"
+ar --session s-1 resumed
+check "resumed after a switch: after-compact is due" "$(field pending)" "after-compact"
+asst 700000 > "$T"
+out=$(after); status=$?
+check "after a switch, an oversized context still hands off" "$status:${out%% *}" "5:handoff"
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase plan
+ar --session s-1 switch
+ar --session s-1 compacted --switch
+ar --session s-1 resumed
+asst 30000 > "$T"
+out=$(after); status=$?
+check "after a switch, a small context continues" "$status:${out%% *}:$(field pending)" "0:continue:null"
+ar --session s-1 compacted --what >/dev/null 2>&1; status=$?
+check "compacted with another flag: exit 2" "$status" "2"
+
+# --- the plan, final and finish phases never hand off ---
+for phase in plan final finish; do
+  ar --session s-1 phase "$phase"
+  ar --session s-1 compacted
+  asst 700000 > "$T"
+  out=$(after); status=$?
+  check "after-compact in $phase: 85% of the window continues" "$status:${out%% *}:$(field pending)" "0:continue:null"
+done
+ar --session s-1 phase execute
+ar --session s-1 compacted
+out=$(after); status=$?
+check "after-compact in execute: 85% of the window still hands off" "$status:${out%% *}" "5:handoff"
+
+# --- once a final-phase compaction ran, every budget line is ok ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 phase final
+out=$(verdict --tokens 465000); status=$?
+check "final, before a compaction: at the budget, compact" "$status:${out%% *}" "6:compact"
+ar --session s-1 compacted
+check "a final-phase compaction is recorded" "$(field finalCompacted)" "true"
+out=$(verdict --tokens 750000); status=$?
+check "final, after a compaction: ok above the high limit" "$status:${out%% *}:$(field pending)" "0:ok:null"
+ar --session s-1 phase finish
+out=$(verdict --tokens 900000); status=$?
+check "finish, after a final-phase compaction: ok" "$status:${out%% *}" "0:ok"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
