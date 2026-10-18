@@ -23,8 +23,11 @@ back. Before anything else:
    A `Wave <k>: started` line with no later `integrated` or `serialized` line
    is a parallel wave in flight: follow
    [parallel-waves.md](../../reference/parallel-waves.md) §Recovery.
-3. Run `scripts/context-size`. On exit 5, finish the task in flight, then
-   invoke dforge:handoff.
+3. When every task has its `complete` line, run `scripts/context-size --final`
+   and go on to Final Review or finishing whatever it prints: the final phase
+   never hands off (in an auto run, the Auto run section's `handoff` rule still
+   applies). Otherwise run `scripts/context-size`; on exit 5, finish the task
+   in flight, then invoke dforge:handoff.
 4. Re-read this skill in full before the next dispatch, and
    [delegated-task.md](../../reference/delegated-task.md) when a task is
    mid-loop (an agent-named assigned line or `fix round R/5`).
@@ -479,13 +482,12 @@ request:
   that line's verdict decides. A short tail costs less to finish here than a
   fresh session's baseline and reload.
 - After the last task's `Task N: complete` line, run
-  `scripts/context-size --final`, which measures against the final-phase limit
-  (85% of the compaction window) instead of the task budget. On `ok` or
-  `unknown`, continue to Final Review in this session and on to finishing: a
-  `review-package` budget line saying `handoff` does not stop the final phase.
-  On exit 5,
-  invoke dforge:handoff, and dforge:resume-execution brings
-  the next session to Final Review.
+  `scripts/context-size --final` for the record, then
+  continue to Final Review in this session and on to finishing, whatever it
+  prints: the final phase never hands off, and a `review-package` budget line
+  saying `handoff` does not stop it. If the context fills, Claude Code's own
+  compaction is the backstop, and After compaction resumes the final phase
+  from the ledger.
 - On Codex the budget line carries a measured number but no verdict: hand off
   after every 3 completed tasks, or after any task that needed 3 or more fix
   rounds.
@@ -536,9 +538,9 @@ crosses a wave boundary.
 
 ## Final Review
 
-This runs in the session that completed the last task, unless
-`scripts/context-size --final` said `handoff` there; then
-dforge:resume-execution brought the next session here.
+This runs in the session that completed the last task. Only a stop the
+final phase cannot avoid (your human partner asked, or the session ended)
+brings it to a later session, through dforge:resume-execution.
 
 Follow [final-review.md](../../reference/final-review.md), the procedure both
 execution skills share. Point the reviewer at the ledger's deferred-minor and

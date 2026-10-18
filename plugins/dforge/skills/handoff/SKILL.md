@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when a budget line says handoff, at a hard phase stop (plan saved, or a switch from inline to subagent mode), on Codex after 3 tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
+description: Use when a budget line says handoff, at a hard phase stop (plan saved outside an auto run, or a switch from inline to subagent mode), on Codex after 3 tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
 ---
 
 # Handoff
@@ -20,9 +20,9 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   through its `Task N: complete` line, then hand off; start no new task. The
   budget leaves room for one task to finish.
 - A hard stop: the plan is saved, or a plan has just switched from inline to
-  subagent mode. The last task completing is a soft stop in both execution
-  modes: the final review and finishing run in the same session unless
-  `scripts/context-size --final` says `handoff` after the last task. A task
+  subagent mode. The last task completing is never a stop in either execution
+  mode: the final review and finishing run in the same session whatever
+  `scripts/context-size --final` prints. A task
   budget line printed during that final phase does not stop it, and nothing
   stops finishing once the final review is clean. The plan's last two tasks
   are measured against the same final-phase limit, so a short tail never hands
@@ -30,10 +30,11 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.
-- An auto run ([auto-run.md](../../reference/auto-run.md)) hands off for a
-  compaction that left too much, for a saved plan, and for the spec-to-plan
-  limit. The steps below run as always, but the turn does not end on the
-  next-step block: return to the step that invoked this skill, which runs
+- An auto run ([auto-run.md](../../reference/auto-run.md)) hands off only for
+  a compaction that left too much. A saved plan switches in place instead
+  (auto-run.md §The switch): only steps 0-3 below run, and the session does
+  not end. On a handoff the steps below run as always, but the turn does not
+  end on the next-step block: return to the step that invoked this skill, which runs
   `scripts/auto-run clear` and ends the turn (auto-run.md §Clears). This skill
   never runs `scripts/auto-run clear` itself.
 - Your human partner says they are stepping away for more than an hour, or

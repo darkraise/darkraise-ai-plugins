@@ -16,8 +16,11 @@ back. Before anything else:
    the directory it prints.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides; see the Recovery table under The Ledger.
-3. Run `scripts/context-size`. On exit 5, finish the task in flight, then
-   invoke dforge:handoff.
+3. When every task has its `complete` line, run `scripts/context-size --final`
+   and go on to the final review or finishing whatever it prints: the final
+   phase never hands off (in an auto run, the Auto run section's `handoff`
+   rule still applies). Otherwise run `scripts/context-size`; on exit 5,
+   finish the task in flight, then invoke dforge:handoff.
 4. Re-read this skill in full before the next task. If a task's last ledger
    line is an agent-named assigned line or `fix round R/5`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
@@ -331,15 +334,15 @@ budget before every task at no extra request:
 The plan's last two tasks are measured against the final-phase limit: their
 brief prints `budget (last 2 tasks)` or `budget (last task)`, and only that
 line's verdict decides. Run `scripts/context-size --final` after the last
-task's `Task <N>: complete` line and act on its exit 5 the same way; after
-every earlier task, the next brief's budget line is the check. Finishing is
-never budget-checked.
+task's `Task <N>: complete` line for the record: it never says `handoff`.
+After every earlier task, the next brief's budget line is the check.
+Finishing is never budget-checked.
 
-The last task completing is a soft stop: the final review, its fix wave and
-finishing run in this session unless `context-size --final` says `handoff`. The
-final phase is measured against its own limit, 85% of the compaction window,
-so a `review-package` budget line saying `handoff` does not stop it. A switch
-to subagent mode is always a handoff.
+The last task completing is never a stop: the final review, its fix wave and
+finishing run in this session whatever `context-size --final` prints, and a
+`review-package` budget line saying `handoff` does not stop them. If the
+context fills, Claude Code's own compaction is the backstop. A switch to
+subagent mode is always a handoff.
 
 ## The Task Loop
 
@@ -497,10 +500,8 @@ Every task is complete, so the branch gets one broad review: follow
 [final-review.md](../../reference/final-review.md), the procedure both
 execution skills share; its reviewer is the seat
 `scripts/review-route PLAN_FILE --final` prints, and its fix wave is your own
-pass. In this mode it runs in this session, unless
-`scripts/context-size --final` said `handoff` - then invoke
-dforge:handoff, and dforge:resume-execution brings the next
-session here. List any
+pass. In this mode it runs in this session: the final phase never hands off.
+List any
 `(unseated)` rulings for the reviewer alongside the ledger's parked and
 deferred-minor lines.
 

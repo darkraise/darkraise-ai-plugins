@@ -6,9 +6,8 @@ of the work being done.
 
 ## Who runs it, and when
 
-- **Either execution mode:** the session that completed the last task, unless
-  `scripts/context-size --final` said `handoff` after it; then
-  dforge:resume-execution brought the next session here. The final
+- **Either execution mode:** the session that completed the last task: the
+  final phase never hands off. The final
   phase - this review, its one fix wave and finishing - is measured against
   that final-phase limit, not the task budget, so a `review-package` budget
   line saying `handoff` here does not stop it. Once the review is clean,

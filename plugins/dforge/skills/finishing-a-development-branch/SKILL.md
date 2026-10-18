@@ -18,8 +18,15 @@ When `scripts/auto-run status` exits 0
 `scripts/auto-run phase finish`, then follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is the base `scripts/auto-run status` names.
-- **Step 4 shows no menu.** Read `scripts/dforge-config get finishAction` and
-  carry out the matching option as if your human partner had chosen it, by
+- **Step 4 shows no menu.** When the spec `scripts/auto-run status` names
+  holds a `Finish: <action>` line in `## Decisions` and
+  `scripts/finish-choice get --plan PLAN_FILE` shows no `answer`, first run
+  `scripts/finish-choice set <action> --plan PLAN_FILE`: writing-plans
+  recorded it in the checkout the plan was written in, and an execution
+  worktree keeps a plan workspace of its own.
+  Read `scripts/finish-choice get --plan PLAN_FILE`
+  (the spec review's answer, else the `finishAction` setting; exit 3 means
+  `ask`) and carry out the matching option as if your human partner had chosen it, by
   name, since the detached-HEAD menu renumbers them: `merge` is Merge Locally
   into that base, `pr` is Push and Create PR, and `keep`, `ask` and `wait` are
   Keep As-Is. Never discard. In an auto run this mapping replaces Step 4's
@@ -32,6 +39,8 @@ When `scripts/auto-run status` exits 0
   partial commits never reach the base unreviewed. `merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of
   `cannot-test`, or when the run added a deferred register
   row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
+  A row deferred at the spec review, before the run started, counts as one
+  the run added.
   The line's `fail` and `flaky` counts are not read: they are taken before the
   fix wave, a failure that survives it is a deferred `A<n>:` row or a red test
   at Step 1, and one the fix wave fixed does not keep the branch.
