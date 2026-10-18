@@ -98,8 +98,8 @@ check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dforge" | gr
 
 # --- the workflow keys: defaults and refusals ---
 fresh w
-check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction].join(" "))')" \
-  "strict true true parallel auto ask standard sections true single ask"
+check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.autoRun].join(" "))')" \
+  "strict true true parallel auto ask standard sections true single ask on"
 # Each key: its default, a value it accepts, and one it refuses.
 while read -r key default valid invalid; do
   fresh "m-$key"
@@ -125,6 +125,9 @@ finishAction ask merge discard
 documentStore darkmem local remote
 progressSource darkmem local remote
 ROWS
+fresh ar-off
+fc set autoRun off; check "autoRun: off is accepted" "$?" "0"
+check "autoRun: off is read back" "$(fc get autoRun)" "off"
 
 fresh lens-env
 check "lensCap: the environment wins" "$(DFORGE_LENS_CAP=1 fc get lensCap)" "1"

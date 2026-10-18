@@ -45,7 +45,10 @@ What changes here:
   and a deferred register row for each. Other tasks keep running.
 - **Each task:** right after its `Task N: complete` line, run
   `scripts/auto-run task-complete`. After each task, run the Fable batch when
-  `scripts/auto-run decision list` prints anything.
+  `scripts/auto-run decision list` prints anything. When that line leaves every
+  task with its `complete` line (in subagent mode, after the last wave's
+  merge), run `scripts/auto-run phase final` next, before any budget check and
+  before the turn ends, so a compaction from there on never hands off.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight, then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
@@ -150,7 +153,9 @@ ask what finishing should do once the final review is clean, record the
 answer, and start work in the same turn. Skip it when
 `scripts/finish-choice get --plan PLAN_FILE` already prints a choice (it does so unasked when the `finishAction` setting
 names an action), or when
-this plan's ledger already exists: a resumed run does not stop to ask. It is
+this plan's ledger already exists: a resumed run does not stop to ask. When
+the spec's `## Decisions` holds a `Finish: <action>` line, run
+`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking. It is
 the run's one question; nothing else waits on your human partner.
 
 Conversation memory does not survive compaction. Track progress in a ledger

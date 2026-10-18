@@ -228,7 +228,8 @@ place; dforge:handoff does not end it. In order:
    written"` and end as Stopping says.
 4. `scripts/auto-run switch`, which also sets the phase to `execute`. It exits
    4 without an attached plan, or when the first prompt in `latest.md` names
-   another plan; stop the run the same way. On exit 0, end the turn with
+   another plan; on exit 4 or any other nonzero exit, stop the run the same
+   way. On exit 0, end the turn with
    `Auto run: switching` as its last line.
 
 The cockpit then compacts the session, keeping the spec, plan, register and

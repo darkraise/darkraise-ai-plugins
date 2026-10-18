@@ -450,12 +450,12 @@ needs. dforge hands off instead.
   `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
   skill writes `latest.md` and the plan's `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
-- **Stops.** A saved plan and a switch from inline to subagent mode are hard
-  stops; a finished task list is a soft stop in both modes, so the final
-  whole-branch review and finishing run in the same session unless
-  `scripts/context-size --final` says otherwise after the last task: the final
-  phase has its own limit, 85% of the compaction window, which the plan's
-  last two tasks share, and finishing itself is never budget-checked. A
+- **Stops.** A saved plan outside an auto run (an auto run switches in place)
+  and a switch from inline to subagent mode are hard stops.
+  The last task completing is never a stop: the final whole-branch review and
+  finishing always run in the same session, measured against the final phase's
+  own limit, 85% of the compaction window, which the plan's last two tasks
+  share; finishing itself is never budget-checked. A
   `handoff` verdict waits for the task in flight to complete. The
   budget is the compaction point minus one task's worst growth, derived from
   `autoCompactWindow` and the model's window; see

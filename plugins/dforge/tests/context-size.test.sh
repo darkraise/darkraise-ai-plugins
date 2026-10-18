@@ -571,6 +571,10 @@ run
 check "auto: compact, exit 6" "$status:$out" "6:budget (auto): 470k of 465k (101%) — compact — source: record"
 run --final
 check "auto: --final follows the run's rule" "$out" "budget (auto): 470k of 465k (101%) — compact — source: record"
+AUTO_STATE="$REPO/.dforge/sdd/auto-run.json"
+jq '.pending = "handoff"' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
+run --final
+check "auto: --final hands off while a handoff is pending" "$status:$out" "5:budget (auto): 470k of 465k (101%) — handoff — source: record"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 compacted)
 asst 400000 > "$AUTO_T"
 run
@@ -593,7 +597,6 @@ has "auto: an unreadable size in a wave names the run's limit" "$out" "budget (a
 run
 has "auto, normal: an unreadable size names the task budget" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"
 # A state the run cannot write: the lock file is a directory.
-AUTO_STATE="$REPO/.dforge/sdd/auto-run.json"
 asst 470000 > "$AUTO_T"
 rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"
 run

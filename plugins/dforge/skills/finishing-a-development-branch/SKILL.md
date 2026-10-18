@@ -20,10 +20,11 @@ When `scripts/auto-run status` exits 0
 - **Step 3** asks nothing: the base branch is the base `scripts/auto-run status` names.
 - **Step 4 shows no menu.** When the spec `scripts/auto-run status` names
   holds a `Finish: <action>` line in `## Decisions` and
-  `scripts/finish-choice get --plan PLAN_FILE` shows no `answer`, first run
-  `scripts/finish-choice set <action> --plan PLAN_FILE`: writing-plans
-  recorded it in the checkout the plan was written in, and an execution
-  worktree keeps a plan workspace of its own.
+  `scripts/finish-choice get --plan PLAN_FILE` exits 3 or prints a record with
+  `"source": "setting"` and no `answer` (a choice recorded any other way
+  stands), first run `scripts/finish-choice set <action> --plan PLAN_FILE`:
+  writing-plans recorded it in the checkout the plan was written in, and an
+  execution worktree keeps a plan workspace of its own.
   Read `scripts/finish-choice get --plan PLAN_FILE`
   (the spec review's answer, else the `finishAction` setting; exit 3 means
   `ask`) and carry out the matching option as if your human partner had chosen it, by

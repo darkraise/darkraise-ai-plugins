@@ -36,6 +36,12 @@ names "finishing: a spec-review deferral keeps a merge" "$FIN" 'A row deferred a
 names "subagent mode: recovery resumes the final phase" "$SDD" '3. When every task has its `complete` line, run `scripts/context-size --final`'
 names "inline mode: recovery resumes the final phase" "$EP" '3. When every task has its `complete` line, run `scripts/context-size --final`'
 names "handoff: a saved plan switches in place" "$H" 'a compaction that left too much. A saved plan switches in place instead'
+names "subagent mode: phase final right after the last task" "$SDD" '`scripts/auto-run phase final` next, before any budget check and before the'
+names "inline mode: phase final right after the last task" "$EP" 'merge), run `scripts/auto-run phase final` next, before any budget check and'
+names "finishing: only a setting-recorded choice is overwritten" "$FIN" '`"source": "setting"` and no `answer` (a choice recorded any other way'
+names "README: the last task completing is never a stop" "$P/README.md" 'The last task completing is never a stop'
+names "subagent mode: the spec's Finish line replaces the question" "$SDD" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
+names "inline mode: the spec's Finish line replaces the question" "$EP" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
 check "handoff: no spec-to-plan trigger is left" "$(grep -c 'spec-to-plan' "$H")" "0"
 for f in "$SDD" "$EP" "$H" "$FR"; do
   check "${f#"$P"/} no longer hands off after --final" "$(tr '\n' ' ' < "$f" | tr -s ' ' | grep -cE -- '--final` (said|says) `handoff`')" "0"
