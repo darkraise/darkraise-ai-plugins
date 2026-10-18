@@ -37,12 +37,18 @@ first. Then nothing in this skill waits on your human partner:
   the pending list, and the Fable batch rules on it with the rest.
 - **Once the plan is reviewed:** `scripts/auto-run attach --plan PLAN_FILE`,
   the Fable batch when `scripts/auto-run decision list` prints anything, then
-  Execution Handoff. This step owns the clear: after dforge:handoff, run
-  `scripts/auto-run clear --phase` and end as auto-run.md §Clears says.
+  the switch instead of Execution Handoff: when the spec's `## Decisions`
+  holds a `Finish: <action>` line, `scripts/finish-choice set <action> --plan
+  PLAN_FILE`; dforge:handoff steps 0-3 only; `scripts/next-step PLAN_FILE`;
+  then `scripts/auto-run switch` and end the turn with `Auto run: switching`
+  as its last line, as auto-run.md §The switch says.
+- **One plan.** An auto run writes one plan for the whole spec and amends it
+  in place through the ruling seat's AMEND path (`scripts/plan-amend`); it
+  never writes a follow-up plan or a second plan version.
 
 ## Scope Check
 
-If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own. Under `autoRun=on` the spec covers the whole request by design: write one plan for it, never suggest a split, and take a later change of scope through the ruling seat's AMEND path.
 
 ## File Structure
 
@@ -195,8 +201,8 @@ per-task review. The tasks not delegated are the **self-implemented** tasks.
 none — it predates the question, or there is no spec — ask your human partner
 the question in dforge:brainstorming §Choosing the execution strategy
 before you draft any task, and wait for the answer; when the `executionStrategy`
-setting is `sequential` or `parallel` (dforge:brainstorming §Settings), take
-that value and do not ask. On a Codex host do not ask:
+setting is `sequential` or `parallel` (dforge:brainstorming §Settings; the
+default is `parallel`), take that value and do not ask. On a Codex host do not ask:
 the plan is sequential. Sequential writes
 `**Parallelism:** sequential — <why>` and nothing below applies.
 
@@ -204,12 +210,22 @@ the plan is sequential. Sequential writes
 bar here — every task keeps its tests, its review and its Rule S — and it
 never invents parallelism the work does not have:
 
-1. **Draft the tasks as usual, then group them into waves.** A wave is a run
-   of consecutive task numbers whose tasks can run at the same time. Order the
-   tasks so that tasks which can run together are adjacent, and give every
+1. **Draft the tasks as usual, then sort them into two groups.** Give every
    task a `**Depends on:**` line below its `**Interfaces:**` block (and its
    `**Items:**` line, when there is one): `none`, or the tasks whose output it
-   consumes, as `Task 1, Task 3`. Every dependency sits in an earlier wave.
+   consumes, as `Task 1, Task 3`. Then:
+   - **alone** — a task that cannot share a wave (rule 4 below, or a file it
+     cannot give up to another task);
+   - **parallel** — every other task.
+
+   Dependencies decide only the order. A task's depth is one more than the
+   deepest task it depends on; a task that depends on nothing has depth 1.
+   Parallel tasks of one depth that share no file form one wave (rule 5 caps
+   its width); an alone task is a wave of its own at its depth. Number the
+   tasks so that the waves run in depth order, each a run of consecutive task
+   numbers. Tasks 1-2 depending on nothing, Tasks 3-5 on Task 1 or 2, and
+   Task 6 on Tasks 3-5 give `waves — 1-2 | 3-5 | 6`. Every dependency sits in
+   an earlier wave.
 2. **Shared things go first.** A type, schema, config key or helper that
    several tasks use is created by a foundation task in an earlier wave, and
    recorded in Contracts, so that the tasks of a later wave consume a fixed
@@ -517,7 +533,7 @@ If you find issues, fix them inline. If you find a spec requirement with no task
 ## Execution Handoff
 
 A saved, reviewed plan is a hard stop: execution starts in a fresh session (in
-an auto run the cockpit starts it; see Auto run).
+an auto run the session switches in place instead; see Auto run).
 Invoke dforge:handoff. It commits (or pushes) the plan and the spec, writes
 `<latest.md>`, runs `scripts/next-step PLAN_FILE`, and ends
 your message with the resume guide — the launch command from the Execution
