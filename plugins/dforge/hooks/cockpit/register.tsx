@@ -94,7 +94,7 @@ import {
   notifyKindsToggled,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
-import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
 import type { BandMeter, PanelLine, PanelRun, Segment } from './svg'
 
 const PANE = 'dforge'
@@ -2012,8 +2012,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
     return (
       <Box key="band" flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
         <Box key="band-top" flexDirection="row" alignItems="center" columnGap={1}>
-          <Box key="band-who" flexGrow={1}>
-            {picture('band-who-line', panelSvg(head0, svgWidth(room - 16)), panelText(head0))}
+          <Box key="band-who" flexGrow={1} flexShrink={1}>
+            {head0.map((line, index) => nativeLine(table, `band-who-${index}`, line))}
           </Box>
           <Button key="band-expand" label="Expand" hotkey="e" onPress={onExpand} />
         </Box>
@@ -2026,7 +2026,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
             )}
           </Box>
         )}
-        {rest.length > 0 && picture('band-rest', panelSvg(rest, w), panelText(rest))}
+        {rest.map((line, index) => nativeLine(table, `band-rest-${index}`, line))}
       </Box>
     )
   }

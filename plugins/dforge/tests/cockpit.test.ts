@@ -83,7 +83,7 @@ import {
   typedNumber,
 } from '../hooks/cockpit/config'
 import { nativeLine, nativeRun } from '../hooks/cockpit/native'
-import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, panelSvg, panelText, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
+import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -1001,9 +1001,10 @@ describe('minimized band', () => {
     await ui.unmount()
     const desk = await $.ui.mount({ ...INLINE, surface: 'desktop' })
     const drawn = JSON.stringify(await desk.drawn())
-    expect(drawn).toContain('me@example.com · subscription')
-    expect(drawn).toContain('5h 23%')
-    expect(drawn).toContain('1 shell · longest 0s')
+    // The band's head and rows are the desktop's own text, its meters one picture.
+    expect((await desk.find({ key: 'band-who-0-left' }))?.text).toMatch(/^me@example\.com · subscription  Remote/)
+    expect((await desk.find({ key: 'band-rest-0-left' }))?.text).toContain('$ 1 shell · longest 0s')
+    expect((await desk.findAll({ type: 'Svg' })).map(one => one.props.alt)).toEqual([expect.stringContaining('5h 23%')])
     expect(drawn).not.toContain('npm run dev')
     expect(await desk.find({ key: 'band-expand' })).toBeDefined()
   })
@@ -1520,29 +1521,6 @@ describe('desktop', () => {
     expect(dial.match(/<path /g)).toHaveLength(2)
     expect(dial).toContain('<line ')
     expect(gaugeSvg(0, 'success', 100, '0%').match(/<path /g)).toHaveLength(1)
-    // A panel lays its lines out in pixels: the header, text cut to fit
-    // beside its right side, pills, wrapped notes and drawings placed whole.
-    const lines = [
-      { kind: 'head', lamp: 'cyan', title: 'Context', right: [{ text: '284k of 650k' }] },
-      { kind: 'text', left: [{ text: 'a very long command line that will not fit in the room it has' }], right: [{ text: '12:04', mono: true }] },
-      { kind: 'chips', chips: [{ text: 'Opus 5.5', color: 'cyan' }, { text: 'xhigh effort' }] },
-      { kind: 'text', wrap: true, small: true, left: [{ text: 'one two three four five six seven eight nine ten eleven twelve', dim: true }] },
-      { kind: 'picture', svg: seatSvg(1, 0.5, 120, 'magenta'), alt: 'a seat' },
-      { kind: 'picture', svg: seatSvg(0.5, 0.5, 120, 'magenta') },
-    ] as const
-    const drawnPanel = panelSvg(lines as never, 120)
-    expect(drawnPanel).toContain('>CONTEXT</text>')
-    expect(drawnPanel).toContain('text-anchor="end"')
-    expect(drawnPanel).toContain('…</tspan>')
-    expect(drawnPanel).toContain('class="pill"')
-    expect(drawnPanel).toContain('@media (prefers-color-scheme: dark)')
-    expect(drawnPanel.match(/<text /g)?.length).toBeGreaterThan(6)
-    // Two placed drawings keep their clip paths apart.
-    const clips = [...drawnPanel.matchAll(/<clipPath id="([^"]+)"/g)].map(match => match[1])
-    expect(new Set(clips).size).toBe(2)
-    expect(panelText(lines as never)).toBe(
-      'Context: 284k of 650k\na very long command line that will not fit in the room it has 12:04\nOpus 5.5, xhigh effort\none two three four five six seven eight nine ten eleven twelve\na seat',
-    )
     const row = gaugeTileSvg({ dial: gaugeSvg(0.5, 'warning', 100, '50%', null, true), key: 'Context', notes: [[{ text: 'of handoff' }]] }, 140)
     expect(row).toContain('class="fg">50%</text>')
     expect(row).toContain('>CONTEXT</text>')
