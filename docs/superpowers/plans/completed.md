@@ -27,3 +27,4 @@ One line per plan that landed, so project-status can tell a merged plan from one
 - 2026-10-18 `docs/superpowers/plans/2026-10-17-cockpit-native-desktop.md` — merged into `main` at 0c3ab53
 - 2026-10-18 `docs/superpowers/plans/2026-10-17-finish-without-wait.md` — merged into `main` at 0913724
 - 2026-10-18 `docs/superpowers/plans/2026-10-18-controller-model-eval.md` — merged into `main` at edbdfac
+- 2026-10-19 `docs/superpowers/plans/2026-10-19-auto-execution-default.md` — merged into `main` at 4d49a91
