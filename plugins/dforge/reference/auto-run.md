@@ -1,19 +1,25 @@
 # Auto run
 
-An opt-in mode: once the design is approved, dforge writes the spec and the
-plan, executes, reviews and finishes without asking its human anything. The
-design is `docs/superpowers/specs/2026-10-13-dr-forge-auto-run-design.md` in
-the dforge repository; this file is the contract the skills cite. Every
+The default on Claude Code (`autoRun=on`): once your human partner approves the
+written spec at the spec review, dforge writes the plan, executes, reviews and
+finishes without asking anything. Under `autoRun=ask` it is offered once the
+design is approved and starts before the spec is written; `autoRun=off` never
+starts one. The designs are
+`docs/superpowers/specs/2026-10-13-dr-forge-auto-run-design.md` and
+`docs/superpowers/specs/2026-10-18-auto-execution-default-design.md` in the
+dforge repository; this file is the contract the skills cite. Every
 `scripts/…` command runs as `bash <plugin-root>/scripts/<name>`.
 
-Claude Code only: the cockpit mod compacts and clears the session. No run
-starts on Codex.
+Claude Code only: the cockpit mod compacts, switches and clears the session.
+No run starts on Codex, where `autoRun=on` behaves as `off`.
 
 ## Starting
 
-dforge:brainstorming offers it once, after the last design section is
-approved and before the spec is written, unless `autoRun=off`. On yes, from
-the checkout the design was made in:
+Under `autoRun=on`, dforge:brainstorming starts it once your human partner
+approves the spec at the spec review (dforge:brainstorming §Auto by default).
+Under `autoRun=ask` it offers it once, after the last design section is
+approved and before the spec is written, and starts it on yes. Either way,
+from the checkout the design was made in:
 
     scripts/auto-run start --spec <spec path> [--register <register path>]
 
@@ -38,7 +44,8 @@ when refused, 5 when the run stopped (`handoff` for `verdict` and
   the worktree), the finish-preference question, and the execution stops
   under Rulings.
 - **Phases:** `scripts/auto-run phase plan` when writing-plans starts,
-  `scripts/auto-run attach --plan <plan>` once the plan is reviewed,
+  `scripts/auto-run attach --plan <plan>` once the plan is reviewed, then
+  `scripts/auto-run switch` (see The switch),
   `scripts/auto-run phase execute` when execution starts,
   `scripts/auto-run phase final` before the final review and
   `scripts/auto-run phase finish` when finishing starts.
@@ -48,6 +55,12 @@ when refused, 5 when the run stopped (`handoff` for `verdict` and
   continue, unless it asks you to stop (see Stopping).
 
 ## The spec
+
+Under `autoRun=on` the critic and the Fable review run before the run starts,
+as dforge:brainstorming §Auto by default says: what Fable leaves undecided is
+asked at the spec review instead of deferred, and its rulings are imported
+after `start` with `scripts/auto-run ruling add`. The rest of this section is
+the spec phase of a run started under `autoRun=ask`.
 
 After your own self-review round and the architecture critic
 (dforge:brainstorming §Architecture critic), dispatch `dforge:judge-fable` on the spec
@@ -60,9 +73,8 @@ critic Blocker, which takes the note below:
     scripts/register add <register> "<item>" --state deferred --note "Fable: <its words>"
 
 At most two Fable rounds run (review, revise, re-review); anything still open
-after the second is deferred the same way. Then `scripts/context-size --plan`
-as brainstorming says: under its limit write the plan here; over it, follow
-Clears with `--phase`.
+after the second is deferred the same way. Then write the plan in this
+session: `scripts/context-size --plan` does not run in an auto run.
 
 **Acceptance statements and critic findings in the spec phase:**
 
@@ -157,18 +169,22 @@ The rules: compact at the task budget in the normal regime, or at 90% of the
 compaction window in the high one, less 140k for each task of a wave beyond
 the first. After a compaction of size P: P at 85% of the window or more hands
 off; P at 85% of the task budget or more switches to the high regime;
-anything smaller returns to the normal one. The tail rule, the final-phase
+anything smaller returns to the normal one. In the `plan`, `final` and
+`finish` phases P never hands off, and once a compaction has run in `final` or
+`finish` every budget line says `ok`. The tail rule, the final-phase
 limit and relaxed mode do not apply. Finishing is never measured.
 
 ## Ending a turn
 
-A run's turn ends only with one of two lines as the last line of the message:
+A run's turn ends only with one of three lines as the last line of the message:
 
 - `Auto run: compacting` when `scripts/auto-run pending` says `compact`;
-- `Auto run: clearing` after `scripts/auto-run clear` exits 0.
+- `Auto run: clearing` after `scripts/auto-run clear` exits 0;
+- `Auto run: switching` after `scripts/auto-run switch` exits 0.
 
 `scripts/auto-run pending` prints `compact`, `after-compact`, `handoff`,
-`clear`, `resume` or `none`. `handoff` is a compaction that left too much
+`clear`, `resume`, `switch`, `switch-resume` or `none`. `handoff` is a
+compaction that left too much
 behind; it stays until `scripts/auto-run clear` turns it into `clear`, and the
 Stop hook holds a turn that tries to end before that.
 
@@ -181,11 +197,16 @@ clears the session and binds the new one, and submits the next prompt itself.
 ## After a compaction
 
 The cockpit's prompt asks you to run `scripts/auto-run after-compact` first.
-It prints `continue` (exit 0) or `handoff` (exit 5). It settles only a
+It prints `continue` (exit 0) or `handoff` (exit 5); in the `plan`, `final`
+and `finish` phases it always prints `continue`, since the plan, the final
+review and finishing stay in this session. It settles only a
 compaction that was booked (`pending` is `after-compact`): while a `clear` or
 `handoff` is pending it prints `handoff` and changes nothing.
 
 - `continue`: carry on with the phase `scripts/auto-run status` names. In
+  `plan`, resume dforge:writing-plans from the spec and the plan file on disk
+  (before `attach`, the newest file in the plans directory whose `**Spec:**`
+  line names the spec). In
   `execute` and `final`, follow the After compaction steps of the execution
   skill the plan's Execution line names, for the plan `status` names: its
   workspace, ledger and `git log` are the authority. `latest.md` predates the
@@ -193,15 +214,44 @@ compaction that was booked (`pending` is `after-compact`): while a `clear` or
   is unknown, record that with `scripts/auto-run ruling add`.
 - `handoff`: follow Clears.
 
+## The switch
+
+Once the plan is reviewed and attached, the session moves to execution in
+place; dforge:handoff does not end it. In order:
+
+1. When the spec's `## Decisions` holds a `Finish: <action>` line,
+   `scripts/finish-choice set <action> --plan PLAN_FILE`.
+2. dforge:handoff steps 0-3: reconcile background agents and shells, commit
+   the plan and the spec, and update the handoff notes. Do not end the session.
+3. `scripts/next-step PLAN_FILE`. Any nonzero exit means `latest.md` was not
+   written: run `scripts/auto-run stop --reason "the handoff file could not be
+   written"` and end as Stopping says.
+4. `scripts/auto-run switch`, which also sets the phase to `execute`. It exits
+   4 without an attached plan, or when the first prompt in `latest.md` names
+   another plan; stop the run the same way. On exit 0, end the turn with
+   `Auto run: switching` as its last line.
+
+The cockpit then compacts the session, keeping the spec, plan, register and
+base paths and dropping the design conversation (`compacted --switch` leaves
+`switch-resume` pending), runs `/model` and `/effort` from the plan's launch
+command, puts back the user's default model and effort, and submits the plan's
+first prompt behind "Run `scripts/auto-run after-compact` first." Run it, then
+follow the first prompt in this same session. A switch is a phase transition:
+it never counts as a self-resume. Its compaction is measured in the `execute`
+phase, so one that leaves 85% of the window or more hands off as Clears says.
+A failure in either stage is retried once in that stage; the second stops the
+run.
+
 ## Clears
 
 The step that hands off owns the clear; dforge:handoff itself never runs it.
 Run dforge:handoff first (`scripts/auto-run clear` reads the first prompt
 and launch command `scripts/next-step` wrote to `latest.md`), then:
 
-- **Plan saved**, and **spec to plan** over the `--plan` limit:
-  `scripts/auto-run clear --phase`.
 - **A compaction that left too much:** `scripts/auto-run clear`.
+
+Plan saved is no clear: the session switches in place (§The switch). A run
+started under `autoRun=ask` writes its plan in the same session too.
 
 If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`: the
 `latest.md` it would read is an older handoff's. Run `scripts/auto-run stop
@@ -233,8 +283,9 @@ sends one Discord `blocked` notice when a run stops with a reason.
 
 ## Finishing
 
-Finishing carries out the `finishAction` setting at once, into the base
-`scripts/auto-run status` names: `merge` and `pr` as named; `keep`, `ask` and
+Finishing carries out at once, into the base `scripts/auto-run status` names,
+the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec
+review recorded, or else the `finishAction` setting: `merge` and `pr` as named; `keep`, `ask` and
 `wait` keep the branch, and so does `merge` when the base is `none`. `merge`
 also keeps the branch when the ledger holds a
 `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
@@ -245,7 +296,9 @@ whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`: an
 acceptance statement that failed or went unverified reaches the base only after
 a person has looked at it. The line's `fail` and `flaky` counts are not read: they are taken
 before the fix wave, a failure that survives it is a deferred `A<n>:` row or a
-red test at finishing's first step, and one the fix wave fixed does not keep the branch. On a
+red test at finishing's first step, and one the fix wave fixed does not keep the branch. A row
+deferred at the spec review, before the run started, counts as one the run
+added. On a
 detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
 branch from the detached HEAD. A `pr` with base `none` opens its request
 against the dforge's default branch. No menu. Its final message lists

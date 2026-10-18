@@ -106,21 +106,23 @@ under `ok` is not a reason to stop.
 - **Acting on `handoff`:** finish the task in flight through its
   `Task N: complete` line, then hand off. Start no new task.
 - **brainstorming:** `context-size --plan` once, after the spec is committed.
-  Below its limit the plan is written in the same session.
+  Below its limit the plan is written in the same session. In an auto run it
+  does not run: the plan is always written in the same session.
 - **Anywhere:** `context-size` when in doubt.
 
 ## Stops
 
 - **Hard:** the plan is saved; a plan switches from inline to subagent mode.
   Both launch the execution model the Execution line names. writing-plans runs
-  dforge:handoff once the plan is reviewed.
-- **Soft:** the last task is complete, in either mode. The final review and
-  finishing follow in the same session unless `context-size --final` says
-  `handoff` there; a clean final review never stops before finishing. The
-  final phase - the final review, its one fix wave, the scoped re-review and
-  finishing - grows far less than a task's fix loop, so it is measured against
-  the final-phase limit, and a task budget line saying `handoff` inside it
-  does not stop it.
+  dforge:handoff once the plan is reviewed. In an auto run the plan saved is
+  no stop: the cockpit switches the session in place
+  ([auto-run.md](auto-run.md) §The switch).
+- **Never a stop:** the last task completing, in either mode. The final review
+  and finishing follow in the same session whatever `context-size --final`
+  prints: it never says `handoff`, and a task budget line saying `handoff`
+  inside the final phase does not stop it. When the context fills there,
+  Claude Code's own compaction is the backstop, and the execution skill's
+  After compaction steps resume the final phase from the ledger.
 - **Budget:** a `handoff` verdict at any checkpoint.
 - **Codex:** the count rule above.
 
@@ -149,7 +151,9 @@ budget line but `context-size --plan` prints the run's own verdict,
 the task budget, or at 90% of the compaction window once a compaction has left
 85% of the task budget or more, less 140k per extra task of a wave; a
 compaction that leaves 85% of the window or more hands off, and the cockpit
-clears and resumes the session. The tail rule, the final-phase limit and
+clears and resumes the session, except in the `plan`, `final` and `finish`
+phases, which never hand off; after one compaction in `final` or `finish`
+every budget line of the run says `ok`. The tail rule, the final-phase limit and
 relaxed mode do not apply to it.
 
 ## Idle

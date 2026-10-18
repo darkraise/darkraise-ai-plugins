@@ -13,10 +13,13 @@ without a plan.
 
 ## Auto run
 
-An auto run ([auto-run.md](auto-run.md)) never asks the question below:
-finishing carries out `finishAction` at once into the run's recorded base
-(`merge` or `pr`), and keeps the branch under `keep`, `ask` or `wait`, or when
-there is no base, with no menu.
+An auto run ([auto-run.md](auto-run.md)) never asks the question below. Under
+`autoRun=on` the spec review asks it when `finishAction` is `ask`, and the
+answer is recorded with `scripts/finish-choice set <action> --plan PLAN_FILE`
+once the plan is attached. Finishing carries out that choice, or else
+`finishAction`, at once into the run's recorded base (`merge` or `pr`), and
+keeps the branch under `keep`, `ask` or `wait`, or when there is no base, with
+no menu.
 
 ## The setting
 
