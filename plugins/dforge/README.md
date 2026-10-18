@@ -634,7 +634,8 @@ desktop window joins the session, unless you closed it.
 section to its title row and headline, and `▸ Usage` expands it again. Each
 press saves the `collapsed` setting, so the next session opens the same way. A
 collapsed Context section keeps its buttons, and the resumable-work card never
-collapses.
+collapses. The Run card is the `plan` section during a dforge run, so collapsing
+either one collapses the other.
 
 **Minimize** (`m`) closes the pane and draws the cockpit as a band directly
 above the prompt, across the transcript's width. **Expand** on the band's top
