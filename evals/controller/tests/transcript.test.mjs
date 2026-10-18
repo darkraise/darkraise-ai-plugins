@@ -133,10 +133,12 @@ test('a ledger check that only redirects stderr, and a write that failed, are no
       use('e2', 'Edit', { file_path: ledger, old_string: 'y', new_string: 'Task 2: complete (commits c..d)' }),
       use('t1', 'Bash', { command: "echo 'Task 3: complete (x)' | tee -a .dforge/sdd/p/progress.md" }),
       use('m1', 'MultiEdit', { file_path: ledger, edits: [{ old_string: 'a', new_string: 'Task 5: complete (x)' }] }),
+      use('v1', 'Bash', { command: "L=/w/.dforge/sdd/p/progress.md && cat >> $L <<'EOF'\nTask 4: complete (x)\nEOF" }),
+      use('v2', 'Bash', { command: "L=/w/.dforge/sdd/p/progress.md; grep -q 'Task 9: complete (' \"$L\" 2>/dev/null" }),
     ]),
     { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'e1', is_error: true, content: 'String to replace not found' }] } },
   ]));
-  assert.deepEqual(m.completed, ['2', '3', '5']);
+  assert.deepEqual(m.completed, ['2', '3', '4', '5']);
 });
 
 test('ledger complete lines the controller wrote are collected, deferred ones left out', () => {

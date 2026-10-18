@@ -16,8 +16,8 @@ const SEAT = /^review-seat (\S+) .*primary=(\S+) fallback=(\S+)/gm;
 // A ledger line the controller wrote; a task the auto run deferred is not done.
 const COMPLETE = /(?:^|[\s'"])Task (\d+): complete \((?!deferred by the auto run\))/g;
 const isAgent = use => use.name === 'Agent' || use.name === 'Task';
-// A shell redirect or tee whose target is the ledger; `2>/dev/null` on a grep is not one.
-const WRITES_LEDGER = /(?:>>?|\btee\b(?:\s+-a)?)\s*['"]?[^\s'";&|]*progress\.md/;
+// A shell redirect or tee into the ledger, by path or by a variable set in the same command; `2>/dev/null` on a grep is not one.
+const WRITES_LEDGER = /(?:>>?|\btee\b(?:\s+-a)?)\s*['"]?(?:[^\s'";&|]*progress\.md|\$\{?\w+)/;
 // The wrapper's operations that launch nothing.
 const CODEX_CONTROL = /--(?:dry-run|recover-commit|handback|release|amend-write-set|accept-baseline)\b/;
 // Only a command that launches a run counts: naming a runner in cat, grep or ps does not.
@@ -40,7 +40,10 @@ function textOf(content) {
 function ledgerText(use) {
   const input = use.input ?? {};
   // A Bash command that only reads the ledger (grep, cat) writes nothing into it.
-  if (use.name === 'Bash') return WRITES_LEDGER.test(String(input.command ?? '')) ? String(input.command) : '';
+  if (use.name === 'Bash') {
+    const cmd = String(input.command ?? '');
+    return /progress\.md/.test(cmd) && WRITES_LEDGER.test(cmd) ? cmd : '';
+  }
   if (!/progress\.md$/.test(String(input.file_path ?? ''))) return '';
   if (use.name === 'Write') return String(input.content ?? '');
   if (use.name === 'Edit') return String(input.new_string ?? '');
