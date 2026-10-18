@@ -1,6 +1,7 @@
 import type { EngineInterface, RenderChildren } from 'claude-code'
 
 import { themeColor } from './lib'
+import { CELL_PX } from './svg'
 import type { PanelLine, PanelRun } from './svg'
 
 // The engine refuses to pass `$` across an import, so this module draws from
@@ -55,7 +56,7 @@ export function nativeLine(table: Elements, key: string, line: PanelLine): Rende
   const size = line.small ? 'footnote' : undefined
   const right = line.right ?? []
   return (
-    <Box key={key} flexDirection="row" justifyContent="space-between" columnGap="sm" paddingLeft={line.indent === undefined ? undefined : Math.round(line.indent / 7.5)}>
+    <Box key={key} flexDirection="row" justifyContent="space-between" columnGap="sm" paddingLeft={line.indent === undefined ? undefined : Math.round(line.indent / CELL_PX)}>
       <Box key={`${key}-left`} flexGrow={1} flexShrink={1}>
         <Text size={size} wrap={line.wrap ? 'wrap' : 'truncate-end'}>
           {runs('left', line.left)}

@@ -100,7 +100,8 @@ const AGENT_GROUPS: readonly { key: AgentGroupKey; name: string }[] = [
  * The Agents section's groups in order, each left out while empty: the
  * running agents an open approval names, the other running ones, then the
  * recent ended ones (up to `shown` rows with the running) as failed or done.
- * A record without an outcome that ended reads as done.
+ * A record without an outcome that ended reads as done. `spawns` must run
+ * oldest first: the ended ones kept are the last ones.
  */
 export function agentGroups<T extends { agentId: string; isDone: boolean; outcome?: 'done' | 'failed' | null }>(
   spawns: readonly T[],

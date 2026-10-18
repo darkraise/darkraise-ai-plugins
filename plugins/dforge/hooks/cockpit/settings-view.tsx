@@ -106,21 +106,24 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
   }
 
   // Under a row: its description while help is shown, and its default with a Reset once it differs.
-  const below = (row: ViewRow): RenderChildren => [
+  const help = (row: ViewRow): RenderChildren =>
     model.isHelpShown && (
-      <Box key={`set-${row.key}-help`} paddingLeft={INDENT}>
-        <Text dimColor wrap="wrap">
+      <Box key={`set-${row.key}-help`} paddingLeft={isNative ? undefined : INDENT}>
+        <Text size={isNative ? 'footnote' : undefined} dimColor wrap="wrap">
           {row.description}
         </Text>
       </Box>
-    ),
+    )
+
+  const defaultLine = (row: ViewRow): RenderChildren =>
     row.isChanged && (
-      <Box key={`set-${row.key}-default`} flexDirection="row" columnGap={1} paddingLeft={INDENT}>
-        <Text key={`set-${row.key}-default-text`} dimColor>{row.shownDefault === '' ? 'changed from the default' : `default ${row.shownDefault}`}</Text>
+      <Box key={`set-${row.key}-default`} flexDirection="row" alignItems={isNative ? 'center' : undefined} columnGap={isNative ? 'sm' : 1} paddingLeft={isNative ? undefined : INDENT}>
+        <Text key={`set-${row.key}-default-text`} size={isNative ? 'footnote' : undefined} dimColor>
+          {row.shownDefault === '' ? 'changed from the default' : `default ${row.shownDefault}`}
+        </Text>
         {press(`set-${row.key}-reset`, 'Reset', () => act.reset(row.key))}
       </Box>
-    ),
-  ]
+    )
 
   const mark = (row: ViewRow): RenderChildren =>
     row.isChanged && (
@@ -130,13 +133,17 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
     )
 
   // A row the caller draws itself still gets the mark, the help and the default line.
+  const customBox = (row: ViewRow): RenderChildren => (
+    <Box key={`set-${row.key}`} flexDirection="row" columnGap={isNative ? 'sm' : 1}>
+      {model.custom[row.key]}
+      {mark(row)}
+    </Box>
+  )
+
   const drawRow = (row: ViewRow): RenderChildren => (
     <Box key={`set-${row.key}-block`} flexDirection="column">
       {model.custom[row.key] !== undefined ? (
-        <Box key={`set-${row.key}`} flexDirection="row" columnGap={1}>
-          {model.custom[row.key]}
-          {mark(row)}
-        </Box>
+        customBox(row)
       ) : (
         // Controls that overflow wrap in the value column, not under the label.
         <Box key={`set-${row.key}`} flexDirection="row" columnGap={1}>
@@ -152,7 +159,8 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
       {model.editing === row.key && model.error !== null && (
         <Text key={`set-${row.key}-error`} color="red">{`${' '.repeat(INDENT)}✗ ${model.error}`}</Text>
       )}
-      {below(row)}
+      {help(row)}
+      {defaultLine(row)}
     </Box>
   )
 
@@ -187,23 +195,14 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
   const drawNativeRow = (row: ViewRow): RenderChildren => (
     <Box key={`set-${row.key}-block`} flexDirection="column" gap="xs">
       {model.custom[row.key] !== undefined ? (
-        <Box key={`set-${row.key}`} flexDirection="row" columnGap="sm">
-          {model.custom[row.key]}
-          {mark(row)}
-        </Box>
+        customBox(row)
       ) : (
         <Box key={`set-${row.key}-label`} flexDirection="row" columnGap="sm">
           <Text weight="medium">{row.label}</Text>
           {mark(row)}
         </Box>
       )}
-      {model.isHelpShown && (
-        <Box key={`set-${row.key}-help`}>
-          <Text size="footnote" dimColor wrap="wrap">
-            {row.description}
-          </Text>
-        </Box>
-      )}
+      {help(row)}
       {model.custom[row.key] === undefined && (
         <Box key={`set-${row.key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap="sm">
           {nativeControl(row)}
@@ -214,14 +213,7 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
           <Text color="error">{`✗ ${model.error}`}</Text>
         </Box>
       )}
-      {row.isChanged && (
-        <Box key={`set-${row.key}-default`} flexDirection="row" alignItems="center" columnGap="sm">
-          <Text size="footnote" dimColor>
-            {row.shownDefault === '' ? 'changed from the default' : `default ${row.shownDefault}`}
-          </Text>
-          {press(`set-${row.key}-reset`, 'Reset', () => act.reset(row.key))}
-        </Box>
-      )}
+      {defaultLine(row)}
     </Box>
   )
 

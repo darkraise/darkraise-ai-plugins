@@ -26,9 +26,12 @@ export function paint(color: string | undefined, fallback = MARK): string {
   return (color === undefined ? undefined : PALETTE_BY_NAME[color]) ?? fallback
 }
 
+/** CSS pixels one terminal column spans in the desktop's text. */
+export const CELL_PX = 7.5
+
 /** The drawing's width in CSS pixels for a pane `columns` cells wide. */
 export function svgWidth(columns: number): number {
-  return Math.max(120, Math.min(640, Math.round(columns * 7.5)))
+  return Math.max(120, Math.min(640, Math.round(columns * CELL_PX)))
 }
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'

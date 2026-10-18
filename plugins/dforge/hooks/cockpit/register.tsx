@@ -94,7 +94,7 @@ import {
   notifyKindsToggled,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
-import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
+import { CELL_PX, avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
 import type { BandMeter, PanelLine, PanelRun, Segment } from './svg'
 
 const PANE = 'dforge'
@@ -1818,7 +1818,7 @@ export const register: Register = on => {
               <Box key={`gauge-${tile.key}`} width={0} flexGrow={share(tile)} flexDirection="column" alignItems="center" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
                 {picture(
                   `gauge-${tile.key}-dial`,
-                  gaugeTileSvg(tile, Math.round((Math.floor((avail * share(tile)) / total) - 5) * 7.5)),
+                  gaugeTileSvg(tile, Math.round((Math.floor((avail * share(tile)) / total) - 5) * CELL_PX)),
                   [tile.alt, ...tile.notes.map(note => note.map(run => run.text).join(''))].join(', '),
                 )}
               </Box>
