@@ -99,7 +99,7 @@ check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dforge" | gr
 # --- the workflow keys: defaults and refusals ---
 fresh w
 check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction].join(" "))')" \
-  "strict true true ask auto ask standard sections true single ask"
+  "strict true true parallel auto ask standard sections true single ask"
 # Each key: its default, a value it accepts, and one it refuses.
 while read -r key default valid invalid; do
   fresh "m-$key"
@@ -113,7 +113,8 @@ handoffMode strict relaxed loose
 codexLane true false maybe
 codexReview true false 0
 lensCap 4 2 10
-executionStrategy ask parallel fast
+executionStrategy parallel sequential fast
+autoRun on ask maybe
 executionMode auto subagent agent
 worktree ask always sometimes
 processBias standard heavier heavy

@@ -88,9 +88,9 @@ export default {
     description: 'How many specialist review lenses the final review runs at most, highest priority first. 0 turns them off. DFORGE_LENS_CAP overrides it.',
   },
   executionStrategy: {
-    type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
+    type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'parallel', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Strategy', title: 'Execution strategy',
-    description: 'How a plan executes. ask keeps the question; parallel falls back to sequential when the parts share files, and on Codex.',
+    description: 'How a plan executes. parallel, the default, runs independent tasks in waves and falls back to sequential when no two tasks can share a wave, and on Codex; ask keeps the question.',
   },
   executionMode: {
     type: 'enum', values: ['auto', 'inline', 'subagent'], default: 'auto', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
@@ -103,9 +103,9 @@ export default {
     description: 'Whether work is isolated in a git worktree before it starts. ask keeps the consent question.',
   },
   autoRun: {
-    type: 'enum', values: ['ask', 'off'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
-    label: 'Auto run', title: 'Offer an unattended run',
-    description: 'ask offers, once the design is approved, to run the spec, plan, execution, review and finish unattended (Claude Code only). off never offers it.',
+    type: 'enum', values: ['on', 'ask', 'off'], default: 'on', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
+    label: 'Auto run', title: 'Unattended runs',
+    description: 'on runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; off on Codex). ask offers that once the design is approved. off never runs one.',
   },
   processBias: {
     type: 'enum', values: ['standard', 'lighter', 'heavier'], default: 'standard', enforcedBy: 'skill', group: 'Process', target: 'dforge',
