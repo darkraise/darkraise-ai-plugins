@@ -27,6 +27,11 @@ export default {
     label: 'Sections', title: 'Pane sections',
     description: 'Which sections the full pane shows, in order, comma-separated: account, context, usage, shells, agents, plan, repo, guard. Empty shows all eight.',
   },
+  collapsed: {
+    type: 'string', default: '', group: 'Cockpit', target: 'dforge',
+    label: 'Collapsed', title: 'Collapsed sections',
+    description: 'Sections drawn as their title row only, comma-separated: account, context, usage, shells, agents, plan, repo, guard. Empty expands all eight.',
+  },
   breakdownRows: {
     type: 'number', default: 6, min: 0, max: 12, step: 1, zero: 'hidden', group: 'Cockpit', target: 'dforge',
     label: 'Context rows', title: 'Context breakdown rows',

@@ -13,6 +13,8 @@ import {
   bar,
   billingLabel,
   budgetFor,
+  collapsedFrom,
+  collapsedToggled,
   duration,
   elapsed,
   endsOnSentinel,
@@ -1273,6 +1275,14 @@ describe('settings view', () => {
     expect(sectionsToggled(['plan', 'context'], 'usage')).toBe('plan,context,usage')
     expect(sectionsToggled(['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo'], 'guard')).toBe('')
     expect(sectionsToggled(['plan'], 'plan')).toBe('plan')
+  })
+
+  test('collapses sections in their own order, each once', () => {
+    expect(collapsedFrom('repo, usage, nope, usage')).toEqual(['usage', 'repo'])
+    expect(collapsedFrom('')).toEqual([])
+    expect(collapsedToggled(['usage', 'repo'], 'context')).toBe('context,usage,repo')
+    expect(collapsedToggled(['usage', 'repo'], 'usage')).toBe('repo')
+    expect(collapsedToggled(['usage'], 'usage')).toBe('')
   })
 
   test('/cockpit settings opens the settings', async ($, on) => {

@@ -76,6 +76,18 @@ export function sectionsToggled(shown: readonly Section[], name: Section): strin
   return isDefault ? '' : next.join(',')
 }
 
+/** The collapsed setting, "repo, usage" → ['usage', 'repo']: known names, each once, in SECTIONS order. */
+export function collapsedFrom(text: string): Section[] {
+  const names = text.split(/[\s,]+/).map(name => name.trim().toLowerCase())
+  return SECTIONS.filter(name => names.includes(name))
+}
+
+/** The collapsed setting after collapsing or expanding one section, in SECTIONS order; empty when none is collapsed. */
+export function collapsedToggled(collapsed: readonly Section[], name: Section): string {
+  const next = collapsed.includes(name) ? collapsed.filter(one => one !== name) : [...collapsed, name]
+  return SECTIONS.filter(one => next.includes(one)).join(',')
+}
+
 /** 465000 → "465k"; 1234567 → "1.2M". */
 export function kTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
