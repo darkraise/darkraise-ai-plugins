@@ -952,7 +952,7 @@ export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | nu
 }
 
 /** The line an auto run's turn ends on, by the pending action it answers. */
-export const AUTO_SENTINELS: Readonly<Record<string, string>> = { compact: 'Auto run: compacting', clear: 'Auto run: clearing' }
+export const AUTO_SENTINELS: Readonly<Record<string, string>> = { compact: 'Auto run: compacting', clear: 'Auto run: clearing', switch: 'Auto run: switching' }
 
 /** Whether `answer`'s last non-blank line is the sentinel for `pending`. */
 export function endsOnSentinel(answer: string, pending: string | null): boolean {

@@ -334,9 +334,10 @@ function world(on: On, w: World) {
       const exitCode = w.autoRunExits?.[word] ?? 0
       if (w.autoFile !== undefined) {
         const state = JSON.parse(w.autoFile.text) as Record<string, unknown>
-        if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: 'after-compact', compactions: Number(state.compactions) + 1 })
+        if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: words[3] === '--switch' ? 'switch-resume' : 'after-compact', compactions: Number(state.compactions) + 1 })
         if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume', regime: 'normal' })
         if (exitCode === 0 && word === 'resumed' && state.pending === 'resume') state.pending = null
+        else if (exitCode === 0 && word === 'resumed' && state.pending === 'switch-resume') state.pending = 'after-compact'
         if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
         if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
         w.autoFile.text = JSON.stringify(state)
@@ -3685,6 +3686,74 @@ describe('auto run', () => {
     const w: World = { ...SIGNED_IN, autoRuns: [] }
     world(on, w)
     signedIn(on, autoFiles({ pending: 'clear' }))
+    await $.session.start(START)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
+    expect(w.autoRuns).toEqual([])
+  })
+
+  test('switches in place: compacts, books it, sets the model and submits the first prompt', async ($, on) => {
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md` with dforge:subagent-driven-development.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.compacts?.[0]).toMatch(/Drop the design conversation/)
+    expect(w.commands).toEqual(['/model sonnet', '/effort high'])
+    expect(w.autoRuns).toContain('--session sess-1 compacted --switch')
+    expect(w.autoRuns).toContain('--session sess-1 resumed')
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/^Run `bash .*\/scripts\/auto-run after-compact` first\. Continue `docs\/plan\.md`/)
+    expect(pendingOf(files)).toBe('after-compact')
+  })
+
+  test('retries the first prompt after the switch compaction without compacting again', async ($, on) => {
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
+    const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], submitFailures: 1 }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts).toEqual([])
+    expect(w.autoRuns?.filter(call => call.includes(' failure --reason the cockpit could not switch: '))).toHaveLength(1)
+    expect(pendingOf(files)).toBe('switch-resume')
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.commands).toEqual([])
+    expect(w.prompts).toHaveLength(1)
+    expect(w.autoRuns?.at(-1)).toBe('--session sess-1 resumed')
+    expect(pendingOf(files)).toBe('after-compact')
+  })
+
+  test('stops the run when the switch cannot book its resume', async ($, on) => {
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
+    const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { resumed: 1 } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts?.filter(text => text.includes('Continue `docs/plan.md`.'))).toHaveLength(1)
+    expect(w.autoRuns).toContain('--session sess-1 stop --reason the cockpit switched but could not book it')
+  })
+
+  test('books no engine compaction over a pending switch', async ($, on) => {
+    const w: World = { ...SIGNED_IN, autoRuns: [] }
+    world(on, w)
+    signedIn(on, autoFiles({ pending: 'switch' }))
+    await $.session.start(START)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
+    expect(w.autoRuns).toEqual([])
+  })
+
+  test('books no engine compaction over a pending switch-resume', async ($, on) => {
+    const w: World = { ...SIGNED_IN, autoRuns: [] }
+    world(on, w)
+    signedIn(on, autoFiles({ pending: 'switch-resume' }))
     await $.session.start(START)
     await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
     expect(w.autoRuns).toEqual([])
