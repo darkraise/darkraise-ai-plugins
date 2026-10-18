@@ -25,6 +25,7 @@ import {
   attributionIn,
   autoLimitFor,
   autoRunFor,
+  agentGroups,
   bar,
   billingLabel,
   budgetFor,
@@ -78,7 +79,7 @@ import {
   warnShare,
   writesGitText,
 } from './lib'
-import type { BandInput, Run, Section, TrackPart } from './lib'
+import type { AgentGroupKey, BandInput, Run, Section, TrackPart } from './lib'
 import { SCHEMA, claudeLocks, envLocks, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
 import type { SettingValue, SettingsFile } from './config'
 import { nativeLine, nativeRun } from './native'
@@ -419,6 +420,7 @@ export const register: Register = on => {
       model: started.model,
       description: e.description,
       isDone: false,
+      outcome: null,
       startedAt: await $.clock.now(),
     }
     await update($, spawns, list => [...list, spawn].slice(-50))
@@ -498,7 +500,7 @@ export const register: Register = on => {
       title: '⏳ Waiting for approval',
       detail: `${e.tool}${callSummary(e.tool, e.input) === '' ? '' : `: ${excerpt(callSummary(e.tool, e.input), 200)}`}`,
       fields: [...(seat === null ? [] : [{ name: 'Agent', value: shortSeat(seat) }]), ...(await turnFields($)).slice(0, 1)],
-    })
+    }, e.agentId ?? null)
     return decided
   }).catch(($, e, next) => next(e))
 
@@ -574,7 +576,8 @@ export const register: Register = on => {
     const list = await read($, spawns)
     const spawn = list.find(one => one.agentId === agentId)
     if (spawn === undefined) return done
-    await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true } : one)))
+    const outcome = e.reason === 'answer' ? 'done' : 'failed'
+    await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true, outcome } : one)))
     await syncTicker($)
     if (e.usage !== undefined) await update($, seats, all => addRun(all, spawn.seat, e.usage as TurnUsage))
     await notify($, {
@@ -611,7 +614,7 @@ export const register: Register = on => {
         title: tool === 'ExitPlanMode' ? '📋 Plan ready for review' : '❓ Claude is asking',
         detail: questionOf(e) || undefined,
         fields: (await turnFields($)).slice(0, 1),
-      })
+      }, null)
     }
     let ran: Awaited<ReturnType<typeof next>>
     try {
@@ -1027,7 +1030,7 @@ export const register: Register = on => {
         )}
       </Text>
     )
-    const recent = [...running, ...finished.slice(-Math.max(0, 6 - running.length))]
+    const groups = agentGroups(all, [...S.waits.values()].flatMap(wait => (wait.agentId === null ? [] : [wait.agentId])))
     const shownItems = planWindow(items, 8)
     const sortedSeats = [...list].sort((a, b) => totalIn(b) - totalIn(a))
     const mostIn = Math.max(1, ...sortedSeats.map(totalIn))
@@ -1363,16 +1366,21 @@ export const register: Register = on => {
             No subagents yet.
           </Text>
         ),
-        recent.map(spawn => (
-          <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
-            <Text color={spawn.isDone ? 'green' : 'cyan'}>{spawn.isDone ? '✓' : '●'} </Text>
-            <Text bold={!spawn.isDone} dimColor={spawn.isDone}>
-              {shortSeat(spawn.seat)}
+        groups.flatMap(group => [
+          <Text key={`agents-${group.key}`} color={AGENT_MARKS[group.key].color} bold>
+            {`${group.name} · ${group.spawns.length}`}
+          </Text>,
+          ...group.spawns.map(spawn => (
+            <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
+              <Text color={AGENT_MARKS[group.key].color}>{AGENT_MARKS[group.key].mark} </Text>
+              <Text bold={!spawn.isDone} dimColor={spawn.isDone}>
+                {shortSeat(spawn.seat)}
+              </Text>
+              <Text dimColor={spawn.isDone}> {spawn.description}</Text>
+              {!spawn.isDone && <Text color="cyan"> {elapsed(now - spawn.startedAt)}</Text>}
             </Text>
-            <Text dimColor={spawn.isDone}> {spawn.description}</Text>
-            {!spawn.isDone && <Text color="cyan"> {elapsed(now - spawn.startedAt)}</Text>}
-          </Text>
-        )),
+          )),
+        ]),
         sortedSeats.length > 0 && (
           <Text key="seats" dimColor>
             Seats by input
@@ -1639,17 +1647,20 @@ export const register: Register = on => {
           [{ text: [running.length > 0 ? `${running.length} running` : '', finished.length > 0 ? `${finished.length} done` : ''].filter(Boolean).join(' · ') }],
           [
             ...(all.length === 0 ? [{ kind: 'text', left: [{ text: 'No subagents yet.', dim: true }] } as PanelLine] : []),
-            ...recent.map(
-              (spawn): PanelLine => ({
-                kind: 'text',
-                left: [
-                  { text: spawn.isDone ? '✓  ' : '●  ', color: spawn.isDone ? undefined : 'green', faint: spawn.isDone },
-                  pill(shortSeat(spawn.seat)),
-                  { text: `  ${spawn.description}`, dim: spawn.isDone },
-                ],
-                right: spawn.isDone ? [] : [{ text: elapsed(now - spawn.startedAt), mono: true, dim: true }],
-              }),
-            ),
+            ...groups.flatMap((group): PanelLine[] => [
+              { kind: 'text', small: true, left: [{ text: `${group.name} · ${group.spawns.length}`, color: AGENT_MARKS[group.key].color, bold: true }] },
+              ...group.spawns.map(
+                (spawn): PanelLine => ({
+                  kind: 'text',
+                  left: [
+                    { text: `${AGENT_MARKS[group.key].mark}  `, color: AGENT_MARKS[group.key].color },
+                    pill(shortSeat(spawn.seat)),
+                    { text: `  ${spawn.description}`, dim: spawn.isDone },
+                  ],
+                  right: spawn.isDone ? [] : [{ text: elapsed(now - spawn.startedAt), mono: true, dim: true }],
+                }),
+              ),
+            ]),
             // Each seat's counts over a bar of its input, the part served from
             // the prompt cache lighter.
             ...sortedSeats.flatMap((seat): PanelLine[] => [
@@ -1888,6 +1899,14 @@ async function drawResumeBand($: EngineInterface, e: RenderInput<'AbovePrompt'>,
 
 const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
 
+// Each Agents group's mark and color, on its title and its rows.
+const AGENT_MARKS: Record<AgentGroupKey, { mark: string; color: string }> = {
+  waiting: { mark: '⏳', color: 'yellow' },
+  working: { mark: '●', color: 'cyan' },
+  failed: { mark: '✗', color: 'red' },
+  done: { mark: '✓', color: 'green' },
+}
+
 /** The minimized cockpit's band, drawn in the pane or above the prompt. */
 async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt'>, onExpand: () => unknown) {
   const table = $.ui.resolve(e)
@@ -2125,7 +2144,8 @@ const S = {
   },
   // An approval or question the person has not answered yet: its timer, and
   // the Discord message sent for it, edited once it is answered.
-  waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent }>(),
+  // Each open wait on the person, by tool call; `agentId` names the subagent whose approval it is.
+  waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null }>(),
   ticker: null as Timer | null,
   isTurnLive: false,
   isBudgetSent: false,
@@ -2225,7 +2245,7 @@ async function settleWait($: EngineInterface, id: string, outcome: string) {
 
 // Starts waiting on the person: the Now row says so at once, Discord after
 // notifyAskAfter seconds if it is still unanswered.
-async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'asking', event: NotifyEvent) {
+async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'asking', event: NotifyEvent, agentId: string | null) {
   const stamp = await $.clock.now()
   await setActivity($, now => ({ ...now, kind, since: stamp, detail: event.detail ?? null, isSent: false }))
   const send = async () => {
@@ -2238,7 +2258,7 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
     await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
   }
   const delay = Math.max(0, S.notifyAskAfter) * 1000
-  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send()), messageId: null, event })
+  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send()), messageId: null, event, agentId })
   if (delay === 0) await send()
 }
 

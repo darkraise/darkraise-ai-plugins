@@ -248,6 +248,8 @@ type World = {
   modeRuns?: string[]
   /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
   primary?: string
+  /** The agent ids the spawns get, in turn; `agent-1` once they run out. */
+  agentIds?: string[]
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -272,7 +274,7 @@ function world(on: On, w: World) {
   }))
   on('settings.read', (_$, e) => ({ value: e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {}) }))
   on('tool.call', (_$, e) => w.tools?.[String(e.tool)]?.() ?? { result: 'ok', text: 'ok' })
-  on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'agent-1' }))
+  on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: w.agentIds?.shift() ?? 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('session.version', () => {
@@ -693,6 +695,41 @@ describe('cockpit pane', () => {
     expect(keys([one('old', true, 'done'), ...many], [])).toEqual([['working', 'Working', ['r1', 'r2', 'r3', 'r4', 'r5', 'r6']]])
     expect(keys([one('d1', true, 'done'), one('d2', true, 'failed'), one('d3', true, 'done'), one('r', false, null)], []).map(group => group[2])).toEqual([['r'], ['d2'], ['d1', 'd3']])
     expect(agentGroups([one('d1', true, 'done'), one('d2', true, 'done'), one('r', false, null)], [], 2).map(group => group.spawns.map(spawn => spawn.agentId))).toEqual([['r'], ['d2']])
+  })
+
+  test('lists subagents waiting on you, working, failed and done', async ($, on) => {
+    world(on, { tokens: 50_000, agentIds: ['agent-1', 'agent-2', 'agent-3', 'agent-4'] })
+    on('tool.check', () => ({ decision: 'ask' }))
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    for (const n of [1, 2, 3, 4]) {
+      await $.agent.spawn({ tool_use_id: `toolu_${n}`, prompt: 'Implement', description: `Task ${n}`, subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    }
+    await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, turnId: 'turn-3', agentId: 'agent-3', reason: 'error' })
+    await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 'turn-4', agentId: 'agent-4', reason: 'answer' })
+    // Task 1's subagent asks to run a command; Task 2's keeps working.
+    await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf build' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    const order = async (ui: { findAll: (query: { type: string }) => Promise<{ text: string }[]> }, surface: string, patterns: RegExp[]) => {
+      const texts = surface === 'desktop' ? await boxTexts(ui) : (await ui.findAll({ type: 'Text' })).map(one => one.text)
+      return patterns.map(pattern => texts.findIndex(text => pattern.test(text)))
+    }
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({ ...PANE, surface })
+      const at = await order(ui, surface, [
+        /^Waiting on you · 1$/, /^⏳ +impl-sonnet-low +Task 1/,
+        /^Working · 1$/, /^● +impl-sonnet-low +Task 2/,
+        /^Failed · 1$/, /^✗ +impl-sonnet-low +Task 3/,
+        /^Done · 1$/, /^✓ +impl-sonnet-low +Task 4/,
+      ])
+      expect(at.every(index => index >= 0)).toBe(true)
+      expect([...at].sort((a, b) => a - b)).toEqual(at)
+      await ui.unmount()
+    }
+    // The approval is given: the call runs, and Task 1's subagent is working again.
+    await $.tool.call({ tool: 'Bash', command: 'rm -rf build', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await order(ui, 'terminal', [/^Waiting on you/, /^Working · 2$/])).toEqual([-1, expect.any(Number)])
+    expect((await order(ui, 'terminal', [/^Working · 2$/]))[0]).toBeGreaterThan(-1)
   })
 
   test('shows the context, limits, cost and repo', async ($, on) => {

@@ -612,9 +612,12 @@ desktop window joins the session, unless you closed it.
   the background, by Claude or with Ctrl+B) with how long each has run, to the
   second, until its notification or a stop ends it. The card shows only while
   one runs.
-- **Agents** lists the subagents running, each timed to the second, and those
-  recently finished, then each subagent type (seat) with its runs, input
-  tokens, the share served from the prompt cache and output tokens. Use it to see where a plan's tokens go.
+- **Agents** lists the subagents in four groups, each with its count and left
+  out while empty: **Waiting on you** (a subagent with an approval open),
+  **Working**, **Failed** (it ended aborted, refused or with an error) and
+  **Done** (recently finished). Running ones are timed to the second. Then
+  each subagent type (seat) with its runs, input tokens, the share served from
+  the prompt cache and output tokens. Use it to see where a plan's tokens go.
 - **Plan** follows the main session's todo list or task list, centred on the
   item in progress. In a `dforge` run it becomes **Run**, read from the
   run's ledger (`.dforge/sdd/<run>/progress.md`) and its plan: the review

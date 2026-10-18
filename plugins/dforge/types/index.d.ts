@@ -60,6 +60,8 @@ export type CockpitSpawn = {
   model: string
   description: string
   isDone: boolean
+  /** How it ended: null while it runs, `failed` for an aborted, refused or failed end; absent on a record saved before it was kept. */
+  outcome: 'done' | 'failed' | null
   /** When it started, in milliseconds since the epoch. */
   startedAt: number
 }
