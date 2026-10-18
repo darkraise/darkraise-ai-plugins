@@ -66,5 +66,20 @@ for f in "$R" "$FIN"; do
 done
 names "finishing: a deferred statement or unresolved Blocker keeps the branch" "$FIN" 'row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.'
 names "finishing: the final message lists demos and lenses" "$FIN" 'every `demo` statement of the spec, every lens'
+
+# The default flow (docs/superpowers/specs/2026-10-18-auto-execution-default-design.md).
+names "auto-run.md: the default" "$R" 'The default on Claude Code (`autoRun=on`): once your human partner approves the'
+names "auto-run.md: the switch section" "$R" '## The switch'
+names "auto-run.md: the switching line" "$R" '- `Auto run: switching` after `scripts/auto-run switch` exits 0.'
+names "auto-run.md: plan saved is no clear" "$R" 'Plan saved is no clear: the session switches in place (§The switch).'
+names "auto-run.md: finishing reads the recorded choice" "$R" 'the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec'
+names "auto-run.md: a spec-review deferral keeps a merge" "$R" 'deferred at the spec review, before the run started, counts as one the run'
+check "auto-run.md: no phase clear is left" "$(grep -c 'clear --phase' "$R")" "0"
+names "session-budget.md: the last task is never a stop" "$P/reference/session-budget.md" '- **Never a stop:** the last task completing, in either mode. The final review'
+names "finish-preference.md: the spec review's answer" "$P/reference/finish-preference.md" 'once the plan is attached. Finishing carries out that choice, or else'
+names "README: the default" "$P/README.md" 'The default on Claude Code (`autoRun=on`). Brainstorming asks its clarifying'
+names "README: the opt-outs" "$P/README.md" '`autoRun=ask` offers the run once the design is approved instead, and'
+names "README: the autoRun row" "$P/README.md" '| Workflow | `autoRun` | `on` |'
+names "README: the strategy row" "$P/README.md" '| Workflow | `executionStrategy` | `parallel` |'
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

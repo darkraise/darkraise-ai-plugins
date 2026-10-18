@@ -474,14 +474,20 @@ needs. dforge hands off instead.
 
 ### Auto run
 
-After you approve a design, brainstorming can offer to run the rest
-unattended. Fable reviews the spec, the plan is written and reviewed, the plan
-executes in its recorded strategy, and the branch is finished by
-`finishAction` into the branch the run started from (kept under `ask` or
-`wait`), with no question to you. What Opus cannot rule goes to Fable in one
-batch; what Fable cannot rule is deferred on the run's register. Instead of
-handing off, the session compacts at the handoff budget, and the cockpit
-clears and resumes it when a compaction leaves too much. The pane shows the
+The default on Claude Code (`autoRun=on`). Brainstorming asks its clarifying
+questions and approaches, writes the whole spec with no design-section
+approvals, and has the architecture critic and Fable review it. You then get
+one spec review message: the open questions, the finish choice when
+`finishAction` is `ask`, and the approval. Approve it and the plan is written
+in the same session; the cockpit compacts and switches the session to the
+plan's launch model in place, and the plan executes, is reviewed and finished
+into the branch the run started from, with no question to you and no handoff
+once the last task is done. What Opus cannot rule goes to Fable in one batch;
+what Fable cannot rule is deferred on the run's register. Instead of handing
+off, the session compacts at the handoff budget, and the cockpit clears and
+resumes it when a compaction leaves too much.
+`autoRun=ask` offers the run once the design is approved instead, and
+`autoRun=off` never runs one. The pane shows the
 run and a **Stop auto** button. A run's turn that ends without its sentinel
 line is held up to three times in a row, retries included; then the run stops
 with a reason, which the cockpit sends to Discord. See
@@ -783,10 +789,10 @@ The same settings can be set with
 | Workflow | `codexLane` | `true` | Give plan tasks to Codex when its gate passes. `false` makes `scripts/codex-gate` report `lane=false`. |
 | Workflow | `codexReview` | `true` | Let Codex take review seats when its gate passes. `false` makes the gate report `review=false`; with both off it does not probe Codex at all. |
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
-| Workflow | `executionStrategy` | `ask` | `sequential` or `parallel` answers the "how should the plan execute" question. `parallel` still falls back to sequential when the parts share files, and on Codex. |
+| Workflow | `executionStrategy` | `parallel` | `parallel` runs independent tasks in waves and falls back to sequential when no two tasks can share a wave, and on Codex; `sequential` runs one task at a time; `ask` asks "how should the plan execute". |
 | Workflow | `executionMode` | `auto` | `auto` follows the planner's rule; `inline` and `subagent` fix the plan's Execution line, and `inline` also makes the plan sequential. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
-| Workflow | `autoRun` | `ask` | `ask` offers, once the design is approved, to run the spec, plan, execution, review and finish unattended (Claude Code only); `off` never offers it. See [Auto run](#auto-run). |
+| Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
 | Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. |
 | Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. |
