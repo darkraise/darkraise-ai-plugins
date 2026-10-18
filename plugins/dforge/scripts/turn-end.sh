@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Stop hook: a turn that wrote a plan's ledger must end on the next step — the
-# finishing menu once the final review is clean, otherwise the `## Next session`
-# block from scripts/next-step. Controllers that summarize and stop (common on
-# Sonnet) leave the human with neither. When the last message carries neither,
+# finishing menu once the final review is clean, or the `## Next session` block
+# once finishing carried out the choice recorded before the run; otherwise the
+# `## Next session` block from scripts/next-step. Controllers that summarize and
+# stop (common on Sonnet) leave the human with neither. When the last message carries neither,
 # block the stop once with the instruction; Claude Code sets stop_hook_active on
 # the retry, which always passes. Anything missing (jq, the turn stamp from
 # scripts/turn-start.sh, a ledger written this turn) passes silently, and so
@@ -144,7 +145,7 @@ while IFS= read -r candidate; do
               'Must fix before completing' 'Worktree removal refused' && continue
     ledger=$candidate clean=1
   else
-    ends_with '## Next session' 'If it gets none within ' && continue
+    ends_with '## Next session' 'Ask me then: show the finish menu' && continue
     ledger=$candidate clean=0
   fi
   break
@@ -158,7 +159,7 @@ if [ -z "$ledger" ]; then
   docs=$(dforge_docs_root "$primary") || docs=""
   [ -n "$docs" ] && [ -d "$docs" ] || exit 0
   ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' \
-            'Worktree removal refused' 'If it gets none within ' 'No plan file — no follow-on work recorded.' && exit 0
+            'Worktree removal refused' 'Ask me then: show the finish menu' 'No plan file — no follow-on work recorded.' && exit 0
   reason="This turn moved a branch (a commit, a merge or a deleted branch) without a plan's ledger, but your message ends without the next step. If work remains for this session, continue it: a ruling you can make with a recommendation in hand is yours to make and record, not a reason to stop. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If the turn did only the one change you were asked for and nothing follows from it, end the turn as you were. If the branch's work is complete and not yet integrated, invoke dforge:finishing-a-development-branch with the Skill tool and end on its menu. If you are stopping, run \`bash ${root_shown}/scripts/next-step --adhoc --phase <design|build> --next \"<the next action>\"\` (design when what remains is rulings, a spec or a plan) and end your message with the block it prints, verbatim."
   hold "$reason" "dforge held the stop: this turn moved a branch and the message ends without the next step"
   exit 0
@@ -168,7 +169,7 @@ plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r'
 [ -n "$plan" ] || plan="PLAN_FILE"
 
 if [ "$clean" = 1 ]; then
-  reason="This turn advanced plan ${plan} and its final review is clean, but your message ends without the finishing menu. Invoke dforge:finishing-a-development-branch with the Skill tool now and follow it: tests, the rulings and amendments, then the integration menu as the last thing in your message."
+  reason="This turn advanced plan ${plan} and its final review is clean, but your message ends without the finishing menu or the next step. Invoke dforge:finishing-a-development-branch with the Skill tool now and follow it: tests, the rulings and amendments, then the finishing menu, or the next-step block once a recorded choice is carried out, as the last thing in your message."
   shown="dforge held the stop: plan ${plan} passed its final review, and the message ends without the finishing menu"
 else
   reason="This turn advanced plan ${plan}, but your message ends without the next step. If work remains for this session, continue it. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If you are stopping, run \`bash ${root_shown}/scripts/next-step ${plan}\` and end your message with the block it prints, verbatim."
