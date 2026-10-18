@@ -60,10 +60,8 @@ keep the sectioned design, the program split and the plan-saved handoff. Rows
 - On a Codex host `autoRun=on` behaves as `off`, and brainstorming says so in
   one line: the cockpit that compacts and switches is Claude Code only.
 - `designApproval` has no effect under `on`: no design is presented in chat.
-- `specReview=false` under `on` removes the spec review stop: the run binds
-  right after the Fable review, and the open items and the finish choice go up
-  the ruling ladder as they do in today's auto run (`finishAction=ask` then
-  keeps the branch).
+- `specReview` has no effect under `on`: the spec review always happens, since
+  it is the owner's only stop.
 
 ### Brainstorming under `autoRun=on`
 
@@ -247,9 +245,9 @@ A16. [test, neg, high] On a Codex host `autoRun=on` starts no auto run, and the 
 A17. [test, neg, high] `autoRun=ask` and `autoRun=off` keep the sectioned design, the offer under `ask`, and the plan-saved handoff; only the `parallel` default, the grouping and the no-handoff final phase reach them.
 A18. [test, neg, high] No question reaches the owner after the spec approval in an auto run.
 A19. [test, high] An acceptance statement deferred at the spec review keeps a `merge` finish, as one deferred during the run does.
-A20. [test, medium] Under `autoRun=on`, brainstorming never splits a request into sub-project specs or writes a `**Program:**` line, and dforge:planning-a-product still handles a new product. Q: should a new product (planning-a-product's milestones and registers) also collapse into one spec and one plan?
-A21. [test, medium] Items Fable leaves undecided in the spec phase are asked at the spec review instead of becoming deferred register rows. Q: is the spec review the right place for them, rather than today's deferred list?
-A22. [test, medium] With `specReview=false` under `autoRun=on`, the run binds right after the Fable review with no stop. Q: should `specReview=false` be able to remove your only stop?
+A20. [test, confirmed] Under `autoRun=on`, brainstorming never splits a request into sub-project specs or writes a `**Program:**` line, and dforge:planning-a-product still handles a new product.
+A21. [test, confirmed] Items Fable leaves undecided in the spec phase are asked at the spec review instead of becoming deferred register rows.
+A22. [test, neg, confirmed] Under `autoRun=on` the spec review always happens: `specReview=false` has no effect there.
 
 ## Riskiest assumption
 
