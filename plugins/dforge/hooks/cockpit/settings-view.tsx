@@ -25,6 +25,8 @@ export type SettingsModel = {
   isConfirmingReset: boolean
   /** Whether the surface has a text field. */
   canType: boolean
+  /** The desktop app: its own dropdowns and fields, spaced by its own scale. */
+  isDesktop: boolean
   /** Saved or environment values the settings in force ignored. */
   problems: readonly string[]
   /** Rows the caller draws itself, by key, in place of the schema's control. */
@@ -52,6 +54,8 @@ export type SettingsActions = {
 export function drawSettings(table: Elements, model: SettingsModel, act: SettingsActions): RenderChildren {
   const { Box, Button, Text } = table
   const Input = 'Input' in table ? table.Input : undefined
+  const Select = model.isDesktop && 'Select' in table ? table.Select : undefined
+  const isNative = Select !== undefined
   const press = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) => (
     <Button key={key} label={label} hotkey={look.hotkey} variant={look.isMain ? 'primary' : undefined} dimColor={look.isOff} onPress={onPress} />
   )
@@ -152,20 +156,104 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
     </Box>
   )
 
+  // The desktop's own controls: a dropdown for a switch or a choice, an open
+  // field for a number or text, a refused entry's reason below its field.
+  const nativeControl = (row: ViewRow): RenderChildren => {
+    if (Select === undefined || row.lockedBy !== null) return control(row)
+    if (row.kind === 'toggle') {
+      return (
+        <Select
+          key={`set-${row.key}-select`}
+          options={[
+            { value: 'true', label: 'On' },
+            { value: 'false', label: 'Off' },
+          ]}
+          value={String(row.value === true)}
+          onSelect={(value: string) => act.set(row.key, value === 'true')}
+        />
+      )
+    }
+    if (row.kind === 'choices') {
+      return <Select key={`set-${row.key}-select`} options={row.values.map(value => ({ value }))} value={String(row.value)} onSelect={(value: string) => act.set(row.key, value)} />
+    }
+    const field = Input !== undefined && (
+      <Input key={`set-${row.key}-input`} label={row.label} value={String(row.value)} submitLabel="save" onSubmit={(text: string) => act.submit(row.key, text)} />
+    )
+    if (row.kind === 'stepper') return [field, press(`set-${row.key}-less`, '−', () => act.step(row.key, -1)), press(`set-${row.key}-more`, '+', () => act.step(row.key, 1))]
+    return field
+  }
+
+  // A desktop row: its label over its description and its control.
+  const drawNativeRow = (row: ViewRow): RenderChildren => (
+    <Box key={`set-${row.key}-block`} flexDirection="column" gap="xs">
+      {model.custom[row.key] !== undefined ? (
+        <Box key={`set-${row.key}`} flexDirection="row" columnGap="sm">
+          {model.custom[row.key]}
+          {mark(row)}
+        </Box>
+      ) : (
+        <Box key={`set-${row.key}-label`} flexDirection="row" columnGap="sm">
+          <Text weight="medium">{row.label}</Text>
+          {mark(row)}
+        </Box>
+      )}
+      {model.isHelpShown && (
+        <Box key={`set-${row.key}-help`}>
+          <Text size="footnote" dimColor wrap="wrap">
+            {row.description}
+          </Text>
+        </Box>
+      )}
+      {model.custom[row.key] === undefined && (
+        <Box key={`set-${row.key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap="sm">
+          {nativeControl(row)}
+        </Box>
+      )}
+      {model.editing === row.key && model.error !== null && (
+        <Box key={`set-${row.key}-error`}>
+          <Text color="error">{`✗ ${model.error}`}</Text>
+        </Box>
+      )}
+      {row.isChanged && (
+        <Box key={`set-${row.key}-default`} flexDirection="row" alignItems="center" columnGap="sm">
+          <Text size="footnote" dimColor>
+            {row.shownDefault === '' ? 'changed from the default' : `default ${row.shownDefault}`}
+          </Text>
+          {press(`set-${row.key}-reset`, 'Reset', () => act.reset(row.key))}
+        </Box>
+      )}
+    </Box>
+  )
+
   const changed = model.rows.filter(row => row.isChanged).length
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" gap={isNative ? 'md' : undefined}>
       <Text bold>Settings</Text>
-      <Box key="settings-tabs" flexDirection="row" flexWrap="wrap" columnGap={1}>
+      <Box key="settings-tabs" flexDirection="row" flexWrap="wrap" columnGap={isNative ? 'sm' : 1} rowGap={isNative ? 'sm' : undefined}>
         {model.tabs.map((tab, index) =>
           press(`settings-tab-${tab}`, tab, () => act.openTab(tab), { hotkey: index < 9 ? String(index + 1) : undefined, isMain: tab === model.tab, isOff: tab !== model.tab }),
         )}
       </Box>
-      <Box key={`set-group-${model.tab}`} flexDirection="column" borderStyle="round" borderColor="subtle" backgroundColor={CARD} paddingX={1}>
-        <Box key="set-group-head" flexDirection="row" columnGap={1}>
-          <Text bold color={ACCENT}>
-            {model.tab}
-          </Text>
+      <Box
+        key={`set-group-${model.tab}`}
+        flexDirection="column"
+        borderStyle="round"
+        borderColor="subtle"
+        backgroundColor={CARD}
+        paddingX={isNative ? 'md' : 1}
+        paddingY={isNative ? 'sm' : undefined}
+        gap={isNative ? 'md' : undefined}
+      >
+        <Box key="set-group-head" flexDirection="row" alignItems="center" columnGap={isNative ? 'sm' : 1}>
+          {isNative ? (
+            <Text size="title" weight="semibold" color={ACCENT}>
+              {model.tab}
+            </Text>
+          ) : (
+            <Text bold color={ACCENT}>
+              {model.tab}
+            </Text>
+          )}
           {model.hint !== null && (
             <Text key="set-group-hint" dimColor>
               {model.hint}
@@ -176,14 +264,14 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
           </Text>
         </Box>
         {model.top}
-        {model.rows.map(drawRow)}
+        {model.rows.map(isNative ? drawNativeRow : drawRow)}
       </Box>
       {model.problems.map((problem, index) => (
         <Text key={`set-problem-${index}`} color="yellow">
           ⚠ {problem}
         </Text>
       ))}
-      <Box key="settings-actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
+      <Box key="settings-actions" flexDirection="row" flexWrap="wrap" columnGap={isNative ? 'sm' : 1} rowGap={isNative ? 'sm' : undefined}>
         {press('settings-back', 'Back', act.back, { hotkey: 'b' })}
         {press('settings-help', model.isHelpShown ? 'Hide help' : 'Show help', act.toggleHelp, { hotkey: 'i' })}
         {model.isConfirmingReset

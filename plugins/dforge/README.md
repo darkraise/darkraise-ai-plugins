@@ -673,7 +673,7 @@ keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s` **Settings**, `
 and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
 draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
 that matters: **Hand off** once the context passes `warnAt`, **Resume**
-whenever it shows. In the settings view a switch reads `● On` or `○ Off`, the
+whenever it shows. In the terminal's settings view a switch reads `● On` or `○ Off`, the
 chosen option of a row takes the accent, and what is off is drawn dim.
 
 **Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
@@ -682,7 +682,10 @@ show, the handoff budget, where Hand off takes the accent and the Discord limit
 message goes out, how many context rows to list, the note and guard switches, and the
 Discord notifications. Each press saves
 the setting to `~/.dforge/config.json`, and the pane redraws with it. **Back** (`b`)
-returns to the cockpit.
+returns to the cockpit. In the desktop app each switch and choice is a
+dropdown, and each number and text setting an open field that saves when you
+submit it (a number keeps its `−` and `+` steps); an entry out of range shows
+why below its field.
 
 The breakdown and the repo are read after each turn while the pane is open, and
 when it opens; nothing in the pane costs the model context.

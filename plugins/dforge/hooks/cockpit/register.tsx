@@ -763,18 +763,19 @@ export const register: Register = on => {
           },
           { ...look, isCompact: true },
         )
+      // The desktop spaces these rows by its own scale, as the settings view does.
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
-        <Box key={key} flexDirection="row" columnGap={1}>
+        <Box key={key} flexDirection="row" columnGap={isDesktop ? 'sm' : 1}>
           <Box key={`${key}-label`} width={16} flexShrink={0}>
             <Text>{label}</Text>
           </Box>
-          <Box key={`${key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} flexShrink={1}>
+          <Box key={`${key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={isDesktop ? 'sm' : 1} rowGap={isDesktop ? 'xs' : undefined} flexShrink={1}>
             {controls}
           </Box>
         </Box>
       )
       const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
-        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={INDENT}>
+        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={isDesktop ? 'xs' : 1} rowGap={isDesktop ? 'xs' : undefined} paddingLeft={isDesktop ? undefined : INDENT}>
           {names.map(name => compact(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
         </Box>
       )
@@ -901,6 +902,7 @@ export const register: Register = on => {
           error: state.error,
           isConfirmingReset: state.isConfirmingReset,
           canType,
+          isDesktop,
           problems: S.settingProblems,
           custom,
           top: tab === 'Notifications' ? webhookRows : null,
@@ -918,7 +920,7 @@ export const register: Register = on => {
             if (spec === undefined) return
             const value = spec.type === 'number' ? typedNumber(spec, text) : text
             if (value === undefined) {
-              await update($, settingsView, now => ({ ...now, error: rangeText(spec) }))
+              await update($, settingsView, now => ({ ...now, editing: key, error: rangeText(spec) }))
               return
             }
             if (await set(key, value)) await show({})

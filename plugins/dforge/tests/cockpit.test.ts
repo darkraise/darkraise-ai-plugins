@@ -1344,8 +1344,13 @@ describe('settings view', () => {
       await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
       const ui = await $.ui.mount({ ...PANE, surface })
       await ui.press({ key: 'pane-settings' })
-      await ui.press({ key: 'set-openAtStart-toggle' })
-      await ui.press({ key: 'set-layout-compact' })
+      if (surface === 'desktop') {
+        await ui.select({ key: 'set-openAtStart-select', value: 'true' })
+        await ui.select({ key: 'set-layout-select', value: 'compact' })
+      } else {
+        await ui.press({ key: 'set-openAtStart-toggle' })
+        await ui.press({ key: 'set-layout-compact' })
+      }
       await ui.press({ key: 'set-section-guard' })
       await ui.press({ key: 'settings-tab-Context' })
       await ui.press({ key: 'set-warnAt-more' })
@@ -1440,6 +1445,38 @@ describe('settings view', () => {
     await ui.input({ key: 'set-warnAt-input', text: '65', kind: 'submit' })
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 65 })
     expect(await ui.find({ key: 'set-warnAt-input' })).toBeUndefined()
+  })
+
+  test('the desktop draws dropdowns and open fields, and a refused entry below its field', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await desk.press({ key: 'pane-settings' })
+    expect((await desk.find({ key: 'set-openAtStart-select' }))?.props).toMatchObject({ value: 'true', options: [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }] })
+    expect((await desk.find({ key: 'set-layout-select' }))?.props).toMatchObject({ value: 'auto', options: [{ value: 'auto' }, { value: 'full' }, { value: 'compact' }] })
+    expect(await desk.find({ key: 'set-layout-full' })).toBeUndefined()
+    // Wrapping rows are spaced by the desktop's own steps both ways.
+    expect((await desk.find({ key: 'settings-tabs' }))?.props).toMatchObject({ columnGap: 'sm', rowGap: 'sm' })
+    expect((await desk.find({ key: 'set-section' }))?.props).toMatchObject({ columnGap: 'xs', rowGap: 'xs' })
+    expect((await desk.find({ key: 'set-section' }))?.props.paddingLeft).toBeUndefined()
+    await desk.select({ key: 'set-openAtStart-select', value: 'false' })
+    await desk.select({ key: 'set-layout-select', value: 'full' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ openAtStart: false, layout: 'full' })
+    await desk.press({ key: 'settings-tab-Context' })
+    expect((await desk.find({ key: 'set-warnAt-input' }))?.props).toMatchObject({ label: 'Warn at', value: '80' })
+    expect(await desk.find({ key: 'set-warnAt-edit' })).toBeUndefined()
+    await desk.input({ key: 'set-warnAt-input', text: '500' })
+    const block = JSON.stringify(await desk.find({ key: 'set-warnAt-block' }))
+    expect(block).toContain('✗ Enter a whole number from 1 to 99')
+    expect(block.indexOf('"set-warnAt-error"')).toBeGreaterThan(block.indexOf('"set-warnAt-input"'))
+    await desk.input({ key: 'set-warnAt-input', text: '65' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ openAtStart: false, layout: 'full', warnAt: 65 })
+    expect(await desk.find({ key: 'set-warnAt-error' })).toBeUndefined()
+    await desk.unmount()
+    const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await term.find({ type: 'Select' })).toBeUndefined()
+    expect(await term.find({ key: 'set-warnAt-edit' })).toBeDefined()
   })
 
   test('a group resets only after a second press', async ($, on) => {
