@@ -92,7 +92,8 @@ Only the architectural path changes; spike and bounded paths are untouched.
    - every item Fable left undecided, and every critic Blocker it did not
      settle, as a question with the recommended option first;
    - when `finishAction` is `ask`: merge into `<current branch>`, open a pull
-     request, or keep the branch;
+     request, or keep the branch, recorded as a `Finish: <merge|pr|keep>` line
+     in `## Decisions`;
    - the approval itself: **Approve and run unattended**, **Approve, keep the
      normal stops** (no run starts; the attended flow continues from the User
      Review Gate's approval), or **Changes needed**.
@@ -103,7 +104,7 @@ Only the architectural path changes; spike and bounded paths are untouched.
    import each `## Review rulings` line with `scripts/auto-run ruling add
    "Fable, spec: <line>"`, then dforge:writing-plans in the same session, whose
    first step is `scripts/auto-run phase plan`. `scripts/context-size --plan`
-   does not run under `on`.
+   does not run in an auto run.
 
 ### Planning
 
@@ -118,8 +119,8 @@ Only the architectural path changes; spike and bounded paths are untouched.
   the deepest task it consumes (`**Depends on:**`), and a task that consumes
   nothing has depth 1. Parallel tasks of the same depth that share no file form
   one wave, in parts of at most three; an alone task forms a wave of its own at
-  its depth. Waves run in depth order. This spec's own shape — F and C at
-  depth 1, B, W and E at depth 2, P at depth 3 — gives
+  its depth. Waves run in depth order. Tasks 1-2 depending on nothing, Tasks
+  3-5 on Task 1 or 2, and Task 6 on Tasks 3-5 give
   `**Parallelism:** waves — 1-2 | 3-5 | 6`. The result is written in today's
   format; plan-lint, `scripts/wave` and parallel-waves.md do not change.
 - **One plan, amended in place.** A task that shows the plan is wrong goes
@@ -129,11 +130,12 @@ Only the architectural path changes; spike and bounded paths are untouched.
   the `plan` phase, so only Claude Code's own compaction can happen there. The
   cockpit books it as today; `after-compact` in the `plan` phase always prints
   `continue`, and dforge:writing-plans resumes from the spec and the plan file
-  on disk. The compaction instructions name the spec, plan and register paths.
-- **Plan saved, under `on`.** After the plan review and `scripts/auto-run
-  attach --plan PLAN_FILE`:
-  1. When the spec review recorded a finish choice, `scripts/finish-choice set
-     <action> --plan PLAN_FILE`.
+  on disk, which `scripts/auto-run status` names with the register. (The
+  engine's own compaction takes no instructions from dforge.)
+- **Plan saved, in an auto run** (whether `on` started it or `ask` offered
+  it). After the plan review and `scripts/auto-run attach --plan PLAN_FILE`:
+  1. When the spec's `## Decisions` holds a `Finish: <action>` line,
+     `scripts/finish-choice set <action> --plan PLAN_FILE`.
   2. dforge:handoff steps 0-3: reconcile background agents and shells, commit
      the plan and spec, and update the handoff notes. It does not end the
      session.
@@ -149,7 +151,7 @@ Two stages, the way compact and continue work today.
 
 - `scripts/auto-run switch` (exit 4 when no plan is attached, or when the
   fenced first prompt in `latest.md` does not name the attached plan) sets the
-  pending action to `switch` and stores the first prompt and launch command
+  pending action to `switch` and the phase to `execute`, and stores the first prompt and launch command
   read from `latest.md`, as `clear` reads them.
 - The Stop hook (`scripts/turn-end.sh`) lets a turn end on `Auto run:
   switching` while `switch` is pending, holds any other ending then (its hold
@@ -173,8 +175,6 @@ Two stages, the way compact and continue work today.
   transition: it does not count toward the three self-resumes.
 - `bookAutoCompaction` does not book an engine compaction while `switch` or
   `switch-resume` is pending, as it does not while `clear` is.
-- The cockpit shows `switch` and `switch-resume` as pending stages, as it shows
-  compact and clear.
 
 ### No handoff before finishing
 
@@ -210,19 +210,21 @@ Codex hosts.
 
 | Part | Wave | Files it owns | Consumes |
 |---|---|---|---|
-| F foundation | 1 | `config/schema.mjs`, `scripts/auto-run`, `scripts/lib/auto-run.sh`, `scripts/turn-end.sh`, `reference/auto-run.md`, `reference/finish-preference.md`, `reference/session-budget.md`, `tests/auto-run.test.sh`, `tests/turn-end.test.sh`, `tests/dforge-config.test.sh` | — |
-| C cockpit | 1 | `hooks/cockpit/register.tsx`, `hooks/cockpit/lib.ts`, `tests/cockpit.test.ts` | the pending names `switch` and `switch-resume`, the `compacted --switch` booking and the `Auto run: switching` sentinel, fixed by this spec |
-| B brainstorming | 2 | `skills/brainstorming/SKILL.md`, `skills/brainstorming/references/architecture-critic-prompt.md`, `skills/using-dforge/SKILL.md`, `tests/settings-skills.test.sh` | F |
-| W planning | 2 | `skills/writing-plans/SKILL.md`, `tests/parallel-grouping.test.sh` (new) | F |
-| E execution | 2 | `skills/subagent-driven-development/SKILL.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/handoff/SKILL.md`, `scripts/context-size`, `tests/context-size.test.sh`, `tests/budget-line.test.sh` | F |
-| P pins and release | 3 | `tests/auto-run-skills.test.sh`, `tests/process-roles.test.sh`, `README.md`, both plugin manifests | B, W, E |
+| F foundation | 1 | `config/schema.mjs`, `scripts/auto-run`, `scripts/lib/auto-run.sh`, `scripts/turn-end.sh`, `scripts/lib/context.sh`, `scripts/context-size`, `reference/auto-run.md`, `reference/finish-preference.md`, `reference/session-budget.md`, `tests/auto-run.test.sh`, `tests/turn-end.test.sh`, `tests/context-size.test.sh`, `tests/dforge-config.test.sh` | — |
+| C cockpit | 2 | `hooks/cockpit/register.tsx`, `hooks/cockpit/lib.ts`, `tests/cockpit.test.ts` | F: the `switch` and `switch-resume` pending names, the `compacted --switch` booking and the Stop hook's `Auto run: switching` line |
+| B brainstorming | 2 | `skills/brainstorming/SKILL.md`, `skills/brainstorming/references/architecture-critic-prompt.md`, `skills/using-dforge/SKILL.md`, `tests/auto-default.test.sh` (new) | F |
+| W planning | 2 | `skills/writing-plans/SKILL.md`, `tests/settings-skills.test.sh`, `tests/parallel-grouping.test.sh` (new) | F |
+| E execution | 2 | `skills/subagent-driven-development/SKILL.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/handoff/SKILL.md`, `reference/final-review.md`, `tests/final-phase.test.sh` (new) | F |
+| P pins and docs | 3 | `tests/auto-run-skills.test.sh`, `README.md` | F, B, W, E |
 
-All paths are under `plugins/dforge/`. Any other `scripts/lib` file that both
-F and E change belongs to F. C runs beside F because it consumes only names
-this spec fixes. It also carries the riskiest-assumption probe, which runs
-against a hand-written auto-run state file with the pending action set to
-`switch`. The shell tests run in their own temporary directories and the
-cockpit tests in memory, so the parts' tests share nothing at run time.
+All paths are under `plugins/dforge/`. C waits for F because its last step
+probes the real switch (§Riskiest assumption), which needs F's
+`compacted --switch` and the Stop hook's switching line. Each wave must leave
+the whole suite green, so a part keeps every phrase that a test file it does not
+own pins. The shell tests run in their own temporary directories and the
+cockpit tests in memory, so the parts' tests share nothing at run time. A part
+whose tasks carry an `**Executor:**` line runs alone in its wave, so the plan's
+waves can be narrower than this table.
 
 ## Acceptance
 
@@ -238,8 +240,8 @@ A9. [test, neg, high] On a `switch` pending, the cockpit compacts and books `com
 A10. [test, high] A failure in the `switch-resume` stage after the compaction is retried in that stage and then either submits the first prompt or stops the run with a reason naming the switch.
 A11. [test, neg, high] An engine compaction while `switch` or `switch-resume` is pending is not booked.
 A12. [demo, high] In a real Claude Code session, a switch leaves the session on the plan's launch model and effort, and execution starts Task 1 in the same session.
-A13. [test, high] writing-plans states the alone / parallel grouping and the waves-by-depth ordering, and a plan of this spec's shape gets `**Parallelism:** waves — 1-2 | 3-5 | 6`.
-A14. [test, neg, high] After the last task's complete line, neither execution skill hands off, attended or auto, and `scripts/context-size --final` never exits 5.
+A13. [test, high] writing-plans states the alone / parallel grouping and the waves-by-depth ordering, with the example that Tasks 1-2 depending on nothing, Tasks 3-5 on Task 1 or 2 and Task 6 on Tasks 3-5 give `**Parallelism:** waves — 1-2 | 3-5 | 6`.
+A14. [test, neg, high] After the last task's complete line, neither execution skill hands off, attended or auto, and outside an auto run `scripts/context-size --final` never exits 5 (in an auto run, A15's rules apply).
 A15. [test, high] In an auto run, `scripts/auto-run after-compact` prints `continue` in the `final` and `finish` phases, and after one compaction there every budget line prints `ok`.
 A16. [test, neg, high] On a Codex host `autoRun=on` starts no auto run, and the attended flow runs.
 A17. [test, neg, high] `autoRun=ask` and `autoRun=off` keep the sectioned design, the offer under `ask`, and the plan-saved handoff; only the `parallel` default, the grouping and the no-handoff final phase reach them.
@@ -258,7 +260,8 @@ in place and runs `/model` and `/effort` after `/clear`
 (`plugins/dforge/hooks/cockpit/register.tsx:2333-2370`), and the restore loop
 was verified on a real engine on 2026-10-13 (register
 2026-10-12-auto-execution row 20) — but never in this order within one
-session: unverified — the plan's first task verifies it (part C, wave 1).
+session: unverified — the plan's cockpit task verifies it as its last step,
+as soon as the foundation has landed.
 
 ## Critic findings
 
