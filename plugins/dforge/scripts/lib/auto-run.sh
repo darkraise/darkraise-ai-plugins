@@ -60,17 +60,25 @@ ar_bound() {
 # Concurrent updates (a Stop auto press beside a ruling add) queue instead of
 # each reading the file the other is about to replace.
 ar_update() {
-  local path status
+  local path
   path=$(ar_path) || return 1
+  ar_locked "$path" ar_write "$path" "$@"
+}
+
+# ar_locked PATH COMMAND [ARGS…] — run COMMAND holding the state file's lock:
+# flock where there is one, else the lock directory.
+ar_locked() {
+  local path=$1 status
+  shift
   if command -v "${DFORGE_FLOCK:-flock}" >/dev/null 2>&1; then
     (
       "${DFORGE_FLOCK:-flock}" -w 10 9 || exit 1
-      ar_write "$path" "$@"
+      "$@"
     ) 9>>"$path.lock"
     return
   fi
   ar_lock_dir "$path.lockd" || return 1
-  ar_write "$path" "$@"
+  "$@"
   status=$?
   rmdir "$path.lockd" 2>/dev/null
   return $status
@@ -94,6 +102,18 @@ ar_write() { # ar_write PATH FILTER [jq options…]
   shift 2
   tmp=$(mktemp "$path.XXXXXX") || return 1
   if ar_jq "$@" "$filter" < "$path" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+    mv -f "$tmp" "$path"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+ar_create() { # ar_create PATH [jq options…] FILTER — the state from jq -n
+  local path=$1 tmp
+  shift
+  tmp=$(mktemp "$path.XXXXXX") || return 1
+  if ar_jq -n "$@" > "$tmp" && [ -s "$tmp" ]; then
     mv -f "$tmp" "$path"
   else
     rm -f "$tmp"
@@ -129,14 +149,19 @@ ar_beat_file() {
 }
 
 # ar_beat_age SESSION — seconds since the session's cockpit last beat; fails
-# when the file is missing or holds no number.
+# when the file is missing or holds no number. A beat up to AR_BEAT_SECONDS
+# ahead of this clock is clock skew and reads as age 0; one further ahead
+# fails, so ar_is_stale reads it as stale.
 ar_beat_age() {
-  local file beat
+  local file beat age
   file=$(ar_beat_file "$1")
   [ -f "$file" ] || return 1
   beat=$(head -n 1 "$file" | tr -dc '0-9')
   [ -n "$beat" ] || return 1
-  echo $(( $(date +%s) - beat ))
+  age=$(( $(date +%s) - beat ))
+  [ "$age" -ge $(( -AR_BEAT_SECONDS )) ] || return 1
+  [ "$age" -ge 0 ] || age=0
+  echo "$age"
 }
 
 # ar_is_stale — true when whoever owned the run is gone: its session's cockpit
@@ -158,7 +183,7 @@ ar_is_stale() {
 # ar_start SPEC REGISTER FORCE — prints the register path. A register it
 # creates goes in the checkout the run starts from, where its path resolves.
 ar_start() {
-  local spec=$1 register=$2 force=$3 path top slug base tmp regfile age
+  local spec=$1 register=$2 force=$3 path top slug base regfile age
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
@@ -184,19 +209,16 @@ ar_start() {
   base=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
   mkdir -p "$(dirname "$path")" || return 1
   [ -f "$(dirname "$path")/.gitignore" ] || printf '*\n' > "$(dirname "$path")/.gitignore"
-  tmp=$(mktemp "$path.XXXXXX") || return 1
-  if ! ar_jq -n --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
+  # Under the update lock, so a --force start never lands between another
+  # session's read and write of the state and is lost.
+  ar_locked "$path" ar_create "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
     setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0
-  }' > "$tmp"; then
-    rm -f "$tmp"
-    return 1
-  fi
-  mv -f "$tmp" "$path" || return 1
+  }' || return 1
   printf '%s\n' "$register"
 }
 
@@ -239,10 +261,13 @@ ar_enter_final() {
 }
 
 # ar_task_complete — a task's complete line is written, so the progress counts
-# start again. In the primary checkout that task ran on the run's base: the run
-# stops (return 5) rather than finish there.
+# start again. In the primary checkout during the execute or final phase that
+# task ran on the run's base: the run stops (return 5) rather than finish
+# there. The spec and plan phases belong in the primary checkout.
 ar_task_complete() {
-  if ar_in_primary; then
+  local phase
+  phase=$(ar_get phase)
+  if { [ "$phase" = execute ] || [ "$phase" = final ]; } && ar_in_primary; then
     ar_stop "a task was completed in the primary checkout" || return 1
     echo "auto-run: a task was completed in the primary checkout; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
     return 5
@@ -443,7 +468,8 @@ ar_settle() {
 # ar_verdict TOKENS BUDGET WINDOW [N] — prints "<ok|compact|handoff> <limit>
 # <regime>". A compaction not yet measured is settled first with TOKENS as its
 # size; a pending clear is a handoff in progress. An ok clears a compaction a
-# wider wave probe requested. Once a compaction ran in the final phases
+# wider wave probe requested, and a resume the cockpit never confirmed: the
+# session measuring itself is the resumed one. Once a compaction ran in the final phases
 # (finalCompacted) it never asks for another: Claude Code's own is the backstop.
 ar_verdict() {
   local tokens=$1 budget=$2 window=$3 n=${4:-1} pending regime limit settled
@@ -461,7 +487,7 @@ ar_verdict() {
     ar_update '.pending = "compact"' || return 1
     echo "compact $limit $regime"
   else
-    if [ "$pending" = compact ]; then ar_update '.pending = null' || return 1; fi
+    if [ "$pending" = compact ] || [ "$pending" = resume ]; then ar_update '.pending = null' || return 1; fi
     echo "ok $limit $regime"
   fi
 }

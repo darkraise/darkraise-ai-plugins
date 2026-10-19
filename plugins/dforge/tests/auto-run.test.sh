@@ -28,7 +28,8 @@ git -C "$REPO" commit -q --allow-empty -m init
 STATE="$REPO/.dforge/sdd/auto-run.json"
 SPEC=docs/dforge/specs/2026-10-13-widget-design.md
 beat() { # beat <session> [age in seconds]: the heartbeat a live cockpit writes
-  local f="$HOME/.claude/dforge/sessions/cockpit/$1"
+  local f
+  f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(( $(date +%s) - ${2:-0} ))" > "$f"
 }
@@ -103,6 +104,47 @@ check "a heartbeat older than 180 seconds: exit 2" "$status:$(field session)" "2
 beat s-1 181
 ar --session s-3 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
 check "a run whose cockpit heartbeat is older than 180 seconds is stale" "$status:$(field session)" "0:s-3"
+
+# --- the heartbeat's age, on a clock that stands still ---
+# A fixed clock, so the 180-second boundary cannot slip a second between
+# writing a heartbeat and reading it.
+NOW=$(date +%s)
+CLOCK="$TMP/clock"
+mkdir -p "$CLOCK"
+printf '#!/usr/bin/env bash\nif [ "$*" = +%%s ]; then echo %s; else exec %s "$@"; fi\n' "$NOW" "$(command -v date)" > "$CLOCK/date"
+chmod +x "$CLOCK/date"
+stamp() { # stamp <session> <seconds before NOW; negative is ahead of it>
+  local f
+  f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  mkdir -p "$(dirname "$f")"
+  printf '%s\n' "$(( NOW - $2 ))" > "$f"
+}
+at_now() { (cd "$REPO" && PATH="$CLOCK:$PATH" bash "$AR" "$@"); }
+age_of() { (PATH="$CLOCK:$PATH"; . "$HERE/../scripts/lib/auto-run.sh"; ar_beat_age "$1") 2>/dev/null || echo fails; }
+stamp s-4 180
+check "a heartbeat 180 seconds old: age 180" "$(age_of s-4)" "180"
+stamp s-4 -5
+check "a heartbeat 5 seconds ahead (clock skew): age 0" "$(age_of s-4)" "0"
+stamp s-4 -180
+check "a heartbeat 180 seconds ahead: age 0" "$(age_of s-4)" "0"
+stamp s-4 -181
+check "a heartbeat 181 seconds ahead: no age" "$(age_of s-4)" "fails"
+stamp s-4 180
+at_now --session s-4 start --spec "$SPEC" --register docs/r.md --force >/dev/null 2>&1; status=$?
+check "start with a heartbeat 180 seconds old: exit 0" "$status:$(field session)" "0:s-4"
+stamp s-3 0
+at_now --session s-3 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
+check "a run whose heartbeat is 180 seconds old is live" "$status:$(field session)" "4:s-4"
+stamp s-4 -5
+at_now --session s-3 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
+check "a run whose heartbeat is a few seconds ahead is live" "$status:$(field session)" "4:s-4"
+stamp s-4 -3600
+at_now --session s-3 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
+check "a run whose heartbeat is an hour ahead is stale" "$status:$(field session)" "0:s-3"
+at_now --session s-4 start --spec "$SPEC" --register docs/r.md --force >/dev/null 2>&1; status=$?
+check "start with its own heartbeat an hour ahead: no live cockpit" "$status:$(field session)" "2:s-3"
+ar --session s.7 start --spec "$SPEC" --register docs/r.md --force >/dev/null 2>&1; status=$?
+check "the beat helper names the file as ar_beat_file does" "$status:$(field session)" "0:s.7"
 
 # --- a start from a linked worktree ---
 git -C "$REPO" worktree add -q -b side "$TMP/side"
@@ -234,6 +276,24 @@ DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
 check "no flock: a lock its holder left behind is taken after the wait" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 
+# --- a start writes under the same lock as an update ---
+# The holder reads the state, keeps the lock two seconds, then writes back what
+# it read, as an update does: a start that does not wait for it is lost.
+for lock in flock no-such-flock; do
+  [ "$lock" = no-such-flock ] || command -v flock >/dev/null 2>&1 || continue
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  if [ "$lock" = flock ]; then
+    flock "$STATE.lock" bash -c 's=$(cat "$1"); sleep 2; jq ".rulings = [\"held\"]" <<<"$s" > "$1.held" && mv -f "$1.held" "$1"' _ "$STATE" &
+  else
+    mkdir "$STATE.lockd"
+    (s=$(cat "$STATE"); sleep 2; jq '.rulings = ["held"]' <<<"$s" > "$STATE.held" && mv -f "$STATE.held" "$STATE"; rmdir "$STATE.lockd") &
+  fi
+  sleep 0.5
+  DFORGE_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  wait
+  check "$lock: a start waits for the lock" "$(field session):$(field rulings)" "s-2:[]"
+done
+
 # --- stop ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 stop --reason "owner asked"
@@ -291,6 +351,13 @@ ar --session s-x verdict --tokens 1 --budget 1 --window 1 >/dev/null 2>&1; statu
 check "verdict for another session: exit 3" "$status" "3"
 ar --session s-1 verdict --tokens 1 --budget 1 >/dev/null 2>&1; status=$?
 check "verdict without a window: exit 2" "$status" "2"
+
+# --- an ok verdict clears a resume the cockpit never confirmed ---
+ar --session s-1 clear --phase
+ar --session s-1 rebind --to s-1
+check "rebind: a resume is pending" "$(field pending)" "resume"
+out=$(verdict --tokens 10000); status=$?
+check "an ok verdict clears a stale resume" "$status:${out%% *}:$(field pending)" "0:ok:null"
 
 # --- after-compact measures the session it names ---
 mkdir -p "$HOME/.claude"
@@ -448,6 +515,19 @@ check "phase final settles Setup" "$(field setupDue)" "false"
 ar --session s-1 task-complete 2>"$TMP/err"; status=$?
 check "task-complete in the primary checkout stops the run" "$status:$(field active):$(field stopped)" "5:false:a task was completed in the primary checkout"
 check "task-complete in the primary checkout: says to end as Stopping says" "$(grep -c 'the run has stopped. End as reference/auto-run.md §Stopping says.' "$TMP/err")" "1"
+for phase in spec plan; do
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  ar --session s-1 phase "$phase"
+  ar --session s-1 stalled
+  ar --session s-1 task-complete 2>"$TMP/err"; status=$?
+  check "task-complete in the primary checkout in the $phase phase: the run goes on" "$status:$(field active):$(field stalls)" "0:true:0"
+done
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase plan
+ar --session s-1 switch
+ar --session s-1 task-complete 2>/dev/null; status=$?
+check "task-complete in the primary checkout in the execute phase stops the run" "$status:$(field phase):$(field active)" "5:execute:false"
 
 # --- progress caps: compactions and stalls without a completed task ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null

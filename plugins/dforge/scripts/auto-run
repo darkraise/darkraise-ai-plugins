@@ -23,6 +23,8 @@ usage: auto-run [--session ID] start --spec P [--register R] [--force]
        auto-run [--session ID] verdict --tokens T --budget B --window W [--wave N]
        auto-run [--session ID] after-compact
 pending prints compact, after-compact, handoff, clear, resume, switch, switch-resume or none.
+clear --phase is the switch from inline to subagent mode and never a self-resume; a plain
+      clear is one, and the third in a row stops the run (exit 5).
 Exit: 0 done; 1 failed (no handoff file, or jq or mktemp failed); 2 usage; 3 no run bound to this session;
       4 refused; 5 the run stopped, or handoff; 6 compact.
 EOF

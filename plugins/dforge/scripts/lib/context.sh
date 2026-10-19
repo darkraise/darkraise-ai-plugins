@@ -359,15 +359,19 @@ ctx_auto_line() {
 }
 
 # ctx_line [final | tail R | plan | wave W] — print the budget line; return 0 ok, 5
-# handoff, 3 unknown. With final, measure against the final-phase limit instead
-# of the task budget; tail R does the same before one of a plan's last R tasks
-# (CTX_TAIL_TASKS), so the tail of a plan and its final phase share one limit.
-# With wave W, reserve one task's worst growth for each of the W - 1
-# tasks that run beside the first, so a parallel wave that starts under its
-# budget lands before compaction just as one task does
+# handoff, 6 compact (an auto run only), 3 unknown. With final, measure against
+# the final-phase limit instead of the task budget; tail R does the same before
+# one of a plan's last R tasks (CTX_TAIL_TASKS), so the tail of a plan and its
+# final phase share one limit. With wave W, reserve one task's worst growth for
+# each of the W - 1 tasks that run beside the first, so a parallel wave that
+# starts under its budget lands before compaction just as one task does
 # (reference/parallel-waves.md). With the handoffMode setting at relaxed, a
 # plain task and a wave measure against the final-phase limit too, and the
-# label says so.
+# label says so. An auto run bound to the session (AR_SESSION, else
+# CLAUDE_CODE_SESSION_ID) replaces every limit but the plan's with its own
+# (ar_verdict, reference/auto-run.md): 6 asks for a compaction and 5 for a
+# handoff. With final it first moves the run to its final phase once the
+# ledger has every task complete (ar_enter_final).
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
   local label=budget extra=0

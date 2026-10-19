@@ -181,6 +181,14 @@ jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-1",transcript_path:$tp,cw
 check "compaction keeps the running work's start time" \
   "$(cat "$HOME/.claude/dforge/sessions/turns/s-1.since")" "$before"
 rm -f "$HOME/.claude/dforge/sessions/turns/s-1.since"
+H3="$TMP/home-no-record"
+mkdir -p "$H3"
+jq -n --arg cwd "$REPO" '{session_id:"s-6",cwd:$cwd,source:"startup"}' \
+  | HOME="$H3" bash "$HERE/../scripts/session-start.sh" >/dev/null
+check "session-start without a transcript writes no session record" \
+  "$([ -e "$H3/.claude/dforge/sessions/by-id" ] && echo yes || echo no)" "no"
+check "session-start makes the cockpit directory without a session record" \
+  "$([ -d "$H3/.claude/dforge/sessions/cockpit" ] && echo yes || echo no)" "yes"
 
 # --- another session, or no stamp ---
 check "unstamped session: passes" "$(stop s-other 'Done.')" ""
