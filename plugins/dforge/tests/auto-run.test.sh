@@ -449,5 +449,46 @@ ar --session s-1 task-complete 2>"$TMP/err"; status=$?
 check "task-complete in the primary checkout stops the run" "$status:$(field active):$(field stopped)" "5:false:a task was completed in the primary checkout"
 check "task-complete in the primary checkout: says to end as Stopping says" "$(grep -c 'the run has stopped. End as reference/auto-run.md §Stopping says.' "$TMP/err")" "1"
 
+# --- progress caps: compactions and stalls without a completed task ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase plan
+ar --session s-1 compacted
+ar --session s-1 compacted
+ar --session s-1 compacted; status=$?
+check "plan-phase compactions are not counted" "$status:$(field active):$(field compactionsSinceTask)" "0:true:0"
+ar --session s-1 switch
+ar --session s-1 compacted --switch
+check "the switch's compaction is not counted" "$(field compactionsSinceTask)" "0"
+ar --session s-1 resumed
+side --session s-1 phase execute
+ar --session s-1 compacted
+ar --session s-1 compacted
+check "two execute compactions: counted, the run goes on" "$(field compactionsSinceTask):$(field active)" "2:true"
+side --session s-1 task-complete
+check "task-complete resets the compaction count" "$(field compactionsSinceTask)" "0"
+ar --session s-1 compacted
+ar --session s-1 compacted
+ar --session s-1 compacted; status=$?
+check "the third execute compaction without a completed task stops the run" "$status:$(field active):$(field stopped)" "5:false:three compactions without a completed task"
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+before=$(date +%s)
+ar --session s-1 stalled; status=$?
+after_s=$(date +%s)
+first=$(field stalledAt)
+check "stalled: exit 0, counted" "$status:$(field stalls)" "0:1"
+check "stalled: stalledAt is the epoch seconds of the call" "$([ "$first" -ge "$before" ] && [ "$first" -le "$after_s" ] && echo within || echo "outside $before..$after_s")" "within"
+sleep 1
+ar --session s-1 stalled
+check "a later stall refreshes stalledAt" "$([ "$(field stalledAt)" -gt "$first" ] && echo later || echo same)" "later"
+side --session s-1 task-complete
+check "task-complete resets the stalls" "$(field stalls):$(field stalledAt)" "0:null"
+ar --session s-1 stalled
+ar --session s-1 stalled
+ar --session s-1 stalled; status=$?
+check "the third stall without a completed task stops the run" "$status:$(field active):$(field stopped)" "5:false:three stalls without a completed task"
+ar --session s-1 stalled >/dev/null 2>&1; status=$?
+check "stalled with no run bound: exit 3" "$status" "3"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

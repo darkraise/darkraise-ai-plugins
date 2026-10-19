@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 usage() {
   cat >&2 <<'EOF'
 usage: auto-run [--session ID] start --spec P [--register R] [--force]
-       auto-run [--session ID] status | pending | task-complete | resumed | switch
+       auto-run [--session ID] status | pending | task-complete | resumed | switch | stalled
        auto-run [--session ID] compacted [--switch]
        auto-run [--session ID] attach --plan P
        auto-run [--session ID] phase spec|plan|execute|final|finish
@@ -80,6 +80,7 @@ case $cmd in
     bound; ar_set_phase "$1"
     ;;
   task-complete) [ $# -eq 0 ] || usage; bound; ar_task_complete ;;
+  stalled) [ $# -eq 0 ] || usage; bound; ar_stalled ;;
   clear)
     case "$#:${1:-}" in
       0:) bound; ar_clear 0 ;;

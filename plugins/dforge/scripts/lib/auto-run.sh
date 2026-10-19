@@ -12,6 +12,8 @@ AR_STALE_MINUTES=60
 AR_LOCK_TENTHS=100
 AR_RESUME_CAP=3
 AR_FAILURE_CAP=2
+AR_STALL_CAP=3
+AR_COMPACTION_CAP=3
 AR_BEAT_SECONDS=180
 
 ar_jq() { "${DFORGE_JQ:-jq}" "$@"; }
@@ -312,12 +314,23 @@ ar_resumed() {
 
 # ar_compacted [--switch] — book a compaction; the switch's own leaves its
 # resume stage due. One in the final or finish phase sets finalCompacted, after
-# which every budget line of the run says ok.
+# which every budget line of the run says ok. An execute-phase compaction other
+# than the switch's counts toward AR_COMPACTION_CAP, reached without a
+# completed task, which stops the run (return 5): a task that cannot fit in a
+# window would otherwise loop.
 ar_compacted() {
-  local next=after-compact
+  local next=after-compact n
   [ "${1:-}" = --switch ] && next=switch-resume
   ar_update '.compactions += 1 | .failures = 0 | .pending = $n
-    | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")' --arg n "$next"
+    | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")
+    | if $n == "after-compact" and .phase == "execute"
+      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --arg n "$next" || return 1
+  [ "$next" = after-compact ] || return 0
+  n=$(ar_get compactionsSinceTask)
+  if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
+    ar_stop "three compactions without a completed task" || return 1
+    return 5
+  fi
 }
 
 ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the run
@@ -326,6 +339,19 @@ ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the ru
   n=$(ar_get failures)
   if [ "${n:-0}" -ge "$AR_FAILURE_CAP" ]; then
     ar_stop "${1:-the cockpit could not compact or clear}" || return 1
+    return 5
+  fi
+}
+
+# ar_stalled — the cockpit found the run idle with no sentinel answered, and
+# nudged it. The AR_STALL_CAP-th since the last completed task stops the run
+# (return 5).
+ar_stalled() {
+  local n
+  ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now' --argjson now "$(date +%s)" || return 1
+  n=$(ar_get stalls)
+  if [ "${n:-0}" -ge "$AR_STALL_CAP" ]; then
+    ar_stop "three stalls without a completed task" || return 1
     return 5
   fi
 }
