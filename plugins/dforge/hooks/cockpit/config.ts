@@ -242,11 +242,16 @@ export function envLocks(schema: Schema, env: Readonly<Record<string, string | u
   return locks
 }
 
-/** The Claude keys a project or managed settings file overrides: the merged value is not the user file's. */
+/**
+ * The Claude keys a project or managed settings file overrides: the merged
+ * value is not the user file's. A merged value that does not fit its setting
+ * is named, since the row shows the default in its place.
+ */
 export function claudeLocks(schema: Schema, merged: Readonly<Record<string, unknown>>, user: Readonly<Record<string, unknown>>): Record<string, string> {
   const locks: Record<string, string> = {}
   for (const [key, spec] of Object.entries(schema)) {
-    if (spec.target === 'claude' && merged[key] !== undefined && merged[key] !== user[key]) locks[key] = 'set by a project or managed settings file'
+    if (spec.target !== 'claude' || merged[key] === undefined || merged[key] === user[key]) continue
+    locks[key] = isValidSetting(spec, merged[key]) ? 'set by a project or managed settings file' : `${JSON.stringify(merged[key])} from a project or managed file, not valid`
   }
   return locks
 }

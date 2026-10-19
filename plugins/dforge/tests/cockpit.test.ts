@@ -370,6 +370,11 @@ function world(on: On, w: World) {
     }
     if (argv.includes('/scripts/lib/dforge-config.mjs ')) {
       w.runs?.push(argv)
+      // dforge-config's first run creates the settings file with dr-cockpit's
+      // options (importLegacy), unless the file exists or it refuses.
+      if (e.argv.includes('get') && w.config === undefined && !w.isDforgeConfigRefusing && w.written !== undefined && !(CONFIG in w.written)) {
+        w.written[CONFIG] = `${JSON.stringify(importedSettings(SCHEMA, w.userSettings ?? w.settings ?? {}), null, 2)}\n`
+      }
       const restore = e.argv[e.argv.indexOf('claude-restore') + 1]
       if (e.argv.includes('claude-restore') && !w.isDforgeConfigRefusing && w.userSettings !== undefined) {
         if ((w.missedRestores ?? 0) > 0) w.missedRestores = (w.missedRestores ?? 0) - 1
@@ -916,6 +921,37 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /^50%$/ })).toBeDefined()
   })
 
+  test('strict handoff reads the same context against the handoff budget', async ($, on) => {
+    // 276,250 of the 464,500 budget: 59%, where relaxed reads 50%.
+    world(on, { tokens: 276_250, config: { handoffMode: 'strict' } })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^59%$/ })).toBeDefined()
+  })
+
+  test('relaxed handoff warns and hands off against the final-phase limit', async ($, on) => {
+    const notes: string[] = []
+    const w: World = { tokens: 440_000, notes, config: { handoffMode: 'relaxed' } }
+    world(on, w)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    // 440,000 of 552,500 is under warnAt's 80%: Hand off is not the one to press.
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('inactive')
+    await ui.unmount()
+    // Past the strict budget and warnAt, short of the limit: the warning, no note.
+    w.tokens = 470_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('permission')
+    await ui.unmount()
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
+    w.tokens = 560_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([expect.stringMatching(/^dforge: budget: 560k of 553k — handoff\. /)])
+  })
+
   test('sections picks and orders the pane', async ($, on) => {
     world(on, { tokens: 50_000, config: { sections: 'plan, repo' } })
     await $.session.start(START)
@@ -1134,6 +1170,32 @@ describe('settings', () => {
     store.set('notifyUrl', 'https://discord.com/api/webhooks/2/mine')
     await $.session.start(START)
     expect(store.get('notifyUrl')).toBe('https://discord.com/api/webhooks/2/mine')
+  })
+
+  test('the first session leaves the import to dforge-config and reads the file it made', async ($, on) => {
+    const written: Record<string, string> = {}
+    const runs: string[] = []
+    world(on, { tokens: 284_000, written, runs, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    disk(on, written, OLD_FILES)
+    memory(on)
+    await $.session.start(START)
+    expect(runs).toEqual([expect.stringMatching(/^node .*\/scripts\/lib\/dforge-config\.mjs get --json$/)])
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: /^70%\s*$/ })).toBeDefined()
+  })
+
+  test('without node the first session writes the import itself', async ($, on) => {
+    const written: Record<string, string> = {}
+    const runs: string[] = []
+    world(on, { tokens: 284_000, written, runs, isNodeMissing: true, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    disk(on, written, OLD_FILES)
+    memory(on)
+    await $.session.start(START)
+    expect(runs).toEqual([])
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
   })
 
   test('a settings file dforge-config wrote first is kept, and the webhook still comes over', async ($, on) => {
@@ -2349,6 +2411,39 @@ describe('discord', () => {
     expect(JSON.stringify(await ui.drawn())).not.toContain('abcDEF_token')
   })
 
+  test('keeps one editor open on the Notifications tab', async ($, on) => {
+    world(on, { tokens: 50_000 })
+    mock.store(on, {})
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Notifications' })
+    await ui.press({ key: 'set-notify-url-edit' })
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeDefined()
+    await ui.press({ key: 'set-notifyAfter-edit' })
+    expect(await ui.find({ key: 'set-notifyAfter-input' })).toBeDefined()
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeUndefined()
+  })
+
+  test('Reset group closes an open webhook field', async ($, on) => {
+    world(on, { tokens: 50_000, config: { notifyAfter: 0 }, written: {} })
+    mock.store(on, {})
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Notifications' })
+    await ui.press({ key: 'set-notify-url-edit' })
+    await ui.press({ key: 'settings-reset' })
+    expect(await ui.find({ key: 'settings-reset-confirm' })).toBeDefined()
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeUndefined()
+    // Opening the field again ends the pending reset, and a save keeps it ended.
+    await ui.press({ key: 'set-notify-url-edit' })
+    expect(await ui.find({ key: 'settings-reset-confirm' })).toBeUndefined()
+    await ui.input({ key: 'set-notify-url-input', text: WEBHOOK, kind: 'submit' })
+    expect(await ui.find({ key: 'settings-reset-confirm' })).toBeUndefined()
+    expect(await ui.find({ key: 'settings-reset' })).toBeDefined()
+  })
+
   test('sends to the webhook named by DFORGE_NOTIFY_URL alone', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
@@ -3273,6 +3368,7 @@ describe('settings rows', () => {
     expect(claudeLocks(ROWS, { compactAt: 500_000 }, { compactAt: 650_000 })).toEqual({ compactAt: 'set by a project or managed settings file' })
     expect(claudeLocks(ROWS, { compactAt: 650_000 }, { compactAt: 650_000 })).toEqual({})
     expect(claudeLocks(ROWS, {}, {})).toEqual({})
+    expect(claudeLocks(ROWS, { compactAt: 50_000 }, { compactAt: 650_000 })).toEqual({ compactAt: '50000 from a project or managed file, not valid' })
   })
 
   test('a Claude key resolves from the Claude settings and never enters the dforge file', () => {
@@ -3359,6 +3455,16 @@ describe('settings held outside the file', () => {
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Context' })
     expect(await ui.find({ type: 'Text', text: 'set by a project or managed settings file' })).toBeDefined()
+    expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
+  })
+
+  test('a Claude key a project or managed file sets to an invalid value names that value', async ($, on) => {
+    world(on, { tokens: 284_000, config: {}, settings: { autoCompactWindow: 50_000 }, userSettings: { autoCompactWindow: 650_000 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: '50000 from a project or managed file, not valid' })).toBeDefined()
     expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
   })
 
@@ -3466,6 +3572,54 @@ describe('settings held outside the file', () => {
     expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
       'dforge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
     ])
+  })
+
+  test('a dforge subagent spawn sends the waiting note once', async ($, on) => {
+    const notes: string[] = []
+    world(on, { tokens: 50_000, config: {}, notes, written: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Process' })
+    await ui.press({ key: 'set-designApproval-whole' })
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
+    const spawn = (n: number) =>
+      $.agent.spawn({ tool_use_id: `toolu_${n}`, prompt: 'Implement', description: `Task ${n}`, subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    await spawn(1)
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
+      'dforge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
+    ])
+    await spawn(2)
+    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
+  })
+
+  test('closing the pane sends the note once', async ($, on) => {
+    const notes: string[] = []
+    const closed: string[] = []
+    // The kit cannot raise the person's close, so the mod's own Minimize closes
+    // the pane. Settings-back sends the note too, so the append is refused there
+    // to keep the note waiting for the close.
+    const w: World = { tokens: 50_000, config: {}, notes, closed, written: {}, isAppendFailing: true }
+    world(on, w)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Workflow' })
+    await ui.press({ key: 'set-worktree-always' })
+    await ui.press({ key: 'settings-back' })
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
+    w.isAppendFailing = false
+    await ui.press({ key: 'pane-minimize' })
+    expect(closed).toEqual(['dforge'])
+    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
+      'dforge settings changed: worktree=always. Each replaces the matching question or default in the skills.',
+    ])
+    await ui.unmount()
+    // Nothing is left waiting: the next point that sends the note sends none.
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
   })
 
   test('a dforge skill started as a slash command marks the session and sends the waiting note', async ($, on) => {

@@ -691,7 +691,10 @@ export const register: Register = on => {
     // Only these two surfaces draw the band above the prompt.
     const canMinimize = e.surface === 'terminal' || e.surface === 'desktop'
     const minimize = async () => {
-      if (await setOption($, 'layout', 'compact')) await $.ui.close({ id: PANE })
+      if (!(await setOption($, 'layout', 'compact'))) return
+      // Under claude plugin test this plugin's own $.ui.close did not run its ui.close hook, so the waiting note goes here.
+      await flushSettingNote($)
+      await $.ui.close({ id: PANE })
     }
     const head = await read($, budget)
     const spend = await read($, usage)
@@ -827,6 +830,8 @@ export const register: Register = on => {
               submitLabel="save"
               autoFocus
               onSubmit={async (value: string) => {
+                // A save ends a pending reset like any other press.
+                await show({})
                 const problem = await onSave(value)
                 await update($, notifier, now => ({ ...now, editing: problem === null ? null : key, error: problem }))
               }}
@@ -877,9 +882,12 @@ export const register: Register = on => {
       const tabs = tabsOf(SCHEMA)
       const tab = tabs.includes(state.tab) ? state.tab : (tabs[0] ?? '')
       const rows = rowsOf(SCHEMA, values, tab, S.locks)
-      // Every press but the one that asked for it ends an edit or a pending reset.
-      const show = (change: Partial<CockpitSettingsView>) =>
-        update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false, ...change }))
+      // Every press but the one that asked for it ends an edit, a webhook or
+      // mention field's included, or a pending reset.
+      const show = async (change: Partial<CockpitSettingsView>) => {
+        if ((await read($, notifier)).editing !== null) await update($, notifier, now => ({ ...now, editing: null, error: null }))
+        await update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false, ...change }))
+      }
       const save = async (key: string, value: SettingValue) => {
         if (state.editing !== null || state.isConfirmingReset) await show({})
         return set(key, value)
@@ -3062,8 +3070,15 @@ async function applySettings($: EngineInterface, file: SettingsFile) {
   applyNotify(liveFrom(values as Partial<Options>))
 }
 
-/** The first run: dr-cockpit's options, written to the new file. */
+/** The first run: dr-cockpit's options, imported into the new file. */
 async function importSettings($: EngineInterface, path: string): Promise<SettingsFile> {
+  if (await nodeRuns($)) {
+    // dforge-config imports before any command, creating the file with a hard
+    // link that never replaces one saved meanwhile. `get --json` prints the
+    // resolved values, not the file, so its output is not used.
+    await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'get', '--json'], { timeoutMs: 15_000 }).catch(() => null)
+    return (await readSettingsFile($, path)) ?? {}
+  }
   const claude = await $.settings.read({ source: 'user' }).catch(() => ({}))
   const file = importedSettings(SCHEMA, claude)
   // The mod has no exclusive create: a file saved while the reads above ran is kept.
