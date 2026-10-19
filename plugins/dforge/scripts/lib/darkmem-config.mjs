@@ -37,15 +37,29 @@ function git(cwd, args) {
 }
 
 // The primary checkout's top level, so every worktree of one repository shares
-// one mapping and one mirror.
+// one mapping and one mirror. A submodule's common directory lies under its
+// superproject's .git/modules/, which has no work tree, and git before 2.31
+// does not answer --path-format with an absolute path: both fall back to the
+// checkout's own top level, so a submodule is a repository of its own.
 export function primaryRoot(cwd) {
   const common = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  return common ? git(path.dirname(common), ["rev-parse", "--show-toplevel"]) : null;
+  const primary = common && path.isAbsolute(common) ? git(path.dirname(common), ["rev-parse", "--show-toplevel"]) : null;
+  return primary ?? git(cwd, ["rev-parse", "--show-toplevel"]);
+}
+
+// A configured key may name the checkout through a symbolic link, and may name
+// a directory that no longer exists, which compares as written.
+function realOrResolved(file) {
+  try {
+    return fs.realpathSync.native(file);
+  } catch {
+    return path.resolve(file);
+  }
 }
 
 function samePath(a, b) {
-  const x = path.resolve(a);
-  const y = path.resolve(b);
+  const x = realOrResolved(a);
+  const y = realOrResolved(b);
   return process.platform === "win32" ? x.toLowerCase() === y.toLowerCase() : x === y;
 }
 
@@ -265,7 +279,7 @@ function isMain() {
 // a mod's process call sets none.
 if (isMain()) {
   const [flag, dir, ...extra] = process.argv.slice(2);
-  if (flag !== "--mode" || extra.length) {
+  if (flag !== "--mode" || dir === "" || extra.length) {
     process.stderr.write("usage: darkmem-config.mjs --mode [DIR]\n");
     process.exitCode = 2;
   } else {
