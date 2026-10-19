@@ -193,6 +193,25 @@ if ! command -v cygpath > /dev/null 2>&1; then
   fc set autoCompactWindow 600000
   check "claude: a dangling symlink stays a symlink" "$([ -L "$CS" ] && echo yes || echo no)" "yes"
   check "claude: its destination is created" "$(tr -d ' \n' < "$TMP/dotfiles/later.json")" '{"autoCompactWindow":600000}'
+  # A dangling chain is followed to its end: no link in it is replaced by a file.
+  rm -f "$CS"; ln -s "$TMP/dotfiles/end.json" "$TMP/dotfiles/hop.json"; ln -s "$TMP/dotfiles/hop.json" "$CS"
+  fc set autoCompactWindow 550000
+  check "claude: a dangling chain: the first link stays" "$([ -L "$CS" ] && echo yes || echo no)" "yes"
+  check "claude: a dangling chain: the middle link stays" "$([ -L "$TMP/dotfiles/hop.json" ] && echo yes || echo no)" "yes"
+  check "claude: a dangling chain: its end is created" "$(tr -d ' \n' < "$TMP/dotfiles/end.json" 2>/dev/null)" '{"autoCompactWindow":550000}'
+fi
+
+# As root, a rewrite keeps the file's owner and group: the temporary file is
+# created by root and would otherwise hand a user's settings file to root.
+if [ "$(id -u)" = 0 ] && ! command -v cygpath > /dev/null 2>&1; then
+  mkdir -p "$TMP/alt-o"
+  printf '%s\n' '{"model":"opus"}' > "$TMP/alt-o/settings.json"
+  chown 4321:4322 "$TMP/alt-o/settings.json"
+  CLAUDE_CONFIG_DIR="$TMP/alt-o" fc set autoCompactWindow 500000
+  check "claude: as root, the value is written" "$(at "$TMP/alt-o/settings.json" autoCompactWindow)" "500000"
+  check "claude: as root, the owner and group are kept" "$(node -e 'const s = require("fs").statSync(process.argv[1]); console.log(s.uid + ":" + s.gid)' "$TMP/alt-o/settings.json")" "4321:4322"
+else
+  echo "skip - the owner is kept when root writes (not running as root)"
 fi
 
 # claude-restore puts back what /model and /effort save, and touches nothing else.
@@ -246,6 +265,12 @@ check "dforge_setting: a first read answers the default" "$(dforge_setting workt
 check "dforge_setting: a read never creates the settings file" "$([ -e "$FILE" ] && echo created || echo absent)" "absent"
 fc set worktree never
 check "DFORGE_NO_SETTINGS answers the default" "$(DFORGE_NO_SETTINGS=1 dforge_setting worktree ask)" "ask"
+# A command that fails is never read for what it printed, with or without
+# pipefail, and a caller under set -e and pipefail survives the failure.
+mkdir -p "$TMP/fake/lib"
+printf '#!/usr/bin/env bash\nprintf partial\nexit 1\n' > "$TMP/fake/dforge-config"
+check "dforge_setting: a failed command's output is not used" "$(set +o pipefail; _DFORGE_ENV_DIR="$TMP/fake/lib"; dforge_setting worktree ask)" "ask"
+check "dforge_setting: a set -e pipefail caller survives a failure" "$(set -eo pipefail; _DFORGE_ENV_DIR="$TMP/fake/lib"; dforge_setting worktree ask > /dev/null; echo survived)" "survived"
 # Git Bash with path conversion off hands node the module path as written.
 check "the command runs with path conversion off" "$(MSYS_NO_PATHCONV=1 fc get worktree)" "never"
 # A number setting is a whole number.

@@ -65,11 +65,16 @@ export function readFile(file) {
 
 // Replaces a file in one rename, keeping the mode it had: Claude's settings
 // file may be private, and a temporary file would otherwise take the umask's.
+// Run as root (sudo, a container), it keeps the owner and group too, or the
+// rename would hand the user's file to root.
 function writeFile(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let mode;
+  let owner;
   try {
-    mode = fs.statSync(file).mode & 0o777;
+    const stat = fs.statSync(file);
+    mode = stat.mode & 0o777;
+    owner = { uid: stat.uid, gid: stat.gid };
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -79,6 +84,7 @@ function writeFile(file, data) {
     // more widely than the file they replace; chmod then undoes the umask.
     fs.rmSync(temp, { force: true });
     fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`, mode === undefined ? undefined : { mode });
+    if (owner && process.getuid?.() === 0) fs.chownSync(temp, owner.uid, owner.gid);
     if (mode !== undefined) fs.chmodSync(temp, mode);
     fs.renameSync(temp, file);
   } catch (error) {
@@ -106,19 +112,28 @@ function claudeValues(env, warn) {
   }
 }
 
+const MAX_LINK_HOPS = 40;
+
 // The file a write lands on: where a symlink points, even when that
 // destination does not exist yet, so a rename never replaces the link itself.
+// A dangling chain is followed link by link to its first missing path.
 function realTarget(file) {
   try {
     return fs.realpathSync(file);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
-  try {
-    return path.resolve(path.dirname(file), fs.readlinkSync(file));
-  } catch {
-    return file;
+  let target = file;
+  for (let hop = 0; hop < MAX_LINK_HOPS; hop++) {
+    let link;
+    try {
+      link = fs.readlinkSync(target);
+    } catch {
+      return target;
+    }
+    target = path.resolve(path.dirname(target), link);
   }
+  throw new Error(`${file}: more than ${MAX_LINK_HOPS} symbolic links`);
 }
 
 // Changes one key of Claude's user settings and nothing else; `undefined`

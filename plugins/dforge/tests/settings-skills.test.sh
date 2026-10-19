@@ -81,11 +81,12 @@ CT="$P/skills/using-dforge/references/codex-tools.md"
 names "codex-tools: session start reconciles, then pulls" "$CT" 'bash <plugin-root>/scripts/darkmem-sync reconcile`, then'
 names "codex-tools: nothing pushes at the end of a turn" "$CT" 'nothing pushes for you at the end of a turn'
 
-# Every skill-enforced key in the schema is named by at least one skill.
+# Every skill-enforced key in the schema is named by at least one skill, as
+# `key` or key=value: a bare word such as "worktree" is not a naming.
 keys=$(node -e 'const { pathToFileURL } = require("url"); import(pathToFileURL(process.argv[1]).href).then(m => console.log(Object.entries(m.default).filter(([, spec]) => spec.enforcedBy === "skill").map(([key]) => key).join(" ")))' "$P/config/schema.mjs")
 check "the schema has skill-enforced keys" "$([ -n "$keys" ] && echo yes || echo no)" "yes"
 for key in $keys; do
-  check "a skill names $key" "$(grep -lF -- "$key" "$P"/skills/*/SKILL.md | head -n 1 | grep -c .)" "1"
+  check "a skill names $key" "$(grep -lE -- "\`$key\`|$key=" "$P"/skills/*/SKILL.md | head -n 1 | grep -c .)" "1"
 done
 
 # The finish menu has no timer: no skill, reference or README names its machinery.
