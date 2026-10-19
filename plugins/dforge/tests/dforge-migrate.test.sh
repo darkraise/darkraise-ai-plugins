@@ -213,6 +213,14 @@ check "fence kinds: an inner three-backtick line does not close a four-backtick 
   $'````md\n```\ndr-forge:inner\n```\n````\nafter dforge:outer'
 check "fence kinds: a tilde fence keeps its prefixes" "$(cat "$FC/docs/dforge/plans/tilde.md")" $'~~~\ndr-forge:tilde\n~~~\nthen dforge:plain'
 
+# --- a CRLF fence closes ---
+printf '```\r\ndr-forge:inner\r\n```\r\nthen dr-forge:outer\r\n' > "$FC/docs/dforge/plans/crlf.md"
+out=$(bash "$FM" --dry-run "$FC" 2>&1)
+check "crlf fence, dry: listed" "$(grep -cxF "would rewrite the plugin prefixes in $FC/docs/dforge/plans/crlf.md" <<<"$out")" "1"
+out=$(bash "$FM" "$FC" 2>&1); code=$?
+check "crlf fence: exit 0" "$code" "0"
+check "crlf fence: closes, the line after it rewritten" "$(cat "$FC/docs/dforge/plans/crlf.md")" $'```\r\ndr-forge:inner\r\n```\r\nthen dforge:outer\r'
+
 # --- .superpowers/ and .forge/ both present: both merged into .dforge/ ---
 T="$TMP/two-states"
 repo "$T"

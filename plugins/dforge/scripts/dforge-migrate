@@ -271,8 +271,8 @@ prefixes_renamed() {
       fence = substr($0, RSTART, RLENGTH); sub(/^ +/, "", fence); print; next
     }
     fence == "" { print rename($0); next }
-    match($0, /^ ? ? ?(```+|~~~+)[ \t]*$/) {
-      f = $0; sub(/^ +/, "", f); sub(/[ \t]+$/, "", f)
+    match($0, /^ ? ? ?(```+|~~~+)[ \t\r]*$/) {
+      f = $0; sub(/^ +/, "", f); sub(/[ \t\r]+$/, "", f)
       if (substr(f, 1, 1) == substr(fence, 1, 1) && length(f) >= length(fence)) fence = ""
     }
     { print }
