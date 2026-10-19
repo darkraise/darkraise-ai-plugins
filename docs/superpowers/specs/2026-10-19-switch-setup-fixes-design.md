@@ -148,14 +148,17 @@ paragraph say that in an auto run a `compact` line still ends the turn on
 executing-plans Task Loop step 7, delegated-task.md §5 and parallel-waves.md
 §4 each say, right after the complete line: "In an auto run, run
 `scripts/auto-run task-complete`, then the Fable batch when
-`scripts/auto-run decision list` prints anything."
+`scripts/auto-run decision list` prints anything." In parallel-waves.md the
+Fable batch stays after the wave, as subagent-driven-development's Auto run
+section has it; only `task-complete` moves next to the complete line.
 
 ### G. Escalation to subagent mode clears by phase (row 19)
 
 executing-plans §Switching to subagent mode step 4, in an auto run: run
 dforge:handoff steps 0-4, then `scripts/auto-run clear --phase`, and end the
 turn with `Auto run: clearing`. auto-run.md §Clears lists this case beside
-the compaction one. A phase clear never counts as a self-resume.
+the compaction one, and dforge:handoff's Auto run note names it beside the
+compaction as a reason an auto run hands off. A phase clear never counts as a self-resume.
 
 ### H. Final-review stops have auto-run rules (rows 20, 21)
 
@@ -185,7 +188,7 @@ line cites a Contracts entry the deferred task's `Produces:` line cites.
 
 ### K. A deferred task's rows stay deferred at finishing (row 24)
 
-finishing Step 5b, under every finish action: a row cited only by a task
+finishing Step 5b, under whichever finish action runs it (Options 1 and 2): a row cited only by a task
 whose complete line reads `(deferred by the auto run)` is set to `deferred`
 with the note `deferred by the auto run: <the line's Ruling>`, never `done`
 or `verify`.
@@ -209,11 +212,16 @@ The cockpit adds a watchdog with `$.clock.every(60_000)`:
    turn); `autoAct` is not running (a new `S.autoBusy` flag covers the whole
    of `autoAct`, including a long `$.session.compact`); the activity kind is
    `idle` or `failed` (never `interrupted`: an Esc hands the session to the
-   owner until they submit a prompt); the activity's `endedAt` is more than
-   180 seconds ago; and the run's `stalledAt`, when set, is more than 180
-   seconds ago too, so one unanswered nudge is not counted again on the next
-   tick. When pending is `compact`, `clear`, `switch` or `switch-resume` and
-   no stage timer is armed, it arms that stage. Otherwise it runs
+   owner until they submit a prompt); and the latest of whichever exist of
+   the session's start (`S.watchedSince`, so a cleared session with no turn
+   yet still ages), the activity's `endedAt`, the end of the cockpit's own
+   last stage (`S.autoActedAt`: a
+   stage's prompt looks idle until the engine starts its turn) and the run's
+   `stalledAt` is more than 180 seconds ago, so neither the cockpit's own
+   prompt nor one unanswered nudge is counted on the next tick. When pending
+   is `compact`, `clear`, `resume`, `switch` or `switch-resume` and no stage
+   timer is armed, it arms that stage (a pending `resume` resubmits the run's
+   first prompt). Otherwise it runs
    `scripts/auto-run stalled`, which records `stalledAt`, adds 1 to `stalls`
    and, at 3, stops the run with the reason
    `three stalls without a completed task` and exits 5; on exit 0 the
@@ -317,9 +325,9 @@ A16. [test, high] final-review.md step 0 has the auto-run rule for a red gate an
 A17. [test, high] A final-residual item with no ruling becomes a deferred row noted `final review residual`, and such a row keeps a `merge` finish.
 A18. [test, high] brainstorming §Auto by default step 5 carries the `register add … --state deferred` command, and step 6 passes `--register` with that register.
 A19. [test, high] auto-run.md §Rulings defines a deferred task's dependents by `**Depends on:**`, or else by `Consumes:` citing the deferred task's `Produces:`.
-A20. [test, high] finishing Step 5b sets a row cited only by a deferred-by-the-auto-run task to `deferred`, under every finish action.
+A20. [test, high] finishing Step 5b sets a row cited only by a deferred-by-the-auto-run task to `deferred`, under whichever finish action runs that step.
 A21. [test, neg, high] `scripts/auto-run start` exits 2 with `no live cockpit` when the session's heartbeat is missing or older than 180 seconds, and a run whose bound session's heartbeat is older than 180 seconds is stale.
-A22. [test, high] With an active run bound, no live turn, no live spawn or shell, `autoAct` not running, activity `idle` or `failed` and `endedAt` over 180 seconds old, the watchdog re-arms a pending cockpit stage, or runs `auto-run stalled` and submits the stall prompt; it does nothing after an Esc (`interrupted`), while a spawn or shell is live, or while `autoAct` is running.
+A22. [test, high] With an active run bound, no live turn, no live spawn or shell, `autoAct` not running, activity `idle` or `failed` and the latest of `endedAt`, `S.autoActedAt` and `stalledAt` over 180 seconds old, the watchdog re-arms a pending cockpit stage (`resume` included), or runs `auto-run stalled` and submits the stall prompt; it does nothing after an Esc (`interrupted`), while a spawn or shell is live, or while `autoAct` is running.
 A23. [test, neg, high] `scripts/auto-run stalled` records `stalledAt`; the watchdog does not nudge again until `stalledAt` is over 180 seconds old; the third `stalled` without a `task-complete` stops the run with `three stalls without a completed task` and exits 5.
 A24. [test, high] `autoAct` books a failure after 30 minutes of continuous deferral.
 A25. [test, high] `scripts/turn-end.sh` holds a bound run's turn when no turn stamp exists, and treats an unwritable holds count as the cap.
