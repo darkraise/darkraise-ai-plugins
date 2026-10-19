@@ -383,6 +383,9 @@ message as your other bookkeeping:
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
   ` (codex off — <reason>)` when `review-route` printed `reason=codex-off`
 
+In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when
+`scripts/auto-run decision list` prints anything.
+
 **Release the worktree when the task is complete.** A task that ran on an
 external executor and reached a reviewed complete line no longer owns its
 worktree:

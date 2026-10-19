@@ -19,8 +19,15 @@ names() { # names <label> <file> <text>
 for skill in subagent-driven-development executing-plans; do
   F="$P/skills/$skill/SKILL.md"
   names "$skill: the section" "$F" '## Auto run'
-  names "$skill: after a compaction" "$F" '`scripts/auto-run after-compact` before step 1 above'
-  names "$skill: setup asks nothing" "$F" 'skip the finish-preference question; run `scripts/auto-run phase execute`'
+  names "$skill: after a compaction" "$F" '`scripts/auto-run after-compact` before step 0 above'
+  names "$skill: setup asks nothing, from the worktree" "$F" 'from the execution worktree, once dforge:using-git-worktrees has created it.'
+  names "$skill: exit 4 is a skipped worktree" "$F" 'Exit 4 means the worktree step was skipped: create the worktree, then run'
+  names "$skill: no ledger goes to Setup" "$F" 'no ledger names this plan, no task has started: skip the rest of this'
+  names "$skill: setup due goes to Setup" "$F" '0. In an auto run, when `scripts/auto-run status` says setup is due, or when'
+  names "$skill: a task-complete stop" "$F" 'A `task-complete` exit 5 means the run stopped (a task was completed in the'
+  names "$skill: dependents come from the plan" "$F" 'names the task; in a plan without those lines, its `Consumes:` line cites'
+  names "$skill: compact still ends the turn at the final check" "$F" 'a `compact` line still ends the turn on `Auto run: compacting`.'
+  check "$skill: no handoff rule at the final check" "$(grep -c "Auto run section's \`handoff\`" "$F")" "0"
   names "$skill: blocked goes to Fable" "$F" '`BLOCKED` goes on the pending list and one Fable batch runs at once'
   names "$skill: the deferred line" "$F" 'Task <N>: complete (deferred by the auto run)'
   names "$skill: dependents are deferred too" "$F" 'and every task that depends on it'
@@ -38,6 +45,17 @@ for skill in subagent-driven-development executing-plans; do
   names "$skill: the four stops give way" "$F" 'except in an auto run'
 done
 names "subagent-driven-development: a deferred task is not merged" "$P/skills/subagent-driven-development/SKILL.md" "a deferred task's branch is"
+EPF="$P/skills/executing-plans/SKILL.md"
+names "executing-plans: step 7 runs task-complete" "$EPF" 'auto run, run `scripts/auto-run task-complete`, then the Fable batch when'
+names "executing-plans: step 8 moves to the final phase" "$EPF" '`scripts/context-size --final`; in an auto run it moves the run to the'
+names "executing-plans: the budget section says so too" "$EPF" 'Finishing is never budget-checked. In an auto run `--final` also moves the'
+names "subagent-driven-development: the budget section says so" "$P/skills/subagent-driven-development/SKILL.md" 'from the ledger. In an auto run `--final` also moves the run to the final'
+names "executing-plans: the mode switch clears by phase" "$EPF" '`scripts/auto-run clear --phase`, and end the turn with'
+names "executing-plans: the mode switch in an auto run" "$EPF" 'not need. In an auto run, run dforge:handoff steps 0-4, then'
+names "delegated-task.md: task-complete after the complete line" "$P/reference/delegated-task.md" 'In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when'
+names "parallel-waves.md: task-complete after the merge" "$P/reference/parallel-waves.md" '`; merged <sha7>`. In an auto run, run `scripts/auto-run task-complete`'
+names "parallel-waves.md: before any budget check" "$P/reference/parallel-waves.md" 'right after it, before any budget check or dispatch; the Fable batch runs'
+names "handoff: the mode switch hands off too" "$P/skills/handoff/SKILL.md" 'mode hands off too, and the step that invoked this skill runs'
 
 R="$P/reference/auto-run.md"
 names "auto-run.md: an unwritten handoff stops the run" "$R" 'If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`'

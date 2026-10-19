@@ -156,7 +156,9 @@ bash scripts/wave merge PLAN_FILE <N> <task base>
 ```
 
 - **Exit 0, `merged Task <N>: <sha7>`.** Write the complete line with
-  `; merged <sha7>`. A `note:` line names a file outside the task's
+  `; merged <sha7>`. In an auto run, run `scripts/auto-run task-complete`
+  right after it, before any budget check or dispatch; the Fable batch runs
+  after the wave. A `note:` line names a file outside the task's
   **Files:** list: the review already judged scope, so copy each note into
   the ledger as `Task <N>: minor (deferred): changed <file> outside its Files`.
   Start the next task of the wave if one is waiting and

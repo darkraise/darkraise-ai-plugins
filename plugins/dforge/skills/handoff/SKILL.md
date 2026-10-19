@@ -30,13 +30,16 @@ A fresh session reloads only its baseline plus these files. The numbers are in
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.
-- An auto run ([auto-run.md](../../reference/auto-run.md)) hands off only for
+- An auto run ([auto-run.md](../../reference/auto-run.md)) hands off for
   a compaction that left too much. A saved plan switches in place instead
   (auto-run.md §The switch): only steps 0-3 below run, and the session does
   not end. On a handoff the steps below run as always, but the turn does not
   end on the next-step block: return to the step that invoked this skill, which runs
   `scripts/auto-run clear` and ends the turn (auto-run.md §Clears). This skill
-  never runs `scripts/auto-run clear` itself.
+  never runs `scripts/auto-run clear` itself. A switch from inline to subagent
+  mode hands off too, and the step that invoked this skill runs
+  `scripts/auto-run clear --phase` (dforge:executing-plans §Switching to
+  subagent mode).
 - Your human partner says they are stepping away for more than an hour, or
   asks you to stop. Reconcile live children first, exactly as step 0 says:
   wait for them, or stop them and record a Ruling. Tell your partner which you

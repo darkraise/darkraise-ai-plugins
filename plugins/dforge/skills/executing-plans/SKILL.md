@@ -11,6 +11,9 @@ If this session was compacted - a compaction snapshot or summary sits above -
 your memory of the run is gone, and only the start of this file may have come
 back. Before anything else:
 
+0. In an auto run, when `scripts/auto-run status` says setup is due, or when
+   no ledger names this plan, no task has started: skip the rest of this
+   section and follow Setup from its first step.
 1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dforge §Session Budget),
    and read `progress.md` and `handoff.md` in
    the directory it prints.
@@ -18,9 +21,10 @@ back. Before anything else:
    ledger line decides; see the Recovery table under The Ledger.
 3. When every task has its `complete` line, run `scripts/context-size --final`
    and go on to the final review or finishing whatever it prints: the final
-   phase never hands off (in an auto run, the Auto run section's `handoff`
-   rule still applies). Otherwise run `scripts/context-size`; on exit 5,
-   finish the task in flight, then invoke dforge:handoff.
+   phase never hands off. In an auto run it also moves the run to the final
+   phase, and a `compact` line still ends the turn on `Auto run: compacting`.
+   Otherwise run `scripts/context-size`; on exit 5, finish the task in
+   flight, then invoke dforge:handoff.
 4. Re-read this skill in full before the next task. If a task's last ledger
    line is an agent-named assigned line or `fix round R/5`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
@@ -32,15 +36,20 @@ When `scripts/auto-run status` exits 0, this run is unattended
 What changes here:
 
 - **After a compaction**, the cockpit's prompt has you run
-  `scripts/auto-run after-compact` before step 1 above. On `handoff` (exit 5),
+  `scripts/auto-run after-compact` before step 0 above. On `handoff` (exit 5),
   invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
-- **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`.
+- **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
+  from the execution worktree, once dforge:using-git-worktrees has created it.
+  Exit 4 means the worktree step was skipped: create the worktree, then run
+  the command again from it.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
   performed (the finish action is the one exception).
   A task Fable gives no ruling for, or whose action is never performed, is
-  deferred, and every task that depends on it: write
+  deferred, and every task that depends on it (its `**Depends on:**` line
+  names the task; in a plan without those lines, its `Consumes:` line cites
+  a Contracts entry the deferred task's `Produces:` line cites): write
   `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
   and a deferred register row for each. Other tasks keep running.
 - **Each task:** right after its `Task N: complete` line, run
@@ -49,6 +58,8 @@ What changes here:
   task with its `complete` line (in subagent mode, after the last wave's
   merge), run `scripts/auto-run phase final` next, before any budget check and
   before the turn ends, so a compaction from there on never hands off.
+  A `task-complete` exit 5 means the run stopped (a task was completed in the
+  primary checkout): end as auto-run.md §Stopping says.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight, then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
@@ -341,7 +352,9 @@ brief prints `budget (last 2 tasks)` or `budget (last task)`, and only that
 line's verdict decides. Run `scripts/context-size --final` after the last
 task's `Task <N>: complete` line for the record: it never says `handoff`.
 After every earlier task, the next brief's budget line is the check.
-Finishing is never budget-checked.
+Finishing is never budget-checked. In an auto run `--final` also moves the
+run to the final phase, and a `compact` line still ends the turn on
+`Auto run: compacting`.
 
 The last task completing is never a stop: the final review, its fix wave and
 finishing run in this session whatever `context-size --final` prints, and a
@@ -379,9 +392,13 @@ For each task, in order:
    a test.
 6. **Commit** as the task's commit step specifies.
 7. **Close the task.** Append the complete line with its checkpoint, in the
-   same message as your other bookkeeping, and mark the todo complete.
+   same message as your other bookkeeping, and mark the todo complete. In an
+   auto run, run `scripts/auto-run task-complete`, then the Fable batch when
+   `scripts/auto-run decision list` prints anything.
 8. **Check the budget after the last task.** Run
-   `scripts/context-size --final`. After any other task, go to the
+   `scripts/context-size --final`; in an auto run it moves the run to the
+   final phase, and a `compact` line still ends the turn on
+   `Auto run: compacting`. After any other task, go to the
    next task's step 1: its brief prints the same budget line.
 
 **When a verification will not pass.** Fix, re-run, then append
@@ -491,7 +508,10 @@ task boundary where every earlier task is complete.
 4. Invoke dforge:handoff. The switch is always a handoff: subagent
    mode's value is a fresh controller that reads the header and one brief at a
    time, and this session's context is full of implementation detail it does
-   not need.
+   not need. In an auto run, run dforge:handoff steps 0-4, then
+   `scripts/auto-run clear --phase`, and end the turn with
+   `Auto run: clearing` as its last line; a phase clear never counts as a
+   self-resume.
 
 Your human partner may also move a plan the other way, from subagent mode to
 this one. Only their explicit instruction does that, and only at the same kind

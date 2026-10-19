@@ -11,6 +11,9 @@ If this session was compacted — a compaction snapshot or summary sits above �
 your memory of the run is gone, and only the start of this file may have come
 back. Before anything else:
 
+0. In an auto run, when `scripts/auto-run status` says setup is due, or when
+   no ledger names this plan, no task has started: skip the rest of this
+   section and follow Setup from its first step.
 1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dforge §Session Budget),
    and read `progress.md` and `handoff.md` in
    the directory it prints.
@@ -25,9 +28,10 @@ back. Before anything else:
    [parallel-waves.md](../../reference/parallel-waves.md) §Recovery.
 3. When every task has its `complete` line, run `scripts/context-size --final`
    and go on to Final Review or finishing whatever it prints: the final phase
-   never hands off (in an auto run, the Auto run section's `handoff` rule still
-   applies). Otherwise run `scripts/context-size`; on exit 5, finish the task
-   in flight, then invoke dforge:handoff.
+   never hands off. In an auto run it also moves the run to the final phase,
+   and a `compact` line still ends the turn on `Auto run: compacting`.
+   Otherwise run `scripts/context-size`; on exit 5, finish the task in flight,
+   then invoke dforge:handoff.
 4. Re-read this skill in full before the next dispatch, and
    [delegated-task.md](../../reference/delegated-task.md) when a task is
    mid-loop (an agent-named assigned line or `fix round R/5`).
@@ -39,15 +43,20 @@ When `scripts/auto-run status` exits 0, this run is unattended
 What changes here:
 
 - **After a compaction**, the cockpit's prompt has you run
-  `scripts/auto-run after-compact` before step 1 above. On `handoff` (exit 5),
+  `scripts/auto-run after-compact` before step 0 above. On `handoff` (exit 5),
   invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
-- **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`.
+- **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
+  from the execution worktree, once dforge:using-git-worktrees has created it.
+  Exit 4 means the worktree step was skipped: create the worktree, then run
+  the command again from it.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
   performed (the finish action is the one exception).
   A task Fable gives no ruling for, or whose action is never performed, is
-  deferred, and every task that depends on it: write
+  deferred, and every task that depends on it (its `**Depends on:**` line
+  names the task; in a plan without those lines, its `Consumes:` line cites
+  a Contracts entry the deferred task's `Produces:` line cites): write
   `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
   and a deferred register row for each. In a wave, a deferred task's branch is
   not merged. Other tasks keep running.
@@ -58,6 +67,8 @@ What changes here:
   (in subagent mode, after the last wave's merge), run
   `scripts/auto-run phase final` next, before any budget check and before the
   turn ends, so a compaction from there on never hands off.
+  A `task-complete` exit 5 means the run stopped (a task was completed in the
+  primary checkout): end as auto-run.md §Stopping says.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight (a wave through its merge), then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
@@ -492,7 +503,8 @@ request:
   prints: the final phase never hands off, and a `review-package` budget line
   saying `handoff` does not stop it. If the context fills, Claude Code's own
   compaction is the backstop, and After compaction resumes the final phase
-  from the ledger.
+  from the ledger. In an auto run `--final` also moves the run to the final
+  phase, and a `compact` line still ends the turn on `Auto run: compacting`.
 - On Codex the budget line carries a measured number but no verdict: hand off
   after every 3 completed tasks, or after any task that needed 3 or more fix
   rounds.
