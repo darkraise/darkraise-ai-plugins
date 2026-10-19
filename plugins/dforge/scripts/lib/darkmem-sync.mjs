@@ -62,8 +62,8 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
 
 // A document name as ledgers and plans write it, docs/dforge/<rest> or the
 // older docs/forge/<rest> and docs/superpowers/<rest> that historical plans
-// cite, as its uri dforge/<rest>; null for a
-// path, a handoff note, an archived copy, or a name that climbs.
+// cite, as its uri dforge/<rest>; null for a path, a handoff note, an
+// archived copy, or a name that climbs.
 function documentUri(name) {
   const match = /^(?:\.\/)?docs\/(?:dforge|forge|superpowers)\/(.+)$/.exec(name);
   if (!match || match[1].split("/").some(segment => segment === "" || segment === "." || segment === "..")) return null;
@@ -213,8 +213,9 @@ async function main(argv, {
   const cfg = {
     ...stores.sync, reason: stores.reason, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress,
   };
-  // A command must not run on a pre-3.0 mirror: a pull would fill dforge/
-  // beside superpowers/ and every later run would refuse.
+  // A command must not run on a mirror holding older (superpowers/ or forge/)
+  // uris: a pull would fill dforge/ beside them and every later run would
+  // refuse.
   try {
     const migrated = migrateMirrorLocked(cfg.mirror);
     if (migrated?.blocked) {
@@ -286,10 +287,11 @@ async function main(argv, {
       timeoutMs: Number(env.DARKMEM_SYNC_TIMEOUT_MS) || 10000,
     });
     const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
-    // darkmem's pre-3.0 uris move before anything syncs: a pull would read a
-    // document still under superpowers/ as deleted from dforge/. Answers why
-    // the command may not sync, or null. Reconcile calls it after its own
-    // refusals and still moves a family back to the checkout, from the mirror.
+    // darkmem's older (superpowers/ or forge/) uris move before anything
+    // syncs: a pull would read a document still under an older prefix as
+    // deleted from dforge/. Answers why the command may not sync, or null.
+    // Reconcile calls it after its own refusals and still moves a family back
+    // to the checkout, from the mirror.
     const migrate = async () => {
       if (!cfg.enabled || !cfg.url || !cfg.apiKey || state.prefix === DOC_PREFIX) return null;
       const failures = await migrateServer({ cfg, client, state, persist });

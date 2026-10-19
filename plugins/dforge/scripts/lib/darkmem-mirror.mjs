@@ -1,6 +1,7 @@
 // The mirror's layout and bookkeeping (darkmem mirror spec §2-§3): which file a
 // document uri lives at, the sync state, the lock, and how text is cut into
 // work-log entries. Filesystem only; nothing here speaks HTTP.
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -205,7 +206,12 @@ export function recordCheckpointAt(state, workstream, at) {
 // A missing state file is a fresh mirror. An unreadable or malformed one is an
 // error, not a fresh start: forgetting a ledger's offset would re-send lines.
 export function loadState(file) {
-  if (!fs.existsSync(file)) return emptyState();
+  try {
+    fs.statSync(file);
+  } catch (error) {
+    if (error.code === "ENOENT") return emptyState();
+    throw new StateError(`${file} is unreadable (${error.message}); ${REBUILD}`);
+  }
   let raw;
   try {
     raw = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -227,7 +233,8 @@ export function loadState(file) {
     version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt, conflicts: raw.conflicts,
     pendingLinks: raw.pendingLinks ?? [],
   };
-  // Set once darkmem was checked for pre-3.0 uris (dforge-home-migrate.mjs).
+  // Set once darkmem was checked for older (superpowers/ or forge/) uris
+  // (dforge-home-migrate.mjs).
   if (raw.prefix !== undefined) state.prefix = raw.prefix;
   return state;
 }
@@ -503,7 +510,9 @@ export function decodeUtf8(buffer) {
 // Cut text into pieces of at most `limit` characters, each ending after its
 // last newline when it has one, so the pieces concatenate back to the text.
 // Counted in UTF-16 units, which never undercounts the server's code points.
+// A limit under 2 cannot hold a surrogate pair, and would never advance.
 export function splitAtLimit(text, limit = MAX_ENTRY_CHARS) {
+  if (!Number.isSafeInteger(limit) || limit < 2) throw new RangeError(`splitAtLimit needs a limit of at least 2, got ${limit}`);
   const pieces = [];
   let rest = text;
   while (rest.length > limit) {
@@ -570,23 +579,40 @@ export function ledgerEntries(text) {
   return entries;
 }
 
+// Every worktree's docs directory, as `git worktree list` names the
+// checkouts; none when git cannot list them.
+function worktreeDocsRoots(worktreeRoot) {
+  if (!worktreeRoot) return [];
+  const listed = spawnSync("git", ["-C", worktreeRoot, "worktree", "list", "--porcelain"], { encoding: "utf8", timeout: 10000 });
+  if (listed.status !== 0) return [];
+  return listed.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree "))
+    .map(line => path.join(line.slice("worktree ".length), "docs", "dforge"));
+}
+
 // The darkmem uri a document's name or path stands for: a name under
-// docs/dforge/, docs/forge/ or docs/superpowers/ (as a ledger or a **Spec:** line writes
-// it), or an absolute path under the docs root or the worktree's docs
-// directory. Computed from the roots, never by searching for a segment.
+// docs/dforge/, docs/forge/ or docs/superpowers/ (as a ledger or a **Spec:**
+// line writes it), or an absolute path under the docs root, the worktree's
+// docs directory or another worktree's (an older ledger's identity line may
+// name one). Computed from the roots, never by searching for a segment.
 export function pathToUri(roots, file) {
   const text = String(file).replace(/\\/g, "/");
   const name = /^(?:\.\/)?docs\/(?:dforge|forge|superpowers)\/(.+)$/.exec(text);
-  if (name) return name[1].split("/").some(segment => segment === ".." || segment === ".") ? null : `${DOC_PREFIX}/${name[1]}`;
+  if (name) return name[1].split("/").some(segment => segment === "" || segment === ".." || segment === ".") ? null : `${DOC_PREFIX}/${name[1]}`;
   if (!path.isAbsolute(String(file))) return null;
+  const under = base => {
+    const rel = path.relative(path.resolve(base), path.resolve(String(file)));
+    return rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel) ? `${DOC_PREFIX}/${rel.split(path.sep).join("/")}` : null;
+  };
   const bases = [roots.docsRoot];
   if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "dforge"));
   for (const base of bases) {
-    if (!base) continue;
-    const rel = path.relative(path.resolve(base), path.resolve(String(file)));
-    if (rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)) {
-      return `${DOC_PREFIX}/${rel.split(path.sep).join("/")}`;
-    }
+    const uri = base && under(base);
+    if (uri) return uri;
+  }
+  // Listed only when the roots do not hold the path: git runs once per miss.
+  for (const base of worktreeDocsRoots(roots.worktreeRoot)) {
+    const uri = under(base);
+    if (uri) return uri;
   }
   return null;
 }
@@ -610,8 +636,10 @@ export function propertiesFor(roots, slug, namedPath) {
       const spec = /^\*\*Spec:\*\*\s*`?([^`\s]+)`?/m.exec(fs.readFileSync(uriToLocal(roots, uri), "utf8"));
       const specUri = spec ? pathToUri(roots, spec[1]) : null;
       if (specUri) properties.spec_uri = specUri;
-    } catch {
+    } catch (error) {
       // The plan is not in this mirror; the workstream carries no spec_uri.
+      // Any other failure to read it is a real fault, not a missing plan.
+      if (error.code !== "ENOENT") throw error;
     }
   } else if (uri) {
     properties.spec_uri = uri;

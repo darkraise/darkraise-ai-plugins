@@ -10,7 +10,7 @@ import {
   pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal,
   utcStamp, utf8Fault, checkpointAtOf, newestCheckpointAt, recordCheckpointAt,
 } from "../../scripts/lib/darkmem-mirror.mjs";
-import { scratch, write } from "./helpers.mjs";
+import { git, makeRepo, scratch, write } from "./helpers.mjs";
 
 function mirror() {
   const root = scratch("dms-mirror-");
@@ -83,6 +83,8 @@ test("splitAtLimit cuts after newlines, never splits a surrogate pair, and conca
   const split = splitAtLimit(emoji, 10);
   assert.equal(split.join(""), emoji);
   assert.equal(split[0], "x".repeat(9));
+  assert.throws(() => splitAtLimit("ab", 1), RangeError, "a limit under 2 cannot hold a surrogate pair");
+  assert.throws(() => splitAtLimit("😀", 1), RangeError);
 });
 
 test("splitAtBlankLines keeps each blank line at the end of its piece", () => {
@@ -138,6 +140,8 @@ test("paths name their uris; plans and drafts name their properties; a handoff n
   assert.equal(pathToUri(named, "/elsewhere/dforge/plans/p1.md"), null);
   assert.equal(pathToUri(named, "plans/p1.md"), null);
   assert.equal(pathToUri(named, "docs/dforge/../../x.md"), null);
+  assert.equal(pathToUri(named, "docs/forge/plans/"), null, "an empty segment names no document");
+  assert.equal(pathToUri(named, "docs/dforge//plans/p1.md"), null);
   assert.equal(ledgerPlanPath("# SDD ledger — plan: docs/superpowers/plans/p1.md\nTask 1: x\n"), "docs/superpowers/plans/p1.md");
   assert.equal(ledgerPlanPath("Task 1: x\n"), null);
   write(path.join(roots.docsRoot, "plans", "p1.md"), "# P\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
@@ -153,6 +157,30 @@ test("paths name their uris; plans and drafts name their properties; a handoff n
   );
   assert.deepEqual(checkpointTarget("## State\n- Draft: `docs/superpowers/specs/d-design.md`\n"), { slug: "d-design", path: "docs/superpowers/specs/d-design.md" });
   assert.equal(checkpointTarget("## State\n- a punch list\n## Gotchas\n- Plan: `x.md`\n"), null);
+});
+
+test("pathToUri reads an absolute path under any worktree's docs directory", () => {
+  const repo = makeRepo();
+  const worktree = path.join(scratch("dms-wt-"), "wt");
+  git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
+  const { roots } = mirror();
+  const file = path.join(worktree, "docs", "dforge", "plans", "p.md");
+  assert.equal(pathToUri({ ...roots, worktreeRoot: repo }, file), "dforge/plans/p.md");
+  assert.equal(pathToUri({ ...roots, worktreeRoot: repo }, path.join(worktree, ".dforge", "x.md")), null);
+  assert.equal(pathToUri(roots, file), null, "without a worktree root no worktree is listed");
+});
+
+test("propertiesFor reads a missing plan as no spec; any other read failure is an error", () => {
+  const { roots } = mirror();
+  assert.deepEqual(propertiesFor(roots, "p1", "docs/dforge/plans/p1.md"), { plan_uri: "dforge/plans/p1.md" });
+  fs.mkdirSync(path.join(roots.docsRoot, "plans", "p1.md"), { recursive: true });
+  assert.throws(() => propertiesFor(roots, "p1", "docs/dforge/plans/p1.md"), { code: "EISDIR" });
+});
+
+test("a state file the mirror cannot reach is an error, not a fresh start", { skip: process.platform === "win32" && "Windows reports ENOENT under a file" }, () => {
+  const { root } = mirror();
+  fs.writeFileSync(path.join(root, "file"), "x");
+  assert.throws(() => loadState(path.join(root, "file", ".sync-state.json")), StateError);
 });
 
 test("each family lists, reports and links only when the roots sync it", () => {
