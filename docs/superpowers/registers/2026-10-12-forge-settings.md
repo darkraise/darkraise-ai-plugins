@@ -1,7 +1,7 @@
 # dr-forge settings revamp and workflow controls
 
 **Source:** owner request, 2026-10-12 session: "revamp the settings UI of forge plugin, also add more settings to control the workflow and development progress of plugin"; inherits rows 3-11, 19 and 20 of docs/superpowers/registers/2026-10-11-dr-forge.md, deferred there to this spec
-**Covers:** docs/superpowers/specs/2026-10-12-dr-forge-settings-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md
+**Covers:** docs/superpowers/specs/2026-10-12-dr-forge-settings-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md, docs/superpowers/specs/2026-10-20-open-rows-sweep-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
@@ -53,4 +53,4 @@
 | 46 | A dr-forge skill started as a slash command (/dr-forge:project-status) does not mark the session: isPlanSession is set only on a Skill tool call or a dr-forge agent spawn, so the settings note and handoff nudge wait | - | - | done | a skill.prompt hook marks the session and sends the waiting note, tested (d1a0106); live: /dr-forge:using-superpowers delivered one note with no Skill tool call |
 | 47 | Edit in the settings view drops the keyboard to the prompt: the number field's autoFocus applies only when the pane takes the keyboard, so typed digits go to the prompt until ctrl+x Tab; the view should move the ring with $.ui.focus when the editor opens | - | - | done | Edit moves the focus into the field with $.ui.focus, and the field starts empty with the value as placeholder (6f46e26); live: 500 refused, 65 saved, Cancel and the Mention field work; the test kit cannot hold the keyboard, so focus is verified by hand only; the pane still loses the keyboard on a terminal resize (engine) |
 | 48 | cockpit: the person-origin ui.close path (the ui.close hook's flushSettingNote) has no test; the kit cannot raise a person's close and the mod's own ui.close did not reach that hook under claude plugin test (cause unknown) (Task 6) | - | - | open | - |
-| 49 | settings-skills.test.sh:222 has no test proving the tighter key regex rejects a bare word; dforge-config.mjs:96 hop-limit throw is practically unreachable and untested (Task 3) | - | - | open | - |
+| 49 | settings-skills.test.sh:222 has no test proving the tighter key regex rejects a bare word; dforge-config.mjs:96 hop-limit throw is practically unreachable and untested (Task 3) | - | - | open | triage 2026-10-20: a accepted (a test of a test); b to fix, reachable at exactly 40 links with the wrong message |

@@ -1,7 +1,7 @@
 # Auto execution as the default
 
 **Source:** owner request in the 2026-10-18 brainstorming session
-**Covers:** docs/superpowers/specs/2026-10-18-auto-execution-default-design.md, docs/superpowers/specs/2026-10-19-switch-setup-fixes-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md
+**Covers:** docs/superpowers/specs/2026-10-18-auto-execution-default-design.md, docs/superpowers/specs/2026-10-19-switch-setup-fixes-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md, docs/superpowers/specs/2026-10-20-open-rows-sweep-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
@@ -43,7 +43,7 @@
 | 36 | executing-plans Switching to subagent mode step 4 sends a next-step exit 5 to auto-run.md Clears, but exit 5 there is the background-work case in auto-run.md's switch step 3 | docs/superpowers/plans/2026-10-19-deferred-rows-sweep.md | the deferred rows sweep spec item for this row is fixed and its Check passes | done | deferred minor from the auto-run-reliability run; not scheduled (final fix re-review) |
 | 37 | task-complete in the primary checkout stops the run even in the spec or plan phase (matches C3 as written) | docs/superpowers/plans/2026-10-19-deferred-rows-sweep.md | the deferred rows sweep spec item for this row is fixed and its Check passes | done | deferred minor from the auto-run-reliability run; not scheduled (Task 1) |
 | 38 | Real-engine probe did not see the switch's pending stages switch-resume and after-compact between 60-second polls; probe session transcripts remain in /root/.claude-alt/projects and show in claude --resume until removed | - | - | n/a | triage 2026-10-19, wontfix: A limit of the probe's 60-second polling (plan Task 16), not a code defect. The probe transcripts are host state outside the repo and still exist under /root/.claude-alt/projects/-tmp-dforge-reliability-probe-repo*. |
-| 39 | auto-run.test.sh lock test assumes the background holder takes the lock within sleep 0.5 (spurious failure on a loaded host); ar_create does not silence ar_jq stderr as ar_write does; session-start.sh would create the cockpit directory under / if HOME is empty (Task 33) | - | - | open | - |
+| 39 | auto-run.test.sh lock test assumes the background holder takes the lock within sleep 0.5 (spurious failure on a loaded host); ar_create does not silence ar_jq stderr as ar_write does; session-start.sh would create the cockpit directory under / if HOME is empty (Task 33) | - | - | open | triage 2026-10-20: b accepted (jq's stderr is ar_create's only diagnostic); a and c to fix |
 | 40 | auto-run.test.sh session-hygiene scan: the command-line exemption matches AR_SESSION= and CLAUDE_CODE_SESSION_ID= anywhere on a line, including in a comment | - | - | deferred | Task 36 ruling: evading it needs a deliberately misleading line; no suite uses the exemption; a real check needs shell parsing in grep |
-| 41 | cockpit register.tsx (Task 4): S.stallFailedAt is not cleared when a run stops or a new run starts; watchdogTick reads the clock twice | - | - | open | - |
+| 41 | cockpit register.tsx (Task 4): S.stallFailedAt is not cleared when a run stops or a new run starts; watchdogTick reads the clock twice | - | - | n/a | triage 2026-10-20: a stale stallFailedAt delays a stall nudge at most about 3 minutes, and only for a run started outside the session's turns; the double clock read is cosmetic |
 | 42 | finishing-a-development-branch SKILL.md line 406 is 81 columns and auto-run.md Finishing has ragged short lines, both plan-mandated rewraps that keep test needles whole (Tasks 9, 10) | - | - | deferred | Tasks 9 and 10: cosmetic, needles must stay on one line |
