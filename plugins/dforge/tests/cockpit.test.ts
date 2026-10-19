@@ -3947,6 +3947,20 @@ describe('auto run', () => {
     expect(w.prompts).toHaveLength(2)
   })
 
+  test('books no stall once the session has ended', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    on('session.end', (_$, e) => e as never)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.session.end({ reason: 'other', sessionId: 'sess-1' })
+    await clock.advance(300_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(w.prompts).toEqual([])
+  })
+
   test('nudges a run whose turn failed', async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }

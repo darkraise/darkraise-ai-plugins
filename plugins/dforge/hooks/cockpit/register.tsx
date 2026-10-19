@@ -330,7 +330,7 @@ export const register: Register = on => {
     S.watchedSince = await $.clock.now()
     await beat($)
     S.watchdog?.cancel()
-    S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($))
+    S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     await readVersion($)
     await readRemote($)
     if (o.isMinimized) {
@@ -415,6 +415,8 @@ export const register: Register = on => {
     }
     S.ticker?.cancel()
     S.ticker = null
+    S.watchdog?.cancel()
+    S.watchdog = null
     await setActivity($, () => IDLE)
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -2571,7 +2573,7 @@ async function watchdogTick($: EngineInterface) {
   }
   const code = await autoRunCall($, await $.session.id(), ['stalled'])
   if (code === 5) await endStoppedRun($)
-  else if (code === 0) await $.prompt.submit({ text: stallPrompt($.plugin.root), asUser: true }).catch(() => undefined)
+  else if (code === 0 && !S.isTurnLive) await $.prompt.submit({ text: stallPrompt($.plugin.root), asUser: true }).catch(() => undefined)
 }
 
 // The run stopped while the session was idle: record it, and give the model a

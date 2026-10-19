@@ -105,6 +105,8 @@ names "finishing: a finish stops the run with no reason" "$FIN" 'stop` with no `
 names "final-review.md: a red gate in an auto run" "$P/reference/final-review.md" 'run ([auto-run.md](auto-run.md)), a red gate does not stop the review: the'
 names "final-review.md: a second red stops the run" "$P/reference/final-review.md" '`scripts/auto-run stop --reason "gate <name> red"` and ends as auto-run.md'
 GWF="$P/skills/using-git-worktrees/SKILL.md"
+names "final-review.md: a manifest defect has its own reason" "$P/reference/final-review.md" 'a manifest defect does the same with the reason'
+names "executing-plans: the mode switch handles next-step exits" "$EPF" 'a `next-step` exit 4 or 5 there is'
 names "using-git-worktrees: never is not read" "$GWF" 'The `worktree` setting is not read: `worktree=never` creates it too'
 names "using-git-worktrees: the sandbox stops the run" "$GWF" 'In an auto run, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"`'
 names "using-git-worktrees: a red baseline is a ruling" "$GWF" 'In an auto run, ask nothing: run `scripts/auto-run ruling add "Setup: baseline tests red — <failing summary>"` and continue'

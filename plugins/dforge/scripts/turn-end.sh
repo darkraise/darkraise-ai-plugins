@@ -5,8 +5,9 @@
 # `## Next session` block from scripts/next-step. Controllers that summarize and
 # stop (common on Sonnet) leave the human with neither. When the last message carries neither,
 # block the stop once with the instruction; Claude Code sets stop_hook_active on
-# the retry, which always passes. Anything missing (jq, the turn stamp from
-# scripts/turn-start.sh, a ledger written this turn) passes silently, and so
+# the retry, which always passes. Anything missing (jq, a ledger written this
+# turn, or the turn stamp from scripts/turn-start.sh unless an auto run is
+# bound to the session) passes silently, and so
 # does a plain stop while an agent or command this session started in the
 # background is still running: the controller is waiting on it, and its
 # notification starts the next turn. The reverse is held once: a next-step

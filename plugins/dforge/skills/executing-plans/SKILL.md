@@ -510,7 +510,8 @@ task boundary where every earlier task is complete.
    time, and this session's context is full of implementation detail it does
    not need. In an auto run, run dforge:handoff steps 0-4, then
    `scripts/auto-run clear --phase`, and end the turn with
-   `Auto run: clearing` as its last line; a phase clear never counts as a
+   `Auto run: clearing` as its last line; a `next-step` exit 4 or 5 there is
+   handled as auto-run.md §Clears says; a phase clear never counts as a
    self-resume.
 
 Your human partner may also move a plan the other way, from subagent mode to
