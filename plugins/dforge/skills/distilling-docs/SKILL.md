@@ -181,9 +181,10 @@ change; everything else stands.
   mirror, which is not necessarily the cited revision. Run
   `darkmem-sync revision <name>` on the restored file: quote the copy in the
   judge's `[REWRITES]` only when the `@r<id>` it prints equals the cited one.
-  When it differs, stop and tell your human partner that the cited text is not
-  recoverable by name. Delete the restored copy again in this wave's removal
-  push.
+  When it differs, undo the restore: delete the restored file from the mirror
+  and run `darkmem-sync push`, which moves it back to the archive. Then stop
+  and tell your human partner that the cited text is not recoverable by name.
+  When it matches, delete the restored copy again in this wave's removal push.
 
 ## An external memory store
 

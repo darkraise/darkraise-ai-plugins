@@ -238,11 +238,11 @@ tiers. Ultra exhaustion is terminal; neither execution tiers nor max can restart
 Transport retries reuse their exact recorded pair and do not reset rank history,
 split budget, or the five-round cap.
 
-An ultra implementer may run subagents in parallel inside its own task: OpenAI
-documents ultra as using subagents for separate parts of a complex task. The
-task's approved write set, the before/after snapshot and the review still apply
-to the task as a whole. Only implementers reach the reserve, so the
-no-delegation instruction for scouts and judges is unaffected.
+An ultra implementer may run subagents in parallel inside its own task: that is
+this plugin's policy, not a property of the ultra effort level, so the brief
+says so explicitly. The task's approved write set, the before/after snapshot
+and the review still apply to the task as a whole. Only implementers reach the
+reserve, so the no-delegation instruction for scouts and judges is unaffected.
 
 ## Dispatch and review
 

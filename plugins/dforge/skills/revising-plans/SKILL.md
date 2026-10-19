@@ -19,6 +19,8 @@ This skill revises Claude plans only. `plan-revise` refuses a plan whose header
 carries `Host: codex` with exit 2, and the survey lists one as
 `host=codex  skipped`: convert a Codex plan per
 [native-codex.md](../../reference/native-codex.md) §Existing plans instead.
+Exit 2 also means a usage error, no registered executor, or a missing file or
+directory; only the Codex refusal's stderr says "is a Codex-host plan".
 
 ## Survey first, when you do not know which plan
 

@@ -63,6 +63,13 @@ Subagent ([IMPLEMENTER]):
     would strengthen my report" — that review is already scheduled.
     Report instead.
 
+    ## Run Control Belongs to the Controller
+
+    Never run `scripts/context-size`, `scripts/auto-run` or
+    `scripts/next-step` yourself: they belong to the controller. Your shell
+    carries the controller's session id, so a call from you reads or moves
+    the controller's session budget and auto-run state.
+
     ## Code Organization
 
     You reason best about code you can hold in context at once, and your edits are more

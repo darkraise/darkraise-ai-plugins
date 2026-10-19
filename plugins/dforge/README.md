@@ -794,8 +794,8 @@ The same settings can be set with
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
-| Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. |
-| Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. |
+| Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. No effect under `autoRun=on` on Claude Code, which presents no design. |
+| Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. No effect under `autoRun=on` on Claude Code: the spec review always happens. |
 | Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |
 | Finish | `finishAction` | `ask` | What finishing does once the final review is clean. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs that action at once; `wait` skips it and shows the finish menu then. |
 | Notifications | `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
@@ -865,6 +865,13 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
 
    On Codex: `codex plugin add dforge@darkraise`, then
    `codex plugin remove dr-forge@darkraise`.
+
+   From dr-superpowers or dr-cockpit, skip dr-forge and install dforge
+   directly. Start one dforge session before you uninstall the old plugins:
+   it imports dr-cockpit's options and its Discord webhook and mention, once.
+   Migrating from dr-superpowers and dr-cockpit below names
+   `dr-forge@darkraise`, the plugin of its day; install `dforge@darkraise`
+   in its place.
 2. In each repository, run `/dforge:migrate` (on Codex, ask for the
    `dforge:migrate` skill). It shows what `scripts/dforge-migrate --dry-run`
    would move, asks once, then moves every checkout and the home, rewrites the
