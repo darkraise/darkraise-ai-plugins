@@ -509,8 +509,9 @@ A revision your human partner asks for gets one new round.
 
 ## Lint and Review
 
-1. **Lint.** Run `scripts/plan-lint PLAN_FILE` (see
-   using-dforge §Session Budget) until it reports `0 errors`. Fix each WARN, or
+1. **Lint.** Run `scripts/plan-lint PLAN_FILE`
+   (see using-dforge §Session Budget) until it reports `0 errors`.
+   Fix each WARN, or
    explain it in one line of the plan's Assumptions. The checker covers the
    header sections, the task headings and index, the Execution line,
    placeholders, and every task's assignment lines.

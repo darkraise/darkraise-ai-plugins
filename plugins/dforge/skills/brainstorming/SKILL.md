@@ -558,8 +558,9 @@ Wait for the user's response. If they request changes, make them and run one new
 **Implementation:**
 
 - In an auto run skip this check: the plan is always written in this session.
-  Otherwise run `scripts/context-size --plan` (see using-dforge §Session
-  Budget). It measures against 150% of the task budget, capped at the
+  Otherwise run `scripts/context-size --plan`
+  (see using-dforge §Session Budget).
+  It measures against 150% of the task budget, capped at the
   final-phase limit: writing the plan here costs less than a fresh session's
   baseline and reload. On exit 5 (handoff), invoke dforge:handoff with the spec
   as the draft and the next action "Write the implementation plan with
