@@ -257,8 +257,9 @@ report lists it; items 2, 13 and 14 are complete with those lines listed.
 18. DR #39 — the README's Migrating to 4.0 section tells dr-superpowers and
     dr-cockpit users to install dforge directly.
 19. CX #8 — the "OpenAI documents ultra as using subagents" sentence in
-    `reference/native-codex.md` gets the source URL and an as-of date; if no
-    OpenAI page states it, the sentence is removed.
+    `reference/native-codex.md` is restated as this plugin's policy: OpenAI's
+    Subagents page (read 2026-10-19) describes ultra's proactive delegation
+    for ChatGPT Work, not native Codex, so it cannot be cited for it.
 20. CX #14 — revising-plans names the stderr text "is a Codex-host plan" as
     the way to tell the Codex refusal from plan-revise's other exit 2s.
 21. DM #28 (skill half) — distilling-docs' stop path says to undo the
@@ -341,7 +342,11 @@ Owns `scripts/lib/darkmem-*.mjs`, `scripts/lib/darkmem-hook.sh`,
     open while the plan is active and is closed once `completed.md` records
     the plan, whether `fileLatest` created it or found it (today a created
     one is never closed, and a finished plan's is reopened only to be
-    re-closed). The 422 refusal says what darkmem now holds. Check: tests
+    re-closed). It never reopens one by itself: an append reopens a closed
+    workstream, and when darkmem already holds an identical checkpoint
+    nothing is appended, so a closed one stays closed (a PATCH to `open` is
+    not known to be accepted by darkmem's server). The 422 refusal says what
+    darkmem now holds. Check: tests
     for an active plan (open), a completed plan with a new workstream
     (closed), and the post-write recheck.
 20. DM #43 — `progressToLocal` wraps its copy loop in a refusal, rejects a
@@ -504,11 +509,19 @@ manifests and `README.md`.
    keeps its own schema-level rules. A `config/schema.d.mts` declares the
    module's exports, so `config.ts`'s imports type-check. Check: the
    dforge-config, layout and cockpit suites, and the P7 `tsc` run passes on
-   the merged tree (fixing any errors P7 listed).
+   the merged tree. The four other errors P7's run reports, in the cockpit's
+   `register.tsx` and `cockpit.test.ts`, are fixed here too (a widened
+   `outcome`, `drawSettings` declared as `RenderElement`, a missing `resume`
+   field and an untyped fixture literal), so `tsc --noEmit` exits 0.
 2. Version 4.2.0 in `.claude-plugin/plugin.json` and
-   `.codex-plugin/plugin.json`, with a README entry for 4.2.0.
-3. Register bookkeeping: every fixed row is `done` (DF 14 `verify`) and each
-   bundle row closes. The repository's own `scripts/register check` cannot
+   `.codex-plugin/plugin.json`. No README entry: the 4.1.0 release
+   (3ed6bbc) changed only version fields, and the marketplace catalog no
+   longer carries one.
+3. Register bookkeeping: dr-superpowers:finishing-a-development-branch
+   resolves every row the plan covers — `done`, and `verify` for DF 14, whose
+   acceptance names a CI run — including the four bundle rows, whose notes
+   already record the sub-findings fixed earlier. The repository's own
+   `scripts/register check` cannot
    judge these registers: this repository keeps the `docs/superpowers/`
    layout, which dforge resolves to a `docs/dforge/` that does not exist
    here, so every Covers path fails it. The check is A3's grep.
@@ -591,3 +604,7 @@ Fable review, 2026-10-19 (commit 8f2841a, verdict: revise), all applied:
   `turn-end.test.sh` (P2.5); L10 readers-only delimiter fix (P6.12); L11
   the decomposition sentence (Parallel decomposition); L12 DF 12's note
   corrected in the register.
+
+Plan review round 1, 2026-10-19 (Codex, verdict: fix and re-review), spec
+changes it caused: P4.19's no-reopen limit; P3.19 restated as policy; P8.3
+leaves row closure to finishing; P8.1 also clears the cockpit's type errors.
