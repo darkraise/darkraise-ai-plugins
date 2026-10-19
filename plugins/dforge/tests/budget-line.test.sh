@@ -100,6 +100,8 @@ printf '{"autoCompactWindow": 650000}\n' > "$HOME/.claude/settings.json"
 rm -f "$HOME/.dforge/config.json"
 
 # --- an auto run bound to this session: its own rule replaces the budget ---
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-1"
 bash "$P/scripts/auto-run" --session s-1 start --spec docs/spec.md --register docs/reg.md >/dev/null
 out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null); status=$?
 check "task-brief: an auto run says compact" "$(tail -n 1 <<<"$out")" \

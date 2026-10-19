@@ -27,7 +27,16 @@ git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
 STATE="$REPO/.dforge/sdd/auto-run.json"
 SPEC=docs/dforge/specs/2026-10-13-widget-design.md
-ar() { (cd "$REPO" && bash "$AR" "$@"); }
+beat() { # beat <session> [age in seconds]: the heartbeat a live cockpit writes
+  local f="$HOME/.claude/dforge/sessions/cockpit/$1"
+  mkdir -p "$(dirname "$f")"
+  printf '%s\n' "$(( $(date +%s) - ${2:-0} ))" > "$f"
+}
+# Every call through ar has a live cockpit in the session it names.
+ar() {
+  [ "${1:-}" != --session ] || beat "$2"
+  (cd "$REPO" && bash "$AR" "$@")
+}
 # The same, from the linked worktree $TMP/side (made below): where an auto
 # run's execution happens.
 side() { (cd "$TMP/side" && bash "$AR" "$@"); }
@@ -73,23 +82,38 @@ live s-1
 ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
 check "a second start while the first is live: exit 4" "$status:$(field session)" "4:s-1"
 live s-1 '2 hours ago'
+beat s-1 7200
 ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
 check "a stale run gives way" "$status:$(field session):$(field register)" "0:s-2:docs/r.md"
 mkdir -p "$HOME/.claude/projects/q"
 printf '{}\n' > "$HOME/.claude/projects/q/s-2.jsonl"
+rm -f "$HOME/.claude/dforge/sessions/cockpit/s-2"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
 check "a live transcript without a record still counts" "$status:$(field session)" "4:s-2"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null 2>&1; status=$?
 check "--force replaces a live run" "$status:$(field session)" "0:s-1"
 
+# --- a start needs a live cockpit in its session ---
+(cd "$REPO" && bash "$AR" --session s-3 start --spec "$SPEC" --register docs/r.md --force >/dev/null 2>"$TMP/err"); status=$?
+check "start without a cockpit heartbeat: exit 2, the run unchanged" "$status:$(field session)" "2:s-1"
+check "start without a cockpit heartbeat: says why" "$(grep -c 'no live cockpit in this session' "$TMP/err")" "1"
+beat s-3 181
+(cd "$REPO" && bash "$AR" --session s-3 start --spec "$SPEC" --register docs/r.md --force >/dev/null 2>&1); status=$?
+check "a heartbeat older than 180 seconds: exit 2" "$status:$(field session)" "2:s-1"
+beat s-1 181
+ar --session s-3 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
+check "a run whose cockpit heartbeat is older than 180 seconds is stale" "$status:$(field session)" "0:s-3"
+
 # --- a start from a linked worktree ---
 git -C "$REPO" worktree add -q -b side "$TMP/side"
+beat s-5
 out=$(cd "$TMP/side" && bash "$AR" --session s-5 start --spec "$SPEC" --force 2>&1); status=$?
 check "worktree: the register is created in that checkout" "$status:$([ -f "$TMP/side/$reg" ] && echo yes)" "0:yes"
 check "worktree: the state stays in the primary checkout" "$(field session) $(field base)" "s-5 side"
 side --session s-5 phase execute; status=$?
 check "a run started in a linked worktree: phase execute there passes" "$status:$(field phase)" "0:execute"
 git -C "$REPO" worktree add -q --detach "$TMP/loose"
+beat s-6
 (cd "$TMP/loose" && bash "$AR" --session s-6 start --spec "$SPEC" --register docs/r.md --force >/dev/null)
 check "a detached HEAD has no base" "$(field base)" "null"
 check "a detached HEAD: status says none" "$(ar --session s-6 status | grep -c 'base none')" "1"

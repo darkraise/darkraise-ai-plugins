@@ -12,6 +12,7 @@ AR_STALE_MINUTES=60
 AR_LOCK_TENTHS=100
 AR_RESUME_CAP=3
 AR_FAILURE_CAP=2
+AR_BEAT_SECONDS=180
 
 ar_jq() { "${DFORGE_JQ:-jq}" "$@"; }
 
@@ -118,12 +119,35 @@ ar_transcript() {
   printf '%s\n' "$tp"
 }
 
-# ar_is_stale — true when the run's session has not written its transcript
-# within AR_STALE_MINUTES, or has none: whoever owned the run is gone.
+# ar_beat_file SESSION — where the session's cockpit writes its heartbeat: the
+# epoch seconds of its last beat.
+ar_beat_file() {
+  printf '%s/.claude/dforge/sessions/cockpit/%s\n' "${HOME:-}" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+}
+
+# ar_beat_age SESSION — seconds since the session's cockpit last beat; fails
+# when the file is missing or holds no number.
+ar_beat_age() {
+  local file beat
+  file=$(ar_beat_file "$1")
+  [ -f "$file" ] || return 1
+  beat=$(head -n 1 "$file" | tr -dc '0-9')
+  [ -n "$beat" ] || return 1
+  echo $(( $(date +%s) - beat ))
+}
+
+# ar_is_stale — true when whoever owned the run is gone: its session's cockpit
+# heartbeat is older than AR_BEAT_SECONDS, or, for a session with no heartbeat
+# file, its transcript was not written within AR_STALE_MINUTES or it has none.
 ar_is_stale() {
-  local sid tp
+  local sid tp age
   sid=$(ar_get session)
   [ -n "$sid" ] || return 0
+  if [ -f "$(ar_beat_file "$sid")" ]; then
+    age=$(ar_beat_age "$sid") || return 0
+    [ "$age" -gt "$AR_BEAT_SECONDS" ]
+    return
+  fi
   tp=$(ar_transcript "$sid") || return 0
   [ -n "$(find "$tp" -mmin +"$AR_STALE_MINUTES" 2>/dev/null)" ]
 }
@@ -131,8 +155,11 @@ ar_is_stale() {
 # ar_start SPEC REGISTER FORCE — prints the register path. A register it
 # creates goes in the checkout the run starts from, where its path resolves.
 ar_start() {
-  local spec=$1 register=$2 force=$3 path top slug base tmp regfile
+  local spec=$1 register=$2 force=$3 path top slug base tmp regfile age
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
+  # Nothing would compact, switch or wake the run without the cockpit.
+  age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
+    || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   if [ "$force" != 1 ] && ar_state | ar_jq -e '.active == true' >/dev/null 2>&1 && ! ar_is_stale; then
     echo "auto-run: an auto run is already active ($(ar_state | ar_jq -r '.spec')); stop it with auto-run stop, or pass --force" >&2
     return 4

@@ -554,6 +554,8 @@ rm -rf "$CODEX_HOME"; unset CODEX_HOME
 AUTO_T="$PROJ/auto-1.jsonl"
 settings 800000
 asst 300000 > "$AUTO_T"; record auto-1 "$AUTO_T"
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md >/dev/null)
 export CLAUDE_CODE_SESSION_ID=auto-1
 unset DFORGE_BUDGET
@@ -593,6 +595,7 @@ run
 has "auto: an unreadable size names the run's limit" "$out" "budget (auto, high): unknown of 720k — unknown — no usage entry in"
 run --wave 2
 has "auto: an unreadable size in a wave names the run's limit" "$out" "budget (auto, high, wave of 2): unknown of 580k — unknown — no usage entry in"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
 run
 has "auto, normal: an unreadable size names the task budget" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"

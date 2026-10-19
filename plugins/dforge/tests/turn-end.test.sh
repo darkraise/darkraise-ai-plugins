@@ -206,6 +206,8 @@ done
 # --- an auto run bound to the session ends its turns only on the sentinel ---
 AR="$HERE/../scripts/auto-run"
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-1"
 (cd "$REPO" && bash "$AR" --session s-1 start --spec docs/s.md --register docs/r.md >/dev/null)
 STATE="$REPO/.dforge/sdd/auto-run.json"
 pend() { jq --arg p "$1" '.pending = $p' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
