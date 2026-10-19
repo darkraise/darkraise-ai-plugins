@@ -14,7 +14,7 @@ import {
   recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
-import { inProgressReason } from "./darkmem-reconcile.mjs";
+import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
 
 const local = (base, rel) => path.join(base, ...rel.split("/"));
 
@@ -39,8 +39,18 @@ export function gatherLocalProgress(cfg) {
     const stateDir = dforgeDir("state", checkout);
     const sdd = path.join(stateDir, "sdd");
     // A linked plan directory is not listed as one, so its progress would be
-    // left behind without a word.
-    const entries = fs.existsSync(sdd) ? fs.readdirSync(sdd, { withFileTypes: true }) : [];
+    // left behind without a word. An sdd that cannot be listed is this
+    // checkout's problem, and nothing under it is read.
+    let entries;
+    try {
+      entries = fs.readdirSync(sdd, { withFileTypes: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        problems.push(`${sdd}: could not be read (${error.code})`);
+        continue;
+      }
+      entries = [];
+    }
     for (const entry of entries) {
       const dir = path.join(sdd, entry.name);
       if (entry.isSymbolicLink() && fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
@@ -60,6 +70,11 @@ export function gatherLocalProgress(cfg) {
   const sources = [];
   const byRel = new Map();
   for (const item of files) {
+    // A linked file is never read through: it could lead anywhere, a FIFO included.
+    if (fs.lstatSync(item.file, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      problems.push(`${item.file}: a symbolic link, which the move will not read through`);
+      continue;
+    }
     try {
       item.buffer = fs.readFileSync(item.file);
     } catch (error) {
@@ -168,11 +183,14 @@ async function newestCheckpoint({ cfg, client }, workstreams) {
 }
 
 // latest.md becomes a checkpoint of the plan or draft it names, so other
-// machines receive it; a workstream that was closed is closed again. One that
-// names neither is copied unsent, dated at darkmem's newest checkpoint so a
-// pull only replaces it with a newer one. Answers { hash, at, workstream,
-// detail }, `workstream` naming the key `at` was read from (null with a null
-// `at`), or { problem } when darkmem reads it back different.
+// machines receive it. The workstream follows that plan: an append reopens a
+// closed one, so it stays open while the plan is active, and it is closed once
+// completed.md records the plan, whether this append opened it or found it.
+// One that names neither is copied unsent, dated at darkmem's newest
+// checkpoint so a pull only replaces it with a newer one. Answers
+// { hash, at, workstream, detail }, `workstream` naming the key `at` was read
+// from (null with a null `at`), or { problem } when darkmem reads it back
+// different.
 async function fileLatest(context, item) {
   const { cfg, client } = context;
   const body = decodeUtf8(item.buffer);
@@ -192,7 +210,7 @@ async function fileLatest(context, item) {
     const answer = await client.append({ project: cfg.project, workstream: target.slug, properties, entries: [{ kind: "checkpoint", body }] });
     at = answer.workstream.last_entry_at;
   }
-  if (before?.workstream.state === "closed") {
+  if (planFinished(cfg, path.dirname(item.stateDir), target.path)) {
     const after = await client.resume(cfg.project, target.slug);
     if (after.workstream.state !== "closed") await client.updateWorkstream(after.workstream.id, { state: "closed", retain: true });
   }
@@ -253,7 +271,19 @@ export async function progressToDarkmem(context) {
         await client.putDocument({ project: cfg.project, uri: item.uri, content: decodeUtf8(item.buffer) });
       }
     }
-    if (report.failures.length) return refuse("darkmem refused part of the progress; nothing was moved locally", report.failures);
+    if (report.failures.length) {
+      // Every handoff note was put (a put darkmem refuses throws), and ids
+      // holds each ledger darkmem has in full.
+      const held = [
+        ...sources.filter(item => item.kind === "ledger" && ids.has(item.slug)).map(item => item.rel),
+        ...sources.filter(item => item.kind === "handoff").map(item => item.uri),
+      ];
+      return refuse("darkmem refused part of the progress; nothing was moved locally, and darkmem keeps what it accepted", [
+        ...report.failures,
+        held.length ? `darkmem now holds in full: ${held.join(", ")}` : "darkmem now holds none of the progress in full",
+        "a refused ledger keeps any entries darkmem accepted before the refusal, in its open workstream",
+      ]);
+    }
     const differing = [];
     for (const item of sources) {
       if (item.kind === "ledger") {
@@ -306,11 +336,21 @@ export async function progressToDarkmem(context) {
   persist();
   const aside = `moved-${utcStamp()}`;
   const backups = new Set();
+  const left = [];
   for (const item of files) {
     const target = local(path.join(item.stateDir, aside), item.rel);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.renameSync(item.file, target);
-    backups.add(path.join(item.stateDir, aside));
+    try {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.renameSync(item.file, target);
+      backups.add(path.join(item.stateDir, aside));
+    } catch (error) {
+      left.push(`${item.file} (${error.code})`);
+    }
+  }
+  // darkmem and the mirror already hold every source, so a rerun finds them
+  // filed and moves aside only what is left.
+  if (left.length) {
+    return refuse(`darkmem and the mirror hold the progress, but ${left.length} sources could not be moved aside: ${left.join(", ")}; reconcile again to finish`);
   }
   // The checkout's state directory ignores itself, as .dforge/sdd/ does, so a
   // backup never shows as untracked in a repository that does not list it.

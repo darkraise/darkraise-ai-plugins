@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
-import { ledgerPieces } from "../../scripts/lib/darkmem-mirror.mjs";
+import { ledgerPieces, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import { checkProgressTargets, gatherLocalProgress } from "../../scripts/lib/darkmem-progress-move.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
@@ -268,6 +268,34 @@ test("a progress file or mirror copy that cannot be read is a problem, not a cra
   assert.deepEqual(checked.problems.map(line => line.replace(mirror, "<mirror>").split(path.sep).join("/")), ["<mirror>/work/sdd/p2/progress.md: could not be read (EISDIR)"]);
 });
 
+test("a state directory whose sdd cannot be listed is a problem, not a crash", () => {
+  const repo = makeRepo();
+  write(path.join(repo, ".dforge", "sdd"), "not a directory\n");
+  const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
+  assert.deepEqual(problems, [`${path.join(repo, ".dforge", "sdd")}: could not be read (ENOTDIR)`]);
+  assert.deepEqual(sources, []);
+});
+
+test("a symbolic-linked progress file is a problem, and is not read through", { skip: process.platform === "win32" }, () => {
+  const repo = makeRepo();
+  const outside = path.join(scratch("dms-link-"), "progress.md");
+  write(outside, LEDGER("p1"));
+  const link = path.join(repo, ".dforge", "sdd", "p1", "progress.md");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(outside, link);
+  const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
+  assert.deepEqual(problems, [`${link}: a symbolic link, which the move will not read through`]);
+  assert.deepEqual(sources, []);
+});
+
+test("a git worktree list that fails is the one problem", () => {
+  const missing = path.join(scratch("dms-gone-"), "missing");
+  const { problems, files, sources } = gatherLocalProgress({ repoRoot: missing });
+  assert.equal(problems.length, 1, problems.join("\n"));
+  assert.match(problems[0], /^git worktree list failed in .+missing: \S/);
+  assert.deepEqual([files, sources], [[], []]);
+});
+
 test("progress reached through a symbolic link stays local, and nothing is sent or moved", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
   write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
@@ -351,6 +379,103 @@ test("a handoff note that darkmem reads back different stays local, and nothing 
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);
   assert.equal(read(note), "# Handoff p1\n");
+});
+
+test("a checkpoint that darkmem reads back different stays local, and nothing is copied or moved", async t => {
+  const s = await setup(t, "darkmem");
+  const latest = path.join(s.repo, ".dforge", "handoff", "latest.md");
+  write(latest, LATEST);
+  s.stub.db.onRequest = (method, pathname) => {
+    if (method !== "GET" || pathname !== "/api/v1/worklog/resume") return;
+    for (const ws of s.stub.db.workstreams) for (const entry of ws.entries) if (entry.kind === "checkpoint") entry.body = "altered\n";
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a read-back of darkmem's copies differs; nothing was moved locally\n"), result.stdout);
+  assert.ok(result.stdout.includes("  handoff/latest.md: darkmem's checkpoint reads back different\n"), result.stdout);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
+  assert.equal(read(latest), LATEST);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff", "latest.md")), false);
+});
+
+test("a plan that starts while darkmem is written keeps progress local, and nothing is copied or moved", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  let started = false;
+  s.stub.db.onRequest = (method, pathname) => {
+    if (started || method !== "POST" || pathname !== "/api/v1/worklog/entries") return;
+    started = true;
+    write(path.join(s.repo, ".dforge", "sdd", "p3", "progress.md"), LEDGER("p3"));
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: docs/dforge/plans/p3.md\n"), result.stdout);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "progress.md")), false);
+});
+
+test("a source that cannot be moved aside is one line naming it, and a rerun finishes the move", async t => {
+  const s = await setup(t, "darkmem");
+  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  write(ledger, LEDGER("p1"));
+  // A non-empty directory at the ledger's backup path, for every stamp the next minute can name.
+  const now = Date.now();
+  const blockers = [];
+  for (let i = 0; i < 60; i += 1) {
+    const dir = path.join(s.repo, ".dforge", `moved-${utcStamp(new Date(now + i * 1000))}`);
+    blockers.push(dir);
+    write(path.join(dir, "sdd", "p1", "progress.md", "keep"), "taken\n");
+  }
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem and the mirror hold the progress, but 1 sources could not be moved aside: .+progress\.md \(\w+\); reconcile again to finish$/m);
+  assert.equal(read(ledger), LEDGER("p1"));
+  assert.equal(s.stores().progress, "local");
+  for (const dir of blockers) fs.rmSync(dir, { recursive: true });
+  const again = await s.reconcile();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.match(again.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+  assert.equal(fs.existsSync(ledger), false);
+});
+
+test("latest.md filed for an active plan leaves its workstream open, even one that was closed", async t => {
+  const s = await setup(t, "darkmem");
+  const { workstream } = await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "note", body: "earlier\n" }] });
+  await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
+  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "## State\n- Plan: `docs/dforge/plans/p3.md`\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p3$/m);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p3").state, "open", "p3 is not in completed.md");
+});
+
+test("latest.md filed for a completed plan closes the workstream it opens", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "## State\n- Plan: `docs/dforge/plans/p2.md`\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const ws = s.stub.db.workstreams.find(w => w.key === "p2");
+  assert.equal(ws.state, "closed", "completed.md records p2");
+  assert.equal(ws.retain, true);
+  assert.equal(ws.entries.filter(e => e.kind === "checkpoint").length, 1);
+});
+
+test("a ledger darkmem refuses names what darkmem now holds, and nothing is moved locally", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  write(path.join(s.repo, ".dforge", "sdd", "p2", "handoff.md"), "# Handoff p2\n");
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 422, detail: "refused by the test" });
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): darkmem refused part of the progress; nothing was moved locally, and darkmem keeps what it accepted\n"), result.stdout);
+  assert.ok(result.stdout.includes("  sdd/p1/progress.md: darkmem refused an entry: refused by the test\n"), result.stdout);
+  assert.ok(result.stdout.includes("  darkmem now holds in full: sdd/p2/progress.md, dforge/handoff/p2.md\n"), result.stdout);
+  assert.equal(s.stores().progress, "local");
+  assert.deepEqual(movedAside(s.repo), []);
 });
 
 test("a plan directory that is a symbolic link stays local, and nothing is sent or moved", { skip: process.platform === "win32" }, async t => {
@@ -534,7 +659,7 @@ test("another writer's append during a resumed import refuses the move, and noth
   };
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): darkmem refused part of the progress; nothing was moved locally\n"), result.stdout);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): darkmem refused part of the progress; nothing was moved locally, and darkmem keeps what it accepted\n"), result.stdout);
   assert.match(result.stdout, /^ {2}sdd\/p1\/progress\.md: darkmem refused an entry: expected the newest ledger entry to be seq \d+, but it is \d+$/m);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);

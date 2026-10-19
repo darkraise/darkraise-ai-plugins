@@ -167,7 +167,7 @@ function rootedName(cfg, checkout, name) {
 // identity is mapped first and completed.md is found from the mapped name: the
 // directory the absolute path names is gone once the documents have moved. An
 // identity no root maps is never finished, whatever lies beside it.
-function planFinished(cfg, checkout, identity) {
+export function planFinished(cfg, checkout, identity) {
   const name = rootedName(cfg, checkout, identity);
   if (path.isAbsolute(name)) return false;
   let text;
