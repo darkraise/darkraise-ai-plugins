@@ -733,6 +733,19 @@ export function planTasks(text: string): { n: number; title: string }[] {
   return out
 }
 
+// A plan's last tasks join its final phase once this many or fewer remain
+// (CTX_TAIL_TASKS in scripts/lib/context.sh).
+const TAIL_TASKS = 2
+
+/**
+ * Whether a run is at its plan's tail or in its final phase: at most
+ * TAIL_TASKS tasks left by its ledger, or its final review clean. The budget
+ * line measures both against the final-phase limit.
+ */
+export function isPlanTail(run: { done: number; total: number; isFinished: boolean }): boolean {
+  return run.isFinished || (run.total > 0 && run.total - run.done <= TAIL_TASKS)
+}
+
 const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, blocked: 1, pending: 2, complete: 3 }
 
 /** The first `size` of a run's tasks as the Run card lists them: in flight, blocked, not started, then done, each in plan order. */
