@@ -64,6 +64,7 @@ check "start: the register covers the spec" "$(grep -c "^\*\*Covers:\*\* $SPEC$"
 check "start: active, bound, based on main" "$(field active) $(field session) $(field base)" "true s-1 main"
 check "start: phase spec, regime normal" "$(field phase) $(field regime)" "spec normal"
 check "start: nothing pending" "$(field pending)" "null"
+check "start: no stalls, no compactions since a task" "$(field stalls):$(field stalledAt):$(field compactionsSinceTask)" "0:null:0"
 check "start: the state file is ignored by git" "$(git -C "$REPO" status --porcelain -- .dforge | grep -c .)" "0"
 check "start: sdd ignores everything in it" "$(cat "$REPO/.dforge/sdd/.gitignore")" "*"
 
@@ -239,7 +240,7 @@ ar --session s-10 clear; ar --session s-10 rebind --to s-11
 ar --session s-11 clear; ar --session s-11 rebind --to s-12
 ar --session s-12 clear >/dev/null 2>&1; status=$?
 check "the third self-resume in a row stops the run" "$status:$(field active)" "5:false"
-check "the stop says why" "$(field stopped)" "three self-resumes without a completed task"
+check "the stop says why" "$(field stopped)" "3 self-resumes without a completed task"
 
 # --- compactions and failures ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
@@ -550,7 +551,7 @@ check "task-complete resets the compaction count" "$(field compactionsSinceTask)
 ar --session s-1 compacted
 ar --session s-1 compacted
 ar --session s-1 compacted; status=$?
-check "the third execute compaction without a completed task stops the run" "$status:$(field active):$(field stopped)" "5:false:three compactions without a completed task"
+check "the third execute compaction without a completed task stops the run" "$status:$(field active):$(field stopped)" "5:false:3 compactions without a completed task"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 before=$(date +%s)
 ar --session s-1 stalled; status=$?
@@ -566,9 +567,37 @@ check "task-complete resets the stalls" "$(field stalls):$(field stalledAt)" "0:
 ar --session s-1 stalled
 ar --session s-1 stalled
 ar --session s-1 stalled; status=$?
-check "the third stall without a completed task stops the run" "$status:$(field active):$(field stopped)" "5:false:three stalls without a completed task"
+check "the third stall without a completed task stops the run" "$status:$(field active):$(field stopped)" "5:false:3 stalls without a completed task"
 ar --session s-1 stalled >/dev/null 2>&1; status=$?
 check "stalled with no run bound: exit 3" "$status" "3"
+
+# --- the progress fields: a state written before them, and the final phases ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+side --session s-1 phase execute
+jq 'del(.stalls, .stalledAt, .compactionsSinceTask)' "$STATE" > "$STATE.old" && mv -f "$STATE.old" "$STATE"
+ar --session s-1 stalled; status=$?
+check "a state without the progress fields: a stall counts from zero" "$status:$(field stalls)" "0:1"
+ar --session s-1 compacted; status=$?
+check "a state without the progress fields: a compaction counts from zero" "$status:$(field compactionsSinceTask)" "0:1"
+for phase in final finish; do
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  ar --session s-1 phase "$phase"
+  ar --session s-1 compacted
+  ar --session s-1 compacted
+  ar --session s-1 compacted; status=$?
+  check "$phase-phase compactions are not counted" "$status:$(field active):$(field compactionsSinceTask)" "0:true:0"
+done
+
+# --- after-compact: an unknown size still names a due Setup ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase plan
+ar --session s-1 switch
+ar --session s-1 compacted --switch
+ar --session s-1 resumed
+printf '{}\n' > "$T"
+out=$(after); status=$?
+check "after-compact: an unknown size with setup due names Setup" "$status:$out:$(field pending)" "0:continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop; setup due: begin at the execution skill's Setup, worktree first:null"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -359,9 +359,9 @@ function world(on: On, w: World) {
         else if (exitCode === 0 && word === 'resumed' && state.pending === 'switch-resume') state.pending = 'after-compact'
         if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
         if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
-        if (exitCode === 5 && word === 'compacted') Object.assign(state, { active: false, stopped: 'three compactions without a completed task', pending: null })
+        if (exitCode === 5 && word === 'compacted') Object.assign(state, { active: false, stopped: '3 compactions without a completed task', pending: null })
         if (exitCode === 0 && word === 'stalled') Object.assign(state, { stalls: Number(state.stalls ?? 0) + 1, stalledAt: Math.floor(clock.now() / 1000) })
-        if (exitCode === 5 && word === 'stalled') Object.assign(state, { active: false, stopped: 'three stalls without a completed task', pending: null })
+        if (exitCode === 5 && word === 'stalled') Object.assign(state, { active: false, stopped: '3 stalls without a completed task', pending: null })
         w.autoFile.text = JSON.stringify(state)
       }
       const answer = { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -4180,7 +4180,7 @@ describe('auto run', () => {
     await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
     expect(w.compacts).toHaveLength(1)
-    expect(w.prompts).toEqual(['The auto run stopped: three compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
+    expect(w.prompts).toEqual(['The auto run stopped: 3 compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
     expect(w.autoRuns?.some(call => call.includes(' stop '))).toBe(false)
   })
 
@@ -4192,7 +4192,7 @@ describe('auto run', () => {
     await $.session.start(START)
     await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
     expect(w.autoRuns).toContain('--session sess-1 compacted')
-    expect(w.prompts).toEqual(['The auto run stopped: three compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
+    expect(w.prompts).toEqual(['The auto run stopped: 3 compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
   })
 
   for (const pending of ['handoff', 'compact']) {
@@ -4447,7 +4447,7 @@ describe('auto run', () => {
     await $.session.start(START)
     await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await clock.advance(240_000)
-    expect(w.prompts).toEqual(['The auto run stopped: three stalls without a completed task. End as reference/auto-run.md §Stopping says.'])
+    expect(w.prompts).toEqual(['The auto run stopped: 3 stalls without a completed task. End as reference/auto-run.md §Stopping says.'])
   })
 
   test('arms a pending stage that no timer holds', async ($, on) => {

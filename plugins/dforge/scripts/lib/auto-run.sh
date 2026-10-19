@@ -331,7 +331,7 @@ ar_clear() {
     ar_update '.resumes = ((.resumes // 0) + 1)' || return 1
     resumes=$(ar_get resumes)
     if [ "${resumes:-0}" -ge "$AR_RESUME_CAP" ]; then
-      ar_stop "three self-resumes without a completed task" || return 1
+      ar_stop "$AR_RESUME_CAP self-resumes without a completed task" || return 1
       echo "auto-run: stopped — $AR_RESUME_CAP self-resumes in a row without a completed task" >&2
       return 5
     fi
@@ -372,7 +372,7 @@ ar_compacted() {
   [ "$next" = after-compact ] || return 0
   n=$(ar_get compactionsSinceTask)
   if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
-    ar_stop "three compactions without a completed task" || return 1
+    ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return 1
     return 5
   fi
 }
@@ -395,7 +395,7 @@ ar_stalled() {
   ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now' --argjson now "$(date +%s)" || return 1
   n=$(ar_get stalls)
   if [ "${n:-0}" -ge "$AR_STALL_CAP" ]; then
-    ar_stop "three stalls without a completed task" || return 1
+    ar_stop "$AR_STALL_CAP stalls without a completed task" || return 1
     return 5
   fi
 }

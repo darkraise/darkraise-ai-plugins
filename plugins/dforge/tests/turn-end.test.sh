@@ -8,6 +8,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 START="$HERE/../scripts/turn-start.sh"
 END="$HERE/../scripts/turn-end.sh"
 HOOKS="$HERE/../hooks/hooks.json"
+# The plugin root as turn-end.sh shows it in a hold reason.
+SHOWN="$(cd "$HERE/.." && pwd)"
+if command -v cygpath >/dev/null 2>&1; then SHOWN=$(cygpath -m "$SHOWN"); fi
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -56,7 +59,9 @@ write_ledger 'Task 1: complete (commits a..b, review clean)'
 out=$(stop s-1 'Task 1 is done. Everything looks good.')
 check "mid-plan summary: blocks" "$(decision "$out")" "block"
 check "mid-plan summary: names next-step and the plan" \
-  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/superpowers/plans/2026-10-08-example.md')" "1"
+  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/superpowers/plans/2026-10-08-example.md')" "1"
+check "mid-plan summary: the plugin root is quoted" \
+  "$(jq -r .reason <<<"$out" | grep -cF "\`bash \"$SHOWN/scripts/next-step\" docs/superpowers/plans/2026-10-08-example.md\`")" "1"
 check "mid-plan summary: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dforge held the stop')" "1"
 check "retry with stop_hook_active: passes" "$(stop s-1 'Task 1 is done.' true)" ""
 check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
@@ -82,7 +87,7 @@ printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-09-other.md\nTask 
 out=$(stop s-1 $'1. Merge back to main locally\n\nWhich option?')
 check "two ledgers, menu only: blocks" "$(decision "$out")" "block"
 check "two ledgers, menu only: names the mid-plan ledger's next-step" \
-  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/superpowers/plans/2026-10-09-other.md')" "1"
+  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/superpowers/plans/2026-10-09-other.md')" "1"
 check "two ledgers, next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
 rm -rf "$WS2"
 
@@ -229,6 +234,7 @@ check "auto run: a summary is held" "$(decision "$out")" "block"
 check "auto run: the reason names the sentinel" "$(jq -r .reason <<<"$out" | grep -c 'Auto run: compacting')" "1"
 check "auto run: the hold tells the user" "$(jq -r .systemMessage <<<"$out" | grep -c 'auto run, hold 1 of 3')" "1"
 check "auto run: the reason names the switching line" "$(jq -r .reason <<<"$out" | grep -c 'end with `Auto run: switching`')" "1"
+check "auto run: the stop command quotes the plugin root" "$(jq -r .reason <<<"$out" | grep -cF "run \`bash \"$SHOWN/scripts/auto-run\" stop --reason")" "1"
 check "auto run: the retry is held again" "$(decision "$(stop s-1 'Task 2 is done.' true)")" "block"
 pend compact
 check "auto run: the compacting line passes" "$(stop s-1 $'Task 2 is done.\n\nAuto run: compacting\n')" ""
@@ -241,16 +247,20 @@ check "auto run: the switching line passes a switch" "$(stop s-1 $'Plan saved.\n
 out=$(stop s-1 $'Plan saved.\n\nAuto run: compacting')
 check "auto run: the compacting line does not answer a switch" "$(decision "$out")" "block"
 check "auto run: the switch hold names the switching line" "$(jq -r .reason <<<"$out" | grep -c 'end your message with the line `Auto run: switching`')" "1"
+check "auto run: the switch hold quotes the plugin root" "$(jq -r .reason <<<"$out" | grep -cF "run \`bash \"$SHOWN/scripts/auto-run\" stop --reason")" "1"
 pend compact
 check "auto run: the switching line does not answer compact" "$(decision "$(stop s-1 $'Done.\n\nAuto run: switching')")" "block"
 pend switch-resume
 check "auto run: a pending switch-resume is held" "$(decision "$(stop s-1 $'Done.\n\nAuto run: switching')")" "block"
 pend after-compact
-check "auto run: after a booked compaction the hold says to settle it" "$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting' | jq -r .reason | grep -c 'auto-run after-compact')" "1"
+out=$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting')
+check "auto run: after a booked compaction the hold says to settle it" "$(jq -r .reason <<<"$out" | grep -c 'auto-run" after-compact')" "1"
+check "auto run: the after-compact hold quotes the plugin root" "$(jq -r .reason <<<"$out" | grep -cF "run \`bash \"$SHOWN/scripts/auto-run\" after-compact\` now")" "1"
 pend handoff
 out=$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting')
 check "auto run: a pending handoff is held" "$(decision "$out")" "block"
 check "auto run: the hold says to hand off and clear" "$(jq -r .reason <<<"$out" | grep -c 'run dforge:handoff')" "1"
+check "auto run: the handoff hold quotes the plugin root" "$(jq -r .reason <<<"$out" | grep -cF "then \`bash \"$SHOWN/scripts/auto-run\" clear\`")" "1"
 check "auto run: the clearing line does not answer a handoff" "$(decision "$(stop s-1 $'Handed off.\n\nAuto run: clearing')")" "block"
 pend resume
 check "auto run: a pending resume is held without a sentinel" "$(decision "$(stop s-1 'Resumed.')")" "block"
@@ -295,7 +305,7 @@ printf '# SDD ledger — plan: docs/dforge/plans/2026-10-10-mirror.md\nTask 1: c
 out=$(stop s-2 'Task 1 is done.')
 check "darkmem progress: a mirror ledger blocks a bare summary" "$(decision "$out")" "block"
 check "darkmem progress: names the plan" \
-  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step docs/dforge/plans/2026-10-10-mirror.md')" "1"
+  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/dforge/plans/2026-10-10-mirror.md')" "1"
 mkdir -p "$M/work/sdd/2026-10-11-other"
 sleep 1; prompt s-3; sleep 1
 printf '# SDD ledger — plan: docs/dforge/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
@@ -315,7 +325,7 @@ commit_in "$REPO" adhoc
 out=$(stop s-4 'Fixed and committed. Tell me whether to merge.')
 check "unplanned: a commit and a summary: blocks" "$(decision "$out")" "block"
 check "unplanned: the hold says to continue" "$(jq -r .reason <<<"$out" | grep -c 'If work remains for this session, continue it')" "1"
-check "unplanned: the hold names next-step --adhoc" "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step --adhoc --phase')" "1"
+check "unplanned: the hold names next-step --adhoc" "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" --adhoc --phase')" "1"
 check "unplanned: the hold names finishing" "$(jq -r .reason <<<"$out" | grep -c 'dforge:finishing-a-development-branch')" "1"
 check "unplanned: the retry passes" "$(stop s-4 'Fixed.' true)" ""
 check "unplanned: the next-step block passes" "$(stop s-4 "$NEXT")" ""
