@@ -388,6 +388,8 @@ ctx_line() {
     AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
     if ar_bound; then
       auto=1
+      # The check after the last task's complete line starts the final phase.
+      [ "${1:-}" != final ] || ar_enter_final || true
       label=$(ctx_auto_label normal "$width")
     fi
   fi

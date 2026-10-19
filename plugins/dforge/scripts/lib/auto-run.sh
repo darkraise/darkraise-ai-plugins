@@ -6,7 +6,8 @@
 # AR_SESSION names the caller. A caller whose session the run is not bound to
 # sees no run, so another session in the same repository never acts on it.
 
-. "$(dirname "${BASH_SOURCE[0]}")/roots.sh"
+# plan.sh brings roots.sh, and the plan and ledger readers ar_enter_final uses.
+. "$(dirname "${BASH_SOURCE[0]}")/plan.sh"
 
 AR_STALE_MINUTES=60
 AR_LOCK_TENTHS=100
@@ -217,6 +218,24 @@ ar_set_phase() {
     return 4
   fi
   ar_update '.phase = $p | if $p == "execute" or $p == "final" then .setupDue = false else . end' --arg p "$1"
+}
+
+# ar_enter_final — in the execute phase, once the attached plan's ledger has a
+# complete line for every task, move the run to the final phase, so the check
+# after the last task is measured where no compaction hands off.
+ar_enter_final() {
+  local plan ledger tasks
+  [ "$(ar_get phase)" = execute ] || return 0
+  plan=$(ar_get plan)
+  [ -n "$plan" ] || return 0
+  plan=$(plan_locate "$plan")
+  [ -f "$plan" ] || return 0
+  ledger=$(plan_ledger "$plan")
+  [ -n "$ledger" ] || return 0
+  tasks=$(plan_tasks "$plan" | cut -f1 | sort -u)
+  [ -n "$tasks" ] || return 0
+  [ -z "$(comm -23 <(printf '%s\n' "$tasks") <(ledger_done "$ledger" | sort -u))" ] || return 0
+  ar_update '.phase = "final" | .setupDue = false'
 }
 
 # ar_task_complete — a task's complete line is written, so the progress counts

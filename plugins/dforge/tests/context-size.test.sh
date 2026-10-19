@@ -610,6 +610,22 @@ rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"
 run
 check "auto: a compaction it cannot settle is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
 rmdir "$AUTO_STATE.lock"
+# --- --final after the last task's complete line starts the final phase ---
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
+mkdir -p "$REPO/docs/plans" "$REPO/.dforge/sdd/fp"
+printf '# FP\n\n### Task 1: One\n\n### Task 2: Two\n' > "$REPO/docs/plans/fp.md"
+printf '# SDD ledger — plan: docs/plans/fp.md\nTask 1: complete (commits a..b, review clean)\n' > "$REPO/.dforge/sdd/fp/progress.md"
+(cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 attach --plan docs/plans/fp.md)
+jq '.phase = "execute" | .setupDue = true' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
+asst 300000 > "$AUTO_T"
+run --final
+check "--final with a task still open: the phase stays execute" "$(jq -r .phase "$AUTO_STATE")" "execute"
+printf 'Task 2: complete (commits b..c, review clean)\n' >> "$REPO/.dforge/sdd/fp/progress.md"
+run
+check "a task budget check never starts the final phase" "$(jq -r .phase "$AUTO_STATE")" "execute"
+run --final
+check "--final after the last task: the phase moves to final" "$status:$(jq -r '"\(.phase) \(.setupDue)"' "$AUTO_STATE")" "0:final false"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 stop)
 unset DFORGE_BUDGET CLAUDE_CODE_SESSION_ID
 
