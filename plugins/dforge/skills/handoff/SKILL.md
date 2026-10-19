@@ -11,7 +11,8 @@ point compaction drops the reports, findings and rulings a controller needs.
 A fresh session reloads only its baseline plus these files. The numbers are in
 [session-budget.md](../../reference/session-budget.md).
 
-**Announce at start:** "I'm using the handoff skill to end this session cleanly."
+**Announce at start:** "I'm using the handoff skill to end this session
+cleanly."
 
 ## When
 
@@ -19,14 +20,14 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   and `scripts/context-size` — said `handoff`. Finish the task in flight
   through its `Task N: complete` line, then hand off; start no new task. The
   budget leaves room for one task to finish.
-- A hard stop: the plan is saved, or a plan has just switched from inline to
-  subagent mode. The last task completing is never a stop in either execution
-  mode: the final review and finishing run in the same session whatever
-  `scripts/context-size --final` prints. A task
-  budget line printed during that final phase does not stop it, and nothing
-  stops finishing once the final review is clean. The plan's last two tasks
-  are measured against the same final-phase limit, so a short tail never hands
-  off on the task budget.
+- A hard stop: the plan is saved outside an auto run, or a plan has just
+  switched from inline to subagent mode.
+  The last task completing is never a stop in either execution mode: the
+  final review and finishing run in the same session whatever
+  `scripts/context-size --final` prints. A task budget line printed during
+  that final phase does not stop it, and nothing stops finishing once the
+  final review is clean. The plan's last two tasks are measured against the
+  same final-phase limit, so a short tail never hands off on the task budget.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.
@@ -34,10 +35,10 @@ A fresh session reloads only its baseline plus these files. The numbers are in
   a compaction that left too much. A saved plan switches in place instead
   (auto-run.md §The switch): only steps 0-3 below run, and the session does
   not end. On a handoff the steps below run as always, but the turn does not
-  end on the next-step block: return to the step that invoked this skill, which runs
-  `scripts/auto-run clear` and ends the turn (auto-run.md §Clears). This skill
-  never runs `scripts/auto-run clear` itself. A switch from inline to subagent
-  mode hands off too, and the step that invoked this skill runs
+  end on the next-step block: return to the step that invoked this skill,
+  which runs `scripts/auto-run clear` and ends the turn (auto-run.md §Clears).
+  This skill never runs `scripts/auto-run clear` itself. A switch from inline
+  to subagent mode hands off too, and the step that invoked this skill runs
   `scripts/auto-run clear --phase` (dforge:executing-plans §Switching to
   subagent mode).
 - Your human partner says they are stepping away for more than an hour, or
@@ -85,8 +86,8 @@ A fresh session reloads only its baseline plus these files. The numbers are in
      or draft file): the notes in `latest.md` are the authority, so step 3's
      `State` must carry every item.
 2. **Commit the plan and the spec** if either has uncommitted changes, in a
-   `docs(<scope>): …` commit of their own (push instead while documents live in
-   darkmem; see project-state.md). Never commit `<state>/`.
+   `docs(<scope>): …` commit of their own (push instead while documents live
+   in darkmem; see project-state.md). Never commit `<state>/`.
 3. **Write the notes sections of `latest.md`** at `<latest.md>`.
    Replace everything above `## Next session` with exactly these sections,
    each under 15 lines:
@@ -124,13 +125,13 @@ A fresh session reloads only its baseline plus these files. The numbers are in
    It prints the `## Next session` block and writes it into `latest.md`. If it
    exits 4, say `latest.md` could not be written.
 
-   On Codex, add `--host codex` to the design-phase and unplanned-work calls,
-   so the block names the Codex client rather than Claude. A plan states its
-   own host in its header, so the execution call needs no flag.
-
    Then run `scripts/darkmem-sync push` and promote the session's durable
    facts ([project-state.md](../../reference/project-state.md) §darkmem sync
    points): the push carries the ledger, `handoff.md` and `latest.md`.
+
+   On Codex, add `--host codex` to the design-phase and unplanned-work calls,
+   so the block names the Codex client rather than Claude. A plan states its
+   own host in its header, so the execution call needs no flag.
 5. **End the session.** Your final message is one line on why you stopped,
    then the block, verbatim, as the last thing. The block is the resume guide:
    the launch command, the directory to launch it in, and the first prompt.

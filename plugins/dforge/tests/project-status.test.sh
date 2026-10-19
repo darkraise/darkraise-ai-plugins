@@ -204,7 +204,16 @@ present "project-state: promotion falls back to a notes file" "$STATE" '`<docs>/
 present "project-state: the facts note is committed, so distilling-docs can absorb it" "$STATE" 'commit it in a `docs(notes): …`'
 for skill in subagent-driven-development executing-plans; do
   present "$skill: pushes after each ledger line" "$P/skills/$skill/SKILL.md" '§darkmem sync points'
+  present "$skill: the push instruction itself" "$P/skills/$skill/SKILL.md" \
+    'After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;'
 done
+HANDOFF_SKILL="$P/skills/handoff/SKILL.md"
+push_line=$(grep -nF 'run `scripts/darkmem-sync push` and promote' "$HANDOFF_SKILL" | cut -d: -f1)
+codex_line=$(grep -nF 'On Codex, add `--host codex`' "$HANDOFF_SKILL" | cut -d: -f1)
+check "handoff: the push comes before the Codex-only paragraph" \
+  "$([ -n "$push_line" ] && [ -n "$codex_line" ] && [ "$push_line" -lt "$codex_line" ] && echo yes || echo no)" "yes"
+present "codex-tools: names the push at the stop points" "$P/skills/using-dforge/references/codex-tools.md" \
+  'run `bash <plugin-root>/scripts/darkmem-sync push`'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

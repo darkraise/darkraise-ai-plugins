@@ -36,7 +36,7 @@ disagree.
   spawn allowlist — V2 accepts only V2-capable presets and hard-errors
   on the rest.
 
-## Pre-3.0 layout check
+## Older layout check
 
 Codex runs no session-start hook, so nothing reports a repository or home that
 still uses an older layout. Run `scripts/repo-audit` once at the start of a
@@ -128,6 +128,7 @@ with a family still in the mirror (`bash <plugin-root>/scripts/dforge-path store
 names `darkmem`), start each session with
 `bash <plugin-root>/scripts/darkmem-sync reconcile`, then `bash <plugin-root>/scripts/darkmem-sync pull`,
 and read what they print: a `darkmem-sync reconcile:` line names a family
-that moved or stayed and why. Push at the stop points
+that moved or stayed and why. At the stop points
 [project-state.md](../../../reference/project-state.md) §darkmem sync points
-names; nothing pushes for you at the end of a turn.
+names, run `bash <plugin-root>/scripts/darkmem-sync push`;
+nothing pushes for you at the end of a turn.
