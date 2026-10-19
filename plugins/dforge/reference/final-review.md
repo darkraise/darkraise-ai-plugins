@@ -28,7 +28,13 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    the review, and so does a manifest defect: reviewing a branch that does not
    build, or whose suites fail, spends both reviewer seats on findings the gate
    already made. When the
-   project has no manifest, say so in one line and go to step 0.5.
+   project has no manifest, say so in one line and go to step 0.5. In an auto
+   run ([auto-run.md](auto-run.md)), a red gate does not stop the review: the
+   review runs, the red gate is the first finding on the one fix wave's
+   list, and the gates run again after that wave; a gate still red then, or
+   a manifest defect, runs
+   `scripts/auto-run stop --reason "gate <name> red"` and ends as auto-run.md
+   §Stopping says.
 
 0.5 **Acceptance QA.** Skip this step, saying so in one line, when the plan's
    spec has no `A<n>` statement tagged `test`, or when the ledger already holds `Acceptance QA: complete`. When the ledger holds

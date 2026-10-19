@@ -38,7 +38,7 @@ Report with branch state:
 
 **If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo checkout.
 
-In an auto run (`scripts/auto-run status` exits 0), create the worktree without asking, as `worktree=always` does ([auto-run.md](../../reference/auto-run.md)).
+In an auto run (`scripts/auto-run status` exits 0), create the worktree without asking, as `worktree=always` does ([auto-run.md](../../reference/auto-run.md)). The `worktree` setting is not read: `worktree=never` creates it too, since an auto run never commits to its base branch.
 
 Has the user already indicated their worktree preference in your instructions? If not, the `worktree` setting decides (read it from the session-start line `dforge settings in force (…)`, or run `scripts/dforge-config workflow` when no such line is in context): `worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2, and `ask`, the default and the value when the line does not name the key, asks for consent before creating a worktree:
 
@@ -99,7 +99,7 @@ git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
 ```
 
-**Sandbox fallback:** If `git worktree add` fails with a permission error (sandbox denial), tell the user the sandbox blocked worktree creation and you're working in the current directory instead. Then run setup and baseline tests in place.
+**Sandbox fallback:** If `git worktree add` fails with a permission error (sandbox denial), tell the user the sandbox blocked worktree creation and you're working in the current directory instead. Then run setup and baseline tests in place. In an auto run, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"` and end as [auto-run.md](../../reference/auto-run.md) §Stopping says.
 
 ## Step 2: Project Setup
 
@@ -129,7 +129,7 @@ Run tests to ensure workspace starts clean:
 npm test / cargo test / pytest / go test ./...
 ```
 
-**If tests fail:** Report failures, ask whether to proceed or investigate.
+**If tests fail:** Report failures, ask whether to proceed or investigate. In an auto run, ask nothing: run `scripts/auto-run ruling add "Setup: baseline tests red — <failing summary>"` and continue; the final review and finishing's first step run the suite again.
 
 **If tests pass:** Report ready.
 

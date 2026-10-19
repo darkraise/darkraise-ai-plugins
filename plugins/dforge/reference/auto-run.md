@@ -114,7 +114,10 @@ The ladder for anything you would have asked:
 **When Fable gives no ruling:**
 
 - **A task's item:** the task is deferred. Write its terminal ledger line,
-  and the same line for every task that depends on it:
+  and the same line for every task that depends on it: a task whose
+  `**Depends on:**` line names it, or, in a plan without those lines, a later
+  task whose `Consumes:` line cites a Contracts entry the deferred task's
+  `Produces:` line cites:
 
       Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>
 
@@ -132,6 +135,10 @@ The ladder for anything you would have asked:
 - **A QA `acceptance-ambiguous` item:** PARK it, as
   [final-review.md](final-review.md) step 0.5 says, and the final review
   continues.
+- **A `final-residual` item** (a final-review finding that belongs to no open
+  task): park it and add it to the run's register with
+  `scripts/register add <run register> "<the finding>" --state deferred --note "final review residual"`.
+  Such a row keeps a `merge` finish (§Finishing).
 
 A batch runs at once for a blocked task and for a QA `acceptance-ambiguous`
 item, and otherwise whenever the list is
@@ -223,9 +230,13 @@ place; dforge:handoff does not end it. In order:
    `scripts/finish-choice set <action> --plan PLAN_FILE`.
 2. dforge:handoff steps 0-3: reconcile background agents and shells, commit
    the plan and the spec, and update the handoff notes. Do not end the session.
-3. `scripts/next-step PLAN_FILE`. Any nonzero exit means `latest.md` was not
-   written: run `scripts/auto-run stop --reason "the handoff file could not be
-   written"` and end as Stopping says.
+3. `scripts/next-step PLAN_FILE`. Exit 5 means background work is still
+   listed: run `scripts/in-flight`, wait for or stop each launch it lists, and
+   run `scripts/next-step PLAN_FILE` again; a second exit 5 runs
+   `scripts/auto-run stop --reason "background work still running at the switch: <next-step's message>"`
+   and ends as Stopping says. Any other nonzero exit means `latest.md` was
+   not written: run `scripts/auto-run stop --reason "the handoff file could
+   not be written"` and end as Stopping says.
 4. `scripts/auto-run switch`, which also sets the phase to `execute`. It exits
    4 without an attached plan, or when the first prompt in `latest.md` names
    another plan; on exit 4 or any other nonzero exit, stop the run the same
@@ -237,7 +248,10 @@ base paths and dropping the design conversation (`compacted --switch` leaves
 `switch-resume` pending), runs `/model` and `/effort` from the plan's launch
 command, puts back the user's default model and effort, and submits the plan's
 first prompt behind "Run `scripts/auto-run after-compact` first." Run it, then
-follow the first prompt in this same session. A switch is a phase transition:
+follow the first prompt in this same session. No ledger exists yet, so the
+execution skill starts at its Setup, worktree first: `scripts/auto-run status`
+says setup is due until `phase execute` runs from the execution worktree. A
+switch is a phase transition:
 it never counts as a self-resume. Its compaction is measured in the `execute`
 phase, so one that leaves 85% of the window or more hands off as Clears says.
 A failure in either stage is retried once in that stage; the second stops the
@@ -250,6 +264,9 @@ Run dforge:handoff first (`scripts/auto-run clear` reads the first prompt
 and launch command `scripts/next-step` wrote to `latest.md`), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
+- **A switch from inline to subagent mode** (dforge:executing-plans
+  §Switching to subagent mode): `scripts/auto-run clear --phase`. A phase
+  clear never counts as a self-resume.
 
 Plan saved is no clear: the session switches in place (§The switch). A run
 started under `autoRun=ask` writes its plan in the same session too.
@@ -299,7 +316,8 @@ a person has looked at it. The line's `fail` and `flaky` counts are not read: th
 before the fix wave, a failure that survives it is a deferred `A<n>:` row or a
 red test at finishing's first step, and one the fix wave fixed does not keep the branch. A row
 deferred at the spec review, before the run started, counts as one the run
-added. On a
+added. `merge` also keeps the branch when the run added a deferred row whose
+Note is `final review residual`. On a
 detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
 branch from the detached HEAD. A `pr` with base `none` opens its request
 against the dforge's default branch. No menu. Its final message lists

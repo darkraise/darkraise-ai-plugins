@@ -92,7 +92,21 @@ names "auto-run.md: the switching line" "$R" '- `Auto run: switching` after `scr
 names "auto-run.md: plan saved is no clear" "$R" 'Plan saved is no clear: the session switches in place (§The switch).'
 names "auto-run.md: finishing reads the recorded choice" "$R" 'the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec'
 names "auto-run.md: a spec-review deferral keeps a merge" "$R" 'deferred at the spec review, before the run started, counts as one the run'
-check "auto-run.md: no phase clear is left" "$(grep -c 'clear --phase' "$R")" "0"
+check "auto-run.md: the one phase clear is the mode switch" "$(grep -c 'clear --phase' "$R")" "1"
+names "auto-run.md: the mode switch clears by phase" "$R" '- **A switch from inline to subagent mode** (dforge:executing-plans'
+names "auto-run.md: the switch starts at Setup" "$R" 'execution skill starts at its Setup, worktree first: `scripts/auto-run status`'
+names "auto-run.md: a listed launch is waited for" "$R" 'listed: run `scripts/in-flight`, wait for or stop each launch it lists, and'
+names "auto-run.md: a second exit 5 stops the run" "$R" '`scripts/auto-run stop --reason "background work still running at the switch: <next-step'"'"'s message>"`'
+names "auto-run.md: dependents come from the plan" "$R" '`**Depends on:**` line names it, or, in a plan without those lines, a later'
+names "auto-run.md: a final residual is a deferred row" "$R" '`scripts/register add <run register> "<the finding>" --state deferred --note "final review residual"`.'
+names "auto-run.md: a final residual keeps the branch" "$R" 'added. `merge` also keeps the branch when the run added a deferred row whose'
+names "final-review.md: a red gate in an auto run" "$P/reference/final-review.md" 'run ([auto-run.md](auto-run.md)), a red gate does not stop the review: the'
+names "final-review.md: a second red stops the run" "$P/reference/final-review.md" '`scripts/auto-run stop --reason "gate <name> red"` and ends as auto-run.md'
+GWF="$P/skills/using-git-worktrees/SKILL.md"
+names "using-git-worktrees: never is not read" "$GWF" 'The `worktree` setting is not read: `worktree=never` creates it too'
+names "using-git-worktrees: the sandbox stops the run" "$GWF" 'In an auto run, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"`'
+names "using-git-worktrees: a red baseline is a ruling" "$GWF" 'In an auto run, ask nothing: run `scripts/auto-run ruling add "Setup: baseline tests red — <failing summary>"` and continue'
+names "finish-preference.md: get reads the spec line" "$P/reference/finish-preference.md" 'the plan'"'"'s spec carries a `Finish: <merge|pr|keep>` line in `## Decisions`,'
 names "session-budget.md: the last task is never a stop" "$P/reference/session-budget.md" '- **Never a stop:** the last task completing, in either mode. The final review'
 names "finish-preference.md: the spec review's answer" "$P/reference/finish-preference.md" 'once the plan is attached. Finishing carries out that choice, or else'
 names "README: the default" "$P/README.md" 'The default on Claude Code (`autoRun=on`). Brainstorming asks its clarifying'

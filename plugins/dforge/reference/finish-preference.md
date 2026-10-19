@@ -37,7 +37,10 @@ branch (`base` is null): finishing finds it as its Step 4 says.
   Skip the question when `scripts/finish-choice get --plan PLAN_FILE` already
   prints a choice, or when the plan's ledger already exists: a resumed run
   never stops to ask: finishing carries out the choice recorded at its
-  start, or shows its menu when there is none.
+  start, or shows its menu when there is none. `get` prints a choice when
+  the plan's spec carries a `Finish: <merge|pr|keep>` line in `## Decisions`,
+  the spec review's answer: it reads and records that line itself, so the
+  question asked there is never asked again.
 - **Work without a plan** that you will finish with
   finishing-a-development-branch (implementation on its own branch or
   worktree, straight from the chat): before the first change, once
