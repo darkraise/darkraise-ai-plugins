@@ -483,6 +483,19 @@ out=$(PATH="$AW:$PATH" bash "$FM" "$RN" 2>&1)
 check "a failing rewrite: not reported" "$(grep -c 'rewrote the older names' <<<"$out")" "0"
 check "a failing rewrite: the file kept" "$(cat "$RN/.gitignore")" ".forge/"
 
+# --- a prefix rewrite that fails is foretold as the real run's refusal ---
+PA="$TMP/prefix-awk-fails"
+repo "$PA"
+mkdir -p "$PA/docs/dforge/plans"
+printf 'dr-forge:impl-sonnet-low\n' > "$PA/docs/dforge/plans/p.md"
+out=$(PATH="$AW:$PATH" bash "$FM" --dry-run "$PA" 2>&1); code=$?
+check "a failing prefix rewrite, dry: exit 1" "$code" "1"
+check "a failing prefix rewrite, dry: the refusal foretold" "$(grep -cxF "dforge-migrate: refused: could not rewrite the plugin prefixes in $PA/docs/dforge/plans/p.md" <<<"$out")" "1"
+check "a failing prefix rewrite, dry: no rewrite listed" "$(grep -c 'would rewrite the plugin prefixes' <<<"$out")" "0"
+out=$(PATH="$AW:$PATH" bash "$FM" "$PA" 2>&1); code=$?
+check "a failing prefix rewrite: exit 1" "$code" "1"
+check "a failing prefix rewrite: the plan keeps its text" "$(cat "$PA/docs/dforge/plans/p.md")" "dr-forge:impl-sonnet-low"
+
 # --- a home note that is no action still leaves nothing to migrate ---
 SH="$TMP/settled-home"
 mkdir -p "$SH/.dr-superpowers" "$SH/.dforge"

@@ -287,6 +287,7 @@ rewrite_prefixes() {
   writable "$2" "$file" || return 1
   grep -qE "$PREFIX_RE" "$file" 2>/dev/null || return 1
   if [ "$dry" -eq 1 ]; then
+    if ! prefixes_renamed "$file" > /dev/null; then refuse "could not rewrite the plugin prefixes in $file"; return 1; fi
     ! prefixes_renamed "$file" | cmp -s -- - "$file" || return 1
     printf 'would rewrite the plugin prefixes in %s\n' "$file"
     moved=1
