@@ -251,6 +251,10 @@ type World = {
   primary?: string
   /** The agent ids the spawns get, in turn; `agent-1` once they run out. */
   agentIds?: string[]
+  /** `node --version` cannot start, as on a machine without node. */
+  isNodeMissing?: boolean
+  /** Reading the user settings rejects. */
+  isUserSettingsUnreadable?: boolean
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -273,7 +277,10 @@ function world(on: On, w: World) {
       cost: { usd: 1.5 },
     },
   }))
-  on('settings.read', (_$, e) => ({ value: e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {}) }))
+  on('settings.read', (_$, e) => {
+    if (e?.source === 'user' && w.isUserSettingsUnreadable) throw new Error('EACCES: the user settings cannot be read')
+    return { value: e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {}) }
+  })
   on('tool.call', (_$, e) => w.tools?.[String(e.tool)]?.() ?? { result: 'ok', text: 'ok' })
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: w.agentIds?.shift() ?? 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
@@ -340,6 +347,7 @@ function world(on: On, w: World) {
         else if (exitCode === 0 && word === 'resumed' && state.pending === 'switch-resume') state.pending = 'after-compact'
         if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
         if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
+        if (exitCode === 5 && word === 'compacted') Object.assign(state, { active: false, stopped: 'three compactions without a completed task', pending: null })
         w.autoFile.text = JSON.stringify(state)
       }
       return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -370,6 +378,10 @@ function world(on: On, w: World) {
       if (w.modeOut === 'timeout') return { deny: 'dforge: $.process.run(node) aborted: still running after 5000ms' }
       const out = w.modeOut ?? { exitCode: 0, stdout: PORCELAIN, stderr: '' }
       return { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (argv === 'node --version') {
+      if (w.isNodeMissing) return { deny: 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }
+      return { value: { exitCode: 0, stdout: 'v24.18.0\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${w.primary ?? '/home/me/code/shop'}/.git\n` : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -3766,6 +3778,85 @@ describe('auto run', () => {
     await $.session.start(START)
     await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
     expect(w.autoRuns).toEqual([])
+  })
+
+  test('says at the switch that execution begins at Setup', async ($, on) => {
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts?.[0]).toMatch(/No task has started and no execution worktree exists yet; execution begins at the execution skill's Setup\./)
+  })
+
+  test('ends the run when its compaction reaches the cap', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { compacted: 5 } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.prompts).toEqual(['The auto run stopped: three compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
+    expect(w.autoRuns?.some(call => call.includes(' stop '))).toBe(false)
+  })
+
+  test('ends the run when an engine compaction reaches the cap', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { compacted: 5 } }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
+    expect(w.autoRuns).toContain('--session sess-1 compacted')
+    expect(w.prompts).toEqual(['The auto run stopped: three compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
+  })
+
+  for (const pending of ['handoff', 'compact']) {
+    test(`books no engine compaction over a pending ${pending}`, async ($, on) => {
+      const w: World = { ...SIGNED_IN, autoRuns: [] }
+      world(on, w)
+      signedIn(on, autoFiles({ pending }))
+      await $.session.start(START)
+      await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
+      expect(w.autoRuns).toEqual([])
+    })
+  }
+
+  for (const [why, flag] of [['node cannot run the restore', { isNodeMissing: true }], ['the user settings cannot be read', { isUserSettingsUnreadable: true }]] as const) {
+    test(`runs neither /model nor /effort when ${why}`, async ($, on) => {
+      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+      const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, ...flag, autoFile: files[AUTO] }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      expect(w.commands).toEqual(['/clear'])
+      expect(w.userSettings).toEqual({ model: 'opus[1m]' })
+      expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
+      expect(w.prompts).toHaveLength(1)
+      expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
+      expect(w.prompts?.[0]).toMatch(/kept this session on .+ because it could not put back your default model afterwards\. Record that with scripts\/auto-run ruling add\./)
+    })
+  }
+
+  test('sends a blocked notice naming the settings file when the defaults cannot be put back', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, fetches, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    const notice = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]).find(embed => embed?.title === '⛔ Default model not restored')
+    expect(notice).toBeDefined()
+    expect(JSON.stringify(notice)).toMatch(/\/home\/me\/\.claude\/settings\.json/)
   })
 
   test('reads a run only for its session, and its sentinel only as the last line', () => {

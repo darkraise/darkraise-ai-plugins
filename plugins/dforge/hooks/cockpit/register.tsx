@@ -124,7 +124,7 @@ const AUTO_COMPACT_INSTRUCTIONS =
 // What the switch's compaction keeps: once the plan is saved, the spec and the
 // plan hold what the design conversation decided.
 const AUTO_SWITCH_INSTRUCTIONS =
-  'Preserve verbatim: the spec, plan, register and auto-run state file paths; the base branch; the current HEAD. Drop the design conversation: the spec and the plan hold what it decided.'
+  "Preserve verbatim: the spec, plan, register and auto-run state file paths; the base branch; the current HEAD. Drop the design conversation: the spec and the plan hold what it decided. No task has started and no execution worktree exists yet; execution begins at the execution skill's Setup."
 // A failed stage is tried again after this long; a live turn or background work defers it as long.
 const AUTO_RETRY_MS = 5_000
 // The restored default model is written this many times at most, each write
@@ -2348,8 +2348,14 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
       // The compaction happened: never repeat it. Unbooked, pending stays
-      // compact and no later stage would run, so stop the run instead.
-      if ((await autoRunCall($, bound, ['compacted'])) !== 0) {
+      // compact and no later stage would run, so stop the run instead. Exit 5
+      // is the script's own stop: the compaction cap was reached.
+      const booked = await autoRunCall($, bound, ['compacted'])
+      if (booked === 5) {
+        await endStoppedRun($)
+        return
+      }
+      if (booked !== 0) {
         await endUnboundRun($, bound, 'the cockpit compacted but could not book it')
         return
       }
@@ -2388,14 +2394,23 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
     }
     const refused: string[] = []
     let isRestored = true
+    let isKept = false
     if (auto.launch !== null) {
+      // /model and /effort save the user's defaults: run them only when those
+      // can be read now and put back after (the restore runs node).
       const saved = await userDefaults($)
-      for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
-        await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
-      }
-      isRestored = saved !== null && (await restoreUserDefaults($, saved))
+      if (saved !== null && (await nodeRuns($))) {
+        for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
+          await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
+        }
+        isRestored = await restoreUserDefaults($, saved)
+        if (!isRestored) {
+          await notify($, { kind: 'blocked', title: '⛔ Default model not restored', detail: `/model and /effort left the auto run's launch model as the default in ${await userSettingsPath($)}.`, isPlain: true })
+        }
+      } else isKept = true
     }
     const notes: string[] = []
+    if (isKept) notes.push(`The cockpit kept this session on ${await $.session.model()} because it could not put back your default model afterwards.`)
     if (refused.length > 0) notes.push(`The cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}.`)
     if (!isRestored) notes.push('The cockpit could not put back the default model and effort that /model and /effort saved in your user settings.')
     const note = notes.length === 0 ? '' : `\n\n${notes.join(' ')} Record that with scripts/auto-run ruling add.`
@@ -2425,6 +2440,19 @@ async function userDefaults($: EngineInterface): Promise<{ model: unknown; model
   const user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
   if (user === null) return null
   return { model: user.model ?? null, modelSettings: user.modelSettings ?? null }
+}
+
+// Whether node starts: the restore below runs dforge-config.mjs with it.
+async function nodeRuns($: EngineInterface): Promise<boolean> {
+  const ran = await $.process.run(['node', '--version'], { timeoutMs: 5_000 }).catch(() => null)
+  return ran?.exitCode === 0
+}
+
+// The user settings file /model and /effort write, for the notice that names it.
+async function userSettingsPath($: EngineInterface): Promise<string> {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home ? `${home.replace(/[\\/]+$/, '')}/.claude` : '~/.claude')
+  return `${configDir}/settings.json`
 }
 
 // /model and /effort save their values as the user's defaults for every new
@@ -2469,9 +2497,11 @@ async function endUnboundRun($: EngineInterface, owner: string, reason: string) 
 async function bookAutoCompaction($: EngineInterface) {
   const auto = await readAutoRun($)
   // A pending clear or switch supersedes the compaction: booking it would drop
-  // that stage.
-  if (auto === null || !auto.active || ['clear', 'switch', 'switch-resume'].includes(auto.pending ?? '')) return
-  await autoRunCall($, await $.session.id(), ['compacted'])
+  // that stage. A pending handoff still needs its clear, and a pending compact
+  // is the cockpit's own stage, which books itself.
+  if (auto === null || !auto.active || ['clear', 'switch', 'switch-resume', 'handoff', 'compact'].includes(auto.pending ?? '')) return
+  // Exit 5: the compaction cap stopped the run.
+  if ((await autoRunCall($, await $.session.id(), ['compacted'])) === 5) await endStoppedRun($)
 }
 
 async function stopAutoRun($: EngineInterface) {
