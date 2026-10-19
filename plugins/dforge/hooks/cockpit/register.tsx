@@ -2451,9 +2451,9 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       await $.session.compact({ instructions: AUTO_SWITCH_INSTRUCTIONS })
       await update($, budget, () => null)
       await update($, isNudged, () => false)
-      // As for compact: the compaction happened, so it is never repeated.
+      // As for compact: the compaction was attempted, so it is never repeated.
       if ((await autoRunCall($, bound, ['compacted', '--switch'])) !== 0) {
-        await endUnboundRun($, bound, 'the cockpit compacted for the switch but could not book it')
+        await endUnboundRun($, bound, "the cockpit could not book the switch's compaction")
         return
       }
       await trackAutoRun($)

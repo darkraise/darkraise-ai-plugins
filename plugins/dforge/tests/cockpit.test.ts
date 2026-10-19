@@ -4133,6 +4133,18 @@ describe('auto run', () => {
     expect(w.autoRuns).toContain('--session sess-1 stop --reason the cockpit switched but could not book it')
   })
 
+  test("stops the run when the switch's compaction cannot be booked", async ($, on) => {
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { compacted: 1 } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.autoRuns).toContain("--session sess-1 stop --reason the cockpit could not book the switch's compaction")
+  })
+
   test('books no engine compaction over a pending switch', async ($, on) => {
     const w: World = { ...SIGNED_IN, autoRuns: [] }
     world(on, w)
