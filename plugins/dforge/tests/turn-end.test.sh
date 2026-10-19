@@ -264,6 +264,20 @@ check "auto run: past the cap the user is told" "$(jq -r .systemMessage <<<"$out
 check "auto run: then the retry passes" "$(stop s-1 'Done.' true)" ""
 check "a stopped run: back to the plain rules" "$(stop s-1 'Here is the answer.')" ""
 
+# --- an auto run holds a session that has no turn stamp ---
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-5"
+(cd "$REPO" && bash "$AR" --session s-5 start --spec docs/s.md --register docs/r.md --force >/dev/null)
+check "no stamp and no run bound: passes" "$(stop s-other 'Done.')" ""
+out=$(stop s-5 'Done.')
+check "auto run without a turn stamp: held" "$(decision "$out")" "block"
+check "auto run without a turn stamp: the count is kept" "$(cat "$HOME/.claude/dforge/sessions/turns/s-5.holds")" "1"
+H2="$TMP/home-turns-is-a-file"
+mkdir -p "$H2/.claude/dforge/sessions"
+printf 'not a directory\n' > "$H2/.claude/dforge/sessions/turns"
+out=$(HOME="$H2" stop s-5 'Done.' true)
+check "a hold count that cannot be written: the run stops" "$(jq -r .active "$STATE"):$(jq -r .stopped "$STATE" | grep -c 'without its sentinel')" "false:1"
+check "a hold count that cannot be written: one hold asks for the attended ending" "$(jq -r .reason <<<"$out" | grep -c '§Stopping')" "1"
+
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---
 . "$HERE/fixtures/darkmem-stores.sh"
 M=$(stores_home "$HOME" "$REPO" proj local darkmem)

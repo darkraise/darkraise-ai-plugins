@@ -40,14 +40,16 @@ hold() { # hold <reason> <what the user sees>
 }
 
 stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
-[ -f "$stamp" ] || exit 0
+# An auto run bound to this session (reference/auto-run.md) lives in the
+# primary checkout, whichever worktree the turn ran in: its pending action. It
+# is read before the stamp gate, so a session with no stamp (a cleared one,
+# whose first prompt the cockpit submitted) is still held.
+auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
+[ -f "$stamp" ] || [ -n "$auto_pending" ] || exit 0
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dforge_ledger_root "$root") || sdd=""
-# An auto run bound to this session (reference/auto-run.md) lives in the
-# primary checkout, whichever worktree the turn ran in: its pending action.
-auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
 [ "$is_retry" = true ] && [ -z "$auto_pending" ] && exit 0
 # The heads turn-start.sh recorded, compared only within the same repository.
 . "${SCRIPT_DIR}/lib/turn-refs.sh"
@@ -105,14 +107,17 @@ if [ -n "$auto_pending" ]; then
   [ "$is_retry" = true ] && holds=$(cat "$stamp.holds" 2>/dev/null || echo 0)
   case $holds in '' | *[!0-9]*) holds=0 ;; esac
   holds=$((holds + 1))
+  # A count that cannot be kept would hold forever: treat it as the cap.
+  if ! { mkdir -p "$(dirname "$stamp")" && printf '%s\n' "$holds" > "$stamp.holds"; } 2>/dev/null; then
+    holds=$((AUTO_HOLD_CAP + 1))
+  fi
   if [ "$holds" -gt "$AUTO_HOLD_CAP" ]; then
-    rm -f "$stamp.holds"
+    rm -f "$stamp.holds" 2>/dev/null
     why="the turn ended ${AUTO_HOLD_CAP} times in a row without its sentinel line"
     (cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1) || true
     hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dforge: the auto run stopped (${why})"
     exit 0
   fi
-  printf '%s\n' "$holds" > "$stamp.holds" 2>/dev/null || true
   reason="An auto run is bound to this session (pending: ${auto_pending}; see reference/auto-run.md), so its turns end only on a sentinel line. Do not stop: continue the run. When a budget line said compact, finish the task in flight, then end your message with the line \`Auto run: compacting\`. After \`auto-run clear\` exits 0, end with \`Auto run: clearing\`. After \`auto-run switch\` exits 0, end with \`Auto run: switching\`. If the run must stop (your human partner asked, or a stop the reference names), run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
   if [ "$auto_pending" = switch ]; then
     reason="An auto run is bound to this session and the plan is saved (pending: switch; see reference/auto-run.md §The switch), so this turn ends only on the switching line. Do not stop: end your message with the line \`Auto run: switching\`; the cockpit then compacts and moves this session to the plan's launch model. If the run must stop, run \`bash ${root_shown}/scripts/auto-run stop --reason \"<why>\"\` first, then end as the attended flow would."
