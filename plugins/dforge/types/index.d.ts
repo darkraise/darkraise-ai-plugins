@@ -222,6 +222,8 @@ export type CockpitAutoRun = {
   stopped: string | null
   /** The first prompt of the session a clear starts. */
   resumePrompt: string | null
+  /** When `auto-run stalled` last ran, in epoch seconds; null before. */
+  stalledAt: number | null
   /** The model and effort that session runs on. */
   launch: { model: string; effort: string } | null
 }

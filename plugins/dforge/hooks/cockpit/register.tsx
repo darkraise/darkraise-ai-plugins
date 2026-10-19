@@ -147,9 +147,17 @@ function autoContinuePrompt(root: string, plan: string | null): string {
   return `Continue the auto run: run \`bash ${root}/scripts/auto-run after-compact\` first, then continue the phase \`bash ${root}/scripts/auto-run status\` names${where}, as reference/auto-run.md §After a compaction says.`
 }
 // The watchdog's period, and how long background work may defer a pending
-// stage before that books a failure.
+// stage before that books a failure. A bound run idle STALL_MS since its last
+// turn ended, stage ran or nudge went is stalled.
 const WATCHDOG_MS = 60_000
 const DEFER_CAP_MS = 1_800_000
+const STALL_MS = 180_000
+// The pending actions whose stage the watchdog arms again when no timer holds
+// it; a pending resume resubmits the run's first prompt.
+const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch', 'switch-resume': 'switch-resume' }
+function stallPrompt(root: string): string {
+  return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash ${root}/scripts/auto-run status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
+}
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
@@ -319,6 +327,7 @@ export const register: Register = on => {
     await readNotifier($)
     await readRun($)
     await trackAutoRun($)
+    S.watchedSince = await $.clock.now()
     await beat($)
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($))
@@ -2179,6 +2188,12 @@ const S = {
   isClosedByPerson: false,
   // The auto run's scheduled stage, at most one.
   autoTimer: null as Timer | null,
+  // True while autoAct runs a stage, a long compaction included, and when it
+  // last finished one: a prompt it just submitted has not started its turn yet.
+  autoBusy: false,
+  autoActedAt: null as number | null,
+  // When this session started: one with no turn yet ages from it.
+  watchedSince: null as number | null,
   // When background work began deferring the pending stage; null while nothing does.
   autoDeferredSince: null as number | null,
   // The watchdog's timer, every WATCHDOG_MS.
@@ -2346,6 +2361,17 @@ function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
 // the run at the second (exit 5).
 async function autoAct($: EngineInterface, stage: AutoStage) {
   S.autoTimer = null
+  // The watchdog arms nothing while a stage is in flight.
+  S.autoBusy = true
+  try {
+    await autoStage($, stage)
+  } finally {
+    S.autoBusy = false
+    S.autoActedAt = await $.clock.now()
+  }
+}
+
+async function autoStage($: EngineInterface, stage: AutoStage) {
   const auto = await readAutoRun($)
   if (auto === null || !auto.active || auto.pending !== AUTO_STAGE_PENDING[stage]) {
     // The run stopped or moved on: its deferral, if any, ends with it.
@@ -2519,9 +2545,33 @@ async function beat($: EngineInterface) {
   await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${id}`, `${seconds}\n`).catch(() => undefined)
 }
 
-// Each WATCHDOG_MS: the heartbeat.
+// Each WATCHDOG_MS: the heartbeat, then a wake-up for a bound run nothing
+// else will carry on. A turn that ended on an error, or without its sentinel
+// and unheld, arms no stage, and a pending stage can lose its timer. Never
+// while a turn, background work, a stage or an Esc holds the session, and
+// never within STALL_MS of the latest of this session's start, its last
+// turn's end, the last stage and the last nudge.
 async function watchdogTick($: EngineInterface) {
   await beat($)
+  if (S.isTurnLive || S.autoBusy) return
+  const auto = await readAutoRun($)
+  if (auto === null || !auto.active) return
+  if ((await read($, spawns)).some(one => !one.isDone) || (await read($, shells)).length > 0) return
+  const now = await read($, activity)
+  if (now.kind !== 'idle' && now.kind !== 'failed') return
+  const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.autoActedAt ?? 0, (auto.stalledAt ?? 0) * 1000)
+  if ((await $.clock.now()) - last <= STALL_MS) return
+  const stage = WATCHED_STAGES[auto.pending ?? '']
+  if (stage !== undefined) {
+    if (S.autoTimer === null) {
+      S.autoDeferredSince = null
+      scheduleAutoAct($, stage, 0)
+    }
+    return
+  }
+  const code = await autoRunCall($, await $.session.id(), ['stalled'])
+  if (code === 5) await endStoppedRun($)
+  else if (code === 0) await $.prompt.submit({ text: stallPrompt($.plugin.root), asUser: true }).catch(() => undefined)
 }
 
 // The run stopped while the session was idle: record it, and give the model a

@@ -255,6 +255,8 @@ type World = {
   isNodeMissing?: boolean
   /** Reading the user settings rejects. */
   isUserSettingsUnreadable?: boolean
+  /** How long each compaction takes, in the clock's milliseconds; at once unless said. */
+  compactMs?: number
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -317,7 +319,8 @@ function world(on: On, w: World) {
   })
   on('session.compact', (_$, e) => {
     w.compacts?.push(`${e.trigger}:${(e as { instructions?: string }).instructions ?? ''}`)
-    return w.isCompactVetoed ? ({ skip: 'vetoed' } as never) : { messages: e.messages ?? [SUMMARY] }
+    const done = w.isCompactVetoed ? ({ skip: 'vetoed' } as never) : { messages: e.messages ?? [SUMMARY] }
+    return w.compactMs === undefined ? done : clock.sleep(w.compactMs).then(() => done)
   })
   on('command.run', (_$, e) => {
     if (w.refusedCommands?.includes(e.command)) throw new Error(`/${e.command} refused`)
@@ -348,6 +351,8 @@ function world(on: On, w: World) {
         if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
         if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
         if (exitCode === 5 && word === 'compacted') Object.assign(state, { active: false, stopped: 'three compactions without a completed task', pending: null })
+        if (exitCode === 0 && word === 'stalled') Object.assign(state, { stalls: Number(state.stalls ?? 0) + 1, stalledAt: Math.floor(clock.now() / 1000) })
+        if (exitCode === 5 && word === 'stalled') Object.assign(state, { active: false, stopped: 'three stalls without a completed task', pending: null })
         w.autoFile.text = JSON.stringify(state)
       }
       return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -3922,10 +3927,203 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
   })
 
+  test('nudges a stalled run, and again only once its last nudge is as old', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(180_000)
+    expect(w.prompts).toEqual([])
+    await clock.advance(60_000)
+    expect(w.autoRuns?.filter(call => call === '--session sess-1 stalled')).toHaveLength(1)
+    expect(w.prompts).toEqual([
+      expect.stringMatching(/^The auto run stalled: the last turn ended without its sentinel line\. Run `bash .*\/scripts\/auto-run status`, continue the phase it names, and end the turn as reference\/auto-run\.md §Ending a turn says\.$/),
+    ])
+    await clock.advance(180_000)
+    expect(w.prompts).toHaveLength(1)
+    await clock.advance(60_000)
+    expect(w.prompts).toHaveLength(2)
+  })
+
+  test('nudges a run whose turn failed', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    await clock.advance(240_000)
+    expect(w.autoRuns).toContain('--session sess-1 stalled')
+    expect(w.prompts).toHaveLength(1)
+  })
+
+  test('leaves the run to the owner after an Esc', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
+    await clock.advance(600_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(w.prompts).toEqual([])
+  })
+
+  test('leaves the run alone while a subagent runs', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.agent.spawn({
+      tool_use_id: 'toolu_1',
+      prompt: 'Implement task 4',
+      description: 'Task 4',
+      subagentType: 'dforge:impl-sonnet-low',
+      provider: { plugin: 'dforge', tier: 'user' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+      fork: false,
+    })
+    await $.turn.complete({ answer: 'Waiting for Task 4.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(600_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(w.prompts).toEqual([])
+  })
+
+  test('ends the run at the stall that stops it', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { stalled: 5 } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(240_000)
+    expect(w.prompts).toEqual(['The auto run stopped: three stalls without a completed task. End as reference/auto-run.md §Stopping says.'])
+  })
+
+  test('arms a pending stage that no timer holds', async ($, on) => {
+    const files = autoFiles({ pending: 'compact' })
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(240_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(pendingOf(files)).toBe('after-compact')
+  })
+
+  test('resubmits the first prompt of a pending resume that no timer holds', async ($, on) => {
+    const files = autoFiles({ pending: 'resume', resumePrompt: 'Execute docs/plan.md.', launch: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(240_000)
+    await settle(clock)
+    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(w.autoRuns).toContain('--session sess-1 resumed')
+    expect(pendingOf(files)).toBeNull()
+  })
+
+  test('nudges a bound run in a session that has had no turn yet', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await clock.advance(180_000)
+    expect(w.prompts).toEqual([])
+    await clock.advance(60_000)
+    expect(w.autoRuns).toContain('--session sess-1 stalled')
+    expect(w.prompts).toHaveLength(1)
+  })
+
+  test('recovers a cleared session whose first prompt started no turn', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
+    await clock.advance(240_000)
+    expect(w.autoRuns).toContain('--session sess-2 stalled')
+    expect(w.prompts).toHaveLength(2)
+  })
+
+  test('waits STALL_MS after a stage before it nudges', async ($, on) => {
+    const files = autoFiles({ pending: 'compact' })
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(240_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.prompts).toHaveLength(1)
+    await clock.advance(60_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    await clock.advance(120_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    await clock.advance(60_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
+  })
+
+  test('leaves the run alone while a background shell runs', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'Waiting for the server.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(600_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(w.prompts).toEqual([])
+  })
+
+  test('leaves the run alone while a turn runs', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.start({ text: 'Continue.', turnId: 't2' })
+    await clock.advance(600_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(w.prompts).toEqual([])
+  })
+
+  test('arms nothing while a stage runs, a long compaction included', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], compactMs: 240_000 }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(250_000)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+  })
+
   test('reads a run only for its session, and its sentinel only as the last line', () => {
     const text = autoFiles({ session: 'b', launch: { model: 'sonnet', effort: 'high' } })[AUTO]!.text
     expect(autoRunFor(text, 'b')?.launch).toEqual({ model: 'sonnet', effort: 'high' })
     expect(autoRunFor(text, 'b')?.plan).toBe('docs/plan.md')
+    expect(autoRunFor(text, 'b')?.stalledAt).toBeNull()
+    expect(autoRunFor(autoFiles({ session: 'b', stalledAt: 1240 })[AUTO]!.text, 'b')?.stalledAt).toBe(1240)
     expect(autoRunFor(text, 'a')).toBeNull()
     expect(autoRunFor('not json', 'b')).toBeNull()
     expect(endsOnSentinel('x\n\nAuto run: compacting  \n\n', 'compact')).toBe(true)

@@ -947,6 +947,7 @@ export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | nu
     resumes: count(s.resumes),
     stopped: word(s.stopped),
     resumePrompt: word(s.resumePrompt),
+    stalledAt: typeof s.stalledAt === 'number' && Number.isFinite(s.stalledAt) ? s.stalledAt : null,
     launch: typeof launch.model === 'string' && typeof launch.effort === 'string' ? { model: launch.model, effort: launch.effort } : null,
   }
 }
