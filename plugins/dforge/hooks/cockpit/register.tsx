@@ -42,6 +42,7 @@ import {
   isAtLeast,
   isGitWriteTool,
   isDforge,
+  isPlanTail,
   kTokens,
   levelOf,
   limitForecast,
@@ -557,6 +558,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       await trackAutoRun($)
       compactWindow = await readCompactWindow($)
+      await readRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       const turnUsage = e.usage as TurnUsage | undefined
       if (turnUsage !== undefined) {
@@ -578,7 +580,6 @@ export const register: Register = on => {
         endedAt: stamp,
         detail: why,
       }))
-      await readRun($)
       if (failed) {
         const messageId = await notify($, {
           kind: 'error',
@@ -665,9 +666,10 @@ export const register: Register = on => {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
       // A run starts, stops and changes regime through the model's own calls.
       await trackAutoRun($)
-      await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
-      // The controller writes its ledger with its own tool calls.
+      // The controller writes its ledger with its own tool calls; read it
+      // before the budget, which measures a plan's tail by it.
       if (/\.dforge|\.dforge|finish-choice/.test(JSON.stringify(e))) await readRun($)
+      await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
     }
 
     return ran
@@ -2939,9 +2941,13 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
   const window = figures.context.window
   const auto = await read($, autoRun)
   const isAuto = auto !== null && auto.active
+  // A plan's last tasks and its final phase share the final-phase limit, as
+  // the budget line measures them; the handoff note follows the same limit.
+  const summary = await read($, run)
+  const isTail = summary !== null && isPlanTail(summary)
   const limit = isAuto
     ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
-    : tuning.isRelaxed
+    : tuning.isRelaxed || isTail
       ? finalLimitFor(window, compactWindow)
       : budgetFor(handoffTokens, undefined, window, compactWindow)
   const usd = figures.cost?.usd ?? null

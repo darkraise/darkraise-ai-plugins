@@ -10,6 +10,7 @@ import {
   autoRunFor,
   isAbsolutePath,
   isDforge,
+  isPlanTail,
   attributionIn,
   bar,
   billingLabel,
@@ -2496,6 +2497,89 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
+  })
+
+  // Five tasks in the 650k window: the handoff budget is 464,500 and the
+  // final-phase limit 552,500. A plan's last two tasks and its final phase
+  // measure against the latter, as scripts/lib/context.sh's tail does.
+  const TAIL_PLAN = `# Plan\n\n${[1, 2, 3, 4, 5].map(n => `### Task ${n}: Step ${n}\n`).join('\n')}`
+  const tailLedger = (done: number, isFinished: boolean) =>
+    [
+      '# SDD ledger — plan: docs/plans/p.md',
+      ...Array.from({ length: done }, (_, i) => `Task ${i + 1}: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`),
+      ...(isFinished ? ['Final review: clean (commits a..b)'] : []),
+    ].join('\n')
+
+  test('a run is at its tail with two tasks left or fewer, or once its final review is clean', () => {
+    expect(isPlanTail({ done: 2, total: 5, isFinished: false })).toBe(false)
+    expect(isPlanTail({ done: 3, total: 5, isFinished: false })).toBe(true)
+    expect(isPlanTail({ done: 5, total: 5, isFinished: false })).toBe(true)
+    expect(isPlanTail({ done: 0, total: 0, isFinished: false })).toBe(false)
+    expect(isPlanTail({ done: 0, total: 0, isFinished: true })).toBe(true)
+  })
+
+  for (const [name, done, isFinished, tokens, note] of [
+    ['three tasks left', 2, false, 500_000, /^dforge: budget: 500k of 465k — handoff\. /],
+    ['two tasks left', 3, false, 500_000, null],
+    ['every task complete', 5, false, 500_000, null],
+    ['the final review clean', 5, true, 500_000, null],
+    ['two tasks left, past the final-phase limit', 3, false, 560_000, /^dforge: budget: 560k of 553k — handoff\. /],
+  ] as const) {
+    test(`the handoff note with ${name} at ${tokens / 1000}k`, async ($, on) => {
+      const notes: string[] = []
+      const files: World['files'] = {
+        '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(done, isFinished), mtimeMs: 2_000_000 },
+        '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
+      }
+      world(on, { ...SIGNED_IN, tokens, notes, files })
+      signedIn(on, files)
+      // The session start reads the ledger; the Skill call makes it a plan session.
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+      const sent = notes.filter(text => /— handoff\./.test(text))
+      if (note === null) expect(sent).toEqual([])
+      else expect(sent).toEqual([expect.stringMatching(note)])
+    })
+  }
+
+  test('a ledger write that reaches the tail is read before the budget in the same call', async ($, on) => {
+    const notes: string[] = []
+    const files: World['files'] = {
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(2, false), mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
+    }
+    const w: World = { ...SIGNED_IN, tokens: 400_000, notes, files }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    // One call both completes Task 3 (two tasks left) and crosses the 465k budget.
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
+    w.tokens = 500_000
+    await $.tool.call({ tool: 'Bash', command: 'echo "Task 3: complete" >> .dforge/sdd/p/progress.md' })
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
+  })
+
+  test('a recorded finish choice starts no once-a-second redraw', async ($, on) => {
+    const files = {
+      ...runFiles(LEDGER),
+      '/home/me/code/shop/.dforge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
+    }
+    let redraws = 0
+    const clock = world(on, { ...SIGNED_IN, files })
+    on('ui.invalidate', () => {
+      redraws++
+      return { value: undefined } as never
+    })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    await clock.advance(5_000)
+    expect(redraws).toBe(0)
+    // A live turn does tick: the count above would have seen a ticker.
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await clock.advance(2_000)
+    expect(redraws).toBeGreaterThan(0)
   })
 
   test('reads the finish choice', () => {
