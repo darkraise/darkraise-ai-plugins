@@ -250,7 +250,8 @@ test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounde
   s.stub.db.workstreams[0].entries[1].created_at = "2026-09-25T10:00:00.000003+00:00";
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# C\n", "p2 is listed first, and C is newer than B by one microsecond");
-  assert.deepEqual(s.state().checkpointAt, { p1: "2026-09-25T10:00:00.000003+00:00" });
+  assert.equal(s.state().checkpointAt, "2026-09-25T10:00:00.000003+00:00", "one workstream is saved as the plain string");
+  assert.equal(s.state().checkpointWorkstream, "p1");
 });
 
 test("latest.md stays the newest stop when the workstream that filed it closes", async t => {

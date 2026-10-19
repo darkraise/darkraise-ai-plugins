@@ -287,6 +287,47 @@ test("a checkpointAt key is only looked up, so any workstream key loads, includi
   assert.equal(newestCheckpointAt(state), at);
 });
 
+test("a single recorded workstream is saved as the plain string an older dforge reads, and loads back as that workstream", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  const first = "2026-09-25T10:00:00.000001+00:00";
+  const second = "2026-09-25T10:00:00.000002+00:00";
+  const state = emptyState();
+  recordCheckpointAt(state, "feature/foo", first);
+  saveState(file, state);
+  const raw = () => JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(raw().checkpointAt, first);
+  const loaded = loadState(file);
+  assert.equal(checkpointAtOf(loaded, "feature/foo"), first);
+  assert.equal(checkpointAtOf(loaded, "p2"), null, "the string stands for the workstream that wrote it, not for every one");
+  recordCheckpointAt(loaded, "feature/foo", second);
+  saveState(file, loaded);
+  assert.equal(raw().checkpointAt, second, "the same workstream again stays a string");
+  fs.writeFileSync(file, JSON.stringify({ ...raw(), checkpointWorkstream: "*" }));
+  assert.equal(checkpointAtOf(loadState(file), "p2"), second, "an unusable workstream name leaves the legacy meaning");
+  const legacy = { version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: first, conflicts: [] };
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  assert.equal(checkpointAtOf(loadState(file), "p2"), first, "a string with no workstream stands for every one");
+});
+
+test("a second recorded workstream switches the saved checkpointAt to the object form, which loads back", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  const first = "2026-09-25T10:00:00.000001+00:00";
+  const second = "2026-09-25T10:00:00.000002+00:00";
+  const state = emptyState();
+  recordCheckpointAt(state, "p1", first);
+  recordCheckpointAt(state, "p2", second);
+  saveState(file, state);
+  const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual(raw.checkpointAt, { p1: first, p2: second });
+  assert.equal(raw.checkpointWorkstream, undefined);
+  const loaded = loadState(file);
+  assert.equal(checkpointAtOf(loaded, "p1"), first);
+  assert.equal(checkpointAtOf(loaded, "p2"), second);
+  assert.equal(newestCheckpointAt(loaded), second);
+});
+
 test("localChanges names new, modified, unpushed, rewritten, unsupported and checkpoint changes", () => {
   const { roots } = mirror();
   const state = emptyState();
