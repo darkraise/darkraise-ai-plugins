@@ -7,15 +7,25 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 ## Overview
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
+Write comprehensive implementation plans assuming the engineer has zero context
+for our codebase and questionable taste. Document everything they need to know:
+which files to touch for each task, code, testing, docs they might need to
+check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI.
+TDD. Frequent commits.
 
-Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well. Small models execute these plans literally: each task's implementer sees only that task's text plus the header's Global Constraints and Contracts.
+Assume they are a skilled developer, but know almost nothing about our toolset
+or problem domain. Assume they don't know good test design very well. Small
+models execute these plans literally: each task's implementer sees only that
+task's text plus the header's Global Constraints and Contracts.
 
-**Keep it minimal and checkable:** no speculative abstractions; each task is the minimum that meets the spec; each task ends with a check that proves it.
+**Keep it minimal and checkable:** no speculative abstractions; each task is the
+minimum that meets the spec; each task ends with a check that proves it.
 
-**Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
+**Announce at start:** "I'm using the writing-plans skill to create the
+implementation plan."
 
-**Context:** If working in an isolated worktree, it should have been created via the `dforge:using-git-worktrees` skill at execution time.
+**Context:** If working in an isolated worktree, it should have been created via
+the `dforge:using-git-worktrees` skill at execution time.
 
 **Save plans to:** `<docs>/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
@@ -27,7 +37,8 @@ When `scripts/auto-run status` exits 0, this plan is written unattended
 first. Then nothing in this skill waits on your human partner:
 
 - **The execution strategy:** take the spec's `**Execution strategy:**` line;
-  with none, write `sequential`.
+  with none, take the `executionStrategy` setting (`parallel` by default) as
+  Parallel waves says, and write `sequential` when it is `ask`.
 - **An approach or planning choice** you would ask about goes to
   `dforge:judge-opus` first, then the ladder in auto-run.md §Rulings.
   dforge:selecting-approaches runs as usual otherwise.
@@ -50,20 +61,37 @@ first. Then nothing in this skill waits on your human partner:
 
 ## Scope Check
 
-If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own. Under `autoRun=on` the spec covers the whole request by design: write one plan for it, never suggest a split, and take a later change of scope through the ruling seat's AMEND path.
+If the spec covers multiple independent subsystems, it should have been broken
+into sub-project specs during brainstorming. If it wasn't, suggest breaking this
+into separate plans — one per subsystem. Each plan should produce working,
+testable software on its own.
+Under `autoRun=on` the spec covers the whole request by design: write one plan for it, never suggest a split,
+and take a later change of scope through the ruling seat's AMEND path. That
+holds on Claude Code; on a Codex host `on` behaves as `off`.
 
 ## File Structure
 
-Before defining tasks, map out which files will be created or modified and what each one is responsible for. This is where decomposition decisions get locked in.
+Before defining tasks, map out which files will be created or modified and what
+each one is responsible for. This is where decomposition decisions get locked
+in.
 
-- Design units with clear boundaries and well-defined interfaces. Each file should have one clear responsibility.
-- You reason best about code you can hold in context at once, and your edits are more reliable when files are focused. Prefer smaller, focused files over large ones that do too much.
-- Files that change together should live together. Split by responsibility, not by technical layer.
-- In existing codebases, follow established patterns. If the codebase uses large files, don't unilaterally restructure - but if a file you're modifying has grown unwieldy, including a split in the plan is reasonable.
+- Design units with clear boundaries and well-defined interfaces. Each file
+  should have one clear responsibility.
+- You reason best about code you can hold in context at once, and your edits are
+  more reliable when files are focused. Prefer smaller, focused files over large
+  ones that do too much.
+- Files that change together should live together. Split by responsibility, not
+  by technical layer.
+- In existing codebases, follow established patterns. If the codebase uses large
+  files, don't unilaterally restructure - but if a file you're modifying has
+  grown unwieldy, including a split in the plan is reasonable.
 
-This structure informs the task decomposition. Each task should produce self-contained changes that make sense independently.
+This structure informs the task decomposition. Each task should produce
+self-contained changes that make sense independently.
 
-**Walking skeleton:** for a greenfield system, Task 1 builds the thinnest end-to-end path through every layer, with its test, before any layer is fleshed out.
+**Walking skeleton:** for a greenfield system, Task 1 builds the thinnest
+end-to-end path through every layer, with its test, before any layer is fleshed
+out.
 
 ## Task Right-Sizing
 
@@ -150,7 +178,8 @@ Task N contains the verifying step. When the spec's riskiest assumption reads
 
 Codex plans also carry `Host: codex` and `Routing policy: codex-v4` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
-names the native pair: `**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
+names the native pair:
+`**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
 That pair runs the main session for the whole plan. A subagent plan names
 `codex gpt-6.1-sol / high`; an inline plan names the execution tier at its
 highest weighted routing score. `scripts/plan-lint` warns on any other pair,
@@ -161,8 +190,8 @@ and errors on an inline pair below that score.
 `dforge settings in force (…)`. With no such line in context,
 run `scripts/dforge-config workflow` before you choose the Execution line
 or ask the strategy question; it prints nothing when both are at their
-defaults. A key the line does not name is at its default, and your human partner's
-own instructions outrank a setting.
+defaults. A key the line does not name is at its default, and your human
+partner's own instructions outrank a setting.
 
 **Choosing the Execution line.** The plan decides its execution mode:
 
@@ -437,37 +466,54 @@ task citing a row no register holds.
 
 ## No Placeholders
 
-Every step must contain the actual content an engineer needs. These are **plan failures** — never write them:
+Every step must contain the actual content an engineer needs. These are
+**plan failures** — never write them:
 - "TBD", "TODO", "implement later", "fill in details"
 - "Add appropriate error handling" / "add validation" / "handle edge cases"
 - "Write tests for the above" (without actual test code)
-- "Similar to Task N" (repeat the code — the engineer may be reading tasks out of order)
-- Steps that describe what to do without showing how (code blocks required for code steps)
+- "Similar to Task N" (repeat the code — the engineer may be reading tasks out
+  of order)
+- Steps that describe what to do without showing how (code blocks required for
+  code steps)
 - References to types, functions, or methods not defined in any task
 
 ## Self-Review
 
-After writing the complete plan, look at the spec with fresh eyes and check the plan against it. This round is required, and it is yours: run the checklist once, never through a subagent. The plan review under Lint and Review comes after it and does not replace it.
+After writing the complete plan, look at the spec with fresh eyes and check the
+plan against it. This round is required, and it is yours: run the checklist
+once, never through a subagent. The plan review under Lint and Review comes
+after it and does not replace it.
 
-**1. Spec coverage:** Skim each section/requirement in the spec. Can you point to a task that implements it? List any gaps.
+**1. Spec coverage:** Skim each section/requirement in the spec. Can you point
+to a task that implements it? List any gaps.
 
-**2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
+**2. Placeholder scan:** Search your plan for red flags — any of the patterns
+from the "No Placeholders" section above. Fix them.
 
-**3. Contracts:** Every cross-task name appears in Contracts, and every task uses it exactly as stated there. A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
+**3. Contracts:** Every cross-task name appears in Contracts, and every task
+uses it exactly as stated there. A function called `clearLayers()` in Task 3 but
+`clearFullLayers()` in Task 7 is a bug.
 
-**3a. Waves (waves plans only):** Every `**Depends on:**` line names every task whose output the task consumes, including through Contracts; a missing dependency is the one waves error `plan-lint` cannot see.
+**3a. Waves (waves plans only):** Every `**Depends on:**` line names every task
+whose output the task consumes, including through Contracts; a missing
+dependency is the one waves error `plan-lint` cannot see.
 
 **4. Lint:** Run the checker under Lint and Review.
 
-If you find issues, fix them inline. If you find a spec requirement with no task, add the task. Once `plan-lint` reports `0 errors`, post `Self-review (round 1 of 1):` with one line per item (clean, or what you fixed) before the first plan-review round. Do not re-review after fixing, and fixes a plan-review round asks for do not start another round. A revision your human partner asks for gets one new round.
+If you find issues, fix them inline. If you find a spec requirement with no
+task, add the task. Once `plan-lint` reports `0 errors`, post
+`Self-review (round 1 of 1):` with one line per item (clean, or what you fixed)
+before the first plan-review round. Do not re-review after fixing, and fixes a
+plan-review round asks for do not start another round.
+A revision your human partner asks for gets one new round.
 
 ## Lint and Review
 
-1. **Lint.** Run `scripts/plan-lint PLAN_FILE` (see using-dforge §Session Budget)
-   until it reports `0 errors`. Fix each
-   WARN, or explain it in one line of the plan's Assumptions. The checker
-   covers the header sections, the task headings and index, the Execution
-   line, placeholders, and every task's assignment lines.
+1. **Lint.** Run `scripts/plan-lint PLAN_FILE` (see
+   using-dforge §Session Budget) until it reports `0 errors`. Fix each WARN, or
+   explain it in one line of the plan's Assumptions. The checker covers the
+   header sections, the task headings and index, the Execution line,
+   placeholders, and every task's assignment lines.
 2. **Review.** Write the lint output to the plan's workspace:
    `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
    `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
@@ -504,8 +550,8 @@ If you find issues, fix them inline. If you find a spec requirement with no task
      `<workspace>/plan-review-round-1.md`, and say why. Never run the Codex seat
      twice in one round.
    - **`reason=codex-off`** (round 1 while the gate has not opened the review
-     surface). No Codex seat runs. The `primary` is
-     `dforge:judge-opus`. Dispatch it with the full-plan template, save its reply to
+     surface). No Codex seat runs. The `primary` is `dforge:judge-opus`.
+     Dispatch it with the full-plan template, save its reply to
      `<workspace>/plan-review-round-1.md`, and say `codex off — <reason>`,
      quoting the gate line's `reason` (`untrusted` when it printed
      `usable=true`).
