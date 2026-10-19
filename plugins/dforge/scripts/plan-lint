@@ -124,10 +124,12 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
   plan_key=$(dforge_name_key "$plan_rel")
   : > "$TMP/reg-ids"
   : > "$TMP/reg-open"
+  # reg-open holds the rows split on \037, not a tab: `read` collapses runs of
+  # a whitespace IFS, so an empty cell would shift every later cell left.
   while IFS= read -r reg_file; do
     [ -n "$reg_file" ] || continue
     register_rows "$reg_file" | cut -f1 >> "$TMP/reg-ids"
-    register_open "$reg_file" >> "$TMP/reg-open"
+    register_open "$reg_file" | tr '\t' '\037' >> "$TMP/reg-open"
   done < <(register_for_spec "$root" "${reg_specs[@]}")
 
   if [ -s "$TMP/reg-ids" ]; then
@@ -143,7 +145,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
     [ -n "$cited" ] \
       || say WARN header "a register covers this plan's spec but no task carries an **Items:** line"
 
-    while IFS=$'\t' read -r rid ritem rassigned _ _ _; do
+    while IFS=$'\037' read -r rid ritem rassigned _ _ _; do
       [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || continue
       grep -qx "$rid" <<<"$cited" \
         || say ERROR header "register row #$rid is assigned to this plan but no task cites it"
@@ -156,7 +158,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
 
     if grep -qE "$SEP"'last[ \t]*$' <<<"$program"; then
       others=""
-      while IFS=$'\t' read -r rid _ rassigned _; do
+      while IFS=$'\037' read -r rid _ rassigned _; do
         [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }#$rid"
       done < "$TMP/reg-open"
       [ -z "$others" ] \

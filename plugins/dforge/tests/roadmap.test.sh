@@ -231,5 +231,18 @@ check "roadmap_unresolved: the milestone register under the other prefix is not 
   "$(HOME=$SH roadmap_unresolved "$SR" docs/superpowers/registers/m9.md | cut -f1,2 | tr '\n' '|')" \
   "$(printf 'docs/superpowers/registers/m9.md\t1|docs/dforge/registers/m1.md\t2|')"
 
+# --- an empty cell keeps its place ---
+# Tab-split reads collapse an empty cell, which shifts every later cell left:
+# the state would read as the note, and an epic's spec as its Item.
+printf '# Gift design\n' > "$D/specs/2026-10-09-gift-design.md"
+GIFT=docs/dforge/specs/2026-10-09-gift-design.md
+register "$D/registers/gift.md" "$GIFT" '| 1 | Wrap |  | - | open | - |'
+register "$D/registers/m5.md" "$GIFT" \
+  '| 1 |  | - | - | open | - |' \
+  "| 2 |  | $GIFT | - | done | - |"
+check "roadmap_unresolved: an empty cell keeps its place" \
+  "$(roadmap_unresolved "$ROOT" docs/dforge/registers/m5.md | tr '\t' ',' | tr '\n' '|')" \
+  "docs/dforge/registers/m5.md,1,,open,-|docs/dforge/registers/gift.md,1,Wrap,open,-|"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

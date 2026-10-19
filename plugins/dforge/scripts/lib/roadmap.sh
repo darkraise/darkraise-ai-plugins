@@ -60,6 +60,13 @@ roadmap_row() {
   return 0
 }
 
+# _roadmap_cells — tab-separated rows on stdin, split on \037 instead: `read`
+# collapses runs of a whitespace IFS, so an empty cell would shift every later
+# cell left. Read the result with IFS=$'\037'.
+_roadmap_cells() {
+  tr '\t' '\037'
+}
+
 # roadmap_unresolved ROOT REGISTER — every unresolved row below a milestone,
 # one per line: "<register-rel>\t<id>\t<item>\t<state>\t<assigned>". First the
 # milestone register's own rows, then the rows of every register covering a
@@ -67,13 +74,13 @@ roadmap_row() {
 # register is still open is reported through the latter, which is how a
 # premature "done" is caught.
 roadmap_unresolved() {
-  local root=$1 reg=$2 path rel id item assigned acceptance state note a f seen=""
+  local root=$1 reg=$2 path rel key id item assigned acceptance state note a f seen=""
   path=$(dforge_resolve "$reg" "$root")
   [ -f "$path" ] || return 0
-  while IFS=$'\t' read -r id item assigned acceptance state note; do
+  while IFS=$'\037' read -r id item assigned acceptance state note; do
     printf '%s\t%s\t%s\t%s\t%s\n' "$reg" "$id" "$item" "$state" "${assigned:--}"
-  done < <(register_open "$path")
-  while IFS=$'\t' read -r id item assigned acceptance state note; do
+  done < <(register_open "$path" | _roadmap_cells)
+  while IFS=$'\037' read -r id item assigned acceptance state note; do
     [ "$state" = "n/a" ] || [ "$state" = "deferred" ] && continue
     a=${assigned#\`}
     a=${a%\`}
@@ -83,13 +90,14 @@ roadmap_unresolved() {
       [ -n "$f" ] || continue
       rel=$(dforge_name "$f" "$root")
       [ "$(dforge_name_key "$rel")" != "$(dforge_name_key "$reg")" ] || continue
-      case " $seen " in *" $rel "*) continue ;; esac
-      seen="$seen $rel"
-      while IFS=$'\t' read -r rid ritem rassigned racc rstate rnote; do
+      key=$(dforge_name_key "$rel")
+      case " $seen " in *" $key "*) continue ;; esac
+      seen="$seen $key"
+      while IFS=$'\037' read -r rid ritem rassigned racc rstate rnote; do
         printf '%s\t%s\t%s\t%s\t%s\n' "$rel" "$rid" "$ritem" "$rstate" "${rassigned:--}"
-      done < <(register_open "$f")
+      done < <(register_open "$f" | _roadmap_cells)
     done < <(register_for_spec "$root" "$a")
-  done < <(register_rows "$path")
+  done < <(register_rows "$path" | _roadmap_cells)
   return 0
 }
 

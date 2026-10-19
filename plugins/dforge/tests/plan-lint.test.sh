@@ -661,6 +661,27 @@ OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/pla
 has "plan-lint: 'last' leaves out this plan's row under the other prefix" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
+# An empty Item cell keeps its place: the Assigned cell is still read as Assigned.
+cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
+# R — item register
+
+**Source:** review 2026-09-20
+**Covers:** docs/superpowers/specs/s-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 |  | docs/superpowers/plans/p.md | - | planned | - |
+| 2 | Someone else's | C2 | - | planned | - |
+REG
+write_plan "next: Two" ""
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: an empty Item cell: the row is still this plan's" "$OUT" \
+  "ERROR header: register row #1 is assigned to this plan but no task cites it"
+write_plan "last" "**Items:** 1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: an empty Item cell: 'last' names only the other row" "$OUT" \
+  "ERROR header: Program line says 'last' while register rows are open: #2"
+
 # A plan with no covering register lints exactly as it did before.
 rm "$LREPO/docs/dforge/registers/r.md"
 write_plan "last" ""
