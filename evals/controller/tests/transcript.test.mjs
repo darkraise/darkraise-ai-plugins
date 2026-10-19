@@ -141,6 +141,19 @@ test('a ledger check that only redirects stderr, and a write that failed, are no
   assert.deepEqual(m.completed, ['2', '3', '4', '5']);
 });
 
+test('a Bash call that fails after writing the ledger still wrote it; a failed Write did not', () => {
+  const ledger = '/w/.dforge/sdd/p/progress.md';
+  const m = measureTranscript(jsonl([
+    said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [
+      use('b1', 'Bash', { command: "echo 'Task 1: complete (commits a..b)' >> .dforge/sdd/p/progress.md; false" }),
+      use('w1', 'Write', { file_path: ledger, content: 'Task 2: complete (commits c..d)\n' }),
+    ]),
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'b1', is_error: true, content: 'Exit code 1' }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'w1', is_error: true, content: 'EACCES: permission denied' }] } },
+  ]));
+  assert.deepEqual(m.completed, ['1']);
+});
+
 test('ledger complete lines the controller wrote are collected, deferred ones left out', () => {
   const ledger = '/w/.dforge/sdd/p/progress.md';
   const m = measureTranscript(jsonl([

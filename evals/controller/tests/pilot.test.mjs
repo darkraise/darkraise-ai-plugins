@@ -37,7 +37,12 @@ write(join(folder, 'mixed.jsonl'), session(['2026-10-18-six', '2026-10-18-seven'
 write(join(folder, 'eight.jsonl'), session(['2026-10-18-eight'], SONNET, 'high', [1, 2]));
 // Task 9 is quoted inside a fence and is not one of the plan's tasks.
 const PLAN_TEXT = '# P\n\n### Task 1: A\n\n````markdown\n```js\n### Task 9: quoted\n```\n````\n\n### Task 2: B\n';
-for (const slug of ['one', 'two', 'three', 'four', 'five', 'six']) write(join(repo, `docs/plans/2026-10-18-${slug}.md`), PLAN_TEXT);
+// Ten ran its per-task script through a variable holding the scripts directory.
+write(join(folder, 'ten.jsonl'), session(['2026-10-18-ten'], SONNET, 'high', [1, 2]).replace('bash /p/scripts/task-brief', 'S=/p/scripts; bash $S/task-brief'));
+// Eleven's subagent ran on a model the price table does not list.
+write(join(folder, 'eleven.jsonl'), session(['2026-10-18-eleven'], SONNET, 'high', [1, 2]));
+write(join(folder, 'eleven/subagents/agent-1.jsonl'), `${JSON.stringify(said('h1', 'claude-haiku-5-5', 'high', []))}\n`);
+for (const slug of ['one', 'two', 'three', 'four', 'five', 'six', 'ten', 'eleven']) write(join(repo, `docs/plans/2026-10-18-${slug}.md`), PLAN_TEXT);
 // A plan kept outside the checkout, as a darkmem-mapped repository keeps its plans.
 const mirrored = join(top, 'mirror/2026-10-18-nine.md');
 write(mirrored, PLAN_TEXT);
@@ -85,6 +90,20 @@ test('pilot-report reads a plan given by an absolute path from disk', () => {
   const r = report([`${mirrored}\tapp\tsonnet@high\tplan kept outside the checkout`]);
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(r.stdout.trim().split('\n')[1].split('\t').slice(0, 4), ['2026-10-18-nine', 'sonnet@high', 'ok', 'yes']);
+});
+
+test('pilot-report finds a session that runs a per-task script by any path', () => {
+  const r = report(['docs/plans/2026-10-18-ten.md\tapp\tsonnet@high\t-']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.trim().split('\n')[1].split('\t').slice(0, 5), ['2026-10-18-ten', 'sonnet@high', 'ok', 'yes', '1']);
+});
+
+test('pilot-report marks a plan unpriced when a model it ran on has no price', () => {
+  const r = report(['docs/plans/2026-10-18-eleven.md\tapp\tsonnet@high\t-']);
+  assert.equal(r.status, 0, r.stderr);
+  const row = r.stdout.trim().split('\n')[1].split('\t');
+  assert.deepEqual([row[0], row[2], row.at(-1)], ['2026-10-18-eleven', 'unpriced', 'claude-haiku-5-5']);
+  assert.match(r.stdout, /0 of 1 plans usable/);
 });
 
 test('pilot-report refuses an arm the pilot does not run', () => {

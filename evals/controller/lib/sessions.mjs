@@ -12,9 +12,10 @@ export const REPOS = process.env.CONTROLLER_EVAL_REPOS ?? fileURLToPath(new URL(
 
 // Every per-task script takes the plan as its first argument, often as a
 // variable the same command assigned (PLAN=docs/…/x.md … task-brief "$PLAN").
-// The scripts/ prefix keeps a search for the script name (rg task-brief …) from
+// The script is run by a path (scripts/task-brief, $S/task-brief), so the
+// required slash keeps a search for the bare name (rg task-brief …) from
 // counting as running it, and the optional quote admits a quoted script path.
-const PER_TASK = /scripts\/(?:task-brief|review-route|review-package)['"]?[ \t]+(['"]?[^\s;&|]+)/g;
+const PER_TASK = /\/(?:task-brief|review-route|review-package)['"]?[ \t]+(['"]?[^\s;&|]+)/g;
 const ASSIGN = /\b([A-Za-z_]\w*)=(['"]?)([^\s'";&|]+)\2/g;
 
 function planArgs(cmd) {
