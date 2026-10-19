@@ -124,6 +124,8 @@ function readJson(file) {
   }
 }
 
+const notObject = value => value === null || typeof value !== "object" || Array.isArray(value);
+
 function writeJson(file, data) {
   const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
   fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`);
@@ -164,6 +166,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   // it still is: under the old entry an earlier line would move there.
   const pending = [];
   let merged;
+  const badConfigs = new Set();
   const view = (...parts) => {
     const target = path.join(newHome, ...parts);
     const hit = pending.find(([to]) => target === to || target.startsWith(`${to}${path.sep}`));
@@ -183,9 +186,10 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       if (entry.name === "config.json" && entry.isFile() && fs.existsSync(to)) {
         const old = readJson(from);
         const next = readJson(to);
-        const notObject = [[from, old], [to, next]].find(([, value]) => value === null || typeof value !== "object" || Array.isArray(value));
-        if (notObject) {
-          refuse(`${notObject[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+        const bad = [[from, old], [to, next]].find(([, value]) => notObject(value));
+        if (bad) {
+          badConfigs.add(bad[0]);
+          refuse(`${bad[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
           continue;
         }
         const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
@@ -261,8 +265,12 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   const oldConfig = readJson(path.join(oldHome, "config.json"));
   if (oldConfig?.darkmem && typeof oldConfig.darkmem === "object") {
     const file = path.join(newHome, "config.json");
-    const config = (dryRun && merged) ? { ...merged } : readJson(view("config.json")) ?? {};
-    if (config.darkmem === undefined) {
+    const source = view("config.json");
+    const current = (dryRun && merged) ? { ...merged } : readJson(source);
+    const config = current ?? {};
+    if (current !== undefined && notObject(current)) {
+      if (!badConfigs.has(source)) refuse(`${source} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+    } else if (config.darkmem === undefined) {
       config.darkmem = oldConfig.darkmem;
       if (!dryRun) {
         fs.mkdirSync(newHome, { recursive: true });

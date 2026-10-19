@@ -404,3 +404,31 @@ test("migrateHome refuses a config.json that is not a JSON object and keeps both
   assert.deepEqual(JSON.parse(read(forge)), ["x"]);
   assert.deepEqual(JSON.parse(read(dforge)), { layout: "auto" });
 });
+
+test("migrateHome refuses a null config.json once and skips the darkmem copy", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge", "config.json");
+  const dforge = path.join(home, ".dforge", "config.json");
+  write(forge, "{}\n");
+  write(dforge, "null\n");
+  write(path.join(home, ".dr-superpowers", "config.json"), JSON.stringify({ darkmem: { project: "p" } }));
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  const real = migrateHome({ HOME: home });
+  for (const { lines, refused } of [dry, real]) {
+    assert.equal(refused, 1, lines.join("\n"));
+    assert.equal(lines.filter(line => line.startsWith("refused: ") && line.includes(dforge)).length, 1, lines.join("\n"));
+    assert.ok(!lines.some(line => line.startsWith("copied the darkmem mapping") || line.startsWith("would copy the darkmem mapping")), lines.join("\n"));
+  }
+  assert.equal(JSON.parse(read(dforge)), null);
+  assert.equal(fs.existsSync(forge), true);
+});
+
+test("migrateHome refuses a string config.json for the darkmem copy without throwing", () => {
+  const home = scratch("dms-home-");
+  const dforge = path.join(home, ".dforge", "config.json");
+  write(dforge, JSON.stringify("x"));
+  write(path.join(home, ".dr-superpowers", "config.json"), JSON.stringify({ darkmem: { project: "p" } }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 1, lines.join("\n"));
+  assert.equal(JSON.parse(read(dforge)), "x");
+});
