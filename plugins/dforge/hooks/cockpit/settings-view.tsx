@@ -1,4 +1,4 @@
-import type { EngineInterface, RenderChildren } from 'claude-code'
+import type { EngineInterface, RenderChildren, RenderElement } from 'claude-code'
 
 import type { SettingValue, ViewRow } from './config'
 
@@ -51,7 +51,7 @@ export type SettingsActions = {
 }
 
 /** The cockpit's settings: a tab for each group, the open group's rows, and the footer. */
-export function drawSettings(table: Elements, model: SettingsModel, act: SettingsActions): RenderChildren {
+export function drawSettings(table: Elements, model: SettingsModel, act: SettingsActions): RenderElement {
   const { Box, Button, Text } = table
   const Input = 'Input' in table ? table.Input : undefined
   const Select = model.isDesktop && 'Select' in table ? table.Select : undefined

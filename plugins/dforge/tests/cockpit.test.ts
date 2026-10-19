@@ -4387,7 +4387,7 @@ describe('auto run', () => {
     signedIn(on, files)
     await $.session.start(START)
     await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await $.session.end({ reason: 'other', sessionId: 'sess-1' })
+    await $.session.end({ reason: 'other', sessionId: 'sess-1', resume: { id: 'sess-1' } })
     await clock.advance(300_000)
     expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
     expect(w.prompts).toEqual([])
@@ -4665,7 +4665,7 @@ describe('auto run in the pane', () => {
   })
 
   test('hides Resume while a run is active and brings it back when the run stops', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), '/home/me/code/shop/.dforge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), '/home/me/code/shop/.dforge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const w: World = { ...SIGNED_IN, files, autoRuns: [], autoFile: files[AUTO] }
     world(on, w)
     signedIn(on, files)

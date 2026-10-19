@@ -605,7 +605,7 @@ export const register: Register = on => {
     const list = await read($, spawns)
     const spawn = list.find(one => one.agentId === agentId)
     if (spawn === undefined) return done
-    const outcome = e.reason === 'answer' ? 'done' : 'failed'
+    const outcome: 'done' | 'failed' = e.reason === 'answer' ? 'done' : 'failed'
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true, outcome } : one)))
     for (const [id, wait] of [...S.waits]) if (wait.agentId === agentId) await endWait($, id, '⏹ Agent ended')
     await syncTicker($)
