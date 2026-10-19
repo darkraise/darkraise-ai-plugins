@@ -96,8 +96,9 @@ export async function startStub({ pageSize, transformContent, onRequest } = {}) 
       if (!doc) return send(404, { detail: `no document with id '${m[1]}'` });
       const limit = limitOf(url, 50);
       const before = q.get("before") === null ? Infinity : Number(q.get("before"));
-      const items = (doc.revisions ?? []).filter(r => r.id < before).reverse().slice(0, limit);
-      return send(200, { document_id: doc.id, items, next_before: items.length === limit ? items.at(-1).id : null });
+      const all = (doc.revisions ?? []).filter(r => r.id < before).reverse();
+      const items = all.slice(0, limit);
+      return send(200, { document_id: doc.id, items, next_before: all.length > limit ? items.at(-1).id : null });
     }
     if (method === "PATCH" && (m = p.match(/^\/api\/v1\/documents\/([^/]+)$/))) {
       const doc = [...db.documents.values()].find(d => d.id === m[1]);
@@ -178,7 +179,7 @@ export async function startStub({ pageSize, transformContent, onRequest } = {}) 
       const all = db.workstreams.filter(w => w.project === q.get("project") && (!state || w.state === state)).reverse();
       const start = before ? all.findIndex(w => w.id === before) + 1 : 0;
       const items = all.slice(start, start + limit);
-      return send(200, { items: items.map(wsOut), next_before: items.length === limit ? items.at(-1).id : null });
+      return send(200, { items: items.map(wsOut), next_before: start + limit < all.length ? items.at(-1).id : null });
     }
     if (method === "GET" && (m = p.match(/^\/api\/v1\/worklog\/workstreams\/([^/]+)\/entries$/))) {
       const ws = db.workstreams.find(w => w.id === m[1]);

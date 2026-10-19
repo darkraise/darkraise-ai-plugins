@@ -78,26 +78,35 @@ async function pullDocument({ cfg, client, roots, state, persist, report }, item
 }
 
 // A synced document darkmem no longer holds was archived or deleted
-// elsewhere: an unchanged local copy goes with it, an edited one stays.
+// elsewhere: an unchanged local copy goes with it, an edited one stays. A
+// name that case-folds to a uri darkmem still files, and reaches the same
+// file, is that document on a case-insensitive file system, so it is never
+// removed. A copy that cannot be read or removed is one item's failure.
 function removeVanished({ roots, state, persist, report }, filed) {
   for (const uri of Object.keys(state.documents).sort()) {
     if (filed.has(uri) || uriFamily(uri) !== "documents" || isArchiveUri(uri)) continue;
     const file = uriToLocal(roots, uri);
     if (!file) continue;
-    const twin = Object.keys(state.documents).find(other => other !== uri && filed.has(other) && !isArchiveUri(other) && other.toLowerCase() === uri.toLowerCase());
+    const twin = [...filed].find(other => other !== uri && !isArchiveUri(other) && other.toLowerCase() === uri.toLowerCase());
     if (twin && sameFile(file, uriToLocal(roots, twin))) {
       delete state.documents[uri];
       persist();
       continue;
     }
-    const local = localHash(file);
-    if (local !== null && local !== state.documents[uri]) {
-      report.conflicts.push(`${uri}: archived or deleted on darkmem, and changed locally; the local file stays — push it under a new name, or delete it`);
+    try {
+      // Hashed directly before the removal, with nothing in between.
+      const local = localHash(file);
+      if (local !== null && local !== state.documents[uri]) {
+        report.conflicts.push(`${uri}: archived or deleted on darkmem, and changed locally; the local file stays — push it under a new name, or delete it`);
+        continue;
+      }
+      if (local !== null) {
+        fs.rmSync(file);
+        report.counts.removed = (report.counts.removed ?? 0) + 1;
+      }
+    } catch (error) {
+      report.failures.push(`${uri}: archived or deleted on darkmem, and the local copy could not be checked or removed (${error.code}); it stays`);
       continue;
-    }
-    if (local !== null) {
-      fs.rmSync(file);
-      report.counts.removed = (report.counts.removed ?? 0) + 1;
     }
     delete state.documents[uri];
     persist();

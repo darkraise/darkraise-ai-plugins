@@ -396,3 +396,67 @@ test("a case-only rename on darkmem keeps the file a case-insensitive file syste
   assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
   assert.deepEqual(Object.keys(s.state().documents), ["dforge/A.md"]);
 });
+
+test("a case-only rename on darkmem that also edits it keeps the file a case-insensitive file system shares", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  await s.pull();
+  const id = s.stub.db.documents.get("proj\u0000dforge/a.md").id;
+  await s.seed.moveDocument(id, { uri: "dforge/A.md" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/A.md", content: "A edited\n", expectedHash: sha("a\n") });
+  // A hard link stands in for a case-insensitive file system: both names reach one file.
+  fs.linkSync(path.join(s.docsRoot, "a.md"), path.join(s.docsRoot, "A.md"));
+  const result = await s.pull();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^conflict: dforge\/A\.md: changed locally and on darkmem; move the local file aside/m);
+  assert.doesNotMatch(result.stdout, /removed/);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
+  assert.deepEqual(Object.keys(s.state().documents), []);
+});
+
+test("a vanished document whose local copy cannot be read is one failure, and the pull goes on", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/b.md", content: "b\n" });
+  assert.equal((await s.pull()).code, 0);
+  const id = uri => s.stub.db.documents.get(`proj\u0000${uri}`).id;
+  await s.seed.moveDocument(id("dforge/a.md"), { uri: "dforge/archive/20261013T091502Z/a.md" });
+  await s.seed.moveDocument(id("dforge/b.md"), { uri: "dforge/archive/20261013T091502Z/b.md" });
+  fs.rmSync(path.join(s.docsRoot, "a.md"));
+  fs.mkdirSync(path.join(s.docsRoot, "a.md", "inner"), { recursive: true });
+  const result = await s.pull();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^failed: dforge\/a\.md: archived or deleted on darkmem, and the local copy could not be checked or removed \(\w+\); it stays$/m);
+  assert.match(result.stdout, /darkmem-sync pull: 0 documents, 0 ledgers, 0 checkpoints, 1 removed; 0 conflicts, 1 failures/);
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "b.md")), false, "the next vanished document is still removed");
+  assert.ok(fs.statSync(path.join(s.docsRoot, "a.md")).isDirectory());
+  assert.deepEqual(Object.keys(s.state().documents), ["dforge/a.md"]);
+});
+
+test("a synced archive uri is never removed, even once darkmem no longer files it", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  assert.equal((await s.pull()).code, 0);
+  const archived = "dforge/archive/20261013T091502Z/old.md";
+  const file = path.join(s.docsRoot, "archive", "20261013T091502Z", "old.md");
+  write(file, "old\n");
+  const state = s.state();
+  state.documents[archived] = sha("old\n");
+  fs.writeFileSync(path.join(s.mirror, ".sync-state.json"), JSON.stringify(state));
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /removed/);
+  assert.equal(read(file), "old\n");
+  assert.equal(s.state().documents[archived], sha("old\n"));
+});
+
+test("a workstream list whose last page is exactly full ends without an empty page", async t => {
+  const s = await setup(t, { pageSize: 2 });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "two\n" }] });
+  assert.equal((await s.pull()).code, 0);
+  const lists = s.stub.db.requests.filter(r => r.path === "/api/v1/worklog/workstreams");
+  assert.equal(lists.length, 1, "two open workstreams fill one page of two, and no empty page follows");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p2", "progress.md")), "two\n");
+});
