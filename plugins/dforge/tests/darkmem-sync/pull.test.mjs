@@ -282,6 +282,19 @@ test("an old state file's single checkpointAt gates a pull, which then records t
   assert.deepEqual(s.state().checkpointAt, { "*": old, p2: s.stub.db.workstreams[1].entries[0].created_at });
 });
 
+test("a checkpoint from a workstream key the directory rule refuses is pulled once and the state stays loadable", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
+  const first = await s.pull();
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  assert.match(first.stdout, / 1 checkpoints;/);
+  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# Foo\n");
+  const second = await s.pull();
+  assert.equal(second.code, 0, second.stdout + second.stderr);
+  assert.match(second.stdout, / 0 checkpoints;/);
+  assert.doesNotMatch(second.stdout + second.stderr, /valid sync state/);
+});
+
 test("pull refuses uris Windows cannot hold, and writes none of a set that differ only in case", async t => {
   const s = await setup(t);
   for (const uri of ["dforge/notes/a:b.md", "dforge/notes/CON.md", "dforge/handoff/a:b.md", "dforge/A.md", "dforge/a.md", "dforge/ok.md"]) {

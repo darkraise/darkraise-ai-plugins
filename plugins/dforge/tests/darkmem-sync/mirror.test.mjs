@@ -244,7 +244,7 @@ test("an unreadable or malformed state file is an error rather than a fresh star
     JSON.stringify({ ...good, pendingLinks: "dforge/handoff/p1.md" }),
     JSON.stringify({ ...good, pendingLinks: [1] }),
     JSON.stringify({ ...good, checkpointAt: 5 }),
-    JSON.stringify({ ...good, checkpointAt: { "../x": "2026-09-24T10:00:00.000Z" } }),
+    JSON.stringify({ ...good, checkpointAt: { "": "2026-09-24T10:00:00.000Z" } }),
     JSON.stringify({ ...good, checkpointAt: { p1: "not a date" } }),
   ]) {
     fs.writeFileSync(file, bad);
@@ -275,6 +275,16 @@ test("checkpointAt is kept per workstream; an old single value stands for every 
   recordCheckpointAt(fresh, "constructor", old);
   assert.equal(checkpointAtOf(fresh, "toString"), null, "the per-workstream record has no prototype");
   assert.equal(checkpointAtOf(fresh, "constructor"), old);
+});
+
+test("a checkpointAt key is only looked up, so any workstream key loads, including one with a slash", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  const at = "2026-09-24T10:00:00.000Z";
+  fs.writeFileSync(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: { "feature/foo": at, "../x": at }, conflicts: [] }));
+  const state = loadState(file);
+  assert.equal(checkpointAtOf(state, "feature/foo"), at);
+  assert.equal(newestCheckpointAt(state), at);
 });
 
 test("localChanges names new, modified, unpushed, rewritten, unsupported and checkpoint changes", () => {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
-import { emptyState, ledgerPieces, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
+import { emptyState, ledgerPieces, loadState, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import { checkProgressTargets, gatherLocalProgress, progressToLocal } from "../../scripts/lib/darkmem-progress-move.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
@@ -176,6 +176,17 @@ test("a latest.md that names no plan is copied unsent, behind darkmem's newest c
   assert.equal(s.state().checkpoint, sha("a note with no State section\n"));
   assert.deepEqual(s.state().checkpointAt, { p9: workstream.last_entry_at });
   assert.equal(s.stub.db.workstreams.flatMap(w => w.entries).filter(e => e.kind === "checkpoint").length, 1);
+});
+
+test("a copy dated at a checkpoint of a workstream key with a slash leaves a loadable state", async t => {
+  const s = await setup(t, "darkmem");
+  await s.seed.append({ project: "proj", workstream: "feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
+  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "a note with no State section\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotThrow(() => loadState(path.join(s.mirror, ".sync-state.json")));
+  const pull = await run(["pull"], { cwd: s.repo, env: s.env });
+  assert.equal(pull.code, 0, pull.stdout + pull.stderr);
 });
 
 test("a ledger's workstream properties read its plan in its own checkout", async t => {

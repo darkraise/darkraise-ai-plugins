@@ -169,14 +169,15 @@ const isLedgerRecord = (slug, record) => validKey(slug) && record !== null && ty
 // synced, per workstream key, so a push's duplicate lookup starts from its own
 // workstream's. A state file written before holds one value (a string, or
 // null); it stands for every workstream until that one is next written, kept
-// under "*", which no workstream key can spell.
+// under "*", which no workstream key can spell. A key here is only looked up,
+// never a path, so it may be any darkmem workstream key, "feature/foo" included.
 const EVERY_WORKSTREAM = "*";
 const isStamp = value => typeof value === "string" && !Number.isNaN(Date.parse(value));
 
 // The loaded checkpointAt, or undefined when it is malformed.
 function checkpointAtRecord(value) {
   if (value === null || isStamp(value)) return value;
-  return dictOf(value, (key, at) => (key === EVERY_WORKSTREAM || validKey(key)) && isStamp(at)) ?? undefined;
+  return dictOf(value, (key, at) => key !== "" && isStamp(at)) ?? undefined;
 }
 
 export function checkpointAtOf(state, workstream) {
