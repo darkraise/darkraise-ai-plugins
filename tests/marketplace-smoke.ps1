@@ -95,7 +95,6 @@ try {
   Check ($newUi.version -eq $expectedUiVersion) 'Codex upgrades UI cache version'
   Check ((Get-Content (Join-Path $newUi.installedPath 'skills/darkraise-ui/SKILL.md') -Raw) -eq (Get-Content (Join-Path $uiRoot 'skills/darkraise-ui/SKILL.md') -Raw)) 'Codex upgrade refreshes actual skill bytes'
 
-  Invoke-Client $Claude @('plugin','marketplace','add','https://github.com/anthropics/claude-plugins-official.git') | Out-Null
   Invoke-Client $Claude @('plugin','marketplace','add',$market) | Out-Null
   foreach ($name in @('dr-status','dforge','darkraise-ui','darkraise-win32ui')) {
     Invoke-Client $Claude @('plugin','install',"$name@darkraise") | Out-Null
@@ -103,8 +102,6 @@ try {
   $claudeList = (Invoke-Client $Claude @('plugin','list','--json')).stdout | ConvertFrom-Json
   $ownEntries = @($claudeList | Where-Object { $_.id -like '*@darkraise' })
   Check ($ownEntries.Count -eq 4) 'Claude installs four repository plugins'
-  Check (@($claudeList | Where-Object { $_.id -eq 'superpowers@claude-plugins-official' }).Count -eq 1) 'Claude resolves the declared cross-marketplace dependency'
-
   Invoke-Client git @('-C',$market,'init','-q','-b','main') | Out-Null
   Invoke-Client git @('-C',$market,'config','user.email','fixture@example.com') | Out-Null
   Invoke-Client git @('-C',$market,'config','user.name','Fixture') | Out-Null

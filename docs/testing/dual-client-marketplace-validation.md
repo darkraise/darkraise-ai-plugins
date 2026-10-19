@@ -12,18 +12,15 @@ The isolated real-client smoke harness is `tests/marketplace-smoke.ps1`. Every
 CLI invocation has a 60-second limit, captures its process, and terminates its
 tree on timeout. All test profiles/caches live in a generated fixture directory
 under the ignored `.superpowers` workspace and are removed after the run.
-The harness downloads the actual official Claude marketplace and Superpowers
-dependency over HTTPS; no paid model or Telegram calls are made.
+No paid model or Telegram calls are made.
 
 Verified outcomes:
 
 - Codex local-root registration lists exactly `dforge`, `darkraise-ui`,
   and `darkraise-win32ui`, and rejects `dr-status` installation by name.
 - All three Codex plugins install; installed native manifest bytes match source.
-  Superpowers' native manifest explicitly contains `"hooks": {}`.
-- Claude installs all four repository plugins and resolves the declared
-  `superpowers@claude-plugins-official` dependency. Dependency entries are counted
-  separately from the four repository plugins.
+  dforge's native manifest explicitly contains `"hooks": {}`.
+- Claude installs all four repository plugins.
 - Codex upgrades a seeded UI `0.1.0` cache to the version the repository's
   `darkraise-ui` Codex manifest names (`0.2.0` at this run), replacing actual
   skill bytes.

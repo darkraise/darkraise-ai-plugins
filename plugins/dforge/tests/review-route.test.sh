@@ -594,8 +594,10 @@ present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**
 absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
 present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
 present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'
-present "the Claude manifest is 4.1.0" "$P/.claude-plugin/plugin.json" '"version": "4.1.0"'
-present "the Codex manifest is 4.1.0" "$P/.codex-plugin/plugin.json" '"version": "4.1.0"'
+# The version is read from the Claude manifest, so a release bump needs no edit here.
+version=$(sed -nE 's/^[[:space:]]*"version": "([^"]+)".*/\1/p' "$P/.claude-plugin/plugin.json" | head -n 1)
+check "the Claude manifest names a release version" "$([[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo yes || echo no)" "yes"
+present "the Codex manifest carries the Claude manifest's version" "$P/.codex-plugin/plugin.json" "\"version\": \"$version\""
 present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
 present "approach ranking runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'Dispatch one `dforge:judge-opus` to run the ring'
 present "the budget reference derives the budget" "$P/reference/session-budget.md" 'min(`autoCompactWindow`, model window) × 93% − 140,000'
