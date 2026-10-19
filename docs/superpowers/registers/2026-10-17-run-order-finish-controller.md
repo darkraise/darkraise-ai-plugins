@@ -1,7 +1,7 @@
 # Run order, finish, controller and desktop
 
 **Source:** owner request in the 2026-10-17 brainstorming session
-**Covers:** docs/superpowers/specs/2026-10-17-finish-without-wait-design.md, docs/superpowers/specs/2026-10-17-cockpit-native-desktop-design.md
+**Covers:** docs/superpowers/specs/2026-10-17-finish-without-wait-design.md, docs/superpowers/specs/2026-10-17-cockpit-native-desktop-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
@@ -18,12 +18,12 @@
 | 11 | cockpit native desktop: JSX props and RenderChildren accepting false are unchecked by any typecheck (nothing type-checks the mod) | - | - | deferred | type-checking the mod is a separate tooling decision |
 | 12 | cockpit native desktop: no test checks the desktop band's chips row or warning row after they moved to nativeLine | - | - | done | covered in tests/cockpit.test.ts |
 | 13 | cockpit native desktop: drawNativeRow duplicates drawRow's custom-or-label branch and help lines | - | - | done | drawRow and drawNativeRow share customBox, help and defaultLine |
-| 14 | cockpit native desktop: register.tsx decides isDesktop by Svg alone while the settings view also requires Select, so a host with Svg and no Select gets desktop spacing around terminal controls | - | - | deferred | no host surface has Svg without Select (the desktop table carries both), so the case cannot occur or be tested on this build |
+| 14 | cockpit native desktop: register.tsx decides isDesktop by Svg alone while the settings view also requires Select, so a host with Svg and no Select gets desktop spacing around terminal controls | - | - | n/a | triage 2026-10-19, wontfix: Still true at plugins/dforge/hooks/cockpit/register.tsx:685 (`isDesktop = Svg !== undefined`) vs settings-view.tsx:57 (needs Select too), but no host has Svg without Select, so the case cannot occur or be tested. |
 | 15 | cockpit native desktop: the desktop settings test covers a number row only, not free-text, locked or custom rows | - | - | done | covered in tests/cockpit.test.ts |
 | 16 | cockpit native desktop: no agentGroups case with more running spawns than shown, which would exercise the Math.max clamp | - | - | done | covered in tests/cockpit.test.ts |
 | 17 | cockpit native desktop: agentGroups assumes spawns arrive oldest-first; the caller must keep satisfying it | - | - | done | the requirement is stated in agentGroups' doc comment |
-| 18 | cockpit native desktop: an approved subagent call stays under Waiting on you until its call returns | - | - | deferred | the plan's documented out-of-scope limit |
-| 19 | cockpit native desktop: Task 2 recorded no RED run and the plan said main reads 220 tests when it read 219 | - | - | deferred | historical count note, no work owed |
+| 18 | cockpit native desktop: an approved subagent call stays under Waiting on you until its call returns | - | - | n/a | triage 2026-10-19, wontfix: The mod API gives no event when a person answers a permission prompt: register.tsx:521-533 sees only the `ask`, and the wait ends at tool.call return (:655-656) or, for Bash only, at ToolProgress render (:537-539). |
+| 19 | cockpit native desktop: Task 2 recorded no RED run and the plan said main reads 220 tests when it read 219 | - | - | n/a | triage 2026-10-19, obsolete: A historical note on Task 2's missing RED run and a test count; nothing in the current tree to change. |
 | 20 | finish without wait: no test runs scripts/finish-choice directly, so a missing executable bit would go unnoticed | - | - | n/a | every documented call runs it through bash, and 42 of 64 tracked scripts carry no executable bit, so nothing depends on the bit |
 | 21 | finish without wait: spec A6's no once-a-second redraw half has no test; the test harness cannot observe the ticker | - | - | deferred | final-residual ruling PARK: syncTicker reads only activity, shells and spawns, and the structural grep is clean; add a direct test if claude-code/testing exposes pending timers |
 | 22 | finish without wait: finishing Step 3 still lists the branch's upstream as a base source without the local-branch qualifier Step 4 adds, and a remote prefix is ambiguous for local branch names containing a slash | - | - | done | Step 3 now qualifies an upstream base; Step 4 drops a remote prefix only for a configured remote when no local branch has the whole name |

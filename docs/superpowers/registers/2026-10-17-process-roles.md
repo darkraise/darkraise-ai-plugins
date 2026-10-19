@@ -1,7 +1,7 @@
 # Process roles
 
 **Source:** owner request 2026-10-17, "I want all 4", after the official-plugin role comparison
-**Covers:** docs/superpowers/specs/2026-10-17-dr-forge-process-roles-design.md
+**Covers:** docs/superpowers/specs/2026-10-17-dr-forge-process-roles-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|

@@ -458,6 +458,9 @@ manifests and `README.md`.
    `.codex-plugin/plugin.json`, with a README entry for 4.2.0.
 3. Register bookkeeping: every fixed row is `done` (DF 14 `verify`) and each
    bundle row closes; `scripts/register check` passes on all nine registers.
+   That is the installed plugin's script: this repository keeps the
+   `docs/superpowers/` layout, which the in-tree dforge copy resolves to a
+   `docs/dforge/` that does not exist here, so every Covers path fails it.
 
 ## Parallel decomposition
 
@@ -495,8 +498,8 @@ and each Claude plugin, and `claude plugin test plugins/dforge` pass on the
 merged branch.
 A3. [read, high] No row in the nine registers is `deferred` except where a
 later finding of this work adds one; DF 14 is `verify`; each closed-without-
-code row carries its triage note; `scripts/register check` is clean on all
-nine.
+code row carries its triage note; the installed plugin's `scripts/register
+check` is clean on all nine (P8 item 3).
 A4. [test, high] Both dforge manifests read 4.2.0 and the review-route suite
 no longer pins a version.
 A5. [read, medium] `skills/using-dforge/SKILL.md` is at most 5,100 bytes.
