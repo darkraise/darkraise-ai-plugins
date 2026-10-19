@@ -31,9 +31,11 @@ The owner's answers on 2026-10-20.
 The deferred-rows sweep (2026-10-19) left 20 rows `open` and DF 14 in
 `verify`: findings its task and final reviews filed against its own fixes.
 A triage on 2026-10-20 checked each against the current tree. One finding is
-medium (DM 52), the rest low; no finding can lose data. Two row premises were
-wrong: FS 48's test is feasible (the kit's `$.ui.close` takes a person
-origin), and FS 49.b's throw is reachable at exactly 40 links.
+medium (DM 52), the rest low; no finding can lose data. One row premise was
+wrong: FS 49.b's throw is reachable at exactly 40 links. FS 48's premise, that
+the kit cannot raise a person's close, is unsettled: the plugin API omits
+`origin` from `$.ui.close` (`PaneCloseArgs`), while the test kit's `$` is the
+engine's own and is not declared locally; P2 item 1 settles it with a probe.
 
 ## Scope
 
@@ -78,26 +80,34 @@ Line numbers are the triage's; an implementer re-reads the code first.
 Owns `scripts/lib/darkmem-pull.mjs`, `darkmem-sync.mjs`,
 `darkmem-reconcile.mjs`, `darkmem-progress-move.mjs`, `darkmem-mirror.mjs`
 (all in `scripts/lib/`), `tests/darkmem-sync/` except `migrate.test.mjs`, and
-`README.md`. Runs alone in wave 2.
+`README.md`. Runs alone in wave 2. Its suite runs include
+`tests/darkmem-sync/migrate.test.mjs`, which imports P1's `helpers.mjs`.
 
 1. DM 53, DM 60.c — the `persist` closure built in `darkmem-sync.mjs`
    (line 282) wraps a `saveState` write failure in a `StateError` naming the
    state file; `saveState` itself is unchanged, since
-   `dforge-home-migrate.mjs` (P3) calls it directly. So the run
-   stops with exit 2 and one line instead of reporting written documents as
-   "not pulled" (`pull:147`) or crashing (`removeVanished`, `recon:523`).
+   `dforge-home-migrate.mjs` (P3) calls it directly. `main`'s `finally`
+   (`darkmem-sync.mjs:318-332`) skips its own `saveState` when the run ended
+   on that state-file `StateError`, and guards the save otherwise: a failed
+   save prints one `darkmem-sync: <statePath> …` line and sets `code` to 2
+   when it was 0. The lock is still released and the report lines (333-335)
+   still print. So the run stops with exit 2 and one line instead of
+   reporting written documents as "not pulled" (`pull:147`) or crashing
+   (`removeVanished`, `recon:523`, and today's exit 4 from the `finally`).
    `StateError`'s export from `darkmem-mirror.mjs` is unchanged
    (`dforge-home-migrate.mjs` imports it). Check: a test turns
    `.sync-state.json` into a directory after the first document GET (pull)
-   and right after the set-aside rename (reconcile); each prints one line
-   naming the state file and no "not pulled" line.
+   and from the hook on reconcile's final manifest read (the last request
+   before the set-aside rename); each exits 2, prints one line naming the
+   state file, the report lines gathered before it, and no "not pulled" line.
 2. DM 52 — in `pullLedgers` (`pull:173-186`), `pullCheckpoint`
    (`pull:232-237`) and `progressToLocal`'s `renderCheckpoint` write
    (`pmove:400-403`), the read, write and `persist()` of each step sit in a
    try/catch that adds a "failed:" line and sets `report.partial`, as
    `pullDocuments` does; a `StateError` from item 1 still propagates.
-   `progressToLocal`'s catch (`pmove:489-490`) keeps re-throwing only what
-   is neither a darkmem error nor a file-system error. Check: tests where
+   `darkmemRefusal` (`pmove:156-159`), which `progressToLocal`'s catch
+   (`pmove:489-490`) calls, is unchanged: file-system errors no longer reach
+   it because these try/catches handle them first. Check: tests where
    `work/sdd/k/progress.md` is a directory and where `sdd/k` is a file each
    exit 1 with a "failed:" line, and the document lines gathered before it
    are printed.
@@ -108,7 +118,9 @@ Owns `scripts/lib/darkmem-pull.mjs`, `darkmem-sync.mjs`,
    `hooks.test.mjs` asserts the push's 100 s bound beside the lookup's 30 s
    (line 233). Check: the hooks test.
 5. DM 59.b — the case-twin lookup (`pull:90`) uses a map from lower-cased
-   uri to uris built once before the loop. Check: the existing case-twin
+   uri to the list of non-archive filed uris, built once before the loop;
+   the lookup picks an entry other than the vanished uri itself, since
+   darkmem can hold two twins of one fold. Check: the existing case-twin
    test, plus one with two vanished documents.
 6. DM 60.a — the recheck refusal (`recon:383`) also lists each uri added,
    removed or whose hash changed between `sent` and `again.documents`.
@@ -118,50 +130,75 @@ Owns `scripts/lib/darkmem-pull.mjs`, `darkmem-sync.mjs`,
    Check: an intent-to-add rename (`git add -N`) gives one `" R … -> …"`
    line.
 8. DM 60.d — `runGit` (`recon:29-31`) returns `result.error?.message`, used
-   when stderr is empty. Check: with no git on `PATH` the reason is not
-   empty.
+   when stderr is empty. Check: a unit test of `runGit` (exported for it)
+   with git stripped from `process.env.PATH` in-process gets a non-empty
+   reason; the CLI cannot reach it without git, since `resolveStores` then
+   answers local mode first, and a failing shim sets no `result.error`.
 9. DM 61.a, 61.b, 61.j — one no-follow read helper in
-   `darkmem-progress-move.mjs`: open with `O_RDONLY | O_NOFOLLOW |
-   O_NONBLOCK`, refuse unless `fstat` shows a regular file, then read. Where
+   `darkmem-progress-move.mjs`, a `function` declaration (reconcile and the
+   moves import each other, and `MOVES` at `recon:22-27` is built at module
+   evaluation, so only hoisted declarations cross the cycle): open with
+   `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`, refuse unless `fstat` shows a
+   regular file, then read. `ELOOP` from the open means a symbolic link; any
+   other open error is the "could not be read" line. Where
    `fs.constants.O_NOFOLLOW` is undefined (Windows) it falls back to the
-   current lstat-then-read. It replaces the reads at `pmove:74/79`,
-   `pmove:518/523`, the post-write checks at `pmove:314, 323, 546, 557`, and
-   `inProgress`'s read (`recon:198`), which reconcile imports. Check: a
-   linked `progress.md` is refused, and a link to a named pipe swapped in
-   from the stub's `onRequest` hook is refused within a few seconds.
-10. DM 61.c — `ledgerFiles` (`mirror:140`) filters with `lstatSync(…,
-    { throwIfNoEntry: false })`. Check: a dangling `progress.md` link
-    refuses the move.
+   current lstat-then-read. It guards the final path component only. It
+   replaces the reads at `pmove:74/79`, `pmove:518/523`, the post-write
+   checks at `pmove:314, 323, 546, 557`, and `inProgress`'s read
+   (`recon:198`). Checks: a link to a named pipe swapped in from the stub's
+   `onRequest` hook is refused within a few seconds at `progressToDarkmem`'s
+   recheck (`pmove:314`, requests at 257-301 precede it) and at
+   `inProgress` (`recon:198`) — these fail first; the checkout-side sites
+   (518/523, 546/557) get the same case through the `offlineMove()` harness
+   and `t.mock.method(fs, …)`, as `reconcile-progress.test.mjs:673-715`
+   does; the existing linked-`progress.md` refusal
+   (`reconcile-progress.test.mjs:636-650`) stays as a regression check; the
+   Windows fallback has a unit test that stubs the constant away.
+10. DM 61.c — `ledgerFiles` (`mirror:137-141`) is unchanged, since
+    `localChanges`, `pushLedgers` and `gatherSources` would crash on a
+    dangling link it no longer skipped. The two moves (`pmove:61` and
+    `pmove:502`) list ledgers through their own lstat-based listing, so a
+    dangling `progress.md` link reaches the link check. Check: a dangling
+    `progress.md` link refuses the move; `status` still exits as before.
 11. DM 61.d — the moved-aside path (`pmove:352-358`) writes the
     `.gitignore` files before it returns, and the count reads "1 source" /
     "N sources". Check: one blocked rename leaves the `.gitignore` written and
     the singular wording.
-12. DM 61.e — the `lstat` calls at `pmove:74` and `pmove:518` move inside
-    the read-error try/catch, so `EACCES` or `ENOTDIR` lists a problem line.
-    Check: a directory that can be listed but not entered; the test skips
-    when the suite runs as root.
+12. DM 61.e — satisfied by item 9: the helper replaces the separate
+    `lstat` at `pmove:74` and `pmove:518`, and its open error (`EACCES`,
+    `ENOTDIR`) is the problem line. Check: `t.mock.method(fs, 'openSync')`
+    throwing `EACCES` lists a problem line, so the test does not depend on
+    running as non-root.
 13. DM 61.f — the refusal at `pmove:480` says "could not be listed" or
     "reached through symbolic links" according to the lines `mirrorLinks`
     returned. Check: an unlistable work directory.
 14. DM 61.g — the changed-during-the-move refusal (`pmove:556`) also names
     the files already copied in that loop, as the catch at `pmove:562` does.
-    Check: one file changes while another was copied; both are named.
+    Check: through `offlineMove()`, a mocked `mkdirSync` edits one target
+    while another is copied; both are named (no request falls inside that
+    loop, so the stub's hook cannot reach it).
 15. DM 61.h — an `EEXIST` from the exclusive copy (`pmove:552`) reports
-    "changed during the move". Check: the target is created from the stub's
-    `onRequest` hook.
+    "changed during the move". Check: through `offlineMove()`, a mocked
+    `copyFileSync` throws `EEXIST`.
 16. DM 61.i — `progressToDarkmem` checks `cfg.mirror`, its `work`
     directory and the plan directories for links (`mirrorLinks` or a lstat
     of the path) before `checkProgressTargets`. Check: a linked `work/sdd/k`
     refuses the move.
 17. DM 61.j (adjacent) — `dirEntries` (`recon:38`) counts a plan directory
-    reached through a link as in progress, so it blocks a documents move.
-    Check: test.
+    reached through a link as in progress, without reading through it (item
+    9's helper still follows a linked directory in the path), so it blocks a
+    documents move. Check: an `sdd/k` link whose target holds a finished
+    ledger refuses a documents move and names the link; today the move
+    proceeds.
 
 ### P2. Cockpit
 
 Owns `tests/cockpit.test.ts`.
 
-1. FS 48 — a test modelled on the one at `cockpit.test.ts:3612` replaces the
+1. FS 48 — first a one-line probe under `claude plugin test`: does the kit's
+   `$.ui.close` accept `origin: { kind: 'person' }` and reach the mod's
+   `ui.close` hook? If yes, a test modelled on the one at
+   `cockpit.test.ts:3612` replaces the
    `settings-back` close with the engine's own `$.ui.close({ id: 'dforge',
    origin: { kind: 'person' } })`, and asserts the settings note is appended
    once and the pane does not reopen. If the kit refuses that call, the task
@@ -174,17 +211,23 @@ Owns `scripts/lib/dforge-home-migrate.mjs`,
 `scripts/validate-repository.mjs`, `tests/repository-layout.test.mjs`.
 
 1. DR 43.b — a read error from `readJson` (`dforge-home-migrate.mjs:118-124`)
-   at the config merge (187-188), the old config (265) and `stores.json`
-   (305) becomes a `refuse(...)` and `continue`, as the other refusals do.
-   Check: `~/.dr-forge/config.json` holding `{not json` beside a
+   at the config merge (187-188) becomes a `refuse(...)` and `continue`, as
+   the other refusals in that loop do; at the old config (265), the current
+   `~/.dforge/config.json` in the darkmem-copy block (269) and `stores.json`
+   (305), none inside a loop, it refuses and skips that block. Checks:
+   `~/.dr-forge/config.json` holding `{not json` beside a
    `~/.dforge/config.json` and an `only-old.txt` gives one refusal, moves
-   `only-old.txt`, and the dry run prints the same refusal.
+   `only-old.txt`, and the dry run prints the same refusal; a malformed
+   `~/.dforge/config.json` with no `~/.dr-forge/config.json` and a darkmem
+   mapping in `~/.dr-superpowers/config.json` gives one refusal and the run
+   finishes.
 2. DR 43.d — an array variant of the darkmem-copy test (`migrate.test.mjs`
    line 426): the file is unchanged and no "copied" line appears.
 3. DR 46 — `present "asks before committing" "$SKILL" "human partner agrees,
    and stage nothing"` above the ordering check (`migrate-skill.test.sh:30`).
-   Check: the suite fails on a scratch copy with "human partner agrees"
-   removed.
+   Check: the suite fails with "human partner agrees" temporarily removed
+   from `skills/migrate/SKILL.md` (the suite reads that path, line 9) and
+   passes once it is restored.
 4. DR 47.a — `textLines` (`scripts/validate-repository.mjs:12`) decodes a
    file starting with a UTF-16 byte-order mark (`FF FE`, `FE FF`) as UTF-16
    before the NUL-byte rule. Check: a UTF-16LE fixture with a BOM holding
@@ -200,9 +243,13 @@ Owns `scripts/plan-lint`, `tests/plan-lint.test.sh`,
 
 1. CX 16.a — `plan-lint` (lines 78-80) checks `command -v jq` first; with jq
    present, an empty version says the routing file "cannot be parsed" or
-   "has no version" (`jq empty` decides which). Check: beside the no-jq case
-   (`plan-lint.test.sh:472`), a version-less file and a corrupt file each
-   name their cause and not "jq installed".
+   "has no version" (`jq empty` decides which). The existing case at
+   `plan-lint.test.sh:472-478` is a failing-jq shim, so it becomes the
+   "cannot be parsed" branch; the new message keeps its needle "cannot read
+   the routing policy version from" (line 477). Checks: a version-less file
+   and a corrupt file each name their cause and not "jq installed"; a true
+   no-jq case runs with a `PATH` directory of links to the other tools the
+   script needs, without jq.
 2. CX 16.b — the suite exports `HOME="$TMP/home"` once at its top; the
    name-key cases keep their own `HOME`. Check: the suite passes when started
    with `HOME` pointing at a scratch directory whose `.dforge/config.json` is
@@ -218,11 +265,16 @@ Owns `tests/auto-run.test.sh`, `scripts/session-start.sh`,
 
 1. AE 39.a — in the `flock` variant (`auto-run.test.sh:287, 307`) the holder
    touches `$STATE.ready` once it holds the lock, and the test waits for that
-   file with a bound instead of `sleep 0.5`. Check: the suite.
+   file instead of `sleep 0.5`. The test removes `$STATE.ready` before
+   starting each holder, and the wait fails the case after 10 s rather than
+   hanging. Check: the suite.
 2. AE 39.c — `session-start.sh`'s persistence block (sessions, cockpit and
    turns directories, lines 23-56) runs only when `HOME` is non-empty.
-   Check: a `turn-end.test.sh` case with `HOME=` and a scratch root creates
-   nothing and still prints the injection.
+   Check: a `turn-end.test.sh` case with `HOME=` puts logging `mkdir` and
+   `find` shims on `PATH` (as `tests/darkmem-sync/hooks.test.mjs:222-227`
+   does for `timeout`), asserts no logged argument starts with `/.claude`,
+   and that the injection still prints; it holds whether or not the suite
+   runs as root, and never writes `/.claude` on the host.
 
 ### P6. Evals
 
@@ -235,9 +287,11 @@ Owns `evals/controller/lib/sessions.mjs`, `evals/controller/lib/transcript.mjs`,
    pattern (`sessions.mjs:18`) requires `bash` or command position.
 2. DF 24.b — a `planSlugs` unit test for `S=/p/scripts; bash $S/task-brief
    docs/plans/x.md 1`.
-3. DF 24.c — `transcript.mjs:134` splits the command at each ledger redirect
-   and decides the `&&` question per segment, counting the "Task N:
-   complete" hits of that segment only. Check: `echo 'Task 1: complete …'
+3. DF 24.c — `transcript.mjs:134` splits the command on shell list
+   separators (`;`, newline, and an `&` that is not part of `&&`); for each
+   list holding a ledger redirect it asks whether an `&&` precedes that
+   redirect inside the list, and counts the "Task N: complete" hits of that
+   list only. Check: `echo 'Task 1: complete …'
    >> progress.md; false && echo 'Task 2: complete …' >> progress.md` counts
    Task 1 only, and `x && y; echo 'Task 3: complete …' >> progress.md;
    false` counts Task 3.
@@ -247,10 +301,13 @@ Owns `evals/controller/lib/sessions.mjs`, `evals/controller/lib/transcript.mjs`,
 Owns `scripts/test-all.mjs`, `tests/marketplace-smoke.ps1`,
 `docs/testing/dual-client-marketplace-validation.md`.
 
-1. DF 21 — on `win32`, `test-all.mjs` probes and runs `tsc.cmd`, and the
-   skip reason reads "tsc not found". Check: Windows only; the task reports
-   it unverified on this host, and `node scripts/test-all.mjs --list` still
-   lists the tsc job on Linux.
+1. DF 21 — on `win32`, `test-all.mjs` probes and runs tsc through
+   `process.env.ComSpec ?? 'cmd.exe'` with `/d /s /c tsc …`: Node refuses to
+   spawn a `.cmd` file without a shell (`EINVAL` since the April 2024
+   security releases), and `run` needs no new option. The skip reason reads
+   "tsc not found". Check: Windows only; the task reports it unverified on
+   this host, and `node scripts/test-all.mjs --list` still lists the tsc job
+   on Linux.
 2. DF 23.b — the blank line before the `git init` block (about line 104) is
    restored.
 3. DF 23 (adjacent) — the "Verified outcomes" bullets 03765c6 rewrote are
@@ -271,7 +328,9 @@ Runs last, alone. Owns `.claude-plugin/plugin.json` and
 ## Parallel decomposition
 
 No foundation part: P1's `StateError` change stays inside its own files, and
-P3 imports nothing P1 changes.
+P3 imports nothing P1 changes. P3's `migrate.test.mjs` imports P1's
+`tests/darkmem-sync/helpers.mjs`; wave 1 leaves that file untouched, and P1's
+wave-2 runs include `migrate.test.mjs`.
 
 | Wave | Parts | Why |
 |---|---|---|
@@ -312,3 +371,32 @@ degrades to today's behaviour on Windows. `O_NOFOLLOW` on a link fails with
 any other open error as a read error. A Windows run of the darkmem suites is
 not available on this host, so the fallback is covered by a unit test that
 stubs the constant away.
+
+## Review rulings
+
+Fable review, 2026-10-20 (commit a7f8384, verdict: revise), all applied:
+
+- H1, `main`'s `finally` re-saved the unwritable state and exited 4: it
+  skips or guards the save (P1.1).
+- H2, spawning `tsc.cmd` without a shell throws `EINVAL`: tsc runs through
+  `cmd.exe` on Windows (P7.1).
+- M1, `ledgerFiles` has three other callers: it stays, the moves list
+  ledgers themselves (P1.10).
+- M2, no request falls inside several race windows: those Checks use
+  `offlineMove()` and `fs` mocks, and each FIFO site is named (P1.1, 9, 14,
+  15).
+- M3, `runGit` is unreachable without git through the CLI: a unit test
+  (P1.8).
+- M4, the `&&` rule contradicted its own Check: split on list separators
+  (P6.3).
+- M5, the empty-`HOME` Check could not fail as non-root: `mkdir` and `find`
+  shims (P5.2).
+- M6, a leftover ready file: removed before each holder, 10 s bound (P5.1).
+- M7, line 269 was unguarded: added, with its variant (P3.1).
+- L1 the FS 48 premise is unsettled: a probe first (Problem, P2.1); L2 the
+  FIFO cases are the fails-first ones (P1.9); L3 item 12 is the helper's
+  error path (P1.12); L4 `darkmemRefusal` is unchanged (P1.2); L5 the map's
+  shape (P1.5); L6 the failing-jq case and its needle (P4.1); L7 the
+  consent Check edits the real skill temporarily (P3.3); L8 item 17's Check
+  (P1.17); L9 the helper is a function declaration (P1.9); L10 P1's runs
+  include `migrate.test.mjs` (P1, Parallel decomposition).
