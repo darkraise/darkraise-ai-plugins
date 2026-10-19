@@ -3859,6 +3859,69 @@ describe('auto run', () => {
     expect(JSON.stringify(notice)).toMatch(/\/home\/me\/\.claude\/settings\.json/)
   })
 
+  test('writes the heartbeat at the start and on every watchdog tick', async ($, on) => {
+    const written: Record<string, string> = {}
+    const clock = world(on, { ...SIGNED_IN, written })
+    signedIn(on, {})
+    await $.session.start(START)
+    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1000\n')
+    await clock.advance(60_000)
+    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1060\n')
+  })
+
+  test('books a failure once background work has deferred a stage for 30 minutes', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.agent.spawn({
+      tool_use_id: 'toolu_1',
+      prompt: 'Implement task 4',
+      description: 'Task 4',
+      subagentType: 'dforge:impl-sonnet-low',
+      provider: { plugin: 'dforge', tier: 'user' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+      fork: false,
+    })
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(1_795_000)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+    await clock.advance(10_000)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual(['--session sess-1 failure --reason a background launch kept the compact waiting 30 minutes'])
+    expect(w.compacts).toEqual([])
+  })
+
+  test("starts a new run's deferral afresh after the last one stopped", async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.agent.spawn({
+      tool_use_id: 'toolu_1',
+      prompt: 'Implement task 4',
+      description: 'Task 4',
+      subagentType: 'dforge:impl-sonnet-low',
+      provider: { plugin: 'dforge', tier: 'user' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+      fork: false,
+    })
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(1_740_000)
+    files[AUTO]!.text = autoFiles({ active: false, pending: null })[AUTO]!.text
+    await clock.advance(10_000)
+    files[AUTO]!.text = autoFiles()[AUTO]!.text
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(120_000)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+  })
+
   test('reads a run only for its session, and its sentinel only as the last line', () => {
     const text = autoFiles({ session: 'b', launch: { model: 'sonnet', effort: 'high' } })[AUTO]!.text
     expect(autoRunFor(text, 'b')?.launch).toEqual({ model: 'sonnet', effort: 'high' })

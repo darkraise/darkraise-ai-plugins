@@ -146,6 +146,10 @@ function autoContinuePrompt(root: string, plan: string | null): string {
   const where = plan === null ? '' : ` for plan ${plan}, through the After compaction steps of the execution skill its Execution line names`
   return `Continue the auto run: run \`bash ${root}/scripts/auto-run after-compact\` first, then continue the phase \`bash ${root}/scripts/auto-run status\` names${where}, as reference/auto-run.md §After a compaction says.`
 }
+// The watchdog's period, and how long background work may defer a pending
+// stage before that books a failure.
+const WATCHDOG_MS = 60_000
+const DEFER_CAP_MS = 1_800_000
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
@@ -315,6 +319,9 @@ export const register: Register = on => {
     await readNotifier($)
     await readRun($)
     await trackAutoRun($)
+    await beat($)
+    S.watchdog?.cancel()
+    S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($))
     await readVersion($)
     await readRemote($)
     if (o.isMinimized) {
@@ -2172,6 +2179,10 @@ const S = {
   isClosedByPerson: false,
   // The auto run's scheduled stage, at most one.
   autoTimer: null as Timer | null,
+  // When background work began deferring the pending stage; null while nothing does.
+  autoDeferredSince: null as number | null,
+  // The watchdog's timer, every WATCHDOG_MS.
+  watchdog: null as Timer | null,
   // The roots --mode last named, and the primary checkout and stores.json
   // modification time they were read for.
   roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
@@ -2316,6 +2327,8 @@ async function trackAutoRun($: EngineInterface) {
 async function armAutoRun($: EngineInterface, answer: string) {
   const auto = await readAutoRun($)
   if (auto === null || !auto.active || !endsOnSentinel(answer, auto.pending)) return
+  // A stage armed now starts its own deferral, whatever the timer it replaces had.
+  S.autoDeferredSince = null
   scheduleAutoAct($, auto.pending === 'clear' ? 'clear' : auto.pending === 'switch' ? 'switch' : 'compact', 0)
 }
 
@@ -2334,11 +2347,31 @@ function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
 async function autoAct($: EngineInterface, stage: AutoStage) {
   S.autoTimer = null
   const auto = await readAutoRun($)
-  if (auto === null || !auto.active || auto.pending !== AUTO_STAGE_PENDING[stage]) return
-  if (S.isTurnLive || (await read($, spawns)).some(one => !one.isDone) || (await read($, shells)).length > 0) {
-    scheduleAutoAct($, stage, AUTO_RETRY_MS)
+  if (auto === null || !auto.active || auto.pending !== AUTO_STAGE_PENDING[stage]) {
+    // The run stopped or moved on: its deferral, if any, ends with it.
+    S.autoDeferredSince = null
     return
   }
+  const isBackground = (await read($, spawns)).some(one => !one.isDone) || (await read($, shells)).length > 0
+  if (S.isTurnLive || isBackground) {
+    const stamp = await $.clock.now()
+    S.autoDeferredSince = isBackground ? (S.autoDeferredSince ?? stamp) : null
+    if (S.autoDeferredSince === null || stamp - S.autoDeferredSince < DEFER_CAP_MS) {
+      scheduleAutoAct($, stage, AUTO_RETRY_MS)
+      return
+    }
+    // A launch that never reports would hold the stage forever: book it as a
+    // failure, so the second one stops the run with a reason.
+    S.autoDeferredSince = null
+    const owner = await $.session.id()
+    const why = `a background launch kept the ${stage} waiting 30 minutes`
+    const code = await autoRunCall($, owner, ['failure', '--reason', why])
+    if (code === 0) scheduleAutoAct($, stage, AUTO_RETRY_MS)
+    else if (code === 5) await endStoppedRun($)
+    else await endUnboundRun($, owner, `${why}, and the failure could not be booked (exit ${code})`)
+    return
+  }
+  S.autoDeferredSince = null
   let bound = await $.session.id()
   let at: AutoStage = stage
   try {
@@ -2473,6 +2506,22 @@ async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; 
     }
   }
   return false
+}
+
+// The heartbeat scripts/auto-run reads (reference/auto-run.md §Starting): the
+// epoch seconds of the last beat, in a file named for this session's id with
+// each character outside A-Za-z0-9 a dash.
+async function beat($: EngineInterface) {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  if (!home) return
+  const id = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
+  const seconds = Math.floor((await $.clock.now()) / 1000)
+  await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${id}`, `${seconds}\n`).catch(() => undefined)
+}
+
+// Each WATCHDOG_MS: the heartbeat.
+async function watchdogTick($: EngineInterface) {
+  await beat($)
 }
 
 // The run stopped while the session was idle: record it, and give the model a
