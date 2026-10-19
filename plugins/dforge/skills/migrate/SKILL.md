@@ -5,7 +5,7 @@ description: Use when session start or repo-audit says a repository or home stil
 
 # Migrate
 
-**Announce at start:** "I'm using the migrate skill to move this repository to dforge's names."
+**Announce at start:** "I'm using the migrate skill to move this repository, the home directory's dforge files and darkmem's documents to dforge's names."
 
 dforge reads only its own names. A repository or home that dr-superpowers
 (before 3.0) or dr-forge (3.x) set up keeps its work under the older ones until
@@ -43,6 +43,10 @@ itself.
 5. **Migrate.** Run `bash <plugin-root>/scripts/dforge-migrate` and show its
    output. On exit 1, list each refusal and its fix, and offer to run it again
    once they are resolved: a second run finishes the job.
+   This run can refuse where the dry run exited 0: the dry run treats a
+   directory an earlier line would create as absent, so a second directory
+   moving into it (`.superpowers/` and `.forge/` both to `.dforge/`) is listed
+   as a move, and only this run merges it and finds a file that differs.
 6. **Commit.** Show the `commit:` lines and offer to commit what they name as
    one commit, `chore: move to the dforge layout`. Commit only after your
    human partner agrees, and stage nothing the lines do not name.

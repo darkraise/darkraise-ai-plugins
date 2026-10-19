@@ -117,6 +117,26 @@ printf '{}\n' > "$HOME/.dr-forge/config.json"
 check "dr-forge: a ~/.dr-forge holding anything is named" "$(dforge_legacy_layout "$R")" "$HOME/.dr-forge"
 export HOME=$SAVED_HOME
 
+# --- dforge_legacy_layout: both older names at once ---
+mkdir -p "$R/.superpowers" "$R/.forge" "$R/docs/superpowers" "$R/docs/forge"
+check "mixed: every older path in one checkout" "$(dforge_legacy_layout "$R" | tr '\n' '|')" "$R/.superpowers|$R/.forge|$R/docs/superpowers|$R/docs/forge|"
+rm -rf "$R/.superpowers" "$R/.forge" "$R/docs/superpowers" "$R/docs/forge"
+mkdir -p "$WG/dr-superpowers" "$WG/dr-forge" "$G/.superpowers" "$G/.forge"
+check "mixed: a worktree's git dir and the primary's state, both names" "$(dforge_legacy_layout "$W" | tr '\n' '|')" "$WG/dr-superpowers|$WG/dr-forge|$TOP/.superpowers|$TOP/.forge|"
+rm -rf "$WG/dr-superpowers" "$WG/dr-forge" "$G/.superpowers" "$G/.forge"
+SAVED_HOME=$HOME
+export HOME="$TMP/home4"; mkdir -p "$HOME/.dr-superpowers" "$HOME/.dr-forge"
+printf '{"darkmem":{"repos":{}}}\n' > "$HOME/.dr-superpowers/config.json"
+printf '{}\n' > "$HOME/.dr-forge/config.json"
+check "mixed: both old homes" "$(dforge_legacy_layout "$R" | tr '\n' '|')" "$HOME/.dr-superpowers|$HOME/.dr-forge|"
+export HOME=$SAVED_HOME
+
+# --- dforge_legacy_layout: the primary checkout's own .forge ---
+GD=$(git -C "$G" rev-parse --absolute-git-dir)
+mkdir -p "$G/.forge" "$GD/dr-forge"
+check "primary: its .forge and git dir, each named once" "$(dforge_legacy_layout "$G" | tr '\n' '|')" "$G/.forge|$GD/dr-forge|"
+rm -rf "$G/.forge" "$GD/dr-forge"
+
 # Codex runs no session-start hook, so its tool notes carry the check.
 check "codex-tools: names the older-layout check" "$(grep -c 'an `older layout` line' "$HERE/../skills/using-dforge/references/codex-tools.md")" "1"
 

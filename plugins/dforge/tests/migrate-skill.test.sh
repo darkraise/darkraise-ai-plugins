@@ -27,7 +27,8 @@ confirm=$(line_of "$SKILL" 'Run nothing')
 check "the dry run comes first" "$([ -n "$dry" ] && [ -n "$real" ] && [ "$dry" -lt "$real" ] && echo yes || echo no)" "yes"
 check "the confirmation comes before the migration" "$([ -n "$confirm" ] && [ "$confirm" -lt "$real" ] && echo yes || echo no)" "yes"
 present "asks before migrating" "$SKILL" "that writes before a yes"
-present "asks before committing" "$SKILL" "human partner agrees, and stage nothing"
+commit=$(line_of "$SKILL" 'Commit only after your')
+check "the commit confirmation follows the migration" "$([ -n "$commit" ] && [ -n "$real" ] && [ "$real" -lt "$commit" ] && echo yes || echo no)" "yes"
 present "commits only what the commit lines name" "$SKILL" "stage nothing the lines do not name"
 present "names the plugin uninstall" "$SKILL" '`dr-forge@darkraise` and `dr-superpowers@darkraise`'
 present "names the webhook keys dforge does not read" "$SKILL" '`notifyUrl` and `notifyMention`'
@@ -38,6 +39,8 @@ uninstall=$(line_of "$SKILL" '`dr-forge@darkraise` and `dr-superpowers@darkraise
 check "the webhook is copied before the uninstall" "$([ -n "$webhook" ] && [ -n "$uninstall" ] && [ "$webhook" -lt "$uninstall" ] && echo yes || echo no)" "yes"
 present "names the environment rename" "$SKILL" '`DFORGE_*` environment variables in place of `DR_FORGE_*`'
 present "writes nothing itself" "$SKILL" "This skill writes nothing"
+present "announces the repository, the home and darkmem" "$SKILL" "to move this repository, the home directory's dforge files and darkmem's documents"
+present "says the real run can refuse where the dry run passed" "$SKILL" "This run can refuse where the dry run exited 0"
 present "the entry point routes to it" "$P/skills/using-dforge/SKILL.md" "| dforge:migrate |"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
