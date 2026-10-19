@@ -82,5 +82,58 @@ printf '{"finishAction":"wait"}\n' > "$HOME/.dforge/config.json"
 check "setting wait: recorded" "$(fc get --plan docs/plans/w.md | jq -r .action)" "wait"
 rm -f "$HOME/.dforge/config.json"
 
+# --- the spec's Finish line, which the spec review writes ---
+mkdir -p docs/specs
+spec_plan() { # spec_plan <name> <spec text> [Spec line value]: a plan citing its spec
+  printf '%s' "$2" > "docs/specs/$1.md"
+  printf '# Plan\n\n**Spec:** %s\n\n### Task 1: One\n' "${3:-\`docs/specs/$1.md\`}" > "docs/plans/$1.md"
+}
+spec_plan bare $'# S\n\n## Decisions\n\n1. Finish: "Ask at spec review" — the owner\'s words\n\nFinish: keep\n\n## Problem\n'
+printf '{"finishAction":"merge"}\n' > "$HOME/.dforge/config.json"
+out=$(FINISH_CHOICE_NOW=$T0 fc get --plan docs/plans/bare.md); status=$?
+check "spec line: get exits 0" "$status" "0"
+check "spec line: outranks the setting, recorded with its source" \
+  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .dforge/sdd/bare/finish.json)" "keep null spec $T0"
+has "spec line: get prints the choice" "$out" '"action": "keep"'
+rm -f "$HOME/.dforge/config.json"
+for pair in 'dash:-' 'star:*' 'number:6.'; do
+  name="marker-${pair%%:*}" marker=${pair#*:}
+  spec_plan "$name" "# S"$'\n\n'"## Decisions"$'\n\n'"$marker Finish: pr"$'\n'
+  check "spec line after a '$marker' marker: a fresh record" "$([ -e ".dforge/sdd/$name/finish.json" ] && echo exists || echo none)" "none"
+  check "spec line after a '$marker' marker" "$(fc get --plan "docs/plans/$name.md" | jq -r '[.action, .source] | join(" ")')" "pr spec"
+  check "spec line after a '$marker' marker: recorded in its own workspace" "$(jq -r .source ".dforge/sdd/$name/finish.json")" "spec"
+done
+{ printf '# S\n\n## Decisions\n\nFinish: keep\n\n## Problem\n\n'; seq 1 200000 | sed 's/^/filler line /'; } > docs/specs/large.md
+printf '# Plan\n\n**Spec:** `docs/specs/large.md`\n\n### Task 1: One\n' > docs/plans/large.md
+out=$(fc get --plan docs/plans/large.md); status=$?
+check "a long spec: the line is read and recorded" "$status:$(jq -r '[.action, .source] | join(" ")' <<<"$out")" "0:keep spec"
+spec_plan crlf $'# S\r\n\r\n## Decisions\r\n\r\nFinish: merge\r\n'
+check "spec line: CRLF line endings" "$(fc get --plan docs/plans/crlf.md | jq -r .action)" "merge"
+spec_plan plain 'plain text'
+fc set merge --plan docs/plans/plain.md >/dev/null
+printf '# S\n\n## Decisions\n\nFinish: keep\n' > docs/specs/plain.md
+check "a recorded choice outranks the spec line" "$(fc get --plan docs/plans/plain.md | jq -r '[.action, (.source // "asked")] | join(" ")')" "merge asked"
+spec_plan none $'# S\n\n## Decisions\n\n1. Keep it small.\n'
+fc get --plan docs/plans/none.md >/dev/null 2>&1
+check "no spec line, setting ask: exit 3" "$?" "3"
+printf '{"finishAction":"pr"}\n' > "$HOME/.dforge/config.json"
+check "no spec line: the setting stands in" "$(fc get --plan docs/plans/none.md | jq -r '[.action, .source] | join(" ")')" "pr setting"
+rm -f "$HOME/.dforge/config.json"
+mkdir -p docs/dforge/specs
+printf '# S\n\n## Decisions\n\nFinish: keep\n' > docs/dforge/specs/legacy.md
+printf '# Plan\n\n**Spec:** docs/superpowers/specs/legacy.md\n\n### Task 1: One\n' > docs/plans/legacy.md
+check "a spec cited under the pre-4.0 prefix is found" "$(fc get --plan docs/plans/legacy.md | jq -r '[.action, .source] | join(" ")')" "keep spec"
+for case in outside fenced worded quoted; do
+  case $case in
+    outside) text=$'# S\n\n## Decisions\n\n1. Small.\n\n## Problem\n\nFinish: keep\n' ;;
+    fenced) text=$'# S\n\n## Decisions\n\n```\nFinish: keep\n```\n' ;;
+    worded) text=$'# S\n\n## Decisions\n\nFinish: keep it for review\n' ;;
+    quoted) text=$'# S\n\n## Decisions\n\n3. Finish: "Ask at spec review"\n' ;;
+  esac
+  spec_plan "not-$case" "$text"
+  fc get --plan "docs/plans/not-$case.md" >/dev/null 2>&1
+  check "a Finish line $case is not read" "$?" "3"
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

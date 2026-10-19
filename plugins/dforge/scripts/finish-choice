@@ -11,8 +11,10 @@
 # Usage: finish-choice <command> [--plan PLAN_FILE] [args]
 #   set ACTION [--base BRANCH]  record the choice: merge | pr | keep | wait
 #   get                         print the file; exit 3 when nothing is chosen.
-#                               With nothing chosen and the finishAction setting
-#                               at anything but ask, record that action first.
+#                               With nothing chosen, record first the plan's
+#                               spec's `Finish:` line in ## Decisions (with
+#                               --plan), else the finishAction setting when it
+#                               is anything but ask.
 #   answer ACTION               record that finishing acted on the choice, or
 #                               that the menu was answered (merge | pr | keep |
 #                               discard); an answered choice is never re-run
@@ -23,6 +25,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/dforge-dir.sh"
 . "$HERE/lib/dforge-env.sh"
+. "$HERE/lib/plan.sh"
 
 usage() { sed -n '/^# Usage:/,/^# FINISH_CHOICE_NOW/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "finish-choice needs jq" >&2; exit 2; }
@@ -73,6 +76,41 @@ from_setting() {
     '{action: $action, base: null, chosenAt: $now, source: "setting"}' > "$file"
 }
 
+# The spec review records its answer as a `Finish: <merge|pr|keep>` line in the
+# spec's ## Decisions; a list marker may precede it. Fenced lines, other
+# sections and any other value are not read. With nothing chosen it stands in
+# for the answer, ahead of the setting: the owner gave it for this plan. awk
+# reads to the end after a match: an early exit would end tr with SIGPIPE,
+# which pipefail turns into this script's exit.
+spec_finish() { # spec_finish SPEC_FILE — the line's action, or nothing
+  tr -d '\r' < "$1" | awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^## / { inside = ($0 ~ /^## Decisions[ \t]*$/); next }
+    found { next }
+    inside && $0 ~ /^([-*]|[0-9]+\.)?[ \t]*Finish:[ \t]*(merge|pr|keep)[ \t]*$/ {
+      v = $0
+      sub(/^([-*]|[0-9]+\.)?[ \t]*Finish:[ \t]*/, "", v)
+      sub(/[ \t]+$/, "", v)
+      print v
+      found = 1
+    }
+  '
+}
+from_spec() {
+  [ -n "$plan" ] && [ ! -s "$file" ] || return 0
+  local located name spec action
+  located=$(plan_locate "$plan")
+  [ -f "$located" ] || return 0
+  name=$(plan_header_line "$located" Spec | sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/')
+  [ -n "$name" ] || return 0
+  spec=$(dforge_resolve "$name") || return 0
+  [ -f "$spec" ] || return 0
+  action=$(spec_finish "$spec")
+  [ -n "$action" ] || return 0
+  jq -n --arg action "$action" --argjson now "$now" \
+    '{action: $action, base: null, chosenAt: $now, source: "spec"}' > "$file"
+}
+
 case $cmd in
   set)
     [ $# -ge 1 ] && valid_action "$1" || { echo "set takes one of: merge pr keep wait" >&2; exit 2; }
@@ -85,6 +123,7 @@ case $cmd in
     cat "$file"
     ;;
   get)
+    from_spec
     from_setting
     need_file
     cat "$file"
