@@ -10,8 +10,8 @@ import { HttpError, TransportError } from "./darkmem-client.mjs";
 import { dforgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
-  DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerFiles, ledgerPieces, listDocumentFiles, propertiesFor, sha256, unsupportedPlanDirs,
-  uriFamily, utcStamp, writeFileAtomic,
+  DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerFiles, ledgerPieces, listDocumentFiles, newestCheckpointAt, propertiesFor,
+  recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason } from "./darkmem-reconcile.mjs";
@@ -156,12 +156,13 @@ const checkoutRoots = (cfg, stateDir) => ({
   worktreeRoot: path.dirname(stateDir),
 });
 
-// The newest checkpoint darkmem holds across `workstreams`, or null.
+// The newest checkpoint darkmem holds across `workstreams`, with the key of
+// the workstream that holds it as `workstream`, or null.
 async function newestCheckpoint({ cfg, client }, workstreams) {
   let newest = null;
   for (const ws of workstreams) {
     const checkpoint = (await client.resume(cfg.project, ws.key))?.checkpoint;
-    if (checkpoint && (!newest || isoMicros(checkpoint.created_at) > isoMicros(newest.created_at))) newest = checkpoint;
+    if (checkpoint && (!newest || isoMicros(checkpoint.created_at) > isoMicros(newest.created_at))) newest = { ...checkpoint, workstream: ws.key };
   }
   return newest;
 }
@@ -169,8 +170,9 @@ async function newestCheckpoint({ cfg, client }, workstreams) {
 // latest.md becomes a checkpoint of the plan or draft it names, so other
 // machines receive it; a workstream that was closed is closed again. One that
 // names neither is copied unsent, dated at darkmem's newest checkpoint so a
-// pull only replaces it with a newer one. Answers { hash, at, detail }, or
-// { problem } when darkmem reads it back different.
+// pull only replaces it with a newer one. Answers { hash, at, workstream,
+// detail }, `workstream` naming the key `at` was read from (null with a null
+// `at`), or { problem } when darkmem reads it back different.
 async function fileLatest(context, item) {
   const { cfg, client } = context;
   const body = decodeUtf8(item.buffer);
@@ -178,7 +180,10 @@ async function fileLatest(context, item) {
   const target = checkpointTarget(body);
   if (!target) {
     const newest = await newestCheckpoint(context, await client.workstreams(cfg.project));
-    return { hash, at: newest?.created_at ?? null, detail: "latest.md names no plan or draft; copied to the mirror, not sent" };
+    return {
+      hash, at: newest?.created_at ?? null, workstream: newest?.workstream ?? null,
+      detail: "latest.md names no plan or draft; copied to the mirror, not sent",
+    };
   }
   const before = await client.resume(cfg.project, target.slug);
   let at = before?.checkpoint && sha256(Buffer.from(before.checkpoint.body, "utf8")) === hash ? before.checkpoint.created_at : null;
@@ -193,7 +198,7 @@ async function fileLatest(context, item) {
   }
   const filed = (await client.resume(cfg.project, target.slug))?.checkpoint;
   if (!filed || sha256(Buffer.from(filed.body, "utf8")) !== hash) return { problem: "handoff/latest.md: darkmem's checkpoint reads back different" };
-  return { hash, at, detail: `latest.md filed as a checkpoint of ${target.slug}` };
+  return { hash, at, workstream: target.slug, detail: `latest.md filed as a checkpoint of ${target.slug}` };
 }
 
 // The symbolic links between a checkout and its progress files. A source is
@@ -294,7 +299,8 @@ export async function progressToDarkmem(context) {
       state.documents[item.uri] = sha256(item.buffer);
     } else {
       state.checkpoint = latest.hash;
-      state.checkpointAt = latest.at;
+      if (latest.at === null) state.checkpointAt = null;
+      else recordCheckpointAt(state, latest.workstream, latest.at);
     }
   }
   persist();
@@ -331,7 +337,8 @@ export async function progressToDarkmem(context) {
 // The latest.md file for `newest`, unless the mirror's copy is newer or holds
 // a local edit; pull's rule, applied across every workstream.
 function renderCheckpoint({ state, persist, report }, workRoot, newest) {
-  if (!newest || (state.checkpointAt && isoMicros(newest.created_at) <= isoMicros(state.checkpointAt))) return;
+  const synced = newestCheckpointAt(state);
+  if (!newest || (synced && isoMicros(newest.created_at) <= isoMicros(synced))) return;
   const file = path.join(workRoot, "handoff", "latest.md");
   const remote = Buffer.from(newest.body, "utf8");
   const hash = sha256(remote);
@@ -350,7 +357,7 @@ function renderCheckpoint({ state, persist, report }, workRoot, newest) {
   }
   if (current !== hash) writeFileAtomic(file, remote);
   state.checkpoint = hash;
-  state.checkpointAt = newest.created_at;
+  recordCheckpointAt(state, newest.workstream, newest.created_at);
   persist();
 }
 

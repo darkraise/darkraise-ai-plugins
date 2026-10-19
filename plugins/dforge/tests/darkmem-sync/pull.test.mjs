@@ -250,7 +250,36 @@ test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounde
   s.stub.db.workstreams[0].entries[1].created_at = "2026-09-25T10:00:00.000003+00:00";
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# C\n", "p2 is listed first, and C is newer than B by one microsecond");
-  assert.equal(s.state().checkpointAt, "2026-09-25T10:00:00.000003+00:00");
+  assert.deepEqual(s.state().checkpointAt, { p1: "2026-09-25T10:00:00.000003+00:00" });
+});
+
+test("latest.md stays the newest stop when the workstream that filed it closes", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
+  assert.equal((await s.pull()).code, 0);
+  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  assert.equal(read(latest), "# C\n");
+  s.stub.db.workstreams.find(w => w.key === "p1").state = "closed";
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(read(latest), "# C\n", "p2's older checkpoint does not replace p1's newer one");
+});
+
+test("an old state file's single checkpointAt gates a pull, which then records the workstream", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
+  const filed = s.stub.db.workstreams[0].entries[0].created_at;
+  const old = new Date(Date.parse(filed) + 500).toISOString();
+  write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dforge",
+  }));
+  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(fs.existsSync(latest), false, "a checkpoint older than the old value is not taken");
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(read(latest), "# B\n");
+  assert.deepEqual(s.state().checkpointAt, { "*": old, p2: s.stub.db.workstreams[1].entries[0].created_at });
 });
 
 test("pull refuses uris Windows cannot hold, and writes none of a set that differ only in case", async t => {
