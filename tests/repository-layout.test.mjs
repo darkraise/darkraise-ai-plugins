@@ -48,6 +48,7 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['retired dr-forge home', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'ls ~/.dr-forge\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired forge_ code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'forge_dir .\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired FORGE variable', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'echo "$FORGE_HOME"\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
+    ['retired _forge code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'my_forge_dir=.\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired dcc- plugin name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-status/stray.md'), 'install dcc-darkraise-ui\n'); }, /plugins\/dr-status\/stray\.md:1: retired dcc- plugin name/],
   ]) {
     await t.test(name, () => {
@@ -105,7 +106,7 @@ test('the retired dr-forge names are allowed only in the allowlisted files', asy
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/scripts/lib/roots.sh']) {
+    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/scripts/lib/roots.sh', 'plugins/dforge/LICENSES/stray-LICENSE']) {
       writeFileSync(resolve(dir, path), 'mkdir -p .forge\n');
     }
     // A dated plan name cites history, and other words merely contain the letters.
@@ -114,6 +115,37 @@ test('the retired dr-forge names are allowed only in the allowlisted files', asy
     assert.deepEqual(retired(), []);
     writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'run dr-forge:brainstorming\n');
     assert.deepEqual(retired(), ['plugins/dforge/reference/stray.md:1: retired dr-forge name']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the retired dcc- name is allowed only in the migration notes and historical documents', async () => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
+  try {
+    for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
+      cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
+    }
+    mkdirSync(resolve(dir, 'docs/superpowers/plans'), { recursive: true });
+    writeFileSync(resolve(dir, 'docs/migration.md'), 'install dcc-darkraise-ui\n');
+    writeFileSync(resolve(dir, 'docs/superpowers/plans/old.md'), 'install dcc-darkraise-ui\n');
+    const retired = () => validateRepository(dir).filter(error => error.includes('retired dcc- plugin name'));
+    assert.deepEqual(retired(), []);
+    writeFileSync(resolve(dir, 'docs/stray.md'), 'install dcc-darkraise-ui\n');
+    assert.deepEqual(retired(), ['docs/stray.md:1: retired dcc- plugin name']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the name sweeps skip binary files', async () => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
+  try {
+    for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
+      cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
+    }
+    const bytes = Buffer.from('\u0000superpowers dr-forge dcc-darkraise-ui\n', 'utf8');
+    writeFileSync(resolve(dir, 'plugins/dforge/reference/image.bin'), bytes);
+    writeFileSync(resolve(dir, 'plugins/dr-status/image.bin'), bytes);
+    assert.deepEqual(validateRepository(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -156,5 +188,10 @@ test('the settings schema is valid, and broken schemas are caught', async () => 
   assert.match(await broken(entry('step: 1').replace('default: 0', 'default: 2.5')), /schema n: default does not fit its type/);
   assert.match(await broken(entry("enforcedBy: 'luck'")), /schema n: enforcedBy must be script or skill/);
   assert.match(await broken(entry('floor: 50')), /schema n: floor must lie between 1 and max, on a number whose min is 0/);
+  assert.match(await broken(entry('floor: 5').replace('min: 0', 'min: 1').replace('default: 0', 'default: 5')), /schema n: floor must lie between 1 and max, on a number whose min is 0/);
+  const flag = extra => `export default { b: { type: 'boolean', default: false, group: 'Cockpit', label: 'B', title: 't', description: 'd', target: 'dforge', ${extra} } }\n`;
+  assert.equal(await broken(flag('')), '');
+  assert.match(await broken(flag("unit: 'k'")), /schema b: unit must be one of k, %, s, min, on a number/);
+  assert.match(await broken(flag("zero: 'off'")), /schema b: zero must be one of auto, off, any, hidden, unset, on a number/);
   assert.equal(await broken(entry('floor: 5')), '');
 });

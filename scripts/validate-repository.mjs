@@ -5,6 +5,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const names = ['darkraise-ui', 'darkraise-win32ui', 'dforge', 'dr-status'];
 const claudeOnly = ['dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
+// A file's lines for the name sweeps, or null for a binary file (one holding a
+// NUL byte), whose bytes are not text to read names in.
+const textLines = path => {
+  const bytes = readFileSync(path);
+  return bytes.includes(0) ? null : bytes.toString('utf8').split('\n');
+};
 
 export function validateRepository(root) {
   root = resolve(root);
@@ -112,13 +118,15 @@ export function validateRepository(root) {
     'plugins/dforge/reference/session-budget.md',
     'plugins/dforge/skills/migrate/SKILL.md',
   ]);
+  // Third-party licence texts and the test suites spell every retired name.
+  const licensesOrTests = /^plugins\/dforge\/(?:LICENSES|tests)\//;
   const superpowersExempt = rel => superpowersAllowed.has(rel) ||
-    /^plugins\/dforge\/(?:LICENSES|tests)\//.test(rel) ||
+    licensesOrTests.test(rel) ||
     /^plugins\/dforge\/scripts\/lib\/(?:darkmem-(?:sync|mirror|reconcile)|dforge-home-migrate)\.mjs$/.test(rel);
   // dforge 4.0 spells the dr-forge names only where it migrates or translates
   // them. A dated plan or spec name (2026-10-12-dr-forge-settings) cites
   // history and is not a retired name.
-  const retiredForge = /dr-forge|DR_FORGE|(?<!D)FORGE|(?<![A-Za-z0-9_d])forge(?![a-z])/;
+  const retiredForge = /dr-forge|(?<!D)FORGE|(?<![A-Za-z0-9d])forge(?![a-z])/;
   const forgeAllowed = new Set([
     'plugins/dforge/README.md',
     'plugins/dforge/hooks/cockpit/lib.ts',
@@ -131,7 +139,7 @@ export function validateRepository(root) {
     'plugins/dforge/scripts/lib/darkmem-reconcile.mjs',
     'plugins/dforge/skills/migrate/SKILL.md',
   ]);
-  const forgeExempt = rel => forgeAllowed.has(rel) || /^plugins\/dforge\/(?:LICENSES|tests)\//.test(rel);
+  const forgeExempt = rel => forgeAllowed.has(rel) || licensesOrTests.test(rel);
   for (const name of names) {
     const pluginRoot = resolve(root, 'plugins', name);
     if (!existsSync(pluginRoot)) continue;
@@ -142,7 +150,9 @@ export function validateRepository(root) {
         const rel = relative(root, path).replaceAll('\\', '/');
         const checksSuperpowers = name === 'dforge' && !superpowersExempt(rel);
         const checksForge = name === 'dforge' && !forgeExempt(rel);
-        readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+        const lines = textLines(path);
+        if (!lines) continue;
+        lines.forEach((line, index) => {
           if (checksSuperpowers && /superpowers/i.test(line)) errors.push(`${rel}:${index + 1}: retired superpowers name`);
           if (checksForge && retiredForge.test(line.replace(/\d{4}-\d{2}-\d{2}-dr-forge/g, ''))) errors.push(`${rel}:${index + 1}: retired dr-forge name`);
           if (legacyAllowed.has(rel)) return;
@@ -174,7 +184,7 @@ export function validateRepository(root) {
         continue;
       }
       if (!item.isFile() || dccAllowed.has(rel)) continue;
-      readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+      (textLines(path) ?? []).forEach((line, index) => {
         if (line.includes('dcc-darkraise')) errors.push(`${rel}:${index + 1}: retired dcc- plugin name`);
       });
     }
