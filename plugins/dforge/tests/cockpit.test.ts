@@ -2422,6 +2422,48 @@ describe('discord', () => {
     expect(JSON.stringify(await ui.drawn())).not.toContain('abcDEF_token')
   })
 
+  test('keeps the webhook field mounted while a save is out, so a refused entry keeps its text', async ($, on) => {
+    world(on, { tokens: 50_000 })
+    const kept = new Map<string, unknown>()
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => {
+      release = resolve
+    })
+    on('store.get', (_$, e) => ({ value: kept.get(e.key) }))
+    on('store.set', async (_$, e) => {
+      await gate
+      kept.set(e.key, e.value)
+      return { value: undefined }
+    })
+    on('store.delete', () => ({ value: undefined }))
+    on('store.keys', () => ({ value: [...kept.keys()] }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Notifications' })
+    await ui.press({ key: 'set-notify-url-edit' })
+    const submitted = ui.input({ key: 'set-notify-url-input', text: WEBHOOK, kind: 'submit' })
+    await ui.advance(50)
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeDefined()
+    release()
+    await submitted
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /discord\.com\/…\/1234…\/••••/ })).toBeDefined()
+  })
+
+  test('an invalid webhook keeps its field open with the error', async ($, on) => {
+    world(on, { tokens: 50_000 })
+    mock.store(on, {})
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Notifications' })
+    await ui.press({ key: 'set-notify-url-edit' })
+    await ui.input({ key: 'set-notify-url-input', text: 'https://example.com/hook', kind: 'submit' })
+    expect(await ui.find({ key: 'set-notify-url-input' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /not a Discord webhook URL/ })).toBeDefined()
+  })
+
   test('keeps one editor open on the Notifications tab', async ($, on) => {
     world(on, { tokens: 50_000 })
     mock.store(on, {})

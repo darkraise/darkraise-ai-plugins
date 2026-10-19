@@ -830,8 +830,10 @@ export const register: Register = on => {
               submitLabel="save"
               autoFocus
               onSubmit={async (value: string) => {
-                // A save ends a pending reset like any other press.
-                await show({})
+                // A save ends a pending reset like any other press, but the
+                // field stays mounted: closing it here would drop the text of
+                // an entry that is then refused.
+                await update($, settingsView, now => ({ ...now, isConfirmingReset: false }))
                 const problem = await onSave(value)
                 await update($, notifier, now => ({ ...now, editing: problem === null ? null : key, error: problem }))
               }}
