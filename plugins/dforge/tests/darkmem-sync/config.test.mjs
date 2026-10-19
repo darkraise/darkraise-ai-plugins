@@ -227,6 +227,9 @@ test("--mode DIR resolves that checkout from anywhere; an unmapped one prints no
   const extra = mode(elsewhere, ["--mode", repo, "extra"]);
   assert.equal(extra.status, 2);
   assert.equal(extra.stderr, "usage: darkmem-config.mjs --mode [DIR]\n");
+  const empty = mode(elsewhere, ["--mode", ""]);
+  assert.equal(empty.status, 2, "an empty DIR is a usage error, not the working directory");
+  assert.equal(empty.stderr, "usage: darkmem-config.mjs --mode [DIR]\n");
 });
 
 test("--mode runs through a symlinked plugin path", () => {
@@ -239,14 +242,29 @@ test("--mode runs through a symlinked plugin path", () => {
   assert.match(result.stdout, /^documents\t/);
 });
 
-test("--mode in a submodule falls back to the worktree for latest.md", () => {
+test("a submodule is its own repository: mapped by its top level, latest.md in its own checkout", () => {
   const outer = makeRepo();
   const inner = makeRepo();
   git(outer, "-c", "protocol.file.allow=always", "submodule", "add", "-q", inner, "sub");
   const sub = path.join(outer, "sub");
-  const result = spawnSync(process.execPath, [MODULE, "--mode"], { cwd: sub, env: makeHome({ repo: sub }).env, encoding: "utf8", timeout: 10000 });
+  const { env } = makeHome({ repo: sub, stores: { documents: "local", progress: "local" } });
+  const result = spawnSync(process.execPath, [MODULE, "--mode"], { cwd: sub, env, encoding: "utf8", timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.split("\n")[1].split("\t")[3], path.join(sub, ".dforge", "handoff", "latest.md"));
+  const lines = result.stdout.split("\n");
+  assert.equal(lines[1].split("\t")[3], path.join(sub, ".dforge", "handoff", "latest.md"));
+  assert.equal(lines[2], "project\tproj", "the submodule's mapping is found");
+  assert.equal(resolveStores({ cwd: sub, env }).repoRoot, sub);
+});
+
+test("a mapping and a record keyed by a symbolic-linked path name the same repository", () => {
+  const repo = makeRepo();
+  const link = path.join(scratch("dms-link-"), "repo");
+  fs.symlinkSync(repo, link, "dir");
+  const { env, mirror } = makeHome({ repo: link });
+  const stores = resolveStores({ cwd: repo, env });
+  assert.equal(stores.reason, "project proj");
+  assert.deepEqual(applied(stores), ["darkmem", "darkmem"]);
+  assert.equal(stores.documents.root, path.join(mirror, "dforge"));
 });
 
 test("the run key prefers the declared id, then the session record, then a day key", () => {

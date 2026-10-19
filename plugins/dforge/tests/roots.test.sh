@@ -69,7 +69,7 @@ done
 mkdir -p "$REPO/.dforge/sdd/a" "$WT/.dforge/sdd/b"
 printf 'x\n' > "$REPO/.dforge/sdd/a/progress.md"
 printf 'x\n' > "$WT/.dforge/sdd/b/progress.md"
-MIRROR=$(stores_home "$HOME" "$REPO" superpowers local local)
+stores_home "$HOME" "$REPO" superpowers local local > /dev/null
 check "ledger files: local lists each worktree's" "$(cd "$WT" && dforge_ledger_files | sort)" \
   "$(printf '%s\t%s\n%s\t%s' "$TOP/.dforge/sdd/a/progress.md" "$TOP" "$WT/.dforge/sdd/b/progress.md" "$WT" | sort)"
 MIRROR=$(stores_home "$HOME" "$REPO" superpowers local darkmem)
@@ -78,7 +78,7 @@ printf 'x\n' > "$MIRROR/work/sdd/c/progress.md"
 check "ledger files: darkmem lists the mirror's once" "$(cd "$WT" && dforge_ledger_files)" "$(printf '%s\tmirror' "$MIRROR/work/sdd/c/progress.md")"
 
 # --- a relative file spelled from a subdirectory is named from the checkout ---
-MIRROR=$(stores_home "$HOME" "$REPO" superpowers local local)
+stores_home "$HOME" "$REPO" superpowers local local > /dev/null
 mkdir -p "$WT/docs/dforge/plans"
 printf 'p\n' > "$WT/docs/dforge/plans/p.md"
 check "subdirectory: a relative file" "$(cd "$WT/docs/dforge/plans" && dforge_name p.md)" "docs/dforge/plans/p.md"
@@ -105,7 +105,7 @@ check "name spellings: any other name" "$(dforge_name_spellings .dforge/x.md | t
 
 # --- the mapped project, from roots.sh and from dforge-path ---
 FP="$HERE/../scripts/dforge-path"
-MIRROR=$(stores_home "$HOME" "$REPO" superpowers local local)
+stores_home "$HOME" "$REPO" superpowers local local > /dev/null
 check "project: mapped, from a worktree" "$(cd "$WT" && dforge_project)" "superpowers"
 check "project: dforge-path" "$(cd "$WT" && bash "$FP" project)" "superpowers"
 OTHER="$TMP/other"
@@ -121,6 +121,12 @@ check "project: dforge-path unmapped prints nothing" "$(cat "$TMP/project-out")"
 check "project: outside git is status 1" "$?" "1"
 (cd "$WT" && bash "$FP" project extra > /dev/null 2>&1)
 check "project: dforge-path takes no argument" "$?" "2"
+NB="$TMP/nonode-bin"
+mkdir -p "$NB"
+for c in git dirname; do ln -s "$(type -P "$c")" "$NB/$c"; done
+(cd "$WT" && PATH="$NB" dforge_project > "$TMP/project-out")
+check "project: without node is status 1" "$?" "1"
+check "project: without node prints nothing" "$(cat "$TMP/project-out")" ""
 
 # --- a --mode run that prints nothing stops the script ---
 mkdir -p "$TMP/fakebin"
