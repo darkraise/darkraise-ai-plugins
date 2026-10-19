@@ -180,6 +180,26 @@ ar_is_stale() {
   [ -n "$(find "$tp" -mmin +"$AR_STALE_MINUTES" 2>/dev/null)" ]
 }
 
+# ar_busy — true when the recorded run is active and its owner is not gone.
+ar_busy() {
+  ar_state | ar_jq -e '.active == true' >/dev/null 2>&1 && ! ar_is_stale
+}
+
+ar_busy_refusal() {
+  echo "auto-run: an auto run is already active ($(ar_state | ar_jq -r '.spec')); stop it with auto-run stop, or pass --force" >&2
+  return 4
+}
+
+# ar_create_unless_busy FORCE PATH [jq options…] FILTER — ar_create, run under
+# the state's lock: a start that waited for the lock looks again, because the
+# run it found absent may have been started meanwhile.
+ar_create_unless_busy() {
+  local force=$1
+  shift
+  if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
+  ar_create "$@"
+}
+
 # ar_start SPEC REGISTER FORCE — prints the register path. A register it
 # creates goes in the checkout the run starts from, where its path resolves.
 ar_start() {
@@ -188,10 +208,7 @@ ar_start() {
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
-  if [ "$force" != 1 ] && ar_state | ar_jq -e '.active == true' >/dev/null 2>&1 && ! ar_is_stale; then
-    echo "auto-run: an auto run is already active ($(ar_state | ar_jq -r '.spec')); stop it with auto-run stop, or pass --force" >&2
-    return 4
-  fi
+  if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
   top=$(git rev-parse --show-toplevel)
   dforge_stores_init "$top"
   if [ -z "$register" ]; then
@@ -211,14 +228,14 @@ ar_start() {
   [ -f "$(dirname "$path")/.gitignore" ] || printf '*\n' > "$(dirname "$path")/.gitignore"
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
-  ar_locked "$path" ar_create "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
+  ar_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
     setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0
-  }' || return 1
+  }' || return $?
   printf '%s\n' "$register"
 }
 

@@ -295,6 +295,26 @@ for lock in flock no-such-flock; do
   check "$lock: a start waits for the lock" "$(field session):$(field rulings)" "s-2:[]"
 done
 
+# --- a start that is not forced re-checks for a live run under the lock ---
+# s-1's run is stopped, so s-2's first look finds none. While s-2's start waits
+# for the lock, the holder makes s-1's run live again, as a start that got the
+# lock first would: s-2 must see it, not replace it.
+for lock in flock no-such-flock; do
+  [ "$lock" = no-such-flock ] || command -v flock >/dev/null 2>&1 || continue
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  ar --session s-1 stop >/dev/null
+  if [ "$lock" = flock ]; then
+    flock "$STATE.lock" bash -c 'sleep 2; jq ".active = true" "$1" > "$1.held" && mv -f "$1.held" "$1"' _ "$STATE" &
+  else
+    mkdir "$STATE.lockd"
+    (sleep 2; jq '.active = true' "$STATE" > "$STATE.held" && mv -f "$STATE.held" "$STATE"; rmdir "$STATE.lockd") &
+  fi
+  sleep 0.5
+  DFORGE_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
+  wait
+  check "$lock: a start that waited for the lock finds the run made live meanwhile" "$status:$(field session):$(field active)" "4:s-1:true"
+done
+
 # --- stop ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 stop --reason "owner asked"
