@@ -52,11 +52,23 @@ refused=0 moved=0 checkout_refused=0 docs_ok=1 docs_at=""
 checkouts=()
 clean=()
 commit_notes=()
+# In a dry run, each path a line says would move.
+dry_moves=()
 
 refuse() { printf 'dforge-migrate: refused: %s\n' "$1" >&2; refused=1; checkout_refused=1; }
 done_move() {
-  if [ "$dry" -eq 1 ]; then printf 'would move %s -> %s\n' "$1" "$2"; else printf 'moved %s -> %s\n' "$1" "$2"; fi
+  if [ "$dry" -eq 1 ]; then printf 'would move %s -> %s\n' "$1" "$2"; dry_moves+=("$1"); else printf 'moved %s -> %s\n' "$1" "$2"; fi
   moved=1
+}
+
+# would_move PATH — a dry run's line said PATH, or a directory holding it,
+# would move.
+would_move() {
+  local from
+  for from in "${dry_moves[@]+"${dry_moves[@]}"}"; do
+    case $1 in "$from" | "$from"/*) return 0 ;; esac
+  done
+  return 1
 }
 
 # same_entry A B — whether two files, or two symlinks, hold the same thing.
@@ -72,19 +84,23 @@ same_entry() {
 # empty directory TO lacks moves, an identical file is dropped, a differing
 # one is refused and left.
 merge_into() {
-  local from=$1 to=$2 file rel conflicts=0 touched=0 dir_conflicts=0
+  local from=$1 to=$2 file rel conflicts=0 touched=0 dir_conflicts=0 listed=0
   if [ "$dry" -eq 1 ]; then
     while IFS= read -r -d '' file; do
       rel=${file#"$from"/}
-      if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1
+      listed=1
+      if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1; dry_moves+=("$file")
       elif same_entry "$file" "$to/$rel"; then printf 'would drop %s, the same as %s\n' "$file" "$to/$rel"; moved=1
       else refuse "$file differs from $to/$rel; keep one by hand, then run dforge-migrate again"; fi
     done < <(find "$from" \( -type f -o -type l \) -print0)
     while IFS= read -r -d '' file; do
       rel=${file#"$from"/}
-      if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1
-      elif [ ! -d "$to/$rel" ]; then refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dforge-migrate again"; fi
+      if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1 listed=1
+      elif [ ! -d "$to/$rel" ]; then refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dforge-migrate again"; listed=1; fi
     done < <(find "$from" -mindepth 1 -type d -empty -print0)
+    # FROM holds nothing, or only directories TO already has: the real run
+    # removes it and says it moved, so the dry run says so too.
+    if [ "$listed" -eq 0 ] && [ -z "$(find "$from" -mindepth 1 ! -type d -print -quit 2>/dev/null)" ]; then done_move "$from" "$to"; fi
     return 0
   fi
   while IFS= read -r -d '' file; do
@@ -114,23 +130,27 @@ merge_into() {
 
 # dir_link_in DIR — DIR is or holds a symbolic link, so a merge into it could
 # land outside the checkout: even a dangling link can resolve once the merge
-# creates the directory it names.
+# creates the directory it names. A search that fails part way counts as
+# finding one: a link can sit where find could not look.
 dir_link_in() {
+  local found
   [ ! -L "$1" ] || return 0
-  [ -z "$(find "$1" -mindepth 1 -type l -print -quit)" ] || return 0
+  found=$(find "$1" -mindepth 1 -type l -print -quit 2>/dev/null) || return 0
+  [ -z "$found" ] || return 0
   return 1
 }
 
-# mv_plain FROM TO — the rename; merged file by file when both exist.
+# mv_plain FROM TO — the rename; merged file by file when both exist. Status
+# 1 when it refused outright; merge_into's per-file refusals leave it 0.
 mv_plain() {
   [ -e "$1" ] || return 0
-  if [ -L "$(dirname -- "$1")" ] || [ -L "$(dirname -- "$2")" ]; then refuse "$1 or $2 lies in a linked directory; move it by hand, then run dforge-migrate again"; return 0; fi
+  if [ -L "$(dirname -- "$1")" ] || [ -L "$(dirname -- "$2")" ]; then refuse "$1 or $2 lies in a linked directory; move it by hand, then run dforge-migrate again"; return 1; fi
   if [ -e "$2" ]; then
-    if [ -L "$1" ] || dir_link_in "$2"; then refuse "$1 or $2 is or holds a symbolic link; merge them by hand, then run dforge-migrate again"; return 0; fi
-    if [ -d "$1" ] && [ -d "$2" ]; then merge_into "$1" "$2"; else refuse "$1 and $2 both exist and are not both directories; merge them by hand, then run dforge-migrate again"; fi
+    if [ -L "$1" ] || dir_link_in "$2"; then refuse "$1 or $2 is or holds a symbolic link; merge them by hand, then run dforge-migrate again"; return 1; fi
+    if [ -d "$1" ] && [ -d "$2" ]; then merge_into "$1" "$2"; else refuse "$1 and $2 both exist and are not both directories; merge them by hand, then run dforge-migrate again"; return 1; fi
     return 0
   fi
-  if [ "$dry" -eq 1 ] || mv -- "$1" "$2"; then done_move "$1" "$2"; else refuse "could not rename $1"; fi
+  if [ "$dry" -eq 1 ] || mv -- "$1" "$2"; then done_move "$1" "$2"; else refuse "could not rename $1"; return 1; fi
 }
 
 # docs_trees CHECKOUT — each docs tree the checkout holds, one per line.
@@ -156,7 +176,7 @@ migrate_docs() {
   [ "$trees" != "$new" ] || return 0
   old=$trees name=${trees##*/}
   [ "$dry" -eq 0 ] || docs_at=$old
-  if [ -z "$(g -C "$wt" ls-files -- "docs/$name" | head -n 1)" ]; then mv_plain "$old" "$new"; return 0; fi
+  if [ -z "$(g -C "$wt" ls-files -- "docs/$name" | head -n 1)" ]; then mv_plain "$old" "$new" || docs_ok=0; return 0; fi
   if [ -n "$(g --no-optional-locks -C "$wt" status --porcelain --untracked-files=all -- "docs/$name")" ]; then
     refuse "$old has uncommitted changes; commit or stash them, then run dforge-migrate again"
     docs_ok=0
@@ -198,6 +218,9 @@ rewrite_names() {
   [ -f "$file" ] && [ ! -L "$file" ] || return 1
   grep -qE '(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
   if [ "$dry" -eq 1 ]; then
+    # Piped into cmp, a failed rewrite would read as a difference; the real
+    # run skips it, so the dry run lists nothing.
+    renamed_lines "$file" "$mode" > /dev/null || return 1
     ! renamed_lines "$file" "$mode" | cmp -s -- - "$file" || return 1
     printf 'would rewrite the older names in %s\n' "$file"
     moved=1
@@ -226,21 +249,61 @@ writable() {
 }
 
 PREFIX_RE='(^|[^A-Za-z0-9_-])dr-(superpowers|forge):([a-z])'
+# prefixes_renamed FILE — FILE with the older plugin prefixes outside fenced
+# code blocks rewritten as dforge's own. A fence is quoted text, never rewritten.
+prefixes_renamed() {
+  awk '
+    function rename(line,   out, prev) {
+      out = ""
+      while (match(line, /dr-(superpowers|forge):[a-z]/)) {
+        prev = RSTART > 1 ? substr(line, RSTART - 1, 1) : substr(out, length(out), 1)
+        if (prev == "" || prev !~ /[A-Za-z0-9_-]/) {
+          out = out substr(line, 1, RSTART - 1) "dforge:"
+          line = substr(line, RSTART + RLENGTH - 1)
+        } else {
+          out = out substr(line, 1, RSTART)
+          line = substr(line, RSTART + 1)
+        }
+      }
+      return out line
+    }
+    fence == "" && match($0, /^ ? ? ?(```+|~~~+)/) {
+      fence = substr($0, RSTART, RLENGTH); sub(/^ +/, "", fence); print; next
+    }
+    fence == "" { print rename($0); next }
+    match($0, /^ ? ? ?(```+|~~~+)[ \t]*$/) {
+      f = $0; sub(/^ +/, "", f); sub(/[ \t]+$/, "", f)
+      if (substr(f, 1, 1) == substr(fence, 1, 1) && length(f) >= length(fence)) fence = ""
+    }
+    { print }
+  ' "$1"
+}
 
 # rewrite_prefixes FILE CHECKOUT — the older plugin prefixes before a skill or
-# agent name, as dforge's own. Status 1 when FILE names none, or is not
-# writable in CHECKOUT.
+# agent name, as dforge's own. Status 1 when FILE names none outside a fenced
+# block, or is not writable in CHECKOUT.
 rewrite_prefixes() {
   local file=$1 tmp
   writable "$2" "$file" || return 1
   grep -qE "$PREFIX_RE" "$file" 2>/dev/null || return 1
   if [ "$dry" -eq 1 ]; then
+    ! prefixes_renamed "$file" | cmp -s -- - "$file" || return 1
     printf 'would rewrite the plugin prefixes in %s\n' "$file"
     moved=1
     return 0
   fi
   tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || { refuse "could not rewrite the plugin prefixes in $file"; return 1; }
-  if sed -E "s#$PREFIX_RE#\\1dforge:\\3#g" "$file" > "$tmp" && cat "$tmp" > "$file"; then
+  if ! prefixes_renamed "$file" > "$tmp"; then
+    rm -f -- "$tmp"
+    refuse "could not rewrite the plugin prefixes in $file"
+    return 1
+  fi
+  # Every prefix sat inside a fenced block: nothing to rewrite.
+  if cmp -s -- "$tmp" "$file"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  if cat "$tmp" > "$file"; then
     rm -f -- "$tmp"
     printf 'rewrote the plugin prefixes in %s\n' "$file"
     moved=1
@@ -265,7 +328,7 @@ plan_done() {
 # rewrite_active_plans CHECKOUT DOCS — every plan under DOCS/plans/ that is
 # still active, and the checkout's handoff note.
 rewrite_active_plans() {
-  local wt=$1 docs=$2 plan rel state
+  local wt=$1 docs=$2 plan rel state note
   if [ -n "$docs" ] && [ -d "$docs/plans" ]; then
     while IFS= read -r -d '' plan; do
       rel=${plan#"$docs"/}
@@ -276,8 +339,14 @@ rewrite_active_plans() {
       fi
     done < <(find "$docs/plans" -type f -name '*.md' -print0)
   fi
-  for state in .dforge .forge .superpowers; do
-    [ ! -f "$wt/$state/handoff/latest.md" ] || rewrite_prefixes "$wt/$state/handoff/latest.md" "$wt" || true
+  # A real run rewrites only .dforge/'s note: one still under an old state
+  # directory was left there by a refused merge. A dry run moved nothing, so
+  # it also lists an old directory's note that a line above would move.
+  [ ! -f "$wt/.dforge/handoff/latest.md" ] || rewrite_prefixes "$wt/.dforge/handoff/latest.md" "$wt" || true
+  [ "$dry" -eq 1 ] || return 0
+  for state in .forge .superpowers; do
+    note="$wt/$state/handoff/latest.md"
+    [ ! -f "$note" ] || ! would_move "$note" || rewrite_prefixes "$note" "$wt" || true
   done
 }
 
@@ -338,7 +407,15 @@ if [ -f "$HERE/lib/dforge-home-migrate.mjs" ]; then
       # darkmem section" note prints on every run while ~/.dr-superpowers stays.
       if grep -qvE '^dforge-home-migrate: (refused: |darkmem is off until you turn it on: |.* already has a darkmem section; )' <<<"$home_out"; then moved=1; fi
     fi
-    [ "$home_status" -eq 0 ] || refuse "scripts/lib/dforge-home-migrate.mjs did not finish; see its output above"
+    if [ "$home_status" -ne 0 ]; then
+      # A dry run's refusals are foretold, not a failure to finish; a non-zero
+      # exit with no refused: line is a crash in either mode.
+      if [ "$dry" -eq 1 ] && grep -q '^dforge-home-migrate: refused: ' <<<"$home_out"; then
+        refuse "foretold refusals in the home; see above"
+      else
+        refuse "scripts/lib/dforge-home-migrate.mjs did not finish; see its output above"
+      fi
+    fi
   fi
 fi
 
