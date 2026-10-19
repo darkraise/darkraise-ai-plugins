@@ -324,5 +324,5 @@ against the dforge's default branch. No menu. Its final message lists
 every `Ruling:` ledger line, every line of `scripts/auto-run ruling list`,
 every deferred row the run added, every `demo` statement of the spec, every lens
 `scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`, and
-it runs `scripts/auto-run stop` before
-the next-step block.
+it runs `scripts/auto-run stop` with no `--reason` before
+the next-step block: a reason marks the run as stopped and sends a `blocked` notice.

@@ -51,7 +51,7 @@ When `scripts/auto-run status` exits 0
   deferred row the run added to its register (`scripts/auto-run status` names
   it; the `final review residual` rows among them),
   every `demo` statement of the spec, every lens
-  `scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`. Run `scripts/auto-run stop` before printing the next-step block.
+  `scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`. Run `scripts/auto-run stop` with no `--reason` before printing the next-step block: a reason marks the run as stopped and sends a `blocked` notice.
 
 ## Step 1: Verify Tests
 

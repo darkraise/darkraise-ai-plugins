@@ -100,6 +100,8 @@ names "auto-run.md: a second exit 5 stops the run" "$R" '`scripts/auto-run stop 
 names "auto-run.md: dependents come from the plan" "$R" '`**Depends on:**` line names it, or, in a plan without those lines, a later'
 names "auto-run.md: a final residual is a deferred row" "$R" '`scripts/register add <run register> "<the finding>" --state deferred --note "final review residual"`.'
 names "auto-run.md: a final residual keeps the branch" "$R" 'added. `merge` also keeps the branch when the run added a deferred row whose'
+names "auto-run.md: a finish stops the run with no reason" "$R" 'stop` with no `--reason` before'
+names "finishing: a finish stops the run with no reason" "$FIN" 'stop` with no `--reason` before printing the next-step block'
 names "final-review.md: a red gate in an auto run" "$P/reference/final-review.md" 'run ([auto-run.md](auto-run.md)), a red gate does not stop the review: the'
 names "final-review.md: a second red stops the run" "$P/reference/final-review.md" '`scripts/auto-run stop --reason "gate <name> red"` and ends as auto-run.md'
 GWF="$P/skills/using-git-worktrees/SKILL.md"
