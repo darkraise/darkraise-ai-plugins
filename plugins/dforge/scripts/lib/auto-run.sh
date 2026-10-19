@@ -21,6 +21,16 @@ ar_primary_root() {
   git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || return 1
 }
 
+# ar_in_primary — true in the primary checkout. An auto run's tasks run in a
+# linked worktree (dforge:using-git-worktrees), so a task step here would land
+# on the run's base.
+ar_in_primary() {
+  local dir common
+  dir=$(git rev-parse --absolute-git-dir 2>/dev/null) || return 1
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [ "$dir" = "$common" ]
+}
+
 # ar_path — the state file's path, whether or not it exists.
 ar_path() {
   local primary
@@ -150,7 +160,8 @@ ar_start() {
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
-    failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: []
+    failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
+    setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0
   }' > "$tmp"; then
     rm -f "$tmp"
     return 1
@@ -160,13 +171,35 @@ ar_start() {
 }
 
 ar_status() {
-  ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register)"'
+  ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register)\(if .setupDue == true then " — setup due" else "" end)"'
 }
 
 ar_pending() { ar_state | ar_jq -r '.pending // "none"'; }
 
 ar_stop() { # ar_stop [REASON]
   ar_update '.active = false | .stopped = (if $r == "" then null else $r end) | .pending = null' --arg r "${1:-}"
+}
+
+# ar_set_phase PHASE — refuses execute in the primary checkout (return 4): the
+# execution worktree Setup makes is missing. execute and final settle Setup.
+ar_set_phase() {
+  if [ "$1" = execute ] && ar_in_primary; then
+    echo "auto-run: this is the primary checkout; create the execution worktree first (dforge:using-git-worktrees), then run auto-run phase execute from it" >&2
+    return 4
+  fi
+  ar_update '.phase = $p | if $p == "execute" or $p == "final" then .setupDue = false else . end' --arg p "$1"
+}
+
+# ar_task_complete — a task's complete line is written, so the progress counts
+# start again. In the primary checkout that task ran on the run's base: the run
+# stops (return 5) rather than finish there.
+ar_task_complete() {
+  if ar_in_primary; then
+    ar_stop "a task was completed in the primary checkout" || return 1
+    echo "auto-run: a task was completed in the primary checkout; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
+    return 5
+  fi
+  ar_update '.resumes = 0 | .stalls = 0 | .stalledAt = null | .compactionsSinceTask = 0 | .setupDue = false'
 }
 
 # ar_fenced FILE PREFIX — the first fenced block after the first line that
@@ -200,7 +233,8 @@ ar_handoff() {
 # and launch as ar_clear reads them. Refuses (return 4) without an attached
 # plan, or when the first prompt names another plan. Never a self-resume. The
 # phase moves to execute, so the switch's compaction is measured under
-# execution's rules and an oversized one still hands off.
+# execution's rules and an oversized one still hands off. Setup is due until
+# a phase execute from the execution worktree, a task-complete or phase final.
 ar_switch() {
   local plan
   plan=$(ar_get plan)
@@ -208,7 +242,7 @@ ar_switch() {
   ar_handoff || return 1
   [[ $AR_PROMPT == *"$(basename "$plan")"* ]] \
     || { echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2; return 4; }
-  ar_update '.pending = "switch" | .phase = "execute" | .resumePrompt = $p
+  ar_update '.pending = "switch" | .phase = "execute" | .setupDue = true | .compactionsSinceTask = 0 | .resumePrompt = $p
     | .launch = (if $m == "" then null else {model: $m, effort: $e} end)' \
     --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT"
 }

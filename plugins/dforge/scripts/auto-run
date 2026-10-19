@@ -77,9 +77,9 @@ case $cmd in
   phase)
     [ $# -eq 1 ] || usage
     case $1 in spec|plan|execute|final|finish) ;; *) usage ;; esac
-    bound; ar_update '.phase = $p' --arg p "$1"
+    bound; ar_set_phase "$1"
     ;;
-  task-complete) [ $# -eq 0 ] || usage; bound; ar_update '.resumes = 0' ;;
+  task-complete) [ $# -eq 0 ] || usage; bound; ar_task_complete ;;
   clear)
     case "$#:${1:-}" in
       0:) bound; ar_clear 0 ;;
@@ -181,9 +181,11 @@ case $cmd in
     budget=$(ctx_pinned_budget)
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
     window=$(ctx_window "$model")
+    due=""
+    [ "$(ar_get setupDue)" != true ] || due="; setup due: begin at the execution skill's Setup, worktree first"
     if [ -z "$tokens" ]; then
       [ "$pending" != after-compact ] || ar_update '.pending = null' || exit 1
-      echo "continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop"
+      echo "continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop$due"
       exit 0
     fi
     # Only a booked compaction is settled into the run; any other pending
@@ -199,7 +201,8 @@ case $cmd in
         [ "$regime" != handoff ] || regime=$(ar_get regime)
       fi
     fi
-    echo "$result — $(( (tokens + 500) / 1000 ))k after compaction; regime $regime"
+    [ "$result" = continue ] || due=""
+    echo "$result — $(( (tokens + 500) / 1000 ))k after compaction; regime $regime$due"
     [ "$result" = continue ] || exit 5
     ;;
   stop) reason_arg "$@"; bound; ar_stop "$reason" ;;

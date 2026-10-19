@@ -28,6 +28,9 @@ git -C "$REPO" commit -q --allow-empty -m init
 STATE="$REPO/.dforge/sdd/auto-run.json"
 SPEC=docs/dforge/specs/2026-10-13-widget-design.md
 ar() { (cd "$REPO" && bash "$AR" "$@"); }
+# The same, from the linked worktree $TMP/side (made below): where an auto
+# run's execution happens.
+side() { (cd "$TMP/side" && bash "$AR" "$@"); }
 field() { jq -r --arg f "$1" '.[$f] | tostring' "$STATE"; }
 # A session's by-id record and transcript, written now or at a touch -d time.
 live() { # live <session> [touch -d argument]
@@ -84,6 +87,8 @@ git -C "$REPO" worktree add -q -b side "$TMP/side"
 out=$(cd "$TMP/side" && bash "$AR" --session s-5 start --spec "$SPEC" --force 2>&1); status=$?
 check "worktree: the register is created in that checkout" "$status:$([ -f "$TMP/side/$reg" ] && echo yes)" "0:yes"
 check "worktree: the state stays in the primary checkout" "$(field session) $(field base)" "s-5 side"
+side --session s-5 phase execute; status=$?
+check "a run started in a linked worktree: phase execute there passes" "$status:$(field phase)" "0:execute"
 git -C "$REPO" worktree add -q --detach "$TMP/loose"
 (cd "$TMP/loose" && bash "$AR" --session s-6 start --spec "$SPEC" --register docs/r.md --force >/dev/null)
 check "a detached HEAD has no base" "$(field base)" "null"
@@ -92,7 +97,11 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 
 # --- progress ---
 ar --session s-1 attach --plan docs/plan.md
-ar --session s-1 phase execute
+ar --session s-1 phase execute 2>"$TMP/err"; status=$?
+check "phase execute in the primary checkout: exit 4, phase unchanged" "$status:$(field phase)" "4:spec"
+check "phase execute in the primary checkout: says to make the worktree" "$(grep -c 'create the execution worktree first (dforge:using-git-worktrees)' "$TMP/err")" "1"
+side --session s-1 phase execute; status=$?
+check "phase execute from a linked worktree: exit 0" "$status" "0"
 check "attach and phase" "$(field plan) $(field phase)" "docs/plan.md execute"
 ar --session s-1 phase later >/dev/null 2>&1; status=$?
 check "an unknown phase: exit 2" "$status:$(field phase)" "2:execute"
@@ -158,7 +167,7 @@ check "rebind without a clear: exit 4" "$status:$(field session)" "4:s-9"
 # --- self-resumes ---
 ar --session s-9 clear; ar --session s-9 rebind --to s-10
 check "a clear without --phase counts" "$(field resumes)" "1"
-ar --session s-10 task-complete
+side --session s-10 task-complete
 check "task-complete resets the count" "$(field resumes)" "0"
 ar --session s-10 clear; ar --session s-10 rebind --to s-11
 ar --session s-11 clear; ar --session s-11 rebind --to s-12
@@ -197,7 +206,7 @@ for lock in flock no-such-flock; do
 done
 check "no flock: the lock directory is gone" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 mkdir "$STATE.lockd"
-DFORGE_FLOCK=no-such-flock ar --session s-1 task-complete; status=$?
+DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
 check "no flock: a lock its holder left behind is taken after the wait" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 
@@ -370,7 +379,7 @@ for phase in plan final finish; do
   out=$(after); status=$?
   check "after-compact in $phase: 85% of the window continues" "$status:${out%% *}:$(field pending)" "0:continue:null"
 done
-ar --session s-1 phase execute
+side --session s-1 phase execute
 ar --session s-1 compacted
 out=$(after); status=$?
 check "after-compact in execute: 85% of the window still hands off" "$status:${out%% *}" "5:handoff"
@@ -387,6 +396,34 @@ check "final, after a compaction: ok above the high limit" "$status:${out%% *}:$
 ar --session s-1 phase finish
 out=$(verdict --tokens 900000); status=$?
 check "finish, after a final-phase compaction: ok" "$status:${out%% *}" "0:ok"
+
+# --- Setup after the switch: setupDue and the primary-checkout guard ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+check "start: setup is not due" "$(field setupDue)" "false"
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase plan
+ar --session s-1 switch
+check "switch: setup is due" "$(field setupDue)" "true"
+check "status: says setup is due" "$(ar --session s-1 status | grep -c ' — setup due$')" "1"
+ar --session s-1 compacted --switch
+ar --session s-1 resumed
+asst 30000 > "$T"
+out=$(after); status=$?
+check "after a switch, continue names Setup" "$status:$out" "0:continue — 30k after compaction; regime normal; setup due: begin at the execution skill's Setup, worktree first"
+ar --session s-1 phase execute 2>/dev/null; status=$?
+check "phase execute in the primary checkout keeps setup due" "$status:$(field setupDue)" "4:true"
+side --session s-1 phase execute
+check "phase execute from a worktree settles Setup" "$(field setupDue)" "false"
+check "status: no setup note once settled" "$(ar --session s-1 status | grep -c 'setup due')" "0"
+ar --session s-1 switch
+side --session s-1 task-complete; status=$?
+check "task-complete in a worktree: exit 0, Setup settled" "$status:$(field setupDue):$(field active)" "0:false:true"
+ar --session s-1 switch
+ar --session s-1 phase final
+check "phase final settles Setup" "$(field setupDue)" "false"
+ar --session s-1 task-complete 2>"$TMP/err"; status=$?
+check "task-complete in the primary checkout stops the run" "$status:$(field active):$(field stopped)" "5:false:a task was completed in the primary checkout"
+check "task-complete in the primary checkout: says to end as Stopping says" "$(grep -c 'the run has stopped. End as reference/auto-run.md §Stopping says.' "$TMP/err")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
