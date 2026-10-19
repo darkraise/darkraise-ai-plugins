@@ -69,8 +69,10 @@ unit1() { run | grep -m 1 '^unit'; }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 
-mktask() { # mktask <files> <spec> <coupling> <risk> <total>
-  printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files %s - spec %s - coupling %s - risk %s = %s\n' "$@"
+mktask() { # mktask <files> <spec> <coupling> <risk> <total> — the Implementer the ladder gives the total
+  local agent=impl-sonnet-low
+  case $5 in 3|4) agent=impl-sonnet-medium ;; 5) agent=impl-sonnet-high ;; 6) agent=impl-opus-high ;; esac
+  printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:%s\n**Evaluation:** files %s - spec %s - coupling %s - risk %s = %s\n' "$agent" "$@"
 }
 
 # --- the gate boundaries, read from the shipped ladder ---
@@ -123,7 +125,7 @@ check "every ticked executor that admits the unit is listed" \
   "$(field rungs "$out" | tr ',' '\n' | cut -d: -f1 | sort | tr '\n' ' ')" "codex stub "
 
 # --- units, parts and the states a score can be in ---
-plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n#### Part A: a\n\n**Files:**\n- Create: `a`\n\n**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b`\n\n**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n#### Part A: a\n\n**Files:**\n- Create: `a`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 check "a split task yields one unit per part" "$(run | grep -c '^unit')" "2"
 check "a part unit is named with its letter" "$(run | sed -n 's/^unit \([0-9A-Z]*\).*/\1/p' | tr '\n' ' ')" "1A 1B "
 
@@ -170,7 +172,7 @@ check "a complete header reports sections ok" "$(field sections "$(run | grep '^
 check "a ticked executor is reported" "$(field executors "$(run | grep '^header')")" "codex"
 
 # The selection is a header line. A fenced example in a task body is not it.
-plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n> **External executors:** stub\n```\n')"
+plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n> **External executors:** stub\n```\n')"
 check "a fenced executors line is not the selection" "$(field executors "$(run | grep '^header')")" "codex"
 
 printf '# Bare Plan\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$REPO/docs/p.md"

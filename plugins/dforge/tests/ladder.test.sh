@@ -62,11 +62,19 @@ check "assignment has no row above score 6" "${above:-NONE}" "NONE"
 check "assignment rows are the tier-eval table" "$(printf '%s\n' "$assignment" | tr '\n' ',')" \
   "0 impl-sonnet-low,1 impl-sonnet-low,2 impl-sonnet-low,3 impl-sonnet-medium,4 impl-sonnet-medium,5 impl-sonnet-high,6 impl-opus-high,"
 
-not_impl=NONE
-while read -r _ agent; do
-  case " $IMPLEMENTERS " in *" $agent "*) ;; *) not_impl="$agent" ;; esac
-done <<< "$assignment"
-check "every assigned agent is an execution implementer" "$not_impl" "NONE"
+# not_implementers <rows> — "score:agent" for every row whose agent is not an
+# execution implementer, comma-separated; NONE when there is none.
+not_implementers() {
+  local score agent list=""
+  while read -r score agent; do
+    [ -n "$score" ] || continue
+    case " $IMPLEMENTERS " in *" $agent "*) ;; *) list="${list:+$list, }$score:${agent:-(no agent)}" ;; esac
+  done <<< "$1"
+  printf '%s\n' "${list:-NONE}"
+}
+check "every assigned agent is an execution implementer" "$(not_implementers "$assignment")" "NONE"
+check "the implementer check names every offending row and skips blank lines" \
+  "$(not_implementers "$(printf '0 impl-sonnet-low\n\n1 judge-opus\n2\n3 impl-sonnet-medium\n')")" "1:judge-opus, 2:(no agent)"
 
 # --- escalation table -------------------------------------------------------
 escalation=$(block escalation)
