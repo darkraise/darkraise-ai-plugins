@@ -221,6 +221,13 @@ out=$(bash "$FM" "$FC" 2>&1); code=$?
 check "crlf fence: exit 0" "$code" "0"
 check "crlf fence: closes, the line after it rewritten" "$(cat "$FC/docs/dforge/plans/crlf.md")" $'```\r\ndr-forge:inner\r\n```\r\nthen dforge:outer\r'
 
+# --- a line opening with an inline code span is no fence ---
+printf '```x``` then dr-forge:one\ndr-forge:two\n```\ndr-forge:inner\n```\nafter dr-forge:three\n' > "$FC/docs/dforge/plans/span.md"
+out=$(bash "$FM" "$FC" 2>&1); code=$?
+check "inline span: exit 0" "$code" "0"
+check "inline span: text around it rewritten, the real fence kept" "$(cat "$FC/docs/dforge/plans/span.md")" \
+  $'```x``` then dforge:one\ndforge:two\n```\ndr-forge:inner\n```\nafter dforge:three'
+
 # --- .superpowers/ and .forge/ both present: both merged into .dforge/ ---
 T="$TMP/two-states"
 repo "$T"

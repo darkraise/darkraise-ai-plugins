@@ -268,7 +268,9 @@ prefixes_renamed() {
       return out line
     }
     fence == "" && match($0, /^ ? ? ?(```+|~~~+)/) {
-      fence = substr($0, RSTART, RLENGTH); sub(/^ +/, "", fence); print; next
+      opener = substr($0, RSTART, RLENGTH); sub(/^ +/, "", opener)
+      # A backtick fence takes no backtick in its info string: ```x``` is a code span.
+      if (!(substr(opener, 1, 1) == "`" && substr($0, RSTART + RLENGTH) ~ /`/)) { fence = opener; print; next }
     }
     fence == "" { print rename($0); next }
     match($0, /^ ? ? ?(```+|~~~+)[ \t\r]*$/) {
