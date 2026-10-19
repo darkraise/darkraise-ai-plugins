@@ -418,5 +418,20 @@ check "plan_ledger: the pre-2.0 prefix names a checkout plan" \
 (cd "$SR" && HOME=$SH plan_require_same_project "$M/dforge/plans/mp.md" 2>/dev/null)
 check "same project: a mirror plan while documents are local is refused" "$?" "2"
 
+# --- a home that is a git repository: a mirror plan still belongs to the
+# working directory's checkout, and a ConfigError stops plan_ledger ---
+GH="$TMP/git-home"
+git init -q "$GH"
+GM=$(stores_home "$GH" "$SR" proj darkmem darkmem)
+mkdir -p "$GM/dforge/plans" "$GM/work/sdd/gp"
+printf '# GP\n' > "$GM/dforge/plans/gp.md"
+printf '# SDD ledger — plan: docs/dforge/plans/gp.md\n' > "$GM/work/sdd/gp/progress.md"
+check "plan_ledger: a mirror plan in a home under git finds its ledger" \
+  "$(cd "$SR" && HOME=$GH plan_ledger "$GM/dforge/plans/gp.md")" "$GM/work/sdd/gp/progress.md"
+printf '{not json\n' > "$GH/.dforge/config.json"
+(cd "$SR" && HOME=$GH plan_ledger "$GM/dforge/plans/gp.md" > /dev/null 2> "$TMP/ledger-err")
+check "plan_ledger: a ConfigError exits 2" "$?" "2"
+check "plan_ledger: the ConfigError is named once" "$(grep -c 'not valid JSON' "$TMP/ledger-err")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
