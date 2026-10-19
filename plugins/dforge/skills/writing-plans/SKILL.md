@@ -39,7 +39,9 @@ first. Then nothing in this skill waits on your human partner:
   the Fable batch when `scripts/auto-run decision list` prints anything, then
   the switch instead of Execution Handoff: when the spec's `## Decisions`
   holds a `Finish: <action>` line, `scripts/finish-choice set <action> --plan
-  PLAN_FILE`; dforge:handoff steps 0-3 only; `scripts/next-step PLAN_FILE`;
+  PLAN_FILE`; dforge:handoff steps 0-3 only; `scripts/next-step PLAN_FILE`
+  (on exit 5, wait for or stop what `scripts/in-flight` lists and run it
+  again, as auto-run.md §The switch step 3 says);
   then `scripts/auto-run switch` and end the turn with `Auto run: switching`
   as its last line, as auto-run.md §The switch says.
 - **One plan.** An auto run writes one plan for the whole spec and amends it

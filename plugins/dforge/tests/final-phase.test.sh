@@ -38,7 +38,7 @@ names "inline mode: recovery resumes the final phase" "$EP" '3. When every task 
 names "handoff: a saved plan switches in place" "$H" 'a compaction that left too much. A saved plan switches in place instead'
 names "subagent mode: phase final right after the last task" "$SDD" '`scripts/auto-run phase final` next, before any budget check and before the'
 names "inline mode: phase final right after the last task" "$EP" 'merge), run `scripts/auto-run phase final` next, before any budget check and'
-names "finishing: only a setting-recorded choice is overwritten" "$FIN" '`"source": "setting"` and no `answer` (a choice recorded any other way'
+names "finishing: get reads the spec's line" "$FIN" 'with nothing recorded in this checkout'"'"'s plan workspace it reads the spec'"'"'s'
 names "README: the last task completing is never a stop" "$P/README.md" 'The last task completing is never a stop'
 names "subagent mode: the spec's Finish line replaces the question" "$SDD" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
 names "inline mode: the spec's Finish line replaces the question" "$EP" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'

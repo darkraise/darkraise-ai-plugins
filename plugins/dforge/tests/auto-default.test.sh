@@ -33,6 +33,18 @@ names "the review rulings section" "$B" '`## Review rulings`'
 names "the three approvals" "$B" '- **Approve and run unattended**, **Approve, keep the normal stops**, or'
 names "the finish line" "$B" '`Finish: <merge|pr|keep>` line in `## Decisions`;'
 names "specReview never skips it" "$B" '`specReview=false` does not skip this stop.'
+names "the finish line is a bare paragraph" "$B" 'recorded as its own paragraph (no list'
+names "a review deferral carries its command" "$B" '`scripts/register add <register> "A<n>: <statement>" --state deferred --note "Q: <question>"`;'
+names "a review deferral opens a register" "$B" 'with no register open, first open `<docs>/registers/<date>-<spec-slug>.md`'
+names "start takes the deferrals' register" "$B" '`--register <path>` when a register is open, and always the register'
+W="$P/skills/writing-plans/SKILL.md"
+names "writing-plans: a listed launch at the switch" "$W" '(on exit 5, wait for or stop what `scripts/in-flight` lists and run it'
+FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+names "finishing: get reads the spec line" "$FIN" '`Finish:` line itself and records it with `"source": "spec"`, so the spec'
+names "finishing: a final residual keeps a merge" "$FIN" 'the run added. `merge` also keeps when the run added a deferred row whose'
+names "finishing: the final message lists residuals" "$FIN" 'it; the `final review residual` rows among them),'
+names "finishing: a deferred task keeps its rows deferred" "$FIN" '`(deferred by the auto run)` is set with'
+check "finishing: no read-the-spec-and-set clause" "$(grep -c 'first run `scripts/finish-choice set <action> --plan PLAN_FILE`:' "$FIN")" "0"
 names "rulings are imported" "$B" '`scripts/auto-run ruling add "Fable, spec: <line>"`'
 names "the old pin survives" "$B" '`autoRun=off`: never offer an auto run'
 names "a Codex host runs attended" "$B" 'and on a Codex host `on` behaves as `off`. Steps 1-5'

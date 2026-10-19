@@ -18,16 +18,12 @@ When `scripts/auto-run status` exits 0
 `scripts/auto-run phase finish`, then follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is the base `scripts/auto-run status` names.
-- **Step 4 shows no menu.** When the spec `scripts/auto-run status` names
-  holds a `Finish: <action>` line in `## Decisions` and
-  `scripts/finish-choice get --plan PLAN_FILE` exits 3 or prints a record with
-  `"source": "setting"` and no `answer` (a choice recorded any other way
-  stands), first run `scripts/finish-choice set <action> --plan PLAN_FILE`:
-  writing-plans recorded it in the checkout the plan was written in, and an
-  execution worktree keeps a plan workspace of its own.
-  Read `scripts/finish-choice get --plan PLAN_FILE`
-  (the spec review's answer, else the `finishAction` setting; exit 3 means
-  `ask`) and carry out the matching option as if your human partner had chosen it, by
+- **Step 4 shows no menu.** Read `scripts/finish-choice get --plan PLAN_FILE`:
+  with nothing recorded in this checkout's plan workspace it reads the spec's
+  `Finish:` line itself and records it with `"source": "spec"`, so the spec
+  review's answer reaches an execution worktree too; else the `finishAction`
+  setting; exit 3 means `ask`. Carry out the matching option as if your
+  human partner had chosen it, by
   name, since the detached-HEAD menu renumbers them: `merge` is Merge Locally
   into that base, `pr` is Push and Create PR, and `keep`, `ask` and `wait` are
   Keep As-Is. Never discard. In an auto run this mapping replaces Step 4's
@@ -41,7 +37,8 @@ When `scripts/auto-run status` exits 0
   `cannot-test`, or when the run added a deferred register
   row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
   A row deferred at the spec review, before the run started, counts as one
-  the run added.
+  the run added. `merge` also keeps when the run added a deferred row whose
+  Note is `final review residual`.
   The line's `fail` and `flaky` counts are not read: they are taken before the
   fix wave, a failure that survives it is a deferred `A<n>:` row or a red test
   at Step 1, and one the fix wave fixed does not keep the branch.
@@ -52,7 +49,8 @@ When `scripts/auto-run status` exits 0
 - **The rulings** printed at Step 3 also include every line of
   `scripts/auto-run ruling list`, and Step 7's final message lists every
   deferred row the run added to its register (`scripts/auto-run status` names
-  it), every `demo` statement of the spec, every lens
+  it; the `final review residual` rows among them),
+  every `demo` statement of the spec, every lens
   `scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`. Run `scripts/auto-run stop` before printing the next-step block.
 
 ## Step 1: Verify Tests
@@ -353,6 +351,10 @@ prose note is not written. In the same commit as the index line:
   `Assigned` cell is this plan's path — with
   `scripts/register set <register> <id> done`, or `verify --note <what is owed>`
   when the row's acceptance names a check only your human partner can perform;
+  a row cited only by a task whose complete line reads
+  `(deferred by the auto run)` is set with
+  `scripts/register set <register> <id> deferred --note "deferred by the auto run: <the line's Ruling>"`
+  instead, whichever finish action runs this step, never `done` or `verify`;
 - add a row for every `minor (deferred)` line, every `parked` line, every
   complete line's `discovered:` field that is not `none`, and every final-review
   finding you left for your human partner, with

@@ -373,11 +373,15 @@ when the setting is `ask`. Then:
    multiple-choice prompt, at most four per call:
    - the spec path, the `Critic: …` counts and the number of Fable rulings;
    - every statement rated below `high`, asked as Drafting acceptance asks it;
-     a deferral writes the same `A<n>:` register row;
+     a deferral runs
+     `scripts/register add <register> "A<n>: <statement>" --state deferred --note "Q: <question>"`;
+     with no register open, first open `<docs>/registers/<date>-<spec-slug>.md`
+     as Opening an item register says;
    - every item Fable left undecided, and every critic Blocker it did not
      settle, with the recommended option first;
    - when `finishAction` is `ask`: merge into `<current branch>`, open a pull
-     request, or keep the branch, recorded as a
+     request, or keep the branch, recorded as its own paragraph (no list
+     marker, nothing after the value) holding one
      `Finish: <merge|pr|keep>` line in `## Decisions`;
    - **Approve and run unattended**, **Approve, keep the normal stops**, or
      **Changes needed**.
@@ -387,7 +391,8 @@ when the setting is `ask`. Then:
    `specReview=false` does not skip this stop.
 6. **Start the run.** On **Approve and run unattended**, commit the spec and
    the register, run `scripts/auto-run start --spec <spec>` (add
-   `--register <path>` when a register is open), then import each
+   `--register <path>` when a register is open, and always the register
+   step 5's deferrals went to), then import each
    `## Review rulings` line with
    `scripts/auto-run ruling add "Fable, spec: <line>"`. Invoke
    dforge:writing-plans in this session: `scripts/context-size --plan` does not
