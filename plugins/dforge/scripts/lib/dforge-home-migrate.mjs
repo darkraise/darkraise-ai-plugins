@@ -18,6 +18,14 @@ const renamed = uri => {
   return prefix ? `${DOC_PREFIX}/${uri.slice(prefix.length + 1)}` : uri;
 };
 const heldFolders = mirror => [...OLD_PREFIXES, DOC_PREFIX].filter(prefix => fs.existsSync(path.join(mirror, prefix)));
+// What a mirror is renamed from, for the line that says so: its old folder,
+// or else the old prefixes its state's uris hold. Read before migrateMirror.
+function oldNamesIn(mirror, state) {
+  const folder = heldFolders(mirror).find(prefix => prefix !== DOC_PREFIX);
+  if (folder) return folder;
+  const uris = [...Object.keys(state.documents), ...state.pendingLinks];
+  return OLD_PREFIXES.filter(prefix => uris.some(uri => oldPrefixOf(uri) === prefix)).join("/ and ");
+}
 
 // A mirror's local half: the docs folder and every uri its state records.
 // Returns whether anything changed; a mirror holding two docs folders throws.
@@ -54,20 +62,22 @@ export function legacyMirror(mirror) {
   return uris.some(uri => oldPrefixOf(uri) !== undefined);
 }
 
+const lockedLine = mirror => `${mirror} is still in an older layout and another darkmem-sync holds its lock; try again once it is done`;
+
 // The local half under the mirror's lock, for a caller that holds none.
 // Answers { line, blocked } saying what happened, or null when nothing needed
 // doing; blocked: a held lock left the mirror in an older layout.
 export function migrateMirrorLocked(mirror) {
   if (!legacyMirror(mirror)) return null;
   const release = acquireLock(mirror);
-  if (!release) return { line: `${mirror} is still in an older layout and another darkmem-sync holds its lock; try again once it is done`, blocked: true };
+  if (!release) return { line: lockedLine(mirror), blocked: true };
   try {
     const statePath = path.join(mirror, ".sync-state.json");
     const state = loadState(statePath);
-    const from = heldFolders(mirror).find(prefix => prefix !== DOC_PREFIX);
+    const from = oldNamesIn(mirror, state);
     if (!migrateMirror(mirror, state)) return null;
     saveState(statePath, state);
-    return { line: `renamed ${mirror}'s ${from ?? OLD_PREFIXES.join("/ and ")}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`, blocked: false };
+    return { line: `renamed ${mirror}'s ${from}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`, blocked: false };
   } finally {
     release();
   }
@@ -148,6 +158,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
     refused += 1;
   };
   const did = (done, would) => lines.push(dryRun ? would : done);
+  // [from, to, whole]: whole marks a home's mirror folder moving, not one mirror.
   const moves = [];
   // In a dry run nothing has moved, so a path in the new home is read where
   // it still is: under the old entry an earlier line would move there.
@@ -164,14 +175,19 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
     if (dryRun) pending.push([newHome, forgeHome]);
     else fs.renameSync(forgeHome, newHome);
     did(`moved ${forgeHome} to ${newHome}`, `would move ${forgeHome} to ${newHome}`);
-    moves.push([path.join(forgeHome, "mirror"), path.join(newHome, "mirror")]);
+    moves.push([path.join(forgeHome, "mirror"), path.join(newHome, "mirror"), true]);
   } else if (fs.existsSync(forgeHome)) {
     for (const entry of fs.readdirSync(forgeHome, { withFileTypes: true })) {
       const from = path.join(forgeHome, entry.name);
       const to = path.join(newHome, entry.name);
       if (entry.name === "config.json" && entry.isFile() && fs.existsSync(to)) {
-        const old = readJson(from) ?? {};
-        const next = readJson(to) ?? {};
+        const old = readJson(from);
+        const next = readJson(to);
+        const notObject = [[from, old], [to, next]].find(([, value]) => value === null || typeof value !== "object" || Array.isArray(value));
+        if (notObject) {
+          refuse(`${notObject[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+          continue;
+        }
         const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
         if (clash.length) {
           refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dforge-migrate again`);
@@ -219,7 +235,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
         if (dryRun) pending.push([to, from]);
         else fs.renameSync(from, to);
         did(`moved ${from} to ${to}`, `would move ${from} to ${to}`);
-        if (entry.name === "mirror") moves.push([from, to]);
+        if (entry.name === "mirror") moves.push([from, to, true]);
         continue;
       }
       if (sameFile(from, to)) {
@@ -233,8 +249,10 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       for (const dir of [path.join(forgeHome, "mirror"), forgeHome]) {
         try {
           fs.rmdirSync(dir);
-        } catch {
-          // Still holds something refused, or already gone.
+        } catch (error) {
+          // Still holds something refused (ENOTEMPTY, or EEXIST on some
+          // systems), already gone, or is a mirror file whose merge was refused.
+          if (!["ENOTEMPTY", "EEXIST", "ENOENT", "ENOTDIR"].includes(error.code)) refuse(`${dir} could not be removed: ${error.message}`);
         }
       }
     }
@@ -297,12 +315,28 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   for (const entry of fs.existsSync(view("mirror")) ? fs.readdirSync(view("mirror"), { withFileTypes: true }) : []) {
     if (entry.isDirectory()) mirrors.add(view("mirror", entry.name));
   }
-  if (dryRun) for (const [from] of moves) if (!from.endsWith(`${path.sep}mirror`)) mirrors.add(from);
+  if (dryRun) for (const [from, , whole] of moves) if (!whole) mirrors.add(from);
   for (const mirror of mirrors) {
     if (dryRun) {
+      // The real run's checks in its order: the lock, the state, the folders.
+      // A lock the real run would find abandoned and take over is still
+      // foretold as held.
+      if (!legacyMirror(mirror)) continue;
+      if (fs.existsSync(path.join(mirror, ".sync.lock"))) {
+        refuse(lockedLine(mirror));
+        continue;
+      }
+      let state;
+      try {
+        state = loadState(path.join(mirror, ".sync-state.json"));
+      } catch (error) {
+        if (!(error instanceof StateError)) throw error;
+        refuse(error.message);
+        continue;
+      }
       const held = heldFolders(mirror);
       if (held.length > 1) refuse(`${mirror} holds ${held.map(prefix => `${prefix}/`).join(" and ")}; move all but one aside`);
-      else if (legacyMirror(mirror)) lines.push(`would rename ${mirror}'s ${held[0] ?? OLD_PREFIXES.join("/ and ")}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`);
+      else lines.push(`would rename ${mirror}'s ${oldNamesIn(mirror, state)}/ to ${DOC_PREFIX}/; darkmem's documents follow at its next sync`);
       continue;
     }
     try {

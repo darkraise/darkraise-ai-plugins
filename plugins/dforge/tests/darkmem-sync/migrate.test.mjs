@@ -7,6 +7,12 @@ import { migrateHome } from "../../scripts/lib/dforge-home-migrate.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
 
+// Every path under dir, each file with its content's hash: a dry run that
+// rewrote a file fails the comparison, not only one that added or removed one.
+const snapshot = dir => fs.readdirSync(dir, { recursive: true }).sort().map(name => {
+  const file = path.join(dir, name);
+  return fs.statSync(file).isDirectory() ? `${name}/` : `${name} ${sha(read(file))}`;
+});
 const STATE = documents => JSON.stringify({ version: 1, documents, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [] });
 
 async function setup(t) {
@@ -211,10 +217,10 @@ test("migrateHome with dryRun writes nothing and says what would happen", () => 
   write(path.join(forge, "mirror", "p", "forge", "a.md"), "a\n");
   write(path.join(forge, "stores.json"), JSON.stringify({ "/r": { project: "p", mirror: path.join(forge, "mirror", "p") } }));
   write(path.join(home, ".dr-superpowers", "mirror", "q", "superpowers", "b.md"), "b\n");
-  const before = fs.readdirSync(home, { recursive: true }).sort();
+  const before = snapshot(home);
   const { lines, refused } = migrateHome({ HOME: home }, { dryRun: true });
   assert.equal(refused, 0, lines.join("\n"));
-  assert.deepEqual(fs.readdirSync(home, { recursive: true }).sort(), before);
+  assert.deepEqual(snapshot(home), before);
   assert.ok(lines.every(line => line.startsWith("would ")), lines.join("\n"));
   assert.ok(lines.includes(`would move ${forge} to ${path.join(home, ".dforge")}`), lines.join("\n"));
   assert.ok(lines.some(line => line.startsWith("would point 1 ")), lines.join("\n"));
@@ -230,10 +236,10 @@ test("migrateHome with dryRun, merging into an existing ~/.dforge, lists every a
   write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
   write(path.join(forge, "mirror", "p", "forge", "a.md"), "a\n");
   write(path.join(forge, "stores.json"), JSON.stringify({ "/r": { project: "p", mirror: path.join(forge, "mirror", "p") } }));
-  const before = fs.readdirSync(home, { recursive: true }).sort();
+  const before = snapshot(home);
   const dry = migrateHome({ HOME: home }, { dryRun: true });
   assert.equal(dry.refused, 0, dry.lines.join("\n"));
-  assert.deepEqual(fs.readdirSync(home, { recursive: true }).sort(), before);
+  assert.deepEqual(snapshot(home), before);
   const real = migrateHome({ HOME: home });
   assert.equal(real.refused, 0, real.lines.join("\n"));
   const verb = line => line.replace(/^would /, "").split(" ")[0];
@@ -254,9 +260,9 @@ test("migrateHome with dryRun foretells the refusals and darkmem lines a merge i
   write(path.join(superpowers, "config.json"), JSON.stringify({ darkmem: { repos: {} } }));
   write(path.join(superpowers, "mirror", "p", "work", "y"), "y\n");
   const refusal = `refused: ${path.join(dforge, "mirror", "p")} exists, so ${path.join(superpowers, "mirror", "p")} was not moved`;
-  const before = fs.readdirSync(home, { recursive: true }).sort();
+  const before = snapshot(home);
   const dry = migrateHome({ HOME: home }, { dryRun: true });
-  assert.deepEqual(fs.readdirSync(home, { recursive: true }).sort(), before);
+  assert.deepEqual(snapshot(home), before);
   assert.equal(dry.refused, 1, dry.lines.join("\n"));
   assert.ok(dry.lines.includes(refusal), dry.lines.join("\n"));
   assert.ok(dry.lines.some(line => line.includes("already has a darkmem section")), dry.lines.join("\n"));
@@ -297,4 +303,104 @@ test("migrateHome merges the plain files under ~/.dr-forge/mirror into an existi
   assert.ok(result.lines.includes(refusal), result.lines.join("\n"));
   assert.equal(read(from), "old\n");
   assert.equal(read(to), "new\n");
+});
+
+test("migrateHome renames a mirror whose state alone holds forge/ uris", () => {
+  const home = scratch("dms-home-");
+  const mirror = path.join(home, ".dforge", "mirror", "p");
+  write(path.join(mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: { "forge/a.md": sha("a\n") }, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [],
+  }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(mirror, ".sync-state.json"))).documents), ["dforge/a.md"]);
+  assert.equal(fs.existsSync(path.join(mirror, "dforge")), false, "no folder is made for a state-only mirror");
+});
+
+test("migrateHome renames the old uris a mirror's pendingLinks hold", () => {
+  const home = scratch("dms-home-");
+  const mirror = path.join(home, ".dforge", "mirror", "p");
+  write(path.join(mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: ["superpowers/a.md", "forge/b.md", "dforge/c.md"],
+  }));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(JSON.parse(read(path.join(mirror, ".sync-state.json"))).pendingLinks, ["dforge/a.md", "dforge/b.md", "dforge/c.md"]);
+});
+
+test("migrateHome names only the old prefixes a mirror's state holds", () => {
+  const home = scratch("dms-home-");
+  const mirrors = path.join(home, ".dforge", "mirror");
+  write(path.join(mirrors, "p", ".sync-state.json"), JSON.stringify({
+    version: 1, documents: { "forge/a.md": sha("a\n") }, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [],
+  }));
+  write(path.join(mirrors, "q", ".sync-state.json"), JSON.stringify({
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: ["superpowers/b.md"],
+  }));
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  const real = migrateHome({ HOME: home });
+  for (const [verb, lines] of [["would rename", dry.lines], ["renamed", real.lines]]) {
+    assert.ok(lines.includes(`${verb} ${path.join(mirrors, "p")}'s forge/ to dforge/; darkmem's documents follow at its next sync`), lines.join("\n"));
+    assert.ok(lines.includes(`${verb} ${path.join(mirrors, "q")}'s superpowers/ to dforge/; darkmem's documents follow at its next sync`), lines.join("\n"));
+  }
+});
+
+test("migrateHome with dryRun lists a moved project mirror named mirror", () => {
+  const home = scratch("dms-home-");
+  const superpowers = path.join(home, ".dr-superpowers");
+  write(path.join(superpowers, "mirror", "mirror", "superpowers", "b.md"), "b\n");
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  assert.equal(dry.refused, 0, dry.lines.join("\n"));
+  assert.ok(dry.lines.includes(`would rename ${path.join(superpowers, "mirror", "mirror")}'s superpowers/ to dforge/; darkmem's documents follow at its next sync`), dry.lines.join("\n"));
+  const real = migrateHome({ HOME: home });
+  assert.ok(real.lines.includes(`renamed ${path.join(home, ".dforge", "mirror", "mirror")}'s superpowers/ to dforge/; darkmem's documents follow at its next sync`), real.lines.join("\n"));
+});
+
+test("migrateHome with dryRun foretells a held lock and an unreadable sync state", () => {
+  const home = scratch("dms-home-");
+  const mirrors = path.join(home, ".dforge", "mirror");
+  write(path.join(mirrors, "p", "forge", "a.md"), "a\n");
+  fs.mkdirSync(path.join(mirrors, "p", ".sync.lock"), { recursive: true });
+  write(path.join(mirrors, "q", "forge", "b.md"), "b\n");
+  write(path.join(mirrors, "q", ".sync-state.json"), "{not json");
+  const refusals = lines => lines.filter(line => line.startsWith("refused: ")).sort();
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  const real = migrateHome({ HOME: home });
+  assert.equal(real.refused, 2, real.lines.join("\n"));
+  assert.equal(dry.refused, 2, dry.lines.join("\n"));
+  assert.deepEqual(refusals(dry.lines), refusals(real.lines));
+  assert.ok(!dry.lines.some(line => line.startsWith("would rename")), dry.lines.join("\n"));
+});
+
+test("migrateHome reports an old home it cannot remove", t => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  write(path.join(forge, "only-old.txt"), "old\n");
+  write(path.join(home, ".dforge", "config.json"), "{}\n");
+  // The suite may run as root, where permissions cannot make rmdir fail.
+  const rmdir = fs.rmdirSync;
+  t.mock.method(fs, "rmdirSync", dir => {
+    if (dir === forge) throw Object.assign(new Error(`EACCES: permission denied, rmdir '${dir}'`), { code: "EACCES" });
+    return rmdir(dir);
+  });
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 1, lines.join("\n"));
+  assert.ok(lines.includes(`refused: ${forge} could not be removed: EACCES: permission denied, rmdir '${forge}'`), lines.join("\n"));
+  assert.equal(read(path.join(home, ".dforge", "only-old.txt")), "old\n");
+});
+
+test("migrateHome refuses a config.json that is not a JSON object and keeps both files", () => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge", "config.json");
+  const dforge = path.join(home, ".dforge", "config.json");
+  write(forge, JSON.stringify(["x"]));
+  write(dforge, JSON.stringify({ layout: "auto" }));
+  const refusal = `refused: ${forge} does not hold a JSON object; fix or delete it, then run dforge-migrate again`;
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  assert.ok(dry.lines.includes(refusal), dry.lines.join("\n"));
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 1, lines.join("\n"));
+  assert.ok(lines.includes(refusal), lines.join("\n"));
+  assert.deepEqual(JSON.parse(read(forge)), ["x"]);
+  assert.deepEqual(JSON.parse(read(dforge)), { layout: "auto" });
 });
