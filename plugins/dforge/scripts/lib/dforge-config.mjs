@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import SCHEMA from "../../config/schema.mjs";
+import SCHEMA, { isValidValue } from "../../config/schema.mjs";
 
 export class SettingError extends Error {}
 
@@ -22,19 +22,7 @@ export function configPath(env = process.env) {
 }
 
 // A value as the file holds it: exactly the schema's type.
-export function isValid(spec, value) {
-  switch (spec.type) {
-    case "boolean": return typeof value === "boolean";
-    case "number":
-      if (typeof value !== "number" || !Number.isInteger(value)) return false;
-      // A floor leaves 0 as the one value below it: "unset".
-      if (spec.floor !== undefined) return value === 0 || (value >= spec.floor && (spec.max === undefined || value <= spec.max));
-      return (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max);
-    case "enum": return typeof value === "string" && spec.values.includes(value);
-    case "string": return typeof value === "string";
-    default: return false;
-  }
-}
+export const isValid = isValidValue;
 
 // A value as a command line or an environment variable spells it; undefined when it does not fit.
 export function fromText(spec, text) {

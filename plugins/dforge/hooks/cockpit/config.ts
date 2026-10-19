@@ -1,4 +1,4 @@
-import RAW from '../../config/schema.mjs'
+import RAW, { isValidValue } from '../../config/schema.mjs'
 
 /** A setting's value as the settings file holds it. */
 export type SettingValue = boolean | number | string
@@ -38,20 +38,7 @@ export const SCHEMA: Schema = RAW as unknown as Schema
 
 /** Whether a value fits a setting exactly as the file must hold it. */
 export function isValidSetting(spec: SettingSpec, value: unknown): value is SettingValue {
-  switch (spec.type) {
-    case 'boolean':
-      return typeof value === 'boolean'
-    case 'number':
-      // A number setting is whole, as scripts/lib/dforge-config.mjs holds it too.
-      if (typeof value !== 'number' || !Number.isInteger(value)) return false
-      // A floor leaves 0 as the one value below it: "unset".
-      if (spec.floor !== undefined) return value === 0 || (value >= spec.floor && (spec.max === undefined || value <= spec.max))
-      return (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max)
-    case 'enum':
-      return typeof value === 'string' && (spec.values ?? []).includes(value)
-    case 'string':
-      return typeof value === 'string'
-  }
+  return isValidValue(spec, value)
 }
 
 /** A value as an environment variable spells it; undefined when it does not fit. */

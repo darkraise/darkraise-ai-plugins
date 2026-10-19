@@ -20,6 +20,16 @@ unset CLAUDE_CONFIG_DIR DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 fc() { bash "$CMD" "$@" 2> "$TMP/stderr"; }
 fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dforge/config.json"; }
 
+# --- the value check lives in the schema module, shared with the cockpit ---
+SCHEMA_MJS="$HERE/../config/schema.mjs"
+vv() { node --input-type=module -e "import { isValidValue } from '$SCHEMA_MJS'; console.log(isValidValue($1, $2))" 2>&1; }
+check "schema exports isValidValue: boolean" "$(vv '{ type: "boolean" }' 'true')" "true"
+check "isValidValue: a fraction is not a number setting" "$(vv '{ type: "number", min: 0 }' '1.5')" "false"
+check "isValidValue: 0 under a floor means unset" "$(vv '{ type: "number", floor: 1000 }' '0')" "true"
+check "isValidValue: under the floor" "$(vv '{ type: "number", floor: 1000 }' '5')" "false"
+check "isValidValue: enum member" "$(vv '{ type: "enum", values: ["a"] }' '"a"')" "true"
+check "isValidValue: unknown type" "$(vv '{ type: "list" }' '[]')" "false"
+
 # --- defaults, set, get, unset ---
 fresh a
 check "default" "$(fc get warnAt)" "80"

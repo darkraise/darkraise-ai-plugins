@@ -11,6 +11,23 @@
 // makes the decision, or `skill`, through the `dforge-config workflow` line.
 // keepDefault writes the key even at its default, for a key whose absence
 // means something of its own.
+// A value as ~/.dforge/config.json must hold it: exactly the setting's type.
+// scripts/lib/dforge-config.mjs and the cockpit's config.ts both call this, so
+// the two readers cannot disagree about what the file may contain.
+export function isValidValue(spec, value) {
+  switch (spec.type) {
+    case "boolean": return typeof value === "boolean";
+    case "number":
+      if (typeof value !== "number" || !Number.isInteger(value)) return false;
+      // A floor leaves 0 as the one value below it: "unset".
+      if (spec.floor !== undefined) return value === 0 || (value >= spec.floor && (spec.max === undefined || value <= spec.max));
+      return (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max);
+    case "enum": return typeof value === "string" && (spec.values ?? []).includes(value);
+    case "string": return typeof value === "string";
+    default: return false;
+  }
+}
+
 export default {
   openAtStart: {
     type: 'boolean', default: true, group: 'Cockpit', target: 'dforge',
