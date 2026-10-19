@@ -54,6 +54,9 @@ H=$HOME
 git -C "$G" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 FP="$HERE/../scripts/dforge-path"
 check "dforge-path: ledger, local" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$TOP/.dforge/sdd/p1"
+check "dforge-path: ledger of a plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger docs/dforge/plans/2026-10-19-greet.md)" "$TOP/.dforge/sdd/2026-10-19-greet"
+check "dforge-path: ledger of a backslashed plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger 'docs\dforge\plans\2026-10-19-greet.md')" "$TOP/.dforge/sdd/2026-10-19-greet"
+check "dforge-path: ledger of a bare plan file name" "$(cd "$G" && HOME=$H bash "$FP" ledger 2026-10-19-greet.md)" "$TOP/.dforge/sdd/2026-10-19-greet"
 check "dforge-path: latest, local" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dforge/handoff/latest.md"
 check "dforge-path: store, local" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents local|progress local|"
 M=$(stores_home "$H" "$G" proj darkmem darkmem)

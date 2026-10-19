@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dforge-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG | latest | store | name PATH | project
+# dforge-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | store | name PATH | project
 # Where this repository's dforge files live: the state directory (.dforge/,
 # always in the checkout), the docs root and a
 # plan's ledger directory and latest.md (in the checkout or in the darkmem
@@ -10,7 +10,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/roots.sh"
-usage() { echo "usage: dforge-path state|docs [RELATIVE] | ledger SLUG | latest | store | name PATH | project" >&2; exit 2; }
+usage() { echo "usage: dforge-path state|docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | store | name PATH | project" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 [ "$1" = state ] || dforge_stores_init
 case $1 in
@@ -19,7 +19,14 @@ case $1 in
     dir=$(dforge_dir state "$(git rev-parse --show-toplevel 2>/dev/null || pwd)") || exit 2
     ;;
   docs) [ $# -le 2 ] || usage; dir=$(dforge_docs_root) ;;
-  ledger) [ $# -eq 2 ] || usage; dforge_ledger_dir "$2"; exit 0 ;;
+  ledger)
+    [ $# -eq 2 ] || usage
+    # A plan path names the same ledger as its basename (sdd-workspace's rule).
+    slug=${2//\\//}
+    case $slug in */* | *.md) slug=$(basename "$slug" .md) ;; esac
+    dforge_ledger_dir "$slug"
+    exit 0
+    ;;
   latest) [ $# -eq 1 ] || usage; dforge_latest_file; exit 0 ;;
   store) [ $# -eq 1 ] || usage; printf 'documents %s\nprogress %s\n' "$(dforge_docs_store)" "$(dforge_progress_store)"; exit 0 ;;
   name) [ $# -eq 2 ] || usage; dforge_name "$2"; exit 0 ;;
