@@ -122,6 +122,7 @@ dforge_ledger_files() {
 # their keys.
 dforge_name_key() {
   local name=${1#./}
+  [ "$name" = / ] || name=${name%/}
   case $name in
     docs/superpowers|docs/forge) printf 'docs/dforge\n' ;;
     docs/superpowers/*) printf 'docs/dforge/%s\n' "${name#docs/superpowers/}" ;;
@@ -135,12 +136,14 @@ dforge_name_key() {
 # register cells keep the spelling they were written with, so a search runs
 # once per line and accepts any.
 dforge_name_spellings() {
-  local key
+  local key rest
   key=$(dforge_name_key "$1")
   printf '%s\n' "$key"
   case $key in
     docs/dforge) printf 'docs/forge\ndocs/superpowers\n' ;;
-    docs/dforge/*) printf 'docs/forge/%s\ndocs/superpowers/%s\n' "${key#docs/dforge/}" "${key#docs/dforge/}" ;;
+    docs/dforge/*)
+      rest=${key#docs/dforge/}
+      printf 'docs/forge/%s\ndocs/superpowers/%s\n' "$rest" "$rest" ;;
   esac
 }
 
@@ -173,9 +176,11 @@ _dforge_name_of() { # ABSOLUTE — its name when it lies under a root; status 1 
 }
 
 # dforge_name FILE [DIR] — the inverse of dforge_resolve, computed from the roots.
-# A relative FILE that exists from a subdirectory of the checkout is made
-# absolute first; a path spelled through a symbolic link is retried in its
-# physical form, and a Git Bash /c/… path in git's C:/… form.
+# A relative FILE is a path from the working directory, as every caller holds
+# it, even when DIR names another directory: one that exists from a
+# subdirectory of the checkout is made absolute first. A path spelled through a
+# symbolic link is retried in its physical form, and a Git Bash /c/… path in
+# git's C:/… form.
 dforge_name() {
   local file=${1//\\//} physical
   dforge_stores_init "${2:-}"

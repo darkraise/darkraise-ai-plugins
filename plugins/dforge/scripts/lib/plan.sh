@@ -322,10 +322,18 @@ plan_task_depends() {
 }
 
 # _plan_ctx PLAN — the directory whose checkout a plan belongs to: its own
-# directory inside a git repository, else the working directory (a plan in
-# the darkmem mirror belongs to the checkout it is worked from).
+# directory inside a git repository, else the working directory. A plan in
+# the darkmem mirror belongs to the checkout it is worked from, even when the
+# mirror lies inside a repository (a home directory under git).
 _plan_ctx() {
-  if git -C "$(dirname "$1")" rev-parse --show-toplevel >/dev/null 2>&1; then dirname "$1"; else printf '%s\n' "$PWD"; fi
+  local dir mirror physical
+  dir=$(dirname "$1")
+  mirror=$(cd "${HOME:-}/.dforge/mirror" 2>/dev/null && pwd -P) || mirror=""
+  physical=$(cd "$dir" 2>/dev/null && pwd -P) || physical=""
+  if [ -n "$mirror" ] && [ -n "$physical" ]; then
+    case "$physical/" in "$mirror"/*) printf '%s\n' "$PWD"; return 0 ;; esac
+  fi
+  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$PWD"; fi
 }
 
 # plan_locate PLAN — PLAN when it is a file; otherwise the file its name
@@ -345,6 +353,8 @@ plan_locate() {
 plan_ledger() {
   local ctx want file named
   ctx=$(_plan_ctx "$1")
+  # In this shell, so a ConfigError exits the caller rather than a $(…) below.
+  dforge_stores_init "$ctx"
   want=$(dforge_name_key "$(dforge_name "$1" "$ctx")")
   file="$(dforge_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
   [ -f "$file" ] || return 0

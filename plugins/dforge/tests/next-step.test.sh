@@ -655,6 +655,15 @@ printf '# Completed plans\n\n- 2026-01-01 `docs/superpowers/plans/inc1.md` — m
   > "$GREPO/docs/dforge/plans/completed.md"
 bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
 
+# The reverse direction: Assigned cells spelled docs/forge/ match the plan
+# being completed and a completed.md entry spelled docs/superpowers/.
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/forge/plans/inc2.md >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned docs/forge/plans/inc1.md >/dev/null
+OUT=$(cd "$GREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/inc2.md 2>&1)
+has "routing: docs/forge cells name docs/superpowers plans" "$OUT" "Still assigned to a finished plan: #1, #6"
+bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned docs/superpowers/plans/inc2.md >/dev/null
+bash "$HERE/../scripts/register" set "$GREG" 6 open --assigned docs/superpowers/plans/inc1.md >/dev/null
+
 # An absolute Assigned cell is named from the roots: one naming the plan being
 # completed and one naming a finished plan are both stale.
 bash "$HERE/../scripts/register" set "$GREG" 1 doing --assigned "$GREPO/docs/dforge/plans/inc2.md" >/dev/null

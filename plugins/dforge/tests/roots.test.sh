@@ -85,6 +85,9 @@ check "subdirectory: a relative file" "$(cd "$WT/docs/dforge/plans" && dforge_na
 check "subdirectory: a name that is no file here stays" "$(cd "$WT/docs/dforge/plans" && dforge_name docs/superpowers/plans/p.md)" "docs/superpowers/plans/p.md"
 check "a historical citation resolves to the file" "$(cd "$WT" && cat "$(dforge_resolve docs/superpowers/plans/p.md)")" "p"
 check "a 3.x citation resolves to the file" "$(cd "$WT" && cat "$(dforge_resolve docs/forge/plans/p.md)")" "p"
+check "a bare 3.x docs directory resolves to the docs root" "$(cd "$WT" && dforge_resolve docs/forge)" "$WT/docs/dforge"
+check "DIR: a relative file is a path from the working directory" \
+  "$(cd "$WT/docs/dforge" && dforge_name plans/p.md plans)" "docs/dforge/plans/p.md"
 
 # --- one name under either docs prefix (spec §7.1) ---
 check "name key: the pre-2.0 prefix" "$(dforge_name_key docs/superpowers/plans/p.md)" "docs/dforge/plans/p.md"
@@ -93,6 +96,8 @@ check "name key: a bare docs/forge" "$(dforge_name_key docs/forge)" "docs/dforge
 check "name key: docs/forgex is another name" "$(dforge_name_key docs/forgex/a.md)" "docs/forgex/a.md"
 check "name key: the dforge prefix" "$(dforge_name_key docs/dforge/plans/p.md)" "docs/dforge/plans/p.md"
 check "name key: a bare docs/superpowers" "$(dforge_name_key docs/superpowers)" "docs/dforge"
+check "name key: a trailing slash" "$(dforge_name_key docs/superpowers/)" "docs/dforge"
+check "name key: a trailing slash after a name" "$(dforge_name_key docs/forge/plans/)" "docs/dforge/plans"
 check "name key: a leading ./" "$(dforge_name_key ./docs/superpowers/specs/s.md)" "docs/dforge/specs/s.md"
 check "name key: docs/superpowersx is another name" "$(dforge_name_key docs/superpowersx/a.md)" "docs/superpowersx/a.md"
 check "name key: a name outside the docs directory" "$(dforge_name_key .dforge/sdd/p/progress.md)" ".dforge/sdd/p/progress.md"
@@ -101,6 +106,8 @@ check "name spellings: a document name" \
   "$(dforge_name_spellings docs/superpowers/plans/p.md | tr '\n' '|')" "docs/dforge/plans/p.md|docs/forge/plans/p.md|docs/superpowers/plans/p.md|"
 check "name spellings: the docs directory itself" \
   "$(dforge_name_spellings ./docs/dforge | tr '\n' '|')" "docs/dforge|docs/forge|docs/superpowers|"
+check "name spellings: a trailing slash" \
+  "$(dforge_name_spellings docs/forge/ | tr '\n' '|')" "docs/dforge|docs/forge|docs/superpowers|"
 check "name spellings: any other name" "$(dforge_name_spellings .dforge/x.md | tr '\n' '|')" ".dforge/x.md|"
 
 # --- the mapped project, from roots.sh and from dforge-path ---
