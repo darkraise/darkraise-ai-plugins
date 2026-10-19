@@ -129,8 +129,9 @@ export function measureTranscript(source) {
     if (use.name === 'Monitor') monitors++;
     // A write that failed (an Edit whose old string was not found) recorded
     // nothing. A Bash call's error is its last command's exit status, so a
-    // ledger line it appended before a failing command was still written.
-    if (use.name === 'Bash' || !failed.has(use.id)) for (const hit of ledgerText(use).matchAll(COMPLETE)) completed.push(hit[1]);
+    // ledger line it appended before a failing command was still written,
+    // unless an `&&` ahead of the redirect let an earlier failure skip it.
+    if (!failed.has(use.id) || (use.name === 'Bash' && !/&&/.test(cmd.slice(0, Math.max(0, cmd.search(WRITES_LEDGER)))))) for (const hit of ledgerText(use).matchAll(COMPLETE)) completed.push(hit[1]);
     let seat = null;
     if (tier !== null || /judge-/.test(type)) seat = { kind: 'review', name: type || `codex:${tier}` };
     else if (isCodexTask(cmd) || /impl-/.test(type)) seat = { kind: 'fix', name: type || 'codex' };

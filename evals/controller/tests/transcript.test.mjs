@@ -154,6 +154,21 @@ test('a Bash call that fails after writing the ledger still wrote it; a failed W
   assert.deepEqual(m.completed, ['1']);
 });
 
+test('a failed Bash call whose ledger write sat behind an && wrote nothing; one that succeeded did', () => {
+  const m = measureTranscript(jsonl([
+    said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [
+      use('f1', 'Bash', { command: "false && echo 'Task 6: complete (commits a..b)' >> .dforge/sdd/p/progress.md" }),
+      use('f2', 'Bash', { command: "git commit -m x && echo 'Task 7: complete (commits c..d)' | tee -a .dforge/sdd/p/progress.md" }),
+      use('s1', 'Bash', { command: "true && echo 'Task 8: complete (commits e..f)' >> .dforge/sdd/p/progress.md" }),
+      use('o1', 'Bash', { command: "false || echo 'Task 9: complete (commits g..h)' >> .dforge/sdd/p/progress.md; false" }),
+    ]),
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'f1', is_error: true, content: 'Exit code 1' }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'f2', is_error: true, content: 'Exit code 1' }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'o1', is_error: true, content: 'Exit code 1' }] } },
+  ]));
+  assert.deepEqual(m.completed, ['8', '9']);
+});
+
 test('ledger complete lines the controller wrote are collected, deferred ones left out', () => {
   const ledger = '/w/.dforge/sdd/p/progress.md';
   const m = measureTranscript(jsonl([
