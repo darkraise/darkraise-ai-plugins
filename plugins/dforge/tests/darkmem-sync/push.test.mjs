@@ -503,8 +503,10 @@ test("a checkpoint whose answer was lost is found after a push to another workst
   assert.match(result.stdout, / 0 checkpoints;/);
   const filed = key => s.stub.db.workstreams.find(w => w.key === key).entries;
   assert.equal(filed("p1").length, 1, "p1's lost checkpoint is recorded, not filed twice");
-  const { checkpointAt } = JSON.parse(read(path.join(s.mirror, ".sync-state.json")));
-  assert.deepEqual(checkpointAt, { p1: filed("p1")[0].created_at, p2: filed("p2")[0].created_at });
+  const { checkpointAt, checkpointAtByWorkstream } = JSON.parse(read(path.join(s.mirror, ".sync-state.json")));
+  const [at1, at2] = [filed("p1")[0].created_at, filed("p2")[0].created_at];
+  assert.equal(checkpointAt, at1 > at2 ? at1 : at2, "the string is the newest date");
+  assert.deepEqual(checkpointAtByWorkstream, { p1: at1, p2: at2 });
 });
 
 test("a note returned to an earlier workstream is filed again, so the newest checkpoint is that note", async t => {
@@ -538,7 +540,9 @@ test("an old state file's single checkpointAt stands for a workstream until it i
   assert.equal(result.code, 0, result.stdout);
   assert.match(result.stdout, / 1 checkpoints;/, "the old value is the floor: X filed before it is not this note");
   const entries = s.stub.db.workstreams[0].entries;
-  assert.deepEqual(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).checkpointAt, { "*": old, p1: entries.at(-1).created_at });
+  const saved = JSON.parse(read(path.join(s.mirror, ".sync-state.json")));
+  assert.equal(saved.checkpointAt, entries.at(-1).created_at, "an older dforge reads a string");
+  assert.deepEqual(saved.checkpointAtByWorkstream, { "*": old, p1: entries.at(-1).created_at });
 });
 
 test("push refuses a uri Windows cannot hold", { skip: process.platform === "win32" && "Windows cannot create these files" }, async t => {

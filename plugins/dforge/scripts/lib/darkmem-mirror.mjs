@@ -174,16 +174,18 @@ const isLedgerRecord = (slug, record) => validKey(slug) && record !== null && ty
 const EVERY_WORKSTREAM = "*";
 const isStamp = value => typeof value === "string" && !Number.isNaN(Date.parse(value));
 
-// The loaded checkpointAt, or undefined when it is malformed. A saved string
-// with a checkpointWorkstream beside it is that one workstream's value.
-function checkpointAtRecord(value, workstream) {
-  if (isStamp(value) && typeof workstream === "string" && workstream !== "" && workstream !== EVERY_WORKSTREAM) {
-    const record = Object.create(null);
-    record[workstream] = value;
-    return record;
-  }
-  if (value === null || isStamp(value)) return value;
-  return dictOf(value, (key, at) => key !== "" && isStamp(at)) ?? undefined;
+const stampDict = value => dictOf(value, (key, at) => key !== "" && isStamp(at));
+
+// The loaded checkpointAt, or undefined when it is malformed. The saved
+// record (byWorkstream) is used only while the file's own checkpointAt is its
+// newest date; any other value means an older dforge wrote the file since, and
+// that value stands as it always did.
+function checkpointAtRecord(value, byWorkstream) {
+  const held = value === null || isStamp(value) ? value : stampDict(value) ?? undefined;
+  if (held === undefined || byWorkstream === undefined) return held;
+  const record = stampDict(byWorkstream);
+  if (record === null) return undefined;
+  return value === newestCheckpointAt({ checkpointAt: record }) ? record : held;
 }
 
 export function checkpointAtOf(state, workstream) {
@@ -227,7 +229,7 @@ export function loadState(file) {
   }
   const documents = dictOf(raw?.documents, (uri, hash) => isHash(hash));
   const ledgers = dictOf(raw?.ledgers, isLedgerRecord);
-  const checkpointAt = checkpointAtRecord(raw?.checkpointAt, raw?.checkpointWorkstream);
+  const checkpointAt = checkpointAtRecord(raw?.checkpointAt, raw?.checkpointAtByWorkstream);
   const valid = raw?.version === 1 && documents && ledgers
     && (raw.checkpoint === null || isHash(raw.checkpoint))
     && checkpointAt !== undefined
@@ -255,16 +257,14 @@ export function writeFileAtomic(file, data) {
   fs.renameSync(temporary, file);
 }
 
-// dforge 4.1.0 reads only a string checkpointAt, so one recorded workstream is
-// saved as a string with its key beside it under checkpointWorkstream, which
-// 4.1.0 ignores; a second workstream switches to the object form.
+// dforge 4.1.0 refuses a checkpointAt that is not null or a string and ignores
+// fields it does not know, so the per-workstream record is saved beside a
+// string checkpointAt holding its newest date. loadState trusts the record
+// only while that string is still its newest date.
 function savedForm(state) {
   const held = state.checkpointAt;
-  const keys = held !== null && typeof held === "object" ? Object.keys(held) : [];
-  if (keys.length !== 1) return state;
-  const [key] = keys;
-  const { checkpointAt, ...rest } = state;
-  return key === EVERY_WORKSTREAM ? { ...rest, checkpointAt: held[key] } : { ...rest, checkpointAt: held[key], checkpointWorkstream: key };
+  if (held === null || typeof held === "string") return state;
+  return { ...state, checkpointAt: newestCheckpointAt(state), checkpointAtByWorkstream: held };
 }
 
 export function saveState(file, state) {

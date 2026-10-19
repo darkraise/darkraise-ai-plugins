@@ -250,8 +250,8 @@ test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounde
   s.stub.db.workstreams[0].entries[1].created_at = "2026-09-25T10:00:00.000003+00:00";
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# C\n", "p2 is listed first, and C is newer than B by one microsecond");
-  assert.equal(s.state().checkpointAt, "2026-09-25T10:00:00.000003+00:00", "one workstream is saved as the plain string");
-  assert.equal(s.state().checkpointWorkstream, "p1");
+  assert.equal(s.state().checkpointAt, "2026-09-25T10:00:00.000003+00:00", "the string is the newest date");
+  assert.deepEqual(s.state().checkpointAtByWorkstream, { p1: "2026-09-25T10:00:00.000003+00:00" });
 });
 
 test("latest.md stays the newest stop when the workstream that filed it closes", async t => {
@@ -280,7 +280,9 @@ test("an old state file's single checkpointAt gates a pull, which then records t
   await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# B\n");
-  assert.deepEqual(s.state().checkpointAt, { "*": old, p2: s.stub.db.workstreams[1].entries[0].created_at });
+  const recorded = s.stub.db.workstreams[1].entries[0].created_at;
+  assert.equal(s.state().checkpointAt, recorded, "an older dforge reads a string");
+  assert.deepEqual(s.state().checkpointAtByWorkstream, { "*": old, p2: recorded });
 });
 
 test("a latest.md that cannot be read is one failure, and the rest of the pull still lands", async t => {
