@@ -20,7 +20,7 @@ export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
+unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
@@ -598,6 +598,36 @@ ar --session s-1 resumed
 printf '{}\n' > "$T"
 out=$(after); status=$?
 check "after-compact: an unknown size with setup due names Setup" "$status:$out:$(field pending)" "0:continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop; setup due: begin at the execution skill's Setup, worktree first:null"
+
+# --- every suite that runs the run-control scripts names its own session ---
+# A subagent's shell carries the controller's CLAUDE_CODE_SESSION_ID, so a
+# suite run there that leaves it set binds to the live auto run. A line runs a
+# script when the path follows bash, "$, $ or starts a command; a line that
+# only names it in quoted text, as a grep needle does, is not a match.
+names='(context-size|auto-run|task-brief|review-package|repo-audit)([^[:alnum:]-]|$)'
+runs='(bash[[:space:]]+|"\$|\$)[^[:space:]'"'"'`]*scripts/'"$names"'|(^|[;&|(])[[:space:]]*"?(\./)?scripts/'"$names"
+sources='(^|[[:space:];&(])(\.|source)[[:space:]]+[^[:space:]]*scripts/lib/(auto-run|context)\.sh'
+is_run() { grep -Eq "$runs|$sources" <<<"$1" && echo run || echo no; }
+check "scan: bash and a path variable is a run" "$(is_run 'out=$(bash "$P/scripts/task-brief" docs/plan.md 1)')" "run"
+check "scan: a path kept in a variable is a run" "$(is_run 'AR="$HERE/../scripts/auto-run"')" "run"
+check "scan: a command that starts with the path is a run" "$(is_run '(cd "$REPO" && scripts/context-size --final)')" "run"
+check "scan: sourcing context.sh is a run" "$(is_run '. "$HERE/../scripts/lib/context.sh"')" "run"
+check "scan: a grep needle is not a run" "$(is_run "names \"x\" \"\$F\" '\`scripts/auto-run switch\` and end the turn'")" "no"
+check "scan: another script of a similar name is not a run" "$(is_run 'bash "$P/scripts/auto-run-probe"')" "no"
+named() { # named <suite> <variable>: the suite exports or unsets it
+  grep -Eq "^[[:space:]]*(export|unset)[[:space:]](.*[[:space:]])?$2([=[:space:]]|\$)" "$1"
+}
+found="" unnamed=""
+for suite in "$HERE"/*.sh; do
+  lines=$(grep -E "$runs|$sources" "$suite") || continue
+  found="$found $(basename "$suite")"
+  named "$suite" AR_SESSION && named "$suite" CLAUDE_CODE_SESSION_ID && continue
+  # Or every such line passes both on its command line.
+  [ -n "$(grep -v 'AR_SESSION=' <<<"$lines"; grep -v 'CLAUDE_CODE_SESSION_ID=' <<<"$lines")" ] || continue
+  unnamed="$unnamed $(basename "$suite")"
+done
+check "scan: this suite is found" "$(case "$found " in *" auto-run.test.sh "*) echo found ;; *) echo missed ;; esac)" "found"
+check "every suite that runs the run-control scripts sets or unsets both session variables" "${unnamed# }" ""
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
