@@ -507,6 +507,25 @@ test("a checkpoint whose answer was lost is found after a push to another workst
   assert.deepEqual(checkpointAt, { p1: filed("p1")[0].created_at, p2: filed("p2")[0].created_at });
 });
 
+test("a note returned to an earlier workstream is filed again, so the newest checkpoint is that note", async t => {
+  const s = await setup(t);
+  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  const plan = name => `# Handoff\n\n## State\n- Plan: \`docs/dforge/plans/${name}.md\`\n`;
+  for (const name of ["p1", "p2", "p1"]) {
+    write(latest, plan(name));
+    const result = await s.push();
+    assert.equal(result.code, 0, result.stdout);
+    assert.match(result.stdout, / 1 checkpoints;/, `${name} is filed`);
+  }
+  const filed = key => s.stub.db.workstreams.find(w => w.key === key).entries.filter(e => e.kind === "checkpoint");
+  assert.equal(filed("p1").length, 2, "the second note for p1 is a new checkpoint, not the acknowledged first");
+  assert.equal(filed("p2").length, 1);
+  const other = makeHome({ repo: s.repo, url: s.stub.url });
+  const pulled = await run(["pull"], { cwd: s.repo, env: other.env });
+  assert.equal(pulled.code, 0, pulled.stdout + pulled.stderr);
+  assert.equal(read(path.join(other.workRoot, "handoff", "latest.md")), plan("p1"));
+});
+
 test("an old state file's single checkpointAt stands for a workstream until it is pushed", async t => {
   const s = await setup(t);
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# X\n" }] });

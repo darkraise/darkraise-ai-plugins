@@ -408,12 +408,13 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
   // The same note already filed since this workstream's last synced checkpoint
   // (an earlier push whose answer was lost, even behind another client's
   // checkpoint or this mirror's push to another workstream) is recorded, not
-  // filed twice.
+  // filed twice. The entry recorded at that time is already acknowledged, so
+  // only a newer one can be a lost answer.
   const existing = await client.resume(cfg.project, workstream);
   const synced = checkpointAtOf(state, workstream);
   const since = (synced && isoMicros(synced)) ?? -Infinity;
   const filed = existing && (await client.entries(existing.workstream.id, "checkpoint"))
-    .find(entry => isoMicros(entry.created_at) >= since && sha256(Buffer.from(entry.body, "utf8")) === hash);
+    .find(entry => isoMicros(entry.created_at) > since && sha256(Buffer.from(entry.body, "utf8")) === hash);
   if (filed) {
     state.checkpoint = hash;
     recordCheckpointAt(state, workstream, filed.created_at);
