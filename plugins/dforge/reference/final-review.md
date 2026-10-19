@@ -7,15 +7,22 @@ of the work being done.
 ## Who runs it, and when
 
 - **Either execution mode:** the session that completed the last task: the
-  final phase never hands off. The final
-  phase - this review, its one fix wave and finishing - is measured against
-  that final-phase limit, not the task budget, so a `review-package` budget
-  line saying `handoff` here does not stop it. Once the review is clean,
-  finishing follows with no budget check.
-- **Either mode:** point the reviewer at the ledger's deferred-minor and parked
-  lines, the complete lines' `discovered:` fields, every borderline (9-13) score,
-  and every `(unseated)` ruling, so it can triage what must be fixed before
-  merge.
+  final phase never hands off. The final phase - this review, its one fix wave
+  and finishing - is measured against that final-phase limit, not the task
+  budget, so a `review-package` budget line saying `handoff` here does not
+  stop it. Once the review is clean, finishing follows with no budget check.
+- **In an auto run** ([auto-run.md](auto-run.md)) the budget line prints the
+  run's verdict, and a `compact` line does end the turn here: finish the step
+  in flight, with no reviewer or fixer still running, and end the turn as
+  auto-run.md §Ending a turn says. After the compaction,
+  `scripts/auto-run after-compact` prints `continue` in this phase: resume the
+  review from the ledger as the execution skill's After compaction section
+  says. It never hands off, and once a compaction has run in this phase every
+  budget line says `ok`.
+- **Either mode:** point the reviewer at the ledger's deferred-minor and
+  parked lines, the complete lines' `discovered:` fields, every borderline
+  (9-13) score, and every `(unseated)` ruling, so it can triage what must be
+  fixed before merge.
 
 ## The review
 
@@ -36,70 +43,89 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    §Stopping says; a manifest defect does the same with the reason
    `"gates manifest defect"`.
 
-0.5 **Acceptance QA.** Skip this step, saying so in one line, when the plan's
-   spec has no `A<n>` statement tagged `test`, or when the ledger already holds `Acceptance QA: complete`. When the ledger holds
-   `Acceptance QA: dispatched` with no `complete` line, QA was cut off: when
-   `<workspace>/acceptance-report.md` exists, read it and go to (c) below;
-   otherwise re-dispatch once with `[MODE]` `rerun`, under (b)'s timer, then
-   continue at (c); it counts as this review's one re-dispatch. When the
-   ledger already holds the re-dispatch `Ruling:` line below, that re-dispatch
-   is spent: write `<workspace>/acceptance-report.md` yourself, with
-   `cannot-test: timeout` for every `test` statement, and continue at (c).
-   Otherwise:
+- 0.5 **Acceptance QA.** Skip this step, saying so in one line, when the
+  plan's spec has no `A<n>` statement tagged `test`, or when
+  the ledger already holds `Acceptance QA: complete`. When the ledger holds
+  `Acceptance QA: dispatched` with no `complete` line, QA was cut off. First,
+  when `<workspace>/qa-status-before.txt` exists, remove QA's uncommitted work
+  as (b) does when its timer finishes first, and log
+  `Ruling: QA cut off — its uncommitted files were removed — none`; without
+  that file, remove nothing. Then, when
+  `<workspace>/acceptance-report.md` exists, read it, complete it yourself
+  with `cannot-test: timeout` for every `test` statement it does not cover,
+  and go to (c) below; otherwise re-dispatch once with `[MODE]` `rerun`, under
+  (b)'s timer, then continue at (c); it counts as this review's one
+  re-dispatch. When the re-dispatch `Ruling:` line below is already in the
+  ledger, that re-dispatch
+  is spent: write `<workspace>/acceptance-report.md` yourself, with
+  `cannot-test: timeout` for every `test` statement, and continue at (c).
+  Otherwise:
 
-   (a) Append `Acceptance QA: dispatched (base <sha7>)` (the HEAD you hand QA).
+  (a) Append `Acceptance QA: dispatched (base <sha7>)` (the HEAD you hand QA).
 
-   (b) Dispatch `dforge:impl-sonnet-high` (on a Codex host, the native
+  (b) Dispatch `dforge:impl-sonnet-high` (on a Codex host, the native
       implementer `gpt-6.1-sol / high`) with
       [acceptance-qa.md](acceptance-qa.md) and its placeholders: the spec,
       its `test` statements verbatim, MERGE_BASE, HEAD, the test command
       `gates.md` declares or `none`, the workspace, and `[MODE]` `first`.
       When the plan has a `**Worktree setup:**` line, give QA that command
-      too, for its mutation worktree. Before dispatching, run
-      `git status --porcelain` and keep its output.
+      too, for its mutation worktree. Before dispatching, save the output of
+      `git status --porcelain` to `<workspace>/qa-status-before.txt`.
       Dispatch it in the background and, in the same message, start a
       background timer, `sleep 2700` (45 minutes), as
       [executor-lane.md](executor-lane.md) arms its timers. When the timer
       finishes first, stop the QA agent (TaskStop on Claude Code; on Codex,
       close the child). Run `git status --porcelain` again: each path it
-      lists that the earlier output did not is QA's unfinished work. Restore
-      a tracked one with `git restore --staged --worktree -- <path>`, delete
-      an untracked one, and log
+      lists that `<workspace>/qa-status-before.txt` does not is QA's
+      unfinished work. Restore a tracked one with
+      `git restore --staged --worktree -- <path>`, delete an untracked one,
+      and log
       `Ruling: QA timed out — its uncommitted files were removed — none`.
       Then write or complete `<workspace>/acceptance-report.md` yourself,
       with `cannot-test: timeout` for every statement it does not cover.
       When QA finishes first, stop the timer.
 
-   (c) When it returns, or on recovery, run `git worktree list`. A QA worktree still listed is
-      removed with `git worktree remove --force <workspace>/qa-mutation` and
+  (c) When it returns, or on recovery, run `git worktree list`. A QA worktree
+      still listed is removed with
+      `git worktree remove --force <workspace>/qa-mutation` and
       `git worktree prune`, and logged as
       `Ruling: QA worktree removed — it held only the throwaway break — none`.
-   (d) Read the report and act on each row:
-      - `fail`, `flaky`, mutation `green`, or `cannot-test: no-surface`: a
-        finding added to the Claude list (step 1), written
-        `[qa] A<n>: <result> — <test>`.
-      - `cannot-test: ambiguous`: an item for
-        `scripts/review-route PLAN_FILE --ruling acceptance-ambiguous`, sent
-        with [ruling-prompt.md](../skills/subagent-driven-development/references/ruling-prompt.md).
-        `REWORD`: replace the statement's text in the spec with the
-        `New statement:` line, commit the spec, and re-dispatch QA with
-        `[MODE]` `reword A<n>[, A<m>]`; every ambiguous statement of one
-        report shares that single re-dispatch. `PARK`: run
-        `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the ruling>"`
-        and change the spec line to `A<n>. deferred — register row <id>`.
-        In an auto run a missing ruling follows
-        [auto-run.md](auto-run.md) §Rulings.
-      - `cannot-test: timeout`: no finding; it is reported, and it keeps the
-        branch at an auto run's finish.
-   (e) Append `Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo`,
+
+  (d) Read the report and act on each row:
+    - In an auto run, a `fail` or `flaky` row whose statement needs work that
+      a `Task <N>: complete (deferred by the auto run)` line lists under
+      `remaining:` is no finding: the fix wave never does a deferred task's
+      work, nor anything [auto-run.md](auto-run.md) §Rulings says is never
+      performed. Handle its test as Fixing what it finds §Acceptance tests
+      says, with the note `deferred task <N>`.
+    - Any other `fail`, `flaky`, mutation `green`, or
+      `cannot-test: no-surface`: a finding added to the Claude list (step 1),
+      written `[qa] A<n>: <result> — <test>`.
+    - `cannot-test: ambiguous`: an item for
+      `scripts/review-route PLAN_FILE --ruling acceptance-ambiguous`, sent
+      with
+      [ruling-prompt.md](../skills/subagent-driven-development/references/ruling-prompt.md).
+      `REWORD`: replace the statement's text in the spec with the
+      `New statement:` line, commit the spec, and re-dispatch QA with
+      `[MODE]` `reword A<n>[, A<m>]`; every ambiguous statement of one
+      report shares that single re-dispatch. `PARK`: run
+      `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the ruling>"`
+      and change the spec line to `A<n>. deferred — register row <id>`.
+      In an auto run a missing ruling follows
+      [auto-run.md](auto-run.md) §Rulings.
+    - `cannot-test: timeout`: no finding; it is reported, and it keeps the
+      branch at an auto run's finish.
+
+  (e) Append
+      `Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo`,
       counted from the final report, except `<d>`: the number of the spec's
       statements tagged `demo`, which QA is not given and finishing lists.
 
-   QA is re-dispatched at most once per final review, the recovery
-   re-dispatch included. Before that re-dispatch, append
-   `Ruling: Acceptance QA re-dispatched (<rerun | reword A<n>[, A<m>]>) — <why> — none`;
-   on recovery, that line means the re-dispatch is spent. When it is spent,
-   carry out a `REWORD` verdict as `PARK`.
+  QA is re-dispatched at most once per final review, the recovery
+  re-dispatch included. Before that re-dispatch, append
+  `Ruling: Acceptance QA re-dispatched (<rerun | reword A<n>[, A<m>]>) — <why> — none`;
+  on recovery, that line means the re-dispatch is spent. When it is spent,
+  carry out a `REWORD` verdict as `PARK`.
 
 1. **Claude review.** Run `scripts/review-package PLAN_FILE MERGE_BASE HEAD`
    and include the printed path in each dispatch below, so a reviewer reads
@@ -111,9 +137,10 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    at rank 8 or above. Then save each reply to `<workspace>/lens-<id>.md`:
    the Claude list for step 3 is the Claude review's findings plus every
    `[qa]` finding from step 0.5 and every lens finding, tagged `[lens:<id>]`,
-   and the dedupe judge and the fixer receive the lens file paths. `lens-skipped` lines and `lenses off` dispatch
-   nothing; step 4 names them. Lens seats are read-only, so a recovery may
-   dispatch them again.
+   and the dedupe judge and the fixer receive the lens file paths.
+   `lens-skipped` lines and `lenses off` dispatch nothing; step 4 names them
+   and writes each `lens-skipped` line to the ledger. Lens seats are
+   read-only, so a recovery may dispatch them again.
 
    ```
    You are a specialist reviewer. Read the lens at <criteria path>: its
@@ -167,16 +194,19 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    enters the fix wave unverified, and the fixer triages it (Fixing what it
    finds).
 4. **Report.** Name the lenses that ran, each `lens-skipped` lens (or
-   `lenses off`), and the `Acceptance QA: complete` counts. With two lists:
-   confirmed findings ranked most severe first, then
-   the rejected ones with the reason each was rejected; a finding both reviewers
-   raised and the judge confirmed is the strongest signal available in this
-   loop, so say so. With one list: the findings ranked most severe first, then,
-   after the fix wave, which were fixed and which the fixer rejected, with the
-   re-review's verdict on each rejection. The report is not where the turn
-   ends: after the fix wave, the execution skill's Finish section goes
-   straight on to dforge:finishing-a-development-branch, and the report
-   sits above its menu.
+   `lenses off`), and the `Acceptance QA: complete` counts. Append each
+   `lens-skipped <id> reason=cap` line step 1 printed to the ledger as
+   `final review lens-skipped <id> reason=cap`, one line per lens, unless the
+   ledger already holds it: finishing lists them from there, because after a
+   merge `scripts/lens-route` has no diff left to read. With two lists:
+   confirmed findings ranked most severe first, then the rejected ones with
+   the reason each was rejected; a finding both reviewers raised and the judge
+   confirmed is the strongest signal available in this loop, so say so. With
+   one list: the findings ranked most severe first, then, after the fix wave,
+   which were fixed and which the fixer rejected, with the re-review's verdict
+   on each rejection. The report is not where the turn ends: after the fix
+   wave, the execution skill's Finish section goes straight on to
+   dforge:finishing-a-development-branch, and the report sits above its menu.
 
 ## Fixing what it finds
 
@@ -186,8 +216,10 @@ fixes it or rejects it with evidence the re-review upholds.
 
 If confirmed findings remain, fix them in ONE wave with the complete list — in
 subagent mode one fix subagent, in inline mode one pass of your own. Never one
-fixer per finding: per-finding fixers each rebuild context and re-run suites, and
-a real session's final-review fix wave cost more than all its tasks combined.
+fixer per finding: per-finding fixers each rebuild context and re-run suites,
+and a real session's final-review fix wave cost more than all its tasks
+combined. In an auto run a deferred task's acceptance failures are not on that
+list (step 0.5 (d)).
 
 **The fix subagent** (subagent mode). Run
 `scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]` with every
@@ -197,7 +229,8 @@ last recorded each (an escalation counts, and an `inline` implementer counts as
 the Execution line's rung), raised to `impl-sonnet-high` and capped at
 `impl-opus-high`; no matched task gives `reason=floor`. Append
 `Final fix: implementer <agent> (assigned; base <sha7>)` to the ledger, then
-dispatch the printed `primary` as `subagent_type`, with no `model` or `effort` argument.
+dispatch the printed `primary` as `subagent_type`, with no `model` or `effort`
+argument.
 
 Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the
@@ -219,11 +252,12 @@ still gets an independent reader.
 `A<n>:`; to dispute one it records `REJECTED: A<n> — <evidence>`, and the
 scoped re-review decides. The fix wave's verification runs the acceptance file
 again. A `fail` or `flaky` acceptance test that survives the fix wave (the
-rejection upheld, or the ruling seat parking it) is the one edit allowed on an acceptance test:
-mark that test skipped with a reason naming its register row, commit it, and
-run `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
+rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
+deferred task, is the one edit allowed on an acceptance test: mark that test
+skipped with a reason naming its register row, commit it, and run
+`scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
 so finishing's test run is green and the statement is not lost.
 
-There is no second fix wave. Residual load-bearing findings surface to your human
-partner when dforge:finishing-a-development-branch presents the options.
+There is no second fix wave. Residual load-bearing findings surface to your
+human partner when dforge:finishing-a-development-branch presents the options.
 Only the four stop classes stop you here.

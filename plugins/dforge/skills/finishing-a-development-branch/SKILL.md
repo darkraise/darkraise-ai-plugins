@@ -7,9 +7,12 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
-**Core principle:** Verify tests → Detect environment → Carry out the choice made before the run, or present options → Execute choice → Record the plan → Clean up → Report the next step.
+**Core principle:** Verify tests → Detect environment → Carry out the choice
+made before the run, or present options → Execute choice → Record the plan →
+Clean up → Report the next step.
 
-**Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
+**Announce at start:** "I'm using the finishing-a-development-branch skill to
+complete this work."
 
 ## Auto run
 
@@ -17,23 +20,24 @@ When `scripts/auto-run status` exits 0
 ([auto-run.md](../../reference/auto-run.md)), run
 `scripts/auto-run phase finish`, then follow this skill with these changes:
 
-- **Step 3** asks nothing: the base branch is the base `scripts/auto-run status` names.
+- **Step 3** asks nothing: the base branch is
+  the base `scripts/auto-run status` names.
 - **Step 4 shows no menu.** Read `scripts/finish-choice get --plan PLAN_FILE`:
   with nothing recorded in this checkout's plan workspace it reads the spec's
   `Finish:` line itself and records it with `"source": "spec"`, so the spec
   review's answer reaches an execution worktree too; else the `finishAction`
-  setting; exit 3 means `ask`. Carry out the matching option as if your
-  human partner had chosen it, by
-  name, since the detached-HEAD menu renumbers them: `merge` is Merge Locally
-  into that base, `pr` is Push and Create PR, and `keep`, `ask` and `wait` are
-  Keep As-Is. Never discard. In an auto run this mapping replaces Step 4's
-  recorded-choice block. Three cases override this: on a
-  detached HEAD (Step 2) there is no merge, so `merge` keeps and `pr` pushes a
-  new branch (`git push origin HEAD:refs/heads/<new-branch>`); when the base is
-  `none`, `merge` keeps and `pr` opens its request against the dforge's default
-  branch; and `merge` keeps when the ledger holds a
+  setting; exit 3 means `ask`. Carry out the matching option as if your human
+  partner had chosen it, by name, since the detached-HEAD menu renumbers them:
+  `merge` is Merge Locally into that base, `pr` is Push and Create PR, and
+  `keep`, `ask` and `wait` are Keep As-Is. Never discard. In an auto run this
+  mapping replaces Step 4's recorded-choice block. Three cases override this:
+  on a detached HEAD (Step 2) there is no merge, so `merge` keeps and `pr`
+  pushes a new branch (`git push origin HEAD:refs/heads/<new-branch>`); when
+  the base is `none`, `merge` keeps and `pr` opens its request against the
+  dforge's default branch; and `merge` keeps when the ledger holds a
   `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
-  partial commits never reach the base unreviewed. `merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of
+  partial commits never reach the base unreviewed.
+  `merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of
   `cannot-test`, or when the run added a deferred register
   row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
   A row deferred at the spec review, before the run started, counts as one
@@ -41,7 +45,12 @@ When `scripts/auto-run status` exits 0
   Note is `final review residual`.
   The line's `fail` and `flaky` counts are not read: they are taken before the
   fix wave, a failure that survives it is a deferred `A<n>:` row or a red test
-  at Step 1, and one the fix wave fixed does not keep the branch.
+  at Step 1, and one the fix wave fixed does not keep the branch. The mapping
+  keeps the recorded-choice block's first call: once these cases settle the
+  option (`merge`, `pr` or `keep`), run
+  `scripts/finish-choice answer <action> --plan PLAN_FILE` with it before
+  carrying it out, so the cockpit's Run card drops its finish row and the
+  record reads as acted on.
 - **Where an unattended finish stops** (failing tests at Step 1, a merged
   result failing its tests, a rejected push, a refused worktree removal), run
   `scripts/auto-run stop --reason "<what stopped it>"` first, then stop as
@@ -51,7 +60,11 @@ When `scripts/auto-run status` exits 0
   deferred row the run added to its register (`scripts/auto-run status` names
   it; the `final review residual` rows among them),
   every `demo` statement of the spec, every lens
-  `scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`. Run `scripts/auto-run stop` with no `--reason` before printing the next-step block: a reason marks the run as stopped and sends a `blocked` notice.
+  a `final review lens-skipped <id> reason=cap` ledger line names (the final
+  review wrote them; never run `scripts/lens-route` here, since after a merge
+  base..HEAD is empty). Run
+  `scripts/auto-run stop` with no `--reason` before printing the next-step block:
+  a reason marks the run as stopped and sends a `blocked` notice.
 
 ## Step 1: Verify Tests
 
@@ -60,7 +73,8 @@ dforge:running-gates — it determines its own base, so it works here even
 though Step 3 has not established one yet. Otherwise run the project's full test
 suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
 
-**If tests fail**, report the failures and stop — the menu comes after a green suite:
+**If tests fail**, report the failures and stop — the menu comes after a
+green suite:
 
 ```
 Tests failing (<N> failures). Must fix before completing:
@@ -102,9 +116,9 @@ than this one. A finish preference
 recorded before the run (`scripts/finish-choice get [--plan PLAN_FILE]`) names
 the base your human partner confirmed then; use it. When Step 4 carries out
 a recorded choice, never ask here: Step 4 says where its base comes from.
-Otherwise, if it is not already known, ask: "This branch split from <your best guess> - is that
-correct?" Confirm before merging: merging into the wrong base is expensive to
-undo.
+Otherwise, if it is not already known, ask: "This branch split from <your
+best guess> - is that correct?" Confirm before merging: merging into the
+wrong base is expensive to undo.
 
 **Rulings first.** If this work came from a plan with a ledger (`progress.md`
 in the directory `scripts/sdd-workspace PLAN_FILE` prints) and this session
@@ -188,19 +202,20 @@ the line is `After integration: <n> register rows are still open — #<id>
 <item>`, whatever the Program line says.
 
 Only when every covering register is fully resolved once those rows land does
-the Program line answer, read as before: `After integration: sub-project <k+1> (<title>) of
-<spec>` when it names `next: <title>`, `After integration: the program is
-complete` when it is the last sub-project, and `After integration: no
-follow-on work recorded` when there is no Program line or no plan. Step 7 turns
-this into the launch block once the choice is made.
+the Program line answer, read as before:
+`After integration: sub-project <k+1> (<title>) of <spec>` when it names
+`next: <title>`, `After integration: the program is complete` when it is the
+last sub-project, and `After integration: no follow-on work recorded` when
+there is no Program line or no plan. Step 7 turns this into the launch block
+once the choice is made.
 
 Present the menu exactly as written — concise, with every option coming
 from the list above. The menu is the last thing in your message: rulings,
 findings and the summary go above it, never after, and never replace it with
-a request in prose such as "tell me 'merge it'". Discarding the work happens only in response to your
-human partner explicitly asking for it (see "If your human partner asks to
-discard the work" below). Wait for their answer; the integration decision
-is theirs.
+a request in prose such as "tell me 'merge it'". Discarding the work happens
+only in response to your human partner explicitly asking for it (see "If your
+human partner asks to discard the work" below). Wait for their answer; the
+integration decision is theirs.
 
 ## Step 5: Execute Choice
 
@@ -310,8 +325,9 @@ The two line forms:
 - 2026-09-12 `docs/dforge/plans/2026-09-12-example.md` — via PR
 ```
 
-Either prefix names the same document: an entry spelled `docs/superpowers/<rest>`
-already records the plan `docs/dforge/<rest>`, so never add a second line for it.
+Either prefix names the same document: an entry spelled
+`docs/superpowers/<rest>` already records the plan `docs/dforge/<rest>`, so
+never add a second line for it.
 
 | Path | When | Which form |
 |---|---|---|
@@ -353,8 +369,9 @@ prose note is not written. In the same commit as the index line:
   when the row's acceptance names a check only your human partner can perform;
   a row cited only by a task whose complete line reads
   `(deferred by the auto run)` is set with
-  `scripts/register set <register> <id> deferred --note "deferred by the auto run: <the line's Ruling>"`
-  instead, whichever finish action runs this step, never `done` or `verify`;
+  `scripts/register set <register> <id> deferred --note "deferred by the auto run: <the line's Ruling>[; unmerged task ref <ref>]"`
+  instead, with the line's `unmerged task ref <ref>` clause when it has one,
+  whichever finish action runs this step, never `done` or `verify`;
 - add a row for every `minor (deferred)` line, every `parked` line, every
   complete line's `discovered:` field that is not `none`, and every final-review
   finding you left for your human partner, with
@@ -387,9 +404,9 @@ and use the `GIT_DIR`/`GIT_COMMON`/`WORKTREE_PATH` values captured in
 Step 2, from before that directory change.
 
 A plan's workspace (`<state>/sdd/<plan>/`: briefs, reports, and the ledger
-and `handoff.md` while progress is local) is git-ignored and lives in the worktree, so it goes with it —
-`git worktree remove` deletes ignored files without `--force`. Options 2 and 3
-keep it for the next session.
+and `handoff.md` while progress is local) is git-ignored and lives in the
+worktree, so it goes with it — `git worktree remove` deletes ignored files
+without `--force`. Options 2 and 3 keep it for the next session.
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. If this
 work came from a plan, delete its workspace — `rm -rf` on the directory
