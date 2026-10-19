@@ -353,7 +353,9 @@ each with a timeout and nothing left running.
 ## Acceptance
 
 A1. [test, high] Every item in P1-P8 is fixed as written and its Check
-passes, except P7 item 1's Windows run, reported unverified.
+passes, except P7 item 1's Windows run, reported unverified, and P2 item 1
+if its probe fails: FS 48 then closes `n/a` with the probe's refusal as the
+note.
 A2. [test, high] `node scripts/test-all.mjs`, `node
 scripts/validate-repository.mjs`, `claude plugin validate` on the marketplace
 and each Claude plugin, and `claude plugin test plugins/dforge` pass on the
