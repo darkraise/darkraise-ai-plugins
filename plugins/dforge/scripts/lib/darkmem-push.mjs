@@ -113,8 +113,9 @@ async function pushDocument(context, { uri, buffer, local, recorded }, remote) {
 // dforge/archive/<stamp>/<rest> under its recorded hash, so an edit made
 // on darkmem since the last sync is never archived unseen; restore moves it
 // back. A missing docs root archives nothing: a lost mirror is not a request
-// to archive every document.
-async function archiveDeleted(context) {
+// to archive every document. `manifest` is the listing pushDocuments read this
+// run, or null; a deleted document is never put, so its entry is as read.
+async function archiveDeleted(context, manifest) {
   const { cfg, client, roots, state, persist, report } = context;
   const gone = Object.keys(state.documents).sort().filter(uri => {
     if (uriFamily(uri) !== "documents" || isArchiveUri(uri)) return false;
@@ -128,7 +129,7 @@ async function archiveDeleted(context) {
   }
   let remote;
   try {
-    remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item]));
+    remote = new Map((manifest ?? await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item]));
   } catch (error) {
     failItem(report, "document manifest", error, "; no document archived");
     return;
@@ -140,6 +141,7 @@ async function archiveDeleted(context) {
     if (!item) {
       // Gone from darkmem too, perhaps by this mirror's own move whose answer
       // was lost: nothing is left to archive.
+      report.notes.push(`${uri}: deleted locally and already gone from darkmem; its record is dropped`);
       delete state.documents[uri];
       persist();
       continue;
@@ -164,6 +166,7 @@ async function archiveDeleted(context) {
   }
 }
 
+// Answers darkmem's document manifest when it read one, else null.
 async function pushDocuments(context) {
   const { cfg, client, roots, state, report } = context;
   const files = listDocumentFiles(roots);
@@ -191,14 +194,15 @@ async function pushDocuments(context) {
     }
     changed.push({ uri, buffer, local, recorded });
   }
-  if (!changed.length) return;
-  let remote;
+  if (!changed.length) return null;
+  let manifest;
   try {
-    remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+    manifest = await client.manifest(cfg.project, DOC_PREFIX);
   } catch (error) {
     failItem(report, "document manifest", error, "; no document pushed");
-    return;
+    return null;
   }
+  const remote = new Map(manifest.map(item => [item.uri, item.content_hash]));
   // Every spelling darkmem holds under each lower-case form: when it holds
   // A.md and a.md, a local a.md collides with A.md although a.md matches.
   const spellings = new Map();
@@ -215,6 +219,7 @@ async function pushDocuments(context) {
       failItem(report, item.uri, error);
     }
   }
+  return manifest;
 }
 
 // What darkmem already holds of a ledger, adopted when it is a prefix of the
@@ -437,8 +442,8 @@ export async function push(context) {
   if (named !== undefined && !families.progress) throw new UsageError("--workstream needs progress applied darkmem; latest.md is local");
   Object.assign(context.report.counts, { documents: 0, "ledger entries": 0, checkpoints: 0 });
   if (families.progress) for (const uri of [...context.state.pendingLinks]) await linkHandoff(context, uri);
-  await pushDocuments(context);
-  if (families.documents) await archiveDeleted(context);
+  const manifest = await pushDocuments(context);
+  if (families.documents) await archiveDeleted(context, manifest);
   if (!families.progress) return;
   await pushLedgers(context);
   await pushCheckpoint(context, named);

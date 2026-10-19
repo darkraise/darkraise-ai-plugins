@@ -102,9 +102,12 @@ async function verify(context, roots, snapshot) {
       report.failures.push("the source files changed during the import; run it again with --replace");
       return;
     }
+    // A refused document or ledger (no id) was reported where darkmem refused
+    // it and was never filed, so it has no copy to compare.
     const differing = [
-      ...snapshot.documents.filter(d => !sameBytes(uriToLocal(scratchRoots, d.uri), d.buffer)).map(d => d.uri),
-      ...snapshot.ledgers.filter(l => !sameBytes(path.join(scratchRoots.workRoot, "sdd", l.slug, "progress.md"), l.buffer)).map(l => `sdd/${l.slug}/progress.md`),
+      ...snapshot.documents.filter(d => !d.refused && !sameBytes(uriToLocal(scratchRoots, d.uri), d.buffer)).map(d => d.uri),
+      ...snapshot.ledgers.filter(l => l.id && !sameBytes(path.join(scratchRoots.workRoot, "sdd", l.slug, "progress.md"), l.buffer))
+        .map(l => `sdd/${l.slug}/progress.md`),
     ];
     if (differing.length) {
       keepScratch = true;
@@ -147,6 +150,7 @@ export async function importRepository(context) {
     } catch (error) {
       if (!(error instanceof HttpError && error.status === 422)) throw error;
       report.failures.push(`${doc.uri}: darkmem refused it: ${error.detail}`);
+      doc.refused = true;
     }
   }
   for (const ledger of snapshot.ledgers) await importLedger(context, roots, ledger);

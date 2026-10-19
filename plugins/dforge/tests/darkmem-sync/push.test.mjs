@@ -655,8 +655,24 @@ test("a deleted document darkmem changed is a conflict that keeps its record; on
   const result = await s.push();
   assert.equal(result.code, 1);
   assert.match(result.stdout, /^conflict: dforge\/a\.md: deleted locally and changed on darkmem; pull to bring darkmem's copy back$/m);
+  assert.match(result.stdout, /^note: dforge\/b\.md: deleted locally and already gone from darkmem; its record is dropped$/m);
   assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
   assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents), ["dforge/a.md"]);
+});
+
+test("a push that changes one document and archives another reads darkmem's manifest once", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "a.md"), "a\n");
+  write(path.join(s.docsRoot, "b.md"), "b\n");
+  assert.equal((await s.push()).code, 0);
+  write(path.join(s.docsRoot, "a.md"), "a2\n");
+  fs.rmSync(path.join(s.docsRoot, "b.md"));
+  const manifests = () => s.stub.db.requests.filter(r => r.path === "/api/v1/documents/manifest").length;
+  const before = manifests();
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /darkmem-sync push: 1 documents, 0 ledger entries, 0 checkpoints, 1 archived;/);
+  assert.equal(manifests() - before, 1);
 });
 
 test("a refused move is a conflict that keeps the record; a move whose answer was lost is settled by the next push", async t => {

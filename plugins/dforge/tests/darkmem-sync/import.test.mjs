@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { startStub } from "./stub-server.mjs";
-import { makeHome, makeRepo, run, write } from "./helpers.mjs";
+import { makeHome, makeRepo, run, scratch, write } from "./helpers.mjs";
 
 const LEDGER = "# SDD ledger — plan: docs/superpowers/plans/p1.md\n\nTask 1: implementer (assigned)\nTask 1: complete\n\n\n| a | b |\r\n\r\nTask 2: complete\n";
 
@@ -82,6 +82,19 @@ test("the verification fails the import on a single changed byte", async t => {
   const failed = /failed: dforge\/specs\/s\.md: a pull of darkmem's copy differs from the source; compare under (\S+)/.exec(result.stdout);
   assert.ok(failed, result.stdout);
   fs.rmSync(failed[1], { recursive: true, force: true });
+});
+
+test("a refused document and a refused ledger are reported once, and no scratch copy is kept", async t => {
+  const s = await setup(t);
+  const tmp = scratch("dms-tmp-");
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 422, detail: "refused" });
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 422, detail: "refused" });
+  const result = await run(["import"], { cwd: s.repo, env: { ...s.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp } });
+  assert.equal(result.code, 1, result.stdout);
+  assert.equal(result.stdout.match(/darkmem refused/g)?.length, 2, result.stdout);
+  assert.match(result.stdout, /^failed: sdd\/p1\/progress\.md: darkmem refused an entry: refused$/m);
+  assert.doesNotMatch(result.stdout, /a pull of darkmem's copy differs/);
+  assert.deepEqual(fs.readdirSync(tmp).filter(name => name.startsWith("darkmem-import-")), []);
 });
 
 test("an empty source file refuses the whole import before any write", async t => {
