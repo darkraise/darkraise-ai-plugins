@@ -8,7 +8,7 @@ import {
   EMPTY_SHA, MAX_ENTRY_CHARS, StateError, acquireLock, archiveUri, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
   isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPieces, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges,
   pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal,
-  utcStamp, utf8Fault,
+  utcStamp, utf8Fault, checkpointAtOf, newestCheckpointAt, recordCheckpointAt,
 } from "../../scripts/lib/darkmem-mirror.mjs";
 import { scratch, write } from "./helpers.mjs";
 
@@ -215,10 +215,38 @@ test("an unreadable or malformed state file is an error rather than a fresh star
     JSON.stringify({ ...good, ledgers: { p1: { offset: 0, prefix: EMPTY_SHA, lastSeq: 1.5 } } }),
     JSON.stringify({ ...good, pendingLinks: "dforge/handoff/p1.md" }),
     JSON.stringify({ ...good, pendingLinks: [1] }),
+    JSON.stringify({ ...good, checkpointAt: 5 }),
+    JSON.stringify({ ...good, checkpointAt: { "../x": "2026-09-24T10:00:00.000Z" } }),
+    JSON.stringify({ ...good, checkpointAt: { p1: "not a date" } }),
   ]) {
     fs.writeFileSync(file, bad);
     assert.throws(() => loadState(file), StateError, bad);
   }
+});
+
+test("checkpointAt is kept per workstream; an old single value stands for every workstream until each is written", () => {
+  const { root } = mirror();
+  const file = path.join(root, ".sync-state.json");
+  const old = "2026-09-24T10:00:00.000Z";
+  const later = "2026-09-25T10:00:00.000001+00:00";
+  fs.writeFileSync(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: old, conflicts: [] }));
+  const state = loadState(file);
+  assert.equal(checkpointAtOf(state, "p1"), old);
+  recordCheckpointAt(state, "p1", later);
+  assert.equal(checkpointAtOf(state, "p1"), later);
+  assert.equal(checkpointAtOf(state, "p2"), old, "a workstream not yet written keeps the old value");
+  assert.equal(newestCheckpointAt(state), later);
+  saveState(file, state);
+  const loaded = loadState(file);
+  assert.equal(checkpointAtOf(loaded, "p1"), later);
+  assert.equal(checkpointAtOf(loaded, "p2"), old);
+  assert.equal(newestCheckpointAt(loaded), later);
+  const fresh = emptyState();
+  assert.equal(checkpointAtOf(fresh, "p1"), null);
+  assert.equal(newestCheckpointAt(fresh), null);
+  recordCheckpointAt(fresh, "constructor", old);
+  assert.equal(checkpointAtOf(fresh, "toString"), null, "the per-workstream record has no prototype");
+  assert.equal(checkpointAtOf(fresh, "constructor"), old);
 });
 
 test("localChanges names new, modified, unpushed, rewritten, unsupported and checkpoint changes", () => {
