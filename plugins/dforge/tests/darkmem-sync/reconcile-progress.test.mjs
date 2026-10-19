@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
-import { ledgerPieces, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
-import { checkProgressTargets, gatherLocalProgress } from "../../scripts/lib/darkmem-progress-move.mjs";
+import { emptyState, ledgerPieces, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
+import { checkProgressTargets, gatherLocalProgress, progressToLocal } from "../../scripts/lib/darkmem-progress-move.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
 
@@ -577,6 +577,111 @@ test("a primary checkout file that cannot be read keeps progress in darkmem, not
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the primary checkout cannot take the mirror's progress$/m);
   assert.ok(result.stdout.includes(`  ${target}: could not be read (EISDIR)\n`), result.stdout);
   assert.equal(s.stores().progress, "darkmem");
+});
+
+test("a mirror that lost latest.md takes darkmem's newest checkpoint again before the move back", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
+  assert.equal((await run(["pull"], { cwd: s.repo, env: s.env })).code, 0);
+  const mirrored = path.join(s.workRoot, "handoff", "latest.md");
+  assert.equal(read(mirrored), LATEST);
+  fs.rmSync(mirrored);
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
+  assert.equal(read(path.join(s.repo, ".dforge", "handoff", "latest.md")), LATEST);
+});
+
+test("a mirror latest.md that cannot be read keeps progress in darkmem, not a crash", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
+  fs.mkdirSync(path.join(s.workRoot, "handoff", "latest.md"), { recursive: true });
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the pull into the mirror did not finish cleanly$/m);
+  assert.ok(result.stdout.includes("  failed: handoff/latest.md: could not be read (EISDIR)\n"), result.stdout);
+  assert.equal(s.stores().progress, "darkmem");
+});
+
+test("a symbolic link among the mirror's progress keeps progress in darkmem, and nothing is read through it", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  const outside = path.join(scratch("dms-link-"), "progress.md");
+  write(outside, LEDGER("p1"));
+  const link = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(outside, link);
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the mirror's progress is reached through symbolic links; nothing was pulled or copied$/m);
+  assert.ok(result.stdout.includes(`  ${link}: a symbolic link in the mirror, which the move will not read through\n`), result.stdout);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), false);
+  assert.equal(s.stores().progress, "darkmem");
+});
+
+test("a linked mirror ledger is refused before the pull, so newer darkmem content neither reads through nor replaces it", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  const outside = path.join(scratch("dms-link-"), "progress.md");
+  const older = "# SDD ledger — plan: docs/dforge/plans/p1.md\n";
+  write(outside, older);
+  const link = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(outside, link);
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the mirror's progress is reached through symbolic links; nothing was pulled or copied$/m);
+  assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
+  assert.equal(fs.readFileSync(outside, "utf8"), older);
+  assert.equal(s.stores().progress, "darkmem");
+});
+
+// The move back run directly and offline, over a mirror holding two ledgers,
+// so a test can stand in for fs between its reads and its copies.
+function offlineMove() {
+  const repo = makeRepo();
+  const mirror = scratch("dms-mirror-");
+  write(path.join(mirror, "work", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(mirror, "work", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  const context = { cfg: { repoRoot: repo, mirror }, client: null, state: emptyState(), persist: () => {} };
+  return { mirror, context, target: slug => path.join(repo, ".dforge", "sdd", slug, "progress.md") };
+}
+
+test("an edit that lands in the primary checkout just before a copy is never overwritten", async t => {
+  const m = offlineMove();
+  const mkdir = fs.mkdirSync;
+  t.mock.method(fs, "mkdirSync", (dir, options) => {
+    const made = mkdir(dir, options);
+    if (dir === path.dirname(m.target("p1")) && !fs.existsSync(m.target("p1"))) fs.writeFileSync(m.target("p1"), "edited meanwhile\n");
+    return made;
+  });
+  const result = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(result.moved, false);
+  assert.equal(result.reason, "the primary checkout changed during the move; nothing was overwritten");
+  assert.deepEqual(result.details, [`${m.target("p1")}: changed during the move; not overwritten`]);
+  assert.equal(read(m.target("p1")), "edited meanwhile\n");
+  assert.equal(fs.existsSync(path.join(m.mirror, "work")), true, "the mirror's copies are not set aside");
+});
+
+test("a copy into the primary checkout that fails part-way is a refusal, not a crash, and a rerun finishes it", async t => {
+  const m = offlineMove();
+  const copy = fs.copyFileSync;
+  let calls = 0;
+  t.mock.method(fs, "copyFileSync", (...args) => {
+    calls += 1;
+    if (calls === 2) throw Object.assign(new Error("injected by the test"), { code: "EIO" });
+    return copy(...args);
+  });
+  const result = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(result.moved, false);
+  assert.equal(result.reason, "a copy into the primary checkout failed (EIO); the files copied so far stay, and a rerun copies the rest");
+  assert.deepEqual(result.details, [`${m.target("p1")}: copied`]);
+  assert.equal(fs.existsSync(path.join(m.mirror, "work")), true, "the mirror's copies are not set aside");
+  t.mock.restoreAll();
+  const again = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(again.moved, true, again.reason);
+  assert.equal(read(m.target("p1")), LEDGER("p1"));
+  assert.equal(read(m.target("p2")), LEDGER("p2"));
 });
 
 const ABSOLUTE_LEDGER = file => `# SDD ledger — plan: ${file}\nTask 1: complete (commits aaaa..bbbb)\n`;

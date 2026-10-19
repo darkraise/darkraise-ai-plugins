@@ -375,11 +375,13 @@ export async function progressToDarkmem(context) {
 }
 
 // The latest.md file for `newest`, unless the mirror's copy is newer or holds
-// a local edit; pull's rule, applied across every workstream.
+// a local edit; pull's rule, applied across every workstream. A mirror that
+// lost latest.md takes darkmem's newest again, however old.
 function renderCheckpoint({ state, persist, report }, workRoot, newest) {
-  const synced = newestCheckpointAt(state);
-  if (!newest || (synced && isoMicros(newest.created_at) <= isoMicros(synced))) return;
+  if (!newest) return;
   const file = path.join(workRoot, "handoff", "latest.md");
+  const synced = newestCheckpointAt(state);
+  if (fs.existsSync(file) && synced && isoMicros(newest.created_at) <= isoMicros(synced)) return;
   const remote = Buffer.from(newest.body, "utf8");
   const hash = sha256(remote);
   let current = null;
@@ -399,6 +401,16 @@ function renderCheckpoint({ state, persist, report }, workRoot, newest) {
   state.checkpoint = hash;
   recordCheckpointAt(state, newest.workstream, newest.created_at);
   persist();
+}
+
+// A file's bytes, or null when it does not exist.
+function readOrNull(file) {
+  try {
+    return fs.readFileSync(file);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 // The symbolic links at or below `stateRel` on the way to each rel, as
@@ -424,6 +436,28 @@ function linksBelow(checkout, stateRel, rels) {
   return links;
 }
 
+// One line per symbolic link, or directory that cannot be listed, under the
+// mirror's work directory. Dirent types come from lstat, so no link is followed.
+function mirrorLinks(workRoot) {
+  const lines = [];
+  const walk = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") lines.push(`${dir}: could not be listed (${error.code})`);
+      return;
+    }
+    for (const entry of entries) {
+      const file = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) lines.push(`${file}: a symbolic link in the mirror, which the move will not read through`);
+      else if (entry.isDirectory()) walk(file);
+    }
+  };
+  walk(workRoot);
+  return lines;
+}
+
 // The mirror is brought up to darkmem first. A pull renders only open
 // workstreams, and every imported ledger is closed, so this renders every
 // workstream's ledger and the newest checkpoint across all of them; darkmem
@@ -433,6 +467,10 @@ export async function progressToLocal(context, { offline = null } = {}) {
   const { cfg, client, state, persist } = context;
   const workRoot = path.join(cfg.mirror, "work");
   const roots = { docsRoot: path.join(cfg.mirror, DOC_PREFIX), workRoot, worktreeRoot: cfg.repoRoot, families: { documents: false, progress: true } };
+  // The pull below reads and rewrites the mirror's progress files, so a linked
+  // one is refused before it, not only before the copies.
+  const linked = mirrorLinks(workRoot);
+  if (linked.length) return refuse("the mirror's progress is reached through symbolic links; nothing was pulled or copied", linked);
   if (!offline) {
     const report = scratchReport();
     try {
@@ -470,6 +508,10 @@ export async function progressToLocal(context, { offline = null } = {}) {
   }
   for (const item of sources) {
     item.target = local(stateDir, item.rel);
+    if (fs.lstatSync(item.file, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      problems.push(`${item.file}: a symbolic link in the mirror, which the move will not read through`);
+      continue;
+    }
     try {
       item.buffer = fs.readFileSync(item.file);
     } catch (error) {
@@ -486,12 +528,33 @@ export async function progressToLocal(context, { offline = null } = {}) {
     if (!held.equals(item.buffer)) problems.push(`${item.target}: differs from the mirror's ${item.rel}`);
   }
   if (problems.length) return refuse("the primary checkout cannot take the mirror's progress", problems);
-  for (const item of sources) {
-    fs.mkdirSync(path.dirname(item.target), { recursive: true });
-    fs.copyFileSync(item.file, item.target);
+  // An edit can land in the checkout between the reads above and a copy: each
+  // target is read again just before it is written, a new one is created
+  // exclusively, and a failure part-way refuses, keeping what was copied.
+  const landed = [];
+  const copied = [];
+  try {
+    for (const item of sources) {
+      fs.mkdirSync(path.dirname(item.target), { recursive: true });
+      const now = readOrNull(item.target);
+      if (now && !now.equals(item.buffer)) {
+        landed.push(`${item.target}: changed during the move; not overwritten`);
+        continue;
+      }
+      if (!now) {
+        fs.copyFileSync(item.file, item.target, fs.constants.COPYFILE_EXCL);
+        copied.push(item);
+      }
+    }
+    if (landed.length) return refuse("the primary checkout changed during the move; nothing was overwritten", landed);
+    const differing = sources.filter(item => !readOrNull(item.target)?.equals(item.buffer)).map(item => `${item.target}: the copy reads back different`);
+    if (differing.length) return refuse("a copy into the primary checkout reads back different", differing);
+  } catch (error) {
+    return refuse(
+      `a copy into the primary checkout failed (${error.code}); the files copied so far stay, and a rerun copies the rest`,
+      copied.map(item => `${item.target}: copied`),
+    );
   }
-  const differing = sources.filter(item => !fs.readFileSync(item.target).equals(item.buffer)).map(item => `${item.target}: the copy reads back different`);
-  if (differing.length) return refuse("a copy into the primary checkout reads back different", differing);
   const details = [`${sources.length} files copied into ${stateDir}`];
   if (offline) details.push("darkmem was not consulted: ledger lines and handoffs not yet pushed stay off darkmem, and another machine's newer progress was not fetched");
   // Moved, not deleted: left in place, these copies would meet a later move
