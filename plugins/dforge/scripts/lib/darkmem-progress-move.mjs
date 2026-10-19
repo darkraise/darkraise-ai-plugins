@@ -436,7 +436,7 @@ function linksBelow(checkout, stateRel, rels) {
   return links;
 }
 
-// One line per symbolic link, or directory that cannot be listed, under the
+// One line per symbolic link, or directory that cannot be listed, at or under the
 // mirror's work directory. Dirent types come from lstat, so no link is followed.
 function mirrorLinks(workRoot) {
   const lines = [];
@@ -454,6 +454,13 @@ function mirrorLinks(workRoot) {
       else if (entry.isDirectory()) walk(file);
     }
   };
+  let top;
+  try {
+    top = fs.lstatSync(workRoot, { throwIfNoEntry: false });
+  } catch (error) {
+    return [`${workRoot}: could not be listed (${error.code})`];
+  }
+  if (top?.isSymbolicLink()) return [`${workRoot}: a symbolic link in the mirror, which the move will not read through`];
   walk(workRoot);
   return lines;
 }

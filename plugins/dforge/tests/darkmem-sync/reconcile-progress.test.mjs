@@ -636,6 +636,25 @@ test("a linked mirror ledger is refused before the pull, so newer darkmem conten
   assert.equal(s.stores().progress, "darkmem");
 });
 
+test("a symbolic-linked mirror work directory keeps progress in darkmem, and nothing is read through it", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  const outside = scratch("dms-link-");
+  const outsideLedger = path.join(outside, "sdd", "p1", "progress.md");
+  const outsideText = "# SDD ledger — plan: docs/dforge/plans/p1.md\n";
+  write(outsideLedger, outsideText);
+  fs.rmSync(s.workRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(s.workRoot), { recursive: true });
+  fs.symlinkSync(outside, s.workRoot);
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the mirror's progress is reached through symbolic links; nothing was pulled or copied$/m);
+  assert.ok(result.stdout.includes(`  ${s.workRoot}: a symbolic link in the mirror, which the move will not read through\n`), result.stdout);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), false);
+  assert.equal(fs.readFileSync(outsideLedger, "utf8"), outsideText);
+  assert.equal(s.stores().progress, "darkmem");
+});
+
 // The move back run directly and offline, over a mirror holding two ledgers,
 // so a test can stand in for fs between its reads and its copies.
 function offlineMove() {
