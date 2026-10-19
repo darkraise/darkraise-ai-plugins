@@ -283,6 +283,34 @@ test("an old state file's single checkpointAt gates a pull, which then records t
   assert.deepEqual(s.state().checkpointAt, { "*": old, p2: s.stub.db.workstreams[1].entries[0].created_at });
 });
 
+test("a latest.md that cannot be read is one failure, and the rest of the pull still lands", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
+  fs.mkdirSync(path.join(s.workRoot, "handoff", "latest.md"), { recursive: true });
+  const result = await s.pull();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: handoff\/latest\.md: could not be read \(EISDIR\); not pulled$/m);
+  assert.equal((result.stdout.match(/^failed:/gm) ?? []).length, 1);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
+});
+
+test("a document that cannot be read is one failure, and the others are still pulled", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/b.md", content: "b\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/c.md", content: "c\n" });
+  fs.mkdirSync(path.join(s.docsRoot, "b.md"), { recursive: true });
+  const result = await s.pull();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: dforge\/b\.md: the local copy could not be read or written \(EISDIR\); not pulled$/m);
+  assert.equal((result.stdout.match(/^failed:/gm) ?? []).length, 1);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
+  assert.equal(read(path.join(s.docsRoot, "c.md")), "c\n");
+  assert.match(result.stdout, / 2 documents,/);
+});
+
 test("a checkpoint from a workstream key the directory rule refuses is pulled once and the state stays loadable", async t => {
   const s = await setup(t);
   await s.seed.append({ project: "proj", workstream: "feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });

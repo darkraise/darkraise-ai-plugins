@@ -140,7 +140,12 @@ export async function pullDocuments(context) {
     try {
       await pullDocument(context, item, keepDeletions);
     } catch (error) {
-      failItem(report, item.uri, error);
+      if (!error?.syscall) {
+        failItem(report, item.uri, error);
+        continue;
+      }
+      report.failures.push(`${item.uri}: the local copy could not be read or written (${error.code}); not pulled`);
+      report.partial = true;
     }
   }
   if (families.documents) removeVanished(context, filed);
@@ -211,7 +216,14 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
   const file = path.join(roots.workRoot, "handoff", "latest.md");
   const remote = Buffer.from(newest.body, "utf8");
   const remoteHash = sha256(remote);
-  const local = localHash(file);
+  let local;
+  try {
+    local = localHash(file);
+  } catch (error) {
+    report.failures.push(`handoff/latest.md: could not be read (${error.code}); not pulled`);
+    report.partial = true;
+    return;
+  }
   if (local !== null && local !== remoteHash && local !== state.checkpoint) {
     report.conflicts.push(`handoff/latest.md: changed locally, and darkmem holds a newer checkpoint; ${RESOLVE}`);
     return;
