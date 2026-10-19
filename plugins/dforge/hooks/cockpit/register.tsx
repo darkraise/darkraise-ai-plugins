@@ -668,7 +668,7 @@ export const register: Register = on => {
       await trackAutoRun($)
       // The controller writes its ledger with its own tool calls; read it
       // before the budget, which measures a plan's tail by it.
-      if (/\.dforge|\.dforge|finish-choice/.test(JSON.stringify(e))) await readRun($)
+      if (/\.dforge|finish-choice/.test(JSON.stringify(e))) await readRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
     }
 
@@ -2213,8 +2213,8 @@ const S = {
   stallFailedAt: null as number | null,
   // The watchdog's timer, every WATCHDOG_MS.
   watchdog: null as Timer | null,
-  // The roots --mode last named, and the primary checkout and stores.json
-  // modification time they were read for.
+  // The roots --mode last named, and the primary checkout and the
+  // modification times of stores.json and config.json they were read for.
   roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
   // latest.md's absolute path while progress is in darkmem; null while it is
   // in the checkout, where the resume prompt names it by its state directory.
@@ -2635,11 +2635,15 @@ async function stopAutoRun($: EngineInterface) {
 }
 
 // The roots darkmem-config.mjs --mode names for the primary checkout (store
-// options spec §7.3). Read again when the checkout or ~/.dforge/stores.json
-// changes, so the session that ran a move sees the new roots. Null keeps the
-// checkout paths: silently without node or mode lines, with a note in the
-// pane when the run fails or outruns its 5 seconds.
-const NO_NODE = /ENOENT|not found/i
+// options spec §7.3). Read again when the checkout, ~/.dforge/stores.json or
+// ~/.dforge/config.json changes, so the session that ran a move or mapped the
+// repository sees the new roots. Null keeps the checkout paths: silently
+// without node, mode lines or either file, with a note in the pane when the
+// run fails or outruns its 5 seconds.
+// A node that cannot start: the engine's "failed to start", or a shell's
+// "node: not found" (exit 127). Any other stderr is the script's own, ENOENT
+// included.
+const NO_NODE = /failed to start|\bnode: (?:command )?not found/i
 // The engine's rejection for a run still going at its timeoutMs (Claude Code
 // 2.1.299: "…aborted: still running after 5000ms"); a command that cannot
 // start rejects "…failed to start: ENOENT…" instead.
@@ -2647,23 +2651,34 @@ const TIMED_OUT = /still running after/i
 
 async function readRoots($: EngineInterface, primary: string): Promise<CockpitRoots | null> {
   const home = (await read($, place))?.home ?? null
-  const stores = home === null ? null : await $.fs.stat(`${home}/.dforge/stores.json`).catch(() => null)
-  const key = `${primary}|${stores?.mtimeMs ?? 'none'}`
+  const mtimeOf = async (name: string) => (home === null ? null : ((await $.fs.stat(`${home}/.dforge/${name}`).catch(() => null))?.mtimeMs ?? null))
+  const stores = await mtimeOf('stores.json')
+  const config = await mtimeOf('config.json')
+  const key = `${primary}|${stores ?? 'none'}|${config ?? 'none'}`
   if (S.roots.key === key) return S.roots.value
   let value: CockpitRoots | null = null
   let note: string | null = null
-  try {
-    const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', primary], { timeoutMs: 5000 })
-    if (ran.exitCode === 0) value = parseModeLines(ran.stdout)
-    else if (!NO_NODE.test(ran.stderr)) {
-      note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
+  let isTimedOut = false
+  // Without either file every store is local, which the checkout paths
+  // already are: there is nothing to ask node.
+  if (stores !== null || config !== null) {
+    try {
+      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', primary], { timeoutMs: 5000 })
+      if (ran.exitCode === 0) value = parseModeLines(ran.stdout)
+      else if (!NO_NODE.test(ran.stderr)) {
+        note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
+      }
+    } catch (error) {
+      // run rejects only when the command cannot start or outlives timeoutMs;
+      // any other wording, a later engine's included, keeps the paths silently.
+      if (TIMED_OUT.test(String(error))) {
+        isTimedOut = true
+        note = 'darkmem-config.mjs --mode gave no answer within 5 seconds'
+      }
     }
-  } catch (error) {
-    // run rejects only when the command cannot start or outlives timeoutMs;
-    // any other wording, a later engine's included, keeps the paths silently.
-    if (TIMED_OUT.test(String(error))) note = 'darkmem-config.mjs --mode gave no answer within 5 seconds'
   }
-  S.roots = { key, value }
+  // A run that timed out is not kept: the next read tries again.
+  S.roots = isTimedOut ? { key: '', value: null } : { key, value }
   if ((await read($, rootsNote)) !== note) await update($, rootsNote, () => note)
   return value
 }

@@ -2917,7 +2917,10 @@ describe('cockpit roots', () => {
   ].join('\n')
   const LEDGER = '# SDD ledger — plan: docs/superpowers/plans/p.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)\n'
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
+  // darkmem-config runs only once one of the ~/.dforge files exists.
+  const storesFile = (): NonNullable<World['files']> => ({ '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } })
   const checkoutFiles = (): NonNullable<World['files']> => ({
+    ...storesFile(),
     '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
     '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
   })
@@ -3013,6 +3016,57 @@ describe('cockpit roots', () => {
     expect(modeRuns).toEqual(['/home/me/code/shop', '/home/me/code/shop'])
   })
 
+  test('reads the roots again when ~/.dforge/config.json changes', async ($, on) => {
+    const files: NonNullable<World['files']> = { ...checkoutFiles(), [CONFIG]: { text: '{}', mtimeMs: 1 } }
+    const modeRuns: string[] = []
+    world(on, { ...SIGNED_IN, files, modeRuns })
+    signedIn(on, files)
+    await $.session.start(START)
+    expect(modeRuns).toEqual(['/home/me/code/shop'])
+    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/config.json' })
+    expect(modeRuns).toHaveLength(1)
+    files[CONFIG]!.mtimeMs = 2
+    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/config.json' })
+    expect(modeRuns).toHaveLength(2)
+  })
+
+  test('a --mode failure that names a missing file is shown, not taken for a missing node', async ($, on) => {
+    const files = checkoutFiles()
+    const stderr = "darkmem-config: ENOENT: no such file or directory, open '/home/me/.dforge/mirror/shop/.sync-state.json'\n"
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 1, stdout: '', stderr } })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^darkmem-config: ENOENT: no such file or directory/ })).toBeDefined()
+  })
+
+  test('a run that timed out is tried again at the next read', async ($, on) => {
+    const files = checkoutFiles()
+    const modeRuns: string[] = []
+    world(on, { ...SIGNED_IN, files, modeRuns, modeOut: 'timeout' })
+    signedIn(on, files)
+    await $.session.start(START)
+    expect(modeRuns).toHaveLength(1)
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
+    expect(modeRuns).toHaveLength(2)
+  })
+
+  test('runs no node while neither ~/.dforge/config.json nor stores.json exists', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
+    }
+    const modeRuns: string[] = []
+    world(on, { ...SIGNED_IN, files, modeRuns })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    expect(modeRuns).toEqual([])
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+  })
+
   test('resolves a plan under the docs root in darkmem, under the docs directory of each checkout otherwise', () => {
     const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
     const w = { root: '/w', docsDir: '/w/docs/dforge' }
@@ -3057,6 +3111,7 @@ describe('cockpit roots', () => {
 
   test('reads the ledger and the plan from the mirror when both families are in darkmem', async ($, on) => {
     const files: World['files'] = {
+      ...storesFile(),
       [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
       [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
     }
@@ -3071,7 +3126,7 @@ describe('cockpit roots', () => {
   })
 
   test('offers Resume for latest.md in the mirror, naming it', async ($, on) => {
-    const files: World['files'] = { [`${MIRROR}/work/handoff/latest.md`]: { text: RESUMABLE, mtimeMs: 900_000 } }
+    const files: World['files'] = { ...storesFile(), [`${MIRROR}/work/handoff/latest.md`]: { text: RESUMABLE, mtimeMs: 900_000 } }
     const prompts: string[] = []
     world(on, { ...SIGNED_IN, files, prompts, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
     signedIn(on, files)
