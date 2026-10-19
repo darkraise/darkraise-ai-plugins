@@ -52,11 +52,11 @@ _darkmem_run() {
   (cd "$1" 2>/dev/null && export DFORGE_SESSION_ID=$2 && _darkmem_bounded "$3" bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
 }
 
-# _darkmem_fit MAXLINES MAXCHARS — the lines on stdin, fitted. Every unindented
-# line (a family's reconcile line, a conflict, a failure, a summary) is kept, in
-# order, while the character room holds it; indented detail lines fill what is
-# left of both rooms; one closing line counts what was left out. 100 characters
-# stay free for that line.
+# _darkmem_fit MAXLINES MAXCHARS — the lines on stdin, fitted. Unindented lines
+# (a family's reconcile line, a conflict, a failure, a summary) are kept in
+# order until the first one the character room cannot hold, so no later line
+# stands in for it; indented detail lines fill what is left of both rooms; one
+# closing line counts what was left out. 100 characters stay free for that line.
 _darkmem_fit() {
   awk -v maxlines="$1" -v maxchars="$2" '
     { line[NR] = $0; detail[NR] = ($0 ~ /^[ \t]/) }
@@ -65,7 +65,7 @@ _darkmem_fit() {
       for (i = 1; i <= NR; i++) {
         if (detail[i]) { details++; continue }
         size = length(line[i]) + 1
-        if (used + size <= room) { keep[i] = 1; used += size; tops++ }
+        if (!full && used + size <= room) { keep[i] = 1; used += size; tops++ } else full = 1
       }
       slots = maxlines - tops
       if (details > slots) slots--
@@ -130,10 +130,12 @@ darkmem_session_lines() {
 # (scripts/darkmem-stop-push.sh). Nothing it prints would reach anyone. It
 # refuses at once when the mirror lock is held (a wait of 1 ms; 0 would mean the
 # 100 s default), so Stop pushes never queue up ahead of a skill's own push or
-# the next session's reconcile; the next stop pushes what this one missed.
+# the next session's reconcile; the next stop pushes what this one missed. The
+# config lookup (a node start) and the push are bounded apart: a bound around
+# both would not reach the push, which runs in a process group of its own.
 darkmem_push_quietly() {
   _darkmem_configured || return 0
-  (dforge_project "$1") >/dev/null 2>&1 || return 0
+  _darkmem_bounded 30 bash -c '. "$1" && dforge_project "$2"' darkmem-push "$_DARKMEM_HOOK_SCRIPTS/lib/roots.sh" "$1" >/dev/null 2>&1 || return 0
   DARKMEM_SYNC_LOCK_WAIT_MS=1 _darkmem_run "$1" "$2" 100 push >/dev/null 2>&1
   return 0
 }

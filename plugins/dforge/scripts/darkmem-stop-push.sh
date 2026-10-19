@@ -14,9 +14,9 @@ session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
 cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 [ -n "$session_id" ] || exit 0
 hook_lib="${SCRIPT_DIR}/lib/darkmem-hook.sh"
-# One bound around config discovery and the push together: darkmem_push_quietly
-# resolves the mapping (a node start) before its own bounded push.
+# darkmem_push_quietly bounds its config lookup and its push apart; a bound
+# here around both would not reach the push's own.
 if . "$hook_lib" 2>/dev/null; then
-  _darkmem_bounded 100 bash -c '. "$1" && darkmem_push_quietly "$2" "$3"' darkmem-stop-push "$hook_lib" "${cwd:-$PWD}" "$session_id" >/dev/null 2>&1
+  darkmem_push_quietly "${cwd:-$PWD}" "$session_id" >/dev/null 2>&1
 fi
 exit 0

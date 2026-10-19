@@ -23,6 +23,7 @@ function bash(args, { cwd, env, input }) {
 const sessionLines = (dir, sid, env, room = "", seconds = "") => bash(["-c", '. "$1"; darkmem_session_lines "$2" "$3" "$4" "$5"', "hook-test", LIB, dir, sid, room, seconds], { cwd: dir, env });
 const MORE = /^darkmem-sync: (\d+) more lines; run darkmem-sync reconcile or status to see them$/m;
 const pushQuietly = (dir, sid, env) => bash(["-c", '. "$1"; darkmem_push_quietly "$2" "$3"', "hook-test", LIB, dir, sid], { cwd: dir, env });
+const fit = (input, lines, chars) => bash(["-c", '. "$1"; _darkmem_fit "$2" "$3"', "hook-test", LIB, String(lines), String(chars)], { cwd: scratch("dmh-fit-"), env: process.env, input });
 
 // The hooks must export the session id themselves, so the test environment
 // carries none.
@@ -86,6 +87,20 @@ test("unindented lines outlast the line cap; the character room trims them last"
   assert.ok(tight.stdout.length <= 400, `${tight.stdout.length} characters`);
   assert.match(tight.stdout, /^failed: dforge\/n00\.: /m);
   assert.match(tight.stdout.trimEnd().split("\n").at(-1), MORE);
+});
+
+test("the character room keeps unindented lines in order: the first that misses ends them", async () => {
+  const result = await fit(`first\n${"x".repeat(50)}\nlast\n`, 20, 120);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, "first\ndarkmem-sync: 2 more lines; run darkmem-sync reconcile or status to see them\n");
+});
+
+test("a malformed ~/.dforge/config.json is one line naming it, and nothing is synced", async t => {
+  const s = await setup(t, { config: "{ not json" });
+  const result = await sessionLines(s.repo, "sid-hook", s.env);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^darkmem-config: .+config\.json is not valid JSON: [^\n]*\n$/);
+  assert.equal(s.stub.db.requests.length, 0);
 });
 
 test("session lines print nothing for an unmapped repository or one with nothing to pull", async t => {
@@ -164,6 +179,22 @@ test("session start adds the darkmem lines on every source, compaction included"
   }
 });
 
+test("session start with under 100 characters of room still syncs, and adds no darkmem line", { skip: !hasJq && "jq is not on PATH" }, async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/specs/a.md", content: "# A\n" });
+  // A roadmap line longer than the hook's whole cap leaves the darkmem lines no room.
+  const name = "x".repeat(9200);
+  write(path.join(s.home.docsRoot, "registers", "m1.md"), "# M1 — item register\n\n**Source:** roadmap\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Search | - | - | open | - |\n");
+  write(path.join(s.home.docsRoot, "roadmap.md"), `# Shop — roadmap\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | ${name} | every epic resolved | docs/dforge/registers/m1.md | open | - |\n`);
+  const payload = { hook_event_name: "SessionStart", session_id: "sid-start", transcript_path: "", cwd: s.repo, source: "startup" };
+  const result = await runHook("session-start.sh", payload, { cwd: s.repo, env: s.env });
+  assert.equal(result.code, 0, result.stderr);
+  const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
+  assert.match(context, /^Roadmap: M1 x{9200}/m, "the roadmap line took the room");
+  assert.doesNotMatch(context, /darkmem-sync/);
+  assert.equal(fs.readFileSync(path.join(s.home.docsRoot, "specs", "a.md"), "utf8"), "# A\n", "the pull still ran");
+});
+
 test("the Stop push sends under its session id, a retried stop too, and prints nothing; turn-end.sh sends nothing", { skip: !hasJq && "jq is not on PATH" }, async t => {
   const s = await setup(t);
   const ledger = path.join(s.home.workRoot, "sdd", "p1", "progress.md");
@@ -179,6 +210,28 @@ test("the Stop push sends under its session id, a retried stop too, and prints n
   assert.deepEqual(await runHook("darkmem-stop-push.sh", payload(true), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
   assert.equal(appends().length, 2, "a retried stop pushes the lines written since");
   assert.ok(appends().every(r => r.body.run_key === "sid-stop"));
+});
+
+test("the Stop push bounds its config lookup apart from the push, which keeps its own bound", {
+  skip: (!hasJq && "jq is not on PATH")
+    || (spawnSync("timeout", ["--version"]).status !== 0 && "GNU timeout is not on PATH")
+    || (process.platform === "win32" && "the PATH shim is a POSIX shell script"),
+}, async t => {
+  const s = await setup(t);
+  write(path.join(s.home.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: a\n");
+  const dir = scratch("dmh-tmo-");
+  const log = path.join(dir, "timeout.log");
+  const real = spawnSync("bash", ["-c", "command -v timeout"], { encoding: "utf8" }).stdout.trim();
+  fs.mkdirSync(path.join(dir, "bin"));
+  fs.writeFileSync(path.join(dir, "bin", "timeout"), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const env = { ...s.env, PATH: `${path.join(dir, "bin")}${path.delimiter}${s.env.PATH}` };
+  const payload = { hook_event_name: "Stop", session_id: "sid-stop", cwd: s.repo, transcript_path: "", stop_hook_active: false };
+  assert.deepEqual(await runHook("darkmem-stop-push.sh", payload, { cwd: s.repo, env }), { code: 0, stdout: "", stderr: "" });
+  const calls = fs.readFileSync(log, "utf8").split("\n").filter(Boolean);
+  assert.deepEqual(calls.filter(line => /darkmem_push_quietly/.test(line)), [], "no bound wraps the push's own bound");
+  assert.equal(calls.filter(line => / push$/.test(line) && /darkmem-sync/.test(line)).length, 1, calls.join("\n"));
+  assert.match(calls.find(line => /dforge_project/.test(line)) ?? "", /^-k \d+ 30 bash -c /);
+  assert.ok(s.stub.db.requests.some(r => r.method === "POST" && r.path === "/api/v1/worklog/entries"), "the push still sent the ledger");
 });
 
 test("the watchdog bounds a command and its children where GNU timeout is missing", async () => {
