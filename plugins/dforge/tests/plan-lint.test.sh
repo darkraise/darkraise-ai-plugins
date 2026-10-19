@@ -451,9 +451,36 @@ has "no Routing policy line: conversion error names it missing" "$out" "ERROR he
 lacks "no Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
 lacks "no Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
 has "no Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
-codex_plan | sed '/^Routing policy:/d; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v4\n```#' > cfenced.md
+codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v4\n```#' > cfenced.md
 lint cfenced.md
 has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
+lacks "a fenced Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
+lacks "a fenced Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
+has "a fenced Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
+# A fenced Host line is an example, not the host: the plan stays a Claude plan.
+variant chost.md 's/^\*\*Goal:\*\* Demo\.$/**Goal:** Demo.\n\n```text\nHost: codex\n```/'
+lint chost.md
+check "a fenced Host line: exit 0" "$status" "0"
+lacks "a fenced Host line: no Codex checks" "$out" "Routing policy"
+has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 2 warnings"
+# A backticked Routing policy value is the value.
+codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: `codex-v4`#' > cbt.md
+lint cbt.md
+check "a backticked Routing policy: exit 0" "$status" "0"
+check "a backticked Routing policy: clean" "$out" "plan-lint: 0 errors, 0 warnings"
+# A routing policy that cannot be read is a usage failure, not a finding.
+mkdir -p "$TMP/nojq"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/nojq/jq"
+chmod +x "$TMP/nojq/jq"
+out=$(PATH="$TMP/nojq:$PATH" bash "$LINT" codex.md 2>&1); status=$?
+check "an unreadable routing policy: exit 2" "$status" "2"
+has "an unreadable routing policy: says so" "$out" "plan-lint: cannot read the routing policy version from"
+lacks "an unreadable routing policy: no empty-policy finding" "$out" "not ;"
+# A converted plan keeps its conversion record before the Task index and lints clean.
+codex_plan | awk '/^## Task index$/ { print "## Policy conversion\n\ncodex-v3 → codex-v4, approved 2026-09-23. Scores unchanged.\n\n| Task | Axes (f/s/c/r) | Score | codex-v3 | codex-v4 | Source |\n|---|---|---|---|---|---|\n| 1 | 1/1/1/0 | 3 | gpt-6-sol / low | gpt-6.1-sol / low | rubric |\n" } { print }' > cconv.md
+lint cconv.md
+check "a Policy conversion record: exit 0" "$status" "0"
+check "a Policy conversion record: clean" "$out" "plan-lint: 0 errors, 0 warnings"
 
 # --- the lazy lane probe ---
 # p1 makes Task 1 lane-eligible: total 2, risk 0, no Executor, no Override.

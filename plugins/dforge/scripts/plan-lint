@@ -9,7 +9,8 @@
 # --no-probe skips the lane probe, for runs whose verdict must not depend on
 # whether Codex is usable on the machine.
 # Output: "ERROR|WARN|NOTE <header|Task N>: <what>" lines, then a summary line.
-# Exit: 0 no errors; 1 errors; 2 usage or missing file.
+# Exit: 0 no errors; 1 errors; 2 usage, missing file, or an unreadable
+# routing policy.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -64,16 +65,21 @@ first_label() { # first_label <label> <unfenced lines>
 header_labels=$(label_lines < "$src")
 header_line() { first_label "$1" "$header_labels"; }
 
+# A fenced Host or Routing policy line is an example, not the plan's own.
+unfenced_header=$(awk "$_PLAN_AWK"'in_fence($0) { next } { print }' <<<"$header")
 codex=0
-grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
+grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$unfenced_header" && codex=1
 
 # A plan written under another routing policy names pairs this policy does not
 # rank, so one conversion finding replaces a pair or rank finding per task.
 policy_ok=1
 if [ "$codex" -eq 1 ]; then
-  want_policy=$(jq -r '.version' "$ROUTING" 2>/dev/null | tr -d '\r')
-  got_policy=$(awk "$_PLAN_AWK"'in_fence($0) { next } { print }' <<<"$header" \
-    | sed -nE 's/^(\*\*)?Routing policy:(\*\*)?[ \t]+([^ \t]+)[ \t]*$/\3/p' | head -n 1)
+  want_policy=$(jq -r '.version // empty' "$ROUTING" 2>/dev/null | tr -d '\r')
+  if [ -z "$want_policy" ]; then
+    echo "plan-lint: cannot read the routing policy version from $ROUTING (is jq installed?)" >&2
+    exit 2
+  fi
+  got_policy=$(sed -nE 's/^(\*\*)?Routing policy:(\*\*)?[ \t]+`?([^ \t`]+)`?[ \t]*$/\3/p' <<<"$unfenced_header" | head -n 1)
   if [ "$got_policy" != "$want_policy" ]; then
     policy_ok=0
     say ERROR header "Routing policy is ${got_policy:-missing}, not $want_policy; convert the plan per reference/native-codex.md §Existing plans"
