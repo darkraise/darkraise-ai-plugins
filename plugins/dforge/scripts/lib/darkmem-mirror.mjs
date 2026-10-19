@@ -164,6 +164,44 @@ const isLedgerRecord = (slug, record) => validKey(slug) && record !== null && ty
   && (record.pending === undefined || typeof record.pending === "boolean")
   && (record.lastSeq === undefined || (Number.isSafeInteger(record.lastSeq) && record.lastSeq >= 0));
 
+// checkpointAt is darkmem's created_at of the last checkpoint this mirror
+// synced, per workstream key, so a push's duplicate lookup starts from its own
+// workstream's. A state file written before holds one value (a string, or
+// null); it stands for every workstream until that one is next written, kept
+// under "*", which no workstream key can spell.
+const EVERY_WORKSTREAM = "*";
+const isStamp = value => typeof value === "string" && !Number.isNaN(Date.parse(value));
+
+// The loaded checkpointAt, or undefined when it is malformed.
+function checkpointAtRecord(value) {
+  if (value === null || isStamp(value)) return value;
+  return dictOf(value, (key, at) => (key === EVERY_WORKSTREAM || validKey(key)) && isStamp(at)) ?? undefined;
+}
+
+export function checkpointAtOf(state, workstream) {
+  const held = state.checkpointAt;
+  if (held === null || typeof held === "string") return held;
+  return held[workstream] ?? held[EVERY_WORKSTREAM] ?? null;
+}
+
+// The newest checkpoint this mirror synced in any workstream: latest.md is the
+// most recent stop, so a pull replaces it only with a newer one.
+export function newestCheckpointAt(state) {
+  const held = state.checkpointAt;
+  if (held === null || typeof held === "string") return held;
+  let newest = null;
+  for (const at of Object.values(held)) if (newest === null || isoMicros(at) > isoMicros(newest)) newest = at;
+  return newest;
+}
+
+export function recordCheckpointAt(state, workstream, at) {
+  const held = state.checkpointAt;
+  const record = held !== null && typeof held === "object" ? held : Object.create(null);
+  if (typeof held === "string") record[EVERY_WORKSTREAM] = held;
+  record[workstream] = at;
+  state.checkpointAt = record;
+}
+
 // A missing state file is a fresh mirror. An unreadable or malformed one is an
 // error, not a fresh start: forgetting a ledger's offset would re-send lines.
 export function loadState(file) {
@@ -176,16 +214,17 @@ export function loadState(file) {
   }
   const documents = dictOf(raw?.documents, (uri, hash) => isHash(hash));
   const ledgers = dictOf(raw?.ledgers, isLedgerRecord);
+  const checkpointAt = checkpointAtRecord(raw?.checkpointAt);
   const valid = raw?.version === 1 && documents && ledgers
     && (raw.checkpoint === null || isHash(raw.checkpoint))
-    && (raw.checkpointAt === null || (typeof raw.checkpointAt === "string" && !Number.isNaN(Date.parse(raw.checkpointAt))))
+    && checkpointAt !== undefined
     && Array.isArray(raw.conflicts) && raw.conflicts.every(line => typeof line === "string")
     && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")))
     // dr-forge recorded forge; migrateServer moves its documents on and records dforge.
     && (raw.prefix === undefined || raw.prefix === DOC_PREFIX || raw.prefix === "forge");
   if (!valid) throw new StateError(`${file} does not hold a valid sync state; ${REBUILD}`);
   const state = {
-    version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt: raw.checkpointAt, conflicts: raw.conflicts,
+    version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt, conflicts: raw.conflicts,
     pendingLinks: raw.pendingLinks ?? [],
   };
   // Set once darkmem was checked for pre-3.0 uris (dforge-home-migrate.mjs).
