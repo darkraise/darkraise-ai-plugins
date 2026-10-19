@@ -488,6 +488,40 @@ test("a checkpoint filed a microsecond before the last synced one is not taken f
   assert.deepEqual(s.stub.db.workstreams[0].entries.map(e => e.body), ["# X\n", "# Y\n", "# X\n"]);
 });
 
+test("a checkpoint whose answer was lost is found after a push to another workstream", async t => {
+  const s = await setup(t);
+  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  const p1 = "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/p1.md`\n";
+  write(latest, p1);
+  s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
+  assert.equal((await s.push()).code, 1);
+  write(latest, "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/p2.md`\n");
+  assert.equal((await s.push()).code, 0);
+  write(latest, p1);
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout);
+  assert.match(result.stdout, / 0 checkpoints;/);
+  const filed = key => s.stub.db.workstreams.find(w => w.key === key).entries;
+  assert.equal(filed("p1").length, 1, "p1's lost checkpoint is recorded, not filed twice");
+  const { checkpointAt } = JSON.parse(read(path.join(s.mirror, ".sync-state.json")));
+  assert.deepEqual(checkpointAt, { p1: filed("p1")[0].created_at, p2: filed("p2")[0].created_at });
+});
+
+test("an old state file's single checkpointAt stands for a workstream until it is pushed", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# X\n" }] });
+  const old = new Date(Date.parse(s.stub.db.workstreams[0].entries[0].created_at) + 500).toISOString();
+  write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dforge",
+  }));
+  write(path.join(s.workRoot, "handoff", "latest.md"), "# X\n");
+  const result = await s.push("--workstream", "p1");
+  assert.equal(result.code, 0, result.stdout);
+  assert.match(result.stdout, / 1 checkpoints;/, "the old value is the floor: X filed before it is not this note");
+  const entries = s.stub.db.workstreams[0].entries;
+  assert.deepEqual(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).checkpointAt, { "*": old, p1: entries.at(-1).created_at });
+});
+
 test("push refuses a uri Windows cannot hold", { skip: process.platform === "win32" && "Windows cannot create these files" }, async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "notes", "a:b.md"), "x\n");

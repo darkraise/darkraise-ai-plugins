@@ -134,7 +134,7 @@ test("progress moves into darkmem from every checkout, and a second run does not
   assert.equal(p1.state, "closed", "a closed workstream is closed again after its checkpoint");
   assert.equal(s.state().checkpoint, sha(LATEST));
   for (const dir of [s.repo, s.worktree]) assert.equal(git(dir, "status", "--porcelain", "--untracked-files=all", "--", ".dforge"), "", `${dir}'s backup is ignored`);
-  assert.equal(s.state().checkpointAt, checkpoint.created_at);
+  assert.deepEqual(s.state().checkpointAt, { p1: checkpoint.created_at });
   assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p1$/m);
   assert.deepEqual(s.stores(), { documents: "local", progress: "darkmem" });
   const [primaryAside] = movedAside(s.repo);
@@ -174,7 +174,7 @@ test("a latest.md that names no plan is copied unsent, behind darkmem's newest c
   assert.match(result.stdout, /^ {2}latest\.md names no plan or draft; copied to the mirror, not sent$/m);
   assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "a note with no State section\n");
   assert.equal(s.state().checkpoint, sha("a note with no State section\n"));
-  assert.equal(s.state().checkpointAt, workstream.last_entry_at);
+  assert.deepEqual(s.state().checkpointAt, { p9: workstream.last_entry_at });
   assert.equal(s.stub.db.workstreams.flatMap(w => w.entries).filter(e => e.kind === "checkpoint").length, 1);
 });
 

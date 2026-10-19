@@ -8,9 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointTarget, decodeUtf8,
+  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointAtOf, checkpointTarget, decodeUtf8,
   familiesOf, isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
-  unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
+  recordCheckpointAt, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
 import { remoteLedger } from "./darkmem-pull.mjs";
 import { nameSpellings } from "./darkmem-reconcile.mjs";
@@ -400,16 +400,18 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
     report.failures.push(`handoff/latest.md: ${chars} characters, over the ${MAX_ENTRY_CHARS} one checkpoint holds`);
     return;
   }
-  // The same note already filed since the last synced checkpoint (an earlier
-  // push whose answer was lost, even behind another client's checkpoint) is
-  // recorded, not filed twice.
+  // The same note already filed since this workstream's last synced checkpoint
+  // (an earlier push whose answer was lost, even behind another client's
+  // checkpoint or this mirror's push to another workstream) is recorded, not
+  // filed twice.
   const existing = await client.resume(cfg.project, workstream);
-  const since = (state.checkpointAt && isoMicros(state.checkpointAt)) ?? -Infinity;
+  const synced = checkpointAtOf(state, workstream);
+  const since = (synced && isoMicros(synced)) ?? -Infinity;
   const filed = existing && (await client.entries(existing.workstream.id, "checkpoint"))
     .find(entry => isoMicros(entry.created_at) >= since && sha256(Buffer.from(entry.body, "utf8")) === hash);
   if (filed) {
     state.checkpoint = hash;
-    state.checkpointAt = filed.created_at;
+    recordCheckpointAt(state, workstream, filed.created_at);
     persist();
     return;
   }
@@ -423,7 +425,7 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
     return;
   }
   state.checkpoint = hash;
-  state.checkpointAt = answer.workstream.last_entry_at;
+  recordCheckpointAt(state, workstream, answer.workstream.last_entry_at);
   persist();
   report.counts.checkpoints += 1;
 }

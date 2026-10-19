@@ -5,7 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, caseGroups, familiesOf, isArchiveUri, isoMicros, sha256, uriFamily, uriProblem, uriToLocal, validKey, writeFileAtomic,
+  DOC_PREFIX, caseGroups, familiesOf, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, sha256, uriFamily, uriProblem, uriToLocal,
+  validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 
 const RESOLVE = "move the local file aside, pull, and re-apply your change";
@@ -173,11 +174,12 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
 }
 
 // latest.md is the most recent stop: the newest checkpoint across the open
-// workstreams, taken when it is newer than the last checkpoint this mirror
-// synced (by darkmem's own timestamps, never the file's mtime) and never over
-// local edits that have not been pushed.
+// workstreams, taken when it is newer than the newest checkpoint this mirror
+// synced in any workstream (by darkmem's own timestamps, never the file's
+// mtime) and never over local edits that have not been pushed.
 async function pullCheckpoint({ cfg, client, roots, state, persist, report }, open) {
   let newest = null;
+  let newestKey = null;
   let unread = false;
   for (const ws of open) {
     let checkpoint;
@@ -188,11 +190,15 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
       unread = true;
       continue;
     }
-    if (checkpoint && (!newest || isoMicros(checkpoint.created_at) > isoMicros(newest.created_at))) newest = checkpoint;
+    if (checkpoint && (!newest || isoMicros(checkpoint.created_at) > isoMicros(newest.created_at))) {
+      newest = checkpoint;
+      newestKey = ws.key;
+    }
   }
   // Without every workstream's checkpoint the newest is unknown.
   if (!newest || unread) return;
-  if (state.checkpointAt && isoMicros(newest.created_at) <= isoMicros(state.checkpointAt)) return;
+  const synced = newestCheckpointAt(state);
+  if (synced && isoMicros(newest.created_at) <= isoMicros(synced)) return;
   const file = path.join(roots.workRoot, "handoff", "latest.md");
   const remote = Buffer.from(newest.body, "utf8");
   const remoteHash = sha256(remote);
@@ -206,7 +212,7 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
     report.counts.checkpoints += 1;
   }
   state.checkpoint = remoteHash;
-  state.checkpointAt = newest.created_at;
+  recordCheckpointAt(state, newestKey, newest.created_at);
   persist();
 }
 
