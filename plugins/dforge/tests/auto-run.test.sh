@@ -614,9 +614,15 @@ check "scan: a command that starts with the path is a run" "$(is_run '(cd "$REPO
 check "scan: sourcing context.sh is a run" "$(is_run '. "$HERE/../scripts/lib/context.sh"')" "run"
 check "scan: a grep needle is not a run" "$(is_run "names \"x\" \"\$F\" '\`scripts/auto-run switch\` and end the turn'")" "no"
 check "scan: another script of a similar name is not a run" "$(is_run 'bash "$P/scripts/auto-run-probe"')" "no"
-named() { # named <suite> <variable>: the suite exports or unsets it
-  grep -Eq "^[[:space:]]*(export|unset)[[:space:]](.*[[:space:]])?$2([=[:space:]]|\$)" "$1"
+named() { # named <suite> <variable>: the suite sets it with export or unsets it
+  grep -Eq "^[[:space:]]*(export[[:space:]](.*[[:space:]])?$2=|unset[[:space:]](.*[[:space:]])?$2([;[:space:]]|\$))" "$1"
 }
+printf 'export AR_SESSION\n' > "$TMP/bare.sh"
+check "scan: a bare export leaves the inherited value" "$(named "$TMP/bare.sh" AR_SESSION && echo named || echo unnamed)" "unnamed"
+printf 'export X=1 AR_SESSION=t\n' > "$TMP/set.sh"
+check "scan: an export that assigns names the variable" "$(named "$TMP/set.sh" AR_SESSION && echo named || echo unnamed)" "named"
+printf 'unset X AR_SESSION\n' > "$TMP/unset.sh"
+check "scan: an unset names the variable" "$(named "$TMP/unset.sh" AR_SESSION && echo named || echo unnamed)" "named"
 found="" unnamed=""
 for suite in "$HERE"/*.sh; do
   lines=$(grep -E "$runs|$sources" "$suite") || continue
