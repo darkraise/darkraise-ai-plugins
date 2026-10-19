@@ -4,8 +4,9 @@ import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { resolveStores, writeApplied } from "../../scripts/lib/darkmem-config.mjs";
+import { utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import {
-  inProgress, inProgressReason, nameSpellings, pendingFamilies, refreshContext, stayLine,
+  NOT_A_FILE, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, refreshContext, stayLine,
 } from "../../scripts/lib/darkmem-reconcile.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
@@ -38,6 +39,16 @@ test("a document name has one key under every prefix", () => {
   assert.deepEqual(nameSpellings("docs/forgex/a.md"), ["docs/forgex/a.md"]);
   assert.deepEqual(nameSpellings("docs/superpowersx/a.md"), ["docs/superpowersx/a.md"]);
   assert.deepEqual(nameSpellings("/abs/docs/superpowers/a.md"), ["/abs/docs/superpowers/a.md"]);
+  assert.deepEqual(nameSpellings("docs/superpowers/"), ["docs/dforge", "docs/forge", "docs/superpowers"]);
+  assert.deepEqual(nameSpellings("docs/forge/plans/"), ["docs/dforge/plans", "docs/forge/plans", "docs/superpowers/plans"]);
+});
+
+test("a directory where a document should be hashes as a non-file instead of throwing", () => {
+  const dir = scratch("dms-hash-");
+  assert.equal(fileHash(dir), NOT_A_FILE);
+  assert.equal(fileHash(path.join(dir, "absent.md")), null);
+  write(path.join(dir, "a.md"), "a\n");
+  assert.equal(fileHash(path.join(dir, "a.md")), sha("a\n"));
 });
 
 test("pending families are those whose configured store differs from the applied one", () => {
@@ -428,6 +439,48 @@ for (const { arg, reason } of [
   });
 }
 
+test("uncommitted changes are named by their raw paths, not git's quoted ones", async t => {
+  const s = await docsRepo(t);
+  write(path.join(s.repo, "docs", "dforge", "spécs", "naïve.md"), "new\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/dforge has uncommitted changes$/m);
+  assert.ok(result.stdout.includes("  ?? docs/dforge/spécs/naïve.md\n"), result.stdout);
+  assert.deepEqual(writes(s.stub), []);
+});
+
+test("a file the move cannot carry, committed during the pull, is named in the refusal", async t => {
+  let repo;
+  let committed = false;
+  const s = await docsRepo(t, undefined, {
+    stub: {
+      onRequest: request => {
+        if (!repo || committed || request.path !== "/api/v1/documents/by-uri") return;
+        committed = true;
+        write(at(repo, "docs/dforge/.hidden.md"), "hidden\n");
+        commitAll(repo, "hidden");
+      },
+    },
+  });
+  repo = s.repo;
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/dforge changed during the move; the repository copy stays$/m);
+  assert.ok(result.stdout.includes("  docs/dforge/.hidden.md: a dot name, which the mirror never syncs\n"), result.stdout);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
+test("a citation search killed before it finishes is named in the move's details", { skip: process.platform === "win32" }, async t => {
+  const s = await docsRepo(t);
+  const realGit = process.env.PATH.split(path.delimiter).map(dir => path.join(dir, "git")).find(file => fs.existsSync(file));
+  const bin = scratch("dms-git-");
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "grep" ] && kill -KILL $$; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /git grep failed: it did not finish \(SIGKILL\); check for docs\/superpowers\/, docs\/forge\/ and docs\/dforge\/ citations before you commit/);
+});
+
 // Documents applied darkmem and configured local, darkmem holding two of them.
 async function darkmemDocs(t, { seeded = true } = {}) {
   const stub = await startStub();
@@ -590,4 +643,55 @@ test("documents stay darkmem when git check-ignore fails", { skip: process.platf
   assert.equal(fs.existsSync(path.join(s.repo, "docs", "dforge")), false);
   assert.equal(fs.existsSync(s.docsRoot), true);
   assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+});
+
+test("a file at docs/dforge refuses the move back, and nothing is copied", async t => {
+  const s = await darkmemDocs(t);
+  write(path.join(s.repo, "docs", "dforge"), "not a directory\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: documents stay darkmem (configured local): docs/dforge is not a directory; nothing was copied\n"), result.stdout);
+  assert.equal(read(path.join(s.repo, "docs", "dforge")), "not a directory\n");
+  assert.equal(fs.existsSync(s.docsRoot), true);
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+});
+
+test("a mirror docs root that is a symbolic link refuses the move back, and nothing is copied or set aside", { skip: process.platform === "win32" }, async t => {
+  const s = await darkmemDocs(t);
+  const outside = scratch("dms-link-");
+  write(path.join(outside, "specs", "a.md"), "# A\n");
+  write(path.join(outside, "plans", "p.md"), "# P\n");
+  fs.mkdirSync(s.mirror, { recursive: true });
+  fs.symlinkSync(outside, s.docsRoot);
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(`darkmem-sync reconcile: documents stay darkmem (configured local): the mirror's docs root ${s.docsRoot} is a symbolic link; nothing was copied\n`), result.stdout);
+  assert.equal(fs.existsSync(path.join(s.repo, "docs", "dforge")), false);
+  assert.ok(fs.lstatSync(s.docsRoot).isSymbolicLink(), "the link is not set aside");
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+});
+
+test("a mirror copy that cannot be set aside refuses the move, keeps the sync state, and a rerun finishes it", async t => {
+  const s = await darkmemDocs(t);
+  assert.equal((await s.pull()).code, 0);
+  // Every name the aside rename can take for the next minute is a non-empty directory.
+  const now = Date.now();
+  const blockers = [];
+  for (let i = 0; i < 60; i += 1) {
+    const dir = path.join(s.mirror, `dforge-moved-${utcStamp(new Date(now + i * 1000))}`);
+    blockers.push(dir);
+    write(path.join(dir, "keep.md"), "taken\n");
+  }
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay darkmem \(configured local\): the mirror's copy could not be set aside \(\w+\); docs\/dforge holds the copied files, and the next reconcile finishes the move$/m);
+  assert.deepEqual(Object.keys(JSON.parse(read(path.join(s.mirror, ".sync-state.json"))).documents).sort(), ["dforge/plans/p.md", "dforge/specs/a.md"]);
+  assert.equal(fs.existsSync(s.docsRoot), true);
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+  for (const dir of blockers) fs.rmSync(dir, { recursive: true });
+  const again = await s.reconcile();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.match(again.stdout, /^darkmem-sync reconcile: documents moved to local$/m);
+  assert.equal(read(path.join(s.repo, "docs", "dforge", "specs", "a.md")), "# A\n");
 });

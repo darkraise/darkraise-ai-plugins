@@ -28,7 +28,7 @@ const MOVES = {
 
 function runGit(cwd, args, input) {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 60000, input, maxBuffer: 64 * 1024 * 1024 });
-  return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+  return { status: result.status, signal: result.signal, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 
 const slash = file => file.split(path.sep).join("/");
@@ -47,7 +47,7 @@ function dirEntries(dir) {
 // docs/superpowers spellings stay readable because historical plans and
 // ledgers cite them.
 export function nameSpellings(name) {
-  const text = String(name).replace(/^\.\//, "");
+  const text = String(name).replace(/^\.\//, "").replace(/(.)\/+$/, "$1");
   const old = LEGACY.find(prefix => text === prefix || text.startsWith(`${prefix}/`));
   const key = old ? `${DOCS}${text.slice(old.length)}` : text;
   return key === DOCS || key.startsWith(`${DOCS}/`) ? [key, ...LEGACY.map(prefix => `${prefix}${key.slice(DOCS.length)}`)] : [key];
@@ -217,7 +217,33 @@ export function inProgressReason(context) {
 }
 
 const pullReport = () => ({ conflicts: [], failures: [], notes: [], counts: { documents: 0, ledgers: 0, checkpoints: 0 }, partial: false, refused: 0 });
-const fileHash = file => (fs.existsSync(file) ? sha256(fs.readFileSync(file)) : null);
+// A directory or other non-file where a document belongs reads as a hash no
+// file has, so it is reported as differing instead of throwing EISDIR.
+export const NOT_A_FILE = "not a regular file";
+
+export function fileHash(file) {
+  const stat = fs.statSync(file, { throwIfNoEntry: false });
+  if (!stat) return null;
+  return stat.isFile() ? sha256(fs.readFileSync(file)) : NOT_A_FILE;
+}
+
+// git status --porcelain -z as "XY path" lines with raw paths, which plain
+// --porcelain would C-quote; a rename or copy reads "XY from -> to".
+function statusLines(stdout) {
+  const entries = stdout.split("\0");
+  const lines = [];
+  for (let i = 0; i < entries.length; i += 1) {
+    const item = entries[i];
+    if (item.length < 4) continue;
+    if ("RC".includes(item[0])) {
+      lines.push(`${item.slice(0, 3)}${entries[i + 1]} -> ${item.slice(3)}`);
+      i += 1;
+    } else {
+      lines.push(item);
+    }
+  }
+  return lines;
+}
 
 // Why the mirror would never sync a tracked file (spec §7.2), or null.
 function uncarried(docsDir, parts) {
@@ -311,9 +337,10 @@ async function documentsToDarkmem(context) {
   const { cfg, client } = context;
   const docsDir = dforgeDir("docs", cfg.repoRoot);
   const rel = slash(path.relative(cfg.repoRoot, docsDir));
-  const dirty = runGit(cfg.repoRoot, ["status", "--porcelain", "--untracked-files=all", "--", rel]);
+  const dirty = runGit(cfg.repoRoot, ["status", "--porcelain", "-z", "--untracked-files=all", "--", rel]);
   if (dirty.status !== 0) return { moved: false, reason: `git status failed: ${dirty.stderr.trim()}`, details: [] };
-  if (dirty.stdout.trim()) return { moved: false, reason: `${rel} has uncommitted changes`, details: dirty.stdout.split("\n").filter(Boolean) };
+  const changes = statusLines(dirty.stdout);
+  if (changes.length) return { moved: false, reason: `${rel} has uncommitted changes`, details: changes };
   const { failed, problems, documents } = carriedDocuments(cfg.repoRoot, docsDir, rel);
   if (failed) return { moved: false, reason: failed, details: [] };
   if (problems.length) return { moved: false, reason: `${rel} holds files the move cannot carry`, details: problems };
@@ -353,7 +380,7 @@ async function documentsToDarkmem(context) {
   const again = carriedDocuments(cfg.repoRoot, docsDir, rel);
   const sent = new Map(documents.map(doc => [doc.uri, doc.hash]));
   if (again.failed || again.problems.length || again.documents.length !== sent.size || again.documents.some(doc => sent.get(doc.uri) !== doc.hash)) {
-    return { moved: false, reason: `${rel} changed during the move; the repository copy stays`, details: [] };
+    return { moved: false, reason: `${rel} changed during the move; the repository copy stays`, details: [...(again.failed ? [again.failed] : []), ...again.problems] };
   }
   if (!documents.length) return { moved: true, details: [`${rel} holds no tracked files; nothing to stage`] };
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
@@ -361,7 +388,11 @@ async function documentsToDarkmem(context) {
   const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
   const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "-e", "docs/dforge/", "--", ".", `:(exclude)${rel}`]);
   const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
-  if (cites.status > 1) details.push(`git grep failed: ${cites.stderr.trim()}; check for docs/superpowers/, docs/forge/ and docs/dforge/ citations before you commit`);
+  // 1 is "no match"; anything else, a killed or timed-out run's null included, is a failure.
+  if (cites.status !== 0 && cites.status !== 1) {
+    const why = cites.stderr.trim() || `it did not finish (${cites.signal ?? "no exit status"})`;
+    details.push(`git grep failed: ${why}; check for docs/superpowers/, docs/forge/ and docs/dforge/ citations before you commit`);
+  }
   if (citing.length) {
     details.push("these tracked files cite docs/superpowers/, docs/forge/ or docs/dforge/ names; rewrite them before you commit the deletion:");
     details.push(...citing.slice(0, 20).map(file => `  ${file}`));
@@ -379,6 +410,10 @@ async function documentsToDarkmem(context) {
 async function documentsToLocal(context, { offline = null } = {}) {
   const { cfg, client, state, persist } = context;
   const mirror = mirrorRoots(cfg, "documents");
+  // A linked docs root would be read through, copied from and set aside as a link.
+  if (fs.lstatSync(mirror.docsRoot, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    return { moved: false, reason: `the mirror's docs root ${mirror.docsRoot} is a symbolic link; nothing was copied`, details: [] };
+  }
   if (!offline) {
     const pulled = pullReport();
     await pullDocuments({ ...context, roots: mirror, report: pulled });
@@ -431,6 +466,13 @@ async function documentsToLocal(context, { offline = null } = {}) {
     }
     if (unverified.length) return { moved: false, reason: "the mirror does not match darkmem; nothing was copied", details: unverified };
   }
+  // mkdirSync cannot make docs/dforge where a file stands. A link is left to
+  // the walk below, which names it.
+  for (const rel of ["docs", DOCS]) {
+    const stat = fs.lstatSync(path.join(cfg.repoRoot, ...rel.split("/")), { throwIfNoEntry: false });
+    if (!stat || stat.isSymbolicLink()) break;
+    if (!stat.isDirectory()) return { moved: false, reason: `${rel} is not a directory; nothing was copied`, details: [] };
+  }
   // Copies and equality reads must not follow a link out of the repository.
   const checked = new Set(["docs", DOCS]);
   for (const { dest } of files) {
@@ -465,12 +507,20 @@ async function documentsToLocal(context, { offline = null } = {}) {
   }
   const mismatched = files.filter(({ dest, hash }) => fileHash(dest) !== hash).map(({ name }) => `${name}: differs from the mirror's copy`);
   if (mismatched.length) return { moved: false, reason: "a copied file differs from the mirror's", details: mismatched };
+  // Set aside before the sync state forgets the documents, so a failed rename
+  // leaves a state that still describes the mirror.
+  const aside = path.join(cfg.mirror, `${DOC_PREFIX}-moved-${utcStamp()}`);
+  if (fs.existsSync(mirror.docsRoot)) {
+    try {
+      fs.renameSync(mirror.docsRoot, aside);
+    } catch (error) {
+      return { moved: false, reason: `the mirror's copy could not be set aside (${error.code}); docs/dforge holds the copied files, and the next reconcile finishes the move`, details: [] };
+    }
+  }
   for (const uri of Object.keys(state.documents)) {
     if (uriFamily(uri) === "documents") delete state.documents[uri];
   }
   persist();
-  const aside = path.join(cfg.mirror, `${DOC_PREFIX}-moved-${utcStamp()}`);
-  if (fs.existsSync(mirror.docsRoot)) fs.renameSync(mirror.docsRoot, aside);
   const details = [`copied ${files.length} files into docs/dforge, untracked; commit them`];
   if (notes.length) {
     details.push(`darkmem was not consulted; the mirror is kept at ${aside}. These differ from darkmem's last known copy:`);
