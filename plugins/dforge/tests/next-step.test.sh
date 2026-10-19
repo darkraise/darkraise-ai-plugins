@@ -71,7 +71,7 @@ has "not started: status counts tasks outside fences only" "$out" "**Status:** P
 has "not started: next is Task 1" "$out" "**Next:** Start at Task 1 (First thing)."
 has "not started: launch dir is the primary checkout" "$out" "Launch in \`$ROOT\`:"
 has "not started: launch command from Execution line" "$out" "claude --model sonnet --effort high"
-has "not started: prompt names the sdd skill" "$out" "Continue \`$PLAN_REL\` with dforge:subagent-driven-development. Start at Task 1 (First thing)."
+has "not started: prompt names the sdd skill and Setup" "$out" "Continue \`$PLAN_REL\` with dforge:subagent-driven-development. No ledger exists yet: begin at the skill's Setup, worktree first; the first task is Task 1 (First thing)."
 check "not started: writes the handoff file" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
 check "not started: handoff carries the block" "$(grep -c '^\*\*Next:\*\* Start at Task 1' "$HANDOFF")" "1"
 
