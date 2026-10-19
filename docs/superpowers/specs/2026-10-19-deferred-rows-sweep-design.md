@@ -82,16 +82,23 @@ re-reads the code before changing it, since line numbers drift.
 Owns `hooks/cockpit/register.tsx`, `hooks/cockpit/config.ts`,
 `hooks/cockpit/lib.ts`, `tests/cockpit.test.ts`.
 
-1. AE #8 — `refresh` does not send the handoff note, and measures against
-   `finalLimitFor`, once the session's plan has every task complete (the
-   attended final phase). Check: a cockpit test with all tasks complete,
-   tokens between `budgetFor` and `finalLimitFor`, sees no note.
+1. AE #8 — `refresh` measures against `finalLimitFor`, and its handoff note
+   compares against that limit, once the session's plan has at most
+   `CTX_TAIL_TASKS` (2, `scripts/lib/context.sh`) tasks left by its ledger —
+   the same tail the budget line already measures against the final limit —
+   and in the final phase. It uses `parseLedger` and `planTasks` (`lib.ts`).
+   Check: cockpit tests with tokens between `budgetFor` and `finalLimitFor`
+   see no note with two tasks left and with every task complete, and see the
+   note with three tasks left.
 2. AE 32.L1 — in the switch stage a `skip` from `$.session.compact` is booked
    as `compacted --switch` and the stage proceeds to switch-resume; it is not
-   a failure. Check: cockpit test.
+   a failure. The booking counts one compaction in the run's status though
+   none ran; that count is informational and stays. Check: cockpit test.
 3. AE 32.L4 — the cockpit derives the primary checkout as `ar_primary_root`
-   does: `git -C <dirname of the common dir> rev-parse --show-toplevel`.
-   Check: cockpit test with a linked worktree.
+   does: `git -C <dirname of the common dir> rev-parse --show-toplevel`, so
+   it shares the scripts' limits (a submodule resolves no primary) by design.
+   The harness mock answers `git -C … rev-parse --show-toplevel`. Check:
+   cockpit test with a linked worktree.
 4. AE 32.L7 — the plugin root is quoted (`bash "<root>/scripts/auto-run" …`)
    in every model-facing prompt the cockpit builds. Check: cockpit test reads
    the stall prompt.
@@ -103,8 +110,12 @@ Owns `hooks/cockpit/register.tsx`, `hooks/cockpit/config.ts`,
 6. RO #21 — Check only: a cockpit test counts `ui.invalidate` across
    `clock.advance(5000)` after a finish without wait and expects none.
 7. DF #17 — `importSettings` runs `node <root>/scripts/lib/dforge-config.mjs
-   get --json` through `$.process.run`, whose atomic legacy import replaces
-   the mod's exists-then-write. Check: cockpit test.
+   get --json` through `$.process.run` only for its side effect, the atomic
+   legacy import (`importLegacy`); it discards stdout, which holds resolved
+   values rather than the file, and re-reads the file with
+   `readSettingsFile`. When node cannot start (`nodeRuns`) it keeps today's
+   exists-then-write. The harness mock's first dforge-config call creates
+   the config file. Check: cockpit tests for both paths.
 8. FS #25, FS #41 — `claudeLocks` names an invalid merged value in its lock
    text (for example "50000 from a project or managed file, not valid").
    Check: cockpit test.
@@ -131,8 +142,10 @@ in the Codex sandbox (AE #12).
 
 Owns `scripts/lib/auto-run.sh`, `scripts/auto-run`, `scripts/turn-end.sh`,
 `scripts/session-start.sh`, `scripts/lib/context.sh`, `tests/auto-run.test.sh`,
-`tests/turn-end.test.sh`, and the session lines of any other suite named in
-item 2.
+`tests/turn-end.test.sh`. Because P2 runs alone in wave 4, after every other
+part has merged, it may also edit the session-variable lines of any
+`tests/*.sh` suite item 2's scan flags, and the stop-reason strings in
+`tests/cockpit.test.ts`'s mock (item 6).
 
 1. AE 32.L2 — `ar_start` writes under the same lock as `ar_update`. Check:
    a test holds the lock and shows `start` waits for it.
@@ -140,21 +153,32 @@ item 2.
    `CLAUDE_CODE_SESSION_ID` and the same set of `CLAUDE_*` variables
    (probed 2026-10-19), so no script can tell the two apart and no
    script-level guard is possible. Two fixes close the paths that exist:
-   every test suite that reaches `ctx_line`, an `ar_*` function or
-   `scripts/auto-run` sets `AR_SESSION` and `CLAUDE_CODE_SESSION_ID` to test
-   values or unsets them, so an implementer running the suite during an auto
-   run cannot bind to it; and P3 item 15 forbids the run-control commands in
-   the implementer prompt. Check: a test scans `tests/*.sh` and fails on a
-   suite that runs `context-size`, `auto-run` or sources `auto-run.sh`
-   without setting or unsetting both variables.
+   every test suite that executes the run-control scripts sets
+   `AR_SESSION` and `CLAUDE_CODE_SESSION_ID` to test values or unsets them,
+   so an implementer running the suite during an auto run cannot bind to
+   it; and P3 item 15 forbids the run-control commands in the implementer
+   prompt. Check: a test in `tests/auto-run.test.sh` scans `tests/*.sh` for
+   a suite that executes them — a line running `scripts/context-size`,
+   `scripts/auto-run`, `scripts/task-brief` or `scripts/review-package`
+   (after `bash`, `"$`, `$` or at the start of a command) or sourcing
+   `auto-run.sh` or `context.sh` — and fails unless that suite has an
+   `export` or `unset` of both variables, or passes both on the command
+   line. A suite that only greps for those names is not a match.
 3. AE 32.L6 — `ar_verdict` clears a stale `resume` pending. Check: test.
 4. AE 32.L7 (script half) — `turn-end.sh` quotes the plugin root in its hold
    reasons. Check: `turn-end.test.sh`.
-5. AE #33 — `ar_beat_age` rejects a negative (future) age; `session-start.sh`
+5. AE #33 — `ar_beat_age` treats a stamp up to `AR_BEAT_SECONDS` in the
+   future as age 0 (clock skew after a beat) and fails only for a stamp
+   further ahead, which `ar_is_stale` then reads as stale; `session-start.sh`
    makes the cockpit directory outside the `record` branch; the test `beat`
    helper passes the session id through the same `tr` as `ar_beat_file`.
-   Check: tests at 180 s, 181 s and a future stamp.
-6. AE #35 — stop reasons are built from the `AR_*_CAP` variables. Check:
+   Check: tests at 180 s, 181 s, a stamp a few seconds ahead (live) and one
+   far ahead (stale), and a `turn-end.test.sh` case that session start makes
+   the cockpit directory without `record`.
+6. AE #35 — stop reasons are built from the `AR_*_CAP` variables as digits
+   ("after 3 compactions", not "three"); the assertions in
+   `tests/auto-run.test.sh` and the mock strings in `tests/cockpit.test.ts`
+   change to match. Check:
    tests for `ar_start`'s `stalls`, `stalledAt` and `compactionsSinceTask`
    fields, a state file without them, final and finish compactions against
    `compactionsSinceTask`, and `after-compact`'s unknown-size branch with
@@ -171,7 +195,10 @@ Owns `skills/*/SKILL.md` and `skills/*/references/*` except `skills/migrate/`,
 `tests/project-status.test.sh`, `tests/hook.test.sh`,
 `tests/repo-audit.test.sh`. Text that must stay with a test: when a phrase a
 suite greps for changes, the suite changes with it in the same task, and a
-suite owned by another part is not edited — the phrase is kept.
+suite owned by another part (such as `tests/settings-skills.test.sh`, P6) is
+not edited — the phrase is kept on one line. A line over 80 columns that
+cannot be rewrapped without splitting such a phrase stays, and the task
+report lists it; items 2, 13 and 14 are complete with those lines listed.
 
 1. AE 9.L1 — the README settings rows for `designApproval` and `specReview`
    say "no effect under `autoRun=on`".
@@ -264,7 +291,13 @@ Owns `scripts/lib/darkmem-*.mjs`, `scripts/lib/darkmem-hook.sh`,
    tests.
 3. DM #12 — `checkpointAt` is kept per workstream; a state file with the old
    single value uses it for every workstream until each is next written.
-   Check: tests for two workstreams and for an old state file.
+   Every reader changes: `darkmem-push.mjs` (`sendCheckpoint` and the
+   duplicate lookup), `darkmem-pull.mjs`, `darkmem-progress-move.mjs`
+   (`renderCheckpoint`, `progressToLocal`) and `darkmem-mirror.mjs`
+   (`loadState`'s validator and `emptyState` accept both shapes). The
+   old-shape fixtures in `tests/darkmem-sync/helpers.mjs` and
+   `migrate.test.mjs` (P5's) keep loading unchanged. Check: tests for two
+   workstreams and for an old state file.
 4. DM #13 — import leaves refused uris and slugs out of `verify`'s
    comparison, so no scratch directory is kept for them. Check: test.
 5. DM #20 — `pathToUri` tries every `git worktree list` checkout's
@@ -304,8 +337,13 @@ Owns `scripts/lib/darkmem-*.mjs`, `scripts/lib/darkmem-hook.sh`,
 18. DM #41 — `readdirSync(sdd)` is guarded and a symbolic-linked
     `progress.md` is refused. Check: tests, including a `git worktree list`
     failure.
-19. DM #42 — `fileLatest` closes a workstream it opened; the 422 refusal says
-    what darkmem now holds. Check: tests, including the post-write recheck.
+19. DM #42 — the workstream `fileLatest` files to follows its plan: it stays
+    open while the plan is active and is closed once `completed.md` records
+    the plan, whether `fileLatest` created it or found it (today a created
+    one is never closed, and a finished plan's is reopened only to be
+    re-closed). The 422 refusal says what darkmem now holds. Check: tests
+    for an active plan (open), a completed plan with a new workstream
+    (closed), and the post-write recheck.
 20. DM #43 — `progressToLocal` wraps its copy loop in a refusal, rejects a
     `stateRel` starting with `..`, and lstats mirror sources. Check: tests,
     including `renderCheckpoint`'s read failure.
@@ -353,10 +391,14 @@ Owns `scripts/dforge-migrate`, `scripts/lib/dforge-home-migrate.mjs`,
     non-zero find exit as holding a link.
 11. DR #19 — `mv_plain` returns non-zero on refusal and `migrate_docs` sets
     `docs_ok=0`.
-12. DR #20 — handoff notes under an old state directory that survives the
-    merge are not rewritten.
-13. DR #21, DR #25 — a dry run prints "foretold refusals in the home; see
-    above" instead of "did not finish".
+12. DR #20 — a real run rewrites only `.dforge/handoff/latest.md`, never a
+    note under an old state directory left behind by a refused merge; a dry
+    run reports the old directory's note as `would rewrite` only when
+    `mv_plain` would move it.
+13. DR #21, DR #25 — when a dry run's home output holds a `refused:` line,
+    the summary reads "foretold refusals in the home; see above" instead of
+    "did not finish"; a non-zero exit with no `refused:` line (a crash)
+    keeps "did not finish".
 14. DR #23 — `rewrite_names` returns 1 when `renamed_lines` fails, before the
     `cmp`.
 15. DR #40 — `merge_into`'s dry run prints `would move FROM -> TO` when FROM
@@ -396,8 +438,9 @@ Owns `scripts/lib/dforge-config.mjs`, `scripts/lib/dforge-env.sh`,
    backticked key or `key=`, not the bare word. Check: the suite.
 5. CX #9 — the fenced-header fixture asserts the pair and tier errors are
    suppressed and the summary reads 1 error. Check: the suite.
-6. CX #10 — `plan-lint`'s `Host: codex` check and `plan-revise`'s
-   `is_codex_plan` skip fenced lines. Check: a fenced-Host fixture.
+6. CX #10 — `plan-lint`'s `Host: codex` check skips fenced lines, as
+   `plan-revise`'s `is_codex_plan` already does. Check: a fenced-Host
+   fixture.
 7. CX #11 — the Routing-policy read allows a backticked value. Check:
    fixture.
 8. CX #12 — `plan-lint` exits 2 with a clear message when the policy file
@@ -407,8 +450,10 @@ Owns `scripts/lib/dforge-config.mjs`, `scripts/lib/dforge-env.sh`,
 10. TR #15 — `plan-revise.test.sh` uses `impl-sonnet-low` for total-2 tasks.
 11. TR #16 — `ladder.test.sh` skips blank lines and reports every offending
     row. Check: the suite.
-12. DM #34 — register rows are read with a delimiter that keeps empty cells
-    in `plan-lint` and `roadmap.sh`, and `roadmap_unresolved` de-duplicates on
+12. DM #34 — `plan-lint` and `roadmap.sh` convert the tab-separated rows
+    from `register_rows`/`register_open` to a non-whitespace delimiter
+    before `read`, so an empty cell keeps its place; `scripts/lib/register.sh`
+    itself is not changed. `roadmap_unresolved` de-duplicates on
     `dforge_name_key`. Check: tests with an empty cell.
 
 ### P7. Validation, CI and evals
@@ -435,7 +480,11 @@ Owns `scripts/validate-repository.mjs`, `tests/repository-layout.test.mjs`,
 7. DF #18 (doc half) — the validation doc says dforge's manifest.
 8. RO #11 — `scripts/test-all.mjs` runs `tsc --noEmit -p plugins/dforge`,
    bounded, when `tsc` and the generated types exist, and prints a skipped
-   line otherwise. Check: run it here (it prints the skipped line).
+   line otherwise. Check: one bounded run with `npx -y -p typescript@5.6.3
+   tsc --noEmit -p plugins/dforge` on the wave-1 tree (it fetches here,
+   2026-10-19). Errors it reports in files P7 does not own are listed in the
+   task report and go to P8, which runs with every file free; the skipped
+   path is checked with `tsc` off PATH.
 9. RO #27 — the transcript reader ignores `is_error` for Bash calls, so a
    ledger line written before a failing command is kept. Check: test.
 10. RO #28 — `PER_TASK` accepts any path before the script name; a pilot
@@ -452,15 +501,17 @@ manifests and `README.md`.
 
 1. DF #20 — the value check moves into `config/schema.mjs` and both
    `dforge-config.mjs` and the cockpit's `config.ts` call it; the validator
-   keeps its own schema-level rules. Check: the dforge-config, layout and
-   cockpit suites.
+   keeps its own schema-level rules. A `config/schema.d.mts` declares the
+   module's exports, so `config.ts`'s imports type-check. Check: the
+   dforge-config, layout and cockpit suites, and the P7 `tsc` run passes on
+   the merged tree (fixing any errors P7 listed).
 2. Version 4.2.0 in `.claude-plugin/plugin.json` and
    `.codex-plugin/plugin.json`, with a README entry for 4.2.0.
 3. Register bookkeeping: every fixed row is `done` (DF 14 `verify`) and each
-   bundle row closes; `scripts/register check` passes on all nine registers.
-   That is the installed plugin's script: this repository keeps the
-   `docs/superpowers/` layout, which the in-tree dforge copy resolves to a
-   `docs/dforge/` that does not exist here, so every Covers path fails it.
+   bundle row closes. The repository's own `scripts/register check` cannot
+   judge these registers: this repository keeps the `docs/superpowers/`
+   layout, which dforge resolves to a `docs/dforge/` that does not exist
+   here, so every Covers path fails it. The check is A3's grep.
 
 ## Parallel decomposition
 
@@ -476,9 +527,10 @@ parts in waves 1-4, and the one cross-part change (DF #20) is in P8.
 | 5 | P8 | touches files P1 and P6 own |
 
 Tests do not collide at run time: each suite makes its own temporary
-directories, and the cockpit suite runs under `claude plugin test`. P3's text
-changes name the P2 behaviours they describe (items 6, 7, 12, 15) as this spec
-fixes them, so P3 consumes the spec, not P2's output.
+directories, and the cockpit suite runs under `claude plugin test`. One P3
+item pairs with a P2 change: item 15's prompt line matches P2 item 2, and it
+reads the spec, not P2's code. P1 and P3 edit files P2 later touches only
+where P2's ownership says so (wave 4 runs alone).
 
 ## Testing
 
@@ -496,10 +548,10 @@ A2. [test, high] `node scripts/test-all.mjs`, `node
 scripts/validate-repository.mjs`, `claude plugin validate` on the marketplace
 and each Claude plugin, and `claude plugin test plugins/dforge` pass on the
 merged branch.
-A3. [read, high] No row in the nine registers is `deferred` except where a
-later finding of this work adds one; DF 14 is `verify`; each closed-without-
-code row carries its triage note; the installed plugin's `scripts/register
-check` is clean on all nine (P8 item 3).
+A3. [read, high] `grep '| deferred |'` over the nine registers finds no row
+except one a later finding of this work adds; DF 14 is `verify`; each row
+closed without code, and each bundle row's closed sub-findings, carry a
+`triage 2026-10-19` note; every row has six cells.
 A4. [test, high] Both dforge manifests read 4.2.0 and the review-route suite
 no longer pins a version.
 A5. [read, medium] `skills/using-dforge/SKILL.md` is at most 5,100 bytes.
@@ -511,3 +563,31 @@ each item names. Items 14, 17 and 20 change when files are removed, renamed
 or copied; each needs a test that fails first and an implementer who re-reads
 the surrounding refusal paths. The per-workstream `checkpointAt` (item 3) is
 the one state-format change; an old state file must keep working.
+
+## Review rulings
+
+Fable review, 2026-10-19 (commit 8f2841a, verdict: revise), all applied:
+
+- M1, `get --json` prints resolved values, not the file: run only for the
+  import, re-read the file, keep the old write without node (P1.7).
+- M2, the budget tail: the note follows `CTX_TAIL_TASKS`, not only every
+  task complete (P1.1).
+- M3, rejecting every future beat made a skewed live run stale: a stamp up
+  to `AR_BEAT_SECONDS` ahead is age 0 (P2.5).
+- M4, closing a created workstream would hide an active plan: the
+  workstream follows the plan, closed once `completed.md` records it (P4.19).
+- M5, the register check cannot read this layout: A3 is a grep (P8.3, A3).
+- M6, the session scan had no pattern and no owner list: both defined, P2
+  may edit flagged suites in wave 4 (P2.2).
+- M7, the bundle rows' notes did not record their fixed sub-findings:
+  amended with the triage's commits before planning.
+- M8, the `tsc` check proved only the skip path: one real `npx` run, and
+  P8 adds `config/schema.d.mts` (P7.8, P8.1).
+- L1 plan-revise already skips fences (P6.6); L2 the phantom compaction
+  count stays, stated (P1.2); L3 digits in stop reasons, mock updated by P2
+  (P2.6); L4 the mock answers `git -C` (P1.3); L5 and L6 dry-run wording
+  (P5.12, P5.13); L7 every `checkpointAt` reader named (P4.3); L8 rewraps
+  keep another part's needles whole (P3); L9 the session-start check is in
+  `turn-end.test.sh` (P2.5); L10 readers-only delimiter fix (P6.12); L11
+  the decomposition sentence (Parallel decomposition); L12 DF 12's note
+  corrected in the register.
