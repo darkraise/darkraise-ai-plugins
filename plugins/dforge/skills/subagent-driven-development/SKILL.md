@@ -42,9 +42,11 @@ When `scripts/auto-run status` exits 0, this run is unattended
 ([auto-run.md](../../reference/auto-run.md)); read that file once per session.
 What changes here:
 
-- **After a compaction**, the cockpit's prompt has you run
-  `scripts/auto-run after-compact` before step 0 above. On `handoff` (exit 5),
-  invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
+- **After any compaction**, whether or not a prompt asks for it (the
+  cockpit's prompt does; a compaction Claude Code starts on its own comes with
+  none), run `scripts/auto-run after-compact` before step 0 above. On
+  `handoff` (exit 5), invoke dforge:handoff,
+  then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
 - **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
   from the execution worktree, once dforge:using-git-worktrees has created it.
   Exit 4 means the worktree step was skipped: create the worktree, then run
@@ -57,9 +59,12 @@ What changes here:
   deferred, and every task that depends on it (its `**Depends on:**` line
   names the task; in a plan without those lines, its `Consumes:` line cites
   a Contracts entry the deferred task's `Produces:` line cites): write
-  `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
+  `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review | ; unmerged task ref <ref>]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
   and a deferred register row for each. In a wave, a deferred task's branch is
-  not merged. Other tasks keep running.
+  not merged, so its commits lie outside the final review's range: its line
+  takes `unmerged task ref <ref>`, the ref `scripts/wave ref PLAN_FILE <N>`
+  prints, in place of the partial-commits clause, and its register row's note
+  names the same ref. Other tasks keep running.
 - **Each task:** right after its `Task N: complete` line, run
   `scripts/auto-run task-complete`. After each wave, or each task in
   sequential mode, run the Fable batch when `scripts/auto-run decision list`
@@ -78,8 +83,9 @@ What changes here:
 - **Final review:** run `scripts/auto-run phase final` and, when the pending
   list is not empty, the Fable batch first; the review's findings take the
   same ladder.
-- **A turn ends** only on one of the two auto-run lines, or after
-  `scripts/auto-run stop --reason "<why>"` when the run must stop.
+- **A turn ends** only on `Auto run: compacting` or `Auto run: clearing` as
+  its last line, or after `scripts/auto-run stop --reason "<why>"` when the
+  run must stop.
 
 ## Select the host first
 
@@ -230,9 +236,9 @@ partner's explicit consent.
 ledger, follow [finish-preference.md](../../reference/finish-preference.md):
 ask what finishing should do once the final review is clean, record the
 answer, and start work in the same turn. Skip it when
-`scripts/finish-choice get --plan PLAN_FILE` already prints a choice (it does so unasked when the `finishAction` setting
-names an action), or when
-this plan's ledger already exists: a resumed run does not stop to ask. When
+`scripts/finish-choice get --plan PLAN_FILE` already prints a choice (it does
+so unasked when the `finishAction` setting names an action), or when this
+plan's ledger already exists: a resumed run does not stop to ask. When
 the spec's `## Decisions` holds a `Finish: <action>` line, run
 `scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking. It is
 the run's one question; nothing else waits on your human partner.

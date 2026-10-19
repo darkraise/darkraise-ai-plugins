@@ -253,4 +253,7 @@ In an auto run ([auto-run.md](auto-run.md)) `--wave` prints the run's verdict.
 Lower the width while it says `compact`, as on `handoff`; a narrower width that
 fits cancels the compaction. At width 1 a `compact` verdict means finishing
 the task in flight and ending the turn with `Auto run: compacting`. A task the
-run defers is not merged.
+run defers is not merged, and `scripts/wave clean` keeps its ref: its deferred
+ledger line and register row name that unmerged task ref
+(`scripts/wave ref PLAN_FILE <N>`), since its commits lie outside the final
+review's range ([auto-run.md](auto-run.md) §Rulings).

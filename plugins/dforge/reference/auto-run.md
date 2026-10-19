@@ -63,9 +63,10 @@ after `start` with `scripts/auto-run ruling add`. The rest of this section is
 the spec phase of a run started under `autoRun=ask`.
 
 After your own self-review round and the architecture critic
-(dforge:brainstorming §Architecture critic), dispatch `dforge:judge-fable` on the spec
-against the approved design: the design sections as approved, verbatim, and
-the spec's path. Apply what it rules, and record each ruling with
+(dforge:brainstorming §Architecture critic), dispatch `dforge:judge-fable` on
+the spec against the approved design: the design sections as approved,
+verbatim, and the spec's path. Apply what it rules, and record each ruling
+with
 `scripts/auto-run ruling add "Fable, spec: <item> — <ruling>"`. Add each item
 it leaves undecided or without a suggestion to the run's register, except a
 critic Blocker, which takes the note below:
@@ -119,11 +120,15 @@ The ladder for anything you would have asked:
   task whose `Consumes:` line cites a Contracts entry the deferred task's
   `Produces:` line cites:
 
-      Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>
+      Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review | ; unmerged task ref <ref>]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>
 
   Add one deferred register row per such task. Recovery, `scripts/next-step`
   and the final review count the line as complete, so the run moves on. In a
-  wave, a deferred task's branch is not merged.
+  wave, a deferred task's branch is not merged, so its commits lie outside the
+  final review's range: its line takes `unmerged task ref <ref>`, the ref
+  `scripts/wave ref PLAN_FILE <N>` prints, in place of the partial-commits
+  clause, and its register row's note names the same ref. Only outside a wave
+  are partial commits kept for the final review.
 - **A spec or planning choice:** take the option listed first, record
   `scripts/auto-run ruling add "unconfirmed: <choice> — Fable gave no ruling"`,
   and add a deferred register row naming the choice.
@@ -203,7 +208,9 @@ clears the session and binds the new one, and submits the next prompt itself.
 
 ## After a compaction
 
-The cockpit's prompt asks you to run `scripts/auto-run after-compact` first.
+Run `scripts/auto-run after-compact` first after any compaction, whether or
+not a prompt asks for it: the cockpit's prompt asks after the compactions it
+runs, but a compaction Claude Code starts on its own comes with no prompt.
 It prints `continue` (exit 0) or `handoff` (exit 5); in the `plan`, `final`
 and `finish` phases it always prints `continue`, since the plan, the final
 review and finishing stay in this session. It settles only a
@@ -275,6 +282,13 @@ If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`: the
 `latest.md` it would read is an older handoff's. Run `scripts/auto-run stop
 --reason "the handoff file could not be written"` and end as Stopping says.
 
+If it exits 5, background work is still listed and nothing was written: run
+`scripts/in-flight`, wait for or stop each launch it lists, and run
+`scripts/next-step PLAN_FILE` again, as §The switch step 3 does. A second
+exit 5 runs
+`scripts/auto-run stop --reason "background work still running at the clear: <next-step's message>"`
+and ends as Stopping says; do not run `scripts/auto-run clear`.
+
 When `scripts/auto-run clear` exits 0, end the turn with `Auto run: clearing`
 as the last line, below the next-step block. The cleared session runs on the
 launch command's model and effort; the cockpit then puts back the default model
@@ -294,6 +308,7 @@ ends as finished. Run it, then end as the attended flow would, when:
 - finishing hits one of its unattended stops (failing tests at its first
   step or on the merged result, a rejected push, a refused worktree removal);
 - `scripts/next-step` exits 4 during a clear (see Clears).
+- `scripts/next-step` exits 5 a second time during a clear (see Clears).
 
 When `scripts/auto-run clear` exits 5, or the cockpit's prompt says the run
 stopped, it has already stopped: end with the next-step block. The cockpit
@@ -303,26 +318,31 @@ sends one Discord `blocked` notice when a run stops with a reason.
 
 Finishing carries out at once, into the base `scripts/auto-run status` names,
 the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec
-review recorded, or else the `finishAction` setting: `merge` and `pr` as named; `keep`, `ask` and
-`wait` keep the branch, and so does `merge` when the base is `none`. `merge`
+review recorded, or else the `finishAction` setting: `merge` and `pr` as
+named; `keep`, `ask` and `wait` keep the branch, and so does `merge` when the
+base is `none`. `merge`
 also keeps the branch when the ledger holds a
 `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
 partial commits reach the base only after a person has looked at them.
 `merge` also keeps the branch when the `Acceptance QA: complete` line reports a nonzero count of
 `cannot-test`, or when the run added a deferred register row
 whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`: an
-acceptance statement that failed or went unverified reaches the base only after
-a person has looked at it. The line's `fail` and `flaky` counts are not read: they are taken
+acceptance statement that failed or went unverified reaches the base only
+after a person has looked
+at it. The line's `fail` and `flaky` counts are not read: they are taken
 before the fix wave, a failure that survives it is a deferred `A<n>:` row or a
-red test at finishing's first step, and one the fix wave fixed does not keep the branch. A row
+red test at finishing's first step, and one the fix wave fixed does not keep
+the branch. A row
 deferred at the spec review, before the run started, counts as one the run
 added. `merge` also keeps the branch when the run added a deferred row whose
-Note is `final review residual`. On a
-detached HEAD there is no merge: `merge` keeps the branch and `pr` pushes a new
-branch from the detached HEAD. A `pr` with base `none` opens its request
-against the dforge's default branch. No menu. Its final message lists
-every `Ruling:` ledger line, every line of `scripts/auto-run ruling list`,
-every deferred row the run added, every `demo` statement of the spec, every lens
-`scripts/lens-route PLAN_FILE --final <base> HEAD` prints as `lens-skipped`, and
-it runs `scripts/auto-run stop` with no `--reason` before
-the next-step block: a reason marks the run as stopped and sends a `blocked` notice.
+Note is `final review residual`. On a detached HEAD there is no merge: `merge`
+keeps the branch and `pr` pushes a new branch from the detached HEAD. A `pr`
+with base `none` opens its request against the dforge's default branch. No
+menu. Its final message lists every `Ruling:` ledger line, every line of
+`scripts/auto-run ruling list`, every deferred row the run added,
+every `demo` statement of the spec, every lens
+named by a `final review lens-skipped <id> reason=cap` line in the ledger
+(final-review.md step 4 writes them; do not run `scripts/lens-route --final`
+here, since after a merge its base..HEAD range is empty), and it runs
+`scripts/auto-run stop` with no `--reason` before the next-step block: a
+reason marks the run as stopped and sends a `blocked` notice.
