@@ -3077,7 +3077,8 @@ async function importSettings($: EngineInterface, path: string): Promise<Setting
     // link that never replaces one saved meanwhile. `get --json` prints the
     // resolved values, not the file, so its output is not used.
     await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'get', '--json'], { timeoutMs: 15_000 }).catch(() => null)
-    return (await readSettingsFile($, path)) ?? {}
+    // A run that failed before creating the file falls through to the import below; otherwise a later save would create the file without dr-cockpit's options and shut out the import for good.
+    if (await $.fs.exists(path).catch(() => false)) return (await readSettingsFile($, path)) ?? {}
   }
   const claude = await $.settings.read({ source: 'user' }).catch(() => ({}))
   const file = importedSettings(SCHEMA, claude)

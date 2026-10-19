@@ -1198,6 +1198,17 @@ describe('settings', () => {
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
   })
 
+  test('when dforge-config fails before creating the file the first session writes the import itself', async ($, on) => {
+    const written: Record<string, string> = {}
+    const runs: string[] = []
+    world(on, { tokens: 284_000, written, runs, isDforgeConfigRefusing: true, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    disk(on, written, OLD_FILES)
+    memory(on)
+    await $.session.start(START)
+    expect(runs[0]).toMatch(/^node .*\/scripts\/lib\/dforge-config\.mjs get --json$/)
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
+  })
+
   test('a settings file dforge-config wrote first is kept, and the webhook still comes over', async ($, on) => {
     const written: Record<string, string> = { [CONFIG]: JSON.stringify({ layout: 'full' }) }
     world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
