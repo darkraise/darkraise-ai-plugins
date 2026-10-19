@@ -168,8 +168,8 @@ check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" 
 check "4.0 layout: no migration line" "$(grep -c 'still uses an older layout' <<<"$rm_ctx")" "0"
 mkdir -p "$REPO/.superpowers"
 lg_out=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
-check "pre-3.0: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$lg_out" && echo yes || echo no)" "yes"
-check "pre-3.0: the migration line is injected" \
+check "older layout: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$lg_out" && echo yes || echo no)" "yes"
+check "older layout: the migration line is injected" \
   "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dforge: this repository still uses an older layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run the dforge:migrate skill (/dforge:migrate)")" "1"
 rm -rf "$REPO/.superpowers"
 

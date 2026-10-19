@@ -157,7 +157,7 @@ git -C "$REPO" worktree add -q --detach "$W2"
 W2_ROOT="$(git -C "$W2" rev-parse --show-toplevel)"
 mkdir -p "$REPO/.superpowers" "$W2/docs/superpowers"
 out=$(cd "$W2" && bash "$SCRIPT" 2>&1)
-has "pre-3.0: the worktree's and the primary's directories, and the command" "$out" \
+has "older layout: the worktree's and the primary's directories, with the migrate command" "$out" \
   "- dforge: this repository still uses an older layout ($ROOT/.superpowers, $W2_ROOT/docs/superpowers); run the dforge:migrate skill (/dforge:migrate)"
 git -C "$REPO" worktree remove --force "$W2" >/dev/null 2>&1
 rm -rf "$REPO/.superpowers"
