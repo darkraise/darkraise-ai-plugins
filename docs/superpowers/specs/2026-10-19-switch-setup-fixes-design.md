@@ -49,8 +49,10 @@ reaches Setup; the probe's run committed every task to `main`.
 3. **The run records that Setup is due.** `ar_switch` sets `setupDue: true`.
    `scripts/auto-run status` adds `— setup due` to its line while it is set,
    and `after-compact` appends `; setup due: begin at the execution skill's
-   Setup, worktree first` to a `continue` line. `phase execute`, when it
-   passes the guard below, clears it.
+   Setup, worktree first` to a `continue` line. It is cleared by a
+   `phase execute` that passes the guard below, by a `task-complete` run
+   outside the primary checkout, and by `phase final`, so a run that skipped
+   `phase execute` never sends a final-phase recovery back to Setup.
 4. **The skills check it first.** dforge:executing-plans and
    dforge:subagent-driven-development each open `## After compaction` with:
    "In an auto run, when `scripts/auto-run status` says setup is due, or when
@@ -69,10 +71,14 @@ reaches Setup; the probe's run committed every task to `main`.
    execution worktree is another linked one, and using-git-worktrees creates
    none when already in one. `scripts/auto-run task-complete` run from the
    primary checkout stops the run with the reason `a task was completed in
-   the primary checkout` and exits 5, so a controller that skipped
-   `phase execute` too stops after its first task instead of finishing on the
-   base. In a submodule, where `ar_path` already fails, both commands keep
-   failing with exit 2 as today.
+   the primary checkout`, prints
+   `auto-run: a task was completed in the primary checkout; the run has stopped. End as reference/auto-run.md §Stopping says.`
+   and exits 5, so a controller that skipped `phase execute` too stops after
+   its first task instead of finishing on the base. The execution skills'
+   Auto run "Each task" bullet says that a `task-complete` exit 5 means the
+   run stopped, and to end as §Stopping says. In a submodule, `ar_path` is
+   expected to fail already (unverified: no fixture covers it), in which case
+   both commands keep failing as today.
 
 ### B. The spec's finish line is read by the script (row 14)
 
@@ -127,9 +133,11 @@ dforge:using-git-worktrees, in an auto run:
 
 ### E. The final phase starts before the last budget check (row 16)
 
-`scripts/context-size --final`, when a run is bound to the session and its
-phase is `execute`, sets the phase to `final` before it measures, so a
-compaction from there never hands off. The execution skills drop the After
+`scripts/context-size --final`, when a run is bound to the session, its
+phase is `execute`, and the attached plan's ledger has a complete line for
+every task (counted as `next-step` counts them), sets the phase to `final`
+before it measures, so a compaction from there never hands off. A `--final`
+run with tasks still open leaves the phase as it is. The execution skills drop the After
 compaction step 3 parenthetical "(in an auto run, the Auto run section's
 `handoff` rule still applies)", and Task Loop step 8 and the Session Budget
 paragraph say that in an auto run a `compact` line still ends the turn on
@@ -194,13 +202,20 @@ The cockpit adds a watchdog with `$.clock.every(60_000)`:
    `ar_is_stale` treats the bound session's run as stale when its heartbeat
    is older than 180 seconds, and uses today's 60-minute transcript rule only
    when no heartbeat file exists.
-2. **Stall detection.** A tick acts when an active run is bound to this
-   session, no turn is live, the activity kind is `idle` or `failed` (never
-   `interrupted`: an Esc hands the session to the owner until they submit a
-   prompt), and the activity's `endedAt` is more than 180 seconds ago. When pending
-   is `compact`, `clear`, `switch` or `switch-resume` and no stage timer is
-   armed, it arms that stage. Otherwise it runs `scripts/auto-run stalled`,
-   which adds 1 to `stalls` and, at 3, stops the run with the reason
+2. **Stall detection.** A tick acts only when all of these hold: an active
+   run is bound to this session; no turn is live; every spawn is done and no
+   shell is listed (the test `autoAct` uses, since the Stop hook lets a turn
+   end while background work runs and its notification starts the next
+   turn); `autoAct` is not running (a new `S.autoBusy` flag covers the whole
+   of `autoAct`, including a long `$.session.compact`); the activity kind is
+   `idle` or `failed` (never `interrupted`: an Esc hands the session to the
+   owner until they submit a prompt); the activity's `endedAt` is more than
+   180 seconds ago; and the run's `stalledAt`, when set, is more than 180
+   seconds ago too, so one unanswered nudge is not counted again on the next
+   tick. When pending is `compact`, `clear`, `switch` or `switch-resume` and
+   no stage timer is armed, it arms that stage. Otherwise it runs
+   `scripts/auto-run stalled`, which records `stalledAt`, adds 1 to `stalls`
+   and, at 3, stops the run with the reason
    `three stalls without a completed task` and exits 5; on exit 0 the
    cockpit submits "The auto run stalled: the last turn ended without its
    sentinel line. Run `bash <root>/scripts/auto-run status`, continue the
@@ -220,8 +235,10 @@ The cockpit adds a watchdog with `$.clock.every(60_000)`:
 
 ### M. Compactions without progress are capped (row 27)
 
-`ar_compacted` adds 1 to `compactionsSinceTask` in the `plan` and `execute`
-phases; `task-complete` and `ar_switch` reset it. At 3 it stops the run with
+`ar_compacted` adds 1 to `compactionsSinceTask` in the `execute` phase only,
+and never for the switch's own compaction (`compacted --switch`), which is a
+phase transition; `task-complete` resets it. The `plan` phase is not capped:
+it never runs `task-complete`, and the switch follows it. At 3 it stops the run with
 the reason `three compactions without a completed task` and returns 5; the
 cockpit ends the run as stopped when `compacted` exits 5, both in its own
 compact stage and in `bookAutoCompaction`. `bookAutoCompaction` also skips a
@@ -235,8 +252,9 @@ Before running `/model` and `/effort`, the cockpit reads the user defaults
 and runs `node --version`. When the defaults cannot be read or node does not
 run, it skips both commands, and the prompt's note says "The cockpit kept
 this session on <model> because it could not put back your default model
-afterwards." When it ran them and the restore still fails, it also sends a
-Discord notice of kind `blocked` naming the settings file.
+afterwards. Record that with scripts/auto-run ruling add." When it ran them
+and the restore still fails, it also sends a Discord notice of kind
+`blocked` naming the settings file.
 
 ### O. A background launch at the switch is waited for, not fatal (row 31)
 
@@ -256,8 +274,8 @@ dforge goes from 4.0.0 to 4.1.0 in `.claude-plugin/plugin.json` and
 Script behaviour is tested in the existing suites:
 `tests/auto-run.test.sh` (guard, `task-complete` stop, `setupDue`, `stalled`,
 `compactionsSinceTask`, heartbeat start and staleness; its two existing
-`phase execute` calls move to the linked worktree `$TMP/side`, and its
-`start` calls write a heartbeat first), `tests/finish-choice.test.sh`,
+`phase execute` calls move to the linked worktree `$TMP/side`),
+`tests/finish-choice.test.sh`,
 `tests/roots.test.sh` (`dforge-path ledger`), `tests/next-step.test.sh`
 (the new prompt; its pin at line 74 changes), `tests/turn-end.test.sh`
 (holds without a stamp, unwritable holds file), `tests/context-size.test.sh`
@@ -269,21 +287,30 @@ instructions). Skill and reference text is pinned in
 existing pin at `tests/auto-run-skills.test.sh:23` is replaced by the new
 Setup bullet.
 
+Every suite that calls `auto-run start` writes the session's heartbeat file
+first, with no production seam: `tests/auto-run.test.sh`,
+`tests/budget-line.test.sh`, `tests/turn-end.test.sh` and
+`tests/context-size.test.sh`. The unwritable holds count is provoked by
+making the holds directory's path a regular file, which fails for root too
+(the suites run as root here, so a permission bit would not). The existing
+pin "unstamped session: passes" in `tests/turn-end.test.sh` stays for a
+session with no run bound.
+
 ## Acceptance
 
 A1. [test, high] `scripts/next-step` on a plan with no ledger writes the first prompt with `No ledger exists yet: begin at the skill's Setup, worktree first; the first task is Task <N> (<title>).`, and the `**Next:**` line is unchanged.
 A2. [test, high] The cockpit's switch compaction instructions state that no task has started and execution begins at the execution skill's Setup.
-A3. [test, high] After `scripts/auto-run switch`, `status` says setup is due and `after-compact`'s `continue` line names Setup; a `phase execute` that passes the guard clears it.
+A3. [test, high] After `scripts/auto-run switch`, `status` says setup is due and `after-compact`'s `continue` line names Setup; a `phase execute` that passes the guard, a `task-complete` outside the primary checkout, or `phase final` clears it.
 A4. [test, high] dforge:executing-plans and dforge:subagent-driven-development each open `## After compaction` with the setup-due / no-ledger step that sends the session to Setup's first step.
 A5. [test, neg, high] `scripts/auto-run phase execute` exits 4 with the message naming dforge:using-git-worktrees in the primary checkout, and exits 0 from a linked worktree, including for a run that started in a linked worktree.
-A6. [test, neg, high] `scripts/auto-run task-complete` in the primary checkout stops the run with `a task was completed in the primary checkout` and exits 5.
+A6. [test, neg, high] `scripts/auto-run task-complete` in the primary checkout stops the run with `a task was completed in the primary checkout`, prints the message naming §Stopping and exits 5, and both execution skills say what that exit means.
 A7. [test, high] `scripts/finish-choice get --plan` with nothing recorded reads a `Finish: keep` line from the spec's `## Decisions`, bare or after a `-`, `*` or `6.` marker, and records and prints it with `"source": "spec"`, even when `finishAction` is `merge`.
 A8. [test, high] A recorded `finish.json` outranks the spec's line; a spec without the line falls through to the setting and then to exit 3; a spec found through `dforge_resolve` (a mirrored or `docs/superpowers/` path) is read.
 A9. [test, neg, high] A `Finish:` line outside `## Decisions`, inside a fenced block, or with a value other than exactly `merge`, `pr` or `keep` (such as `3. Finish: "Ask at spec review"`) is not read.
 A10. [test, high] brainstorming writes the spec review's finish answer as a bare `Finish: <merge|pr|keep>` paragraph; finish-preference.md and finishing's Auto run rule say `get` reads the line.
 A11. [test, high] `dforge-path ledger` given `docs/dforge/plans/2026-10-19-greet.md` or `docs\dforge\plans\2026-10-19-greet.md` prints the same directory as given `2026-10-19-greet`.
 A12. [test, high] using-git-worktrees, in an auto run, ignores `worktree=never`, records a red baseline as a ruling and continues, and stops the run when the sandbox refuses the worktree.
-A13. [test, high] `scripts/context-size --final` in a bound run whose phase is `execute` sets the phase to `final`, and the execution skills no longer say the `handoff` rule applies at the final check.
+A13. [test, high] `scripts/context-size --final` in a bound run whose phase is `execute` sets the phase to `final` when the attached plan's ledger has every task complete, leaves it at `execute` when a task is open, and the execution skills no longer say the `handoff` rule applies at the final check.
 A14. [test, high] executing-plans step 7, delegated-task.md §5 and parallel-waves.md §4 each name `scripts/auto-run task-complete` and the Fable batch after the complete line.
 A15. [test, high] executing-plans §Switching to subagent mode, in an auto run, runs `scripts/auto-run clear --phase` and ends on `Auto run: clearing`, and auto-run.md §Clears lists that case.
 A16. [test, high] final-review.md step 0 has the auto-run rule for a red gate and a manifest defect.
@@ -292,12 +319,12 @@ A18. [test, high] brainstorming §Auto by default step 5 carries the `register a
 A19. [test, high] auto-run.md §Rulings defines a deferred task's dependents by `**Depends on:**`, or else by `Consumes:` citing the deferred task's `Produces:`.
 A20. [test, high] finishing Step 5b sets a row cited only by a deferred-by-the-auto-run task to `deferred`, under every finish action.
 A21. [test, neg, high] `scripts/auto-run start` exits 2 with `no live cockpit` when the session's heartbeat is missing or older than 180 seconds, and a run whose bound session's heartbeat is older than 180 seconds is stale.
-A22. [test, high] With an active run bound, no live turn, activity `idle` or `failed` and the last turn over 180 seconds old, the watchdog re-arms a pending cockpit stage, or runs `auto-run stalled` and submits the stall prompt; it does nothing after an Esc (`interrupted`).
-A23. [test, neg, high] The third `scripts/auto-run stalled` without a `task-complete` stops the run with `three stalls without a completed task` and exits 5.
+A22. [test, high] With an active run bound, no live turn, no live spawn or shell, `autoAct` not running, activity `idle` or `failed` and `endedAt` over 180 seconds old, the watchdog re-arms a pending cockpit stage, or runs `auto-run stalled` and submits the stall prompt; it does nothing after an Esc (`interrupted`), while a spawn or shell is live, or while `autoAct` is running.
+A23. [test, neg, high] `scripts/auto-run stalled` records `stalledAt`; the watchdog does not nudge again until `stalledAt` is over 180 seconds old; the third `stalled` without a `task-complete` stops the run with `three stalls without a completed task` and exits 5.
 A24. [test, high] `autoAct` books a failure after 30 minutes of continuous deferral.
 A25. [test, high] `scripts/turn-end.sh` holds a bound run's turn when no turn stamp exists, and treats an unwritable holds count as the cap.
-A26. [test, neg, high] The third compaction in the `plan` or `execute` phase without a `task-complete` stops the run with `three compactions without a completed task`, and `bookAutoCompaction` books nothing while `handoff` or `compact` is pending.
-A27. [test, neg, high] When the user defaults cannot be read or `node --version` fails, the cockpit runs neither `/model` nor `/effort` and says so in the prompt; a failed restore after running them sends a `blocked` notice.
+A26. [test, neg, high] The third compaction in the `execute` phase without a `task-complete` stops the run with `three compactions without a completed task`; `compacted --switch` and compactions in the `plan` phase are not counted; and `bookAutoCompaction` books nothing while `handoff` or `compact` is pending.
+A27. [test, neg, high] When the user defaults cannot be read or `node --version` fails, the cockpit runs neither `/model` nor `/effort` and says so in the prompt, asking for a ruling line; a failed restore after running them sends a `blocked` notice.
 A28. [test, high] The switch step waits for or stops a listed background launch on `next-step` exit 5 and stops the run only on a second exit 5.
 A29. [demo, high] In a fresh scratch repository, a real auto run of a one-task plan switches in place, creates the execution worktree before Task 1, leaves the base branch without task commits, and finishes with the spec's `Finish: keep`.
 A30. [demo, high] In the same kind of repository, an attended run whose spec carries `Finish: keep` never asks the finish question, and its ledger is at `.dforge/sdd/<plan basename>/progress.md`.
@@ -332,4 +359,23 @@ answers it:
 - L3, the Run card before `get` runs: stated (B).
 - L4, backslash paths: normalised (C).
 - L5, fenced and CRLF lines: skipped and stripped (B).
-- L6, submodules: both commands keep exit 2 (A.5).
+- L6, submodules: stated as unverified (A.5).
+
+Round 2 of the review, 2026-10-19 (commit b1c8486, verdict: revise), all
+applied:
+
+- H1, the stall detector counted waits on background work: it now requires
+  no live spawn or shell (L.2, A22).
+- M1, `autoAct` re-entrancy: `S.autoBusy` (L.2, A22).
+- M2, one unanswered nudge counted three times: `stalledAt` (L.2, A23).
+- M3, the switch's compaction and the plan phase: counted in `execute` only,
+  never `--switch` (M, A26).
+- M4, `setupDue` never cleared: also cleared by `task-complete` and
+  `phase final` (A.3, A3).
+- M5, the heartbeat broke three more suites: named in Testing.
+- L1, the `task-complete` stop had no skill text: added (A.5, A6).
+- L2, the unwritable-holds test as root: a path collision (Testing).
+- L3, `--final` moving the phase early: only with every task complete (E,
+  A13).
+- L4, no ruling for a skipped `/model`: the note asks for one (N, A27).
+- L5, the `task-complete` message: it names §Stopping (A.5).
