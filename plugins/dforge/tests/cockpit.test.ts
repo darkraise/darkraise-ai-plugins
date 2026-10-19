@@ -258,6 +258,14 @@ type World = {
   isUserSettingsUnreadable?: boolean
   /** How long each compaction takes, in the clock's milliseconds; at once unless said. */
   compactMs?: number
+  /** Each git command the plugin runs, as one line. */
+  gitRuns?: string[]
+  /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
+  commonDir?: string
+  /** Runs inside each scripts/auto-run call, given its command word, before the call answers. */
+  onAutoRun?: (word: string) => unknown
+  /** How many `$.session.id()` calls fail before one answers. */
+  sessionIdFailures?: number
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -356,7 +364,9 @@ function world(on: On, w: World) {
         if (exitCode === 5 && word === 'stalled') Object.assign(state, { active: false, stopped: 'three stalls without a completed task', pending: null })
         w.autoFile.text = JSON.stringify(state)
       }
-      return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+      const answer = { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+      const during = w.onAutoRun?.(word)
+      return during instanceof Promise ? during.then(() => answer) : answer
     }
     if (argv.includes('/scripts/lib/dforge-config.mjs ')) {
       w.runs?.push(argv)
@@ -389,10 +399,33 @@ function world(on: On, w: World) {
       if (w.isNodeMissing) return { deny: 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }
       return { value: { exitCode: 0, stdout: 'v24.18.0\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${w.primary ?? '/home/me/code/shop'}/.git\n` : PORCELAIN
+    if (argv.startsWith('git ')) w.gitRuns?.push(argv)
+    const common = w.commonDir ?? `${w.primary ?? '/home/me/code/shop'}/.git`
+    // A directory is a work tree when the common directory is its .git: a
+    // primary checkout is; a submodule's modules directory is not.
+    const toplevel = /^git -C (.+) rev-parse --show-toplevel$/.exec(argv)
+    if (toplevel !== null) {
+      const isTree = `${toplevel[1]}/.git` === common
+      return {
+        value: {
+          exitCode: isTree ? 0 : 128,
+          stdout: isTree ? `${toplevel[1]}\n` : '',
+          stderr: isTree ? '' : 'fatal: not a git repository (or any of the parent directories): .git\n',
+          isStdoutTruncated: false,
+          isStderrTruncated: false,
+        },
+      }
+    }
+    const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${common}\n` : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  on('session.id', () => ({ value: w.sessionId ?? 'sess-1' }))
+  on('session.id', () => {
+    if ((w.sessionIdFailures ?? 0) > 0) {
+      w.sessionIdFailures = (w.sessionIdFailures ?? 1) - 1
+      throw new Error('no session id')
+    }
+    return { value: w.sessionId ?? 'sess-1' }
+  })
   on('fs.stat', (_$, e) => {
     const file = w.files?.[e.path]
     if (file === undefined) throw new Error('ENOENT')
@@ -2959,6 +2992,28 @@ describe('cockpit roots', () => {
     expect(await ui.find({ type: 'Text', text: /Finish push and open a PR/ })).toBeDefined()
   })
 
+  test('takes the primary checkout from the common directory, as the scripts do', async ($, on) => {
+    // stores.json makes the cockpit ask darkmem-config for the primary's roots.
+    const files: NonNullable<World['files']> = { '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } }
+    const gitRuns: string[] = []
+    const modeRuns: string[] = []
+    world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main', gitRuns, modeRuns })
+    signedIn(on, files)
+    await $.session.start(START)
+    expect(gitRuns).toContain('git -C /home/me/code/main rev-parse --show-toplevel')
+    expect(modeRuns).toEqual(['/home/me/code/main'])
+  })
+
+  test('a submodule has no primary checkout, as in the scripts', async ($, on) => {
+    const files: NonNullable<World['files']> = { '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } }
+    const modeRuns: string[] = []
+    world(on, { ...SIGNED_IN, files, commonDir: '/home/me/code/shop/.git/modules/web', modeRuns })
+    signedIn(on, files)
+    await $.session.start(START)
+    // With no primary, the session's own repository stands in.
+    expect(modeRuns).toEqual(['/home/me/code/shop'])
+  })
+
   test('a changed stores.json moves the card to the new roots', async ($, on) => {
     const files: NonNullable<World['files']> = {
       '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
@@ -3479,7 +3534,8 @@ describe('auto run', () => {
     expect(w.compacts?.[0]).toMatch(/Ruling: line/)
     expect(w.autoRuns).toContain('--session sess-1 compacted')
     expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/scripts\/auto-run after-compact/)
+    expect(w.prompts?.[0]).toMatch(/`bash "[^"]*\/scripts\/auto-run" after-compact`/)
+    expect(w.prompts?.[0]).toMatch(/`bash "[^"]*\/scripts\/auto-run" status` names/)
     expect(w.prompts?.[0]).toMatch(/docs\/plan\.md/)
     expect(pendingOf(files)).toBe('after-compact')
   })
@@ -3806,7 +3862,7 @@ describe('auto run', () => {
     expect(w.autoRuns).toContain('--session sess-1 compacted --switch')
     expect(w.autoRuns).toContain('--session sess-1 resumed')
     expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/^Run `bash .*\/scripts\/auto-run after-compact` first\. Continue `docs\/plan\.md`/)
+    expect(w.prompts?.[0]).toMatch(/^Run `bash "[^"]*\/scripts\/auto-run" after-compact` first\. Continue `docs\/plan\.md`/)
     expect(pendingOf(files)).toBe('after-compact')
   })
 
@@ -3827,6 +3883,21 @@ describe('auto run', () => {
     expect(w.commands).toEqual([])
     expect(w.prompts).toHaveLength(1)
     expect(w.autoRuns?.at(-1)).toBe('--session sess-1 resumed')
+    expect(pendingOf(files)).toBe('after-compact')
+  })
+
+  test('switches over a refused compaction: books it and submits the first prompt', async ($, on) => {
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], isCompactVetoed: true }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+    expect(w.autoRuns).toContain('--session sess-1 compacted --switch')
+    expect(w.prompts).toEqual([expect.stringMatching(/after-compact` first\. Continue `docs\/plan\.md`\.$/)])
     expect(pendingOf(files)).toBe('after-compact')
   })
 
@@ -3983,6 +4054,63 @@ describe('auto run', () => {
     expect(w.compacts).toEqual([])
   })
 
+  test('a live turn restarts the deferral, so the cap counts background work alone', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.agent.spawn({
+      tool_use_id: 'toolu_1',
+      prompt: 'Implement task 4',
+      description: 'Task 4',
+      subagentType: 'dforge:impl-sonnet-low',
+      provider: { plugin: 'dforge', tier: 'user' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+      fork: false,
+    })
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await $.turn.start({ text: 'How is Task 4 going?', turnId: 't2' })
+    await clock.advance(1_795_000)
+    await $.turn.complete({ answer: 'Still running.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await clock.advance(10_000)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+    expect(w.compacts).toEqual([])
+  })
+
+  for (const [code, prompt] of [
+    [5, 'The auto run stopped: the cockpit could not compact twice. End as reference/auto-run.md §Stopping says.'],
+    [1, 'The auto run stopped: a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1). End as reference/auto-run.md §Stopping says.'],
+  ] as const) {
+    test(`ends the run when the deferral cap's failure exits ${code}`, async ($, on) => {
+      const files = autoFiles()
+      const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { failure: code } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.agent.spawn({
+        tool_use_id: 'toolu_1',
+        prompt: 'Implement task 4',
+        description: 'Task 4',
+        subagentType: 'dforge:impl-sonnet-low',
+        provider: { plugin: 'dforge', tier: 'user' },
+        parentModel: 'claude-opus-5-5',
+        background: true,
+        fork: false,
+      })
+      await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      await clock.advance(1_805_000)
+      expect(w.prompts).toEqual([prompt])
+      expect(w.compacts).toEqual([])
+      if (code === 1) {
+        expect(w.autoRuns).toContain('--session sess-1 stop --reason a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1)')
+      }
+    })
+  }
+
   test("starts a new run's deferral afresh after the last one stopped", async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
@@ -4023,7 +4151,7 @@ describe('auto run', () => {
     await clock.advance(60_000)
     expect(w.autoRuns?.filter(call => call === '--session sess-1 stalled')).toHaveLength(1)
     expect(w.prompts).toEqual([
-      expect.stringMatching(/^The auto run stalled: the last turn ended without its sentinel line\. Run `bash .*\/scripts\/auto-run status`, continue the phase it names, and end the turn as reference\/auto-run\.md §Ending a turn says\.$/),
+      expect.stringMatching(/^The auto run stalled: the last turn ended without its sentinel line\. Run `bash "[^"]*\/scripts\/auto-run" status`, continue the phase it names, and end the turn as reference\/auto-run\.md §Ending a turn says\.$/),
     ])
     await clock.advance(180_000)
     expect(w.prompts).toHaveLength(1)
@@ -4214,6 +4342,53 @@ describe('auto run', () => {
     await clock.advance(250_000)
     expect(w.compacts).toHaveLength(1)
     expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+  })
+
+  test('after a stalled call that fails, waits STALL_MS before the next', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { stalled: 1 } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const stalls = () => w.autoRuns?.filter(call => call === '--session sess-1 stalled').length
+    await clock.advance(240_000)
+    expect(stalls()).toBe(1)
+    await clock.advance(180_000)
+    expect(stalls()).toBe(1)
+    await clock.advance(60_000)
+    expect(stalls()).toBe(2)
+    expect(w.prompts).toEqual([])
+  })
+
+  test('a heartbeat that fails leaves the rest of the tick to run', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(180_000)
+    // The tick at 240 s: its heartbeat's session id read fails once.
+    w.sessionIdFailures = 1
+    await clock.advance(60_000)
+    expect(w.autoRuns).toContain('--session sess-1 stalled')
+  })
+
+  test('submits no stall prompt once a turn has started during the stalled call', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    // The activity read before the call was idle; the person's prompt starts a
+    // turn while scripts/auto-run books the stall, so only the turn guard
+    // holds the stall prompt back.
+    w.onAutoRun = word => (word === 'stalled' ? $.turn.start({ text: 'Continue.', turnId: 't2' }) : undefined)
+    await clock.advance(240_000)
+    expect(w.autoRuns).toContain('--session sess-1 stalled')
+    expect(w.prompts).toEqual([])
   })
 
   test('reads a run only for its session, and its sentinel only as the last line', () => {

@@ -145,7 +145,7 @@ const AUTO_STAGE_PENDING: Record<AutoStage, string> = {
 }
 function autoContinuePrompt(root: string, plan: string | null): string {
   const where = plan === null ? '' : ` for plan ${plan}, through the After compaction steps of the execution skill its Execution line names`
-  return `Continue the auto run: run \`bash ${root}/scripts/auto-run after-compact\` first, then continue the phase \`bash ${root}/scripts/auto-run status\` names${where}, as reference/auto-run.md §After a compaction says.`
+  return `Continue the auto run: run \`bash "${root}/scripts/auto-run" after-compact\` first, then continue the phase \`bash "${root}/scripts/auto-run" status\` names${where}, as reference/auto-run.md §After a compaction says.`
 }
 // The watchdog's period, and how long background work may defer a pending
 // stage before that books a failure. A bound run idle STALL_MS since its last
@@ -157,7 +157,7 @@ const STALL_MS = 180_000
 // it; a pending resume resubmits the run's first prompt.
 const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch', 'switch-resume': 'switch-resume' }
 function stallPrompt(root: string): string {
-  return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash ${root}/scripts/auto-run status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
+  return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
 }
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
@@ -2198,8 +2198,11 @@ const S = {
   autoActedAt: null as number | null,
   // When this session started: one with no turn yet ages from it.
   watchedSince: null as number | null,
-  // When background work began deferring the pending stage; null while nothing does.
+  // When background work began deferring the pending stage; null while nothing
+  // does or a turn is live.
   autoDeferredSince: null as number | null,
+  // When the last stalled call failed: the watchdog waits STALL_MS before the next.
+  stallFailedAt: null as number | null,
   // The watchdog's timer, every WATCHDOG_MS.
   watchdog: null as Timer | null,
   // The roots --mode last named, and the primary checkout and stores.json
@@ -2385,7 +2388,9 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
   const isBackground = (await read($, spawns)).some(one => !one.isDone) || (await read($, shells)).length > 0
   if (S.isTurnLive || isBackground) {
     const stamp = await $.clock.now()
-    S.autoDeferredSince = isBackground ? (S.autoDeferredSince ?? stamp) : null
+    // Only background work with no turn live counts toward the cap: a live
+    // turn restarts it.
+    S.autoDeferredSince = S.isTurnLive ? null : (S.autoDeferredSince ?? stamp)
     if (S.autoDeferredSince === null || stamp - S.autoDeferredSince < DEFER_CAP_MS) {
       scheduleAutoAct($, stage, AUTO_RETRY_MS)
       return
@@ -2432,8 +2437,10 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       return
     }
     if (at === 'switch') {
-      const done = await $.session.compact({ instructions: AUTO_SWITCH_INSTRUCTIONS })
-      if ('skip' in done && typeof done.skip === 'string') throw new Error(done.skip)
+      // A refused compaction leaves the switch only its model change. It is
+      // booked as compacted all the same, so the run's status counts one
+      // compaction that did not run.
+      await $.session.compact({ instructions: AUTO_SWITCH_INSTRUCTIONS })
       await update($, budget, () => null)
       await update($, isNudged, () => false)
       // As for compact: the compaction happened, so it is never repeated.
@@ -2477,7 +2484,7 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
     if (refused.length > 0) notes.push(`The cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}.`)
     if (!isRestored) notes.push('The cockpit could not put back the default model and effort that /model and /effort saved in your user settings.')
     const note = notes.length === 0 ? '' : `\n\n${notes.join(' ')} Record that with scripts/auto-run ruling add.`
-    const lead = at === 'switch-resume' ? `Run \`bash ${$.plugin.root}/scripts/auto-run after-compact\` first. ` : ''
+    const lead = at === 'switch-resume' ? `Run \`bash "${$.plugin.root}/scripts/auto-run" after-compact\` first. ` : ''
     await $.prompt.submit({ text: `${lead}${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
     // After a switch an unbooked resume leaves switch-resume pending, which no
     // stage retries; the prompt is already submitted, so stop rather than resend it.
@@ -2542,11 +2549,15 @@ async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; 
 // epoch seconds of the last beat, in a file named for this session's id with
 // each character outside A-Za-z0-9 a dash.
 async function beat($: EngineInterface) {
-  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  if (!home) return
-  const id = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
-  const seconds = Math.floor((await $.clock.now()) / 1000)
-  await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${id}`, `${seconds}\n`).catch(() => undefined)
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    if (!home) return
+    const id = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
+    const seconds = Math.floor((await $.clock.now()) / 1000)
+    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${id}`, `${seconds}\n`)
+  } catch {
+    // A beat that cannot be written is skipped; the watchdog's tick goes on.
+  }
 }
 
 // Each WATCHDOG_MS: the heartbeat, then a wake-up for a bound run nothing
@@ -2573,7 +2584,10 @@ async function watchdogTick($: EngineInterface) {
     }
     return
   }
+  const stamp = await $.clock.now()
+  if (S.stallFailedAt !== null && stamp - S.stallFailedAt <= STALL_MS) return
   const code = await autoRunCall($, await $.session.id(), ['stalled'])
+  S.stallFailedAt = code === 0 || code === 5 ? null : stamp
   if (code === 5) await endStoppedRun($)
   else if (code === 0 && !S.isTurnLive) await $.prompt.submit({ text: stallPrompt($.plugin.root), asUser: true }).catch(() => undefined)
 }
@@ -2844,9 +2858,13 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
-  // A worktree's .dforge/ lives in the primary checkout.
+  // A worktree's .dforge/ lives in the primary checkout: the work tree of the
+  // common git directory's parent, as ar_primary_root (scripts/lib/auto-run.sh)
+  // finds it, so a layout the scripts resolve no primary for (a submodule)
+  // has none here either.
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
-  S.where.primary = common === null ? null : common.replace(/[\\/]\.git[\\/]?$/, '') || null
+  const parent = common === null ? '' : common.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '')
+  S.where.primary = parent === '' ? null : await firstLine(['git', '-C', parent, 'rev-parse', '--show-toplevel'])
 }
 
 // The context crossed its handoff budget: said once per crossing.
