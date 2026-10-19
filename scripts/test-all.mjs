@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -40,6 +40,11 @@ async function run(executable, args, seconds) {
 }
 // The cockpit's tests need the claude CLI; CI runs them in their own pinned-CLI step.
 const hasClaude = !options.list && process.platform !== 'win32' && spawnSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }).status === 0;
+// The mod's type check needs tsc on PATH and the declarations Claude Code lays
+// beside a mod it loads from a folder, which are gitignored: a fresh clone has none.
+const typesGenerated = ['plugins/dforge/tsconfig.json', 'plugins/dforge/.claude-plugin/types/tsconfig.json'].every(path => existsSync(resolve(root, path)));
+// Detected under --list too, so a listing shows the job that a run would start.
+const hasTsc = typesGenerated && spawnSync('tsc', ['--version'], { stdio: 'ignore', timeout: 10000 }).status === 0;
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
@@ -52,7 +57,11 @@ const jobs = [
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
   ...readdirSync(resolve(root, 'plugins/dforge/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dforge/tests/${name}`], 600]),
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300]] : []),
+  ...(hasTsc ? [['tsc', ['--noEmit', '-p', 'plugins/dforge'], 300]] : []),
 ];
+if (!options.list && !hasTsc) {
+  console.log(`Skipped tsc --noEmit -p plugins/dforge: ${typesGenerated ? 'tsc is not on PATH' : 'the generated types are missing (Claude Code writes them when it loads plugins/dforge from the folder)'}`);
+}
 let success = true;
 for (const [executable, args, seconds] of selectShard(jobs, options.shard)) {
   if (options.list) { console.log(args.join(' ')); continue; }
