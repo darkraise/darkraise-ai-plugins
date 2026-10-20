@@ -410,6 +410,8 @@ ordinary Claude ladder govern from there.
 
 ## Codex task review seats
 
+These seats open only when the `codexReview` setting is on; it is off by
+default, and the gate then names Claude seats only. While it is on,
 `scripts/review-route PLAN_FILE --task <N>` names a Codex seat for every task
 without an `**Executor:**` line: `codex:light` for every total at risk 2 or
 below, and `codex:heavy+judge-opus` at risk 3. A task carrying
@@ -490,7 +492,8 @@ The judge's verdicts and scores are the task's.
 
 ## Final-review Codex round
 
-The final whole-branch review adds this round. Run the session gate first:
+The final whole-branch review adds this round when the `codexReview` setting
+is on (it is off by default). Run the session gate first:
 
 ```bash
 bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"

@@ -91,9 +91,9 @@ every evaluation, and 2 to 4 criteria that each say where to look, what scores
 high, what scores low, and what to ignore. Task reviews score four criteria -
 spec, scope, verification, quality - 1 to 20 each, alongside the spec and
 quality verdicts and never replacing them, because the fix loop keys on those
-verdicts. Tasks at risk 3 are reviewed by Codex `gpt-6-astra` and then by
-`judge-opus`, which rules CONFIRMED or REJECTED on every Codex finding in the
-same pass.
+verdicts. With Codex reviews on (`codexReview`), tasks at risk 3 are reviewed
+by Codex `gpt-6-astra` and then by `judge-opus`, which rules CONFIRMED or
+REJECTED on every Codex finding in the same pass.
 
 **Best-of-3 approach selection.** `selecting-approaches` gates an open approach
 decision to inline, one advisory pass, or three scouts ranked by a judge in a
@@ -211,7 +211,12 @@ puts `gpt-6.1-sol` at ranks 3 to 6.
 A different machine, account, or Codex version must verify the tables against
 its own account before relying on them. Do not make paid capability probes.
 
-**Cross-family review.** Codex is the default task reviewer: `gpt-6.1-sol` for
+**Cross-family review.** Codex reviews are opt-in. By default every review runs
+on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 3, `judge-opus`
+for 4 to 6 and at risk 3, plan review and the final review. For a one-off Codex
+review, run `/codex:review` or `/codex:adversarial-review` from the codex
+plugin. Turning the `codexReview` setting on gives Codex the review seats below
+for every run. With it on, Codex is the default task reviewer: `gpt-6.1-sol` for
 tasks totalling 0 to 6, and `gpt-6-astra` followed by `judge-opus` at risk 3. A task the executor lane implemented is always
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
 Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
@@ -219,7 +224,7 @@ Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
 (`judge-opus` when Codex is off) and `judge-opus` for delta rounds,
 capped by the plan's highest task total.
 The final whole-branch review runs on `judge-opus`, its one fix subagent on
-the highest tier among the tasks the findings touch, and gains a Codex round. When both reviewers return findings,
+the highest tier among the tasks the findings touch, and with `codexReview` on gains a Codex round. When both reviewers return findings,
 a fresh `judge-opus` dedupes and verifies them. No route names `judge-fable`:
 on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
 known defects, at about 40% of the cost, so Fable is dispatched on a judge seat
@@ -788,7 +793,7 @@ The same settings can be set with
 | Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |
 | Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
 | Workflow | `codexLane` | `true` | Give plan tasks to Codex when its gate passes. `false` makes `scripts/codex-gate` report `lane=false`. |
-| Workflow | `codexReview` | `true` | Let Codex take review seats when its gate passes. `false` makes the gate report `review=false`; with both off it does not probe Codex at all. |
+| Workflow | `codexReview` | `false` | `true` lets Codex take review seats when its gate passes. `false`, the default, makes the gate report `review=false` and keeps every review on Claude; `/codex:review` runs a Codex review on demand. With `codexLane` off too, the gate does not probe Codex at all. |
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `executionStrategy` | `parallel` | `parallel` runs independent tasks in waves and falls back to sequential when no two tasks can share a wave, and on Codex; `sequential` runs one task at a time; `ask` asks "how should the plan execute". |
 | Workflow | `executionMode` | `auto` | `auto` follows the planner's rule; `inline` and `subagent` fix the plan's Execution line, and `inline` also makes the plan sequential. |
@@ -1021,8 +1026,9 @@ differences:
 5. **One ledger grammar.** Every task gets an assigned line and a complete line
    carrying its scores and a checkpoint (done, verified, remaining, discovered
    issues, assumptions), which crash recovery and the final review read.
-6. **Cross-family final review.** The final whole-branch review adds a Codex
-   round, and a judge verifies the union of both reviewers' findings.
+6. **Cross-family final review, on request.** With `codexReview` on, the final
+   whole-branch review adds a Codex round, and a judge verifies the union of
+   both reviewers' findings.
 7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
    unavailable model, an Executor line the wrapper refuses - are logged
    rulings, never silent fallbacks and never stops.
