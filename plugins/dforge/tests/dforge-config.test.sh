@@ -215,10 +215,29 @@ if ! command -v cygpath > /dev/null 2>&1; then
   rm -f "$CS"; ln -s "$TMP/chain40/end.json" "$TMP/chain40/link39"
   for n in $(seq 38 -1 1); do ln -s "$TMP/chain40/link$((n + 1))" "$TMP/chain40/link$n"; done
   ln -s "$TMP/chain40/link1" "$CS"
-  fc set autoCompactWindow 540000
-  check "claude: a 40-link dangling chain: exit 0" "$?" "0"
+  fc set autoCompactWindow 540000; check "claude: a 40-link dangling chain: exit 0" "$?" "0"
   check "claude: a 40-link dangling chain: its end is created" "$(tr -d ' \n' < "$TMP/chain40/end.json" 2>/dev/null)" '{"autoCompactWindow":540000}'
   check "claude: a 40-link dangling chain: the last link stays" "$([ -L "$TMP/chain40/link39" ] && echo yes || echo no)" "yes"
+  # One link more is refused, and nothing is created at the chain's end. On
+  # Linux the kernel's own 40-link limit refuses it (ELOOP) before the cap.
+  mkdir -p "$TMP/chain41"
+  rm -f "$CS"; ln -s "$TMP/chain41/end.json" "$TMP/chain41/link40"
+  for n in $(seq 39 -1 1); do ln -s "$TMP/chain41/link$((n + 1))" "$TMP/chain41/link$n"; done
+  ln -s "$TMP/chain41/link1" "$CS"
+  fc set autoCompactWindow 530000; check "claude: a 41-link dangling chain: exit 1" "$?" "1"
+  check "claude: a 41-link dangling chain: the refusal names the links" "$(grep -c 'symbolic links' "$TMP/stderr")" "1"
+  check "claude: a 41-link dangling chain: nothing is created at its end" "$([ -e "$TMP/chain41/end.json" ] && echo yes || echo no)" "no"
+  # The cap itself, reached by making realpath report the chain as missing, as
+  # a system whose kernel allows longer chains would: the loop refuses it.
+  capped=$(DFORGE_CONFIG_MJS="$HERE/../scripts/lib/dforge-config.mjs" node --input-type=module -e '
+    import fs from "node:fs";
+    const { main } = await import(process.env.DFORGE_CONFIG_MJS);
+    // After the import: the module loader resolves paths with realpathSync too.
+    fs.realpathSync = () => { throw Object.assign(new Error("ENOENT: realpath stubbed"), { code: "ENOENT" }); };
+    process.exitCode = main(["set", "autoCompactWindow", "520000"]);
+  ' 2>&1; printf 'exit %s\n' "$?")
+  check "claude: the hop cap refuses a 41-link chain" "$(grep -c -e 'more than 40 symbolic links' -e '^exit 1$' <<<"$capped")" "2"
+  check "claude: the hop cap creates nothing at the chain's end" "$([ -e "$TMP/chain41/end.json" ] && echo yes || echo no)" "no"
 fi
 
 # As root, a rewrite keeps the file's owner and group: the temporary file is
