@@ -201,6 +201,27 @@ Evidence table, filled by the backfill task:
 
 | Plan | Landing commit | Date | Evidence |
 |---|---|---|---|
+| `2026-07-27-dcc-superpower-companions.md` | 03a9e85 | 2026-07-27 | default, paths 13/14; run af9424b to 03a9e85 |
+| `2026-07-27-dcc-statusline.md` | 4fc6542 | 2026-07-28 | default, paths 31/31; run 40b30a4 to 4fc6542 |
+| `2026-07-28-dcc-statusline-visual-redesign.md` | 29bde71 | 2026-07-28 | default, paths 23/23; merge 29bde71 of the plan's branch |
+| `2026-08-08-dcc-statusline-responsive-ui.md` | 8f97fdf | 2026-08-08 | default, paths 19/20; merge 8f97fdf of the plan's branch |
+| `2026-08-08-dcc-telegram-notify-events.md` | 7b27e4a | 2026-08-09 | default, paths 10/10; merge 7b27e4a of the plan's branch |
+| `2026-08-09-dcc-statusline-resize-refresh.md` | 91b9720 | 2026-08-09 | default, paths 11/11; merge 91b9720 of the plan's branch |
+| `2026-08-09-dcc-telegram-notify-reply-back.md` | cc8594e | 2026-08-10 | default, paths 15/15; merge cc8594e of the plan's branch |
+| `2026-08-19-companions-verifier-redesign.md` | 829075e | 2026-08-19 | default, paths 21/21; merge 829075e of the plan's branch |
+| `2026-08-21-companions-reserve-tier.md` | e1e8626 | 2026-08-21 | default, paths 19/19; merge e1e8626 of the plan's branch |
+| `2026-08-28-dcc-darkraise-ui.md` | afb9a35 | 2026-08-28 | default, paths 9/10; merge afb9a35 of the plan's branch |
+| `2026-08-28-dcc-darkraise-win32ui.md` | 1256275 | 2026-08-28 | default, paths 9/10; merge 1256275 of the plan's branch |
+| `2026-08-31-companions-external-executors.md` | 2d514e7 | 2026-08-31 | default, paths 14/15 under plugins/dcc-superpower-companions/; merge 2d514e7 of the plan's branch |
+| `2026-09-08-dual-client-plugin-revision.md` | 99a1315 | 2026-09-08 | subjects; run c9eba8f to 99a1315: rename plugin and track installations, support native Codex execution, separate client marketplaces |
+| `2026-09-08-codex-terra-scoring.md` | 86bfe94 | 2026-09-08 | subjects; single commit 86bfe94, add Terra and 0-9 scoring |
+| `2026-09-11-dr-superpowers-standalone-base.md` | 266d92c | 2026-09-11 | default, paths 18/19; run 2235ea9 to 266d92c |
+| `2026-09-11-dr-superpowers-fold-companions.md` | 930f784 | 2026-09-11 | default, paths 20/22; run 58ac9cb to 930f784 |
+| `2026-09-11-dr-superpowers-session-budget.md` | 095048c | 2026-09-12 | default, paths 26/28; run 0d86b53 to 095048c |
+| `2026-09-12-dr-superpowers-small-model-planning.md` | 6a4619a | 2026-09-12 | default, paths 31/34 under P = plugins/dr-superpowers; run e15d600 to 6a4619a |
+| `2026-09-12-dr-superpowers-inline-mode.md` | ee89185 | 2026-09-12 | default, paths 12/12; run f23b0a2 to ee89185 |
+| `2026-09-14-dr-superpowers-project-state.md` | 25dea81 | 2026-09-14 | default, paths 22/22; run b8a4a96 to 25dea81 |
+| `2026-09-14-dr-superpowers-judge-seats.md` | 6d54b1e | 2026-09-14 | default, paths 13/13; run 11e82c8 to 6d54b1e |
 
 Check: for every file under `docs/superpowers/plans/` for which `plan_tasks`
 (`scripts/lib/plan.sh` in the dr-superpowers plugin) prints a task,
