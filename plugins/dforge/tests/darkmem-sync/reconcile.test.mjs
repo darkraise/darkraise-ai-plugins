@@ -43,12 +43,34 @@ test("a document name has one key under every prefix", () => {
   assert.deepEqual(nameSpellings("docs/forge/plans/"), ["docs/dforge/plans", "docs/forge/plans", "docs/superpowers/plans"]);
 });
 
-test("a directory where a document should be hashes as a non-file instead of throwing", () => {
+test("a directory or named pipe where a document should be hashes as a non-file instead of throwing or blocking", () => {
   const dir = scratch("dms-hash-");
   assert.equal(fileHash(dir), NOT_A_FILE);
   assert.equal(fileHash(path.join(dir, "absent.md")), null);
   write(path.join(dir, "a.md"), "a\n");
   assert.equal(fileHash(path.join(dir, "a.md")), sha("a\n"));
+  assert.equal(fileHash(path.join(dir, "a.md", "below.md")), null);
+  if (process.platform === "win32") return;
+  fs.symlinkSync(path.join(dir, "a.md"), path.join(dir, "link.md"));
+  assert.equal(fileHash(path.join(dir, "link.md")), sha("a\n"));
+  assert.equal(fileHash(namedPipe(path.join(dir, "pipe.md"))), NOT_A_FILE);
+});
+
+test("a file swapped for a directory as fileHash opens it hashes as a non-file, not a crash", t => {
+  const dir = scratch("dms-hash-");
+  const file = path.join(dir, "a.md");
+  write(file, "a\n");
+  const open = fs.openSync;
+  let swapped = false;
+  t.mock.method(fs, "openSync", (target, ...rest) => {
+    if (!swapped && target === file) {
+      swapped = true;
+      fs.rmSync(file);
+      fs.mkdirSync(file);
+    }
+    return open(target, ...rest);
+  });
+  assert.equal(fileHash(file), NOT_A_FILE);
 });
 
 test("pending families are those whose configured store differs from the applied one", () => {
@@ -175,7 +197,32 @@ test("an active auto run is in progress", () => {
   write(file, JSON.stringify({ active: false }));
   assert.deepEqual(inProgress(cfgFor(repo, env)), []);
   assert.equal(inProgressReason({ cfg: cfgFor(repo, env) }), null);
+  if (process.platform === "win32") return;
+  const record = path.join(scratch("dms-run-"), "auto-run.json");
+  write(record, JSON.stringify({ active: true }));
+  fs.rmSync(file);
+  fs.symlinkSync(record, file);
+  assert.deepEqual(inProgress(cfgFor(repo, env)), ["an auto run is active"], "a linked record is read through");
 });
+
+for (const [name, at] of [["auto-run.json", [".dforge", "sdd", "auto-run.json"]], ["completed.md", ["docs", "dforge", "plans", "completed.md"]]]) {
+  test(`a named pipe at ${name} never blocks reconcile: it records no active run and no finished plan`, { skip: process.platform === "win32" }, async t => {
+    const stub = await startStub();
+    t.after(() => stub.close());
+    const repo = makeRepo();
+    const { env } = mapped(repo, { url: stub.url });
+    write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("docs/dforge/plans/p1.md"));
+    namedPipe(path.join(repo, ...at));
+    const result = await reconcile(repo, env);
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.equal(result.stdout, [
+      "darkmem-sync reconcile: documents stay local (configured darkmem): a plan is in progress: docs/dforge/plans/p1.md",
+      "darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: docs/dforge/plans/p1.md",
+      "",
+    ].join("\n"));
+    assert.equal(stub.db.requests.length, 0);
+  });
+}
 
 test("an unreadable ledger is in progress, and a slug without a ledger is not", () => {
   const repo = makeRepo();

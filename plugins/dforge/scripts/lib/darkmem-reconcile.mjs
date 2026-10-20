@@ -9,7 +9,7 @@ import { dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
-import { progressToDarkmem, progressToLocal, readNoFollow } from "./darkmem-progress-move.mjs";
+import { progressToDarkmem, progressToLocal, readNoFollow, readRegular } from "./darkmem-progress-move.mjs";
 import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
@@ -188,7 +188,7 @@ export function planFinished(cfg, checkout, identity) {
   if (path.isAbsolute(name)) return false;
   let text;
   try {
-    text = fs.readFileSync(path.join(path.dirname(planFile(cfg, checkout, name)), "completed.md"), "utf8");
+    text = readRegular(path.join(path.dirname(planFile(cfg, checkout, name)), "completed.md"), { follow: true }).toString("utf8");
   } catch {
     return false;
   }
@@ -201,10 +201,13 @@ export function planFinished(cfg, checkout, identity) {
 export function inProgress(cfg) {
   const found = [];
   try {
-    const run = JSON.parse(fs.readFileSync(path.join(dforgeDir("state", cfg.repoRoot), "sdd", "auto-run.json"), "utf8"));
+    const run = JSON.parse(readRegular(path.join(dforgeDir("state", cfg.repoRoot), "sdd", "auto-run.json"), { follow: true }).toString("utf8"));
     if (run?.active === true) found.push("an auto run is active");
   } catch {
-    // No auto run, or an unreadable record, which auto-run.sh reads as inactive too.
+    // No auto run, or an unreadable record, which auto-run.sh reads as inactive
+    // too. The record is read through a link, as auto-run.sh reads it; one that
+    // is not a regular file holds no run, since auto-run.sh writes the record
+    // with tmp+mv, which replaces a link or a pipe at the path.
   }
   for (const { sdd, checkout } of ledgerSources(cfg)) {
     for (const { name: slug, linked } of dirEntries(sdd)) {
@@ -245,9 +248,13 @@ const pullReport = () => ({ conflicts: [], failures: [], notes: [], counts: { do
 export const NOT_A_FILE = "not a regular file";
 
 export function fileHash(file) {
-  const stat = fs.statSync(file, { throwIfNoEntry: false });
-  if (!stat) return null;
-  return stat.isFile() ? sha256(fs.readFileSync(file)) : NOT_A_FILE;
+  try {
+    return sha256(readRegular(file, { follow: true }));
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return null;
+    if (error.code === "EISDIR" || error.code === "EFTYPE") return NOT_A_FILE;
+    throw error;
+  }
 }
 
 // A rename or copy in either column: an intent-to-add file (git add -N) is
