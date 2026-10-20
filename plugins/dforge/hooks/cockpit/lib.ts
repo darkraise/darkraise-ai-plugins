@@ -764,7 +764,7 @@ export function elapsed(ms: number): string {
 
 /** What the session is doing, as the Now row reads it. */
 export type ActivityInput = {
-  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed' | 'interrupted'
+  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed' | 'interrupted' | 'background'
   since: number
   turnStartedAt: number | null
   step: number
@@ -778,8 +778,17 @@ export type ActivityInput = {
 
 const AMBER = '#ffaf5f'
 
+/** The main conversation's background work, as the Now row names it. */
+export type ActivityWork = { shells: readonly { command: string; startedAt: number }[]; agents: number }
+
+/** A command's first line, cut to `width` characters with an ellipsis. */
+function commandExcerpt(command: string, width: number): string {
+  const chars = [...(command.split('\n')[0] ?? '')]
+  return chars.length <= width ? chars.join('') : `${chars.slice(0, width - 1).join('')}…`
+}
+
 /** The Now row: one line, whatever the state, so the pane never jumps. */
-export function nowLine(now: ActivityInput, at: number): Run[] {
+export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { shells: [], agents: 0 }): Run[] {
   const sep: Run = { text: ' · ', dim: true }
   const sent: Run[] = now.isSent ? [sep, { text: 'Discord ✓', dim: true }] : []
   switch (now.kind) {
@@ -819,6 +828,19 @@ export function nowLine(now: ActivityInput, at: number): Run[] {
         ...(now.detail === null ? [] : [sep, { text: now.detail }]),
         ...(now.endedAt === null ? [] : [sep, { text: at - now.endedAt < 60_000 ? 'just now' : `${duration(at - now.endedAt)} ago`, dim: true }]),
       ]
+    case 'background': {
+      const count = work.shells.length
+      const newest = work.shells.reduce<{ command: string; startedAt: number } | null>((last, shell) => (last === null || shell.startedAt > last.startedAt ? shell : last), null)
+      const oldest = Math.min(...work.shells.map(shell => shell.startedAt))
+      return [
+        { text: '◐ background', color: AMBER, bold: true },
+        ...(count === 0 ? [] : [sep, { text: `${count} ${count === 1 ? 'shell' : 'shells'}` }]),
+        ...(newest === null ? [] : [sep, { text: commandExcerpt(newest.command, 40), dim: true }]),
+        ...(count === 0 ? [] : [sep, { text: shellAge(at - oldest), color: AMBER, bold: true }]),
+        ...(work.agents === 0 ? [] : [sep, { text: `${work.agents} ${work.agents === 1 ? 'agent' : 'agents'}`, color: 'cyan' }]),
+        ...sent,
+      ]
+    }
     default:
       return [
         { text: '○ idle', dim: true },
@@ -826,6 +848,11 @@ export function nowLine(now: ActivityInput, at: number): Run[] {
         ...(now.endedAt === null ? [] : [sep, { text: `ended ${duration(at - now.endedAt) || '<1m'} ago`, dim: true }]),
       ]
   }
+}
+
+/** Whether a main turn's text is a prompt the person typed: a continuation starts with none, a task notification's wake-up with the notification. */
+export function isTypedPrompt(text: string): boolean {
+  return text.trim() !== '' && !text.includes('<task-notification>')
 }
 
 /** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */

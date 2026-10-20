@@ -27,6 +27,7 @@ import {
   folderRuns,
   handedOff,
   isAtLeast,
+  isTypedPrompt,
   levelOf,
   limitForecast,
   modelName,
@@ -2182,6 +2183,23 @@ describe('now row', () => {
     expect(flat(nowLine({ ...IDLE, kind: 'waiting', since: 158_000, detail: 'Bash: git push', isSent: true }, at))).toBe('⏳ approve? Bash: git push · 42s · Discord ✓')
     expect(flat(nowLine({ ...IDLE, kind: 'idle', lastTurnMs: 760_000, endedAt: 20_000 }, at))).toBe('○ idle · last turn 12m40s · ended 3m ago')
     expect(elapsed(3_725_000)).toBe('1h02m')
+  })
+
+  test('reads the background state with what still runs', () => {
+    const at = 200_000
+    const two = { shells: [{ command: 'npm test', startedAt: 140_000 }, { command: 'node codex-companion.mjs review --background\nsecond line', startedAt: 20_000 }], agents: 1 }
+    expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, two))).toBe('◐ background · 2 shells · npm test · 3m · 1 agent')
+    const long = { shells: [{ command: 'node codex-companion.mjs review --background', startedAt: 20_000 }], agents: 0 }
+    expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, long))).toBe('◐ background · 1 shell · node codex-companion.mjs review --backg… · 3m')
+    expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, { shells: [], agents: 2 }))).toBe('◐ background · 2 agents')
+    expect(flat(nowLine({ ...IDLE, kind: 'background', isSent: true }, at, { shells: [], agents: 1 }))).toBe('◐ background · 1 agent · Discord ✓')
+  })
+
+  test('tells a typed prompt from a continuation', () => {
+    expect(isTypedPrompt('go')).toBe(true)
+    expect(isTypedPrompt('')).toBe(false)
+    expect(isTypedPrompt('  \n')).toBe(false)
+    expect(isTypedPrompt('<task-notification>\n<task-id>b7k2</task-id>\n<status>completed</status>\n</task-notification>')).toBe(false)
   })
 
   test('follows a turn from start to end, and its tool calls', async ($, on) => {

@@ -142,8 +142,8 @@ export type CockpitEngine = {
 
 /** What the session is doing now, for the Now row and the state file. */
 export type CockpitActivity = {
-  /** `waiting` on an approval, `asking` a question, `failed` once a turn ended in an error, `interrupted` once Esc stopped it. */
-  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed' | 'interrupted'
+  /** `waiting` on an approval, `asking` a question, `failed` once a turn ended in an error, `interrupted` once Esc stopped it, `background` once a turn ended with its shells or subagents still running. */
+  kind: 'idle' | 'running' | 'waiting' | 'asking' | 'failed' | 'interrupted' | 'background'
   /** When this state began, in milliseconds since the epoch. */
   since: number
   /** When the running turn began. */
