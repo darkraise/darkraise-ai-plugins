@@ -440,6 +440,7 @@ export const register: Register = on => {
     S.heldDone = null
     S.poll?.cancel()
     S.poll = null
+    S.isMainTurn = false
     await setActivity($, () => IDLE)
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -528,6 +529,7 @@ export const register: Register = on => {
   // A main turn begins: the Now row starts its clock.
   on('turn.start', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
+    S.isMainTurn = true
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     if (isTypedPrompt(e.text)) S.heldDone = null
@@ -584,6 +586,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined) {
+      S.isMainTurn = false
       await trackAutoRun($)
       compactWindow = await readCompactWindow($)
       await readRun($)
@@ -2290,6 +2293,8 @@ const S = {
   waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null }>(),
   ticker: null as Timer | null,
   isTurnLive: false,
+  // Whether a main-loop turn is running; a subagent's approval wait does not set it, as it does isTurnLive.
+  isMainTurn: false,
   isBudgetSent: false,
   // Ledger events already seen, so a reload or a re-read sends nothing twice.
   ledgerSeen: null as Set<string> | null,
@@ -2405,7 +2410,7 @@ async function settleBackground($: EngineInterface) {
 
 async function releaseHeld($: EngineInterface) {
   S.releaseTimer = null
-  if (S.heldDone !== null && !S.isTurnLive) await sendDone($, '', 0)
+  if (S.heldDone !== null && !S.isMainTurn) await sendDone($, '', 0)
 }
 
 // The context, cost and plan fields most messages carry.
@@ -2476,7 +2481,9 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
 async function endWait($: EngineInterface, id: string, outcome: string) {
   await settleWait($, id, outcome)
   if (S.waits.size > 0) return
-  await setActivity($, now => (now.kind === 'waiting' || now.kind === 'asking' ? { ...now, kind: 'running', detail: null, isSent: false } : now))
+  const kind = S.isMainTurn || S.heldDone === null ? 'running' : 'background'
+  await setActivity($, now => (now.kind === 'waiting' || now.kind === 'asking' ? { ...now, kind, detail: null, isSent: false } : now))
+  if (kind === 'background') await settleBackground($)
 }
 
 // The auto run state file in the primary checkout, as the run bound to this
@@ -2732,7 +2739,7 @@ async function beat($: EngineInterface) {
 // turn's end, the last stage and the last nudge.
 async function watchdogTick($: EngineInterface) {
   await beat($)
-  if (S.heldDone !== null && !S.isTurnLive && (await $.clock.now()) - S.heldDone.heldAt > DEFER_CAP_MS) {
+  if (S.heldDone !== null && !S.isMainTurn && (await $.clock.now()) - S.heldDone.heldAt > DEFER_CAP_MS) {
     if ((await read($, activity)).kind === 'background') await setActivity($, now => ({ ...now, kind: 'idle' }))
     await sendDone($, '', 0)
   }

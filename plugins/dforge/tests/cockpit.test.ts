@@ -2562,6 +2562,32 @@ describe('shells and remote', () => {
       await clock.advance(10_000)
       expect(fetches).toHaveLength(0)
     })
+
+    test("a subagent's approval after the turn does not stall the release", async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', () => ({ decision: 'ask' }))
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
+      await $.session.append(notified(ENDED))
+      await clock.advance(5_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
+    })
+
+    test('the shell ending under a subagent approval still releases once it is answered', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', () => ({ decision: 'ask' }))
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await $.session.append(notified(ENDED))
+      await clock.advance(5_000)
+      expect(fetches).toHaveLength(0)
+      await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
+      await clock.advance(5_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 2m10s'])
+    })
   })
 
   test('drop a shell TaskStop stopped', async ($, on) => {
