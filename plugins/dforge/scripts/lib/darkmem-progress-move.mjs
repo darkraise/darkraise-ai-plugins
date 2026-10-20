@@ -18,6 +18,30 @@ import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
 
 const local = (base, rel) => path.join(base, ...rel.split("/"));
 
+// `file`'s bytes, read without following a symbolic link at its last component
+// and without blocking on a FIFO or device: it throws an error whose code is
+// ELOOP for a symbolic link (a dangling one too), EISDIR for a directory,
+// EFTYPE for any other file that is not regular, or the open's or read's own
+// (ENOENT, EACCES, ENOTDIR). Links earlier in the path are followed. A function
+// declaration, since darkmem-reconcile.mjs imports it across the import cycle
+// between the two modules. Without O_NOFOLLOW (Windows) a link is refused by
+// lstat before the read, which leaves a window between the two. fs.constants
+// cannot be stubbed, so a test passes a copy without O_NOFOLLOW as `constants`.
+export function readNoFollow(file, constants = fs.constants) {
+  if (constants.O_NOFOLLOW === undefined) {
+    if (fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw Object.assign(new Error(`${file} is a symbolic link`), { code: "ELOOP" });
+    return fs.readFileSync(file);
+  }
+  const fd = fs.openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) throw Object.assign(new Error(`${file} is not a regular file`), { code: stat.isDirectory() ? "EISDIR" : "EFTYPE" });
+    return fs.readFileSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 // The primary checkout first, then every linked worktree git lists.
 function checkouts(repoRoot) {
   const result = spawnSync("git", ["-C", repoRoot, "worktree", "list", "--porcelain"], { encoding: "utf8", timeout: 10000 });
@@ -71,14 +95,10 @@ export function gatherLocalProgress(cfg) {
   const byRel = new Map();
   for (const item of files) {
     // A linked file is never read through: it could lead anywhere, a FIFO included.
-    if (fs.lstatSync(item.file, { throwIfNoEntry: false })?.isSymbolicLink()) {
-      problems.push(`${item.file}: a symbolic link, which the move will not read through`);
-      continue;
-    }
     try {
-      item.buffer = fs.readFileSync(item.file);
+      item.buffer = readNoFollow(item.file);
     } catch (error) {
-      problems.push(`${item.file}: could not be read (${error.code})`);
+      problems.push(error.code === "ELOOP" ? `${item.file}: a symbolic link, which the move will not read through` : `${item.file}: could not be read (${error.code})`);
       continue;
     }
     if (!decodeUtf8(item.buffer)) {
@@ -311,7 +331,7 @@ export async function progressToDarkmem(context) {
   for (const item of files) {
     let now;
     try {
-      now = fs.readFileSync(item.file);
+      now = readNoFollow(item.file);
     } catch {
       now = null;
     }
@@ -320,7 +340,13 @@ export async function progressToDarkmem(context) {
   if (changed.length) return refuse("progress changed in the checkouts during the move; nothing was moved locally", changed);
   const workRoot = path.join(cfg.mirror, "work");
   for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer);
-  const unread = sources.filter(item => !fs.readFileSync(local(workRoot, item.rel)).equals(item.buffer));
+  const unread = sources.filter(item => {
+    try {
+      return !readNoFollow(local(workRoot, item.rel)).equals(item.buffer);
+    } catch {
+      return true;
+    }
+  });
   if (unread.length) return refuse("a copy into the mirror reads back different", unread.map(item => local(workRoot, item.rel)));
   for (const item of sources) {
     if (item.kind === "ledger") {
@@ -410,10 +436,10 @@ function renderCheckpoint({ state, persist, report }, workRoot, newest) {
   }
 }
 
-// A file's bytes, or null when it does not exist.
+// A file's bytes, or null when it does not exist; never read through a link.
 function readOrNull(file) {
   try {
-    return fs.readFileSync(file);
+    return readNoFollow(file);
   } catch (error) {
     if (error.code === "ENOENT") return null;
     throw error;
@@ -522,14 +548,10 @@ export async function progressToLocal(context, { offline = null } = {}) {
   }
   for (const item of sources) {
     item.target = local(stateDir, item.rel);
-    if (fs.lstatSync(item.file, { throwIfNoEntry: false })?.isSymbolicLink()) {
-      problems.push(`${item.file}: a symbolic link in the mirror, which the move will not read through`);
-      continue;
-    }
     try {
-      item.buffer = fs.readFileSync(item.file);
+      item.buffer = readNoFollow(item.file);
     } catch (error) {
-      problems.push(`${item.file}: could not be read (${error.code})`);
+      problems.push(error.code === "ELOOP" ? `${item.file}: a symbolic link in the mirror, which the move will not read through` : `${item.file}: could not be read (${error.code})`);
       continue;
     }
     let held;

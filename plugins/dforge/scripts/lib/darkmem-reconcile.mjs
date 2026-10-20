@@ -9,7 +9,7 @@ import { dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
-import { progressToDarkmem, progressToLocal } from "./darkmem-progress-move.mjs";
+import { progressToDarkmem, progressToLocal, readNoFollow } from "./darkmem-progress-move.mjs";
 import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
@@ -195,9 +195,10 @@ export function inProgress(cfg) {
   for (const { sdd, checkout } of ledgerSources(cfg)) {
     for (const slug of dirEntries(sdd)) {
       const ledger = path.join(sdd, slug, "progress.md");
+      // A linked ledger is never read through, and an unread one is in progress.
       let text;
       try {
-        text = fs.readFileSync(ledger, "utf8");
+        text = readNoFollow(ledger).toString("utf8");
       } catch (error) {
         if (error.code === "ENOENT") continue;
         found.push(ledger);
