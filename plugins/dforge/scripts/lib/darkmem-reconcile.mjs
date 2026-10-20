@@ -35,12 +35,12 @@ export function runGit(cwd, args, input) {
 
 const slash = file => file.split(path.sep).join("/");
 
-// stat follows a link to its target's type, and reads nothing through it.
+// stat follows a link to its target's type, and reads nothing through it. A link whose target cannot be stat'd (dangling, EACCES) counts as a plan directory: nothing can show its plan finished.
 const isDirectoryLink = file => {
   try {
     return fs.statSync(file).isDirectory();
   } catch {
-    return false;
+    return true;
   }
 };
 
