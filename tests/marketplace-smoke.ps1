@@ -102,6 +102,7 @@ try {
   $claudeList = (Invoke-Client $Claude @('plugin','list','--json')).stdout | ConvertFrom-Json
   $ownEntries = @($claudeList | Where-Object { $_.id -like '*@darkraise' })
   Check ($ownEntries.Count -eq 4) 'Claude installs four repository plugins'
+
   Invoke-Client git @('-C',$market,'init','-q','-b','main') | Out-Null
   Invoke-Client git @('-C',$market,'config','user.email','fixture@example.com') | Out-Null
   Invoke-Client git @('-C',$market,'config','user.name','Fixture') | Out-Null
