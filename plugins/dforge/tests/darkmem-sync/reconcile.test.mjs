@@ -695,3 +695,30 @@ test("a mirror copy that cannot be set aside refuses the move, keeps the sync st
   assert.match(again.stdout, /^darkmem-sync reconcile: documents moved to local$/m);
   assert.equal(read(path.join(s.repo, "docs", "dforge", "specs", "a.md")), "# A\n");
 });
+
+test("a sync state that cannot be saved after the set-aside stops reconcile with exit 2 and one line", async t => {
+  const s = await darkmemDocs(t);
+  assert.equal((await s.pull()).code, 0);
+  const stateFile = path.join(s.mirror, ".sync-state.json");
+  // Reconcile reads the manifest three times: its probe, the pull into the
+  // mirror, and the check before anything is copied, which is the last request
+  // before the set-aside rename and the save after it.
+  let manifests = 0;
+  s.stub.db.onRequest = (method, pathname) => {
+    if (method !== "GET" || pathname !== "/api/v1/documents/manifest" || ++manifests !== 3) return;
+    fs.rmSync(stateFile);
+    fs.mkdirSync(stateFile);
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 2, result.stdout + result.stderr);
+  assert.equal(manifests, 3);
+  assert.equal(
+    result.stderr.replace(/ could not be saved \(\w+\);/, " could not be saved (CODE);"),
+    `darkmem-sync: ${stateFile} could not be saved (CODE); the run stopped, and the next run checks what this one wrote\n`,
+  );
+  assert.doesNotMatch(result.stdout, /moved to local/);
+  assert.equal(read(path.join(s.repo, "docs", "dforge", "specs", "a.md")), "# A\n");
+  assert.equal(fs.existsSync(s.docsRoot), false, "the mirror copy was set aside before the save");
+  assert.equal(fs.existsSync(path.join(s.mirror, ".sync.lock")), false, "the lock is released");
+  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+});

@@ -69,8 +69,11 @@ test("the lock is released even when the state file cannot be saved", async () =
   const { env, mirror } = makeHome({ repo });
   fs.mkdirSync(path.join(mirror, "..sync-state.json.tmp"), { recursive: true });
   const failed = await run(["status"], { cwd: repo, env });
-  assert.equal(failed.code, 4);
-  assert.match(failed.stderr, /unexpected error/);
+  assert.equal(failed.code, 2, failed.stdout + failed.stderr);
+  assert.equal(
+    failed.stderr.replace(/ could not be saved \(\w+\);/, " could not be saved (CODE);"),
+    `darkmem-sync: ${path.join(mirror, ".sync-state.json")} could not be saved (CODE); the run stopped, and the next run checks what this one wrote\n`,
+  );
   assert.equal(fs.existsSync(path.join(mirror, ".sync.lock")), false);
   fs.rmdirSync(path.join(mirror, "..sync-state.json.tmp"));
   assert.equal((await run(["status"], { cwd: repo, env })).code, 0);

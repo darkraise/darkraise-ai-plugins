@@ -169,6 +169,10 @@ function summary(name, report) {
   return `darkmem-sync ${name}: ${counts}; ${report.conflicts.length} conflicts, ${report.failures.length} failures`;
 }
 
+// A sync state that cannot be saved stops the run; what the run wrote stays
+// for the next run to find.
+const unsaved = (file, error) => `${file} could not be saved (${error.code ?? error.message}); the run stopped, and the next run checks what this one wrote`;
+
 // The Stop hook's push runs in the background, so a skill's push at a stop
 // point, or the next session start, can meet its lock: push waits for it,
 // 100 s unless DARKMEM_SYNC_LOCK_WAIT_MS says otherwise; every other command
@@ -277,9 +281,19 @@ async function main(argv, {
   const report = { conflicts: [], failures: [], notes: [], counts: {}, partial: false, refused: 0 };
   let state = null;
   let code = 0;
+  let unsavable = false;
   try {
     state = loadState(cfg.statePath);
-    const persist = () => saveState(cfg.statePath, state);
+    // A StateError has no syscall, so no command's per-item catch of a file
+    // error reads a failed save as its item's failure.
+    const persist = () => {
+      try {
+        saveState(cfg.statePath, state);
+      } catch (error) {
+        unsavable = true;
+        throw new StateError(unsaved(cfg.statePath, error));
+      }
+    };
     const client = createClient({
       url: cfg.url,
       apiKey: cfg.apiKey,
@@ -317,14 +331,19 @@ async function main(argv, {
     }
   } finally {
     try {
-      if (state) {
+      if (state && !unsavable) {
         // A completed run replaces the recorded conflicts; a run that stopped
         // part-way, or failed an item or phase darkmem answered with an error,
         // adds what it found, since it never re-checked the rest.
         if (parsed.command.recordsConflicts) {
           state.conflicts = code === 0 && !report.partial ? report.conflicts : [...new Set([...state.conflicts, ...report.conflicts])];
         }
-        saveState(cfg.statePath, state);
+        try {
+          saveState(cfg.statePath, state);
+        } catch (error) {
+          err(`darkmem-sync: ${unsaved(cfg.statePath, error)}`);
+          if (code === 0) code = 2;
+        }
       }
     } finally {
       release();

@@ -504,3 +504,31 @@ test("a workstream list whose last page is exactly full ends without an empty pa
   assert.equal(lists.length, 1, "two open workstreams fill one page of two, and no empty page follows");
   assert.equal(read(path.join(s.workRoot, "sdd", "p2", "progress.md")), "two\n");
 });
+
+test("a sync state that cannot be saved stops the pull: exit 2, one line, and the lines gathered before it", async t => {
+  const s = await setup(t);
+  assert.equal((await s.pull()).code, 0);
+  for (const uri of ["dforge/T.md", "dforge/t.md", "dforge/a.md", "dforge/b.md"]) {
+    await s.seed.putDocument({ project: "proj", uri, content: `${uri}\n` });
+  }
+  const stateFile = path.join(s.mirror, ".sync-state.json");
+  // The first document fetch turns the state file into a directory, so the
+  // save after a.md is written fails.
+  s.stub.db.onRequest = (method, pathname) => {
+    if (method !== "GET" || pathname !== "/api/v1/documents/by-uri" || fs.statSync(stateFile).isDirectory()) return;
+    fs.rmSync(stateFile);
+    fs.mkdirSync(stateFile);
+  };
+  const result = await s.pull();
+  assert.equal(result.code, 2, result.stdout + result.stderr);
+  assert.equal(
+    result.stderr.replace(/ could not be saved \(\w+\);/, " could not be saved (CODE);"),
+    `darkmem-sync: ${stateFile} could not be saved (CODE); the run stopped, and the next run checks what this one wrote\n`,
+  );
+  assert.match(result.stdout, /^conflict: dforge\/T\.md, dforge\/t\.md: differ only in case/m);
+  assert.doesNotMatch(result.stdout, /not pulled/);
+  assert.doesNotMatch(result.stdout, /^darkmem-sync pull:/m);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "dforge/a.md\n");
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "b.md")), false, "the pull stopped at the failed save");
+  assert.equal(fs.existsSync(path.join(s.mirror, ".sync.lock")), false, "the lock is released");
+});
