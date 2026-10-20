@@ -139,8 +139,9 @@ prints nothing.
 
 For each plan below, find its landing commit on `main`:
 
-- **Default.** Collect the paths the plan names on `Create:` and `Modify:`
-  lines, with the plan's own prefix applied. When at least half have history,
+- **Default.** Collect the paths the plan names on `Create:`, `Modify:` and
+  `Test:` lines outside fenced code blocks, with the plan's own prefix
+  applied. When at least half have history,
   list `git log --first-parent main --format='%h %cs %s' -- <paths>`. The
   plan's run is the consecutive commits in that list whose subjects match the
   plan's title or task titles; the landing commit is the last commit of that
@@ -227,13 +228,15 @@ timeout and nothing left running.
 A1. [read, high] D1's check holds; the three `archive/*` tags exist at their
 tips; every branch left on the remote is reported with its reason.
 A2. [read, high] D2's check holds; no branch was deleted with `-D`.
-A3. [test, high] Every line `completed.md` gained after the backfill
-paragraph matches
+A3. [test, high] Each of the 21 lines `completed.md` gained after the
+backfill paragraph for a pre-index plan (this plan's own line, written at
+finishing in the ordinary form, is not one of them) matches
 ``^- [0-9]{4}-[0-9]{2}-[0-9]{2} `docs/superpowers/plans/[^`]+` — merged into `main` at [0-9a-f]{7}$``;
 for each, `git merge-base --is-ancestor <sha> main` exits 0 and
-`git log -1 --format=%cs <sha>` equals its date; each has an evidence table
-row; `git diff 0396023..HEAD -- docs/superpowers/plans/completed.md` has no
-removed line.
+`git log -1 --format=%cs <sha>` equals its date; each has exactly one
+evidence table row carrying its plan, commit and date;
+`git diff --numstat 0396023..HEAD -- docs/superpowers/plans/completed.md`
+reports 0 removed lines.
 A4. [test, high] The Testing commands pass on main.
 A5. [read, high] Rows 2, 3, 4 and 6 are `done`; row 4's note names every plan
 left out under No evidence, or says none was; `scripts/register check` reports
@@ -267,3 +270,9 @@ applied.
    (9, 10); evidence cell defined and committed with the index (11); commit
    plan added (12); wording reconciled (13); the backup ref deleted as row 6
    (14, Decision 8); the `docs/darkmem-mirror-spec` index line noted (15).
+
+Codex plan review, 2026-10-20: D3's default rule counts `Test:` lines and
+skips fenced code blocks, because a plan's last commit is often a test (the
+statusline plan's landing commit 4fc6542 touches only `tests/e2e.test.sh`);
+A3 excludes this plan's own finishing line and checks removals with
+`--numstat`, which counts a removed `- ` entry that `^-[^-]` would miss.
