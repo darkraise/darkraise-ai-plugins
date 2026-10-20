@@ -28,6 +28,7 @@ import {
   agentGroups,
   bar,
   billingLabel,
+  bottomRule,
   budgetFor,
   collapsedFrom,
   collapsedToggled,
@@ -50,6 +51,7 @@ import {
   limitForecast,
   limitLabel,
   modelName,
+  MODE_LABEL_RESERVE,
   nowLine,
   parseFinish,
   parseLedger,
@@ -1048,9 +1050,14 @@ export const register: Register = on => {
     // band's rows, has to be asked for the full pane.
     if (isCompact) {
       const isInline = e.props.placement === 'inline'
-      return drawBand($, e, async () => {
-        if ((await setOption($, 'layout', isInline ? 'full' : 'auto')) && isInline) await $.ui.open(paneFor('full'))
-      })
+      return drawBand(
+        $,
+        e,
+        async () => {
+          if ((await setOption($, 'layout', isInline ? 'full' : 'auto')) && isInline) await $.ui.open(paneFor('full'))
+        },
+        e.props.bodyColumns,
+      )
     }
 
     if (isDense) {
@@ -1974,13 +1981,13 @@ export const register: Register = on => {
     )
   })
 
-  // Minimized, the band sits above the prompt in place of the pane. A handoff
-  // to resume rides above it, or alone while the pane is open.
+  // Minimized off the terminal, the band sits above the prompt in place of the
+  // pane. A handoff to resume rides above it, or alone while the pane is open.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const o = await live($)
     const offer = await offerNow($, await $.clock.now())
-    const band = o.isMinimized ? await drawBand($, e, () => expand($, e.viewport?.isFullscreen === true)) : null
+    const band = o.isMinimized && e.surface !== 'terminal' ? await drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), e.props.bodyColumns) : null
     if (offer === null) return band ?? next(e)
     const { Box } = $.ui.resolve(e)
     return (
@@ -1989,6 +1996,15 @@ export const register: Register = on => {
         {band}
       </Box>
     )
+  })
+
+  // Minimized on the terminal, the band is a box below the prompt in the hint
+  // line's place, after the permission-mode label. It draws while a turn runs:
+  // the Now state is what it is there for.
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' || !(await live($)).isMinimized) return next(e)
+    const room = e.viewport === undefined ? FRAME_MIN_COLUMNS - 1 : Math.max(10, e.viewport.columns - 2 - MODE_LABEL_RESERVE)
+    return drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), room, e.props.hint)
   })
 }
 
@@ -2022,14 +2038,16 @@ const AGENT_MARKS: Record<AgentGroupKey, { mark: string; color: string }> = {
   done: { mark: '✓', color: 'green' },
 }
 
-/** The minimized cockpit's band, drawn in the pane or above the prompt. */
-async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt'>, onExpand: () => unknown) {
+/**
+ * The minimized cockpit's band, `room` cells wide: drawn in the pane, above
+ * the prompt, or below it with the engine's `hint` set into its bottom rule.
+ */
+async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt' | 'PromptHint'>, onExpand: () => unknown, room: number, hint: string | null = null) {
   const table = $.ui.resolve(e)
   const { Box, Button, Text } = table
   const Svg = e.surface === 'desktop' && 'Svg' in table ? table.Svg : undefined
   const isDesktop = Svg !== undefined
   const now = await $.clock.now()
-  const room = e.props.bodyColumns
   const head = await read($, budget)
   const limits = (await read($, usage))?.limits ?? []
   const running = (await read($, spawns)).filter(one => !one.isDone)
@@ -2064,6 +2082,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
     agents: running.length,
     shells: { count: background.length, longest: background.reduce((most, shell) => Math.max(most, now - shell.startedAt), 0) },
     now,
+    isBackground: (await read($, activity)).kind === 'background',
   }
   const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
   const warning: Run[] = [
@@ -2203,6 +2222,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   const top = tops.find(runs => runsWidth(runs) <= room0 - 1) ?? []
   const dashes = Math.max(1, room0 - runsWidth(top) - (top.length > 0 ? 0 : -1))
   const lines = [one, two].filter(line => line.length > 0)
+  const bottom = bottomRule(hint, room)
 
   return (
     <Box flexDirection="column">
@@ -2231,7 +2251,14 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
       {warning.length > 0 && row('band-warning', warning)}
       {isFramed && (
         <Text key="frame-bottom" color={tint} wrap="truncate-end">
-          {'╰' + '─'.repeat(Math.max(0, room - 2)) + '╯'}
+          {bottom.lead}
+          <Text dimColor>{bottom.label}</Text>
+          {bottom.tail}
+        </Text>
+      )}
+      {!isFramed && hint !== null && hint.trim() !== '' && (
+        <Text key="band-hint" dimColor wrap="truncate-end">
+          {hint}
         </Text>
       )}
     </Box>

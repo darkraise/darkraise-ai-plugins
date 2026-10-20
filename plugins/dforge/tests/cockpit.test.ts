@@ -113,6 +113,9 @@ const PANE = {
   requestId: 'dforge',
   props: { title: 'Cockpit', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
+// Where a minimized cockpit draws: below the prompt on the terminal, above it on the desktop.
+const minimized = (surface: (typeof SURFACES)[number], viewport = { columns: 120, rows: 40, isFullscreen: false }) =>
+  surface === 'terminal' ? { ...HINT, surface, viewport } : { ...BAND, surface, viewport }
 const PORCELAIN = '# branch.oid abc1234def\n# branch.head feat/pane\n# branch.ab +2 -1\n1 .M N... 100644 100644 100644 a b src/a.ts\n? notes.md\n'
 
 // The /context breakdown, as a summary estimate answers it.
@@ -1294,6 +1297,47 @@ describe('minimized band', () => {
     expect(await ui.find({ type: 'Text', text: /✗ 1 refused/ })).toBeDefined()
   })
 
+  test('draws below the prompt on the terminal, the hint set into its bottom rule', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const above = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await above.find({ key: 'band-expand' })).toBeUndefined()
+    await above.unmount()
+    const box = await $.ui.mount(minimized('terminal'))
+    expect(await box.find({ key: 'band-expand' })).toBeDefined()
+    expect(await box.find({ type: 'Text', text: /^╭─ me@example\.com/ })).toBeDefined()
+    expect(await box.find({ type: 'Text', text: /^╰─ \? for shortcuts ─+╯$/ })).toBeDefined()
+    const rows = (await box.findAll({ type: 'Text' })).map(one => one.text).filter(text => /^[│╰].*[│╯]$/.test(text))
+    expect(rows.length).toBeGreaterThan(2)
+    for (const row of rows) expect([...row].length).toBe(120 - 2 - MODE_LABEL_RESERVE)
+  })
+
+  test('takes unframed lines below the prompt when no width is reported', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const box = await $.ui.mount({ ...HINT, surface: 'terminal' })
+    expect(await box.find({ type: 'Text', text: /╭/ })).toBeUndefined()
+    expect(await box.find({ type: 'Text', text: 'me@example.com' })).toBeDefined()
+    expect(await box.find({ type: 'Text', text: '? for shortcuts' })).toBeDefined()
+  })
+
+  test('leads its second line with ◐ while background work runs', async ($, on) => {
+    const shell = { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }
+    world(on, { ...SIGNED_IN, tools: { Bash: () => shell } })
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    const box = await $.ui.mount(minimized('terminal'))
+    expect(await box.find({ type: 'Text', text: /^│ ◐ \$ 1 shell/ })).toBeDefined()
+  })
+
   test('is used docked too when minimized', async ($, on) => {
     world(on, { tokens: 284_000, config: { layout: 'compact' } })
     await $.session.start(START)
@@ -1326,20 +1370,20 @@ describe('minimized band', () => {
       expect(openedRows).toEqual([undefined])
     })
 
-    test(`draws the band above the prompt when minimized on ${surface}`, async ($, on) => {
+    test(`draws the minimized band on ${surface}`, async ($, on) => {
       world(on, SIGNED_IN)
       signedIn(on, configured({ layout: 'compact' }))
       await $.session.start(START)
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       await $.session.measure(MEASURE)
-      const band = await $.ui.mount({ ...BAND, surface })
+      const band = await $.ui.mount(minimized(surface))
       expect(await band.find({ key: 'band-expand' })).toBeDefined()
       const drawn = JSON.stringify(await band.drawn())
       expect(drawn).toContain('me@example.com')
       expect(drawn).toContain('5h')
     })
 
-    test(`Expand on the band above the prompt opens the pane on ${surface}`, async ($, on) => {
+    test(`Expand on the minimized band opens the pane on ${surface}`, async ($, on) => {
       const written: Record<string, string> = {}
       const opened: string[] = []
       world(on, { tokens: 284_000, opened, written, config: { layout: 'compact' } })
@@ -1348,7 +1392,7 @@ describe('minimized band', () => {
       // Left on the settings view, as closing the settings pane by hand leaves it.
       await $.command.run({ ...COCKPIT, args: 'settings' })
       opened.length = 0
-      const docking = await $.ui.mount({ ...BAND, surface, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+      const docking = await $.ui.mount(minimized(surface, { columns: 160, rows: 50, isFullscreen: true }))
       await docking.press({ key: 'band-expand' })
       expect(opened).toEqual(['dforge'])
       // auto is the default, so saving it drops the key.
@@ -1360,7 +1404,7 @@ describe('minimized band', () => {
       // Minimized again for the next session, which reads the file afresh.
       written[CONFIG] = JSON.stringify({ layout: 'compact' })
       await $.session.start(START)
-      const main = await $.ui.mount({ ...BAND, surface, viewport: { columns: 100, rows: 50, isFullscreen: false } })
+      const main = await $.ui.mount(minimized(surface, { columns: 100, rows: 50, isFullscreen: false }))
       await main.press({ key: 'band-expand' })
       expect(JSON.parse(written[CONFIG] ?? '{}').layout).toBe('full')
     })
@@ -1377,7 +1421,7 @@ describe('minimized band', () => {
     world(on, { tokens: 284_000, config: { layout: 'compact' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal' })
+    const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'desktop' })
     expect(await band.find({ key: 'band-expand' })).toBeUndefined()
   })
 
@@ -1423,7 +1467,7 @@ describe('minimized band', () => {
     signedIn(on, configured({ layout: 'compact' }))
     await $.session.start(START)
     await $.session.measure(MEASURE)
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const band = await $.ui.mount(minimized('terminal'))
     expect(await band.find({ type: 'Text', text: /⎇ feat\/pane\*/ })).toBeDefined()
   })
 
@@ -3189,7 +3233,8 @@ describe('resume offer', () => {
       await start($, on, RESUMABLE, COMPACT)
       const band = await $.ui.mount({ ...BAND, surface })
       expect(await band.find({ key: 'band-resume' })).toBeDefined()
-      expect(await band.find({ key: 'band-expand' })).toBeDefined()
+      const site = await $.ui.mount(minimized(surface))
+      expect(await site.find({ key: 'band-expand' })).toBeDefined()
     })
   }
 
