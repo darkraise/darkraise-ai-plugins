@@ -10,3 +10,4 @@
 | 3 | Delete the merged worktree-agent-* local branches | - | - | open | owner ruling 2026-10-20: widened to all 26 local branches but main |
 | 4 | Add the 21 old plans to completed.md so future status checks stop flagging them | - | - | open | - |
 | 5 | CLAUDE.md has no Compact Instructions section | - | - | n/a | owner ruling 2026-10-20: skip the Compact Instructions section |
+| 6 | Delete the filter-branch backup ref refs/original/refs/heads/feat/darkmem-sync-client | - | - | open | Fable spec review finding 14; owner ruling 2026-10-20: delete |
