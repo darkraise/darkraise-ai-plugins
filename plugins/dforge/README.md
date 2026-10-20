@@ -590,8 +590,14 @@ desktop window joins the session, unless you closed it.
   subagent calling it; waiting for your approval; Claude asking you something;
   idle with the last turn's length; the last turn failed; or Esc
   interrupted it, with the background shells and agents still running after
-  it (Esc stops the turn, not them). It adds
-  `Discord ✓` once a notification went out for what it shows.
+  it (Esc stops the turn, not them). When a turn ends with its own background
+  shells or subagents still running (a Codex review, a test run), it reads
+  `◐ background` with the shells, the newest command and the subagents, and the
+  Done notification waits: one Done goes out after the turn their notification
+  wakes ends, timed from the first turn. A prompt you type starts the count
+  again, a subagent's own shells hold nothing, and after 30 minutes the Done
+  goes out anyway. It adds `Discord ✓` once a notification went out for what
+  it shows.
 - **Account** is who the session runs as: the email, name, organization and
   role from the account's `.claude.json` (under `CLAUDE_CONFIG_DIR` when set),
   the billing type, the model and effort the last request used, Remote Control,
@@ -649,13 +655,36 @@ collapsed Context section keeps its buttons, and the resumable-work card never
 collapses. The Run card is the `plan` section during a dforge run, so collapsing
 either one collapses the other.
 
-**Minimize** (`m`) closes the pane and draws the cockpit as a band directly
-above the prompt, across the transcript's width. **Expand** on the band's top
-rule opens the pane again, and so does `/cockpit`. Each saves the `layout`
-setting, so the next session opens the same way: a minimized cockpit starts
-with the band and no pane. `/cockpit settings` still opens the settings, and
-**Back** closes them again. Minimize is offered in the terminal and the desktop
-app, the two that draw above the prompt; elsewhere a minimized cockpit shows
+**Dense** (`d`) turns the pane into one line per section, in the `sections`
+order: the Now row, then `ctx` with a bar, the share of the handoff budget and
+the turns left, `lim` with the 5-hour and 7-day limits, the background shells
+with the newest command, the running subagents, the plan or run's progress
+and its task in flight, the branch and changes, and refusals. A section with
+nothing to show is left out; the buttons shrink to one line, and
+**Detailed** (`d`) brings the cards back. Each press saves the `density`
+setting. In the desktop app the dense rows are text, without the gauges.
+
+**Live readings.** While the pane is up or the cockpit minimized, it checks
+`~/.dforge/config.json` and the dforge keys in Claude's settings every two
+seconds and puts a change in force, so an edit from `dforge-config`, by hand or
+in another session shows without a restart; a file that stops being a JSON
+object keeps the settings in force and says so in the settings view. The run
+ledger is re-read when it changes, and the git state and the `/context`
+breakdown every ten seconds. Nothing is read while the cockpit is hidden. The
+account, Remote Control's `/config` row and the usage limits keep their own
+timing.
+
+**Minimize** (`m`) closes the pane. In the terminal the cockpit then draws as a
+framed box directly below the prompt, in place of the hint line and after the
+permission-mode label, with Claude Code's own hint (`esc to interrupt`, `? for
+shortcuts`) set into its bottom rule; it leaves room for the widest mode label,
+so beside a short one it ends before the right edge. In the desktop app it
+draws as a band directly above the prompt, across the transcript's width.
+**Expand** on the top rule opens the pane again, and so does `/cockpit`. Each
+saves the `layout` setting, so the next session opens the same way: a
+minimized cockpit starts with the box or band and no pane. `/cockpit settings`
+still opens the settings, and **Back** closes them again. Minimize is offered
+in the terminal and the desktop app; elsewhere a minimized cockpit shows
 nothing until `/cockpit` opens it. The band is also what a pane that is not
 docked draws (`layout` `auto`, the default). Its frame takes the account's
 color, with the email, billing and Remote Control (`connected`, `on` or
@@ -665,7 +694,8 @@ context against the handoff budget with the turns left, and the 5-hour and
 7-day limits with their pace (`on pace`, or when the window runs out before
 it resets). The second has the subagents running, the background shells with
 how long the longest has run, and the folder with the branch, ahead and behind
-counts and changes. A blocked run task or a refused command adds a red line.
+counts and changes; it leads with `◐` while the background state shows. A
+blocked run task or a refused command adds a red line.
 
 ```
 ╭─ you@example.com · subscription · Remote ● connected ───────────────────────────────── Expand ─╮
@@ -682,7 +712,7 @@ one card with slim meters whose ticks mark how far each window has run.
 
 Each button sits in a rounded box, the letter of its hotkey underlined in the
 label as a desktop app marks one; the hotkey presses it while the pane has the
-keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `s` **Settings**, `m` **Minimize**,
+keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `d` **Dense** or **Detailed**, `s` **Settings**, `m` **Minimize**,
 and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
 draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
 that matters: **Hand off** once the context passes `warnAt`, **Resume**
@@ -781,7 +811,8 @@ The same settings can be set with
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
 | Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
-| Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
+| Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and a box below the prompt in the terminal (the band above it in the desktop app). **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
+| Cockpit | `density` | `detailed` | `detailed`: cards, charts and lists. `dense`: one line per section. **Dense** and **Detailed** in the pane set it. |
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band always draws its own lines. |
 | Cockpit | `collapsed` | empty | Sections drawn as their title row and headline only, comma-separated, from the same eight names. Pressing a section's title collapses or expands it and saves this setting. Empty expands all eight. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
@@ -813,8 +844,9 @@ The same settings can be set with
 | darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until a session start with no plan in progress moves it back. |
 | darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
-The cockpit settings (Cockpit, Context, Notifications) apply at once, except
-the two Claude keys, which Claude reads at its next session start. A
+The cockpit settings (Cockpit, Context, Notifications) apply at once, whether
+you change them in the pane, with `dforge-config` or in the file, except the
+two Claude keys, which Claude reads at its next session start. A
 Workflow or Process setting reaches the skills through one line injected at
 session start; when you change one mid-session, the cockpit adds a note to the
 conversation as the settings close. The Codex switches, the handoff mode and
