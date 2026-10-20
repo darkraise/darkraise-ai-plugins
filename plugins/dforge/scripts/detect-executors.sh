@@ -57,7 +57,7 @@ emit() { # emit <id> <batch_capable> <incapable_reason>
       locator_root=${locator_line#*root=}
       path=$locator_root
       version=$(jq -Rn --arg v "${locator_line#*version=}" '$v | sub(" root=.*"; "")')
-      auth_json=$(printf '{"op":"%s","cwd":"%s"}' "$probe_op" "$(dr_native_path "$PWD")" \
+      auth_json=$(jq -nc --arg op "$probe_op" --arg cwd "$(dr_native_path "$PWD")" '{op: $op, cwd: $cwd}' \
         | timeout 60 node "$probe_cmd" "$locator_root" 2>/dev/null)
       case "$(jq -r '.authed | tojson' <<<"${auth_json:-{\}}" 2>/dev/null)" in
         true)  authed=true;  auth_status=authenticated ;;
