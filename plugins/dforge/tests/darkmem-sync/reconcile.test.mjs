@@ -808,6 +808,24 @@ function assertKept(s) {
   assert.equal(read(s.dest("specs/a.md")), "# A\n");
 }
 
+// Maps each descriptor the exclusive create returns to its path: the copy
+// writes through that descriptor, so a mock of writeFileSync sees no path.
+function exclusiveOpens(t) {
+  const open = fs.openSync;
+  const opened = new Map();
+  t.mock.method(fs, "openSync", (file, flags, ...rest) => {
+    const fd = open(file, flags, ...rest);
+    if (flags === "wx") opened.set(fd, file);
+    return fd;
+  });
+  return opened;
+}
+
+// The lines from the refusal on, so a test can check the details' order.
+function from(s, reason) {
+  return s.lines.slice(s.lines.indexOf(`${STAY}${reason}`));
+}
+
 // Runs `act` once, when the move makes b.md's directory after writing a.md:
 // between b.md's checks and its write. Returns how often it ran.
 function beforeSecondWrite(t, s, act) {
@@ -883,9 +901,10 @@ test("a mirror copy replaced by a link after it was hashed is never read through
 
 test("a write into docs/dforge that fails part-way is a refusal, not a crash, and a rerun finishes the move", async t => {
   const s = offlineDocs();
+  const opened = exclusiveOpens(t);
   const writeFile = fs.writeFileSync;
   t.mock.method(fs, "writeFileSync", (file, ...rest) => {
-    if (file === s.dest("specs/b.md")) throw Object.assign(new Error("injected by the test"), { code: "EIO" });
+    if (opened.get(file) === s.dest("specs/b.md")) throw Object.assign(new Error("injected by the test"), { code: "EIO" });
     return writeFile(file, ...rest);
   });
   await s.reconcile();
@@ -904,12 +923,14 @@ test("a link that replaces a written copy before the read-back is never read thr
   const s = offlineDocs();
   const outside = path.join(scratch("dms-link-"), "a.md");
   write(outside, "# A\n");
+  const opened = exclusiveOpens(t);
   const writeFile = fs.writeFileSync;
   const written = [];
   t.mock.method(fs, "writeFileSync", (file, ...rest) => {
     writeFile(file, ...rest);
-    if (file === s.dest("specs/a.md") || file === s.dest("specs/b.md")) written.push(file);
-    if (file === s.dest("specs/b.md")) {
+    const target = opened.get(file);
+    if (target === s.dest("specs/a.md") || target === s.dest("specs/b.md")) written.push(target);
+    if (target === s.dest("specs/b.md")) {
       fs.rmSync(s.dest("specs/a.md"));
       fs.symlinkSync(outside, s.dest("specs/a.md"));
     }
@@ -929,12 +950,60 @@ test("a link that replaces a written copy before the read-back is never read thr
 test("a docs/dforge copy a killed run left equal is not written again", async t => {
   const s = offlineDocs();
   write(s.dest("specs/a.md"), "# A\n");
-  const written = t.mock.method(fs, "writeFileSync");
+  const opens = t.mock.method(fs, "openSync");
   await s.reconcile();
   assert.ok(s.lines.some(line => line.startsWith("darkmem-sync reconcile: documents moved to local")), s.lines.join("\n"));
   assert.ok(s.lines.includes("  copied 2 files into docs/dforge, untracked; commit them"), s.lines.join("\n"));
-  assert.equal(written.mock.calls.filter(call => call.arguments[0] === s.dest("specs/a.md")).length, 0);
+  assert.equal(opens.mock.calls.filter(call => call.arguments[0] === s.dest("specs/a.md") && call.arguments[1] === "wx").length, 0);
   assert.equal(read(s.dest("specs/b.md")), "# B\n");
+});
+
+test("a write into docs/dforge that fails after a partial write leaves no partial file, and a rerun finishes the move", async t => {
+  const s = offlineDocs();
+  const opened = exclusiveOpens(t);
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, data, ...rest) => {
+    if (opened.get(file) !== s.dest("specs/b.md")) return writeFile(file, data, ...rest);
+    writeFile(file, data.subarray(0, 1), ...rest);
+    throw Object.assign(new Error("injected by the test"), { code: "ENOSPC" });
+  });
+  await s.reconcile();
+  const refusal = "a copy into docs/dforge failed (ENOSPC); the files copied so far stay, and a rerun copies the rest";
+  assert.deepEqual(from(s, refusal).slice(0, 2), [`${STAY}${refusal}`, "  docs/dforge/specs/a.md: copied"], s.lines.join("\n"));
+  assert.equal(fs.lstatSync(s.dest("specs/b.md"), { throwIfNoEntry: false }), undefined);
+  assertKept(s);
+  t.mock.restoreAll();
+  s.lines.length = 0;
+  await s.reconcile();
+  assert.ok(s.lines.some(line => line.startsWith("darkmem-sync reconcile: documents moved to local")), s.lines.join("\n"));
+  assert.equal(read(s.dest("specs/b.md")), "# B\n");
+});
+
+test("a bug in the docs/dforge copy loop crashes reconcile rather than refusing", async t => {
+  const s = offlineDocs();
+  beforeSecondWrite(t, s, () => { throw new TypeError("injected by the test"); });
+  await assert.rejects(s.reconcile(), TypeError);
+  assert.equal(s.persisted(), 0);
+  assert.equal(fs.existsSync(s.docsRoot), true);
+});
+
+test("a written copy that changes before the read-back is a difference, listed before the copied files", async t => {
+  const s = offlineDocs();
+  const opened = exclusiveOpens(t);
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    writeFile(file, ...rest);
+    if (opened.get(file) === s.dest("specs/b.md")) writeFile(s.dest("specs/a.md"), "# A tampered\n");
+  });
+  await s.reconcile();
+  assert.deepEqual(from(s, "a copied file differs from the mirror's").slice(0, 4), [
+    `${STAY}a copied file differs from the mirror's`,
+    "  docs/dforge/specs/a.md: differs from the mirror's copy",
+    "  docs/dforge/specs/a.md: copied",
+    "  docs/dforge/specs/b.md: copied",
+  ], s.lines.join("\n"));
+  assert.deepEqual(s.state.documents, SYNCED);
+  assert.equal(s.persisted(), 0);
 });
 
 test("a mirror copy that differs from darkmem's refuses the move before anything is copied or set aside", async t => {

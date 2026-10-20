@@ -54,6 +54,21 @@ export function readNoFollow(file, constants = fs.constants) {
   return readRegular(file, { follow: false }, constants);
 }
 
+// Written through the descriptor the exclusive create returned, so a failed
+// write removes only the partial file it made; left behind, a rerun's
+// comparison would refuse it as a different copy.
+export function writeExclusive(file, buffer) {
+  const fd = fs.openSync(file, "wx");
+  try {
+    fs.writeFileSync(fd, buffer);
+  } catch (error) {
+    try { fs.closeSync(fd); } catch {}
+    try { fs.rmSync(file, { force: true }); } catch {}
+    throw error;
+  }
+  fs.closeSync(fd);
+}
+
 // Each plan directory's progress.md that lstat finds, a dangling link
 // included, so the read's link check names it. ledgerFiles' existsSync skips
 // a dangling link, which its other callers rely on. An lstat that fails other
@@ -653,7 +668,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
         // The buffer is written, not the mirror's file, which a link or a
         // named pipe could have replaced since it was read.
         try {
-          fs.writeFileSync(item.target, item.buffer, { flag: "wx" });
+          writeExclusive(item.target, item.buffer);
         } catch (error) {
           if (error.code !== "EEXIST") throw error;
           landed.push(`${item.target}: changed during the move; not overwritten`);

@@ -9,7 +9,7 @@ import { dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
-import { progressToDarkmem, progressToLocal, readNoFollow, readRegular } from "./darkmem-progress-move.mjs";
+import { progressToDarkmem, progressToLocal, readNoFollow, readRegular, writeExclusive } from "./darkmem-progress-move.mjs";
 import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
@@ -572,10 +572,12 @@ async function documentsToLocal(context, { offline = null } = {}) {
   if (ignored.status !== 0 && ignored.status !== 1) return { moved: false, reason: `git check-ignore failed: ${ignored.stderr.trim()}`, details: [] };
   fs.mkdirSync(target, { recursive: true });
   // Each mirror file is read once without following a link or blocking on a
-  // named pipe, checked against the hash darkmem confirmed, and that buffer is
-  // written exclusively, so nothing that lands at either end meanwhile is
-  // read through or overwritten. A refusal keeps what was written, which a
-  // rerun's comparison above takes as equal.
+  // named pipe, checked against the hash listed for it (online, the one
+  // darkmem confirmed), and that buffer is written with an exclusive create,
+  // so a file or link that lands at either file's own name meanwhile is never
+  // read through or overwritten; a parent directory swapped for a link after
+  // the check above is not guarded. A refusal keeps the files written whole,
+  // which a rerun's comparison above takes as equal.
   const landed = [];
   const copied = [];
   const copiedLines = () => copied.map(name => `${name}: copied`);
@@ -592,7 +594,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
         };
       }
       try {
-        fs.writeFileSync(dest, buffer, { flag: "wx" });
+        writeExclusive(dest, buffer);
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
         landed.push(`${name}: changed during the move; not overwritten`);
@@ -604,6 +606,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
     const mismatched = files.filter(({ dest, hash }) => sha256(readNoFollow(dest)) !== hash).map(({ name }) => `${name}: differs from the mirror's copy`);
     if (mismatched.length) return { moved: false, reason: "a copied file differs from the mirror's", details: [...mismatched, ...copiedLines()] };
   } catch (error) {
+    if (typeof error?.code !== "string") throw error;
     return { moved: false, reason: `a copy into docs/dforge failed (${error.code}); the files copied so far stay, and a rerun copies the rest`, details: copiedLines() };
   }
   // Set aside before the sync state forgets the documents, so a failed rename
