@@ -280,16 +280,33 @@ check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gon
 # --- a start writes under the same lock as an update ---
 # The holder reads the state, keeps the lock two seconds, then writes back what
 # it read, as an update does: a start that does not wait for it is lost.
+# held <name>: waits up to 10 s for the holder to touch $STATE.ready, which it
+# does once it holds the lock; on timeout it fails <name> and stops the holder,
+# so the case cannot hang.
+held() {
+  local i
+  for i in $(seq 100); do
+    [ -e "$STATE.ready" ] && return 0
+    sleep 0.1
+  done
+  check "$1" "the holder never took the lock" "taken"
+  kill "$holder" 2>/dev/null
+  wait
+  return 1
+}
 for lock in flock no-such-flock; do
   [ "$lock" = no-such-flock ] || command -v flock >/dev/null 2>&1 || continue
   ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  rm -f "$STATE.ready"
   if [ "$lock" = flock ]; then
-    flock "$STATE.lock" bash -c 's=$(cat "$1"); sleep 2; jq ".rulings = [\"held\"]" <<<"$s" > "$1.held" && mv -f "$1.held" "$1"' _ "$STATE" &
+    flock "$STATE.lock" bash -c 'touch "$1.ready"; s=$(cat "$1"); sleep 2; jq ".rulings = [\"held\"]" <<<"$s" > "$1.held" && mv -f "$1.held" "$1"' _ "$STATE" &
   else
     mkdir "$STATE.lockd"
+    touch "$STATE.ready"
     (s=$(cat "$STATE"); sleep 2; jq '.rulings = ["held"]' <<<"$s" > "$STATE.held" && mv -f "$STATE.held" "$STATE"; rmdir "$STATE.lockd") &
   fi
-  sleep 0.5
+  holder=$!
+  held "$lock: a start waits for the lock" || continue
   DFORGE_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
   wait
   check "$lock: a start waits for the lock" "$(field session):$(field rulings)" "s-2:[]"
@@ -303,13 +320,16 @@ for lock in flock no-such-flock; do
   [ "$lock" = no-such-flock ] || command -v flock >/dev/null 2>&1 || continue
   ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
   ar --session s-1 stop >/dev/null
+  rm -f "$STATE.ready"
   if [ "$lock" = flock ]; then
-    flock "$STATE.lock" bash -c 'sleep 2; jq ".active = true" "$1" > "$1.held" && mv -f "$1.held" "$1"' _ "$STATE" &
+    flock "$STATE.lock" bash -c 'touch "$1.ready"; sleep 2; jq ".active = true" "$1" > "$1.held" && mv -f "$1.held" "$1"' _ "$STATE" &
   else
     mkdir "$STATE.lockd"
+    touch "$STATE.ready"
     (sleep 2; jq '.active = true' "$STATE" > "$STATE.held" && mv -f "$STATE.held" "$STATE"; rmdir "$STATE.lockd") &
   fi
-  sleep 0.5
+  holder=$!
+  held "$lock: a start that waited for the lock finds the run made live meanwhile" || continue
   DFORGE_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
   wait
   check "$lock: a start that waited for the lock finds the run made live meanwhile" "$status:$(field session):$(field active)" "4:s-1:true"
