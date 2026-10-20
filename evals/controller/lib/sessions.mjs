@@ -29,7 +29,12 @@ const OPTION_VALUE = { env: new Set(['-u']), timeout: new Set(['-k', '-s']), bas
 // A shell's clustered flags take a value when the last of them does (-eo pipefail).
 const SHELL_CLUSTER_VALUE = /^[-+][A-Za-z]*[oO]$/;
 const takesValue = (wrapper, w) => OPTION_VALUE[wrapper]?.has(w) || ((wrapper === 'bash' || wrapper === 'sh') && SHELL_CLUSTER_VALUE.test(w));
-const NOT_A_RUN = { bash: new Set(['-n']), sh: new Set(['-n']), command: new Set(['-v', '-V']) };
+const NOT_A_RUN = { command: new Set(['-v', '-V']) };
+// A shell given -n, alone or in a cluster (-nx, -en), or -o noexec (-eo
+// noexec) reads the script without running it. A long option (--norc) is not
+// a cluster.
+const noExec = (wrapper, w, next) => (wrapper === 'bash' || wrapper === 'sh')
+  && (/^-[A-Za-z]*n[A-Za-z]*$/.test(w) || (/^-[A-Za-z]*o$/.test(w) && next === 'noexec'));
 const ASSIGN = /\b([A-Za-z_]\w*)=(['"]?)([^\s'";&|]+)\2/g;
 
 // simpleCommands CMD — CMD cut at `;`, `&`, `|`, `(`, `)`, a backtick and a
@@ -77,7 +82,7 @@ function planArgs(cmd) {
     const name = w => (w.includes('=') ? w : basename(w));
     while (i < words.length && !SCRIPT.test(words[i]) && (BEFORE_COMMAND.has(name(words[i])) || /^(?:[A-Za-z_]\w*=|[-+]|\d)/.test(words[i]))) {
       const w = words[i];
-      if (NOT_A_RUN[wrapper]?.has(w)) return [];
+      if (NOT_A_RUN[wrapper]?.has(w) || noExec(wrapper, w, words[i + 1])) return [];
       if (BEFORE_COMMAND.has(name(w))) wrapper = name(w);
       i += takesValue(wrapper, w) ? 2 : 1;
     }

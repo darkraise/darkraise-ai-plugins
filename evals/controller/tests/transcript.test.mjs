@@ -197,11 +197,11 @@ test('a heredoc body ends only at a line that is exactly its delimiter, tabs all
   const m = measureTranscript(jsonl([
     said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [
       use('h1', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<'EOF'\n  EOF\nTask 21: complete (commits q..r)\nEOF\nfalse" }),
-      use('h2', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<-'EOF'\nTask 22: complete (commits s..t)\n\tEOF\nfalse" }),
+      use('h2', 'Bash', { command: "false && cat >> .dforge/sdd/p/progress.md <<-'EOF'\nTask 22: complete (commits s..t)\n\tEOF\necho 'Task 23: complete (commits u..v)' >> .dforge/sdd/p/progress.md; false" }),
     ]),
     failedCall('h1'), failedCall('h2'),
   ]));
-  assert.deepEqual(m.completed, ['21', '22']);
+  assert.deepEqual(m.completed, ['21', '23']);
 });
 
 test('ledger complete lines the controller wrote are collected, deferred ones left out', () => {
