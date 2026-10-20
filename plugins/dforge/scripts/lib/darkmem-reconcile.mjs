@@ -285,30 +285,36 @@ function uncarried(docsDir, parts) {
   return fs.lstatSync(at).isFile() ? null : "not a regular file";
 }
 
-// The tracked documents the move carries, and every file it cannot (§7.2).
+// The tracked documents the move carries, and every file it cannot (§7.2),
+// with the uris of the tracked files that are not carried (`uncarriable`).
 // Tracked is the test because git rm -r deletes only tracked paths.
 function carriedDocuments(repoRoot, docsDir, rel) {
   const problems = [];
   const documents = [];
+  const uncarriable = new Set();
   const listed = runGit(repoRoot, ["ls-files", "-z", "--", rel]);
-  if (listed.status !== 0) return { failed: `git ls-files failed: ${listed.stderr.trim()}`, problems: [], documents: [] };
+  if (listed.status !== 0) return { failed: `git ls-files failed: ${listed.stderr.trim()}`, problems: [], documents: [], uncarriable };
   for (const file of listed.stdout.split("\0").filter(Boolean)) {
     const parts = file.slice(rel.length + 1).split("/");
+    const uri = `${DOC_PREFIX}/${parts.join("/")}`;
+    const refuse = why => {
+      problems.push(`${file}: ${why}`);
+      uncarriable.add(uri);
+    };
     const why = uncarried(docsDir, parts);
     if (why) {
-      problems.push(`${file}: ${why}`);
+      refuse(why);
       continue;
     }
     const buffer = fs.readFileSync(path.join(docsDir, ...parts));
     const content = decodeUtf8(buffer);
     if (!content) {
-      problems.push(`${file}: empty or not UTF-8 text, which darkmem cannot store`);
+      refuse("empty or not UTF-8 text, which darkmem cannot store");
       continue;
     }
-    const uri = `${DOC_PREFIX}/${parts.join("/")}`;
     const problem = uriProblem(uri);
     if (problem) {
-      problems.push(`${file}: ${problem}`);
+      refuse(problem);
       continue;
     }
     documents.push({ file, parts, uri, content, hash: sha256(buffer) });
@@ -320,11 +326,11 @@ function carriedDocuments(repoRoot, docsDir, rel) {
   // The mirror walks the filesystem, so it would carry an ignored file, and
   // git rm -r would leave it behind.
   const ignored = runGit(repoRoot, ["status", "--porcelain", "-z", "--ignored=matching", "--untracked-files=all", "--", rel]);
-  if (ignored.status !== 0) return { failed: `git status failed: ${ignored.stderr.trim()}`, problems: [], documents: [] };
+  if (ignored.status !== 0) return { failed: `git status failed: ${ignored.stderr.trim()}`, problems: [], documents: [], uncarriable };
   for (const item of ignored.stdout.split("\0")) {
     if (item.startsWith("!! ")) problems.push(`${item.slice(3)}: ignored by git, so the mirror would carry it and git rm would leave it behind`);
   }
-  return { problems, documents };
+  return { problems, documents, uncarriable };
 }
 
 // The documents a linked worktree holds that the primary checkout does not:
@@ -408,8 +414,9 @@ async function documentsToDarkmem(context) {
   const sent = new Map(documents.map(doc => [doc.uri, doc.hash]));
   const now = new Map(again.documents.map(doc => [doc.uri, doc.hash]));
   // A failed listing holds no documents, which would read as every one removed.
+  // A sent document still tracked but no longer carriable changed; its problem line says how.
   const drifted = again.failed ? [] : [...new Set([...sent.keys(), ...now.keys()])].sort().flatMap(uri => {
-    if (!now.has(uri)) return [`${uri}: removed during the move`];
+    if (!now.has(uri)) return [`${uri}: ${again.uncarriable.has(uri) ? "changed" : "removed"} during the move`];
     if (!sent.has(uri)) return [`${uri}: added during the move`];
     return sent.get(uri) === now.get(uri) ? [] : [`${uri}: changed during the move`];
   });

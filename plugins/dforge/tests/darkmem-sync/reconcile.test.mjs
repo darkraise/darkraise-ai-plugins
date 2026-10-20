@@ -476,6 +476,30 @@ for (const { name, files, change, line } of [
   });
 }
 
+test("a document emptied and committed during the pull is named as changed and uncarriable, not removed", async t => {
+  let repo;
+  let committed = false;
+  const s = await docsRepo(t, { "specs/a.md": "# A\n", "specs/b.md": "# B\n" }, {
+    stub: {
+      onRequest: request => {
+        if (!repo || committed || request.path !== "/api/v1/documents/by-uri") return;
+        committed = true;
+        write(at(repo, "docs/dforge/specs/b.md"), "");
+        commitAll(repo, "emptied");
+      },
+    },
+  });
+  repo = s.repo;
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/dforge changed during the move; the repository copy stays$/m);
+  assert.ok(result.stdout.includes("  docs/dforge/specs/b.md: empty or not UTF-8 text, which darkmem cannot store\n"), result.stdout);
+  assert.ok(result.stdout.includes("  dforge/specs/b.md: changed during the move\n"), result.stdout);
+  assert.ok(!result.stdout.includes("dforge/specs/b.md: removed during the move"), result.stdout);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
 test("a failing citation search is named in the move's details", { skip: process.platform === "win32" }, async t => {
   const s = await docsRepo(t);
   const realGit = process.env.PATH.split(path.delimiter).map(dir => path.join(dir, "git")).find(file => fs.existsSync(file));
