@@ -411,19 +411,21 @@ export async function progressToDarkmem(context) {
   const unignored = [];
   for (const stateDir of new Set(files.map(item => item.stateDir))) {
     if (fs.lstatSync(stateDir).isSymbolicLink()) continue;
+    const file = path.join(stateDir, ".gitignore");
     try {
-      fs.writeFileSync(path.join(stateDir, ".gitignore"), "*\n", { flag: "wx" });
+      fs.writeFileSync(file, "*\n", { flag: "wx" });
     } catch (error) {
       if (error.code === "EEXIST") continue;
-      if (!left.length || !error?.syscall) throw error;
-      unignored.push(`${path.join(stateDir, ".gitignore")} (${error.code})`);
+      if (!error?.syscall) throw error;
+      unignored.push({ file, code: error.code });
     }
   }
   // darkmem and the mirror already hold every source, so a rerun finds them
   // filed and moves aside only what is left.
   if (left.length) {
     const sourceCount = left.length === 1 ? "1 source" : `${left.length} sources`;
-    return refuse(`darkmem and the mirror hold the progress, but ${sourceCount} could not be moved aside: ${left.join(", ")}${unignored.length ? `, and ${unignored.join(", ")} could not be written` : ""}; reconcile again to finish`);
+    const unwritten = unignored.map(({ file, code }) => `${file} (${code})`);
+    return refuse(`darkmem and the mirror hold the progress, but ${sourceCount} could not be moved aside: ${left.join(", ")}${unwritten.length ? `, and ${unwritten.join(", ")} could not be written` : ""}; reconcile again to finish`);
   }
   const count = kind => sources.filter(item => item.kind === kind).length;
   return {
@@ -432,6 +434,7 @@ export async function progressToDarkmem(context) {
       `${count("ledger")} ledgers and ${count("handoff")} handoff notes in darkmem`,
       ...(latest ? [latest.detail] : []),
       ...[...backups].map(dir => `sources moved to ${dir}`),
+      ...unignored.map(({ file, code }) => `${file} could not be written (${code})`),
     ],
   };
 }

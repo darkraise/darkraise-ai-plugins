@@ -640,6 +640,33 @@ test("a move-aside that leaves a source behind and cannot write .gitignore still
   assert.equal(s.stores().progress, "local");
 });
 
+test("a move that sets every source aside but cannot write .gitignore still moves, and names the file", async t => {
+  const s = await setup(t, "darkmem");
+  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  write(ledger, LEDGER("p1"));
+  // This host runs as root, which bypasses chmod, so the write is made to fail.
+  const preload = path.join(scratch("dms-preload-"), "preload.mjs");
+  write(preload, [
+    'import fs from "node:fs";',
+    'import path from "node:path";',
+    "const w = fs.writeFileSync;",
+    "fs.writeFileSync = (f, ...a) => {",
+    '  if (String(f).endsWith(`${path.sep}.dforge${path.sep}.gitignore`)) throw Object.assign(new Error("injected by the test"), { code: "EACCES", syscall: "open" });',
+    "  return w(f, ...a);",
+    "};",
+    "",
+  ].join("\n"));
+  const result = await run(["reconcile"], { cwd: s.repo, env: { ...s.env, NODE_OPTIONS: `--import ${pathToFileURL(preload).href}` } });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+  assert.ok(result.stdout.includes(`  ${path.join(s.repo, ".dforge", ".gitignore")} could not be written (EACCES)\n`), result.stdout);
+  assert.equal(fs.existsSync(ledger), false);
+  assert.equal(movedAside(s.repo).length, 1);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", ".gitignore")), false);
+  assert.equal(s.stores().progress, "darkmem");
+});
+
 test("latest.md filed for an active plan leaves its workstream open, even one that was closed", async t => {
   const s = await setup(t, "darkmem");
   const { workstream } = await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "note", body: "earlier\n" }] });
