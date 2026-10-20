@@ -136,7 +136,7 @@ test("a source file changed during the import fails its verification", async t =
   });
   repo = s.repo;
   const result = await s.importing();
-  assert.equal(result.code, 1);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /failed: the source files changed during the import; run it again with --replace/);
 });
 
