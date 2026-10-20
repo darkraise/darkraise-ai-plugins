@@ -503,6 +503,27 @@ test("a case-only rename on darkmem keeps the file a case-insensitive file syste
   assert.deepEqual(Object.keys(s.state().documents), ["dforge/A.md"]);
 });
 
+test("two case-only renames on darkmem keep both files a case-insensitive file system shares", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/b.md", content: "b\n" });
+  assert.equal((await s.pull()).code, 0);
+  for (const name of ["a", "b"]) {
+    const id = s.stub.db.documents.get(`proj\u0000dforge/${name}.md`).id;
+    await s.seed.moveDocument(id, { uri: `dforge/${name.toUpperCase()}.md` });
+    // A hard link stands in for a case-insensitive file system, which already
+    // reaches the file under both names.
+    const twin = path.join(s.docsRoot, `${name.toUpperCase()}.md`);
+    if (!fs.existsSync(twin)) fs.linkSync(path.join(s.docsRoot, `${name}.md`), twin);
+  }
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /removed/);
+  assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
+  assert.equal(read(path.join(s.docsRoot, "b.md")), "b\n");
+  assert.deepEqual(Object.keys(s.state().documents).sort(), ["dforge/A.md", "dforge/B.md"]);
+});
+
 test("a case-only rename on darkmem that also edits it keeps the file a case-insensitive file system shares", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });

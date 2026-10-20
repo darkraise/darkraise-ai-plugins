@@ -83,12 +83,20 @@ async function pullDocument({ cfg, client, roots, state, persist, report }, item
 // file, is that document on a case-insensitive file system, so it is never
 // removed. A copy that cannot be read or removed is one item's failure.
 function removeVanished({ roots, state, persist, report }, filed) {
+  // Built once: darkmem can hold two twins of one fold.
+  const byFold = new Map();
+  for (const uri of filed) {
+    if (isArchiveUri(uri)) continue;
+    const fold = uri.toLowerCase();
+    if (!byFold.has(fold)) byFold.set(fold, []);
+    byFold.get(fold).push(uri);
+  }
   for (const uri of Object.keys(state.documents).sort()) {
     if (filed.has(uri) || uriFamily(uri) !== "documents" || isArchiveUri(uri)) continue;
     const file = uriToLocal(roots, uri);
     if (!file) continue;
-    const twin = [...filed].find(other => other !== uri && !isArchiveUri(other) && other.toLowerCase() === uri.toLowerCase());
-    if (twin && sameFile(file, uriToLocal(roots, twin))) {
+    const twins = (byFold.get(uri.toLowerCase()) ?? []).filter(other => other !== uri);
+    if (twins.some(twin => sameFile(file, uriToLocal(roots, twin)))) {
       delete state.documents[uri];
       persist();
       continue;
