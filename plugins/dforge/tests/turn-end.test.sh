@@ -194,6 +194,28 @@ check "session-start without a transcript writes no session record" \
   "$([ -e "$H3/.claude/dforge/sessions/by-id" ] && echo yes || echo no)" "no"
 check "session-start makes the cockpit directory without a session record" \
   "$([ -d "$H3/.claude/dforge/sessions/cockpit" ] && echo yes || echo no)" "yes"
+# An empty HOME persists nothing: no path under /.claude reaches mkdir or find.
+# The shims log every argument and refuse such a path instead of running the
+# tool, so the case holds as root and never writes /.claude on the host.
+SHIM="$TMP/shim-bin"
+mkdir -p "$SHIM"
+for tool in mkdir find; do
+  real=$(command -v "$tool")
+  cat > "$SHIM/$tool" <<EOF
+#!/bin/sh
+printf '%s\n' "\$@" >> "$TMP/shim.log"
+for a in "\$@"; do case "\$a" in /.claude*) exit 1 ;; esac; done
+exec "$real" "\$@"
+EOF
+  chmod +x "$SHIM/$tool"
+done
+PATH="$SHIM:$PATH" mkdir -p "$TMP/shim-probe"
+check "the mkdir shim logs its arguments" "$(grep -c "^$TMP/shim-probe\$" "$TMP/shim.log")" "1"
+out=$(jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-7",transcript_path:$tp,cwd:$cwd,source:"startup"}' \
+  | HOME= PATH="$SHIM:$PATH" bash "$HERE/../scripts/session-start.sh")
+check "session-start with an empty HOME touches nothing under /.claude" "$(grep -c '^/\.claude' "$TMP/shim.log")" "0"
+check "session-start with an empty HOME still injects the entry point" \
+  "$(jq -r '.hookSpecificOutput.additionalContext | contains("You have dforge.")' <<<"$out" 2>/dev/null)" "true"
 
 # --- another session, or no stamp ---
 check "unstamped session: passes" "$(stop s-other 'Done.')" ""

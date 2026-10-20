@@ -19,7 +19,9 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
   cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
   source_event=$(jq -r '.source // empty' <<<"$stdin_json")
-  if [ -n "$transcript_path" ] && [ -n "$cwd" ]; then
+  # Every record below lives under $HOME; with HOME empty its paths would start
+  # at /.claude, so nothing is persisted.
+  if [ -n "${HOME:-}" ] && [ -n "$transcript_path" ] && [ -n "$cwd" ]; then
     sessions_dir="${HOME:-}/.claude/dforge/sessions"
     key=$(printf '%s' "$cwd" | tr -c 'A-Za-z0-9' '-')
     # Git Bash rewrites POSIX-looking values passed as native-binary arguments;
@@ -45,15 +47,17 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   # The cockpit writes its heartbeat here (scripts/lib/auto-run.sh
   # ar_beat_file) with $.fs.write, which need not create a directory, so a
   # start that records no session makes it too.
-  cockpit_dir="${HOME:-}/.claude/dforge/sessions/cockpit"
-  mkdir -p "$cockpit_dir" 2>/dev/null || true
-  find "$cockpit_dir" -maxdepth 1 -type f -mtime +30 -delete 2>/dev/null || true
+  if [ -n "${HOME:-}" ]; then
+    cockpit_dir="$HOME/.claude/dforge/sessions/cockpit"
+    mkdir -p "$cockpit_dir" 2>/dev/null || true
+    find "$cockpit_dir" -maxdepth 1 -type f -mtime +30 -delete 2>/dev/null || true
+  fi
   # Background work dies with the process, so a launch made before a startup or
   # resume never sends its notification. scripts/turn-end.sh counts only the
   # launches after this time as running.
   case "$source_event" in
     startup | resume)
-      if [ -n "$session_id" ] && mkdir -p "${HOME:-}/.claude/dforge/sessions/turns" 2>/dev/null; then
+      if [ -n "${HOME:-}" ] && [ -n "$session_id" ] && mkdir -p "${HOME:-}/.claude/dforge/sessions/turns" 2>/dev/null; then
         date -u +%Y-%m-%dT%H:%M:%S.000Z \
           > "${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').since" 2>/dev/null || true
       fi
