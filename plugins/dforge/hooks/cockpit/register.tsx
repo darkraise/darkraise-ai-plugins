@@ -31,6 +31,7 @@ import {
   budgetFor,
   collapsedFrom,
   collapsedToggled,
+  denseLine,
   duration,
   elapsed,
   endsOnSentinel,
@@ -65,6 +66,7 @@ import {
   resumeOfferOf,
   runList,
   shellAge,
+  runsCut,
   runsWidth,
   SECTIONS,
   sectionsFrom,
@@ -80,7 +82,7 @@ import {
   warnShare,
   writesGitText,
 } from './lib'
-import type { AgentGroupKey, BandInput, Run, Section, TrackPart } from './lib'
+import type { AgentGroupKey, BandInput, DenseInput, Run, Section, TrackPart } from './lib'
 import { SCHEMA, claudeLocks, envLocks, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
 import type { SettingValue, SettingsFile } from './config'
 import { nativeLine, nativeRun } from './native'
@@ -234,6 +236,7 @@ type Options = {
   guardAttribution: boolean
   warnAt: number
   layout: string
+  density: string
   sections: string
   collapsed: string
   breakdownRows: number
@@ -249,8 +252,9 @@ type Options = {
 type Tuning = { handoffTokens: number; nudgeModel: boolean; warnAt: number; isRelaxed: boolean }
 
 /** The options with their defaults filled in, and what the pane derives from them. */
-type Live = Omit<Options, 'layout'> & {
+type Live = Omit<Options, 'layout' | 'density'> & {
   layout: 'auto' | 'full' | 'compact'
+  density: 'detailed' | 'dense'
   tuning: Tuning
   shown: Section[]
   shownCollapsed: Section[]
@@ -265,6 +269,7 @@ function liveFrom(values: Partial<Options>): Live {
     guardAttribution = true,
     warnAt = 80,
     layout: layoutSetting = 'auto',
+    density: densitySetting = 'detailed',
     sections = '',
     collapsed = '',
     breakdownRows = 6,
@@ -284,6 +289,7 @@ function liveFrom(values: Partial<Options>): Live {
     guardAttribution,
     warnAt,
     layout,
+    density: densitySetting === 'dense' ? 'dense' : 'detailed',
     sections,
     collapsed,
     breakdownRows,
@@ -793,6 +799,7 @@ export const register: Register = on => {
       </Box>
     )
     const autoNow = await read($, autoRun)
+    const isDense = o.density === 'dense'
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
         {autoNow?.active && (
@@ -800,11 +807,12 @@ export const register: Register = on => {
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
           </Text>
         )}
-        {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($))}
-        {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff })}
-        {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c' })}
-        {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's' })}
-        {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
+        {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
+        {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
+        {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c', isCompact: isDense })}
+        {button('pane-density', isDense ? 'Detailed' : 'Dense', () => setOption($, 'density', isDense ? 'detailed' : 'dense'), { hotkey: 'd', isCompact: isDense })}
+        {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's', isCompact: isDense })}
+        {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm', isCompact: isDense })}
       </Box>
     )
 
@@ -1043,6 +1051,48 @@ export const register: Register = on => {
       return drawBand($, e, async () => {
         if ((await setOption($, 'layout', isInline ? 'full' : 'auto')) && isInline) await $.ui.open(paneFor('full'))
       })
+    }
+
+    if (isDense) {
+      const inFlight = summary?.tasks.find(task => task.state === 'assigned') ?? null
+      const dense: DenseInput = {
+        email: who?.email ?? null,
+        billing,
+        remote: remoteRuns(remoteNow.clients, remoteNow.setting),
+        context: head === null ? null : { tokens: head.tokens, limit: head.limit },
+        turnsLeft: head === null ? null : turnsToBudget(await read($, turnTokens), head.limit),
+        limits,
+        shells: background,
+        agents: running.map(one => shortSeat(one.seat)),
+        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, current: inFlight === null ? null : `Task ${inFlight.n}${inFlight.title === '' ? '' : `: ${inFlight.title}`}` },
+        todos: items.length === 0 ? null : { done: doneCount, total: items.length, current: items.find(item => item.status === 'in_progress')?.text ?? null },
+        repo: git,
+        refused: refused.length,
+        now,
+      }
+      const rows = o.shown.flatMap(name => {
+        const runs = denseLine(name, dense)
+        return runs === null ? [] : [{ key: `dense-${name}`, runs: runsCut(runs, room) }]
+      })
+      return (
+        <Box flexDirection="column">
+          {resumeCard}
+          <Box key="dense-now" flexDirection="row" alignItems="center" columnGap={1}>
+            <Box key="dense-now-text" flexGrow={1} flexShrink={1}>
+              <Text key="now" wrap="truncate-end">
+                {drawRuns('now', nowLine(actNow, now, work))}
+              </Text>
+            </Box>
+            {isDesktop && canMinimize && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
+          </Box>
+          {rows.map(row => (
+            <Box key={row.key}>
+              <Text wrap="truncate-end">{drawRuns(row.key, row.runs)}</Text>
+            </Box>
+          ))}
+          {actions}
+        </Box>
+      )
     }
 
     // Each section is a card: a rounded frame in its own color, its title and

@@ -1474,6 +1474,51 @@ describe('minimized band', () => {
   })
 })
 
+describe('dense pane', () => {
+  const SHELL = { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }
+
+  test('draws one line per shown section, and Detailed switches back', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { ...SIGNED_IN, written, tools: { Bash: () => SHELL } })
+    signedIn(on, configured({ density: 'dense', sections: 'context,usage,shells,agents,repo' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect((await ui.find({ key: 'dense-context' }))?.text).toMatch(/^ctx  ▰+▱* 61% 284k\/465k/)
+    expect((await ui.find({ key: 'dense-usage' }))?.text).toMatch(/^lim  5h ▰+▱* 23% · 7d ▰+▱* 61%$/)
+    expect((await ui.find({ key: 'dense-shells' }))?.text).toBe('$    1 shell · npm run dev · 0s')
+    expect(await ui.find({ key: 'dense-agents' })).toBeUndefined()
+    expect((await ui.find({ key: 'dense-repo' }))?.text).toBe('⎇    feat/pane ↑2 ↓1 · ~1 changed · ?1')
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+    await ui.press({ key: 'pane-density' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').density).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeDefined()
+  })
+
+  test('Dense saves the setting', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, written, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-density' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').density).toBe('dense')
+    expect(await ui.find({ key: 'dense-context' })).toBeDefined()
+  })
+
+  test('draws the same rows as text on the desktop', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ density: 'dense' }))
+    await $.session.start(START)
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(await ui.find({ key: 'dense-context' })).toBeDefined()
+    expect(await ui.findAll({ type: 'Svg' })).toEqual([])
+    expect(await ui.find({ key: 'pane-minimize' })).toBeDefined()
+  })
+})
+
 describe('/cockpit', () => {
   test('says the pane opened when Claude Code draws it', async ($, on) => {
     world(on, { tokens: 284_000 })

@@ -39,6 +39,11 @@ export default {
     label: 'Layout', title: 'Pane layout',
     description: 'auto: the full layout docked beside the transcript, the band when the pane sits above the prompt. full: always the full layout. compact: minimized, the band above the prompt; Minimize sets it and Expand sets auto, or full where the pane does not dock.',
   },
+  density: {
+    type: 'enum', values: ['detailed', 'dense'], default: 'detailed', group: 'Cockpit', target: 'dforge',
+    label: 'Density', title: 'Pane density',
+    description: 'detailed: cards, charts and lists. dense: one line per section. The pane\'s Dense and Detailed buttons set it.',
+  },
   sections: {
     type: 'string', default: '', group: 'Cockpit', target: 'dforge',
     label: 'Sections', title: 'Pane sections',
