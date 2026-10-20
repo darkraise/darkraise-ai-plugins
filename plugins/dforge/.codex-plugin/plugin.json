@@ -1,6 +1,6 @@
 {
   "name": "dforge",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "description": "Brainstorm, plan and execute with scored tasks, tiered implementers, criteria-based review and an external Codex executor; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
   "author": {
     "name": "Darkraise"
