@@ -6,7 +6,7 @@ import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { resolveStores, writeApplied } from "../../scripts/lib/darkmem-config.mjs";
 import { loadState, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import {
-  NOT_A_FILE, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, reconcile as reconcileInProcess, refreshContext, runGit, stayLine,
+  NOT_A_FILE, carriedDocuments, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, reconcile as reconcileInProcess, refreshContext, runGit, stayLine,
 } from "../../scripts/lib/darkmem-reconcile.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, namedPipe, read, run, scratch, write } from "./helpers.mjs";
@@ -522,6 +522,51 @@ for (const { name, files, change, line } of [
     assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
   });
 }
+
+test("a document deleted without a commit during the pull is named as missing and changed, and nothing is staged", async t => {
+  let repo;
+  let deleted = false;
+  const s = await docsRepo(t, { "specs/a.md": "# A\n", "specs/b.md": "# B\n" }, {
+    stub: {
+      onRequest: request => {
+        if (!repo || deleted || request.path !== "/api/v1/documents/by-uri") return;
+        deleted = true;
+        fs.rmSync(at(repo, "docs/dforge/specs/b.md"));
+      },
+    },
+  });
+  repo = s.repo;
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/dforge changed during the move; the repository copy stays$/m);
+  assert.ok(result.stdout.includes("  docs/dforge/specs/b.md: missing from the working tree\n"), result.stdout);
+  assert.ok(result.stdout.includes("  dforge/specs/b.md: changed during the move\n"), result.stdout);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.equal(read(at(s.repo, "docs/dforge/specs/a.md")), "# A\n");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
+test("a tracked document swapped for a directory after its check is uncarriable, not a crash", t => {
+  const repo = makeRepo();
+  const docsDir = path.join(repo, "docs", "dforge");
+  const file = path.join(docsDir, "specs", "a.md");
+  write(file, "# A\n");
+  commitAll(repo, "docs");
+  const open = fs.openSync;
+  let swapped = false;
+  t.mock.method(fs, "openSync", (target, ...rest) => {
+    if (!swapped && target === file) {
+      swapped = true;
+      fs.rmSync(file);
+      fs.mkdirSync(file);
+    }
+    return open(target, ...rest);
+  });
+  const { problems, documents, uncarriable } = carriedDocuments(repo, docsDir, "docs/dforge");
+  assert.deepEqual(problems, ["docs/dforge/specs/a.md: could not be read (EISDIR)"]);
+  assert.deepEqual(documents, []);
+  assert.deepEqual([...uncarriable], ["dforge/specs/a.md"]);
+});
 
 test("a document emptied and committed during the pull is named as changed and uncarriable, not removed", async t => {
   let repo;

@@ -285,17 +285,21 @@ function uncarried(docsDir, parts) {
   if (parts[0] === "handoff") return "under handoff/, which is reserved for plan handoff notes";
   if (parts[0] === "archive") return "under archive/, which is reserved for deletion archives";
   let at = docsDir;
+  let stat;
   for (const part of parts) {
     at = path.join(at, part);
-    if (fs.lstatSync(at).isSymbolicLink()) return "a symbolic link, or reached through one, which the mirror never syncs";
+    stat = fs.lstatSync(at, { throwIfNoEntry: false });
+    // Tracked but deleted without a commit, as during a move's pull.
+    if (!stat) return "missing from the working tree";
+    if (stat.isSymbolicLink()) return "a symbolic link, or reached through one, which the mirror never syncs";
   }
-  return fs.lstatSync(at).isFile() ? null : "not a regular file";
+  return stat.isFile() ? null : "not a regular file";
 }
 
 // The tracked documents the move carries, and every file it cannot (§7.2),
 // with the uris of the tracked files that are not carried (`uncarriable`).
 // Tracked is the test because git rm -r deletes only tracked paths.
-function carriedDocuments(repoRoot, docsDir, rel) {
+export function carriedDocuments(repoRoot, docsDir, rel) {
   const problems = [];
   const documents = [];
   const uncarriable = new Set();
@@ -313,7 +317,13 @@ function carriedDocuments(repoRoot, docsDir, rel) {
       refuse(why);
       continue;
     }
-    const buffer = fs.readFileSync(path.join(docsDir, ...parts));
+    let buffer;
+    try {
+      buffer = readNoFollow(path.join(docsDir, ...parts));
+    } catch (error) {
+      refuse(`could not be read (${error.code})`);
+      continue;
+    }
     const content = decodeUtf8(buffer);
     if (!content) {
       refuse("empty or not UTF-8 text, which darkmem cannot store");
