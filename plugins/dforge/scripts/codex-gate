@@ -15,7 +15,7 @@
 #
 # The codexReview and codexLane settings (scripts/dforge-config) switch a surface
 # off whatever the probe says; with both off the gate answers `reason=setting`
-# without probing.
+# without probing. codexReview is off unless set: Codex reviews are opt-in.
 # Exit: 0 answered, either way; 2 usage error or missing jq or node.
 set -uo pipefail
 
@@ -37,7 +37,7 @@ command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
-want_review=$(dforge_setting codexReview true)
+want_review=$(dforge_setting codexReview false)
 want_lane=$(dforge_setting codexLane true)
 
 usable="" reason="" resets="" epoch="" version="" source=probe

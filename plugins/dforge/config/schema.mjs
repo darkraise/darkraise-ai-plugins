@@ -95,9 +95,9 @@ export default {
     description: 'Give plan tasks to Codex when its gate passes. Off keeps every task on Claude.',
   },
   codexReview: {
-    type: 'boolean', default: true, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    type: 'boolean', default: false, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
     label: 'Codex reviews', title: 'Let Codex review',
-    description: 'Let Codex take review seats when its gate passes. Off keeps every review on Claude.',
+    description: 'On lets Codex take review seats when its gate passes. Off, the default, keeps every review on Claude; /codex:review or /codex:adversarial-review runs a Codex review on demand.',
   },
   lensCap: {
     type: 'number', default: 4, min: 0, max: 9, step: 1, zero: 'off', env: 'DFORGE_LENS_CAP', enforcedBy: 'script', group: 'Workflow', target: 'dforge',

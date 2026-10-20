@@ -159,7 +159,9 @@ check "a second call answers from the cache" "$out" \
 check "a cached answer starts no client" "$(grep -c connect "$TMP/log")" "1"
 
 # Trust is read on every call, cache or probe: flipping it must not wait for a
-# new session.
+# new session. Codex reviews are opt-in, so these checks turn them on.
+mkdir -p "$HOME/.dforge"
+printf '{"codexReview":true}\n' > "$HOME/.dforge/config.json"
 cp "$POLICY" "$TMP/policy.bak"
 jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
 gate usable
@@ -219,7 +221,11 @@ check "a hung connect times out" "$out" \
 mkdir -p "$HOME/.dforge"
 setting() { printf '%s\n' "$1" > "$HOME/.dforge/config.json"; }
 jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
-setting '{"codexLane":false}'
+setting '{}'
+fresh; gate usable
+check "codexReview is off by default, the lane is not" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+setting '{"codexLane":false,"codexReview":true}'
 fresh; gate usable
 check "codexLane off closes the lane only" "$out" \
   "codex-gate usable=true reason=ok review=true lane=false resets_at=- source=probe"
@@ -234,7 +240,7 @@ check "both off answers without a probe" "$out" \
   "codex-gate usable=false reason=setting review=false lane=false resets_at=- source=setting"
 check "both off starts no client" "$(cat "$TMP/log" 2>/dev/null | grep -c connect)" "0"
 check "both off is written for the readers" "$(field usable)/$(field reason)" "false/setting"
-setting '{}'
+setting '{"codexReview":true}'
 gate usable
 check "switching Codex back on probes again" "$out" \
   "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=probe"
