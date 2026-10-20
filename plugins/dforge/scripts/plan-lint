@@ -74,9 +74,14 @@ grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$unfenced_header" && codex
 # rank, so one conversion finding replaces a pair or rank finding per task.
 policy_ok=1
 if [ "$codex" -eq 1 ]; then
+  if ! command -v jq > /dev/null 2>&1; then
+    echo "plan-lint: cannot read the routing policy version from $ROUTING: jq is not installed" >&2
+    exit 2
+  fi
   want_policy=$(jq -r '.version // empty' "$ROUTING" 2>/dev/null | tr -d '\r')
   if [ -z "$want_policy" ]; then
-    echo "plan-lint: cannot read the routing policy version from $ROUTING (is jq installed?)" >&2
+    if jq empty "$ROUTING" > /dev/null 2>&1; then cause="the file has no version"; else cause="the file cannot be parsed"; fi
+    echo "plan-lint: cannot read the routing policy version from $ROUTING: $cause" >&2
     exit 2
   fi
   got_policy=$(sed -nE 's/^(\*\*)?Routing policy:(\*\*)?[ \t]+`?([^ \t`]+)`?[ \t]*$/\3/p' <<<"$unfenced_header" | head -n 1)
