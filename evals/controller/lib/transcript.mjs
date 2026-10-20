@@ -36,6 +36,56 @@ function textOf(content) {
   return '';
 }
 
+// shellLists CMD — CMD cut at its list separators outside quotes: `;`, a
+// newline, and an `&` that is not part of `&&` or a redirect (`2>&1`, `&>`).
+// A heredoc's body, on the lines after its opener, is appended to the list
+// that opened it, even when more lists follow the opener on its line. The
+// delimiter is the whole word after << or <<-, quoted ('END-OF-DOC') or not.
+function shellLists(cmd) {
+  const lists = [];
+  const bodies = [];
+  const pending = [];
+  let start = 0;
+  let quote = '';
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (quote) {
+      if (c === quote) quote = '';
+      else if (c === '\\' && quote === '"') i++;
+    } else if (c === "'" || c === '"') quote = c;
+    else if (c === '\\') i++;
+    else if (cmd.startsWith('<<', i)) {
+      const opener = /^<<(-)?[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;&|<>()'"]+))/.exec(cmd.slice(i));
+      if (opener) pending.push({ list: lists.length, word: opener[2] ?? opener[3] ?? opener[4], tabs: opener[1] === '-' });
+      i += opener ? opener[0].length - 1 : 1;
+    } else if (c === '\n' || c === ';' || (c === '&' && !/[&<>|]/.test(cmd[i - 1] ?? '') && !/[&>]/.test(cmd[i + 1] ?? ''))) {
+      lists.push(cmd.slice(start, i));
+      if (c === '\n') {
+        for (const { list, word, tabs } of pending.splice(0)) {
+          const quoted = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const end = new RegExp(`\\n${tabs ? '\\t*' : ''}${quoted}(?=\\n|$)`).exec(cmd.slice(i));
+          const stop = end ? i + end.index + end[0].length : cmd.length;
+          bodies[list] = (bodies[list] ?? '') + cmd.slice(i, stop);
+          i = stop;
+        }
+      }
+      start = i + 1;
+    }
+  }
+  lists.push(cmd.slice(start));
+  return lists.map((list, n) => list + (bodies[n] ?? ''));
+}
+
+// ledgerWrites CMD — the lists of a failed Bash command that still wrote the
+// ledger: the call's error is only its last command's exit status, so a list
+// wrote unless an `&&` ahead of its redirect let an earlier failure skip it.
+function ledgerWrites(cmd) {
+  return shellLists(cmd).filter(list => {
+    const at = list.search(WRITES_LEDGER);
+    return at !== -1 && !/&&/.test(list.slice(0, at));
+  }).join('\n');
+}
+
 // The text a tool call writes into a ledger (progress.md), or ''.
 function ledgerText(use) {
   const input = use.input ?? {};
@@ -128,10 +178,9 @@ export function measureTranscript(source) {
     if (use.name === 'ListAgents') listAgents++;
     if (use.name === 'Monitor') monitors++;
     // A write that failed (an Edit whose old string was not found) recorded
-    // nothing. A Bash call's error is its last command's exit status, so a
-    // ledger line it appended before a failing command was still written,
-    // unless an `&&` ahead of the redirect let an earlier failure skip it.
-    if (!failed.has(use.id) || (use.name === 'Bash' && !/&&/.test(cmd.slice(0, Math.max(0, cmd.search(WRITES_LEDGER)))))) for (const hit of ledgerText(use).matchAll(COMPLETE)) completed.push(hit[1]);
+    // nothing; a failed Bash call recorded what its lists wrote (ledgerWrites).
+    const written = !failed.has(use.id) ? ledgerText(use) : use.name === 'Bash' && ledgerText(use) !== '' ? ledgerWrites(cmd) : '';
+    for (const hit of written.matchAll(COMPLETE)) completed.push(hit[1]);
     let seat = null;
     if (tier !== null || /judge-/.test(type)) seat = { kind: 'review', name: type || `codex:${tier}` };
     else if (isCodexTask(cmd) || /impl-/.test(type)) seat = { kind: 'fix', name: type || 'codex' };

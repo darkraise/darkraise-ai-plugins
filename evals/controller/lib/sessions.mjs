@@ -14,14 +14,59 @@ export const REPOS = process.env.CONTROLLER_EVAL_REPOS ?? fileURLToPath(new URL(
 // variable the same command assigned (PLAN=docs/…/x.md … task-brief "$PLAN").
 // The script is run by a path (scripts/task-brief, $S/task-brief), so the
 // required slash keeps a search for the bare name (rg task-brief …) from
-// counting as running it, and the optional quote admits a quoted script path.
-const PER_TASK = /\/(?:task-brief|review-route|review-package)['"]?[ \t]+(['"]?[^\s;&|]+)/g;
+// counting as running it. The path must also be a command's first word once
+// the words that may precede a command are skipped (BEFORE_COMMAND, an
+// assignment, an option, a timeout's duration), so a command that only reads
+// the script (cat $S/task-brief …) or quotes a run (echo 'bash …/task-brief …')
+// is not a run. A run inside a quoted string (bash -c '…/task-brief x.md') is
+// one word too, so it is not counted either.
+const SCRIPT = /\/(?:task-brief|review-route|review-package)$/;
+const BEFORE_COMMAND = new Set(['!', '{', 'if', 'then', 'elif', 'else', 'while', 'until', 'do', 'bash', 'sh', 'command', 'env', 'exec', 'nohup', 'time', 'timeout']);
+const OPTION_VALUE = { env: new Set(['-u']), timeout: new Set(['-k', '-s']) };
+const NOT_A_RUN = { bash: new Set(['-n']), sh: new Set(['-n']), command: new Set(['-v', '-V']) };
 const ASSIGN = /\b([A-Za-z_]\w*)=(['"]?)([^\s'";&|]+)\2/g;
+
+// simpleCommands CMD — CMD cut at `;`, `&`, `|`, `(`, `)`, a backtick and a
+// newline outside quotes, each piece as its words with the quotes removed, so
+// a quoted string is one word and never a command.
+function simpleCommands(cmd) {
+  const commands = [[]];
+  let word = null;
+  let quote = '';
+  const end = () => {
+    if (word !== null) commands.at(-1).push(word);
+    word = null;
+  };
+  for (const c of cmd) {
+    if (quote) {
+      if (c === quote) quote = '';
+      else word += c;
+    } else if (c === "'" || c === '"') {
+      quote = c;
+      word ??= '';
+    } else if (c === ' ' || c === '\t') end();
+    else if (/[;&|()`\n]/.test(c)) {
+      end();
+      commands.push([]);
+    } else word = (word ?? '') + c;
+  }
+  end();
+  return commands;
+}
 
 function planArgs(cmd) {
   const vars = Object.fromEntries([...cmd.matchAll(ASSIGN)].map(m => [m[1], m[3]]));
-  return [...cmd.matchAll(PER_TASK)].flatMap(m => {
-    const arg = m[1].replace(/^['"]|['"]$/g, '').replace(/^\$\{?(\w+)\}?$/, (_, name) => vars[name] ?? '');
+  return simpleCommands(cmd).flatMap(words => {
+    let i = 0;
+    let wrapper = '';
+    while (i < words.length && !SCRIPT.test(words[i]) && (BEFORE_COMMAND.has(words[i]) || /^(?:[A-Za-z_]\w*=|-|\d)/.test(words[i]))) {
+      const w = words[i];
+      if (NOT_A_RUN[wrapper]?.has(w)) return [];
+      if (BEFORE_COMMAND.has(w)) wrapper = w;
+      i += OPTION_VALUE[wrapper]?.has(w) ? 2 : 1;
+    }
+    if (!SCRIPT.test(words[i] ?? '')) return [];
+    const arg = (words[i + 1] ?? '').replace(/^\$\{?(\w+)\}?$/, (_, name) => vars[name] ?? '');
     return arg.endsWith('.md') ? [basename(arg, '.md')] : [];
   });
 }
