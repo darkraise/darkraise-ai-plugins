@@ -46,6 +46,8 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['retired dr-forge variable', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'echo "$DR_FORGE_BUDGET"\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired dr-forge docs root', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'cat docs/forge/plans/p.md\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired dr-forge home', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'ls ~/.dr-forge\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
+    ['retired dr-forge home in UTF-16LE text', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('ls ~/.dr-forge\n', 'utf16le')])); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
+    ['retired dr-forge home in UTF-16BE text', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from('ls ~/.dr-forge\n', 'utf16le').swap16()])); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired forge_ code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'forge_dir .\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired FORGE variable', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'echo "$FORGE_HOME"\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired _forge code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'my_forge_dir=.\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
@@ -142,7 +144,7 @@ test('the name sweeps skip binary files', async () => {
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    const bytes = Buffer.from('\u0000superpowers dr-forge dcc-darkraise-ui\n', 'utf8');
+    const bytes = Buffer.from('superpowers dr-forge\u0000 dcc-darkraise-ui\n', 'utf8');
     writeFileSync(resolve(dir, 'plugins/dforge/reference/image.bin'), bytes);
     writeFileSync(resolve(dir, 'plugins/dr-status/image.bin'), bytes);
     assert.deepEqual(validateRepository(dir), []);
