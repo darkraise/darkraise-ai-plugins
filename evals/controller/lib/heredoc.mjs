@@ -1,8 +1,9 @@
 // heredocOpener CMD I — the heredoc opener starting at CMD[I] as
 // { length, word, tabs }, or null. The delimiter is the whole word after <<
-// or <<-, quoted ('END-OF-DOC') or not; `tabs` marks <<-.
+// or <<-, quoted ('END-OF-DOC') or not; `tabs` marks <<-; a `<<` inside a
+// here-string (`<<<`) opens nothing.
 export function heredocOpener(cmd, i) {
-  if (!cmd.startsWith('<<', i)) return null;
+  if (!cmd.startsWith('<<', i) || cmd[i - 1] === '<') return null;
   const opener = /^<<(-)?[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;&|<>()'"]+))/.exec(cmd.slice(i));
   return opener ? { length: opener[0].length, word: opener[2] ?? opener[3] ?? opener[4], tabs: opener[1] === '-' } : null;
 }
