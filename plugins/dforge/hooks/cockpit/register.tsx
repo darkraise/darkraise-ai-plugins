@@ -2967,8 +2967,7 @@ async function readRun($: EngineInterface) {
     // A run whose every task was done before this session started is history:
     // a new session starts with no Run card.
     if (isOlder && (summary.isFinished || (summary.total > 0 && summary.done === summary.total))) return clear()
-    if (JSON.stringify(await read($, run)) === JSON.stringify(summary)) return
-    await update($, run, () => summary)
+    if (JSON.stringify(await read($, run)) !== JSON.stringify(summary)) await update($, run, () => summary)
     await sendLedgerEvents($, summary)
   } catch {
     // No readable ledger: the Plan card stays as it is.
