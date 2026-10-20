@@ -1,3 +1,5 @@
+import { heredocEnd, heredocOpener } from './heredoc.mjs';
+
 // USD per million tokens, from https://platform.claude.com/docs/en/about-claude/pricing
 // as fetched on 2026-10-17. A model not listed is named in `unpriced`, and its
 // tokens are counted but not priced.
@@ -64,9 +66,9 @@ function shellLists(cmd) {
     } else if (c === "'" || c === '"') quote = c;
     else if (c === '\\') i++;
     else if (cmd.startsWith('<<', i)) {
-      const opener = /^<<(-)?[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;&|<>()'"]+))/.exec(cmd.slice(i));
-      if (opener) pending.push({ owner: list, word: opener[2] ?? opener[3] ?? opener[4], tabs: opener[1] === '-' });
-      i += opener ? opener[0].length - 1 : 1;
+      const doc = heredocOpener(cmd, i);
+      if (doc) pending.push({ owner: list, doc });
+      i += doc ? doc.length - 1 : 1;
     } else if (c === '(' || (c === '{' && /^[\s;&|(]?$/.test(cmd[i - 1] ?? '') && /\s/.test(cmd[i + 1] ?? ''))) {
       groups.push(list);
       list = { lead: list.lead + cmd.slice(list.start, i + 1), start: i + 1, body: '', close: c === '(' ? ')' : '}' };
@@ -75,10 +77,8 @@ function shellLists(cmd) {
     else if (c === '\n' || c === ';' || (c === '&' && !/[&<>|]/.test(cmd[i - 1] ?? '') && !/[&>]/.test(cmd[i + 1] ?? ''))) {
       const at = i;
       if (c === '\n') {
-        for (const { owner, word, tabs } of pending.splice(0)) {
-          const quoted = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const end = new RegExp(`\\n${tabs ? '\\t*' : ''}${quoted}(?=\\n|$)`).exec(cmd.slice(i));
-          const stop = end ? i + end.index + end[0].length : cmd.length;
+        for (const { owner, doc } of pending.splice(0)) {
+          const stop = heredocEnd(cmd, i, doc);
           owner.body += cmd.slice(i, stop);
           i = stop;
         }

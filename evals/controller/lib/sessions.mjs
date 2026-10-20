@@ -3,6 +3,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { heredocEnd, heredocOpener } from './heredoc.mjs';
 import { measureTranscript, sumMetrics } from './transcript.mjs';
 
 export const PROJECTS = process.env.CONTROLLER_EVAL_PROJECTS ?? join(homedir(), '.claude/projects');
@@ -33,16 +34,20 @@ const ASSIGN = /\b([A-Za-z_]\w*)=(['"]?)([^\s'";&|]+)\2/g;
 
 // simpleCommands CMD — CMD cut at `;`, `&`, `|`, `(`, `)`, a backtick and a
 // newline outside quotes, each piece as its words with the quotes removed, so
-// a quoted string is one word and never a command.
+// a quoted string is one word and never a command. A heredoc's body is data,
+// never a command, so it is left out.
 function simpleCommands(cmd) {
   const commands = [[]];
+  const pending = [];
   let word = null;
   let quote = '';
   const end = () => {
     if (word !== null) commands.at(-1).push(word);
     word = null;
   };
-  for (const c of cmd) {
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    const doc = quote ? null : heredocOpener(cmd, i);
     if (quote) {
       if (c === quote) quote = '';
       else word += c;
@@ -50,9 +55,14 @@ function simpleCommands(cmd) {
       quote = c;
       word ??= '';
     } else if (c === ' ' || c === '\t') end();
-    else if (/[;&|()`\n]/.test(c)) {
+    else if (doc) {
+      pending.push(doc);
+      word = (word ?? '') + cmd.slice(i, i + doc.length);
+      i += doc.length - 1;
+    } else if (/[;&|()`\n]/.test(c)) {
       end();
       commands.push([]);
+      if (c === '\n') for (const open of pending.splice(0)) i = heredocEnd(cmd, i, open);
     } else word = (word ?? '') + c;
   }
   end();
