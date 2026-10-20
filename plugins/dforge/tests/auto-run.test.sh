@@ -282,7 +282,8 @@ check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gon
 # it read, as an update does: a start that does not wait for it is lost.
 # held <name>: waits up to 10 s for the holder to touch $STATE.ready, which it
 # does once it holds the lock; on timeout it fails <name> and stops the holder,
-# so the case cannot hang.
+# so the case cannot hang. The flock holder's bash -c child keeps the lock and
+# writes $STATE after flock itself is killed, so the children go first.
 held() {
   local i
   for i in $(seq 100); do
@@ -290,6 +291,7 @@ held() {
     sleep 0.1
   done
   check "$1" "the holder never took the lock" "taken"
+  pkill -P "$holder" 2>/dev/null
   kill "$holder" 2>/dev/null
   wait
   return 1
