@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { emptyState, ledgerPieces, loadState, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import { checkProgressTargets, gatherLocalProgress, progressToLocal, readNoFollow } from "../../scripts/lib/darkmem-progress-move.mjs";
@@ -608,6 +609,36 @@ for (const [slugs, count] of [[["p1"], "1 source"], [["p1", "p2"], "2 sources"]]
     for (const ledger of ledgers) assert.equal(fs.existsSync(ledger), false);
   });
 }
+
+test("a move-aside that leaves a source behind and cannot write .gitignore still ends in the refusal", async t => {
+  const s = await setup(t, "darkmem");
+  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  write(ledger, LEDGER("p1"));
+  const now = Date.now();
+  for (let i = 0; i < 60; i += 1) {
+    const dir = path.join(s.repo, ".dforge", `moved-${utcStamp(new Date(now + i * 1000))}`);
+    write(path.join(dir, "sdd", "p1", "progress.md", "keep"), "taken\n");
+  }
+  // This host runs as root, which bypasses chmod, so the write is made to fail.
+  const preload = path.join(scratch("dms-preload-"), "preload.mjs");
+  write(preload, [
+    'import fs from "node:fs";',
+    'import path from "node:path";',
+    "const w = fs.writeFileSync;",
+    "fs.writeFileSync = (f, ...a) => {",
+    '  if (String(f).endsWith(`${path.sep}.dforge${path.sep}.gitignore`)) throw Object.assign(new Error("injected by the test"), { code: "EACCES", syscall: "open" });',
+    "  return w(f, ...a);",
+    "};",
+    "",
+  ].join("\n"));
+  const result = await run(["reconcile"], { cwd: s.repo, env: { ...s.env, NODE_OPTIONS: `--import ${pathToFileURL(preload).href}` } });
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem and the mirror hold the progress, but 1 source could not be moved aside: .+progress\.md \(\w+\), and .+\.dforge[\\/]\.gitignore \(EACCES\) could not be written; reconcile again to finish$/m);
+  assert.equal(read(ledger), LEDGER("p1"));
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", ".gitignore")), false);
+  assert.equal(s.stores().progress, "local");
+});
 
 test("latest.md filed for an active plan leaves its workstream open, even one that was closed", async t => {
   const s = await setup(t, "darkmem");

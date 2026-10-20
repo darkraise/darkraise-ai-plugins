@@ -408,19 +408,22 @@ export async function progressToDarkmem(context) {
   // The checkout's state directory ignores itself, as .dforge/sdd/ does, so a
   // backup never shows as untracked in a repository that does not list it.
   // "wx" never writes through a link or over a file already there.
+  const unignored = [];
   for (const stateDir of new Set(files.map(item => item.stateDir))) {
     if (fs.lstatSync(stateDir).isSymbolicLink()) continue;
     try {
       fs.writeFileSync(path.join(stateDir, ".gitignore"), "*\n", { flag: "wx" });
     } catch (error) {
-      if (error.code !== "EEXIST") throw error;
+      if (error.code === "EEXIST") continue;
+      if (!left.length || !error?.syscall) throw error;
+      unignored.push(`${path.join(stateDir, ".gitignore")} (${error.code})`);
     }
   }
   // darkmem and the mirror already hold every source, so a rerun finds them
   // filed and moves aside only what is left.
   if (left.length) {
     const sourceCount = left.length === 1 ? "1 source" : `${left.length} sources`;
-    return refuse(`darkmem and the mirror hold the progress, but ${sourceCount} could not be moved aside: ${left.join(", ")}; reconcile again to finish`);
+    return refuse(`darkmem and the mirror hold the progress, but ${sourceCount} could not be moved aside: ${left.join(", ")}${unignored.length ? `, and ${unignored.join(", ")} could not be written` : ""}; reconcile again to finish`);
   }
   const count = kind => sources.filter(item => item.kind === kind).length;
   return {
