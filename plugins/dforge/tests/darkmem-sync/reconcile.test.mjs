@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { resolveStores, writeApplied } from "../../scripts/lib/darkmem-config.mjs";
 import { loadState, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
+import { readNoFollow, readRegular } from "../../scripts/lib/darkmem-progress-move.mjs";
 import {
   NOT_A_FILE, carriedDocuments, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, reconcile as reconcileInProcess, refreshContext, runGit, stayLine,
 } from "../../scripts/lib/darkmem-reconcile.mjs";
@@ -71,6 +73,16 @@ test("a file swapped for a directory as fileHash opens it hashes as a non-file, 
     return open(target, ...rest);
   });
   assert.equal(fileHash(file), NOT_A_FILE);
+});
+
+test("a Unix-domain socket where a document should be hashes as a non-file, and readRegular refuses it as EFTYPE", { skip: process.platform === "win32" }, async t => {
+  const socket = path.join(scratch("dms-hash-"), "sock.md");
+  const server = net.createServer();
+  t.after(() => server.close());
+  await new Promise((resolve, reject) => server.once("error", reject).listen(socket, resolve));
+  assert.equal(fileHash(socket), NOT_A_FILE);
+  assert.throws(() => readRegular(socket, { follow: true }), { code: "EFTYPE" });
+  assert.throws(() => readNoFollow(socket), { code: "EFTYPE" });
 });
 
 test("pending families are those whose configured store differs from the applied one", () => {

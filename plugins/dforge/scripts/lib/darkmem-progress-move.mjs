@@ -33,7 +33,14 @@ export function readRegular(file, { follow = false } = {}, constants = fs.consta
     if (!follow && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw Object.assign(new Error(`${file} is a symbolic link`), { code: "ELOOP" });
     return fs.readFileSync(file);
   }
-  const fd = fs.openSync(file, constants.O_RDONLY | constants.O_NONBLOCK | (follow ? 0 : constants.O_NOFOLLOW));
+  let fd;
+  try {
+    fd = fs.openSync(file, constants.O_RDONLY | constants.O_NONBLOCK | (follow ? 0 : constants.O_NOFOLLOW));
+  } catch (error) {
+    // A socket cannot be opened for reading: open(2) fails with ENXIO.
+    if (error.code === "ENXIO") throw Object.assign(new Error(`${file} is not a regular file`), { code: "EFTYPE" });
+    throw error;
+  }
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) throw Object.assign(new Error(`${file} is not a regular file`), { code: stat.isDirectory() ? "EISDIR" : "EFTYPE" });

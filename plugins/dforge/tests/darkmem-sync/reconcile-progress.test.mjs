@@ -356,7 +356,7 @@ test("readNoFollow reads a regular file and refuses a link, a dangling link, a l
   fs.symlinkSync(namedPipe(path.join(dir, "pipe")), path.join(dir, "pipe-link"));
   fs.mkdirSync(path.join(dir, "dir"));
   assert.equal(readNoFollow(file).toString(), "bytes\n");
-  for (const [name, code] of [["link", "ELOOP"], ["dangling", "ELOOP"], ["pipe-link", "ELOOP"], ["dir", "EISDIR"], ["missing", "ENOENT"]]) {
+  for (const [name, code] of [["link", "ELOOP"], ["dangling", "ELOOP"], ["pipe-link", "ELOOP"], ["pipe", "EFTYPE"], ["dir", "EISDIR"], ["missing", "ENOENT"]]) {
     assert.throws(() => readNoFollow(path.join(dir, name)), { code }, name);
   }
 });
