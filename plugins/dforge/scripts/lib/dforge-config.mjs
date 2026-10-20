@@ -112,7 +112,7 @@ function realTarget(file) {
     if (error.code !== "ENOENT") throw error;
   }
   let target = file;
-  for (let hop = 0; hop < MAX_LINK_HOPS; hop++) {
+  for (let hop = 0; hop <= MAX_LINK_HOPS; hop++) {
     let link;
     try {
       link = fs.readlinkSync(target);

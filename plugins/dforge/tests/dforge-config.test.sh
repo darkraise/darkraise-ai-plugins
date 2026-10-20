@@ -209,6 +209,16 @@ if ! command -v cygpath > /dev/null 2>&1; then
   check "claude: a dangling chain: the first link stays" "$([ -L "$CS" ] && echo yes || echo no)" "yes"
   check "claude: a dangling chain: the middle link stays" "$([ -L "$TMP/dotfiles/hop.json" ] && echo yes || echo no)" "yes"
   check "claude: a dangling chain: its end is created" "$(tr -d ' \n' < "$TMP/dotfiles/end.json" 2>/dev/null)" '{"autoCompactWindow":550000}'
+  # A dangling chain of exactly 40 links, the most the loop allows, is still
+  # followed: the 40th hop lands on the chain's final path.
+  mkdir -p "$TMP/chain40"
+  rm -f "$CS"; ln -s "$TMP/chain40/end.json" "$TMP/chain40/link39"
+  for n in $(seq 38 -1 1); do ln -s "$TMP/chain40/link$((n + 1))" "$TMP/chain40/link$n"; done
+  ln -s "$TMP/chain40/link1" "$CS"
+  fc set autoCompactWindow 540000
+  check "claude: a 40-link dangling chain: exit 0" "$?" "0"
+  check "claude: a 40-link dangling chain: its end is created" "$(tr -d ' \n' < "$TMP/chain40/end.json" 2>/dev/null)" '{"autoCompactWindow":540000}'
+  check "claude: a 40-link dangling chain: the last link stays" "$([ -L "$TMP/chain40/link39" ] && echo yes || echo no)" "yes"
 fi
 
 # As root, a rewrite keeps the file's owner and group: the temporary file is
