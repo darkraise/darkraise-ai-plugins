@@ -6,10 +6,14 @@ const names = ['darkraise-ui', 'darkraise-win32ui', 'dforge', 'dr-status'];
 const claudeOnly = ['dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 // A file's lines for the name sweeps, or null for a binary file (one holding a
-// NUL byte), whose bytes are not text to read names in.
+// NUL character), whose bytes are not text to read names in. UTF-16 text holds
+// NUL bytes, so a file opening with a UTF-16 byte-order mark is decoded first.
 const textLines = path => {
   const bytes = readFileSync(path);
-  return bytes.includes(0) ? null : bytes.toString('utf8').split('\n');
+  const text = bytes[0] === 0xff && bytes[1] === 0xfe ? new TextDecoder('utf-16le').decode(bytes.subarray(2))
+    : bytes[0] === 0xfe && bytes[1] === 0xff ? new TextDecoder('utf-16be').decode(bytes.subarray(2))
+    : bytes.toString('utf8');
+  return text.includes('\u0000') ? null : text.split('\n');
 };
 
 export function validateRepository(root) {
