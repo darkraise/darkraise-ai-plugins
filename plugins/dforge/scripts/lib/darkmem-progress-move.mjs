@@ -299,8 +299,7 @@ export async function progressToDarkmem(context) {
   // The mirror's copies are read and written under its work directory, so a
   // link at the mirror, at work or below it would carry them elsewhere.
   const workRoot = path.join(cfg.mirror, "work");
-  const top = fs.lstatSync(cfg.mirror, { throwIfNoEntry: false })?.isSymbolicLink() ? [`${cfg.mirror}: ${MIRROR_LINK}`] : [];
-  const linked = mirrorRefusal([...top, ...mirrorLinks(workRoot)], "nothing was sent or moved");
+  const linked = mirrorRefusal([...mirrorTop(cfg.mirror), ...mirrorLinks(workRoot)], "nothing was sent or moved");
   if (linked) return linked;
   const report = scratchReport();
   const ids = new Map();
@@ -371,6 +370,10 @@ export async function progressToDarkmem(context) {
     if (!now?.equals(item.buffer)) changed.push(`${item.file}: changed or removed during the move`);
   }
   if (changed.length) return refuse("progress changed in the checkouts during the move; nothing was moved locally", changed);
+  // A link can be swapped into the mirror while darkmem is written, and the
+  // atomic write follows one in any directory above the file it replaces.
+  const relinked = mirrorRefusal([...mirrorTop(cfg.mirror), ...mirrorLinks(workRoot)], "nothing was sent or moved");
+  if (relinked) return relinked;
   for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer);
   const unread = sources.filter(item => {
     try {
@@ -509,6 +512,10 @@ function linksBelow(checkout, stateRel, rels) {
 }
 
 const MIRROR_LINK = "a symbolic link in the mirror, which the move will not read through";
+
+function mirrorTop(mirror) {
+  return fs.lstatSync(mirror, { throwIfNoEntry: false })?.isSymbolicLink() ? [`${mirror}: ${MIRROR_LINK}`] : [];
+}
 
 // One line per symbolic link, or directory that cannot be listed, at or under the
 // mirror's work directory. Dirent types come from lstat, so no link is followed.

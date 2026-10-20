@@ -551,6 +551,30 @@ test("a ledger linked to a named pipe while darkmem is written is in progress, a
   assert.deepEqual(movedAside(s.repo), []);
 });
 
+test("a mirror directory linked while darkmem is written refuses the move, and nothing is written through it", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "darkmem");
+  const note = path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md");
+  write(note, "# Handoff p1\n");
+  const outside = scratch("dms-outside-");
+  const planDir = path.join(s.workRoot, "sdd", "p1");
+  let linked = false;
+  s.stub.db.onRequest = (method, pathname) => {
+    if (linked || method !== "POST" || pathname !== "/api/v1/documents") return;
+    linked = true;
+    fs.rmSync(planDir, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(planDir), { recursive: true });
+    fs.symlinkSync(outside, planDir);
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the mirror's progress is reached through symbolic links; nothing was sent or moved\n"), result.stdout);
+  assert.ok(result.stdout.includes(`  ${planDir}: a symbolic link in the mirror, which the move will not read through\n`), result.stdout);
+  assert.deepEqual(fs.readdirSync(outside), []);
+  assert.equal(read(note), "# Handoff p1\n");
+  assert.deepEqual(movedAside(s.repo), []);
+  assert.equal(s.stores().progress, "local");
+});
+
 test("a named pipe where a ledger belongs is in progress, and is never opened for a blocking read", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
   const ledger = namedPipe(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"));
