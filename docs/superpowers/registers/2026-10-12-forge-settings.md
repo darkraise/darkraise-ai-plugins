@@ -1,7 +1,7 @@
 # dr-forge settings revamp and workflow controls
 
 **Source:** owner request, 2026-10-12 session: "revamp the settings UI of forge plugin, also add more settings to control the workflow and development progress of plugin"; inherits rows 3-11, 19 and 20 of docs/superpowers/registers/2026-10-11-dr-forge.md, deferred there to this spec
-**Covers:** docs/superpowers/specs/2026-10-12-dr-forge-settings-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md, docs/superpowers/specs/2026-10-20-open-rows-sweep-design.md
+**Covers:** docs/superpowers/specs/2026-10-12-dr-forge-settings-design.md, docs/superpowers/specs/2026-10-19-deferred-rows-sweep-design.md, docs/superpowers/specs/2026-10-20-open-rows-sweep-design.md, docs/superpowers/specs/2026-10-20-review-rows-sweep-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
