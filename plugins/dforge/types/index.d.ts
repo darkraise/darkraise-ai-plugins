@@ -73,6 +73,8 @@ export type CockpitShell = {
   command: string
   /** When it went to the background, in milliseconds since the epoch. */
   startedAt: number
+  /** The subagent whose loop started it; null for the main conversation's, absent on a row saved before it was kept. */
+  agentId?: string | null
 }
 
 /** Remote Control as the cockpit sees it. */

@@ -609,6 +609,8 @@ export const register: Register = on => {
     if (spawn === undefined) return done
     const outcome: 'done' | 'failed' = e.reason === 'answer' ? 'done' : 'failed'
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true, outcome } : one)))
+    // A notification for a finished subagent's loop may never arrive: its shells end with it.
+    await update($, shells, list => list.filter(one => one.agentId !== agentId))
     for (const [id, wait] of [...S.waits]) if (wait.agentId === agentId) await endWait($, id, '⏹ Agent ended')
     await syncTicker($)
     if (e.usage !== undefined) await update($, seats, all => addRun(all, spawn.seat, e.usage as TurnUsage))
@@ -3363,7 +3365,7 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
   if (tool === 'Bash') {
     const id = (result as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
     if (typeof id !== 'string' || id === '') return
-    const shell: CockpitShell = { id, command: String((e as { command?: unknown }).command ?? ''), startedAt: await $.clock.now() }
+    const shell: CockpitShell = { id, command: String((e as { command?: unknown }).command ?? ''), startedAt: await $.clock.now(), agentId: (e as { agentId?: string }).agentId ?? null }
     await update($, shells, list => [...list.filter(one => one.id !== id), shell].slice(-20))
     await syncTicker($)
     return
@@ -3373,6 +3375,7 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     const id = (result as { task_id?: unknown } | undefined)?.task_id ?? input.task_id ?? input.shell_id
     if (typeof id === 'string') {
       await update($, shells, list => list.filter(one => one.id !== id))
+      await update($, spawns, all => all.map(one => (one.agentId === id && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
       await syncTicker($)
     }
   }

@@ -2264,6 +2264,31 @@ describe('shells and remote', () => {
     expect(await ui.find({ key: 'shells' })).toBeUndefined()
   })
 
+  test("drops a subagent's shells when the subagent ends", async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true, agentId: 'agent-1' } as never)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ npm test/ })).toBeDefined()
+    await ui.unmount()
+    await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'shells' })).toBeUndefined()
+  })
+
+  test('a stop naming a background agent ends its spawn', async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { TaskStop: () => ({ result: { task_id: 'agent-1' }, text: 'stopped' }) } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Review', description: 'Review the branch', subagentType: 'dforge:judge-opus', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.tool.call({ tool: 'TaskStop', task_id: 'agent-1' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^Failed · 1$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Working · / })).toBeUndefined()
+  })
+
   test('drop a shell TaskStop stopped', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL, TaskStop: () => ({ result: { message: 'stopped', task_id: 'b7k2', task_type: 'local_bash' }, text: 'stopped' }) } })
     signedIn(on)
