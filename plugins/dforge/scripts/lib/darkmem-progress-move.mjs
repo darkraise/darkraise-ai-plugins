@@ -377,7 +377,7 @@ export async function progressToDarkmem(context) {
   if (changed.length) return refuse("progress changed in the checkouts during the move; nothing was moved locally", changed);
   // A link can be swapped into the mirror while darkmem is written, and the
   // atomic write follows one in any directory above the file it replaces.
-  const relinked = mirrorRefusal([...mirrorTop(cfg.mirror), ...mirrorLinks(workRoot)], "nothing was sent or moved");
+  const relinked = mirrorRefusal([...mirrorTop(cfg.mirror), ...mirrorLinks(workRoot)], "nothing was moved locally, and darkmem keeps what it accepted");
   if (relinked) return relinked;
   for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer);
   const unread = sources.filter(item => {
