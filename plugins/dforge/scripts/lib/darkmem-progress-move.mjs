@@ -649,9 +649,11 @@ export async function progressToLocal(context, { offline = null } = {}) {
         continue;
       }
       if (!now) {
-        // A file the exclusive copy finds there landed after the read above.
+        // A file the exclusive write finds there landed after the read above.
+        // The buffer is written, not the mirror's file, which a link or a
+        // named pipe could have replaced since it was read.
         try {
-          fs.copyFileSync(item.file, item.target, fs.constants.COPYFILE_EXCL);
+          fs.writeFileSync(item.target, item.buffer, { flag: "wx" });
         } catch (error) {
           if (error.code !== "EEXIST") throw error;
           landed.push(`${item.target}: changed during the move; not overwritten`);

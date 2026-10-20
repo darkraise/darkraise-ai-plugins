@@ -1011,10 +1011,10 @@ test("an edit that lands in the primary checkout just before a copy is never ove
 
 test("an edit that lands between the read and the exclusive copy is a change during the move, not a failed copy", async t => {
   const m = offlineMove();
-  const copy = fs.copyFileSync;
-  t.mock.method(fs, "copyFileSync", (from, to, mode) => {
-    if (to !== m.target("p1")) return copy(from, to, mode);
-    fs.writeFileSync(to, "edited meanwhile\n");
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    if (file !== m.target("p1")) return writeFile(file, ...rest);
+    writeFile(file, "edited meanwhile\n");
     throw Object.assign(new Error("injected by the test"), { code: "EEXIST" });
   });
   const result = await progressToLocal(m.context, { offline: "test" });
@@ -1027,12 +1027,10 @@ test("an edit that lands between the read and the exclusive copy is a change dur
 
 test("a copy into the primary checkout that fails part-way is a refusal, not a crash, and a rerun finishes it", async t => {
   const m = offlineMove();
-  const copy = fs.copyFileSync;
-  let calls = 0;
-  t.mock.method(fs, "copyFileSync", (...args) => {
-    calls += 1;
-    if (calls === 2) throw Object.assign(new Error("injected by the test"), { code: "EIO" });
-    return copy(...args);
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    if (file === m.target("p2")) throw Object.assign(new Error("injected by the test"), { code: "EIO" });
+    return writeFile(file, ...rest);
   });
   const result = await progressToLocal(m.context, { offline: "test" });
   assert.equal(result.moved, false);
@@ -1044,6 +1042,26 @@ test("a copy into the primary checkout that fails part-way is a refusal, not a c
   assert.equal(again.moved, true, again.reason);
   assert.equal(read(m.target("p1")), LEDGER("p1"));
   assert.equal(read(m.target("p2")), LEDGER("p2"));
+});
+
+test("a mirror ledger replaced by a link after it was read is copied as read, not through the link", { skip: process.platform === "win32" }, async t => {
+  const m = offlineMove();
+  const source = path.join(m.mirror, "work", "sdd", "p1", "progress.md");
+  const outside = path.join(scratch("dms-link-"), "progress.md");
+  write(outside, "outside the mirror\n");
+  const mkdir = fs.mkdirSync;
+  t.mock.method(fs, "mkdirSync", (dir, options) => {
+    const made = mkdir(dir, options);
+    if (dir === path.dirname(m.target("p1")) && !fs.lstatSync(source).isSymbolicLink()) {
+      fs.rmSync(source);
+      fs.symlinkSync(outside, source);
+    }
+    return made;
+  });
+  const result = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(result.moved, true, result.reason);
+  assert.equal(read(m.target("p1")), LEDGER("p1"));
+  assert.equal(read(outside), "outside the mirror\n");
 });
 
 test("a mirror work directory that cannot be listed is named as such, not as a symbolic link", async () => {
@@ -1144,10 +1162,10 @@ test("a link that replaces a copied target before the read-back is never read th
   const m = offlineMove();
   const outside = path.join(scratch("dms-link-"), "progress.md");
   write(outside, LEDGER("p1"));
-  const copy = fs.copyFileSync;
-  t.mock.method(fs, "copyFileSync", (from, to, mode) => {
-    copy(from, to, mode);
-    if (to === m.target("p2")) {
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    writeFile(file, ...rest);
+    if (file === m.target("p2")) {
       fs.rmSync(m.target("p1"));
       fs.symlinkSync(outside, m.target("p1"));
     }
