@@ -23,6 +23,10 @@ lacks() { # lacks <name> <haystack> <needle>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
+# Every case reads this home, never the developer's ~/.dforge; the name-key
+# cases below set their own.
+export HOME="$TMP/home"
+mkdir -p "$HOME"
 mkdir -p docs
 printf '# Spec\n' > docs/spec.md
 printf '# Program\n' > docs/program.md
@@ -468,14 +472,37 @@ codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: `codex-v4`#' > cb
 lint cbt.md
 check "a backticked Routing policy: exit 0" "$status" "0"
 check "a backticked Routing policy: clean" "$out" "plan-lint: 0 errors, 0 warnings"
-# A routing policy that cannot be read is a usage failure, not a finding.
+# A routing policy that cannot be read is a usage failure, not a finding, and
+# its message names the cause. A jq that fails reads as a file it cannot parse.
 mkdir -p "$TMP/nojq"
 printf '#!/bin/sh\nexit 1\n' > "$TMP/nojq/jq"
 chmod +x "$TMP/nojq/jq"
 out=$(PATH="$TMP/nojq:$PATH" bash "$LINT" codex.md 2>&1); status=$?
 check "an unreadable routing policy: exit 2" "$status" "2"
 has "an unreadable routing policy: says so" "$out" "plan-lint: cannot read the routing policy version from"
+has "a failing jq: the file cannot be parsed" "$out" "codex-routing.json: the file cannot be parsed"
 lacks "an unreadable routing policy: no empty-policy finding" "$out" "not ;"
+# A copy of the scripts reads its own reference/codex-routing.json.
+KIT="$TMP/kit"
+mkdir -p "$KIT"
+cp -R "$HERE/../scripts" "$HERE/../reference" "$KIT/"
+printf '{"tiers":{}}\n' > "$KIT/reference/codex-routing.json"
+out=$(bash "$KIT/scripts/plan-lint" codex.md 2>&1); status=$?
+check "a version-less routing policy: exit 2" "$status" "2"
+has "a version-less routing policy: says it has no version" "$out" "codex-routing.json: the file has no version"
+lacks "a version-less routing policy: does not blame jq" "$out" "jq installed"
+printf '{"version":\n' > "$KIT/reference/codex-routing.json"
+out=$(bash "$KIT/scripts/plan-lint" codex.md 2>&1); status=$?
+check "a corrupt routing policy: exit 2" "$status" "2"
+has "a corrupt routing policy: says it cannot be parsed" "$out" "codex-routing.json: the file cannot be parsed"
+lacks "a corrupt routing policy: does not blame jq" "$out" "jq installed"
+# No jq on PATH: links to every other tool plan-lint runs before the check.
+mkdir -p "$TMP/jqless"
+for tool in awk cat cut dirname git grep head mktemp rm sed tr; do ln -s "$(type -P "$tool")" "$TMP/jqless/$tool"; done
+out=$(PATH="$TMP/jqless" "$BASH" "$LINT" codex.md 2>&1); status=$?
+check "no jq: exit 2" "$status" "2"
+has "no jq: says jq is not installed" "$out" "codex-routing.json: jq is not installed"
+lacks "no jq: plan-lint found every other tool it runs" "$out" "command not found"
 # A converted plan keeps its conversion record before the Task index and lints clean.
 codex_plan | awk '/^## Task index$/ { print "## Policy conversion\n\ncodex-v3 → codex-v4, approved 2026-09-23. Scores unchanged.\n\n| Task | Axes (f/s/c/r) | Score | codex-v3 | codex-v4 | Source |\n|---|---|---|---|---|---|\n| 1 | 1/1/1/0 | 3 | gpt-6-sol / low | gpt-6.1-sol / low | rubric |\n" } { print }' > cconv.md
 lint cconv.md
