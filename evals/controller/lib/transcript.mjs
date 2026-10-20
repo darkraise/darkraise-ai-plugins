@@ -38,15 +38,24 @@ function textOf(content) {
 
 // shellLists CMD — CMD cut at its list separators outside quotes: `;`, a
 // newline, and an `&` that is not part of `&&` or a redirect (`2>&1`, `&>`).
+// A newline after a trailing `&&`, `||` or `|` continues the list. A `{ … }`
+// or `( … )` group is part of the list that opened it, and each list inside
+// it is also given on its own, led by the text before and including the
+// group's opener, so an `&&` ahead of the group still gates what it holds.
 // A heredoc's body, on the lines after its opener, is appended to the list
 // that opened it, even when more lists follow the opener on its line. The
 // delimiter is the whole word after << or <<-, quoted ('END-OF-DOC') or not.
 function shellLists(cmd) {
   const lists = [];
-  const bodies = [];
+  const groups = [];
   const pending = [];
-  let start = 0;
+  let list = { lead: '', start: 0, body: '', close: '' };
   let quote = '';
+  const cut = (at, next) => {
+    list.text = list.lead + cmd.slice(list.start, at);
+    lists.push(list);
+    list = next ?? { lead: list.lead, start: at + 1, body: '', close: list.close };
+  };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
     if (quote) {
@@ -56,24 +65,37 @@ function shellLists(cmd) {
     else if (c === '\\') i++;
     else if (cmd.startsWith('<<', i)) {
       const opener = /^<<(-)?[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;&|<>()'"]+))/.exec(cmd.slice(i));
-      if (opener) pending.push({ list: lists.length, word: opener[2] ?? opener[3] ?? opener[4], tabs: opener[1] === '-' });
+      if (opener) pending.push({ owner: list, word: opener[2] ?? opener[3] ?? opener[4], tabs: opener[1] === '-' });
       i += opener ? opener[0].length - 1 : 1;
-    } else if (c === '\n' || c === ';' || (c === '&' && !/[&<>|]/.test(cmd[i - 1] ?? '') && !/[&>]/.test(cmd[i + 1] ?? ''))) {
-      lists.push(cmd.slice(start, i));
+    } else if (c === '(' || (c === '{' && /^[\s;&|(]?$/.test(cmd[i - 1] ?? '') && /\s/.test(cmd[i + 1] ?? ''))) {
+      groups.push(list);
+      list = { lead: list.lead + cmd.slice(list.start, i + 1), start: i + 1, body: '', close: c === '(' ? ')' : '}' };
+    } else if (list.close === ')' && c === ')') cut(i, groups.pop());
+    else if (list.close === '}' && c === '}' && cmd.slice(list.start, i).trim() === '' && /^[\s;&|)]?$/.test(cmd[i + 1] ?? '')) cut(i, groups.pop());
+    else if (c === '\n' || c === ';' || (c === '&' && !/[&<>|]/.test(cmd[i - 1] ?? '') && !/[&>]/.test(cmd[i + 1] ?? ''))) {
+      const at = i;
       if (c === '\n') {
-        for (const { list, word, tabs } of pending.splice(0)) {
+        for (const { owner, word, tabs } of pending.splice(0)) {
           const quoted = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const end = new RegExp(`\\n${tabs ? '\\t*' : ''}${quoted}(?=\\n|$)`).exec(cmd.slice(i));
           const stop = end ? i + end.index + end[0].length : cmd.length;
-          bodies[list] = (bodies[list] ?? '') + cmd.slice(i, stop);
+          owner.body += cmd.slice(i, stop);
           i = stop;
         }
+        if (/(?:&&|\|)[ \t]*$/.test(cmd.slice(list.start, at))) continue;
       }
-      start = i + 1;
+      cut(at);
+      list.start = i + 1;
     }
   }
-  lists.push(cmd.slice(start));
-  return lists.map((list, n) => list + (bodies[n] ?? ''));
+  // A group left open at the end closes there, its own lists first.
+  for (;;) {
+    list.text = list.lead + cmd.slice(list.start);
+    lists.push(list);
+    if (groups.length === 0) break;
+    list = groups.pop();
+  }
+  return lists.map(l => l.text + l.body);
 }
 
 // ledgerWrites CMD — the lists of a failed Bash command that still wrote the

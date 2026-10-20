@@ -180,10 +180,16 @@ test('a failed Bash call counts the ledger lines of each list that wrote them, n
       use('l5', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<'EOF'; false\nTask 6: complete (commits k..l)\nEOF" }),
       use('l6', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<'END-OF-DOC'\nTask 7: complete (commits m..n)\nEND-OF-DOC\nfalse" }),
       use('l7', 'Bash', { command: "false && cat >> .dforge/sdd/p/progress.md <<'EOF'; true\nTask 8: complete (commits o..p)\nEOF\nfalse" }),
+      use('l8', 'Bash', { command: "false &&  \necho 'Task 9: complete (commits q..r)' >> .dforge/sdd/p/progress.md" }),
+      use('l9', 'Bash', { command: "false && { echo a; echo 'Task 10: complete (commits s..t)' >> .dforge/sdd/p/progress.md; }" }),
+      use('l10', 'Bash', { command: "{ false && echo a; echo 'Task 11: complete (commits u..v)' >> .dforge/sdd/p/progress.md; }; false" }),
+      use('l11', 'Bash', { command: "false && (echo a; echo 'Task 12: complete (commits w..x)' >> .dforge/sdd/p/progress.md)" }),
+      use('l12', 'Bash', { command: "echo ${X}; printf '%s\\n' 'Task 13: complete (commits y..z)' |\ntee -a .dforge/sdd/p/progress.md; false" }),
     ]),
     failedCall('l1'), failedCall('l2'), failedCall('l3'), failedCall('l4'), failedCall('l5'), failedCall('l6'), failedCall('l7'),
+    failedCall('l8'), failedCall('l9'), failedCall('l10'), failedCall('l11'), failedCall('l12'),
   ]));
-  assert.deepEqual(m.completed, ['1', '3', '4', '5', '6', '7']);
+  assert.deepEqual(m.completed, ['1', '3', '4', '5', '6', '7', '11', '13']);
 });
 
 test('a heredoc body ends only at a line that is exactly its delimiter, tabs allowed for <<-', () => {
