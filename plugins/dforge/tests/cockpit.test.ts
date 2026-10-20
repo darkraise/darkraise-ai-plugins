@@ -14,6 +14,7 @@ import {
   attributionIn,
   bar,
   billingLabel,
+  bottomRule,
   budgetFor,
   collapsedFrom,
   collapsedToggled,
@@ -32,6 +33,7 @@ import {
   levelOf,
   limitForecast,
   modelName,
+  MODE_LABEL_RESERVE,
   nowLine,
   parseFinish,
   parseLedger,
@@ -2177,6 +2179,21 @@ describe('band lines', () => {
     const meters = bandMetersSvg([{ key: 'Context', percent: 61, share: 0.44, color: 'yellow', tick: 0.72, note: [{ text: '≈9 turns' }] }], 300)
     expect(meters).toContain('>CONTEXT</text>')
     expect(meters).toContain('61%')
+  })
+
+  test('leads line 2 with ◐ while background work runs', () => {
+    expect(text(bandLines({ ...input, isBackground: true }, 0)[1])).toBe('◐ ● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
+    expect(text(bandLines({ ...input, isBackground: false }, 0)[1])).toBe('● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
+  })
+
+  test('sets a label into the bottom rule, cut to fit', () => {
+    const whole = (rule: { lead: string; label: string; tail: string }) => rule.lead + rule.label + rule.tail
+    expect(whole(bottomRule('? for shortcuts', 30))).toBe(`╰─ ? for shortcuts ${'─'.repeat(10)}╯`)
+    expect(whole(bottomRule('esc to interrupt and more', 20))).toBe('╰─ esc to interr… ─╯')
+    expect(whole(bottomRule(null, 10))).toBe('╰────────╯')
+    expect(whole(bottomRule('  ', 10))).toBe('╰────────╯')
+    for (const width of [10, 20, 30]) expect([...whole(bottomRule('esc to interrupt and more', width))].length).toBe(width)
+    expect(MODE_LABEL_RESERVE).toBe(29)
   })
 })
 

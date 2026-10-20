@@ -335,6 +335,8 @@ export type BandInput = {
   /** Background shells running, and how long the oldest has run. */
   shells: { count: number; longest: number }
   now: number
+  /** True while the main conversation's background work runs: line 2 leads with ◐. */
+  isBackground?: boolean
 }
 
 const DIR = 'blue'
@@ -443,7 +445,8 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
   }
   const where = dir === null && git.length === 0 ? null : [...(dir ?? []), ...(dir === null ? git.map((run, index) => (index === 0 ? { ...run, text: '⎇ ' } : run)) : git)]
 
-  return [join([ctx, ...limits]), join([agents, shells, where])]
+  const two = join([agents, shells, where])
+  return [join([ctx, ...limits]), input.isBackground === true ? [{ text: '◐ ', color: AMBER_RUN, bold: true }, ...two] : two]
 }
 
 /**
@@ -459,6 +462,23 @@ export function fitBand(input: BandInput, width: number): [Run[], Run[]] {
     return runsCut(bandLines(input, BAND_TIERS - 1)[which], width)
   }
   return [fit(0), fit(1)]
+}
+
+/**
+ * Cells the box below the prompt leaves for Claude Code's permission-mode
+ * label on its row: the widest, `⏵⏵ bypass permissions on · ` after a 2-cell
+ * margin, measured on Claude Code 2.1.304. The live mode cannot be read at
+ * draw time, so every mode gets the widest.
+ */
+export const MODE_LABEL_RESERVE = 29
+
+/** The band's bottom rule, `width` cells wide, with `label` set into it after `╰─ ` and cut to fit; no label draws a plain rule. */
+export function bottomRule(label: string | null, width: number): { lead: string; label: string; tail: string } {
+  const text = (label ?? '').trim()
+  const room = width - 6
+  if (text === '' || room < 4) return { lead: `╰${'─'.repeat(Math.max(0, width - 2))}╯`, label: '', tail: '' }
+  const shown = commandExcerpt(text, room)
+  return { lead: '╰─ ', label: shown, tail: ` ${'─'.repeat(Math.max(1, width - 5 - [...shown].length))}╯` }
 }
 
 /** The cells a row of runs takes. */
