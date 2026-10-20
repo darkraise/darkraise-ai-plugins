@@ -323,8 +323,9 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   the durable facts the skills would file with `memory_add` go to
   `<docs>/notes/<date>-facts.md` instead. Session start runs `reconcile` and
   `pull`; the skills' stop points run `push`, and a
-  background Stop hook pushes as a safety net, the whole run bounded at 100
-  seconds (SIGTERM, then SIGKILL after 5 seconds). `push` waits up to 100
+  background Stop hook pushes as a safety net in at most 140 seconds: its
+  config lookup is bounded at 30 seconds and its push at 100, each sent
+  SIGTERM at its bound and SIGKILL 5 seconds later. `push` waits up to 100
   seconds for another run's mirror lock before refusing;
   `DARKMEM_SYNC_LOCK_WAIT_MS` sets that wait in milliseconds, and a value that
   is not a positive number means the 100 seconds. The Stop hook's push never

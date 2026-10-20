@@ -231,6 +231,7 @@ test("the Stop push bounds its config lookup apart from the push, which keeps it
   assert.deepEqual(calls.filter(line => /darkmem_push_quietly/.test(line)), [], "no bound wraps the push's own bound");
   assert.equal(calls.filter(line => / push$/.test(line) && /darkmem-sync/.test(line)).length, 1, calls.join("\n"));
   assert.match(calls.find(line => /dforge_project/.test(line)) ?? "", /^-k \d+ 30 bash -c /);
+  assert.match(calls.find(line => / push$/.test(line) && /darkmem-sync/.test(line)) ?? "", /^-k \d+ 100 bash /);
   assert.ok(s.stub.db.requests.some(r => r.method === "POST" && r.path === "/api/v1/worklog/entries"), "the push still sent the ledger");
 });
 
