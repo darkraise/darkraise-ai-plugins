@@ -25,6 +25,8 @@ The owner's answers on 2026-10-20.
 4. The not-a-defect and accepted findings close as proposed.
 5. One spec and one plan, executed as parallel subagent waves.
 6. Both design sections approved as presented.
+7. The plan is Claude-only: the Codex executor lane would run each of the
+   wave-1 tasks alone, and the parallel waves win for this plan.
 
 ## Problem
 
