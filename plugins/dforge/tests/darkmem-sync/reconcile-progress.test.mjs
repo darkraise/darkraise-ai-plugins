@@ -580,30 +580,34 @@ test("a handoff note linked to a named pipe while darkmem is written stays local
   assert.deepEqual(movedAside(s.repo), []);
 });
 
-test("a source that cannot be moved aside is one line naming it, and a rerun finishes the move", async t => {
-  const s = await setup(t, "darkmem");
-  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
-  write(ledger, LEDGER("p1"));
-  // A non-empty directory at the ledger's backup path, for every stamp the next minute can name.
-  const now = Date.now();
-  const blockers = [];
-  for (let i = 0; i < 60; i += 1) {
-    const dir = path.join(s.repo, ".dforge", `moved-${utcStamp(new Date(now + i * 1000))}`);
-    blockers.push(dir);
-    write(path.join(dir, "sdd", "p1", "progress.md", "keep"), "taken\n");
-  }
-  const result = await s.reconcile();
-  assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.doesNotMatch(result.stderr, /unexpected error/);
-  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem and the mirror hold the progress, but 1 sources could not be moved aside: .+progress\.md \(\w+\); reconcile again to finish$/m);
-  assert.equal(read(ledger), LEDGER("p1"));
-  assert.equal(s.stores().progress, "local");
-  for (const dir of blockers) fs.rmSync(dir, { recursive: true });
-  const again = await s.reconcile();
-  assert.equal(again.code, 0, again.stdout + again.stderr);
-  assert.match(again.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
-  assert.equal(fs.existsSync(ledger), false);
-});
+for (const [slugs, count] of [[["p1"], "1 source"], [["p1", "p2"], "2 sources"]]) {
+  test(`a move-aside that leaves ${count} behind names them in one line, still ignores the backup, and a rerun finishes the move`, async t => {
+    const s = await setup(t, "darkmem");
+    const ledgers = slugs.map(slug => path.join(s.repo, ".dforge", "sdd", slug, "progress.md"));
+    for (const [k, slug] of slugs.entries()) write(ledgers[k], LEDGER(slug));
+    // A non-empty directory at each ledger's backup path, for every stamp the next minute can name.
+    const now = Date.now();
+    const blockers = [];
+    for (let i = 0; i < 60; i += 1) {
+      const dir = path.join(s.repo, ".dforge", `moved-${utcStamp(new Date(now + i * 1000))}`);
+      blockers.push(dir);
+      for (const slug of slugs) write(path.join(dir, "sdd", slug, "progress.md", "keep"), "taken\n");
+    }
+    const result = await s.reconcile();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stderr, /unexpected error/);
+    const named = slugs.map(() => ".+progress\\.md \\(\\w+\\)").join(", ");
+    assert.match(result.stdout, new RegExp(`^darkmem-sync reconcile: progress stay local \\(configured darkmem\\): darkmem and the mirror hold the progress, but ${count} could not be moved aside: ${named}; reconcile again to finish$`, "m"));
+    for (const [k, slug] of slugs.entries()) assert.equal(read(ledgers[k]), LEDGER(slug));
+    assert.equal(read(path.join(s.repo, ".dforge", ".gitignore")), "*\n");
+    assert.equal(s.stores().progress, "local");
+    for (const dir of blockers) fs.rmSync(dir, { recursive: true });
+    const again = await s.reconcile();
+    assert.equal(again.code, 0, again.stdout + again.stderr);
+    assert.match(again.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+    for (const ledger of ledgers) assert.equal(fs.existsSync(ledger), false);
+  });
+}
 
 test("latest.md filed for an active plan leaves its workstream open, even one that was closed", async t => {
   const s = await setup(t, "darkmem");
@@ -895,7 +899,23 @@ test("an edit that lands in the primary checkout just before a copy is never ove
   const result = await progressToLocal(m.context, { offline: "test" });
   assert.equal(result.moved, false);
   assert.equal(result.reason, "the primary checkout changed during the move; nothing was overwritten");
-  assert.deepEqual(result.details, [`${m.target("p1")}: changed during the move; not overwritten`]);
+  assert.deepEqual(result.details, [`${m.target("p1")}: changed during the move; not overwritten`, `${m.target("p2")}: copied`]);
+  assert.equal(read(m.target("p1")), "edited meanwhile\n");
+  assert.equal(fs.existsSync(path.join(m.mirror, "work")), true, "the mirror's copies are not set aside");
+});
+
+test("an edit that lands between the read and the exclusive copy is a change during the move, not a failed copy", async t => {
+  const m = offlineMove();
+  const copy = fs.copyFileSync;
+  t.mock.method(fs, "copyFileSync", (from, to, mode) => {
+    if (to !== m.target("p1")) return copy(from, to, mode);
+    fs.writeFileSync(to, "edited meanwhile\n");
+    throw Object.assign(new Error("injected by the test"), { code: "EEXIST" });
+  });
+  const result = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(result.moved, false);
+  assert.equal(result.reason, "the primary checkout changed during the move; nothing was overwritten");
+  assert.deepEqual(result.details, [`${m.target("p1")}: changed during the move; not overwritten`, `${m.target("p2")}: copied`]);
   assert.equal(read(m.target("p1")), "edited meanwhile\n");
   assert.equal(fs.existsSync(path.join(m.mirror, "work")), true, "the mirror's copies are not set aside");
 });

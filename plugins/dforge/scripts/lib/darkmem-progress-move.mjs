@@ -405,11 +405,6 @@ export async function progressToDarkmem(context) {
       left.push(`${item.file} (${error.code})`);
     }
   }
-  // darkmem and the mirror already hold every source, so a rerun finds them
-  // filed and moves aside only what is left.
-  if (left.length) {
-    return refuse(`darkmem and the mirror hold the progress, but ${left.length} sources could not be moved aside: ${left.join(", ")}; reconcile again to finish`);
-  }
   // The checkout's state directory ignores itself, as .dforge/sdd/ does, so a
   // backup never shows as untracked in a repository that does not list it.
   // "wx" never writes through a link or over a file already there.
@@ -420,6 +415,12 @@ export async function progressToDarkmem(context) {
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
     }
+  }
+  // darkmem and the mirror already hold every source, so a rerun finds them
+  // filed and moves aside only what is left.
+  if (left.length) {
+    const sourceCount = left.length === 1 ? "1 source" : `${left.length} sources`;
+    return refuse(`darkmem and the mirror hold the progress, but ${sourceCount} could not be moved aside: ${left.join(", ")}; reconcile again to finish`);
   }
   const count = kind => sources.filter(item => item.kind === kind).length;
   return {
@@ -623,11 +624,20 @@ export async function progressToLocal(context, { offline = null } = {}) {
         continue;
       }
       if (!now) {
-        fs.copyFileSync(item.file, item.target, fs.constants.COPYFILE_EXCL);
+        // A file the exclusive copy finds there landed after the read above.
+        try {
+          fs.copyFileSync(item.file, item.target, fs.constants.COPYFILE_EXCL);
+        } catch (error) {
+          if (error.code !== "EEXIST") throw error;
+          landed.push(`${item.target}: changed during the move; not overwritten`);
+          continue;
+        }
         copied.push(item);
       }
     }
-    if (landed.length) return refuse("the primary checkout changed during the move; nothing was overwritten", landed);
+    if (landed.length) {
+      return refuse("the primary checkout changed during the move; nothing was overwritten", [...landed, ...copied.map(item => `${item.target}: copied`)]);
+    }
     const differing = sources.filter(item => !readOrNull(item.target)?.equals(item.buffer)).map(item => `${item.target}: the copy reads back different`);
     if (differing.length) return refuse("a copy into the primary checkout reads back different", differing);
   } catch (error) {
