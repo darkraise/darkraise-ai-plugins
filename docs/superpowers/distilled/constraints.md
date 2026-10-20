@@ -10,6 +10,12 @@ Set by: owner, 2026-09-15 review-routing design session
 Scope: every plan written for this repository on a Claude host
 Source: docs/superpowers/specs/2026-09-15-dr-superpowers-review-routing-design.md@18a00a7
 
+### Codex reviews run only on demand
+dforge never routes a task, plan or final review to Codex unless the `codexReview` setting is on, and it ships off. A one-off Codex review runs through `/codex:review` or `/codex:adversarial-review`. `trust.calibration` stays `pass`, so turning the setting on is all it takes. This covers reviews only; the executor lane above is unchanged.
+Set by: owner, 2026-10-21 ("codex review should be optional and on demand, do not auto review with codex")
+Scope: dforge's review routing (`scripts/codex-gate`, `config/schema.mjs`) and every plan run
+Source: commit c342980 (feat(dforge): make Codex reviews opt-in)
+
 ## Evals
 
 ### Eval parser shapes need a real transcript
