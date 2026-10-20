@@ -17,6 +17,7 @@ import {
   budgetFor,
   collapsedFrom,
   collapsedToggled,
+  denseLine,
   duration,
   elapsed,
   endsOnSentinel,
@@ -56,7 +57,7 @@ import {
   windowElapsed,
   writesGitText,
 } from '../hooks/cockpit/lib'
-import type { ActivityInput, Run } from '../hooks/cockpit/lib'
+import type { ActivityInput, DenseInput, Run } from '../hooks/cockpit/lib'
 import {
   discordBody,
   excerpt,
@@ -2223,6 +2224,52 @@ describe('now row', () => {
     await $.turn.complete({ answer: 'ok', durationMs: 6_000, isAborted: false, turnId: 't1', reason: 'answer' })
     ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /○ idle · last turn 6s/ })).toBeDefined()
+  })
+})
+
+describe('dense rows', () => {
+  const INPUT: DenseInput = {
+    email: 'me@example.com',
+    billing: 'subscription',
+    remote: [{ text: '○ not connected' }],
+    context: { tokens: 284_000, limit: 465_000 },
+    turnsLeft: 8,
+    limits: [
+      { kind: 'five_hour', percent: 23 },
+      { kind: 'seven_day', percent: 61 },
+      { kind: 'spend_limit', percent: 5 },
+    ],
+    shells: [
+      { command: 'npm test', startedAt: 100_000 },
+      { command: 'node codex-companion.mjs review --background\nmore', startedAt: 160_000 },
+    ],
+    agents: ['impl-sonnet-medium', 'judge-opus'],
+    run: { done: 3, total: 5, current: 'Task 4: Draw the card' },
+    todos: null,
+    repo: { branch: 'main', ahead: 2, behind: 0, changed: 3, untracked: 1 },
+    refused: 0,
+    now: 340_000,
+  }
+
+  test('draw one line per section', () => {
+    expect(flat(denseLine('account', INPUT) ?? [])).toBe('acct me@example.com · subscription · Remote ○ not connected')
+    expect(flat(denseLine('context', INPUT) ?? [])).toBe('ctx  ▰▰▰▰▰▰▱▱▱▱ 61% 284k/465k · ≈8 turns')
+    expect(flat(denseLine('usage', INPUT) ?? [])).toBe('lim  5h ▰▱▱▱▱▱ 23% · 7d ▰▰▰▰▱▱ 61%')
+    expect(flat(denseLine('shells', INPUT) ?? [])).toBe('$    2 shells · node codex-companion.mjs review --backg… · 3m')
+    expect(flat(denseLine('agents', INPUT) ?? [])).toBe('agt  2 running · impl-sonnet-medium, judge-opus')
+    expect(flat(denseLine('plan', INPUT) ?? [])).toBe('plan ▰▰▰▱▱ 3/5 · Task 4: Draw the card')
+    expect(flat(denseLine('repo', INPUT) ?? [])).toBe('⎇    main ↑2 · ~3 changed · ?1')
+    expect(denseLine('guard', INPUT)).toBeNull()
+    expect(flat(denseLine('guard', { ...INPUT, refused: 2 }) ?? [])).toBe('grd  ✗ 2 refused')
+  })
+
+  test('leave out what has nothing to show, and say when nothing was read yet', () => {
+    const empty: DenseInput = { ...INPUT, email: null, context: null, limits: [], shells: [], agents: [], run: null, todos: null, repo: null }
+    expect(denseLine('account', empty)).toBeNull()
+    expect(flat(denseLine('context', empty) ?? [])).toBe('ctx  no reading yet')
+    expect(flat(denseLine('usage', empty) ?? [])).toBe('lim  no reading yet')
+    for (const section of ['shells', 'agents', 'plan', 'repo', 'guard'] as const) expect(denseLine(section, empty)).toBeNull()
+    expect(flat(denseLine('plan', { ...empty, todos: { done: 1, total: 4, current: 'Write the tests' } }) ?? [])).toBe('plan ▰▱▱▱ 1/4 · Write the tests')
   })
 })
 

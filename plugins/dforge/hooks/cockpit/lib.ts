@@ -850,6 +850,96 @@ export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { s
   }
 }
 
+/** What the dense pane's rows draw from. */
+export type DenseInput = {
+  email: string | null
+  billing: string | null
+  remote: Run[]
+  /** The context against the handoff budget. */
+  context: { tokens: number; limit: number } | null
+  turnsLeft: number | null
+  limits: readonly { kind: string; percent: number }[]
+  shells: readonly { command: string; startedAt: number }[]
+  /** The running subagents' seats, short names. */
+  agents: readonly string[]
+  run: { done: number; total: number; current: string | null } | null
+  todos: { done: number; total: number; current: string | null } | null
+  repo: RepoState | null
+  refused: number
+  now: number
+}
+
+/** A dense row's label, padded to five cells so the rows line up. */
+function denseLabel(label: string, color?: string): Run {
+  return { text: label.padEnd(5), color, dim: color === undefined }
+}
+
+/** One dense pane row for a section, or null when the section has nothing to show. */
+export function denseLine(section: Section, input: DenseInput): Run[] | null {
+  const sep: Run = { text: ' · ', dim: true }
+  const join = (parts: Run[][]): Run[] => parts.filter(part => part.length > 0).flatMap((part, index) => (index === 0 ? part : [sep, ...part]))
+  switch (section) {
+    case 'account':
+      if (input.email === null) return null
+      return [denseLabel('acct'), ...join([[{ text: input.email, bold: true }], input.billing === null ? [] : [{ text: input.billing, dim: true }], [{ text: 'Remote ', dim: true }, ...input.remote]])]
+    case 'context': {
+      if (input.context === null) return [denseLabel('ctx'), { text: 'no reading yet', dim: true }]
+      const { tokens, limit } = input.context
+      const percent = (tokens / limit) * 100
+      const color = rampColor(percent)
+      const turns = input.turnsLeft
+      return [
+        denseLabel('ctx'),
+        { text: bar(tokens / limit, 10), color },
+        { text: ` ${Math.round(percent)}%`, color, bold: true },
+        { text: ` ${kTokens(tokens)}/${kTokens(limit)}`, dim: true },
+        ...(turns === null ? [] : [sep, { text: `≈${turns} ${turns === 1 ? 'turn' : 'turns'}`, color: turns <= 3 ? AMBER : undefined, dim: turns > 3 }]),
+      ]
+    }
+    case 'usage': {
+      const shown = input.limits.filter(limit => limit.kind === 'five_hour' || limit.kind === 'seven_day')
+      if (shown.length === 0) return [denseLabel('lim'), { text: 'no reading yet', dim: true }]
+      return [
+        denseLabel('lim'),
+        ...join(
+          shown.map(limit => {
+            const color = rampColor(limit.percent)
+            return [{ text: `${limitLabel(limit.kind)} `, dim: true }, { text: bar(limit.percent / 100, 6), color }, { text: ` ${Math.round(limit.percent)}%`, color, bold: true }]
+          }),
+        ),
+      ]
+    }
+    case 'shells': {
+      if (input.shells.length === 0) return null
+      const newest = input.shells.reduce((last, shell) => (shell.startedAt > last.startedAt ? shell : last))
+      const count = input.shells.length
+      return [
+        denseLabel('$', 'yellow'),
+        ...join([[{ text: `${count} ${count === 1 ? 'shell' : 'shells'}`, color: 'yellow' }], [{ text: commandExcerpt(newest.command, 40) }], [{ text: shellAge(input.now - newest.startedAt), dim: true }]]),
+      ]
+    }
+    case 'agents':
+      if (input.agents.length === 0) return null
+      return [denseLabel('agt', 'cyan'), ...join([[{ text: `${input.agents.length} running`, color: 'cyan' }], [{ text: input.agents.join(', ') }]])]
+    case 'plan': {
+      const plan = input.run ?? input.todos
+      if (plan === null || plan.total === 0) return null
+      return [
+        denseLabel('plan', 'magenta'),
+        ...join([[{ text: bar(plan.done / plan.total, Math.min(plan.total, 10)), color: 'magenta' }, { text: ` ${plan.done}/${plan.total}`, bold: true }], plan.current === null ? [] : [{ text: plan.current }]]),
+      ]
+    }
+    case 'repo': {
+      if (input.repo === null) return null
+      const r = input.repo
+      const branch: Run[] = [{ text: r.branch, color: 'magenta', bold: true }, ...(r.ahead > 0 ? [{ text: ` ↑${r.ahead}`, color: 'magenta' }] : []), ...(r.behind > 0 ? [{ text: ` ↓${r.behind}`, color: 'magenta' }] : [])]
+      return [denseLabel('⎇', 'magenta'), ...join([branch, r.changed > 0 ? [{ text: `~${r.changed} changed`, color: 'yellow' }] : [], r.untracked > 0 ? [{ text: `?${r.untracked}`, dim: true }] : []])]
+    }
+    case 'guard':
+      return input.refused === 0 ? null : [denseLabel('grd'), { text: `✗ ${input.refused} refused`, color: 'red' }]
+  }
+}
+
 /** Whether a main turn's text is a prompt the person typed: a continuation starts with none, a task notification's wake-up with the notification. */
 export function isTypedPrompt(text: string): boolean {
   return text.trim() !== '' && !text.includes('<task-notification>')
