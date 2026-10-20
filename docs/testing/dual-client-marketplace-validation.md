@@ -19,8 +19,10 @@ Verified outcomes:
 - Codex local-root registration lists exactly `dforge`, `darkraise-ui`,
   and `darkraise-win32ui`, and rejects `dr-status` installation by name.
 - All three Codex plugins install; installed native manifest bytes match source.
-  dforge's native manifest explicitly contains `"hooks": {}`.
-- Claude installs all four repository plugins.
+  Current-state note, not a result of the 2026-09-08 run: dforge's native
+  manifest explicitly contains `"hooks": {}`.
+- Current-state note, not a result of the 2026-09-08 run: Claude installs all
+  four repository plugins.
 - Codex upgrades a seeded UI `0.1.0` cache to the version the repository's
   `darkraise-ui` Codex manifest names (`0.2.0` at this run), replacing actual
   skill bytes.
