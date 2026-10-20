@@ -65,15 +65,15 @@ test('planSlugs counts a script run, not another command reading its path', () =
   write(join(dir, 'cat.jsonl'), [skill(SDD), bash('c', 'cat $S/task-brief docs/plans/2026-10-18-zeta.md')]);
   write(join(dir, 'sed.jsonl'), [skill(SDD), bash('s', 'sed -n 1p /p/scripts/task-brief 2026-10-18-zeta.md')]);
   write(join(dir, 'echo.jsonl'), [skill(SDD), bash('e', "echo 'bash /p/scripts/task-brief docs/plans/2026-10-18-zeta.md'")]);
-  write(join(dir, 'run.jsonl'), [skill(SDD), bash('v', 'S=/p/scripts; bash $S/task-brief docs/plans/2026-10-18-eta.md 1'), bash('t', 'timeout 60 bash /p/scripts/task-brief docs/plans/2026-10-18-theta.md 2'), bash('d', 'cd /w && /p/scripts/review-route docs/plans/2026-10-18-iota.md 3'), bash('a', 'FOO=1 /p/scripts/task-brief docs/plans/2026-10-18-kappa.md 4'), bash('w', 'env -u AR_SESSION timeout 60 bash /p/scripts/task-brief docs/plans/2026-10-18-lambda.md 5'), bash('u', 'bash -u /p/scripts/task-brief docs/plans/2026-10-18-mu.md 6')]);
-  write(join(dir, 'n.jsonl'), [skill(SDD), bash('n', 'bash -n /p/scripts/task-brief docs/plans/2026-10-18-zeta.md')]);
+  write(join(dir, 'run.jsonl'), [skill(SDD), bash('v', 'S=/p/scripts; bash $S/task-brief docs/plans/2026-10-18-eta.md 1'), bash('t', 'timeout 60 bash /p/scripts/task-brief docs/plans/2026-10-18-theta.md 2'), bash('d', 'cd /w && /p/scripts/review-route docs/plans/2026-10-18-iota.md 3'), bash('a', 'FOO=1 /p/scripts/task-brief docs/plans/2026-10-18-kappa.md 4'), bash('w', 'env -u AR_SESSION timeout 60 bash /p/scripts/task-brief docs/plans/2026-10-18-lambda.md 5'), bash('u', 'bash -u /p/scripts/task-brief docs/plans/2026-10-18-mu.md 6'), bash('o', 'bash -o pipefail /p/scripts/task-brief docs/plans/2026-10-18-nu.md 7'), bash('eo', 'bash -eo pipefail /p/scripts/task-brief docs/plans/2026-10-18-xi.md 8'), bash('po', 'sh +o histexpand /p/scripts/review-package docs/plans/2026-10-18-omicron.md a b out.md'), bash('bb', '/bin/bash /p/scripts/task-brief docs/plans/2026-10-18-pi.md 9'), bash('ue', '/usr/bin/env timeout 60 bash /p/scripts/task-brief docs/plans/2026-10-18-rho.md 10')]);
+  write(join(dir, 'n.jsonl'), [skill(SDD), bash('n', 'bash -n /p/scripts/task-brief docs/plans/2026-10-18-zeta.md'), bash('bn', '/bin/bash -n /p/scripts/task-brief docs/plans/2026-10-18-zeta.md')]);
   write(join(dir, 'v.jsonl'), [skill(SDD), bash('v', 'command -v /p/scripts/task-brief docs/plans/2026-10-18-zeta.md')]);
   assert.deepEqual(planSlugs(join(dir, 'n.jsonl')), []);
   assert.deepEqual(planSlugs(join(dir, 'v.jsonl')), []);
   assert.deepEqual(planSlugs(join(dir, 'cat.jsonl')), []);
   assert.deepEqual(planSlugs(join(dir, 'sed.jsonl')), []);
   assert.deepEqual(planSlugs(join(dir, 'echo.jsonl')), []);
-  assert.deepEqual(planSlugs(join(dir, 'run.jsonl')), ['2026-10-18-eta', '2026-10-18-iota', '2026-10-18-kappa', '2026-10-18-lambda', '2026-10-18-mu', '2026-10-18-theta']);
+  assert.deepEqual(planSlugs(join(dir, 'run.jsonl')), ['2026-10-18-eta', '2026-10-18-iota', '2026-10-18-kappa', '2026-10-18-lambda', '2026-10-18-mu', '2026-10-18-nu', '2026-10-18-omicron', '2026-10-18-pi', '2026-10-18-rho', '2026-10-18-theta', '2026-10-18-xi']);
 });
 
 test('inFlight counts launches running at a handoff or at the end', () => {

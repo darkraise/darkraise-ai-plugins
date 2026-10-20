@@ -19,10 +19,15 @@ export const REPOS = process.env.CONTROLLER_EVAL_REPOS ?? fileURLToPath(new URL(
 // assignment, an option, a timeout's duration), so a command that only reads
 // the script (cat $S/task-brief …) or quotes a run (echo 'bash …/task-brief …')
 // is not a run. A run inside a quoted string (bash -c '…/task-brief x.md') is
-// one word too, so it is not counted either.
+// one word too, so it is not counted either. A wrapper is known by its base
+// name, so /bin/bash and /usr/bin/env are bash and env.
 const SCRIPT = /\/(?:task-brief|review-route|review-package)$/;
 const BEFORE_COMMAND = new Set(['!', '{', 'if', 'then', 'elif', 'else', 'while', 'until', 'do', 'bash', 'sh', 'command', 'env', 'exec', 'nohup', 'time', 'timeout']);
-const OPTION_VALUE = { env: new Set(['-u']), timeout: new Set(['-k', '-s']) };
+const SHELL_OPTION_VALUE = new Set(['-o', '-O', '+o', '+O', '--rcfile', '--init-file']);
+const OPTION_VALUE = { env: new Set(['-u']), timeout: new Set(['-k', '-s']), bash: SHELL_OPTION_VALUE, sh: SHELL_OPTION_VALUE };
+// A shell's clustered flags take a value when the last of them does (-eo pipefail).
+const SHELL_CLUSTER_VALUE = /^[-+][A-Za-z]*[oO]$/;
+const takesValue = (wrapper, w) => OPTION_VALUE[wrapper]?.has(w) || ((wrapper === 'bash' || wrapper === 'sh') && SHELL_CLUSTER_VALUE.test(w));
 const NOT_A_RUN = { bash: new Set(['-n']), sh: new Set(['-n']), command: new Set(['-v', '-V']) };
 const ASSIGN = /\b([A-Za-z_]\w*)=(['"]?)([^\s'";&|]+)\2/g;
 
@@ -59,11 +64,12 @@ function planArgs(cmd) {
   return simpleCommands(cmd).flatMap(words => {
     let i = 0;
     let wrapper = '';
-    while (i < words.length && !SCRIPT.test(words[i]) && (BEFORE_COMMAND.has(words[i]) || /^(?:[A-Za-z_]\w*=|-|\d)/.test(words[i]))) {
+    const name = w => (w.includes('=') ? w : basename(w));
+    while (i < words.length && !SCRIPT.test(words[i]) && (BEFORE_COMMAND.has(name(words[i])) || /^(?:[A-Za-z_]\w*=|[-+]|\d)/.test(words[i]))) {
       const w = words[i];
       if (NOT_A_RUN[wrapper]?.has(w)) return [];
-      if (BEFORE_COMMAND.has(w)) wrapper = w;
-      i += OPTION_VALUE[wrapper]?.has(w) ? 2 : 1;
+      if (BEFORE_COMMAND.has(name(w))) wrapper = name(w);
+      i += takesValue(wrapper, w) ? 2 : 1;
     }
     if (!SCRIPT.test(words[i] ?? '')) return [];
     const arg = (words[i + 1] ?? '').replace(/^\$\{?(\w+)\}?$/, (_, name) => vars[name] ?? '');
