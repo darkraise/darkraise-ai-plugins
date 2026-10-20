@@ -807,6 +807,26 @@ describe('cockpit pane', () => {
     expect((await order(ui, 'terminal', [/^Working · 2$/]))[0]).toBeGreaterThan(-1)
   })
 
+  test('the background pill under an approved call settles its wait after the draw', async ($, on) => {
+    const clock = world(on, { tokens: 50_000 })
+    on('tool.check', () => ({ decision: 'ask' }))
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.tool.check({ tool: 'Bash', input: { command: 'npm test' }, tool_use_id: 'toolu_1' } as never)
+    const now = async () => {
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      const isWaiting = (await ui.find({ type: 'Text', text: /approve\?/ })) !== undefined
+      const isRunning = (await ui.find({ type: 'Text', text: /running \d/ })) !== undefined
+      await ui.unmount()
+      return isWaiting ? 'waiting' : isRunning ? 'running' : 'neither'
+    }
+    expect(await now()).toBe('waiting')
+    const pill = await $.ui.mount({ plugin: 'dforge', surface: 'terminal', component: 'ToolProgress', props: { tool_use_id: 'toolu_1', kind: 'background_hint', hint: '(ctrl+b to run in background)' } })
+    await pill.unmount()
+    await clock.advance(1)
+    expect(await now()).toBe('running')
+  })
+
   test('the desktop context legend squares carry the stack bar colors', async ($, on) => {
     world(on, { tokens: 284_000 })
     await $.session.start(START)

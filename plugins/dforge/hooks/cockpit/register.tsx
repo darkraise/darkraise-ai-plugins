@@ -534,9 +534,11 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   // The background pill under a Bash call is drawn only once the call runs,
-  // so an approval waiting on it was given.
+  // so an approval waiting on it was given. Drawing may not write state, so
+  // the wait settles once this draw is done.
   on('ui.render', { component: 'ToolProgress' }, async ($, e, next) => {
-    if (S.waits.has(e.props.tool_use_id)) await endWait($, e.props.tool_use_id, '✓ Approved')
+    const id = e.props.tool_use_id
+    if (S.waits.has(id)) $.clock.after(0, () => void endWait($, id, '✓ Approved'))
     return next(e)
   })
 
