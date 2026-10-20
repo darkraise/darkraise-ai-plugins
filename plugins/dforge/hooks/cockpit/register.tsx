@@ -3443,7 +3443,7 @@ async function refreshDetail($: EngineInterface) {
           .map(row => ({ name: row.name, tokens: row.tokens })),
         compactAt: detail.isAutoCompactEnabled ? (detail.autoCompactThreshold ?? null) : null,
       }
-      await update($, breakdown, () => next)
+      if (JSON.stringify(await read($, breakdown)) !== JSON.stringify(next)) await update($, breakdown, () => next)
     }
   } catch {
     // No breakdown on this host: the pane shows the totals alone.
@@ -3451,9 +3451,9 @@ async function refreshDetail($: EngineInterface) {
   try {
     const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
     const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
-    await update($, repo, () => state)
+    if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
   } catch {
-    await update($, repo, () => null)
+    if ((await read($, repo)) !== null) await update($, repo, () => null)
   }
 }
 
