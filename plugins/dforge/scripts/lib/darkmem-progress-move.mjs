@@ -175,7 +175,7 @@ export async function checkProgressTargets({ cfg, client }, sources) {
     if (!fs.existsSync(target)) continue;
     let held;
     try {
-      held = fs.readFileSync(target);
+      held = readNoFollow(target);
     } catch (error) {
       problems.push(`${target}: could not be read (${error.code})`);
       continue;
@@ -459,7 +459,7 @@ function renderCheckpoint({ state, persist, report }, workRoot, newest) {
   const hash = sha256(remote);
   let current = null;
   try {
-    current = sha256(fs.readFileSync(file));
+    current = sha256(readNoFollow(file));
   } catch (error) {
     if (error.code !== "ENOENT") {
       report.failures.push(`handoff/latest.md: could not be read (${error.code})`);
@@ -620,7 +620,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
     }
     let held;
     try {
-      held = fs.readFileSync(item.target);
+      held = readNoFollow(item.target);
     } catch (error) {
       if (error.code !== "ENOENT") problems.push(`${item.target}: could not be read (${error.code})`);
       continue;

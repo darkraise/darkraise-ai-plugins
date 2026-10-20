@@ -532,9 +532,17 @@ async function documentsToLocal(context, { offline = null } = {}) {
       details: links.map(rel => `${rel}: a symbolic link, which the move will not write through`),
     };
   }
-  // A killed earlier run may have copied some files: equal ones are fine.
+  // A killed earlier run may have copied some files: equal ones are fine. One
+  // that cannot be read, a named pipe included, differs.
   const differing = files
-    .filter(({ file, dest }) => fs.existsSync(dest) && !fs.readFileSync(dest).equals(fs.readFileSync(file)))
+    .filter(({ file, dest }) => {
+      if (!fs.existsSync(dest)) return false;
+      try {
+        return !readNoFollow(dest).equals(readNoFollow(file));
+      } catch {
+        return true;
+      }
+    })
     .map(({ name }) => `${name}: already exists with different content`);
   if (differing.length) return { moved: false, reason: "docs/dforge already holds different copies; nothing was copied", details: differing };
   // A repository moved under the parent spec's §6 ignored its docs directory.

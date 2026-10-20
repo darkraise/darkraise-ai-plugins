@@ -4,12 +4,12 @@ import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { resolveStores, writeApplied } from "../../scripts/lib/darkmem-config.mjs";
-import { utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
+import { loadState, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import {
-  NOT_A_FILE, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, refreshContext, runGit, stayLine,
+  NOT_A_FILE, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, reconcile as reconcileInProcess, refreshContext, runGit, stayLine,
 } from "../../scripts/lib/darkmem-reconcile.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
-import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
+import { git, makeHome, makeRepo, namedPipe, read, run, scratch, write } from "./helpers.mjs";
 
 // A HOME mapping `repo` to project "proj" with the mapping entry's overrides,
 // and stores.json recording `stores` (null: no record).
@@ -625,16 +625,47 @@ test("documents move back into docs/dforge, untracked, and the mirror copy is se
   assert.equal(again.stdout, "");
 });
 
-test("a differing file already in docs/dforge refuses the move and nothing is copied", async t => {
-  const s = await darkmemDocs(t);
-  write(path.join(s.repo, "docs", "dforge", "specs", "a.md"), "# A local\n");
-  const result = await s.reconcile();
-  assert.equal(result.code, 1);
-  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay darkmem \(configured local\): docs\/dforge already holds different copies; nothing was copied$/m);
-  assert.ok(result.stdout.includes("  docs/dforge/specs/a.md: already exists with different content\n"), result.stdout);
-  assert.equal(fs.existsSync(path.join(s.repo, "docs", "dforge", "plans", "p.md")), false);
-  assert.equal(read(path.join(s.docsRoot, "plans", "p.md")), "# P\n");
-  assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+for (const [what, plant] of [["a differing file", file => write(file, "# A local\n")], ["a named pipe", namedPipe]]) {
+  test(`${what} already in docs/dforge refuses the move and nothing is copied`, { skip: what === "a named pipe" && process.platform === "win32" }, async t => {
+    const s = await darkmemDocs(t);
+    plant(path.join(s.repo, "docs", "dforge", "specs", "a.md"));
+    const result = await s.reconcile();
+    assert.equal(result.code, 1);
+    assert.match(result.stdout, /^darkmem-sync reconcile: documents stay darkmem \(configured local\): docs\/dforge already holds different copies; nothing was copied$/m);
+    assert.ok(result.stdout.includes("  docs/dforge/specs/a.md: already exists with different content\n"), result.stdout);
+    assert.equal(fs.existsSync(path.join(s.repo, "docs", "dforge", "plans", "p.md")), false);
+    assert.equal(read(path.join(s.docsRoot, "plans", "p.md")), "# P\n");
+    assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
+  });
+}
+
+test("a mirror copy swapped for a directory during the killed-run comparison refuses the move, not a crash", async t => {
+  const repo = makeRepo();
+  const home = mapped(repo, { entry: { documentStore: "local", progressSource: "local" }, stores: { documents: "darkmem", progress: "local" } });
+  const mirrorCopy = path.join(home.docsRoot, "specs", "a.md");
+  const dest = path.join(repo, "docs", "dforge", "specs", "a.md");
+  write(mirrorCopy, "# A\n");
+  write(dest, "# A\n");
+  // Offline (darkmem turned off) the move needs no client.
+  const cfg = { ...cfgFor(repo, home.env), enabled: false };
+  const lines = [];
+  const context = { cfg, client: null, env: home.env, out: line => lines.push(line), report: { refused: 0 }, state: loadState(cfg.statePath), persist: () => {} };
+  // The comparison reads the repository's copy, then the mirror's: the
+  // mirror's becomes a directory at that second open.
+  const open = fs.openSync;
+  let armed = false;
+  t.mock.method(fs, "openSync", (target, ...rest) => {
+    if (target === dest) armed = true;
+    else if (armed && target === mirrorCopy) {
+      armed = false;
+      fs.rmSync(mirrorCopy);
+      fs.mkdirSync(mirrorCopy);
+    }
+    return open(target, ...rest);
+  });
+  await reconcileInProcess(context);
+  assert.ok(lines.includes("darkmem-sync reconcile: documents stay darkmem (configured local): docs/dforge already holds different copies; nothing was copied"), lines.join("\n"));
+  assert.ok(lines.includes("  docs/dforge/specs/a.md: already exists with different content"), lines.join("\n"));
 });
 
 test("a mirror copy that differs from darkmem's refuses the move before anything is copied or set aside", async t => {

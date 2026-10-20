@@ -592,6 +592,17 @@ test("a named pipe where a ledger belongs is in progress, and is never opened fo
   assert.equal(s.stub.db.requests.length, 0);
 });
 
+test("a named pipe at the mirror's copy of a ledger is a problem, and is never opened for a blocking read", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  const target = namedPipe(path.join(s.workRoot, "sdd", "p1", "progress.md"));
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): darkmem or the mirror already holds different progress\n"), result.stdout);
+  assert.ok(result.stdout.includes(`  ${target}: could not be read (EFTYPE)\n`), result.stdout);
+  assert.equal(s.stores().progress, "local");
+});
+
 test("a handoff note linked to a named pipe while darkmem is written stays local, and the recheck never blocks on it", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
   const note = path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md");
@@ -862,17 +873,19 @@ test("a primary state directory reached through a symbolic link keeps progress i
   assert.equal(s.stores().progress, "darkmem");
 });
 
-test("a primary checkout file that cannot be read keeps progress in darkmem, not a crash", async t => {
-  const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
-  const target = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
-  fs.mkdirSync(target, { recursive: true });
-  const result = await s.reconcile();
-  assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the primary checkout cannot take the mirror's progress$/m);
-  assert.ok(result.stdout.includes(`  ${target}: could not be read (EISDIR)\n`), result.stdout);
-  assert.equal(s.stores().progress, "darkmem");
-});
+for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { recursive: true }), "EISDIR"], ["a named pipe", namedPipe, "EFTYPE"]]) {
+  test(`a primary checkout file that is ${what} keeps progress in darkmem, not a crash or a blocking read`, { skip: code === "EFTYPE" && process.platform === "win32" }, async t => {
+    const s = await setup(t, "local");
+    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+    const target = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+    plant(target);
+    const result = await s.reconcile();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the primary checkout cannot take the mirror's progress$/m);
+    assert.ok(result.stdout.includes(`  ${target}: could not be read (${code})\n`), result.stdout);
+    assert.equal(s.stores().progress, "darkmem");
+  });
+}
 
 test("a mirror that lost latest.md takes darkmem's newest checkpoint again before the move back", async t => {
   const s = await setup(t, "local");
@@ -887,16 +900,18 @@ test("a mirror that lost latest.md takes darkmem's newest checkpoint again befor
   assert.equal(read(path.join(s.repo, ".dforge", "handoff", "latest.md")), LATEST);
 });
 
-test("a mirror latest.md that cannot be read keeps progress in darkmem, not a crash", async t => {
-  const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
-  fs.mkdirSync(path.join(s.workRoot, "handoff", "latest.md"), { recursive: true });
-  const result = await s.reconcile();
-  assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the pull into the mirror did not finish cleanly$/m);
-  assert.ok(result.stdout.includes("  failed: handoff/latest.md: could not be read (EISDIR)\n"), result.stdout);
-  assert.equal(s.stores().progress, "darkmem");
-});
+for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { recursive: true }), "EISDIR"], ["a named pipe", namedPipe, "EFTYPE"]]) {
+  test(`a mirror latest.md that is ${what} keeps progress in darkmem, not a crash or a blocking read`, { skip: code === "EFTYPE" && process.platform === "win32" }, async t => {
+    const s = await setup(t, "local");
+    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
+    plant(path.join(s.workRoot, "handoff", "latest.md"));
+    const result = await s.reconcile();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the pull into the mirror did not finish cleanly$/m);
+    assert.ok(result.stdout.includes(`  failed: handoff/latest.md: could not be read (${code})\n`), result.stdout);
+    assert.equal(s.stores().progress, "darkmem");
+  });
+}
 
 test("a mirror latest.md that cannot be written keeps progress in darkmem, not a crash", async t => {
   const s = await setup(t, "local");
