@@ -258,5 +258,16 @@ expected_cwd="$PWD"
 command -v cygpath >/dev/null 2>&1 && expected_cwd=$(cygpath -m "$PWD")
 check "a registry probe receives a native-form cwd" \
   "$(head -1 "$TMP/probe-cwd.log")" "$expected_cwd"
+
+# A cwd holding a quote and a backslash reaches the probe as valid JSON.
+# Windows does not allow either in a file name.
+if ! command -v cygpath >/dev/null 2>&1; then
+  odd="$TMP/a\"b\\c"
+  mkdir -p "$odd"
+  : > "$TMP/probe-odd.log"
+  (cd "$odd" && STUB_PROBE_LOG="$TMP/probe-odd.log" regrun >/dev/null)
+  check "a cwd with a quote and a backslash reaches the probe intact" \
+    "$(head -1 "$TMP/probe-odd.log")" "$odd"
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
