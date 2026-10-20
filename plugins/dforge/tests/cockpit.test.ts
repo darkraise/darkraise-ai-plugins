@@ -486,8 +486,9 @@ function world(on: On, w: World) {
 
 // A signed-in account working in a repository under home.
 const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
-function signedIn(on: On, files: World['files'] = {}) {
+function signedIn(on: On, files: World['files'] = {}, reads?: string[]) {
   on('fs.read', (_$, e) => {
+    reads?.push(e.path)
     const file = files[e.path]
     if (file !== undefined) return { value: file.text }
     if (e.path === '/home/me/.claude.json') {
@@ -2762,6 +2763,36 @@ describe('run card', () => {
     const drawn = JSON.stringify(await ui.drawn())
     expect(drawn.indexOf('Task 2: Draw the card')).toBeLessThan(drawn.indexOf('Task 3: Ship it'))
     expect(drawn.indexOf('Task 3: Ship it')).toBeLessThan(drawn.indexOf('Task 1: Add the helpers'))
+  })
+
+  test('reads an unchanged ledger no more, however many ticks pass', async ($, on) => {
+    const files = runFiles(LEDGER) ?? {}
+    const reads: string[] = []
+    const clock = world(on, { ...SIGNED_IN, files })
+    signedIn(on, files, reads)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    await clock.advance(4_000)
+    const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
+    const before = ledgerReads()
+    await clock.advance(10_000)
+    expect(ledgerReads()).toBe(before)
+  })
+
+  test('picks up a ledger change within one poll tick', async ($, on) => {
+    const files = runFiles(LEDGER) ?? {}
+    const clock = world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    await clock.advance(4_000)
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = {
+      text: `${LEDGER}\nTask 2: complete (commits c..e, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`,
+      mtimeMs: 2_100_000,
+    }
+    await clock.advance(2_000)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^2\/3$/ })).toBeDefined()
   })
 
   test('reads no ledger left under the pre-3.0 .superpowers', async ($, on) => {

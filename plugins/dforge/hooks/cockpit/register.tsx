@@ -332,6 +332,7 @@ export const register: Register = on => {
     await readEngine($)
     await readWhere($)
     await readNotifier($)
+    S.runKey = ''
     await readRun($)
     await trackAutoRun($)
     S.watchedSince = await $.clock.now()
@@ -2256,6 +2257,9 @@ const S = {
   detailAt: 0,
   // The settings file's modification time and the engine's settings, as last put in force.
   seen: { config: null as number | null, claude: '' },
+  // The ledger, its modification time and its plan's, as the run was last read; the plan file found then.
+  runKey: '',
+  runPlan: null as string | null,
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2834,15 +2838,22 @@ async function readRun($: EngineInterface) {
     // A ledger counts once this session works on it, or when it is the one
     // the session started next to.
     if (newest === null || (!(await read($, isPlanSession)) && isOlder)) return clear()
+    const planStat = S.runPlan === null ? null : await $.fs.stat(S.runPlan).catch(() => null)
+    const runKey = `${newest.path}:${newest.at}:${planStat?.mtimeMs ?? ''}`
+    if (runKey === S.runKey && (await read($, run)) !== null) return
     const ledger = parseLedger(String(await $.fs.read(newest.path)))
     let titles: { n: number; title: string }[] = []
+    let planPath: string | null = null
     if (ledger.plan !== null) {
       const places: { root: string; docsDir: string }[] = []
       for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/dforge` })
       for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
-          if (titles.length > 0) break
+          if (titles.length > 0) {
+            planPath = candidate
+            break
+          }
         } catch {
           // Try the next checkout.
         }
@@ -2867,9 +2878,12 @@ async function readRun($: EngineInterface) {
       total: numbers.length,
       isFinished: ledger.isFinished,
     }
+    S.runKey = runKey
+    S.runPlan = planPath
     // A run whose every task was done before this session started is history:
     // a new session starts with no Run card.
     if (isOlder && (summary.isFinished || (summary.total > 0 && summary.done === summary.total))) return clear()
+    if (JSON.stringify(await read($, run)) === JSON.stringify(summary)) return
     await update($, run, () => summary)
     await sendLedgerEvents($, summary)
   } catch {
