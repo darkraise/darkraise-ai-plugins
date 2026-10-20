@@ -125,6 +125,8 @@ function readJson(file) {
 }
 
 const notObject = value => value === null || typeof value !== "object" || Array.isArray(value);
+// What readOrRefuse answers for a file it refused.
+const UNREADABLE = Symbol("unreadable");
 
 function writeJson(file, data) {
   const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
@@ -167,6 +169,17 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   const pending = [];
   let merged;
   const badConfigs = new Set();
+  // Each file is refused once however many blocks read it; the block that
+  // reads it is skipped, as a file that is not an object is.
+  const readOrRefuse = file => {
+    try {
+      return readJson(file);
+    } catch (error) {
+      if (!badConfigs.has(file)) refuse(`${error.message}; fix or delete it, then run dforge-migrate again`);
+      badConfigs.add(file);
+      return UNREADABLE;
+    }
+  };
   const view = (...parts) => {
     const target = path.join(newHome, ...parts);
     const hit = pending.find(([to]) => target === to || target.startsWith(`${to}${path.sep}`));
@@ -184,8 +197,9 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       const from = path.join(forgeHome, entry.name);
       const to = path.join(newHome, entry.name);
       if (entry.name === "config.json" && entry.isFile() && fs.existsSync(to)) {
-        const old = readJson(from);
-        const next = readJson(to);
+        const old = readOrRefuse(from);
+        const next = readOrRefuse(to);
+        if (old === UNREADABLE || next === UNREADABLE) continue;
         const bad = [[from, old], [to, next]].find(([, value]) => notObject(value));
         if (bad) {
           badConfigs.add(bad[0]);
@@ -262,13 +276,13 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
     }
   }
 
-  const oldConfig = readJson(path.join(oldHome, "config.json"));
-  if (oldConfig?.darkmem && typeof oldConfig.darkmem === "object") {
+  const oldConfig = readOrRefuse(path.join(oldHome, "config.json"));
+  if (oldConfig !== UNREADABLE && oldConfig?.darkmem && typeof oldConfig.darkmem === "object") {
     const file = path.join(newHome, "config.json");
     const source = view("config.json");
-    const current = (dryRun && merged) ? { ...merged } : readJson(source);
+    const current = (dryRun && merged) ? { ...merged } : readOrRefuse(source);
     const config = current ?? {};
-    if (current !== undefined && notObject(current)) {
+    if (current === UNREADABLE || (current !== undefined && notObject(current))) {
       if (!badConfigs.has(source)) refuse(`${source} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
     } else if (config.darkmem === undefined) {
       config.darkmem = oldConfig.darkmem;
@@ -302,8 +316,8 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   }
 
   const stores = view("stores.json");
-  const data = readJson(stores);
-  if (data && typeof data === "object" && !Array.isArray(data)) {
+  const data = readOrRefuse(stores);
+  if (data !== UNREADABLE && data && typeof data === "object" && !Array.isArray(data)) {
     let pointed = 0;
     for (const record of Object.values(data)) {
       if (!record || typeof record.mirror !== "string") continue;

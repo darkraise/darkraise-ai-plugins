@@ -423,12 +423,59 @@ test("migrateHome refuses a null config.json once and skips the darkmem copy", (
   assert.equal(fs.existsSync(forge), true);
 });
 
-test("migrateHome refuses a string config.json for the darkmem copy without throwing", () => {
+test("migrateHome refuses a string or array config.json for the darkmem copy without throwing", () => {
+  for (const value of ["x", ["x"]]) {
+    const home = scratch("dms-home-");
+    const dforge = path.join(home, ".dforge", "config.json");
+    write(dforge, JSON.stringify(value));
+    write(path.join(home, ".dr-superpowers", "config.json"), JSON.stringify({ darkmem: { project: "p" } }));
+    const { lines, refused } = migrateHome({ HOME: home });
+    assert.equal(refused, 1, lines.join("\n"));
+    assert.deepEqual(JSON.parse(read(dforge)), value);
+    assert.ok(!lines.some(line => line.startsWith("copied the darkmem mapping")), lines.join("\n"));
+  }
+});
+
+test("migrateHome refuses a malformed ~/.dr-forge config.json once and still moves the other entries", () => {
   const home = scratch("dms-home-");
-  const dforge = path.join(home, ".dforge", "config.json");
-  write(dforge, JSON.stringify("x"));
-  write(path.join(home, ".dr-superpowers", "config.json"), JSON.stringify({ darkmem: { project: "p" } }));
-  const { lines, refused } = migrateHome({ HOME: home });
-  assert.equal(refused, 1, lines.join("\n"));
-  assert.equal(JSON.parse(read(dforge)), "x");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  write(path.join(forge, "config.json"), "{not json");
+  write(path.join(dforge, "config.json"), JSON.stringify({ layout: "auto" }));
+  write(path.join(forge, "only-old.txt"), "old\n");
+  const refusals = lines => lines.filter(line => line.startsWith("refused: "));
+  const dry = migrateHome({ HOME: home }, { dryRun: true });
+  const real = migrateHome({ HOME: home });
+  for (const { lines, refused } of [dry, real]) {
+    assert.equal(refused, 1, lines.join("\n"));
+    assert.equal(refusals(lines).length, 1, lines.join("\n"));
+    assert.ok(refusals(lines)[0].startsWith(`refused: ${path.join(forge, "config.json")} could not be read: `), lines.join("\n"));
+  }
+  assert.deepEqual(refusals(dry.lines), refusals(real.lines));
+  assert.equal(read(path.join(dforge, "only-old.txt")), "old\n");
+  assert.equal(read(path.join(forge, "config.json")), "{not json");
+  assert.deepEqual(JSON.parse(read(path.join(dforge, "config.json"))), { layout: "auto" });
+});
+
+test("migrateHome refuses an unreadable config or stores file once and finishes the run", () => {
+  for (const [label, file, extra] of [
+    ["~/.dforge/config.json", [".dforge", "config.json"], home => write(path.join(home, ".dr-superpowers", "config.json"), JSON.stringify({ darkmem: { project: "p" } }))],
+    ["~/.dr-superpowers/config.json", [".dr-superpowers", "config.json"], () => {}],
+    ["~/.dforge/stores.json", [".dforge", "stores.json"], () => {}],
+  ]) {
+    const home = scratch("dms-home-");
+    const bad = path.join(home, ...file);
+    const mirror = path.join(home, ".dforge", "mirror", "p");
+    write(bad, "{not json");
+    extra(home);
+    write(path.join(mirror, "forge", "a.md"), "a\n");
+    const dry = migrateHome({ HOME: home }, { dryRun: true });
+    const real = migrateHome({ HOME: home });
+    for (const [verb, { lines, refused }] of [["would rename", dry], ["renamed", real]]) {
+      assert.equal(refused, 1, `${label}: ${lines.join("\n")}`);
+      assert.equal(lines.filter(line => line.startsWith(`refused: ${bad} could not be read: `)).length, 1, `${label}: ${lines.join("\n")}`);
+      assert.ok(lines.includes(`${verb} ${mirror}'s forge/ to dforge/; darkmem's documents follow at its next sync`), `${label}: ${lines.join("\n")}`);
+    }
+    assert.equal(read(bad), "{not json", label);
+  }
 });
