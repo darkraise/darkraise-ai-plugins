@@ -90,8 +90,10 @@ never removes our own partial file:
 
 - `tests/darkmem-sync/reconcile-progress.test.mjs`, "a copy into the primary
   checkout that fails after a partial write leaves no partial file, and a
-  rerun finishes it" (about line 1062), asserts directly that the target is
-  gone.
+  rerun finishes it" (about line 1062), and `tests/darkmem-sync/
+  reconcile.test.mjs`, "a write into docs/dforge that fails after a partial
+  write leaves no partial file, and a rerun finishes the move" (about line
+  961), assert directly that the target is gone.
 - The same file's "a copy into the primary checkout that fails part-way is
   a refusal, not a crash, and a rerun finishes it" (about line 1042) and
   `tests/darkmem-sync/reconcile.test.mjs`'s "a write into docs/dforge that
@@ -112,7 +114,8 @@ target's descriptor:
 - It fails on main: the newcomer is deleted.
 
 `reconcile.test.mjs` gets no new test: `documentsToLocal` calls the same
-`writeExclusive`, and its line-902 test guards the removal there.
+`writeExclusive`, and its line-961 and line-902 tests guard the removal
+there.
 
 After the change: `node scripts/test-all.mjs`, `node
 scripts/validate-repository.mjs`, `claude plugin validate` on the
@@ -129,7 +132,7 @@ deferred when this spec is committed.
 ## Acceptance
 
 A1. [test, high] W1 behaves as written; the new test passes and fails on
-main; the three regression guards pass.
+main; the four regression guards pass.
 A2. [test, high] The validation commands under Testing pass on the merged
 branch.
 A3. [read, high] DM 74 is `done`, DM 73 is `deferred` with the ruling in
