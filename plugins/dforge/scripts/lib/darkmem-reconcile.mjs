@@ -35,9 +35,23 @@ export function runGit(cwd, args, input) {
 
 const slash = file => file.split(path.sep).join("/");
 
+// stat follows a link to its target's type, and reads nothing through it.
+const isDirectoryLink = file => {
+  try {
+    return fs.statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+// The directories under `dir`, a symbolic link to one included, as
+// { name, linked }.
 function dirEntries(dir) {
   try {
-    return fs.readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
+    return fs.readdirSync(dir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() || (entry.isSymbolicLink() && isDirectoryLink(path.join(dir, entry.name))))
+      .map(entry => ({ name: entry.name, linked: entry.isSymbolicLink() }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   } catch (error) {
     if (error.code === "ENOENT") return [];
     throw error;
@@ -193,7 +207,13 @@ export function inProgress(cfg) {
     // No auto run, or an unreadable record, which auto-run.sh reads as inactive too.
   }
   for (const { sdd, checkout } of ledgerSources(cfg)) {
-    for (const slug of dirEntries(sdd)) {
+    for (const { name: slug, linked } of dirEntries(sdd)) {
+      // A linked plan directory is not read through, so nothing can show its
+      // plan finished.
+      if (linked) {
+        found.push(path.join(sdd, slug));
+        continue;
+      }
       const ledger = path.join(sdd, slug, "progress.md");
       // A linked ledger is never read through, and an unread one is in progress.
       let text;

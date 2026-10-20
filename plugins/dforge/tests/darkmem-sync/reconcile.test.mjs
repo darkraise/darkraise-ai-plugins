@@ -398,6 +398,23 @@ test("a pull that reads back different bytes refuses the move, keeps the reposit
   assert.equal(cfgFor(s.repo, s.env).documents.applied, "local", "the pulled sync state does not tip the first-run rule");
 });
 
+test("a plan directory reached through a symbolic link is in progress, and a documents move stays local", { skip: process.platform === "win32" }, async t => {
+  const s = await docsRepo(t, { "specs/a.md": "# A\n", "plans/k.md": "# K\n", "plans/completed.md": "- `docs/dforge/plans/k.md`\n" });
+  // Its ledger reads as finished, which only a read through the link could tell.
+  const outside = scratch("dms-link-");
+  write(path.join(outside, "progress.md"), LEDGER("docs/dforge/plans/k.md"));
+  const link = path.join(s.repo, ".dforge", "sdd", "k");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(outside, link);
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal(result.stdout, `darkmem-sync reconcile: documents stay local (configured darkmem): a plan is in progress: ${link}\n`);
+  assert.equal(s.stub.db.requests.length, 0);
+  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+  assert.equal(read(at(s.repo, "docs/dforge/specs/a.md")), "# A\n");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
 test("a plan that starts during the pull stops the move before the deletion is staged", async t => {
   let repo;
   const s = await docsRepo(t, undefined, {

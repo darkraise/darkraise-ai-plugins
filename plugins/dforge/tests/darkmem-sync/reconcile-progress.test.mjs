@@ -302,6 +302,28 @@ test("a symbolic-linked progress file is a problem, and is not read through", { 
   assert.deepEqual(sources, []);
 });
 
+test("a dangling progress.md link is a problem, not a ledger left behind", { skip: process.platform === "win32" }, () => {
+  const repo = makeRepo();
+  const link = path.join(repo, ".dforge", "sdd", "p1", "progress.md");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(path.join(scratch("dms-link-"), "missing.md"), link);
+  const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
+  assert.deepEqual(problems, [`${link}: a symbolic link, which the move will not read through`]);
+  assert.deepEqual(sources, []);
+});
+
+test("a dangling progress.md link in the mirror leaves status as it was", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t, "local");
+  write(path.join(s.workRoot, "sdd", "p2", "progress.md"), LEDGER("p2"));
+  const before = await run(["status"], { cwd: s.repo, env: s.env });
+  assert.equal(before.code, 0, before.stdout + before.stderr);
+  const link = path.join(s.workRoot, "sdd", "p1", "progress.md");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(path.join(scratch("dms-link-"), "missing.md"), link);
+  const after = await run(["status"], { cwd: s.repo, env: s.env });
+  assert.deepEqual(after, before);
+});
+
 // A named pipe nobody writes to: a plain read of it, or through a link to it,
 // blocks. Only the command run as a child process meets one before its fix,
 // so a blocked read ends at run()'s timeout instead of stopping this file.
@@ -630,12 +652,49 @@ test("a plan directory that is a symbolic link stays local, and nothing is sent 
   const before = s.stub.db.requests.length;
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the checkouts hold progress the move cannot carry\n"), result.stdout);
-  assert.ok(result.stdout.includes(`  ${link}: a symbolic link, which the move will not move files through\n`), result.stdout);
+  // Reconcile's in-progress check counts a linked plan directory before the
+  // move runs; the move's own listing names it too.
+  assert.ok(result.stdout.includes(`darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: ${link}\n`), result.stdout);
+  assert.deepEqual(gatherLocalProgress({ repoRoot: s.repo }).problems, [`${link}: a symbolic link, which the move will not move files through`]);
   assert.deepEqual(s.stub.db.requests.slice(before).filter(r => r.method !== "GET").map(r => `${r.method} ${r.path}`), []);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.worktree), []);
 });
+
+for (const { name, plant, linked, unwritten } of [
+  {
+    name: "a plan directory in the mirror",
+    plant: s => {
+      fs.mkdirSync(path.join(s.workRoot, "sdd"), { recursive: true });
+      fs.symlinkSync(scratch("dms-link-"), path.join(s.workRoot, "sdd", "p1"));
+    },
+    linked: s => path.join(s.workRoot, "sdd", "p1"),
+    unwritten: s => path.join(fs.realpathSync(path.join(s.workRoot, "sdd", "p1")), "progress.md"),
+  },
+  {
+    name: "the mirror itself",
+    plant: s => {
+      fs.mkdirSync(path.dirname(s.mirror), { recursive: true });
+      fs.symlinkSync(scratch("dms-link-"), s.mirror);
+    },
+    linked: s => s.mirror,
+    unwritten: s => path.join(fs.realpathSync(s.mirror), "work"),
+  },
+]) {
+  test(`progress stays local when ${name} is a symbolic link, and nothing is sent or written through it`, { skip: process.platform === "win32" }, async t => {
+    const s = await setup(t, "darkmem");
+    write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+    plant(s);
+    const result = await s.reconcile();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the mirror's progress is reached through symbolic links; nothing was sent or moved\n"), result.stdout);
+    assert.ok(result.stdout.includes(`  ${linked(s)}: a symbolic link in the mirror, which the move will not read through\n`), result.stdout);
+    assert.deepEqual(s.stub.db.requests.filter(r => r.method !== "GET").map(r => `${r.method} ${r.path}`), []);
+    assert.equal(fs.existsSync(unwritten(s)), false, "nothing is written through the link");
+    assert.equal(s.stores().progress, "local");
+    assert.deepEqual(movedAside(s.repo), []);
+  });
+}
 
 test("progress moves back into the primary checkout from closed and open workstreams, and darkmem keeps its copy", async t => {
   const s = await setup(t, "local");
@@ -860,6 +919,35 @@ test("a copy into the primary checkout that fails part-way is a refusal, not a c
   assert.equal(again.moved, true, again.reason);
   assert.equal(read(m.target("p1")), LEDGER("p1"));
   assert.equal(read(m.target("p2")), LEDGER("p2"));
+});
+
+test("a mirror work directory that cannot be listed is named as such, not as a symbolic link", async () => {
+  const m = offlineMove();
+  const work = path.join(m.mirror, "work");
+  fs.rmSync(work, { recursive: true });
+  write(work, "not a directory\n");
+  const result = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(result.moved, false);
+  assert.equal(result.reason, "the mirror's progress could not be listed; nothing was pulled or copied");
+  assert.deepEqual(result.details, [`${work}: could not be listed (ENOTDIR)`]);
+});
+
+test("a mirror ledger that lstat cannot reach while ledgers are listed is a problem line from the read, not a crash", async t => {
+  const m = offlineMove();
+  const ledger = path.join(m.mirror, "work", "sdd", "p1", "progress.md");
+  // As if its directory turned unreadable after it was listed: every look at
+  // the ledger fails, the listing's lstat and the read's open alike.
+  const denied = () => {
+    throw Object.assign(new Error("injected by the test"), { code: "EACCES" });
+  };
+  const lstat = fs.lstatSync;
+  t.mock.method(fs, "lstatSync", (file, ...rest) => (file === ledger ? denied() : lstat(file, ...rest)));
+  const open = fs.openSync;
+  t.mock.method(fs, "openSync", (file, ...rest) => (file === ledger ? denied() : open(file, ...rest)));
+  const result = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(result.moved, false);
+  assert.equal(result.reason, "the primary checkout cannot take the mirror's progress");
+  assert.deepEqual(result.details, [`${ledger}: could not be read (EACCES)`]);
 });
 
 test("a mirror ledger swapped for a link after its check is refused, and nothing is read through it", { skip: process.platform === "win32" }, async t => {

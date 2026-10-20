@@ -10,8 +10,8 @@ import { HttpError, TransportError } from "./darkmem-client.mjs";
 import { dforgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
-  DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerFiles, ledgerPieces, listDocumentFiles, newestCheckpointAt, propertiesFor,
-  recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, writeFileAtomic,
+  DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerPieces, listDocumentFiles, newestCheckpointAt, propertiesFor,
+  recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
@@ -40,6 +40,33 @@ export function readNoFollow(file, constants = fs.constants) {
   } finally {
     fs.closeSync(fd);
   }
+}
+
+// Each plan directory's progress.md that lstat finds, a dangling link
+// included, so the read's link check names it. ledgerFiles' existsSync skips
+// a dangling link, which its other callers rely on. An lstat that fails other
+// than by ENOENT (EACCES, or ENOTDIR once the directory changed) keeps the
+// file, so the callers' guarded read reports it instead of the listing throwing.
+function ledgersIn(workRoot) {
+  const sdd = path.join(workRoot, "sdd");
+  let entries;
+  try {
+    entries = fs.readdirSync(sdd, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  return entries
+    .filter(entry => entry.isDirectory() && validKey(entry.name))
+    .map(entry => ({ slug: entry.name, file: path.join(sdd, entry.name, "progress.md") }))
+    .filter(({ file }) => {
+      try {
+        return fs.lstatSync(file, { throwIfNoEntry: false }) !== undefined;
+      } catch {
+        return true;
+      }
+    })
+    .sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 
 // The primary checkout first, then every linked worktree git lists.
@@ -82,7 +109,7 @@ export function gatherLocalProgress(cfg) {
       }
     }
     for (const dir of unsupportedPlanDirs(stateDir)) problems.push(`${dir}: not a usable workstream key`);
-    for (const { slug, file } of ledgerFiles(stateDir)) files.push({ kind: "ledger", slug, file, stateDir, rel: `sdd/${slug}/progress.md` });
+    for (const { slug, file } of ledgersIn(stateDir)) files.push({ kind: "ledger", slug, file, stateDir, rel: `sdd/${slug}/progress.md` });
     for (const { file, uri } of listDocumentFiles({ workRoot: stateDir, families: { documents: false, progress: true } })) {
       const slug = path.basename(path.dirname(file));
       files.push({ kind: "handoff", slug, uri, file, stateDir, rel: `sdd/${slug}/handoff.md` });
@@ -269,6 +296,12 @@ export async function progressToDarkmem(context) {
       links.map(link => `${link}: a symbolic link, which the move will not move files through`),
     );
   }
+  // The mirror's copies are read and written under its work directory, so a
+  // link at the mirror, at work or below it would carry them elsewhere.
+  const workRoot = path.join(cfg.mirror, "work");
+  const top = fs.lstatSync(cfg.mirror, { throwIfNoEntry: false })?.isSymbolicLink() ? [`${cfg.mirror}: ${MIRROR_LINK}`] : [];
+  const linked = mirrorRefusal([...top, ...mirrorLinks(workRoot)], "nothing was sent or moved");
+  if (linked) return linked;
   const report = scratchReport();
   const ids = new Map();
   const lastSeqs = new Map();
@@ -338,7 +371,6 @@ export async function progressToDarkmem(context) {
     if (!now?.equals(item.buffer)) changed.push(`${item.file}: changed or removed during the move`);
   }
   if (changed.length) return refuse("progress changed in the checkouts during the move; nothing was moved locally", changed);
-  const workRoot = path.join(cfg.mirror, "work");
   for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer);
   const unread = sources.filter(item => {
     try {
@@ -469,6 +501,8 @@ function linksBelow(checkout, stateRel, rels) {
   return links;
 }
 
+const MIRROR_LINK = "a symbolic link in the mirror, which the move will not read through";
+
 // One line per symbolic link, or directory that cannot be listed, at or under the
 // mirror's work directory. Dirent types come from lstat, so no link is followed.
 function mirrorLinks(workRoot) {
@@ -483,7 +517,7 @@ function mirrorLinks(workRoot) {
     }
     for (const entry of entries) {
       const file = path.join(dir, entry.name);
-      if (entry.isSymbolicLink()) lines.push(`${file}: a symbolic link in the mirror, which the move will not read through`);
+      if (entry.isSymbolicLink()) lines.push(`${file}: ${MIRROR_LINK}`);
       else if (entry.isDirectory()) walk(file);
     }
   };
@@ -493,9 +527,20 @@ function mirrorLinks(workRoot) {
   } catch (error) {
     return [`${workRoot}: could not be listed (${error.code})`];
   }
-  if (top?.isSymbolicLink()) return [`${workRoot}: a symbolic link in the mirror, which the move will not read through`];
+  if (top?.isSymbolicLink()) return [`${workRoot}: ${MIRROR_LINK}`];
   walk(workRoot);
   return lines;
+}
+
+// The refusal for mirrorLinks' lines, or null when there are none, saying
+// whether the mirror could not be listed, is reached through links, or both.
+function mirrorRefusal(lines, outcome) {
+  if (!lines.length) return null;
+  const found = [
+    lines.some(line => !line.endsWith(MIRROR_LINK)) && "could not be listed",
+    lines.some(line => line.endsWith(MIRROR_LINK)) && "is reached through symbolic links",
+  ].filter(Boolean).join(", and ");
+  return refuse(`the mirror's progress ${found}; ${outcome}`, lines);
 }
 
 // The mirror is brought up to darkmem first. A pull renders only open
@@ -509,8 +554,8 @@ export async function progressToLocal(context, { offline = null } = {}) {
   const roots = { docsRoot: path.join(cfg.mirror, DOC_PREFIX), workRoot, worktreeRoot: cfg.repoRoot, families: { documents: false, progress: true } };
   // The pull below reads and rewrites the mirror's progress files, so a linked
   // one is refused before it, not only before the copies.
-  const linked = mirrorLinks(workRoot);
-  if (linked.length) return refuse("the mirror's progress is reached through symbolic links; nothing was pulled or copied", linked);
+  const linked = mirrorRefusal(mirrorLinks(workRoot), "nothing was pulled or copied");
+  if (linked) return linked;
   if (!offline) {
     const report = scratchReport();
     try {
@@ -532,7 +577,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
   const stateDir = dforgeDir("state", cfg.repoRoot);
   const problems = unsupportedPlanDirs(workRoot).map(dir => `${dir}: not a usable workstream key`);
   const sources = [
-    ...ledgerFiles(workRoot).map(({ slug, file }) => ({ file, rel: `sdd/${slug}/progress.md` })),
+    ...ledgersIn(workRoot).map(({ slug, file }) => ({ file, rel: `sdd/${slug}/progress.md` })),
     ...listDocumentFiles(roots).map(({ file }) => ({ file, rel: `sdd/${path.basename(path.dirname(file))}/handoff.md` })),
   ];
   const latest = path.join(workRoot, "handoff", "latest.md");
