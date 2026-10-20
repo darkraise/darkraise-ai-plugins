@@ -32,3 +32,4 @@ One line per plan that landed, so project-status can tell a merged plan from one
 - 2026-10-20 `docs/superpowers/plans/2026-10-19-deferred-rows-sweep.md` — merged into `main` at 8bf7139
 - 2026-10-20 `docs/superpowers/plans/2026-10-20-open-rows-sweep.md` — merged into `main` at bd9489b
 - 2026-10-20 `docs/superpowers/plans/2026-10-20-review-rows-sweep.md` — merged into `main` at 34d66d2
+- 2026-10-20 `docs/superpowers/plans/2026-10-20-copy-race.md` — merged into `main` at a29f9f9
