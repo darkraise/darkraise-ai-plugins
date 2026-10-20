@@ -575,7 +575,7 @@ test("a mirror directory linked while darkmem is written refuses the move, and n
   };
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the mirror's progress is reached through symbolic links; nothing was sent or moved\n"), result.stdout);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the mirror's progress is reached through symbolic links; nothing was moved locally, and darkmem keeps what it accepted\n"), result.stdout);
   assert.ok(result.stdout.includes(`  ${planDir}: a symbolic link in the mirror, which the move will not read through\n`), result.stdout);
   assert.deepEqual(fs.readdirSync(outside), []);
   assert.equal(read(note), "# Handoff p1\n");
