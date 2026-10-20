@@ -169,6 +169,23 @@ test('a failed Bash call whose ledger write sat behind an && wrote nothing; one 
   assert.deepEqual(m.completed, ['8', '9']);
 });
 
+test('a failed Bash call counts the ledger lines of each list that wrote them, not of one behind an &&', () => {
+  const failedCall = id => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: true, content: 'Exit code 1' }] } });
+  const m = measureTranscript(jsonl([
+    said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [
+      use('l1', 'Bash', { command: "echo 'Task 1: complete (commits a..b)' >> .dforge/sdd/p/progress.md; false && echo 'Task 2: complete (commits c..d)' >> .dforge/sdd/p/progress.md" }),
+      use('l2', 'Bash', { command: "x && y; echo 'Task 3: complete (commits e..f)' >> .dforge/sdd/p/progress.md; false" }),
+      use('l3', 'Bash', { command: "echo 'Task 4: complete (commits g..h; review clean)' >> .dforge/sdd/p/progress.md 2>&1; false" }),
+      use('l4', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<'EOF'\nTask 5: complete (commits i..j)\nEOF\nfalse" }),
+      use('l5', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<'EOF'; false\nTask 6: complete (commits k..l)\nEOF" }),
+      use('l6', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<'END-OF-DOC'\nTask 7: complete (commits m..n)\nEND-OF-DOC\nfalse" }),
+      use('l7', 'Bash', { command: "false && cat >> .dforge/sdd/p/progress.md <<'EOF'; true\nTask 8: complete (commits o..p)\nEOF\nfalse" }),
+    ]),
+    failedCall('l1'), failedCall('l2'), failedCall('l3'), failedCall('l4'), failedCall('l5'), failedCall('l6'), failedCall('l7'),
+  ]));
+  assert.deepEqual(m.completed, ['1', '3', '4', '5', '6', '7']);
+});
+
 test('ledger complete lines the controller wrote are collected, deferred ones left out', () => {
   const ledger = '/w/.dforge/sdd/p/progress.md';
   const m = measureTranscript(jsonl([
