@@ -54,16 +54,28 @@ export function readNoFollow(file, constants = fs.constants) {
   return readRegular(file, { follow: false }, constants);
 }
 
-// Written through the descriptor the exclusive create returned, so a failed
-// write removes only the partial file it made; left behind, a rerun's
-// comparison would refuse it as a different copy.
+// Written through the descriptor the exclusive create returned. A failed
+// write removes the partial file, which a rerun's comparison would refuse as
+// a different copy, only while the path still names it: a file another
+// process put there meanwhile is kept. Both stats are taken before the close,
+// while the descriptor keeps the inode from being reused, and the close comes
+// before the removal because Windows keeps a name until its last handle
+// closes. A file swapped in between the lstat and the removal is still removed.
 export function writeExclusive(file, buffer) {
   const fd = fs.openSync(file, "wx");
   try {
     fs.writeFileSync(fd, buffer);
   } catch (error) {
+    let own;
+    let now;
+    try {
+      own = fs.fstatSync(fd, { bigint: true });
+      now = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
+    } catch {}
     try { fs.closeSync(fd); } catch {}
-    try { fs.rmSync(file, { force: true }); } catch {}
+    if (own && now && own.dev === now.dev && own.ino === now.ino) {
+      try { fs.rmSync(file, { force: true }); } catch {}
+    }
     throw error;
   }
   fs.closeSync(fd);
@@ -652,7 +664,8 @@ export async function progressToLocal(context, { offline = null } = {}) {
   if (problems.length) return refuse("the primary checkout cannot take the mirror's progress", problems);
   // An edit can land in the checkout between the reads above and a copy: each
   // target is read again just before it is written, a new one is created
-  // exclusively, and a failure part-way refuses, keeping what was copied.
+  // exclusively, and a failure part-way refuses, keeping what was copied. A
+  // parent directory swapped for a link after the check above is not guarded.
   const landed = [];
   const copied = [];
   try {

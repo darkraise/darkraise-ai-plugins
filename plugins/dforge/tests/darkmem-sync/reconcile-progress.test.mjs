@@ -1079,6 +1079,24 @@ test("a copy into the primary checkout that fails after a partial write leaves n
   assert.equal(read(m.target("p2")), LEDGER("p2"));
 });
 
+test("a failed write never removes a file another process put at the target meanwhile", async t => {
+  const m = offlineMove();
+  const opened = exclusiveOpens(t);
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    if (opened.get(file) !== m.target("p2")) return writeFile(file, ...rest);
+    fs.renameSync(m.target("p2"), `${m.target("p2")}.aside`);
+    writeFile(m.target("p2"), "planted meanwhile\n");
+    throw Object.assign(new Error("injected by the test"), { code: "EIO" });
+  });
+  const result = await progressToLocal(m.context, { offline: "test" });
+  assert.equal(result.moved, false);
+  assert.equal(result.reason, "a copy into the primary checkout failed (EIO); the files copied so far stay, and a rerun copies the rest");
+  assert.deepEqual(result.details, [`${m.target("p1")}: copied`]);
+  assert.equal(fs.existsSync(path.join(m.mirror, "work")), true, "the mirror's copies are not set aside");
+  assert.equal(read(m.target("p2")), "planted meanwhile\n");
+});
+
 test("a mirror ledger replaced by a link after it was read is copied as read, not through the link", { skip: process.platform === "win32" }, async t => {
   const m = offlineMove();
   const source = path.join(m.mirror, "work", "sdd", "p1", "progress.md");
