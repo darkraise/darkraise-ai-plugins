@@ -55,15 +55,15 @@ function shellLists(cmd) {
     } else if (c === "'" || c === '"') quote = c;
     else if (c === '\\') i++;
     else if (cmd.startsWith('<<', i)) {
-      const opener = /^<<-?[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;&|<>()'"]+))/.exec(cmd.slice(i));
-      if (opener) pending.push({ list: lists.length, word: opener[1] ?? opener[2] ?? opener[3] });
+      const opener = /^<<(-)?[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;&|<>()'"]+))/.exec(cmd.slice(i));
+      if (opener) pending.push({ list: lists.length, word: opener[2] ?? opener[3] ?? opener[4], tabs: opener[1] === '-' });
       i += opener ? opener[0].length - 1 : 1;
     } else if (c === '\n' || c === ';' || (c === '&' && !/[&<>|]/.test(cmd[i - 1] ?? '') && !/[&>]/.test(cmd[i + 1] ?? ''))) {
       lists.push(cmd.slice(start, i));
       if (c === '\n') {
-        for (const { list, word } of pending.splice(0)) {
+        for (const { list, word, tabs } of pending.splice(0)) {
           const quoted = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const end = new RegExp(`\\n[ \\t]*${quoted}[ \\t]*(?=\\n|$)`).exec(cmd.slice(i));
+          const end = new RegExp(`\\n${tabs ? '\\t*' : ''}${quoted}(?=\\n|$)`).exec(cmd.slice(i));
           const stop = end ? i + end.index + end[0].length : cmd.length;
           bodies[list] = (bodies[list] ?? '') + cmd.slice(i, stop);
           i = stop;

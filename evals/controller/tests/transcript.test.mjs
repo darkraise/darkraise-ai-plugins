@@ -186,6 +186,18 @@ test('a failed Bash call counts the ledger lines of each list that wrote them, n
   assert.deepEqual(m.completed, ['1', '3', '4', '5', '6', '7']);
 });
 
+test('a heredoc body ends only at a line that is exactly its delimiter, tabs allowed for <<-', () => {
+  const failedCall = id => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: true, content: 'Exit code 1' }] } });
+  const m = measureTranscript(jsonl([
+    said('msg_a', 'claude-sonnet-5-5', usage(1, 1), [
+      use('h1', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<'EOF'\n  EOF\nTask 21: complete (commits q..r)\nEOF\nfalse" }),
+      use('h2', 'Bash', { command: "cat >> .dforge/sdd/p/progress.md <<-'EOF'\nTask 22: complete (commits s..t)\n\tEOF\nfalse" }),
+    ]),
+    failedCall('h1'), failedCall('h2'),
+  ]));
+  assert.deepEqual(m.completed, ['21', '22']);
+});
+
 test('ledger complete lines the controller wrote are collected, deferred ones left out', () => {
   const ledger = '/w/.dforge/sdd/p/progress.md';
   const m = measureTranscript(jsonl([
