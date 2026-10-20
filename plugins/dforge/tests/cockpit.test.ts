@@ -3557,6 +3557,69 @@ describe('settings file', () => {
   })
 })
 
+describe('polling', () => {
+  test('puts an edited settings file in force within one tick', async ($, on) => {
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({ sections: 'context,usage' }), mtimeMs: 1 } }
+    const clock = world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    files[CONFIG] = { text: JSON.stringify({ sections: 'usage' }), mtimeMs: 2 }
+    await clock.advance(2_000)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Usage' })).toBeDefined()
+  })
+
+  test('keeps the settings in force when the file stops being a JSON object', async ($, on) => {
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({ sections: 'usage' }), mtimeMs: 1 } }
+    const clock = world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    files[CONFIG] = { text: '{ "sections": ', mtimeMs: 2 }
+    await clock.advance(2_000)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Usage' })).toBeDefined()
+    await ui.press({ key: 'pane-settings' })
+    expect(await ui.find({ type: 'Text', text: /config\.json is not a JSON object; the settings in force are kept/ })).toBeDefined()
+  })
+
+  test("puts a Claude key changed outside the pane in force", async ($, on) => {
+    const w: World = { tokens: 284_000, config: {}, settings: { autoCompactWindow: 650_000 } }
+    const clock = world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
+    w.settings = { autoCompactWindow: 700_000 }
+    await clock.advance(2_000)
+    expect(await ui.find({ type: 'Text', text: /^700k/ })).toBeDefined()
+  })
+
+  test('reads nothing while the cockpit is hidden', async ($, on) => {
+    const gitRuns: string[] = []
+    const clock = world(on, { ...SIGNED_IN, gitRuns, isPaneShut: true })
+    signedIn(on)
+    await $.session.start(START)
+    await clock.advance(20_000)
+    expect(gitRuns.filter(run => run.includes('status --porcelain=v2'))).toEqual([])
+  })
+
+  test('refreshes the git state every ten seconds while the pane is up', async ($, on) => {
+    const gitRuns: string[] = []
+    const clock = world(on, { ...SIGNED_IN, gitRuns })
+    signedIn(on)
+    await $.session.start(START)
+    await clock.advance(8_000)
+    expect(gitRuns.filter(run => run.includes('status --porcelain=v2'))).toEqual([])
+    await clock.advance(2_000)
+    expect(gitRuns.filter(run => run.includes('status --porcelain=v2'))).toHaveLength(1)
+  })
+})
+
 describe('settings rows', () => {
   const ROWS: Schema = {
     layout: { type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', label: 'Layout', title: 'Layout', description: 'd', target: 'dforge' },

@@ -156,6 +156,9 @@ const DEFER_CAP_MS = 1_800_000
 const STALL_MS = 180_000
 // How long a Done held for background work waits, once the work ends, for the turn its notification wakes.
 const RELEASE_GRACE_MS = 5_000
+// While the cockpit is drawn its files are checked every POLL_MS, git and the context breakdown every DETAIL_EVERY ticks.
+const POLL_MS = 2_000
+const DETAIL_EVERY = 5
 // The pending actions whose stage the watchdog arms again when no timer holds
 // it; a pending resume resubmits the run's first prompt.
 const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch', 'switch-resume': 'switch-resume' }
@@ -335,6 +338,8 @@ export const register: Register = on => {
     await beat($)
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
+    S.poll?.cancel()
+    S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
     await readVersion($)
     await readRemote($)
     if (o.isMinimized) {
@@ -424,6 +429,8 @@ export const register: Register = on => {
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     S.heldDone = null
+    S.poll?.cancel()
+    S.poll = null
     await setActivity($, () => IDLE)
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -2242,6 +2249,13 @@ const S = {
   heldDone: null as { startedAt: number; heldAt: number } | null,
   // Sends the held Done if no turn starts within RELEASE_GRACE_MS of the work ending.
   releaseTimer: null as Timer | null,
+  // The poll's timer, whether a tick is running, how many ran, and when the slower readings last ran.
+  poll: null as Timer | null,
+  isPolling: false,
+  polls: 0,
+  detailAt: 0,
+  // The settings file's modification time and the engine's settings, as last put in force.
+  seen: { config: null as number | null, claude: '' },
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -3148,6 +3162,7 @@ async function applySettings($: EngineInterface, file: SettingsFile) {
   S.locks = locks
   await update($, settings, () => values)
   applyNotify(liveFrom(values as Partial<Options>))
+  await markSettingsSeen($)
 }
 
 /** The first run: dr-cockpit's options, imported into the new file. */
@@ -3258,9 +3273,66 @@ async function flushSettingNote($: EngineInterface) {
   for (const key of keys) if (S.changed[key] === sent[key]) delete S.changed[key]
 }
 
+/** The settings file's path and modification time; the time is null when there is no file. */
+async function configStamp($: EngineInterface): Promise<{ path: string | null; mtime: number | null }> {
+  const path = await configFile($)
+  const stat = path === null ? null : await $.fs.stat(path).catch(() => null)
+  return { path, mtime: stat?.kind === 'file' ? stat.mtimeMs : null }
+}
+
+/** Records the settings file's modification time and the engine's settings as the ones in force, so the poll re-reads only a change. */
+async function markSettingsSeen($: EngineInterface) {
+  S.seen = { config: (await configStamp($)).mtime, claude: await engineSettings($) }
+}
+
+/** The engine's user and merged settings as one string, to compare between ticks. */
+async function engineSettings($: EngineInterface): Promise<string> {
+  const user = await $.settings.read({ source: 'user' }).catch(() => null)
+  const merged = await $.settings.read().catch(() => null)
+  return JSON.stringify([user, merged])
+}
+
+/**
+ * One poll tick: nothing unless the pane is placed or the cockpit minimized;
+ * then changed settings and the run, and every DETAIL_EVERY ticks the slower
+ * readings and the auto run.
+ */
+async function pollTick($: EngineInterface) {
+  if (S.isPolling) return
+  S.isPolling = true
+  try {
+    if (!(await live($)).isMinimized && !(await isPaneUp($))) return
+    S.polls += 1
+    await rereadSettings($)
+    await readRun($)
+    if (S.polls % DETAIL_EVERY !== 0) return
+    if ((await $.clock.now()) - S.detailAt >= DETAIL_EVERY * POLL_MS) await refreshDetail($)
+    await trackAutoRun($)
+  } finally {
+    S.isPolling = false
+  }
+}
+
+/** Puts the settings in force again when the file or the engine's settings changed; a file that is not a JSON object keeps the values in force. */
+async function rereadSettings($: EngineInterface) {
+  const { path, mtime } = await configStamp($)
+  const claude = await engineSettings($)
+  if (mtime === S.seen.config && claude === S.seen.claude) return
+  const file = path === null ? {} : await readSettingsFile($, path)
+  if (file === null) {
+    S.seen = { config: mtime, claude }
+    const problem = `${path} is not a JSON object; the settings in force are kept`
+    if (!S.settingProblems.includes(problem)) S.settingProblems = [...S.settingProblems, problem]
+    $.ui.invalidate('ui.render')
+    return
+  }
+  await applySettings($, file)
+}
+
 // The pane's slower readings: the /context breakdown, estimated locally, and
 // the working tree's git state. Read while the pane is up, never per tool call.
 async function refreshDetail($: EngineInterface) {
+  S.detailAt = await $.clock.now()
   await readPlace($)
   try {
     const figures = await $.session.usage({ breakdown: 'summary' })
