@@ -6,7 +6,7 @@ import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { resolveStores, writeApplied } from "../../scripts/lib/darkmem-config.mjs";
 import { utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import {
-  NOT_A_FILE, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, refreshContext, stayLine,
+  NOT_A_FILE, fileHash, inProgress, inProgressReason, nameSpellings, pendingFamilies, refreshContext, runGit, stayLine,
 } from "../../scripts/lib/darkmem-reconcile.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
@@ -320,6 +320,20 @@ test("documents stay local while the docs directory has uncommitted changes", as
   assert.deepEqual(writes(s.stub), []);
 });
 
+test("an intent-to-add rename in the docs directory is one uncommitted change", async t => {
+  const s = await docsRepo(t);
+  fs.renameSync(at(s.repo, "docs/dforge/specs/a.md"), at(s.repo, "docs/dforge/specs/b.md"));
+  git(s.repo, "add", "-N", "docs/dforge/specs/b.md");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal(result.stdout, [
+    "darkmem-sync reconcile: documents stay local (configured darkmem): docs/dforge has uncommitted changes",
+    "   R docs/dforge/specs/a.md -> docs/dforge/specs/b.md",
+    "",
+  ].join("\n"));
+  assert.deepEqual(writes(s.stub), []);
+});
+
 test("documents stay local while a linked worktree holds documents the primary checkout does not", async t => {
   const s = await docsRepo(t);
   const tree = path.join(scratch("dms-tree-"), "wt");
@@ -334,6 +348,19 @@ test("documents stay local while a linked worktree holds documents the primary c
   assert.ok(result.stdout.includes(`  ${tree}: docs/dforge/specs/c.md\n`), result.stdout);
   assert.deepEqual(writes(s.stub), []);
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
+test("an intent-to-add rename in a linked worktree names only the new path", async t => {
+  const s = await docsRepo(t);
+  const tree = path.join(scratch("dms-tree-"), "wt");
+  git(s.repo, "worktree", "add", "-q", "-b", "feature", tree);
+  fs.renameSync(at(tree, "docs/dforge/specs/a.md"), at(tree, "docs/dforge/specs/b.md"));
+  git(tree, "add", "-N", "docs/dforge/specs/b.md");
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): a linked worktree holds documents the primary checkout does not; merge or remove them first$/m);
+  assert.deepEqual(result.stdout.split("\n").filter(line => line.startsWith(`  ${tree}: `)), [`  ${tree}: docs/dforge/specs/b.md`]);
+  assert.deepEqual(writes(s.stub), []);
 });
 
 test("a linked worktree holding only the primary checkout's documents does not refuse the move", async t => {
@@ -389,27 +416,34 @@ test("a plan that starts during the pull stops the move before the deletion is s
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
 });
 
-test("a document committed during the pull keeps the repository copy", async t => {
-  let repo;
-  let committed = false;
-  const s = await docsRepo(t, undefined, {
-    stub: {
-      onRequest: request => {
-        if (!repo || committed || request.path !== "/api/v1/documents/by-uri") return;
-        committed = true;
-        write(at(repo, "docs/dforge/specs/a.md"), "# A newer\n");
-        commitAll(repo, "newer");
+for (const { name, files, change, line } of [
+  { name: "changed", files: { "specs/a.md": "# A\n" }, change: repo => write(at(repo, "docs/dforge/specs/a.md"), "# A newer\n"), line: "dforge/specs/a.md: changed during the move" },
+  { name: "added", files: { "specs/a.md": "# A\n" }, change: repo => write(at(repo, "docs/dforge/specs/b.md"), "# B\n"), line: "dforge/specs/b.md: added during the move" },
+  { name: "removed", files: { "specs/a.md": "# A\n", "specs/b.md": "# B\n" }, change: repo => fs.rmSync(at(repo, "docs/dforge/specs/b.md")), line: "dforge/specs/b.md: removed during the move" },
+]) {
+  test(`a document ${name} and committed during the pull keeps the repository copy and is named`, async t => {
+    let repo;
+    let committed = false;
+    const s = await docsRepo(t, files, {
+      stub: {
+        onRequest: request => {
+          if (!repo || committed || request.path !== "/api/v1/documents/by-uri") return;
+          committed = true;
+          change(repo);
+          commitAll(repo, name);
+        },
       },
-    },
+    });
+    repo = s.repo;
+    const result = await s.reconcile();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/dforge changed during the move; the repository copy stays$/m);
+    assert.ok(result.stdout.includes(`  ${line}\n`), result.stdout);
+    assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
+    assert.equal(fs.existsSync(at(s.repo, "docs/dforge/specs/a.md")), true);
+    assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
   });
-  repo = s.repo;
-  const result = await s.reconcile();
-  assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /^darkmem-sync reconcile: documents stay local \(configured darkmem\): docs\/dforge changed during the move; the repository copy stays$/m);
-  assert.equal(git(s.repo, "diff", "--cached", "--name-only"), "");
-  assert.equal(read(at(s.repo, "docs/dforge/specs/a.md")), "# A newer\n");
-  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
-});
+}
 
 test("a failing citation search is named in the move's details", { skip: process.platform === "win32" }, async t => {
   const s = await docsRepo(t);
@@ -438,6 +472,19 @@ for (const { arg, reason } of [
     assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
   });
 }
+
+// The CLI cannot reach this: without git, resolveStores answers local mode
+// first, and a failing git shim exits with a status, which sets no error.
+test("a git that cannot be started gives runGit a reason", t => {
+  const saved = process.env.PATH;
+  process.env.PATH = scratch("dms-nogit-");
+  t.after(() => {
+    process.env.PATH = saved;
+  });
+  const result = runGit(scratch("dms-cwd-"), ["status"]);
+  assert.equal(result.status, null);
+  assert.match(result.stderr, /\bENOENT\b/);
+});
 
 test("uncommitted changes are named by their raw paths, not git's quoted ones", async t => {
   const s = await docsRepo(t);

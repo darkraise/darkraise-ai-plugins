@@ -26,9 +26,11 @@ const MOVES = {
   "progress:local": progressToLocal,
 };
 
-function runGit(cwd, args, input) {
+// A git that could not be started or was timed out sets result.error and
+// prints nothing, so its message stands in for the empty stderr.
+export function runGit(cwd, args, input) {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 60000, input, maxBuffer: 64 * 1024 * 1024 });
-  return { status: result.status, signal: result.signal, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+  return { status: result.status, signal: result.signal, stdout: result.stdout ?? "", stderr: result.stderr || result.error?.message || "" };
 }
 
 const slash = file => file.split(path.sep).join("/");
@@ -227,6 +229,10 @@ export function fileHash(file) {
   return stat.isFile() ? sha256(fs.readFileSync(file)) : NOT_A_FILE;
 }
 
+// A rename or copy in either column: an intent-to-add file (git add -N) is
+// detected as a rename in the worktree column, Y.
+const renamed = item => "RC".includes(item[0]) || "RC".includes(item[1]);
+
 // git status --porcelain -z as "XY path" lines with raw paths, which plain
 // --porcelain would C-quote; a rename or copy reads "XY from -> to".
 function statusLines(stdout) {
@@ -235,7 +241,7 @@ function statusLines(stdout) {
   for (let i = 0; i < entries.length; i += 1) {
     const item = entries[i];
     if (item.length < 4) continue;
-    if ("RC".includes(item[0])) {
+    if (renamed(item)) {
       lines.push(`${item.slice(0, 3)}${entries[i + 1]} -> ${item.slice(3)}`);
       i += 1;
     } else {
@@ -321,7 +327,7 @@ function worktreeOnlyDocuments(cfg) {
       const item = entries[i];
       if (item.length < 4) continue;
       // A rename or copy is followed by its source path, which is no entry.
-      if ("RC".includes(item[0])) i += 1;
+      if (renamed(item)) i += 1;
       if (!"D ".includes(item[0]) || !"D ".includes(item[1])) files.add(item.slice(3));
     }
     found.push(...[...files].sort().map(file => `${tree}: ${file}`));
@@ -379,8 +385,15 @@ async function documentsToDarkmem(context) {
   // clean, so git rm would delete a version that was never carried.
   const again = carriedDocuments(cfg.repoRoot, docsDir, rel);
   const sent = new Map(documents.map(doc => [doc.uri, doc.hash]));
-  if (again.failed || again.problems.length || again.documents.length !== sent.size || again.documents.some(doc => sent.get(doc.uri) !== doc.hash)) {
-    return { moved: false, reason: `${rel} changed during the move; the repository copy stays`, details: [...(again.failed ? [again.failed] : []), ...again.problems] };
+  const now = new Map(again.documents.map(doc => [doc.uri, doc.hash]));
+  // A failed listing holds no documents, which would read as every one removed.
+  const drifted = again.failed ? [] : [...new Set([...sent.keys(), ...now.keys()])].sort().flatMap(uri => {
+    if (!now.has(uri)) return [`${uri}: removed during the move`];
+    if (!sent.has(uri)) return [`${uri}: added during the move`];
+    return sent.get(uri) === now.get(uri) ? [] : [`${uri}: changed during the move`];
+  });
+  if (again.failed || again.problems.length || drifted.length) {
+    return { moved: false, reason: `${rel} changed during the move; the repository copy stays`, details: [...(again.failed ? [again.failed] : []), ...again.problems, ...drifted] };
   }
   if (!documents.length) return { moved: true, details: [`${rel} holds no tracked files; nothing to stage`] };
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
