@@ -61,7 +61,7 @@ Code paths are relative to `plugins/dforge/`.
 1. The killed-run comparison also collects the destinations that exist and
    are equal to their source into a set, fixed at comparison time; the copy
    loop skips them. A skipped file is not listed as copied. One removed after
-   the comparison is caught by the read-back (item 5), and a rerun writes it.
+   the comparison is caught by the read-back (C2.5), and a rerun writes it.
 2. For every other file, inside one `try` around the loop and the read-back:
    1. `buffer = readNoFollow(file)`.
    2. `sha256(buffer) !== hash` stops the loop and refuses with reason "the
@@ -74,7 +74,7 @@ Code paths are relative to `plugins/dforge/`.
       after the loop any such line refuses with reason "docs/dforge changed
       during the move; nothing was overwritten". An `EEXIST` or `ENOTDIR`
       from the `mkdirSync` before it (a file where a subdirectory belongs)
-      reaches item 3.
+      reaches C2.3.
 3. Any other error in the loop or the read-back refuses with reason "a copy
    into docs/dforge failed (`<code>`); the files copied so far stay, and a
    rerun copies the rest". A source swapped for a link fails `readNoFollow`
@@ -88,9 +88,9 @@ Code paths are relative to `plugins/dforge/`.
    removed or made equal, and the mirror matches darkmem again.
 5. The read-back replaces `fileHash(dest)`, which follows links and sits
    outside any `try`, with `sha256(readNoFollow(dest)) !== hash`, inside the
-   `try` of item 2. A mismatch keeps today's refusal ("a copied file differs
+   `try` of C2.2. A mismatch keeps today's refusal ("a copied file differs
    from the mirror's"); a link swapped in at `dest` after the write fails
-   with `ELOOP` and reaches item 3, as C1's read-back does.
+   with `ELOOP` and reaches C2.3, as C1's read-back does.
 6. The success detail "copied `<n>` files into docs/dforge" keeps counting
    every carried file, written or skipped: all of them are now in
    docs/dforge.
