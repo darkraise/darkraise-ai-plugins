@@ -218,7 +218,7 @@ Evidence table, filled by the backfill task:
 | `2026-09-11-dr-superpowers-standalone-base.md` | 266d92c | 2026-09-11 | default, paths 18/19; run 2235ea9 to 266d92c |
 | `2026-09-11-dr-superpowers-fold-companions.md` | 930f784 | 2026-09-11 | default, paths 20/22; run 58ac9cb to 930f784 |
 | `2026-09-11-dr-superpowers-session-budget.md` | 095048c | 2026-09-12 | default, paths 26/28; run 0d86b53 to 095048c |
-| `2026-09-12-dr-superpowers-small-model-planning.md` | 6a4619a | 2026-09-12 | default, paths 31/34 under P = plugins/dr-superpowers; run e15d600 to 6a4619a |
+| `2026-09-12-dr-superpowers-small-model-planning.md` | 6a4619a | 2026-09-12 | default, paths 33/33 under P = plugins/dr-superpowers; run e15d600 to 6a4619a |
 | `2026-09-12-dr-superpowers-inline-mode.md` | ee89185 | 2026-09-12 | default, paths 12/12; run f23b0a2 to ee89185 |
 | `2026-09-14-dr-superpowers-project-state.md` | 25dea81 | 2026-09-14 | default, paths 22/22; run b8a4a96 to 25dea81 |
 | `2026-09-14-dr-superpowers-judge-seats.md` | 6d54b1e | 2026-09-14 | default, paths 13/13; run 11e82c8 to 6d54b1e |
