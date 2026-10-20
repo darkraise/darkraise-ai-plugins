@@ -42,6 +42,7 @@ import {
   isAtLeast,
   isGitWriteTool,
   isDforge,
+  isTypedPrompt,
   isPlanTail,
   kTokens,
   levelOf,
@@ -153,6 +154,8 @@ function autoContinuePrompt(root: string, plan: string | null): string {
 const WATCHDOG_MS = 60_000
 const DEFER_CAP_MS = 1_800_000
 const STALL_MS = 180_000
+// How long a Done held for background work waits, once the work ends, for the turn its notification wakes.
+const RELEASE_GRACE_MS = 5_000
 // The pending actions whose stage the watchdog arms again when no timer holds
 // it; a pending resume resubmits the run's first prompt.
 const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch', 'switch-resume': 'switch-resume' }
@@ -418,6 +421,9 @@ export const register: Register = on => {
     S.ticker = null
     S.watchdog?.cancel()
     S.watchdog = null
+    S.releaseTimer?.cancel()
+    S.releaseTimer = null
+    S.heldDone = null
     await setActivity($, () => IDLE)
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -505,6 +511,10 @@ export const register: Register = on => {
 
   // A main turn begins: the Now row starts its clock.
   on('turn.start', async ($, e, next) => {
+    if (e.agentId !== undefined) return next(e)
+    S.releaseTimer?.cancel()
+    S.releaseTimer = null
+    if (isTypedPrompt(e.text)) S.heldDone = null
     const stamp = await $.clock.now()
     for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
     await setActivity($, now => ({
@@ -573,10 +583,14 @@ export const register: Register = on => {
       const stamp = await $.clock.now()
       const failed = e.reason === 'error' || e.reason === 'refusal'
       const why = failed ? failureOf(e) : null
+      const isHeld = e.reason === 'answer' && (await isMainBackground($))
+      const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
+      if (e.reason !== 'answer') S.heldDone = null
+      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp }
       await readRemote($)
       await setActivity($, now => ({
         ...IDLE,
-        kind: failed ? 'failed' : e.reason === 'aborted' ? 'interrupted' : 'idle',
+        kind: failed ? 'failed' : e.reason === 'aborted' ? 'interrupted' : isHeld ? 'background' : 'idle',
         since: now.since,
         lastTurnMs: e.durationMs,
         endedAt: stamp,
@@ -591,14 +605,8 @@ export const register: Register = on => {
           fields: await turnFields($),
         })
         if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
-      } else if (e.reason === 'answer' && e.durationMs >= Math.max(0, (await live($)).notifyAfter) * 1000) {
-        const messageId = await notify($, {
-          kind: 'done',
-          title: `✅ Done in ${elapsed(e.durationMs)}`,
-          detail: e.answer.trim() === '' ? undefined : excerpt(e.answer, 300),
-          fields: await turnFields($),
-        })
-        if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+      } else if (e.reason === 'answer' && !isHeld) {
+        await sendDone($, e.answer, e.durationMs)
       }
       if (e.reason === 'answer') await armAutoRun($, e.answer)
       return done
@@ -613,6 +621,7 @@ export const register: Register = on => {
     await update($, shells, list => list.filter(one => one.agentId !== agentId))
     for (const [id, wait] of [...S.waits]) if (wait.agentId === agentId) await endWait($, id, '⏹ Agent ended')
     await syncTicker($)
+    await settleBackground($)
     if (e.usage !== undefined) await update($, seats, all => addRun(all, spawn.seat, e.usage as TurnUsage))
     await notify($, {
       kind: 'agent',
@@ -1004,6 +1013,7 @@ export const register: Register = on => {
       running.length > 0 ? `${running.length} ${running.length === 1 ? 'agent' : 'agents'}` : '',
     ].filter(Boolean)
     const actNow = act.kind === 'interrupted' ? { ...act, detail: kept.length === 0 ? 'nothing left running' : `${kept.join(' and ')} still running` } : act
+    const work = { shells: background.filter(one => (one.agentId ?? null) === null), agents: running.length }
     const finished = all.filter(one => one.isDone)
     const failedCount = finished.filter(one => one.outcome === 'failed').length
     const doneCount = items.filter(item => item.status === 'completed').length
@@ -1878,7 +1888,7 @@ export const register: Register = on => {
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="now-box" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
-                {drawRuns('now', nowLine(actNow, now))}
+                {drawRuns('now', nowLine(actNow, now, work))}
               </Text>
             </Box>
             {button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
@@ -1898,7 +1908,7 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {resumeCard}
         <Text key="now" wrap="truncate-end">
-          {drawRuns('now', nowLine(actNow, now))}
+          {drawRuns('now', nowLine(actNow, now, work))}
         </Text>
         {o.shown.map(name => byName[name])}
         {!o.shown.includes('context') && actions}
@@ -2227,6 +2237,11 @@ const S = {
   latestName: null as string | null,
   // The latest.md path and modification time the resume offer was read for.
   offerRead: '',
+  // A Done held while the main conversation's background work runs: when its
+  // chain of turns began, and when a turn last ended with the work pending.
+  heldDone: null as { startedAt: number; heldAt: number } | null,
+  // Sends the held Done if no turn starts within RELEASE_GRACE_MS of the work ending.
+  releaseTimer: null as Timer | null,
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2256,6 +2271,46 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string): 
   // A failed send shows in the settings' Discord row, never as a pop-up.
   await update($, notifier, now => ({ ...now, last: { at: stamp, text: sent.reason, isError: true } }))
   return null
+}
+
+/**
+ * Sends a turn's Done, timed from the start of the held chain when one is
+ * held, else from the turn alone; one under notifyAfter sends nothing.
+ */
+async function sendDone($: EngineInterface, answer: string, durationMs: number) {
+  const held = S.heldDone
+  S.heldDone = null
+  const took = held === null ? durationMs : (await $.clock.now()) - held.startedAt
+  if (took < Math.max(0, (await live($)).notifyAfter) * 1000) return
+  const messageId = await notify($, {
+    kind: 'done',
+    title: `✅ Done in ${elapsed(took)}`,
+    detail: answer.trim() === '' ? undefined : excerpt(answer, 300),
+    fields: await turnFields($),
+  })
+  if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+}
+
+/** Whether the main conversation still waits on work it sent to the background: its own shells, or a subagent still running. */
+async function isMainBackground($: EngineInterface): Promise<boolean> {
+  if ((await read($, spawns)).some(one => !one.isDone)) return true
+  return (await read($, shells)).some(one => (one.agentId ?? null) === null)
+}
+
+/**
+ * The background work ended with no turn live: the Now row goes idle, and a
+ * held Done waits RELEASE_GRACE_MS for the turn the work's notification wakes.
+ */
+async function settleBackground($: EngineInterface) {
+  if ((await read($, activity)).kind !== 'background' || (await isMainBackground($))) return
+  await setActivity($, now => ({ ...now, kind: 'idle' }))
+  S.releaseTimer?.cancel()
+  S.releaseTimer = $.clock.after(RELEASE_GRACE_MS, () => void releaseHeld($).catch(() => undefined))
+}
+
+async function releaseHeld($: EngineInterface) {
+  S.releaseTimer = null
+  if (S.heldDone !== null && !S.isTurnLive) await sendDone($, '', 0)
 }
 
 // The context, cost and plan fields most messages carry.
@@ -2582,6 +2637,10 @@ async function beat($: EngineInterface) {
 // turn's end, the last stage and the last nudge.
 async function watchdogTick($: EngineInterface) {
   await beat($)
+  if (S.heldDone !== null && !S.isTurnLive && (await $.clock.now()) - S.heldDone.heldAt > DEFER_CAP_MS) {
+    if ((await read($, activity)).kind === 'background') await setActivity($, now => ({ ...now, kind: 'idle' }))
+    await sendDone($, '', 0)
+  }
   if (S.isTurnLive || S.autoBusy) return
   const auto = await readAutoRun($)
   if (auto === null || !auto.active) return
@@ -3357,6 +3416,7 @@ async function endShells($: EngineInterface, text: string) {
   if (ended.size === 0 || !(await read($, shells)).some(one => ended.has(one.id))) return
   await update($, shells, list => list.filter(one => !ended.has(one.id)))
   await syncTicker($)
+  await settleBackground($)
 }
 
 // A Bash call that went to the background (asked for, Ctrl+B, or its
@@ -3377,6 +3437,7 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
       await update($, shells, list => list.filter(one => one.id !== id))
       await update($, spawns, all => all.map(one => (one.agentId === id && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
       await syncTicker($)
+      await settleBackground($)
     }
   }
 }

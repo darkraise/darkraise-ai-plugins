@@ -2307,6 +2307,109 @@ describe('shells and remote', () => {
     expect(await ui.find({ type: 'Text', text: /^Working · / })).toBeUndefined()
   })
 
+  describe('a Done held for background work', () => {
+    const titles = (fetches: NonNullable<World['fetches']>) => fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
+    // A turn that sends a shell to the background and ends 30 s later, the shell still running.
+    const hold = async ($: Parameters<TestBody>[0], on: On, fetches: NonNullable<World['fetches']>) => {
+      const clock = world(on, { tokens: 50_000, fetches, config: { notifyAfter: 60 }, tools: { Bash: () => SHELL } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.turn.start({ text: 'review it', turnId: 't1' })
+      await $.tool.call({ tool: 'Bash', command: 'node codex-companion.mjs review', run_in_background: true } as never)
+      await clock.advance(30_000)
+      await $.turn.complete({ answer: 'Started the review.', durationMs: 30_000, isAborted: false, turnId: 't1', reason: 'answer' })
+      return clock
+    }
+
+    test('shows the background state and sends one Done after the woken turn', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      expect(fetches).toHaveLength(0)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /◐ background · 1 shell · node codex-companion\.mjs review · 30s/ })).toBeDefined()
+      await ui.unmount()
+      await clock.advance(90_000)
+      await $.session.append(notified(`[SYSTEM NOTIFICATION - NOT USER INPUT]\n\n${ENDED}`))
+      await $.turn.start({ text: '', turnId: 't2' })
+      await clock.advance(5_000)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 5_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
+    })
+
+    test('sends the held Done once the grace passes with no turn', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await clock.advance(4_000)
+      expect(fetches).toHaveLength(0)
+      await clock.advance(2_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /^○ idle/ })).toBeDefined()
+    })
+
+    test('a turn starting in the grace carries the held Done', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await clock.advance(1_000)
+      await $.turn.start({ text: '', turnId: 't2' })
+      await clock.advance(10_000)
+      expect(fetches).toHaveLength(0)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 10_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 2m11s'])
+    })
+
+    test('a typed prompt starts a new chain', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(60_000)
+      await $.turn.start({ text: 'what next?', turnId: 't2' })
+      await clock.advance(10_000)
+      await $.turn.complete({ answer: 'Waiting on the review.', durationMs: 10_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      expect(fetches).toHaveLength(0)
+      await clock.advance(60_000)
+      await $.session.append(notified(ENDED))
+      await $.turn.start({ text: '', turnId: 't3' })
+      await clock.advance(5_000)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 5_000, isAborted: false, turnId: 't3', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 1m15s'])
+    })
+
+    test("a subagent's shell holds nothing", async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, tools: { Bash: () => SHELL } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.turn.start({ text: 'go', turnId: 't1' })
+      await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true, agentId: 'agent-1' } as never)
+      await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 5s'])
+    })
+
+    test('the watchdog sends a hold older than the cap', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(1_800_000)
+      expect(fetches).toHaveLength(0)
+      await clock.advance(60_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 31m00s'])
+    })
+
+    test('a session ending in the grace sends no Done', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('session.end', (_$, e) => e as never)
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
+      await clock.advance(10_000)
+      expect(fetches).toHaveLength(0)
+    })
+  })
+
   test('drop a shell TaskStop stopped', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL, TaskStop: () => ({ result: { message: 'stopped', task_id: 'b7k2', task_type: 'local_bash' }, text: 'stopped' }) } })
     signedIn(on)
