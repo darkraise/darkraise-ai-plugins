@@ -772,6 +772,171 @@ test("a mirror copy swapped for a directory during the killed-run comparison ref
   assert.ok(lines.includes("  docs/dforge/specs/a.md: already exists with different content"), lines.join("\n"));
 });
 
+// Documents applied darkmem and configured local, the mirror holding
+// specs/a.md and specs/b.md with their sync state, moved in-process so a test
+// can mock fs. Offline (darkmem turned off) the move needs no client.
+const SYNCED = { "dforge/specs/a.md": sha("# A\n"), "dforge/specs/b.md": sha("# B\n") };
+
+function offlineDocs() {
+  const repo = makeRepo();
+  const home = mapped(repo, { entry: { documentStore: "local", progressSource: "local" }, stores: { documents: "darkmem", progress: "local" } });
+  write(path.join(home.docsRoot, "specs", "a.md"), "# A\n");
+  write(path.join(home.docsRoot, "specs", "b.md"), "# B\n");
+  const cfg = { ...cfgFor(repo, home.env), enabled: false };
+  const state = loadState(cfg.statePath);
+  state.documents = { ...SYNCED };
+  const lines = [];
+  let persisted = 0;
+  const context = { cfg, client: null, env: home.env, out: line => lines.push(line), report: { refused: 0 }, state, persist: () => { persisted += 1; } };
+  return {
+    ...home, repo, lines, state,
+    persisted: () => persisted,
+    mirrorCopy: rel => path.join(home.docsRoot, ...rel.split("/")),
+    dest: rel => path.join(repo, "docs", "dforge", ...rel.split("/")),
+    reconcile: () => reconcileInProcess(context),
+  };
+}
+
+const STAY = "darkmem-sync reconcile: documents stay darkmem (configured local): ";
+
+// A refused move keeps the mirror and its sync state, and a.md, written
+// before the refusal, holds the mirror's content.
+function assertKept(s) {
+  assert.equal(fs.existsSync(s.docsRoot), true, "the mirror is not set aside");
+  assert.deepEqual(s.state.documents, SYNCED);
+  assert.equal(s.persisted(), 0);
+  assert.equal(read(s.dest("specs/a.md")), "# A\n");
+}
+
+// Runs `act` once, when the move makes b.md's directory after writing a.md:
+// between b.md's checks and its write. Returns how often it ran.
+function beforeSecondWrite(t, s, act) {
+  const mkdir = fs.mkdirSync;
+  let ran = 0;
+  t.mock.method(fs, "mkdirSync", (dir, options) => {
+    const made = mkdir(dir, options);
+    if (dir === path.dirname(s.dest("specs/b.md")) && fs.existsSync(s.dest("specs/a.md")) && !fs.lstatSync(s.dest("specs/b.md"), { throwIfNoEntry: false })) {
+      ran += 1;
+      act();
+    }
+    return made;
+  });
+  return () => ran;
+}
+
+test("a file that lands in docs/dforge just before its write is never overwritten", async t => {
+  const s = offlineDocs();
+  const ran = beforeSecondWrite(t, s, () => fs.writeFileSync(s.dest("specs/b.md"), "# B local\n"));
+  await s.reconcile();
+  assert.equal(ran(), 1);
+  assert.ok(s.lines.includes(`${STAY}docs/dforge changed during the move; nothing was overwritten`), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/b.md: changed during the move; not overwritten"), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/a.md: copied"), s.lines.join("\n"));
+  assert.equal(read(s.dest("specs/b.md")), "# B local\n");
+  assertKept(s);
+});
+
+test("a link that lands at a docs/dforge destination after the comparison is never written through", { skip: process.platform === "win32" }, async t => {
+  const s = offlineDocs();
+  const outside = path.join(scratch("dms-link-"), "b.md");
+  write(outside, "outside the repository\n");
+  const ran = beforeSecondWrite(t, s, () => fs.symlinkSync(outside, s.dest("specs/b.md")));
+  await s.reconcile();
+  assert.equal(ran(), 1);
+  assert.ok(s.lines.includes(`${STAY}docs/dforge changed during the move; nothing was overwritten`), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/b.md: changed during the move; not overwritten"), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/a.md: copied"), s.lines.join("\n"));
+  assert.equal(fs.lstatSync(s.dest("specs/b.md")).isSymbolicLink(), true);
+  assert.equal(read(outside), "outside the repository\n");
+  assertKept(s);
+});
+
+test("a mirror copy edited after darkmem confirmed it is not copied", async t => {
+  const s = offlineDocs();
+  const ran = beforeSecondWrite(t, s, () => write(s.mirrorCopy("specs/b.md"), "# B edited\n"));
+  await s.reconcile();
+  assert.equal(ran(), 1);
+  assert.ok(s.lines.includes(`${STAY}the mirror changed during the move; nothing more was copied`), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/b.md: the mirror's copy changed after darkmem confirmed it"), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/a.md: copied"), s.lines.join("\n"));
+  assert.equal(fs.existsSync(s.dest("specs/b.md")), false);
+  assert.equal(read(s.mirrorCopy("specs/b.md")), "# B edited\n");
+  assertKept(s);
+});
+
+test("a mirror copy replaced by a link after it was hashed is never read through", { skip: process.platform === "win32" }, async t => {
+  const s = offlineDocs();
+  const outside = path.join(scratch("dms-link-"), "b.md");
+  write(outside, "# B\n");
+  const ran = beforeSecondWrite(t, s, () => {
+    fs.rmSync(s.mirrorCopy("specs/b.md"));
+    fs.symlinkSync(outside, s.mirrorCopy("specs/b.md"));
+  });
+  await s.reconcile();
+  assert.equal(ran(), 1);
+  assert.ok(s.lines.includes(`${STAY}a copy into docs/dforge failed (ELOOP); the files copied so far stay, and a rerun copies the rest`), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/a.md: copied"), s.lines.join("\n"));
+  assert.equal(fs.existsSync(s.dest("specs/b.md")), false);
+  assert.equal(fs.lstatSync(s.mirrorCopy("specs/b.md")).isSymbolicLink(), true);
+  assertKept(s);
+});
+
+test("a write into docs/dforge that fails part-way is a refusal, not a crash, and a rerun finishes the move", async t => {
+  const s = offlineDocs();
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    if (file === s.dest("specs/b.md")) throw Object.assign(new Error("injected by the test"), { code: "EIO" });
+    return writeFile(file, ...rest);
+  });
+  await s.reconcile();
+  assert.ok(s.lines.includes(`${STAY}a copy into docs/dforge failed (EIO); the files copied so far stay, and a rerun copies the rest`), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/a.md: copied"), s.lines.join("\n"));
+  assertKept(s);
+  t.mock.restoreAll();
+  s.lines.length = 0;
+  await s.reconcile();
+  assert.ok(s.lines.some(line => line.startsWith("darkmem-sync reconcile: documents moved to local")), s.lines.join("\n"));
+  assert.equal(read(s.dest("specs/a.md")), "# A\n");
+  assert.equal(read(s.dest("specs/b.md")), "# B\n");
+});
+
+test("a link that replaces a written copy before the read-back is never read through", { skip: process.platform === "win32" }, async t => {
+  const s = offlineDocs();
+  const outside = path.join(scratch("dms-link-"), "a.md");
+  write(outside, "# A\n");
+  const writeFile = fs.writeFileSync;
+  const written = [];
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    writeFile(file, ...rest);
+    if (file === s.dest("specs/a.md") || file === s.dest("specs/b.md")) written.push(file);
+    if (file === s.dest("specs/b.md")) {
+      fs.rmSync(s.dest("specs/a.md"));
+      fs.symlinkSync(outside, s.dest("specs/a.md"));
+    }
+  });
+  await s.reconcile();
+  assert.deepEqual(written, [s.dest("specs/a.md"), s.dest("specs/b.md")]);
+  assert.ok(s.lines.includes(`${STAY}a copy into docs/dforge failed (ELOOP); the files copied so far stay, and a rerun copies the rest`), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/a.md: copied"), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  docs/dforge/specs/b.md: copied"), s.lines.join("\n"));
+  assert.equal(fs.lstatSync(s.dest("specs/a.md")).isSymbolicLink(), true);
+  assert.equal(read(s.dest("specs/b.md")), "# B\n");
+  assert.equal(fs.existsSync(s.docsRoot), true, "the mirror is not set aside");
+  assert.deepEqual(s.state.documents, SYNCED);
+  assert.equal(s.persisted(), 0);
+});
+
+test("a docs/dforge copy a killed run left equal is not written again", async t => {
+  const s = offlineDocs();
+  write(s.dest("specs/a.md"), "# A\n");
+  const written = t.mock.method(fs, "writeFileSync");
+  await s.reconcile();
+  assert.ok(s.lines.some(line => line.startsWith("darkmem-sync reconcile: documents moved to local")), s.lines.join("\n"));
+  assert.ok(s.lines.includes("  copied 2 files into docs/dforge, untracked; commit them"), s.lines.join("\n"));
+  assert.equal(written.mock.calls.filter(call => call.arguments[0] === s.dest("specs/a.md")).length, 0);
+  assert.equal(read(s.dest("specs/b.md")), "# B\n");
+});
+
 test("a mirror copy that differs from darkmem's refuses the move before anything is copied or set aside", async t => {
   const s = await darkmemDocs(t);
   assert.equal((await s.pull()).code, 0);

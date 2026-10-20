@@ -549,16 +549,20 @@ async function documentsToLocal(context, { offline = null } = {}) {
       details: links.map(rel => `${rel}: a symbolic link, which the move will not write through`),
     };
   }
-  // A killed earlier run may have copied some files: equal ones are fine. One
-  // that cannot be read, a named pipe included, differs.
+  // A killed earlier run may have copied some files: equal ones are fine and
+  // are not written again. One that cannot be read, a named pipe included,
+  // differs.
+  const present = new Set();
   const differing = files
     .filter(({ file, dest }) => {
       if (!fs.existsSync(dest)) return false;
       try {
-        return !readNoFollow(dest).equals(readNoFollow(file));
+        if (!readNoFollow(dest).equals(readNoFollow(file))) return true;
       } catch {
         return true;
       }
+      present.add(dest);
+      return false;
     })
     .map(({ name }) => `${name}: already exists with different content`);
   if (differing.length) return { moved: false, reason: "docs/dforge already holds different copies; nothing was copied", details: differing };
@@ -567,12 +571,41 @@ async function documentsToLocal(context, { offline = null } = {}) {
   const ignored = runGit(cfg.repoRoot, ["check-ignore", "--stdin"], files.map(({ name }) => name).join("\n"));
   if (ignored.status !== 0 && ignored.status !== 1) return { moved: false, reason: `git check-ignore failed: ${ignored.stderr.trim()}`, details: [] };
   fs.mkdirSync(target, { recursive: true });
-  for (const { file, dest } of files) {
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(file, dest);
+  // Each mirror file is read once without following a link or blocking on a
+  // named pipe, checked against the hash darkmem confirmed, and that buffer is
+  // written exclusively, so nothing that lands at either end meanwhile is
+  // read through or overwritten. A refusal keeps what was written, which a
+  // rerun's comparison above takes as equal.
+  const landed = [];
+  const copied = [];
+  const copiedLines = () => copied.map(name => `${name}: copied`);
+  try {
+    for (const { file, dest, name, hash } of files) {
+      if (present.has(dest)) continue;
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const buffer = readNoFollow(file);
+      if (sha256(buffer) !== hash) {
+        return {
+          moved: false,
+          reason: "the mirror changed during the move; nothing more was copied",
+          details: [`${name}: the mirror's copy changed after darkmem confirmed it`, ...landed, ...copiedLines()],
+        };
+      }
+      try {
+        fs.writeFileSync(dest, buffer, { flag: "wx" });
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        landed.push(`${name}: changed during the move; not overwritten`);
+        continue;
+      }
+      copied.push(name);
+    }
+    if (landed.length) return { moved: false, reason: "docs/dforge changed during the move; nothing was overwritten", details: [...landed, ...copiedLines()] };
+    const mismatched = files.filter(({ dest, hash }) => sha256(readNoFollow(dest)) !== hash).map(({ name }) => `${name}: differs from the mirror's copy`);
+    if (mismatched.length) return { moved: false, reason: "a copied file differs from the mirror's", details: [...mismatched, ...copiedLines()] };
+  } catch (error) {
+    return { moved: false, reason: `a copy into docs/dforge failed (${error.code}); the files copied so far stay, and a rerun copies the rest`, details: copiedLines() };
   }
-  const mismatched = files.filter(({ dest, hash }) => fileHash(dest) !== hash).map(({ name }) => `${name}: differs from the mirror's copy`);
-  if (mismatched.length) return { moved: false, reason: "a copied file differs from the mirror's", details: mismatched };
   // Set aside before the sync state forgets the documents, so a failed rename
   // leaves a state that still describes the mirror.
   const aside = path.join(cfg.mirror, `${DOC_PREFIX}-moved-${utcStamp()}`);
