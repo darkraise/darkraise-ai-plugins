@@ -225,7 +225,7 @@ ar_start() {
   fi
   base=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
   mkdir -p "$(dirname "$path")" || return 1
-  [ -f "$(dirname "$path")/.gitignore" ] || printf '*\n' > "$(dirname "$path")/.gitignore"
+  dforge_self_ignore "$(dirname "$path")"
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
   ar_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \

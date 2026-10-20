@@ -48,7 +48,7 @@ else
   root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "not inside a git repository" >&2; exit 2; }
   dir="$(dforge_dir state "$root")/sdd"
   mkdir -p "$dir"
-  printf '*\n' > "$dir/.gitignore"
+  dforge_self_ignore "$dir"
 fi
 file="$dir/finish.json"
 now=${FINISH_CHOICE_NOW:-$(date +%s)}

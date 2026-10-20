@@ -68,6 +68,16 @@ check "start: no stalls, no compactions since a task" "$(field stalls):$(field s
 check "start: the state file is ignored by git" "$(git -C "$REPO" status --porcelain -- .dforge | grep -c .)" "0"
 check "start: sdd ignores everything in it" "$(cat "$REPO/.dforge/sdd/.gitignore")" "*"
 
+# A cloned repository controls .dforge/sdd/, so its ignore is never written
+# through a symbolic link.
+git init -q -b main "$TMP/linked"
+git -C "$TMP/linked" commit -q --allow-empty -m init
+mkdir -p "$TMP/linked/.dforge/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$TMP/linked/.dforge/sdd/.gitignore"
+beat s-link
+(cd "$TMP/linked" && bash "$AR" --session s-link start --spec "$SPEC" >/dev/null 2>&1)
+check "start: linked ignore never written through" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
+
 # --- binding ---
 ar --session s-2 status >/dev/null 2>&1; status=$?
 check "another session: no run (exit 3)" "$status" "3"

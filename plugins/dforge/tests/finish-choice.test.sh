@@ -61,6 +61,15 @@ check "old file: the action and base read" "$(jq -r '[.action, .base] | join(" "
 # --- wait, and work without a plan ---
 fc set wait >/dev/null
 check "no plan: under .dforge/sdd" "$(jq -r .action .dforge/sdd/finish.json)" "wait"
+git init -q "$TMP/linked"
+mkdir -p "$TMP/linked/.dforge/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$TMP/linked/.dforge/sdd/.gitignore"
+(cd "$TMP/linked" && fc set wait >/dev/null 2>&1)
+check "no plan: a linked ignore is never written through" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
+printf '!keep\n' > .dforge/sdd/.gitignore
+fc set wait >/dev/null
+check "no plan: an existing ignore is kept" "$(cat .dforge/sdd/.gitignore)" '!keep'
+printf '*\n' > .dforge/sdd/.gitignore
 fc clear
 fc get >/dev/null 2>&1
 check "clear: nothing chosen" "$?" "3"
