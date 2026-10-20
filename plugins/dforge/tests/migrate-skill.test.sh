@@ -27,6 +27,7 @@ confirm=$(line_of "$SKILL" 'Run nothing')
 check "the dry run comes first" "$([ -n "$dry" ] && [ -n "$real" ] && [ "$dry" -lt "$real" ] && echo yes || echo no)" "yes"
 check "the confirmation comes before the migration" "$([ -n "$confirm" ] && [ "$confirm" -lt "$real" ] && echo yes || echo no)" "yes"
 present "asks before migrating" "$SKILL" "that writes before a yes"
+present "asks before committing" "$SKILL" "human partner agrees, and stage nothing"
 commit=$(line_of "$SKILL" 'Commit only after your')
 check "the commit confirmation follows the migration" "$([ -n "$commit" ] && [ -n "$real" ] && [ "$real" -lt "$commit" ] && echo yes || echo no)" "yes"
 present "commits only what the commit lines name" "$SKILL" "stage nothing the lines do not name"
