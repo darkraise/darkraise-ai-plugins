@@ -23,6 +23,10 @@ lacks() { # lacks <name> <haystack> <needle>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
+# Every case reads this home, never the developer's ~/.dforge; the name-key
+# cases below set their own.
+export HOME="$TMP/home"
+mkdir -p "$HOME"
 mkdir -p docs
 printf '# Spec\n' > docs/spec.md
 printf '# Program\n' > docs/program.md
