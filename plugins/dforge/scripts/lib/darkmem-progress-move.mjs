@@ -18,21 +18,22 @@ import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
 
 const local = (base, rel) => path.join(base, ...rel.split("/"));
 
-// `file`'s bytes, read without following a symbolic link at its last component
-// and without blocking on a FIFO or device: it throws an error whose code is
-// ELOOP for a symbolic link (a dangling one too), EISDIR for a directory,
-// EFTYPE for any other file that is not regular, or the open's or read's own
-// (ENOENT, EACCES, ENOTDIR). Links earlier in the path are followed. A function
-// declaration, since darkmem-reconcile.mjs imports it across the import cycle
-// between the two modules. Without O_NOFOLLOW (Windows) a link is refused by
-// lstat before the read, which leaves a window between the two. fs.constants
-// cannot be stubbed, so a test passes a copy without O_NOFOLLOW as `constants`.
-export function readNoFollow(file, constants = fs.constants) {
-  if (constants.O_NOFOLLOW === undefined) {
-    if (fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw Object.assign(new Error(`${file} is a symbolic link`), { code: "ELOOP" });
+// `file`'s bytes, read without blocking on a FIFO or device: it throws an
+// error whose code is EISDIR for a directory, EFTYPE for any other file that
+// is not regular, or the open's or read's own (ENOENT, EACCES, ENOTDIR).
+// Without `follow`, a symbolic link at the last component (a dangling one
+// too) throws ELOOP; links earlier in the path are always followed. Function
+// declarations, since darkmem-reconcile.mjs imports them across the import
+// cycle between the two modules. Without O_NOFOLLOW or O_NONBLOCK (Windows,
+// which has no FIFOs) a link is refused by lstat before the read, which
+// leaves a window between the two. fs.constants cannot be stubbed, so a test
+// passes a copy without them as `constants`.
+export function readRegular(file, { follow = false } = {}, constants = fs.constants) {
+  if (constants.O_NOFOLLOW === undefined || constants.O_NONBLOCK === undefined) {
+    if (!follow && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw Object.assign(new Error(`${file} is a symbolic link`), { code: "ELOOP" });
     return fs.readFileSync(file);
   }
-  const fd = fs.openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const fd = fs.openSync(file, constants.O_RDONLY | constants.O_NONBLOCK | (follow ? 0 : constants.O_NOFOLLOW));
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) throw Object.assign(new Error(`${file} is not a regular file`), { code: stat.isDirectory() ? "EISDIR" : "EFTYPE" });
@@ -40,6 +41,10 @@ export function readNoFollow(file, constants = fs.constants) {
   } finally {
     fs.closeSync(fd);
   }
+}
+
+export function readNoFollow(file, constants = fs.constants) {
+  return readRegular(file, { follow: false }, constants);
 }
 
 // Each plan directory's progress.md that lstat finds, a dangling link

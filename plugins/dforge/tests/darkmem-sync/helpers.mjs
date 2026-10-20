@@ -88,6 +88,16 @@ export function read(file) {
   return fs.readFileSync(file, "utf8");
 }
 
+// A named pipe nobody writes to: a plain read of it, or through a link to it,
+// blocks. Only the command run as a child process meets one before its fix,
+// so a blocked read ends at run()'s timeout instead of stopping the test file.
+export function namedPipe(file) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const made = spawnSync("mkfifo", [file], { encoding: "utf8", timeout: 10000 });
+  if (made.status !== 0) throw new Error(`mkfifo ${file}: ${made.stderr || made.error?.message}`);
+  return file;
+}
+
 // A mirror whose darkmem was already checked for pre-3.0 uris, so a test's
 // first injected failure meets the command, not that check.
 export function markMigrated(mirror) {

@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { emptyState, ledgerPieces, loadState, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
-import { checkProgressTargets, gatherLocalProgress, progressToLocal, readNoFollow } from "../../scripts/lib/darkmem-progress-move.mjs";
+import { checkProgressTargets, gatherLocalProgress, progressToLocal, readNoFollow, readRegular } from "../../scripts/lib/darkmem-progress-move.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
-import { git, makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
+import { git, makeHome, makeRepo, namedPipe, read, run, scratch, write } from "./helpers.mjs";
 
 const LEDGER = name => `# SDD ledger — plan: docs/dforge/plans/${name}.md\nTask 1: complete (commits aaaa..bbbb)\n`;
 const LATEST = "## State\n- Plan: `docs/dforge/plans/p1.md`\n";
@@ -325,16 +324,6 @@ test("a dangling progress.md link in the mirror leaves status as it was", { skip
   assert.deepEqual(after, before);
 });
 
-// A named pipe nobody writes to: a plain read of it, or through a link to it,
-// blocks. Only the command run as a child process meets one before its fix,
-// so a blocked read ends at run()'s timeout instead of stopping this file.
-function namedPipe(file) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const made = spawnSync("mkfifo", [file], { encoding: "utf8", timeout: 10000 });
-  assert.equal(made.status, 0, made.stderr || made.error?.message);
-  return file;
-}
-
 // Replaces `victim` with a link to `outside` the first time the code lstats
 // or opens it: after an lstat, so a check that read it as a file then follows
 // the link, or before an open, so an open that follows links reads `outside`.
@@ -372,15 +361,34 @@ test("readNoFollow reads a regular file and refuses a link, a dangling link, a l
   }
 });
 
-test("without O_NOFOLLOW, as on Windows, readNoFollow refuses a link by lstat before it reads", { skip: process.platform === "win32" }, () => {
+test("readRegular with follow reads through a link, and refuses a named pipe, a link to one and a directory", { skip: process.platform === "win32" }, () => {
   const dir = scratch("dms-read-");
   const file = path.join(dir, "file");
   write(file, "bytes\n");
   fs.symlinkSync(file, path.join(dir, "link"));
-  const windows = { ...fs.constants, O_NOFOLLOW: undefined };
-  assert.equal(readNoFollow(file, windows).toString(), "bytes\n");
-  assert.throws(() => readNoFollow(path.join(dir, "link"), windows), { code: "ELOOP" });
+  fs.symlinkSync(namedPipe(path.join(dir, "pipe")), path.join(dir, "pipe-link"));
+  fs.mkdirSync(path.join(dir, "dir"));
+  assert.equal(readRegular(path.join(dir, "link"), { follow: true }).toString(), "bytes\n");
+  for (const [name, code] of [["pipe", "EFTYPE"], ["pipe-link", "EFTYPE"], ["dir", "EISDIR"], ["missing", "ENOENT"]]) {
+    assert.throws(() => readRegular(path.join(dir, name), { follow: true }), { code }, name);
+  }
 });
+
+for (const removed of ["O_NOFOLLOW", "O_NONBLOCK"]) {
+  test(`without ${removed}, as on Windows, readNoFollow refuses a link by lstat before it reads, and readRegular with follow reads through it`, { skip: process.platform === "win32" }, t => {
+    const dir = scratch("dms-read-");
+    const file = path.join(dir, "file");
+    const link = path.join(dir, "link");
+    write(file, "bytes\n");
+    fs.symlinkSync(file, link);
+    const windows = { ...fs.constants, [removed]: undefined };
+    const lstat = t.mock.method(fs, "lstatSync");
+    assert.equal(readNoFollow(file, windows).toString(), "bytes\n");
+    assert.equal(lstat.mock.callCount(), 1, "the fallback lstats before it reads");
+    assert.throws(() => readNoFollow(link, windows), { code: "ELOOP" });
+    assert.equal(readRegular(link, { follow: true }, windows).toString(), "bytes\n");
+  });
+}
 
 test("a link swapped in for a file after any lstat of it is still not read through", { skip: process.platform === "win32" }, t => {
   const dir = scratch("dms-read-");
