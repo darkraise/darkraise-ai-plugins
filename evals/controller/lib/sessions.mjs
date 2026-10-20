@@ -22,7 +22,8 @@ export const REPOS = process.env.CONTROLLER_EVAL_REPOS ?? fileURLToPath(new URL(
 // one word too, so it is not counted either.
 const SCRIPT = /\/(?:task-brief|review-route|review-package)$/;
 const BEFORE_COMMAND = new Set(['!', '{', 'if', 'then', 'elif', 'else', 'while', 'until', 'do', 'bash', 'sh', 'command', 'env', 'exec', 'nohup', 'time', 'timeout']);
-const OPTION_VALUE = new Set(['-u', '-k', '-s']);
+const OPTION_VALUE = { env: new Set(['-u']), timeout: new Set(['-k', '-s']) };
+const NOT_A_RUN = { bash: new Set(['-n']), sh: new Set(['-n']), command: new Set(['-v', '-V']) };
 const ASSIGN = /\b([A-Za-z_]\w*)=(['"]?)([^\s'";&|]+)\2/g;
 
 // simpleCommands CMD — CMD cut at `;`, `&`, `|`, `(`, `)`, a backtick and a
@@ -57,7 +58,13 @@ function planArgs(cmd) {
   const vars = Object.fromEntries([...cmd.matchAll(ASSIGN)].map(m => [m[1], m[3]]));
   return simpleCommands(cmd).flatMap(words => {
     let i = 0;
-    while (i < words.length && !SCRIPT.test(words[i]) && (BEFORE_COMMAND.has(words[i]) || /^(?:[A-Za-z_]\w*=|-|\d)/.test(words[i]))) i += OPTION_VALUE.has(words[i]) ? 2 : 1;
+    let wrapper = '';
+    while (i < words.length && !SCRIPT.test(words[i]) && (BEFORE_COMMAND.has(words[i]) || /^(?:[A-Za-z_]\w*=|-|\d)/.test(words[i]))) {
+      const w = words[i];
+      if (NOT_A_RUN[wrapper]?.has(w)) return [];
+      if (BEFORE_COMMAND.has(w)) wrapper = w;
+      i += OPTION_VALUE[wrapper]?.has(w) ? 2 : 1;
+    }
     if (!SCRIPT.test(words[i] ?? '')) return [];
     const arg = (words[i + 1] ?? '').replace(/^\$\{?(\w+)\}?$/, (_, name) => vars[name] ?? '');
     return arg.endsWith('.md') ? [basename(arg, '.md')] : [];
