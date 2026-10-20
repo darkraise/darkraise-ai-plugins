@@ -27,7 +27,7 @@ Source: docs/superpowers/notes/2026-10-11-dr-forge-plan-research.md@e7f93ca
 ### The mod test harness
 - It answers `$.fs` and `$.env` only through the test's own hooks.
 - `test(name, { options })` feeds `userConfig` only.
-- On 2026-10-11 the cockpit tests' fixture `world(on, w)` hooked `fs.stat/list/write` from `w.files`/`w.written`, and `signedIn(on, files)` hooked `fs.read`, throwing ENOENT for unknown paths; about 25 tests passed `{ options: {...} }` and 5 hooked `config.set`.
+- On 2026-10-11 the cockpit tests' fixture `world(on, w)` (about line 140 of `cockpit.test.ts`) hooked `fs.stat/list/write` from `w.files`/`w.written`, and `signedIn(on, files)` hooked `fs.read`, throwing ENOENT for unknown paths; about 25 tests passed `{ options: {...} }` and 5 hooked `config.set`.
 - Baseline then: `claude plugin test plugins/dr-cockpit` → 100 pass.
 Measured: reading `plugins/dr-cockpit/tests/cockpit.test.ts` and a test run
 Authority: the test file and its run

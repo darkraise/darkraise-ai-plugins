@@ -42,9 +42,9 @@ Source: docs/superpowers/notes/2026-09-21-executor-interface-plan-review.md@7221
 
 ### `tests/plan-lint.test.sh` dies with no failure line
 Cause: it takes about 4m20s on this machine (2026-09-20), so a 120 s or 200 s bound kills it silently
-Workaround: bound it at 600 s or more
+Workaround: bound it well above that; the dr-forge merge plan ran each suite under `timeout 600`
 Verified: 2026-09-20
-Source: docs/superpowers/notes/2026-09-20-dr-superpowers-item-registers-followups.md@382b264
+Source: docs/superpowers/notes/2026-09-20-dr-superpowers-item-registers-followups.md@382b264, docs/superpowers/notes/2026-10-11-dr-forge-plan-research.md@e7f93ca
 
 ### `tests/budget-line.test.sh` fails three assertions on this machine
 Cause: the suite hardcoded a 465k window, while this machine's `autoCompactWindow` of 650000 gives 790k; it failed identically at the commit before the item-registers plan
@@ -59,8 +59,8 @@ Verified: 2026-10-11
 Source: docs/superpowers/notes/2026-09-21-dr-superpowers-revising-plans-followups.md@da5b2e3, docs/superpowers/notes/2026-10-11-dr-forge-plan-research.md@e7f93ca
 
 ### A cached helper in `lib/roots.sh` re-reads its config on every call
-Cause: roots.sh loads lazily and caches in shell variables; a `$(…)` subshell loses the cache, and a ConfigError there exits only the subshell's script
-Workaround: call `forge_stores_init` (now `dforge_stores_init`) in the main shell before calling the helpers repeatedly
+Cause: roots.sh loads lazily and caches in shell variables; a `$(…)` subshell loses the cache
+Workaround: call `forge_stores_init` (now `dforge_stores_init`) in the main shell before calling the helpers repeatedly. By design a ConfigError exits the script (status 2, per the header of `scripts/lib/roots.sh`)
 Verified: 2026-10-13
 Source: docs/superpowers/notes/2026-10-13-darkmem-store-options-plan1-inventory.md@3a2bdd5
 
@@ -93,7 +93,7 @@ Verified: 2026-10-11
 Source: docs/superpowers/notes/2026-10-11-dr-forge-plan-research.md@e7f93ca
 
 ### A setting registered once at load ignores later changes
-Cause: options read at `register` time are fixed for the module's life; on 2026-10-11 76 uses read them there, and `if (guardAttribution) { on('attribution.text', …) }` registered a hook conditionally
+Cause: options read at `register` time are fixed for the module's life; on 2026-10-11 76 uses read them there (lines 179-207 of the cockpit's `register.tsx` plus its body), and `if (guardAttribution) { on('attribution.text', …) }` at about line 483 registered a hook conditionally
 Workaround: register every hook unconditionally and read the live option inside it
 Verified: 2026-10-11
 Source: docs/superpowers/notes/2026-10-11-dr-forge-plan-research.md@e7f93ca
