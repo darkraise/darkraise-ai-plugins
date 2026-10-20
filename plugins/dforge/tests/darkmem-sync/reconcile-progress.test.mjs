@@ -616,6 +616,20 @@ test("a mirror latest.md that cannot be read keeps progress in darkmem, not a cr
   assert.equal(s.stores().progress, "darkmem");
 });
 
+test("a mirror latest.md that cannot be written keeps progress in darkmem, not a crash", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
+  // The atomic write's temporary file cannot be made where a directory stands.
+  fs.mkdirSync(path.join(s.workRoot, "handoff", ".latest.md.tmp"), { recursive: true });
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the pull into the mirror did not finish cleanly$/m);
+  assert.match(result.stdout, /^ {2}failed: handoff\/latest\.md: could not be written \(\w+\)$/m);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "handoff", "latest.md")), false);
+  assert.equal(s.stores().progress, "darkmem");
+});
+
 test("a symbolic link among the mirror's progress keeps progress in darkmem, and nothing is read through it", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "local");
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });

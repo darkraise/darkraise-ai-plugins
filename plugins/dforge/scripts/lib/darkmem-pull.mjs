@@ -170,20 +170,27 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
     const remote = Buffer.from(text, "utf8");
     const synced = { offset: remote.length, prefix: sha256(remote), lastSeq };
     const file = path.join(roots.workRoot, "sdd", ws.key, "progress.md");
-    const local = fs.existsSync(file) ? fs.readFileSync(file) : null;
-    const record = state.ledgers[ws.key];
-    if (local && local.length >= remote.length && local.subarray(0, remote.length).equals(remote)) {
-      // Equal, or ahead by lines push has not sent yet.
-      state.ledgers[ws.key] = synced;
-    } else if (!local || (record && !record.pending && local.length === record.offset && sha256(local) === record.prefix)) {
-      writeFileAtomic(file, remote);
-      state.ledgers[ws.key] = synced;
-      report.counts.ledgers += 1;
-    } else {
-      report.conflicts.push(`sdd/${ws.key}/progress.md: the local ledger and darkmem's have diverged; ${RESOLVE}`);
-      continue;
+    try {
+      const local = fs.existsSync(file) ? fs.readFileSync(file) : null;
+      const record = state.ledgers[ws.key];
+      if (local && local.length >= remote.length && local.subarray(0, remote.length).equals(remote)) {
+        // Equal, or ahead by lines push has not sent yet.
+        state.ledgers[ws.key] = synced;
+      } else if (!local || (record && !record.pending && local.length === record.offset && sha256(local) === record.prefix)) {
+        writeFileAtomic(file, remote);
+        state.ledgers[ws.key] = synced;
+        report.counts.ledgers += 1;
+      } else {
+        report.conflicts.push(`sdd/${ws.key}/progress.md: the local ledger and darkmem's have diverged; ${RESOLVE}`);
+        continue;
+      }
+      persist();
+    } catch (error) {
+      // persist's StateError, or a bug, is not this ledger's failure.
+      if (!error?.syscall) throw error;
+      report.failures.push(`sdd/${ws.key}/progress.md: the local ledger could not be read or written (${error.code}); not pulled`);
+      report.partial = true;
     }
-    persist();
   }
 }
 
@@ -228,13 +235,19 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
     report.conflicts.push(`handoff/latest.md: changed locally, and darkmem holds a newer checkpoint; ${RESOLVE}`);
     return;
   }
-  if (local !== remoteHash) {
-    writeFileAtomic(file, remote);
-    report.counts.checkpoints += 1;
+  try {
+    if (local !== remoteHash) {
+      writeFileAtomic(file, remote);
+      report.counts.checkpoints += 1;
+    }
+    state.checkpoint = remoteHash;
+    recordCheckpointAt(state, newestKey, newest.created_at);
+    persist();
+  } catch (error) {
+    if (!error?.syscall) throw error;
+    report.failures.push(`handoff/latest.md: could not be written (${error.code}); not pulled`);
+    report.partial = true;
   }
-  state.checkpoint = remoteHash;
-  recordCheckpointAt(state, newestKey, newest.created_at);
-  persist();
 }
 
 export async function pull(context) {

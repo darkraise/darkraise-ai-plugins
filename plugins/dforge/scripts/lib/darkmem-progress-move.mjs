@@ -397,10 +397,17 @@ function renderCheckpoint({ state, persist, report }, workRoot, newest) {
     report.conflicts.push("handoff/latest.md: changed locally, and darkmem holds a newer checkpoint");
     return;
   }
-  if (current !== hash) writeFileAtomic(file, remote);
-  state.checkpoint = hash;
-  recordCheckpointAt(state, newest.workstream, newest.created_at);
-  persist();
+  try {
+    if (current !== hash) writeFileAtomic(file, remote);
+    state.checkpoint = hash;
+    recordCheckpointAt(state, newest.workstream, newest.created_at);
+    persist();
+  } catch (error) {
+    // persist's StateError, or a bug, propagates.
+    if (!error?.syscall) throw error;
+    report.failures.push(`handoff/latest.md: could not be written (${error.code})`);
+    report.partial = true;
+  }
 }
 
 // A file's bytes, or null when it does not exist.

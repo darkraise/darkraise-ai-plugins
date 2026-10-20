@@ -298,6 +298,68 @@ test("a latest.md that cannot be read is one failure, and the rest of the pull s
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
 });
 
+for (const [name, block] of [
+  ["is a directory", file => fs.mkdirSync(file, { recursive: true })],
+  ["sits under a file", file => write(path.dirname(file), "not a directory\n")],
+]) {
+  test(`a ledger whose local copy ${name} is one failure, and the documents, other ledgers and checkpoint still land`, async t => {
+    const s = await setup(t);
+    await s.seed.putDocument({ project: "proj", uri: "dforge/T.md", content: "T\n" });
+    await s.seed.putDocument({ project: "proj", uri: "dforge/t.md", content: "t\n" });
+    await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+    await s.seed.append({ project: "proj", workstream: "k", entries: [{ kind: "ledger", body: "k\n" }] });
+    await s.seed.append({ project: "proj", workstream: "m", entries: [{ kind: "ledger", body: "m\n" }, { kind: "checkpoint", body: "# m\n" }] });
+    block(path.join(s.workRoot, "sdd", "k", "progress.md"));
+    const result = await s.pull();
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stderr, /unexpected error/);
+    assert.match(result.stdout, /^conflict: dforge\/T\.md, dforge\/t\.md: differ only in case/m);
+    assert.match(result.stdout, /^failed: sdd\/k\/progress\.md: the local ledger could not be read or written \(\w+\); not pulled$/m);
+    assert.equal((result.stdout.match(/^failed:/gm) ?? []).length, 1);
+    assert.match(result.stdout, /darkmem-sync pull: 1 documents, 1 ledgers, 1 checkpoints; 1 conflicts, 1 failures/);
+    assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
+    assert.equal(read(path.join(s.workRoot, "sdd", "m", "progress.md")), "m\n");
+    assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# m\n");
+    assert.equal(s.state().ledgers.k, undefined);
+  });
+}
+
+test("a latest.md that cannot be written is one failure, and the rest of the pull still lands", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
+  // The atomic write's temporary file cannot be made where a directory stands.
+  fs.mkdirSync(path.join(s.workRoot, "handoff", ".latest.md.tmp"), { recursive: true });
+  const result = await s.pull();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^failed: handoff\/latest\.md: could not be written \(\w+\); not pulled$/m);
+  assert.equal((result.stdout.match(/^failed:/gm) ?? []).length, 1);
+  assert.match(result.stdout, /darkmem-sync pull: 1 documents, 1 ledgers, 0 checkpoints; 0 conflicts, 1 failures/);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff", "latest.md")), false);
+  assert.equal(s.state().checkpoint, null);
+});
+
+test("a sync state that cannot be saved after a ledger is written still stops the pull with exit 2", async t => {
+  const s = await setup(t);
+  assert.equal((await s.pull()).code, 0);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  const stateFile = path.join(s.mirror, ".sync-state.json");
+  s.stub.db.onRequest = (method, pathname) => {
+    if (method !== "GET" || !pathname.endsWith("/entries") || fs.statSync(stateFile).isDirectory()) return;
+    fs.rmSync(stateFile);
+    fs.mkdirSync(stateFile);
+  };
+  const result = await s.pull();
+  assert.equal(result.code, 2, result.stdout + result.stderr);
+  assert.equal(
+    result.stderr.replace(/ could not be saved \(\w+\);/, " could not be saved (CODE);"),
+    `darkmem-sync: ${stateFile} could not be saved (CODE); the run stopped, and the next run checks what this one wrote\n`,
+  );
+  assert.doesNotMatch(result.stdout, /^failed:/m);
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
+});
+
 test("a document that cannot be read is one failure, and the others are still pulled", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
