@@ -97,7 +97,10 @@ parallel, one per candidate, dispatched in a single message so they run
 concurrently. Give
 each the same decision statement and the same constraints, and name its
 candidate's angle so the three do not converge. Each returns one committed
-approach, not a survey.
+approach, not a survey. With only two named candidates, the third scout gets
+both of their one-sentence statements and is asked for a structurally
+distinct third; if it can only return a variant of one of them, the ring still
+runs over its three drafts.
 
 **Rank.** Dispatch one `dforge:judge-opus` to run the ring
 pass: three comparisons, **A vs B, B vs C, C vs A**, scoring both candidates
