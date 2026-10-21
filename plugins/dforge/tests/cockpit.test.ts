@@ -1860,6 +1860,18 @@ describe('settings view', () => {
     expect(await desk.find({ key: 'set-warnAt-input' })).toBeDefined()
   })
 
+  test('every variable the schema names locks its row', async ($, on) => {
+    const named = Object.entries(SCHEMA).filter(([, spec]) => spec.env !== undefined)
+    world(on, { tokens: 284_000, config: { lensCap: 3 }, env: Object.fromEntries(named.map(([, spec]) => [spec.env, String(spec.max)])) })
+    await $.session.start(START)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await desk.press({ key: 'pane-settings' })
+    for (const [key, spec] of named) {
+      await desk.press({ key: `settings-tab-${spec.group}` })
+      expect((await desk.find({ key: `set-${key}-controls` }))?.text).toMatch(new RegExp(` set by ${spec.env}$`))
+    }
+  })
+
   test('the desktop draws a free-text row as an open field alone', () => {
     const TABLE = { Box: 'Box', Text: 'Text', Button: 'Button', Input: 'Input', Select: 'Select' } as never
     const spec = { type: 'string', default: '', group: 'Cockpit', target: 'dforge', label: 'Note', title: 'A note', description: 'Free text.' } as never

@@ -3258,7 +3258,8 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
 
 /** Puts a settings file in force: the atom every hook reads through live(), the locked rows, and the notifier. */
 async function applySettings($: EngineInterface, file: SettingsFile) {
-  const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET') }
+  // $.env.get takes only a literal name: each variable the schema names is listed.
+  const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET'), DFORGE_LENS_CAP: await $.env.get('DFORGE_LENS_CAP') }
   const engineUser = ((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>
   // The engine's snapshot can predate a save: until it shows the saved value the merged read is overlaid too, then a project or managed override shows through.
   const awaited = Object.fromEntries(Object.entries(S.claudeSaved).filter(([key, saved]) => engineUser[key] !== saved))
