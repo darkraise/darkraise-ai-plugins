@@ -142,5 +142,53 @@ case "${OSTYPE:-}" in
     rm -f "$fixture/big/\"lead.txt" ;;
 esac
 
+# --- submodules ---------------------------------------------------------------
+# The executor writes the worktree, so nothing in it may make a snapshot run a
+# command: a nested repository's own config is never read.
+git init -q "$fixture/lib"
+git -C "$fixture/lib" -c user.email=f@example.com -c user.name=F commit -q --allow-empty -m 'test: lib'
+git -C "$fixture/primary" -c protocol.file.allow=always submodule --quiet add "$fixture/lib" lib
+git -C "$fixture/primary" commit -qm 'test: add submodule'
+git -C "$fixture/primary" worktree add -q --detach "$fixture/subs" HEAD
+dr_snapshot "$fixture/subs" "$fixture/subs-empty.json"
+check 'an uninitialized submodule can be snapshotted' "$?" 0
+git -C "$fixture/subs" -c protocol.file.allow=always submodule --quiet update --init
+dr_snapshot "$fixture/subs" "$fixture/subs.json"
+check 'an initialized submodule can be snapshotted' "$?" 0
+check 'a submodule records its commit' \
+  "$(jq -r '.files[] | select(.path == "lib") | "\(.kind) \(.mode) \(.hash)"' "$fixture/subs.json")" \
+  "gitlink 160000 $(git -C "$fixture/lib" rev-parse HEAD)"
+printf 'inside\n' > "$fixture/subs/lib/inside.txt"
+dr_snapshot "$fixture/subs" "$fixture/subs-dirty.json" 2>/dev/null
+check 'a dirty submodule is refused' "$?" 2
+rm -f "$fixture/subs/lib/inside.txt"
+plant() { # plant <repo dir> — a repository whose config runs a command on status
+  git init -q "$1"
+  git -C "$1" config core.fsmonitor "touch '$fixture/pwned'"
+  git -C "$1" config core.hooksPath "$fixture/no-hooks"
+}
+plant "$fixture/subs/nested"
+dr_snapshot "$fixture/subs" "$fixture/subs-nested.json" 2>/dev/null
+check 'an untracked nested repository is refused' "$?" 2
+rm -rf "$fixture/subs/nested"
+mv "$fixture/subs/lib/.git" "$fixture/lib.gitfile"
+plant "$fixture/subs/lib"
+dr_snapshot "$fixture/subs" "$fixture/subs-planted.json" 2>/dev/null
+check 'a submodule whose gitfile became a repository is refused' "$?" 2
+check 'no nested repository config ran' "$([ -e "$fixture/pwned" ] && echo ran || echo clean)" clean
+rm -rf "$fixture/subs/lib/.git"
+mv "$fixture/lib.gitfile" "$fixture/subs/lib/.git"
+source "$HERE/../scripts/lib/task-execution.sh"
+git -C "$fixture/subs" switch -q -c subs-task
+printf '["lib"]\n' > "$fixture/sub-scope.json"
+dr_task_open "$fixture/subs" sub-task "$fixture/sub-scope.json"
+dr_snapshot "$fixture/subs" "$fixture/sub-before.json"
+git -C "$fixture/subs/lib" -c user.email=f@example.com -c user.name=F commit -q --allow-empty -m 'test: bump'
+dr_task_stage "$fixture/sub-before.json" 'chore(lib): bump submodule'
+check 'a submodule bump is committed' "$?" 0
+check 'the commit records the new submodule commit' \
+  "$(git -C "$fixture/subs" ls-tree HEAD lib | awk '{print $3}')" "$(git -C "$fixture/subs/lib" rev-parse HEAD)"
+dr_task_unlock
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

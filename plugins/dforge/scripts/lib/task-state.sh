@@ -40,7 +40,8 @@ dr_snapshot() {
 # 2,000-file repository take seconds, and a task takes several snapshots.
 # Symlinks, and names --stdin-paths cannot carry verbatim (a newline or
 # carriage return, or a leading quote, which it unquotes C-style), are still
-# hashed one at a time.
+# hashed one at a time. A directory is accepted only as a registered
+# submodule, recorded by its checked-out commit (_dr_submodule_head).
 _dr_snapshot_entries() {
   local root="$1" filemode="$2" path hash mode n=0 i=0
   local paths=() hashes=() modes=() kinds=() batch=()
@@ -57,6 +58,9 @@ _dr_snapshot_entries() {
         *) hash=''; batch+=("$n") ;;
       esac
       hashes+=("$hash"); modes+=("$mode"); kinds+=(file)
+    elif [ -d "$root/$path" ]; then
+      hash="$(_dr_submodule_head "$root" "$path" </dev/null)" || return 2
+      hashes+=("$hash"); modes+=(160000); kinds+=(gitlink)
     elif [ ! -e "$root/$path" ]; then hashes+=(''); modes+=(0); kinds+=(deleted)
     else return 2
     fi
@@ -76,6 +80,48 @@ _dr_snapshot_entries() {
   for ((i = 0; i < ${#paths[@]}; i++)); do
     printf '%s\0%s\0%s\0%s\0' "${paths[i]}" "${hashes[i]}" "${modes[i]}" "${kinds[i]}" || return 2
   done
+}
+
+# _dr_is_gitlink ROOT PATH [COMMIT] — whether the index, or COMMIT (default
+# HEAD), records PATH as a submodule.
+_dr_is_gitlink() {
+  local entry
+  entry="$(git --literal-pathspecs -C "$1" ls-files -s -- "$2")" || return 1
+  if [ -z "$entry" ] || [ -n "${3:-}" ]; then
+    entry="$(git --literal-pathspecs -C "$1" ls-tree "${3:-HEAD}" -- "$2")" || return 1
+  fi
+  [[ "$entry" == "160000 "* ]]
+}
+
+# _dr_submodule_head ROOT PATH — the commit a registered submodule has checked
+# out, or nothing when it is not initialized. The worktree is written by the
+# executor, so a nested .git is never trusted: only a gitfile into this
+# repository's own modules directory is read, with config-driven commands
+# off, and a dirty submodule is refused rather than summarized.
+_dr_submodule_head() {
+  local root="$1" path="$2" dir="$1/$2" link gitdir common head dirty
+  _dr_is_gitlink "$root" "$path" || { dr_state_error "unregistered directory in worktree: $path"; return 2; }
+  if [ ! -e "$dir/.git" ] && [ ! -L "$dir/.git" ]; then
+    [ -z "$(ls -A -- "$dir")" ] || { dr_state_error "uninitialized submodule has files: $path"; return 2; }
+    return 0
+  fi
+  [ -f "$dir/.git" ] && [ ! -L "$dir/.git" ] && IFS= read -r link < "$dir/.git" && [[ "$link" == 'gitdir: '* ]] ||
+    { dr_state_error "submodule git directory is not a gitfile: $path"; return 2; }
+  link="${link#gitdir: }"; link="${link%$'\r'}"
+  case "$link" in /*|[A-Za-z]:*) ;; *) link="$dir/$link" ;; esac
+  gitdir="$(dr_canonical "$link")" || return 2
+  common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" || return 2
+  common="$(dr_canonical "$common")" || return 2
+  case "$gitdir" in
+    "$common"/modules/*|"$common"/worktrees/*/modules/*) ;;
+    *) dr_state_error "submodule git directory is outside this repository: $path"; return 2 ;;
+  esac
+  set -- git -c core.fsmonitor=false -c core.untrackedCache=false -c core.hooksPath=/dev/null \
+    --git-dir="$gitdir" --work-tree="$dir"
+  head="$("$@" rev-parse --verify -q HEAD)" || { dr_state_error "submodule has no commit: $path"; return 2; }
+  dirty="$("$@" status --porcelain=v1 --untracked-files=all --ignore-submodules=all)" || return 2
+  [ -z "$dirty" ] || { dr_state_error "submodule has uncommitted changes: $path"; return 2; }
+  printf '%s' "$head"
 }
 
 dr_task_assert_snapshot() {

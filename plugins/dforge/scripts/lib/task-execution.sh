@@ -68,7 +68,14 @@ dr_task_stage() {
       GIT_INDEX_FILE="$expected_index" git -C "$DR_WORKTREE" update-index --force-remove -- "$path" || return 2
     else
       mode="$(jq -r --arg path "$path" '.files[] | select(.path == $path) | .mode' "$after")"
-      if [ "$kind" = symlink ]; then hash="$(readlink -n -- "$DR_WORKTREE/$path" | git -C "$DR_WORKTREE" hash-object -w --stdin)"
+      if [ "$kind" = gitlink ]; then
+        hash="$(jq -r --arg path "$path" '.files[] | select(.path == $path) | .hash' "$after")"
+        [[ "$hash" =~ ^[0-9a-f]+$ ]] || { dr_task_block "submodule $path is not initialized"; return 2; }
+        _dr_is_gitlink "$DR_WORKTREE" "$path" "$parent" &&
+          git -C "$DR_WORKTREE" config --blob "$parent:.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null |
+            awk -v p="$path" '{ sub(/^[^ ]+ /, "") } $0 == p { found = 1 } END { exit !found }' ||
+          { dr_task_block "submodule $path is not registered in the parent commit"; return 2; }
+      elif [ "$kind" = symlink ]; then hash="$(readlink -n -- "$DR_WORKTREE/$path" | git -C "$DR_WORKTREE" hash-object -w --stdin)"
       else hash="$(git -C "$DR_WORKTREE" hash-object -w --path="$path" -- "$path")"; fi
       [ -n "$hash" ] && GIT_INDEX_FILE="$expected_index" git -C "$DR_WORKTREE" update-index --add --cacheinfo "$mode" "$hash" "$path" || return 2
     fi
