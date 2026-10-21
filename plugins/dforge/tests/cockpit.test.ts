@@ -2732,6 +2732,10 @@ describe('discord', () => {
   test('picks kinds and keeps the default set as the empty setting', () => {
     expect(notifyKindsFrom('')).toEqual(['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit'])
     expect(notifyKindsFrom('done, nope, done')).toEqual(['done'])
+    expect(notifyKindsFrom('none')).toEqual([])
+    expect(notifyKindsFrom(' None ')).toEqual([])
+    expect(notifyKindsFrom('off')).toEqual([])
+    expect(notifyKindsFrom(notifyKindsToggled(['done'], 'done'))).toEqual([])
     expect(notifyKindsToggled(notifyKindsFrom(''), 'agent')).toBe('ask,question,done,error,blocked,budget,limit,agent')
     expect(notifyKindsToggled(['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit', 'agent'], 'agent')).toBe('')
     expect(notifyKindsToggled(['done'], 'done')).toBe('none')

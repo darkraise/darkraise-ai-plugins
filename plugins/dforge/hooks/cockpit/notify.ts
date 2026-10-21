@@ -24,13 +24,14 @@ const COLORS: Record<NotifyKind, number> = {
 const SUPPRESS_NOTIFICATIONS = 4096
 const WEBHOOK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([\w-]+)\/?$/
 
-/** The notifyOn setting, "ask, done" → ['ask', 'done']: known kinds, each once; empty is the default set. */
+/** The notifyOn setting, "ask, done" → ['ask', 'done']: known kinds, each once; empty is the default set, and text naming no kind ("none") is none. */
 export function notifyKindsFrom(text: string): NotifyKind[] {
+  if (text.trim() === '') return [...DEFAULT_NOTIFY_ON]
   const names = text
     .split(/[\s,]+/)
     .map(name => name.trim().toLowerCase())
     .filter((name): name is NotifyKind => (NOTIFY_KINDS as readonly string[]).includes(name))
-  return names.length === 0 ? [...DEFAULT_NOTIFY_ON] : [...new Set(names)]
+  return [...new Set(names)]
 }
 
 /** The notifyOn setting after turning one kind on or off; the default set is the empty setting. */

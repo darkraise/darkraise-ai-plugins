@@ -317,7 +317,7 @@ async function live($: EngineInterface): Promise<Live> {
 
 /** Points the notifier at the options' events, detail and wait. */
 function applyNotify(o: Live) {
-  S.kinds = o.notifyOn === 'none' ? [] : notifyKindsFrom(o.notifyOn)
+  S.kinds = notifyKindsFrom(o.notifyOn)
   S.isBrief = o.notifyDetail === 'brief'
   S.notifyAskAfter = o.notifyAskAfter
 }
