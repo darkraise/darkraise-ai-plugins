@@ -7,8 +7,8 @@
 #
 # Usage: in-flight
 # Exit: 0 nothing running; 1 something still running (listed on stdout);
-#       3 no transcript for this session (Codex, or no session record): check
-#       by hand; 2 usage.
+#       3 no transcript for this session (Codex, or no session record), or
+#       one that could not be scanned: check by hand; 2 usage.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +23,10 @@ if ! ctx_have_jq || ! ctx_find_transcript || [ "$CTX_SOURCE" != record ]; then
 fi
 # Claude Code names a transcript by its session id.
 sid=${CLAUDE_CODE_SESSION_ID:-$(basename "$CTX_TRANSCRIPT" .jsonl)}
-running=$(inflight_scan "$CTX_TRANSCRIPT" "$(inflight_since "$sid")")
+if ! running=$(inflight_scan "$CTX_TRANSCRIPT" "$(inflight_since "$sid")"); then
+  echo "in-flight: unknown — the transcript could not be scanned; list your background shells and agents by hand"
+  exit 3
+fi
 if [ -z "$running" ]; then
   echo "in-flight: nothing this session started is still running"
   exit 0

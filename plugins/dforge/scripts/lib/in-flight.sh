@@ -17,10 +17,11 @@
 
 # inflight_scan TRANSCRIPT [SINCE]
 # stdout: one line per launch still running: <agent|shell> <task id> <what>
+# Returns 1 when the transcript could not be scanned, which is not "nothing".
 inflight_scan() {
-  local tp=$1 since=${2:-} events launched stopped latest
+  local tp=$1 since=${2:-} events launched stopped latest running
   [ -n "$tp" ] && [ -f "$tp" ] || return 0
-  events=$(jq -rR --arg since "$since" 'fromjson? | select(.isSidechain? != true)
+  events=$(set -o pipefail; jq -rR --arg since "$since" 'fromjson? | select(.isSidechain? != true)
       | select($since == "" or ((.timestamp? // $since) >= $since))
       | if .type? == "assistant" then
           .message.content? | arrays | .[] | select(.type? == "tool_use")
@@ -35,7 +36,7 @@ inflight_scan() {
             elif ($text | test("^(\\{\"message\":\")?Successfully (stopped task|killed shell): ")) then
               "S\t\(($text | capture("Successfully (stopped task|killed shell): (?<id>[A-Za-z0-9_-]+)").id) // "-")"
             else empty end
-        else empty end' "$tp" 2>/dev/null | tr -d '\r')
+        else empty end' "$tp" 2>/dev/null | tr -d '\r') || return 1
   launched=$(awk -F '\t' '$1 == "L" && $2 != "-"' <<<"$events")
   [ -n "$launched" ] || return 0
   stopped=$(awk -F '\t' '$1 == "S" && $2 != "-" { print $2 }' <<<"$events" | sort -u)
@@ -43,7 +44,7 @@ inflight_scan() {
   # where Claude Code delivers them (a queued command, a queue operation, or a
   # user message's own text), never from tool output that quotes one. Each is
   # copied into several entries, in order, so the last copy is the latest.
-  latest=$(jq -rR 'fromjson? | select(.isSidechain? != true)
+  latest=$(set -o pipefail; jq -rR 'fromjson? | select(.isSidechain? != true)
       | [ .attachment.prompt?, (select(.type? == "queue-operation") | .content?),
           (select(.type? == "user") | .message.content? | if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end) ]
       | .[] | strings | select(contains("<task-notification>")) | gsub("[\r\n]+"; " ")' "$tp" 2>/dev/null \
@@ -61,19 +62,21 @@ inflight_scan() {
             seq++
             if (match(c, /<task-id>[^<]+<\/task-id>/)) print "t:" substr(c, RSTART + 9, RLENGTH - 19) "\t" seq "\t" state
             if (match(c, /<tool-use-id>[^<]+<\/tool-use-id>/)) print "u:" substr(c, RSTART + 13, RLENGTH - 27) "\t" seq "\t" state
-          } }')
-  STOPPED="$stopped" LATEST="$latest" EVENTS="$events" awk -F '\t' '
-      BEGIN { n = split(ENVIRON["STOPPED"], s, "\n"); for (i = 1; i <= n; i++) gone[s[i]] = 1
-              n = split(ENVIRON["LATEST"], l, "\n")
-              for (i = 1; i <= n; i++) { split(l[i], p, "\t"); seq[p[1]] = p[2] + 0; state[p[1]] = p[3] }
-              n = split(ENVIRON["EVENTS"], e, "\n")
-              for (i = 1; i <= n; i++) { split(e[i], p, "\t"); if (p[1] == "U") what[p[2]] = p[3] } }
+          } }') || return 1
+  # The three tables reach awk as files: a long transcript's events overflow
+  # the per-string limit of an environment variable or an argument.
+  running=$(awk -F '\t' '
+      FILENAME == ARGV[1] { if ($0 != "") gone[$0] = 1; next }
+      FILENAME == ARGV[2] { if ($0 != "") { seq[$1] = $2 + 0; state[$1] = $3 }; next }
+      FILENAME == ARGV[3] { if ($1 == "U") what[$2] = $3; next }
       { u = "u:" $2; t = "t:" $3; k = ""
         if (u in seq) k = u
         if ((t in seq) && (k == "" || seq[t] > seq[k])) k = t
         if (k != "" && state[k] == "done") next }
       ($3 in gone) || seen[$2]++ { next }
-      { w = what[$2]; if (w == "") w = "(no description)"; print $4 " " $3 " " w }' <<<"$launched"
+      { w = what[$2]; if (w == "") w = "(no description)"; print $4 " " $3 " " w }' \
+      <(printf '%s\n' "$stopped") <(printf '%s\n' "$latest") <(printf '%s\n' "$events") - <<<"$launched") || return 1
+  [ -z "$running" ] || printf '%s\n' "$running"
 }
 
 # inflight_since SESSION_ID: the time scripts/session-start.sh recorded when

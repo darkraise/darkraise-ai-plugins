@@ -68,7 +68,8 @@ if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROO
 # Background work this session started that is still listed (lib/in-flight.sh):
 # no finished notification yet, or an agent that reported but left work of its
 # own running.
-running=$(inflight_scan "$transcript_path" "$(inflight_since "$session_id")")
+running=$(inflight_scan "$transcript_path" "$(inflight_since "$session_id")") \
+  || running="(unknown: the transcript could not be scanned; check your background shells and agents by hand)"
 pending=$(grep -c . <<<"$running" || true)
 has_pending_background() { [ "$pending" -gt 0 ]; }
 

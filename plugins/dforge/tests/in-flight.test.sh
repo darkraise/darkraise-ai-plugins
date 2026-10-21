@@ -85,6 +85,15 @@ out=$(cd "$REPO" && bash "$NEXT" docs/superpowers/plans/2026-10-10-example.md 2>
 check "everything stopped or finished: next-step exit 0" "$code" "0"
 check "everything stopped or finished: the block prints" "$(grep -c '## Next session' <<<"$out")" "1"
 
+# A long session's tool calls outgrow what one environment string can carry.
+fjq -nc 'range(2000) | {type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:("toolu_bulk_" + tostring),name:"Bash",input:{description:("routine step " + tostring + " " + ("x" * 60))}}]}}' >> "$TP"
+use toolu_late 'Watch the build'
+result toolu_late 'Command running in background with ID: b10. Output is being written to: /tmp/b10.output.'
+out=$(bash "$INFLIGHT"); code=$?
+check "a long transcript: still exit 1" "$code" "1"
+check "a long transcript: the launch is named" "$(grep -c '^- shell b10 Watch the build$' <<<"$out")" "1"
+result toolu_stop2 '{"message":"Successfully stopped task: b10 (Watch the build)","task_id":"b10"}'
+
 # --- no transcript for this session ---
 rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"
 check "no session record: exit 3" "$(cd "$REPO" && bash "$INFLIGHT" >/dev/null; echo $?)" "3"
