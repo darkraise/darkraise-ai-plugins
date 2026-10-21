@@ -18,9 +18,11 @@ disagree.
   `spawn_agent {fork_turns: "none"}`; the default `"all"` copies your
   entire transcript into the child. On Codex 0.145+, role files under
   `~/.codex/agents/` attach to isolated forks via `agent_type`.
-  Full-history forks accept `model` and `reasoning_effort` overrides
-  (only `agent_type` is refused there) — isolated forks are the SDD
-  default for context hygiene, not because overrides require them.
+  Never assume a full-history fork accepts `model` and
+  `reasoning_effort` overrides: whether it does is the active spawn
+  schema's call, and it may inherit yours instead. Every routed dispatch
+  sets both, so use an isolated fork for it
+  ([native-codex.md](../../../reference/native-codex.md)).
 - **Fix rounds:** resume the implementer with `followup_task` — it
   delivers your message, triggers a turn, and transparently reloads a
   child the harness evicted. Never dispatch a fresh implementer on the

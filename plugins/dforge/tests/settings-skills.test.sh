@@ -80,6 +80,8 @@ H="$P/skills/handoff/SKILL.md"
 names "handoff: a design phase writes the Draft line" "$H" '- Draft: `<spec path>`'
 names "handoff: pushes once latest.md is written" "$H" 'run `scripts/darkmem-sync push` and promote'
 CT="$P/skills/using-dforge/references/codex-tools.md"
+names "codex-tools: routed dispatch never relies on a full-history fork" "$CT" 'Never assume a full-history fork accepts `model` and'
+check "codex-tools: no unconditional fork override claim" "$(grep -cF 'Full-history forks accept `model`' "$CT")" "0"
 names "codex-tools: session start reconciles, then pulls" "$CT" 'bash <plugin-root>/scripts/darkmem-sync reconcile`, then'
 names "codex-tools: nothing pushes at the end of a turn" "$CT" 'nothing pushes for you at the end of a turn'
 
