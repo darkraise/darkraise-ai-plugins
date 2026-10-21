@@ -73,9 +73,15 @@ review package, so the package includes the acceptance tests step 0.5 commits.
       `git status --porcelain` to `<workspace>/qa-status-before.txt`.
       Dispatch it in the background and, in the same message, start a
       background timer, `sleep 2700` (45 minutes), as
-      [executor-lane.md](executor-lane.md) arms its timers. When the timer
-      finishes first, stop the QA agent (TaskStop on Claude Code; on Codex,
-      close the child). Run `git status --porcelain` again: each path it
+      [executor-lane.md](executor-lane.md) arms its timers, with the Bash
+      call's `timeout` set to 2820000 ms: a background call's limit defaults
+      to 30 minutes, and a timer killed there fires 15 minutes early. When the
+      timer finishes first, stop the QA agent: TaskStop on Claude Code; on
+      Codex, `close_agent` where your tools offer it. V2 has none: send the
+      child a `followup_task` telling it to stop and return now, then wait for
+      it in bounded `wait_agent` stretches until `list_agents` shows it
+      finished. Clean up only once it has stopped, since removing files a
+      live writer still owns races it. Run `git status --porcelain` again: each path it
       lists that `<workspace>/qa-status-before.txt` does not is QA's
       unfinished work. Restore a tracked one with
       `git restore --staged --worktree -- <path>`, delete an untracked one,
