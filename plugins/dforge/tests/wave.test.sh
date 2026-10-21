@@ -83,11 +83,14 @@ run clean docs/plan.md 9 HEAD
 check "clean: a wave the plan lacks exits 2" "$status" "2"
 run status "$TMP/bad.md" 1 HEAD
 check "status: waves that do not parse exit 4" "$status" "4"
+run enter docs/plan.md 2 HEAD
+check "enter: refuses the primary checkout" "$status" "2"
 
 # --- a task worktree, as an implementer would leave it ---
 task() { # task <N> <file> — commit <file> in a detached worktree and move the ref
   local wt="$TMP/wt-$1"
-  git worktree add -q --detach "$wt" "$BASE"
+  git worktree add -q --detach "$wt" main
+  (cd "$wt" && bash "$WAVE" enter "$REPO/docs/plan.md" "$1" "$BASE" >/dev/null)
   printf '%s\n' "$1" > "$wt/$2"
   git -C "$wt" add -A && git -C "$wt" commit -qm "task $1"
   git -C "$wt" branch -f "sdd/plan/task-$1" HEAD
@@ -132,6 +135,8 @@ check "merge: one merge commit per task" "$(git rev-list --merges --count "$BASE
 
 # --- clean ---
 git worktree add -q -b own "$TMP/own" "$BASE"
+# A user's detached worktree on a task's commit was never entered for the task.
+git worktree add -q --detach "$TMP/inspect" sdd/plan/task-2
 printf 'x\n' > "$TMP/wt-3/scratch"
 run clean docs/plan.md 2 "$BASE"
 has "clean: removes a merged task's worktree" "$out" "removed $GTMP/wt-2"
@@ -140,6 +145,7 @@ has "clean: deletes the merged ref" "$out" "deleted sdd/plan/task-2"
 check "clean: a worktree is reported once" "$(grep -c "wt-3: uncommitted" <<<"$out")" "1"
 check "clean: a user's own worktree stays" "$(git worktree list | grep -c "$GTMP/own ")" "1"
 check "clean: the removed worktree is gone" "$([ -d "$TMP/wt-2" ] && echo yes || echo no)" "no"
+check "clean: an unmarked detached worktree in range stays" "$([ -d "$TMP/inspect" ] && echo yes || echo no)" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

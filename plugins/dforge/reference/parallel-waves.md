@@ -96,7 +96,9 @@ Dispatch up to `c` tasks of the wave in one message. Each is
 You run beside other implementers, each in a worktree of its own. Before
 anything else, in your worktree:
 
-1. `git switch --detach [START]`
+1. `bash [PLUGIN_ROOT]/scripts/wave enter [PLAN_FILE] [N] [START]` — it
+   detaches at `[START]` and marks the worktree as this task's, which is what
+   lets the wave's clean-up remove it later
 2. `bash [PLUGIN_ROOT]/scripts/sdd-workspace [PLAN_FILE]` — write your
    report as `task-[N]-report.md` in the directory it prints, which is inside
    your worktree and ignored by git. [PRIOR_REPORT]
@@ -187,9 +189,9 @@ rebase or rewrite a task ref: the review saw those commits.
 When every task of the wave has a complete line:
 
 1. `bash scripts/wave clean PLAN_FILE <k> <wave base>` removes the worktrees
-   the wave's tasks committed in and deletes their merged refs. It never
-   forces: a `kept` line is a worktree with uncommitted changes or a lock,
-   left for your human partner; log each as a `Ruling:` line.
+   the wave's tasks entered and committed in, and deletes their merged refs.
+   It never forces: a `kept` line is a worktree with uncommitted changes or a
+   lock, left for your human partner; log each as a `Ruling:` line.
 2. Run the plan's `**Worktree setup:**` (when it is not `none`) and its
    `**Integration check:**` in the checkout, bounded like any long command,
    with the output written to `<workspace>/wave-<k>-check.txt`.

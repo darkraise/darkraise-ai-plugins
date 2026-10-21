@@ -8,6 +8,8 @@
 #   wave list   PLAN_FILE              one "wave K: Tasks A-B" line per wave, or
 #                                      "sequential" for a plan without waves
 #   wave ref    PLAN_FILE N            the branch parallel Task N commits to
+#   wave enter  PLAN_FILE N START      in a task's worktree: detach at START and
+#                                      mark the worktree as Task N's
 #   wave status PLAN_FILE K BASE       per task of wave K: ref, commits since
 #                                      BASE, merged or not, its worktree
 #   wave merge  PLAN_FILE N BASE       merge Task N's ref into the checked-out
@@ -24,7 +26,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 usage() {
-  echo "usage: wave list PLAN_FILE | ref PLAN_FILE N | status PLAN_FILE K BASE | merge PLAN_FILE N BASE | clean PLAN_FILE K BASE" >&2
+  echo "usage: wave list PLAN_FILE | ref PLAN_FILE N | enter PLAN_FILE N START | status PLAN_FILE K BASE | merge PLAN_FILE N BASE | clean PLAN_FILE K BASE" >&2
   exit 2
 }
 die() { echo "wave: $2" >&2; exit "$1"; }
@@ -54,12 +56,19 @@ wave_range() { # wave_range K — "A B", or exit 2 (4 when the waves do not pars
   printf '%s\n' "$r"
 }
 need_commit() { git rev-parse --verify --quiet "$1^{commit}" >/dev/null || die 2 "not a commit: $1"; }
-# worktrees_holding A B — "<path>" of every detached worktree whose HEAD lies in
-# A..B (an ancestor of B, not of A): the worktrees a parallel task's
-# implementers committed in. A user's own worktrees sit on branches, or outside
-# the range, so they are never listed.
+# wave_mark [DIR] — the file in DIR's worktree git directory naming the task
+# ref that worktree was entered for.
+wave_mark() {
+  local gitdir
+  gitdir=$(git -C "${1:-.}" rev-parse --absolute-git-dir 2>/dev/null) || return 1
+  printf '%s/dforge/wave-task\n' "$gitdir"
+}
+# worktrees_holding A B — "<path>" of every detached worktree entered for ref B
+# (wave enter) whose HEAD lies in A..B (an ancestor of B, not of A): the
+# worktrees a parallel task's implementers committed in. Ancestry alone is not
+# ownership: a user's own detached worktree can sit on a task's commit.
 worktrees_holding() {
-  local path="" head="" detached=0 line
+  local path="" head="" detached=0 line mark
   while IFS= read -r line; do
     case $line in
       'worktree '*) path=${line#worktree } head="" detached=0 ;;
@@ -67,6 +76,7 @@ worktrees_holding() {
       detached) detached=1 ;;
       '')
         if [ -n "$path" ] && [ "$detached" -eq 1 ] && [ -n "$head" ] \
+           && mark=$(wave_mark "$path") && [ "$(cat "$mark" 2>/dev/null)" = "${2#refs/heads/}" ] \
            && git merge-base --is-ancestor "$head" "$2" 2>/dev/null \
            && ! git merge-base --is-ancestor "$head" "$1" 2>/dev/null; then
           printf '%s\n' "$path"
@@ -87,6 +97,18 @@ case $cmd in
   ref)
     [ $# -eq 1 ] && is_num "$1" || usage
     task_ref "$1"
+    ;;
+
+  enter)
+    [ $# -eq 2 ] && is_num "$1" || usage
+    ref=$(task_ref "$1") || exit $?
+    need_commit "$2"
+    [ "$(git rev-parse --absolute-git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ] \
+      || die 2 "not a linked worktree; a parallel task runs in a worktree of its own"
+    git switch -q --detach "$2" || die 1 "cannot detach at $2"
+    mark=$(wave_mark) && mkdir -p "$(dirname "$mark")" && printf '%s\n' "$ref" > "$mark" \
+      || die 2 "cannot mark this worktree as Task $1's"
+    echo "entered Task $1 at $(git rev-parse --short HEAD)"
     ;;
 
   status)
