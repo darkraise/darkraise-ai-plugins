@@ -3320,14 +3320,20 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
   }
 }
 
-/** Puts a settings file in force: the atom every hook reads through live(), the locked rows, and the notifier. */
-async function applySettings($: EngineInterface, file: SettingsFile) {
+/**
+ * Puts a settings file in force: the atom every hook reads through live(), the
+ * locked rows, and the notifier. `mtime` is the file's time taken before it was
+ * read; absent, the file is timed now.
+ */
+async function applySettings($: EngineInterface, file: SettingsFile, mtime?: number | null) {
   // $.env.get takes only a literal name: each variable the schema names is listed.
   const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET'), DFORGE_LENS_CAP: await $.env.get('DFORGE_LENS_CAP') }
-  const engineUser = ((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>
+  const userRead = await $.settings.read({ source: 'user' }).catch(() => null)
+  const mergedRead = await $.settings.read().catch(() => null)
+  const engineUser = (userRead ?? {}) as Record<string, unknown>
   // The engine's snapshot can predate a save: until it shows the saved value the reads are overlaid, then the save is dropped, so a project or managed override or a later hand edit shows through.
   for (const [key, saved] of Object.entries(S.claudeSaved)) if (engineUser[key] === saved) delete S.claudeSaved[key]
-  const merged = { ...(((await $.settings.read().catch(() => ({}))) ?? {}) as Record<string, unknown>), ...S.claudeSaved }
+  const merged = { ...((mergedRead ?? {}) as Record<string, unknown>), ...S.claudeSaved }
   const user = { ...engineUser, ...S.claudeSaved }
   const values = resolveSettings(SCHEMA, file, env, merged)
   S.settingProblems = settingProblems(SCHEMA, file, env)
@@ -3335,7 +3341,8 @@ async function applySettings($: EngineInterface, file: SettingsFile) {
   S.locks = locks
   await update($, settings, () => values)
   applyNotify(liveFrom(values as Partial<Options>))
-  await markSettingsSeen($)
+  // What was applied is what the poll compares with, so a change landing during these reads is put in force at its next tick.
+  S.seen = { config: mtime === undefined ? (await configStamp($)).mtime : mtime, claude: JSON.stringify([userRead, mergedRead]) }
 }
 
 /** The first run: dr-cockpit's options, imported into the new file. */
@@ -3380,20 +3387,22 @@ async function importWebhook($: EngineInterface) {
 async function loadSettings($: EngineInterface) {
   S.claudeSaved = {}
   S.changed = {}
-  const path = await configFile($)
-  if (path === null) return applySettings($, {})
+  const { path, mtime } = await configStamp($)
+  if (path === null) return applySettings($, {}, null)
   let file = await readSettingsFile($, path)
+  let readAt: number | null | undefined = mtime
   if (file !== null && Object.keys(file).length === 0 && !(await $.fs.exists(path).catch(() => false))) {
     file = await importSettings($, path)
+    readAt = undefined
   }
-  await applySettings($, file ?? {})
+  await applySettings($, file ?? {}, readAt)
   await importWebhook($).catch(() => undefined)
 }
 
 /** Saves one setting and puts it in force, saying why if it could not; resolves whether it was saved. */
 async function setOption($: EngineInterface, key: string, value: SettingValue): Promise<boolean> {
   const spec = SCHEMA[key]
-  const path = await configFile($)
+  const { path, mtime } = await configStamp($)
   const file = path === null ? null : await readSettingsFile($, path)
   try {
     if (spec?.target === 'claude') {
@@ -3402,16 +3411,17 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
       if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
       // dforge-config removes a floored key saved as 0, so the user file then lacks it.
       S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
-      await applySettings($, file ?? {})
+      await applySettings($, file ?? {}, mtime)
       return true
     }
     if (path === null) throw new Error('no home directory is set')
     if (file === null) throw new Error(`${path} is not a JSON object; fix or remove it`)
     const next = settingWritten(SCHEMA, file, key, value)
     if (await isSetByNode($, key, value)) {
+      const savedAt = (await configStamp($)).mtime
       const saved = await readSettingsFile($, path)
       if (saved === null) throw new Error(`${path} could not be read after saving`)
-      await applySettings($, saved)
+      await applySettings($, saved, savedAt)
     } else {
       await $.fs.write(path, `${JSON.stringify(next, null, 2)}\n`)
       await applySettings($, next)
@@ -3475,11 +3485,6 @@ async function configStamp($: EngineInterface): Promise<{ path: string | null; m
   return { path, mtime: stat?.kind === 'file' ? stat.mtimeMs : null }
 }
 
-/** Records the settings file's modification time and the engine's settings as the ones in force, so the poll re-reads only a change. */
-async function markSettingsSeen($: EngineInterface) {
-  S.seen = { config: (await configStamp($)).mtime, claude: await engineSettings($) }
-}
-
 /** The engine's user and merged settings as one string, to compare between ticks. */
 async function engineSettings($: EngineInterface): Promise<string> {
   const user = await $.settings.read({ source: 'user' }).catch(() => null)
@@ -3521,7 +3526,7 @@ async function rereadSettings($: EngineInterface) {
     $.ui.invalidate('ui.render')
     return
   }
-  await applySettings($, file)
+  await applySettings($, file, mtime)
 }
 
 // The pane's slower readings: the /context breakdown, estimated locally, and

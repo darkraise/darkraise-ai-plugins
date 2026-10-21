@@ -279,6 +279,8 @@ type World = {
   onAutoRun?: (word: string) => unknown
   /** How many `$.session.id()` calls fail before one answers. */
   sessionIdFailures?: number
+  /** Runs after each settings read has taken its answer, given the source it named. */
+  afterSettingsRead?: (source: string | undefined) => void
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -303,7 +305,9 @@ function world(on: On, w: World) {
   }))
   on('settings.read', (_$, e) => {
     if (e?.source === 'user' && w.isUserSettingsUnreadable) throw new Error('EACCES: the user settings cannot be read')
-    return { value: e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {}) }
+    const value = e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {})
+    w.afterSettingsRead?.(e?.source)
+    return { value }
   })
   on('tool.call', (_$, e) => w.tools?.[String(e.tool)]?.() ?? { result: 'ok', text: 'ok' })
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: w.agentIds?.shift() ?? 'agent-1' }))
@@ -4191,6 +4195,46 @@ describe('polling', () => {
     w.settings = { autoCompactWindow: 700_000 }
     await clock.advance(2_000)
     expect(await ui.find({ type: 'Text', text: /^700k/ })).toBeDefined()
+  })
+
+  test('puts in force a settings file saved again just after the cockpit read it', async ($, on) => {
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({ sections: 'context,usage' }), mtimeMs: 1 } }
+    const clock = world(on, { ...SIGNED_IN, files })
+    let isSavingAgain = false
+    on('fs.read', (_$, e) => {
+      const file = files[e.path]
+      if (file === undefined) throw new Error('ENOENT')
+      if (e.path === CONFIG && isSavingAgain) {
+        isSavingAgain = false
+        files[CONFIG] = { text: JSON.stringify({ sections: 'context' }), mtimeMs: 3 }
+      }
+      return { value: file.text }
+    })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    files[CONFIG] = { text: JSON.stringify({ sections: 'usage' }), mtimeMs: 2 }
+    isSavingAgain = true
+    await clock.advance(4_000)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Usage' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeDefined()
+  })
+
+  test("puts in force a Claude key changed again while the cockpit applied the last change", async ($, on) => {
+    const w: World = { tokens: 284_000, config: {}, settings: { autoCompactWindow: 650_000 } }
+    const clock = world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    w.settings = { autoCompactWindow: 700_000 }
+    // The poll's first merged read finds the change; the second is the one it applies.
+    let mergedReads = 0
+    w.afterSettingsRead = source => {
+      if (source === undefined && ++mergedReads === 2) w.settings = { autoCompactWindow: 750_000 }
+    }
+    await clock.advance(4_000)
+    expect(await ui.find({ type: 'Text', text: /^750k/ })).toBeDefined()
   })
 
   test('reads nothing while the cockpit is hidden', async ($, on) => {
