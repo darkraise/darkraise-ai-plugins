@@ -242,12 +242,21 @@ git pull
 PRE_MERGE=$(git rev-parse HEAD)
 git merge <feature-branch>
 
+echo "$PRE_MERGE"
+
 # Verify the merged result: gates when the project declares a manifest
-# (dforge:running-gates, with $PRE_MERGE as its base), otherwise the full
-# test suite. Gates that passed on the branch say nothing about the merged
-# tree.
+# (dforge:running-gates, with the sha printed above as its base), otherwise
+# the full test suite. Gates that passed on the branch say nothing about the
+# merged tree.
 <test command>
 ```
+
+Shell variables do not survive between Bash calls, so `$PRE_MERGE` is gone by
+the time dforge:running-gates runs. Pass the base as the literal sha the
+`echo` printed. A gates manifest whose `Repo` fields name several
+repositories needs one base per repository: capture each repository's
+pre-merge `git rev-parse HEAD` the same way, before that repository's merge,
+and name each sha with its repository.
 
 If tests fail on the merged result: stop, leave the worktree and branch in
 place, and investigate — nothing has been pushed, so the merge is local

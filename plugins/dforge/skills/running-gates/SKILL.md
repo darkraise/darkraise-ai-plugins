@@ -79,8 +79,8 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
    ask. A ledger's `base <sha7>` is one task's starting commit, never the
    branch's: using one narrows the change set to the last task and skips every
    conditional gate for the files the earlier ones touched, in a report that
-   reads as correct. State the base in the report. Never wait for a caller to
-   supply one:
+   reads as correct. State the base in the report. A caller that has not merged
+   supplies none, so never wait for one:
    dforge:finishing-a-development-branch establishes its base in Step 3,
    after the Step 1 that invokes this skill. The change set is
    `git diff --name-only <base>...HEAD` plus `git status --short`, computed per
@@ -88,8 +88,9 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
 
    After a merge the fork point is HEAD itself, and an empty change set would
    skip every conditional gate. So a caller that has already merged names the
-   base instead: dforge:finishing-a-development-branch passes the base
-   branch's commit from before its merge, and dforge:closing-a-milestone
+   base instead, as a literal sha (one per `Repo` when the manifest spans
+   several repositories): dforge:finishing-a-development-branch passes the
+   base branch's commit from before its merge, and dforge:closing-a-milestone
    passes `all` — a milestone spans many merges, so no one change set covers
    it, and every gate runs, conditional ones included. A computed base equal
    to HEAD with no caller-named base is the same trap: ask, or run every
