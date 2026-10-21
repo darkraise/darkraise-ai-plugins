@@ -109,6 +109,10 @@ A plan's `**Worktree setup:**` command, or the setup the repository's README or
 `CLAUDE.md` names, wins over detection. Otherwise detect from the lockfile,
 which names the tool the project actually uses; a manifest alone does not:
 
+- Node: `packageManager` in `package.json` (such as `pnpm@9.12.0`) names the
+  tool and its version, and wins over the lockfile. Use the declared npm,
+  pnpm, Yarn or Bun at that version, and never create a second lockfile.
+
 ```bash
 # Node.js
 if [ -f pnpm-lock.yaml ]; then pnpm install
