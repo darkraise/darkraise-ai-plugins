@@ -73,7 +73,7 @@ import {
   notifyKindsToggled,
   redact,
 } from '../hooks/cockpit/notify'
-import type { Schema, SettingSpec } from '../hooks/cockpit/config'
+import type { Schema, SettingSpec, SettingsFile } from '../hooks/cockpit/config'
 import {
   SCHEMA,
   claudeLocks,
@@ -398,6 +398,22 @@ function world(on: On, w: World) {
           }
           w.userSettings = next
         }
+      }
+      // A dforge-target set rewrites the settings file as the cockpit's own
+      // fallback write would, and fails as that write does.
+      const at = e.argv.indexOf('set')
+      const setKey = at < 0 ? undefined : e.argv[at + 1]
+      const setSpec = setKey === undefined ? undefined : SCHEMA[setKey]
+      if (setKey !== undefined && setSpec !== undefined && setSpec.target !== 'claude') {
+        if (w.isNodeMissing) return { deny: 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }
+        if (w.isReadOnly) return { value: { exitCode: 1, stdout: '', stderr: 'dforge-config: EROFS: read-only file system\n', isStdoutTruncated: false, isStderrTruncated: false } }
+        const text = e.argv[at + 2] ?? ''
+        const value = setSpec.type === 'boolean' ? text === 'true' : setSpec.type === 'number' ? Number(text) : text
+        const current = w.written?.[CONFIG] ?? w.files?.[CONFIG]?.text ?? (w.config === undefined ? '{}' : JSON.stringify(w.config))
+        const next = settingWritten(SCHEMA, JSON.parse(current) as SettingsFile, setKey, value)
+        if (w.written !== undefined) w.written[CONFIG] = `${JSON.stringify(next, null, 2)}\n`
+        else w.config = next
+        if (w.files?.[CONFIG] !== undefined) w.files[CONFIG].text = JSON.stringify(next)
       }
       const stderr = w.isDforgeConfigRefusing ? 'dforge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
       return { value: { exitCode: w.isDforgeConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
@@ -1574,8 +1590,9 @@ describe('dense pane', () => {
 
   test('draws one line per shown section, and Detailed switches back', async ($, on) => {
     const written: Record<string, string> = {}
-    world(on, { ...SIGNED_IN, written, tools: { Bash: () => SHELL } })
-    signedIn(on, configured({ density: 'dense', sections: 'context,usage,shells,agents,repo' }))
+    const files = configured({ density: 'dense', sections: 'context,usage,shells,agents,repo' })
+    world(on, { ...SIGNED_IN, written, files, tools: { Bash: () => SHELL } })
+    signedIn(on, files)
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
     await $.session.measure(MEASURE)
@@ -1595,6 +1612,28 @@ describe('dense pane', () => {
   test('Dense saves the setting', async ($, on) => {
     const written: Record<string, string> = {}
     world(on, { tokens: 284_000, written, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-density' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').density).toBe('dense')
+    expect(await ui.find({ key: 'dense-context' })).toBeDefined()
+  })
+
+  test('saves through dforge-config, under the lock every writer of the file takes', async ($, on) => {
+    const written: Record<string, string> = {}
+    const runs: string[] = []
+    world(on, { tokens: 284_000, written, runs, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-density' })
+    expect(runs.filter(run => run.includes(' set '))).toEqual([expect.stringMatching(/^node .*\/scripts\/lib\/dforge-config\.mjs set density dense$/)])
+    expect(JSON.parse(written[CONFIG] ?? '{}').density).toBe('dense')
+    expect(await ui.find({ key: 'dense-context' })).toBeDefined()
+  })
+
+  test('without node a save writes the settings file itself', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, written, config: {}, isNodeMissing: true })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-density' })

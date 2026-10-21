@@ -3374,7 +3374,7 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
   try {
     if (spec?.target === 'claude') {
       // Claude's settings file holds far more than these keys, so only dforge-config, which rewrites it in one rename, writes it.
-      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)])
+      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
       if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
       // dforge-config removes a floored key saved as 0, so the user file then lacks it.
       S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
@@ -3384,14 +3384,36 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
     if (path === null) throw new Error('no home directory is set')
     if (file === null) throw new Error(`${path} is not a JSON object; fix or remove it`)
     const next = settingWritten(SCHEMA, file, key, value)
-    await $.fs.write(path, `${JSON.stringify(next, null, 2)}\n`)
-    await applySettings($, next)
+    if (await isSetByNode($, key, value)) {
+      const saved = await readSettingsFile($, path)
+      if (saved === null) throw new Error(`${path} could not be read after saving`)
+      await applySettings($, saved)
+    } else {
+      await $.fs.write(path, `${JSON.stringify(next, null, 2)}\n`)
+      await applySettings($, next)
+    }
     if (spec?.enforcedBy === 'skill') S.changed[key] = value
     return true
   } catch (error) {
     $.ui.toast(`dforge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
     return false
   }
+}
+
+// dforge-config writes under ~/.dforge/.lock, the lock every other writer of
+// the file takes, so a save cannot drop another session's. False when node
+// cannot start: the direct write is then all there is.
+async function isSetByNode($: EngineInterface, key: string, value: SettingValue): Promise<boolean> {
+  let ran
+  try {
+    ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
+  } catch (error) {
+    if (NO_NODE.test(String(error))) return false
+    throw error
+  }
+  if (ran.exitCode === 0) return true
+  if (NO_NODE.test(ran.stderr)) return false
+  throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
 }
 
 /**
