@@ -10,8 +10,9 @@ that the fix itself broke nothing.
 ```
 Subagent (general-purpose):
   description: "Re-review Task N fix round R"
-  model: [MODEL — REQUIRED: a cheap-to-mid model per SKILL.md Seats; an
-         omitted model silently inherits the session's most expensive one]
+  model: [MODEL — REQUIRED: `sonnet`, or `opus` for a subtle concurrency
+         fix, per delegated-task.md §Seats; an omitted model silently
+         inherits the session's most expensive one]
   prompt: |
     You are re-reviewing one task's fix round. A previous review produced
     findings; an implementer has attempted to fix them. Your job is to
