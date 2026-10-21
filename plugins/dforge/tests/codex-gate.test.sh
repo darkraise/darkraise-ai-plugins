@@ -220,10 +220,14 @@ check "a hung connect times out" "$out" \
 # A PATH without timeout, as on macOS: the probe still answers.
 NOTIMEOUT="$TMP/no-timeout-bin"
 mkdir -p "$NOTIMEOUT"
-for dir in $(tr ':' ' ' <<<"$PATH"); do
+IFS=':' read -r -a PATH_DIRS <<<"$PATH"
+for dir in "${PATH_DIRS[@]}"; do
+  [ -n "$dir" ] || continue
   for tool in "$dir"/*; do
     name=${tool##*/}
-    [ "$name" = timeout ] || [ -e "$NOTIMEOUT/$name" ] || ln -s "$tool" "$NOTIMEOUT/$name" 2>/dev/null
+    # Git Bash's timeout is timeout.exe.
+    case "$name" in timeout|timeout.exe) continue ;; esac
+    [ -e "$NOTIMEOUT/$name" ] || ln -s "$tool" "$NOTIMEOUT/$name" 2>/dev/null
   done
 done
 fresh; PATH="$NOTIMEOUT" gate usable
