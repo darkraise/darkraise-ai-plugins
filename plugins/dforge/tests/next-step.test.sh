@@ -795,6 +795,28 @@ OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md
 has "roadmap: only verify rows go to the audit" "$OUT" "Milestone M1 (MVP) has nothing else open: audit and close it with dforge:closing-a-milestone."
 has "roadmap: the verify rows are named" "$OUT" "Awaiting your check (verify): #1."
 has "roadmap: a verify-only audit gets a launch prompt" "$OUT" "Close milestone M1 (MVP)"
+
+# A requirements register covering the milestone's spec joins the audit the
+# same way: its verify rows go there, and an open row keeps the work first.
+cat > "$MD/registers/billing-requirements.md" <<'REG'
+# Billing requirements
+
+**Source:** spec
+**Covers:** docs/superpowers/specs/billing-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Pay invoice | - | owner check | verify | built |
+REG
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: verify requirements join the audit" "$OUT" 'Close milestone M1 (MVP)'
+bash "$HERE/../scripts/register" set "$MD/registers/billing-requirements.md" 1 open >/dev/null
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+lacks "roadmap: open requirements prevent audit routing" "$OUT" 'Close milestone M1 (MVP)'
+bash "$HERE/../scripts/register" set "$MD/registers/billing-requirements.md" 1 verify >/dev/null
+bash "$HERE/../scripts/roadmap" close --root "$MREPO" M1 --note audit >/dev/null 2>&1
+check "roadmap: verify rows still require sign-off" "$?" 1
+bash "$HERE/../scripts/register" set "$MD/registers/billing-requirements.md" 1 done --note 'audit: MET' >/dev/null
 bash "$HERE/../scripts/register" set "$MD/registers/m1.md" 1 done >/dev/null
 OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
 has "roadmap: nothing open goes to the audit" "$OUT" "Milestone M1 (MVP) has nothing open: audit and close it with dforge:closing-a-milestone."
