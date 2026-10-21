@@ -384,12 +384,12 @@ head=$(git -C "$cwd" rev-parse HEAD)
   if [ "$status" != DONE ]; then
     # Codex's own failure text comes first because it is the only thing here
     # that separates a transient failure from a capability one. stderr follows
-    # as a fallback: it carries the CLI's complaints - a rejected flag, a
-    # missing directory - which are the failures that produce no error event.
+    # as a fallback: it carries the client process's own complaints, which are
+    # the failures that leave no reason in its result.
     if [ -n "$codex_error" ]; then
       printf '\n## Codex error\n\n```\n%s\n```\n' "$codex_error"
     else
-      printf '\n## Codex error\n\nNo error event on the --json stream. Either codex never reached the API, or it exited without reporting why.\n'
+      printf '\n## Codex error\n\nThe Codex client returned no reason and no error text. Either the client exited before printing its result, or the turn ended without reporting why.\n'
     fi
     printf '\n## Working tree\n\nLeft uncommitted on purpose. Last 20 stderr lines:\n\n```\n'
     tail -20 "$report.stderr" 2>/dev/null || true

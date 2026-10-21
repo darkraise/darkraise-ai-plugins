@@ -139,6 +139,7 @@ check 'an unreaped transport error is not reported as a timeout' "$(grep -c 'not
 git -C "$fixture/primary" worktree add -qb handback-case "$fixture/handback"
 STUB_FINAL_MESSAGE="$(final_message BLOCKED)" run --cwd "$fixture/handback"
 check 'handback fixture has pending work' "$?" 1
+check 'a failure without error text names the client result' "$(grep -c '^The Codex client returned no reason and no error text' "$fixture/report.md")" 1
 bash "$SCRIPT" --cwd "$fixture/handback" --task-id task-one --handback > "$fixture/out" 2> "$fixture/err"
 check 'handback transfers stopped pending task' "$?" 0
 run --cwd "$fixture/handback"
