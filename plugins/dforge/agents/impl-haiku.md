@@ -1,6 +1,6 @@
 ---
 name: impl-haiku
-description: "Task implementer running Haiku 4.5. Reached only by a human Implementer override since 1.27.0, which assigns score 0 to impl-sonnet-low: single-file transcription where the plan supplies the complete code."
+description: "Task implementer running Haiku 4.5. No score assigns it, so it runs only on a human Implementer override: single-file transcription where the plan supplies the complete code."
 model: haiku
 skills:
   - dforge:verification-before-completion
