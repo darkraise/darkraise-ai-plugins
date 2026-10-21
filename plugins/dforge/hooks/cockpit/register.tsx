@@ -3764,10 +3764,13 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
     const inline = attributionIn(command)
     if (inline !== undefined) return inline
     // A relative file is read from the session's directory: a cd earlier in
-    // the command is not followed, and a file that cannot be read passes.
+    // the command is not followed, and a file that cannot be read passes. Only
+    // a regular file is read: this hook runs before the tool, and a read of
+    // /dev/stdin or a pipe would wait on input the command has not yet given.
     const cwd = await $.session.cwd().catch(() => null)
     for (const file of gitTextFiles(command)) {
       const path = isAbsolutePath(file) || cwd === null ? file : `${cwd.replace(/[\\/]+$/, '')}/${file}`
+      if ((await $.fs.stat(path).catch(() => null))?.kind !== 'file') continue
       const text = await $.fs.read(path).catch(() => null)
       const line = text === null ? undefined : attributionIn(String(text))
       if (line !== undefined) return line

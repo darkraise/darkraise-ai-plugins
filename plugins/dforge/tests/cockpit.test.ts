@@ -212,7 +212,7 @@ type World = {
   notes?: string[]
   env?: Record<string, string>
   /** Files the plugin reads, by path, with their modification time. */
-  files?: Record<string, { text: string; mtimeMs?: number }>
+  files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other' }>
   /** What the plugin writes, by path. */
   written?: Record<string, string>
   /** Each request the plugin sends through $.http.fetch. */
@@ -464,7 +464,7 @@ function world(on: On, w: World) {
   on('fs.stat', (_$, e) => {
     const file = w.files?.[e.path]
     if (file === undefined) throw new Error('ENOENT')
-    return { value: { kind: 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: false } }
+    return { value: { kind: file.kind ?? 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: false } }
   })
   on('fs.list', (_$, e) => {
     const prefix = `${e.path}/`
@@ -662,6 +662,16 @@ describe('attribution guard', () => {
     expect(dirty.deny).toBe('dforge: this project keeps AI attribution out of git. Remove "Co-Authored-By: Claude <noreply@anthropic.com>" and try again.')
     const clean = await $.tool.call({ tool: 'Bash', command: 'gh pr create --title x --body-file /tmp/clean.md' })
     expect(clean.deny).toBeUndefined()
+  })
+
+  test('never reads a message file that is not a regular file', async ($, on) => {
+    const files: World['files'] = { '/dev/stdin': { text: 'Co-Authored-By: Claude <noreply@anthropic.com>\n', kind: 'other' } }
+    const reads: string[] = []
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files, reads)
+    const ran = await $.tool.call({ tool: 'Bash', command: "git commit -F /dev/stdin <<'EOF'\nfix: tidy\nEOF" })
+    expect(ran.deny).toBeUndefined()
+    expect(reads).not.toContain('/dev/stdin')
   })
 
   test('is off when configured off', async ($, on) => {
