@@ -54,13 +54,18 @@ seat: the plan's tests were written by the same author as its code.
 4. **Mutation check on every `neg` statement.** For each statement tagged
    `neg` whose test passed:
    - `git worktree add --detach [WORKSPACE]/qa-mutation HEAD`;
+   - copy the acceptance file and its fixtures into the same paths there:
+     they are not committed yet, so `HEAD` does not have them;
    - in that worktree, link the dependency directories the tests need from the
      main worktree (for example `node_modules` or a virtualenv), or run the
      plan's `**Worktree setup:**` command when the session gave you one;
+   - run that statement's test there before changing anything. It must pass:
+     a failure here is a setup bug in the mutation worktree, so fix the setup;
    - make one minimal change that violates the statement (remove the guard,
      invert the check, skip the refusal);
-   - run that statement's test there and record `red` when it fails and
-     `green` when it still passes;
+   - run that statement's test there and record `red` when its assertion
+     fails and `green` when it still passes. A missing file, an import or a
+     setup error is not `red`: fix the setup and run it again;
    - `git worktree remove --force [WORKSPACE]/qa-mutation`, then confirm with
      `git worktree list` and `git status` that the main worktree is unchanged.
 5. **Commit and report.** Commit the acceptance file and any fixtures it needs,
