@@ -2662,6 +2662,23 @@ describe('shells and remote', () => {
       expect(await ui.find({ type: 'Text', text: /^○ idle/ })).toBeDefined()
     })
 
+    test("a released Done carries the held turn's answer", async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started the review.')
+    })
+
+    test("the watchdog's Done carries the held turn's answer", async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(1_860_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 31m00s'])
+      expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started the review.')
+    })
+
     test('a woken turn past notifyAfter sends its own Done after the grace sent one', async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)

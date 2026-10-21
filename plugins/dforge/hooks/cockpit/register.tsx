@@ -618,7 +618,7 @@ export const register: Register = on => {
       const isHeld = e.reason === 'answer' && (await holdsDone($))
       const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
       if (e.reason !== 'answer') S.heldDone = null
-      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp }
+      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer }
       await readRemote($)
       await setActivity($, now => ({
         ...IDLE,
@@ -2349,8 +2349,9 @@ const S = {
   // The latest.md path and modification time the resume offer was read for.
   offerRead: '',
   // A Done held while the main conversation's background work runs: when its
-  // chain of turns began, and when a turn last ended with the work pending.
-  heldDone: null as { startedAt: number; heldAt: number } | null,
+  // chain of turns began, when a turn last ended with the work pending, and
+  // that turn's answer, which a Done released with no turn carries.
+  heldDone: null as { startedAt: number; heldAt: number; answer: string } | null,
   // Sends the held Done if no turn starts within RELEASE_GRACE_MS of the work ending.
   releaseTimer: null as Timer | null,
   // The poll's timer, whether a tick is running, how many ran, and when the slower readings last ran.
@@ -2397,17 +2398,19 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string): 
 
 /**
  * Sends a turn's Done, timed from the start of the held chain when one is
- * held, else from the turn alone; one under notifyAfter sends nothing.
+ * held, else from the turn alone; one under notifyAfter sends nothing. With
+ * no answer of its own it carries the held turn's.
  */
 async function sendDone($: EngineInterface, answer: string, durationMs: number) {
   const held = S.heldDone
   S.heldDone = null
   const took = held === null ? durationMs : (await $.clock.now()) - held.startedAt
   if (took < Math.max(0, (await live($)).notifyAfter) * 1000) return
+  const text = answer.trim() === '' ? (held?.answer ?? '') : answer
   const messageId = await notify($, {
     kind: 'done',
     title: `✅ Done in ${elapsed(took)}`,
-    detail: answer.trim() === '' ? undefined : excerpt(answer, 300),
+    detail: text.trim() === '' ? undefined : excerpt(text, 300),
     fields: await turnFields($),
   })
   if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
