@@ -1390,6 +1390,20 @@ describe('minimized band', () => {
     expect(await hint.find({ type: 'Text', text: /me@example\.com/ })).toBeUndefined()
   })
 
+  for (const version of [undefined, '2.1.303']) {
+    test(`leaves the slot above the prompt to a survey on a ${version === undefined ? 'current' : version} terminal`, async ($, on) => {
+      world(on, { ...SIGNED_IN, version })
+      signedIn(on, configured({ layout: 'compact' }))
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Bash', command: 'ls' })
+      await $.session.measure(MEASURE)
+      const viewport = { columns: 120, rows: 40, isFullscreen: false }
+      const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal', viewport })
+      expect(await band.find({ key: 'band-expand' })).toBeUndefined()
+      expect(await band.find({ key: 'engine' })).toBeDefined()
+    })
+  }
+
   test('takes unframed lines below the prompt when no width is reported', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on, configured({ layout: 'compact' }))
