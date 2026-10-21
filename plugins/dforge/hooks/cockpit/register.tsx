@@ -1636,8 +1636,8 @@ export const register: Register = on => {
           <Text key="guard-head" color="red" bold>
             {refused.length} refused
           </Text>,
-          refused.slice(-3).map(refusal => (
-            <Text key={`guard-${refusal.at}`} wrap="truncate-end">
+          refused.slice(-3).map((refusal, index) => (
+            <Text key={`guard-${refusal.at}-${index}`} wrap="truncate-end">
               <Text color="red">✗ </Text>
               {refusal.tool}
               <Text dimColor>: {refusal.line}</Text>
