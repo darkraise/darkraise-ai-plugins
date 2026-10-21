@@ -4278,6 +4278,45 @@ describe('polling', () => {
     expect(await ui.find({ type: 'Button', text: '▾ Usage' })).toBeDefined()
   })
 
+  describe('a layout saved outside the pane', () => {
+    const outside = async ($: Parameters<TestBody>[0], on: On, from: string, to: string, isPaneShut: boolean) => {
+      const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({ layout: from }), mtimeMs: 1 } }
+      const w: World = { ...SIGNED_IN, files, isPaneShut, opened: [], closed: [], openedRows: [] }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      w.opened!.length = 0
+      w.closed!.length = 0
+      w.openedRows!.length = 0
+      files[CONFIG] = { text: JSON.stringify({ layout: to }), mtimeMs: 2 }
+      await clock.advance(2_000)
+      return w
+    }
+
+    test('opens the pane for a minimized cockpit expanded elsewhere', async ($, on) => {
+      const w = await outside($, on, 'compact', 'auto', true)
+      expect(w.opened).toEqual(['dforge'])
+      expect(w.openedRows).toEqual([5])
+    })
+
+    test('shuts the pane for a cockpit minimized elsewhere', async ($, on) => {
+      const w = await outside($, on, 'auto', 'compact', false)
+      expect(w.closed).toEqual(['dforge'])
+      expect(w.opened).toEqual([])
+    })
+
+    test('asks the open pane for the rows of the new layout', async ($, on) => {
+      const w = await outside($, on, 'auto', 'full', false)
+      expect(w.openedRows).toEqual([undefined])
+      expect(w.closed).toEqual([])
+    })
+
+    test('opens nothing for a pane the person closed', async ($, on) => {
+      const w = await outside($, on, 'auto', 'full', true)
+      expect(w.opened).toEqual([])
+    })
+  })
+
   test('keeps the settings in force when the file stops being a JSON object', async ($, on) => {
     const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({ sections: 'usage' }), mtimeMs: 1 } }
     const clock = world(on, { ...SIGNED_IN, files })

@@ -3534,7 +3534,22 @@ async function rereadSettings($: EngineInterface) {
     $.ui.invalidate('ui.render')
     return
   }
+  const before = (await live($)).layout
   await applySettings($, file, mtime)
+  await reseatPane($, before)
+}
+
+/**
+ * Seats the cockpit for a layout saved outside the pane (dforge-config or
+ * another session), as the pane's own controls do when they save it: the band
+ * in the pane's place, or the pane in the band's, or the open pane asked for
+ * the new layout's rows. The settings view is left where it is.
+ */
+async function reseatPane($: EngineInterface, before: Live['layout']) {
+  const o = await live($)
+  if (o.layout === before || (await read($, view)) === 'settings') return
+  if (o.isMinimized) await shutPane($)
+  else if (before === 'compact' || (await isPaneUp($))) await $.ui.open(paneFor(o.layout))
 }
 
 // The pane's slower readings: the /context breakdown, estimated locally, and
