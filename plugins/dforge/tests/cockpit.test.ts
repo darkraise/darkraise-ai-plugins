@@ -4082,6 +4082,18 @@ describe('settings file', () => {
     expect(settingProblems(SCHEMA, { notifyOn: 'off' }, {})).toEqual(['notifyOn in ~/.dforge/config.json is not valid; read as none'])
   })
 
+  test('a list naming an unknown name keeps the names it knows', () => {
+    expect(resolveSettings(SCHEMA, { sections: 'plan, typo,Context' }, {}).sections).toBe('plan,context')
+    expect(resolveSettings(SCHEMA, { collapsed: 'repo usage bogus' }, {}).collapsed).toBe('repo,usage')
+    expect(resolveSettings(SCHEMA, { sections: 'typo' }, {}).sections).toBe('')
+    expect(resolveSettings(SCHEMA, { notifyOn: 'ask,typo' }, {}).notifyOn).toBe('ask')
+    expect(settingProblems(SCHEMA, { sections: 'plan,typo', collapsed: 'nope bad repo' }, {})).toEqual([
+      'sections in ~/.dforge/config.json: unknown typo ignored',
+      'collapsed in ~/.dforge/config.json: unknown nope, bad ignored',
+    ])
+    expect(settingProblems(SCHEMA, { sections: 'typo' }, {})).toEqual(['sections in ~/.dforge/config.json is not valid; ignored'])
+  })
+
   test('a saved value drops its default and keeps darkmem', () => {
     const darkmem = { url: 'http://d.test', repos: {} }
     expect(settingWritten(FAKE, { darkmem, warnAt: 70 }, 'warnAt', 80)).toEqual({ darkmem })

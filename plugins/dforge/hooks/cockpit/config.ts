@@ -77,10 +77,29 @@ export function resolveSettings(
     }
     const raw = spec.env === undefined ? undefined : env[spec.env]
     const fromEnv = raw === undefined || raw === '' ? undefined : settingFromText(spec, raw)
-    const stored = file[key]
-    values[key] = fromEnv ?? (isValidSetting(spec, stored) ? stored : Object.prototype.hasOwnProperty.call(file, key) ? invalidStored(key, spec) : spec.default)
+    values[key] = fromEnv ?? storedSetting(key, spec, file)
   }
   return values
+}
+
+function storedSetting(key: string, spec: SettingSpec, file: SettingsFile): SettingValue {
+  const stored = file[key]
+  if (isValidSetting(spec, stored)) return stored
+  if (!Object.prototype.hasOwnProperty.call(file, key)) return spec.default
+  const list = listNames(spec, stored)
+  return list !== undefined && list.known.length > 0 ? list.known.join(',') : invalidStored(key, spec)
+}
+
+// A list naming one unknown name keeps the names it knows: falling back to
+// the default would bring back every name the empty list stands for.
+function listNames(spec: SettingSpec, value: unknown): { known: string[]; unknown: string[] } | undefined {
+  const allowed = spec.values
+  if (spec.type !== 'string' || allowed === undefined || typeof value !== 'string') return undefined
+  const names = value.split(/[\s,]+/).filter(name => name !== '')
+  return {
+    known: names.map(name => name.toLowerCase()).filter(name => allowed.includes(name)),
+    unknown: names.filter(name => !allowed.includes(name.toLowerCase())),
+  }
 }
 
 // A notifyOn the person wrote but mistyped ("off") sends nothing: the default
@@ -102,6 +121,11 @@ export function settingProblems(
       problems.push(`${spec.env}=${raw} is not a valid ${key}; ignored`)
     }
     if (spec.target === 'dforge' && Object.prototype.hasOwnProperty.call(file, key) && !isValidSetting(spec, file[key])) {
+      const list = listNames(spec, file[key])
+      if (list !== undefined && list.known.length > 0) {
+        problems.push(`${key} in ~/.dforge/config.json: unknown ${list.unknown.join(', ')} ignored`)
+        continue
+      }
       const reading = invalidStored(key, spec)
       problems.push(`${key} in ~/.dforge/config.json is not valid; ${reading === spec.default ? 'ignored' : `read as ${String(reading)}`}`)
     }
