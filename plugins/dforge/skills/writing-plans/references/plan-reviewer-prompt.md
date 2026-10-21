@@ -122,11 +122,15 @@ for a judge.
 
 ## Later rounds
 
-When `scripts/review-route` prints `primary=dforge:judge-opus`, dispatch
-this template instead of the one above:
+Dispatch this template instead of the one above in every round after the
+first: when `scripts/review-route` prints `primary=dforge:judge-opus`, as
+`dforge:judge-opus`; when it prints `primary=native:<model>/<effort>` (every
+round of a Codex-host plan), as a native judge at that pair or above
+([native-codex.md](../../../reference/native-codex.md)). `[JUDGE]` is the seat
+the route printed.
 
 ```
-Subagent (dforge:judge-opus):
+Subagent ([JUDGE]):
   description: "Re-review plan document, round [ROUND]"
   prompt: |
     You are reviewing an implementation plan that failed its previous review
