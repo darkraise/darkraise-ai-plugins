@@ -77,6 +77,12 @@ run list "$TMP/bad.md"
 check "list: a range that does not parse exits 4" "$status" "4"
 run ref docs/plan.md 3
 check "ref: named after the plan" "$out" "sdd/plan/task-3"
+run status docs/plan.md 9 HEAD
+check "status: a wave the plan lacks exits 2" "$status" "2"
+run clean docs/plan.md 9 HEAD
+check "clean: a wave the plan lacks exits 2" "$status" "2"
+run status "$TMP/bad.md" 1 HEAD
+check "status: waves that do not parse exit 4" "$status" "4"
 
 # --- a task worktree, as an implementer would leave it ---
 task() { # task <N> <file> — commit <file> in a detached worktree and move the ref

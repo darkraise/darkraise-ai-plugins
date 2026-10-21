@@ -46,9 +46,10 @@ waves() {
   w=$(plan_waves "$plan") || die 4 "the **Parallelism:** waves line of $plan does not parse"
   printf '%s' "$w"
 }
-wave_range() { # wave_range K — "A B", or exit 2
-  local r
-  r=$(waves | awk -F'\t' -v k="$1" '$1 == k { print $2, $3 }')
+wave_range() { # wave_range K — "A B", or exit 2 (4 when the waves do not parse)
+  local w r
+  w=$(waves) || exit $?
+  r=$(awk -F'\t' -v k="$1" '$1 == k { print $2, $3 }' <<<"$w")
   [ -n "$r" ] || die 2 "the plan has no wave $1"
   printf '%s\n' "$r"
 }
@@ -90,10 +91,11 @@ case $cmd in
 
   status)
     [ $# -eq 2 ] && is_num "$1" || usage
-    read -r a b < <(wave_range "$1")
+    range=$(wave_range "$1") || exit $?
+    read -r a b <<<"$range"
     base=$2; need_commit "$base"
     for n in $(seq "$a" "$b"); do
-      ref=$(task_ref "$n")
+      ref=$(task_ref "$n") || exit $?
       if ! git rev-parse --verify --quiet "refs/heads/$ref" >/dev/null; then
         printf 'Task %s: ref none\n' "$n"; continue
       fi
@@ -111,7 +113,7 @@ case $cmd in
     [ $# -eq 2 ] && is_num "$1" || usage
     n=$1 base=$2
     need_commit "$base"
-    ref=$(task_ref "$n")
+    ref=$(task_ref "$n") || exit $?
     git rev-parse --verify --quiet "refs/heads/$ref" >/dev/null || die 2 "Task $n has no ref $ref"
     [ -z "$(git status --porcelain --untracked-files=no)" ] || die 3 "the checkout is not clean; commit or clear it before merging"
     git merge-base --is-ancestor "$base" "refs/heads/$ref" || die 1 "Task $n's ref does not descend from the wave base $base"
@@ -146,11 +148,12 @@ case $cmd in
 
   clean)
     [ $# -eq 2 ] && is_num "$1" || usage
-    read -r a b < <(wave_range "$1")
+    range=$(wave_range "$1") || exit $?
+    read -r a b <<<"$range"
     base=$2; need_commit "$base"
     seen=$'\n'
     for n in $(seq "$a" "$b"); do
-      ref=$(task_ref "$n")
+      ref=$(task_ref "$n") || exit $?
       git rev-parse --verify --quiet "refs/heads/$ref" >/dev/null || continue
       if ! git merge-base --is-ancestor "refs/heads/$ref" HEAD; then
         echo "kept $ref: not merged"; continue
