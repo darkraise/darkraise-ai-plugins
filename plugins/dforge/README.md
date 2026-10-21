@@ -61,7 +61,7 @@ is reached only by a human `**Implementer:**` override. Nine reserve implementer
 every Fable 5.1 tier - are reachable only by a human override, or by a task
 that has already been split once and still exhausted `impl-opus-high`. Four
 read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
-`judge-fable` (a human override only), and `scout-sonnet` - whose `tools:`
+`judge-fable` (an auto run's spec review and rulings, or a human override), and `scout-sonnet` - whose `tools:`
 frontmatter omits `Edit`, `Write`, and `Agent`, so a reviewer that cannot
 modify the tree or spawn subagents is a fact about the registry rather than a
 request in a prompt.
@@ -119,10 +119,12 @@ implements, and `--effort high` once it delegates. A task that will not
 converge after three fix rounds escalates to subagent mode at the next task
 boundary, recorded in the ledger both modes write.
 
-**Opt-in parallel waves.** Brainstorming asks, once the approach is settled,
-whether the plan should run sequentially (the default) or with parallel
-subagents, and records the answer in the spec as `**Execution strategy:**`;
-writing-plans asks the same question when a spec carries no answer. A parallel
+**Parallel waves by default.** The `executionStrategy` setting defaults to
+`parallel`: a plan runs its independent tasks in waves, and falls back to
+sequential when no two tasks can share a wave, on Codex, and in inline mode.
+Set it to `sequential` to turn waves off, or to `ask` to have brainstorming ask
+once the approach is settled (and writing-plans when a spec carries no answer).
+Brainstorming records the result in the spec as `**Execution strategy:**`. A parallel
 plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
 contiguous task ranges whose tasks share no file and consume nothing from each
 other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
@@ -225,10 +227,12 @@ Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
 capped by the plan's highest task total.
 The final whole-branch review runs on `judge-opus`, its one fix subagent on
 the highest tier among the tasks the findings touch, and with `codexReview` on gains a Codex round. When both reviewers return findings,
-a fresh `judge-opus` dedupes and verifies them. No route names `judge-fable`:
+a fresh `judge-opus` dedupes and verifies them. No review route names `judge-fable`:
 on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
-known defects, at about 40% of the cost, so Fable is dispatched on a judge seat
-only when you ask for it. With one list there is no third seat:
+known defects, at about 40% of the cost, so Fable takes a review seat only
+when you ask for it. An auto run is the exception: it dispatches `judge-fable`
+for the spec review and for each batch of rulings
+(`reference/auto-run.md`). With one list there is no third seat:
 the fixer triages each finding against the code and the scoped re-review rules
 on every rejection. The Codex round is not self-review-free, because the branch
 contains whatever the executor lane produced, which is why no finding is acted

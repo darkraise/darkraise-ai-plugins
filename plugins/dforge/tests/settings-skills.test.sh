@@ -79,6 +79,11 @@ names "finishing: failing tests at Step 1 stop the run" "$P/skills/finishing-a-d
 H="$P/skills/handoff/SKILL.md"
 names "handoff: a design phase writes the Draft line" "$H" '- Draft: `<spec path>`'
 names "handoff: pushes once latest.md is written" "$H" 'run `scripts/darkmem-sync push` and promote'
+# The README describes the shipped defaults: executionStrategy=parallel, and an
+# auto run (autoRun=on) that dispatches judge-fable.
+names "README: parallel waves are the default" "$P/README.md" 'The `executionStrategy` setting defaults to'
+check "README: sequential is not called the default" "$(grep -cF 'sequentially (the default)' "$P/README.md")" "0"
+names "README: an auto run dispatches judge-fable" "$P/README.md" 'An auto run is the exception: it dispatches `judge-fable`'
 CT="$P/skills/using-dforge/references/codex-tools.md"
 names "codex-tools: routed dispatch never relies on a full-history fork" "$CT" 'Never assume a full-history fork accepts `model` and'
 check "codex-tools: no unconditional fork override claim" "$(grep -cF 'Full-history forks accept `model`' "$CT")" "0"
