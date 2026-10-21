@@ -236,7 +236,8 @@ export function loadState(file) {
     && Array.isArray(raw.conflicts) && raw.conflicts.every(line => typeof line === "string")
     && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")))
     // dr-forge recorded forge; migrateServer moves its documents on and records dforge.
-    && (raw.prefix === undefined || raw.prefix === DOC_PREFIX || raw.prefix === "forge");
+    && (raw.prefix === undefined || raw.prefix === DOC_PREFIX || raw.prefix === "forge")
+    && (raw.remote === undefined || (typeof raw.remote?.url === "string" && typeof raw.remote?.project === "string"));
   if (!valid) throw new StateError(`${file} does not hold a valid sync state; ${REBUILD}`);
   const state = {
     version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt, conflicts: raw.conflicts,
@@ -245,7 +246,23 @@ export function loadState(file) {
   // Set once darkmem was checked for older (superpowers/ or forge/) uris
   // (dforge-home-migrate.mjs).
   if (raw.prefix !== undefined) state.prefix = raw.prefix;
+  if (raw.remote !== undefined) state.remote = { url: raw.remote.url, project: raw.remote.project };
   return state;
+}
+
+// The darkmem a sync state was synced with, recorded by the first sync that
+// sees none. A state synced with another server, or with another project that
+// shares this mirror directory (a name differing only in case, on a
+// case-insensitive file system), is refused: its hashes would read every
+// document missing from this darkmem as deleted there.
+export function checkRemote(file, state, url, project) {
+  if (state.remote === undefined) {
+    state.remote = { url, project };
+    return;
+  }
+  if (state.remote.url !== url || state.remote.project !== project) {
+    throw new StateError(`${file} was synced with project ${state.remote.project} at ${state.remote.url}, not project ${project} at ${url}; map the repository back, or ${REBUILD}`);
+  }
 }
 
 // Throws ELOOP when a directory from `root` (exclusive) down to `dir` is a

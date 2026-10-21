@@ -7,7 +7,7 @@ import path from "node:path";
 import { ConfigError, recordWhere, resolveStores, runKey } from "./darkmem-config.mjs";
 import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
 import {
-  ARCHIVE_PREFIX, DOC_PREFIX, StateError, UsageError, acquireLock, isArchiveUri, loadState, localChanges, lockOwner, pathToUri,
+  ARCHIVE_PREFIX, DOC_PREFIX, StateError, UsageError, acquireLock, checkRemote, isArchiveUri, loadState, localChanges, lockOwner, pathToUri,
   saveState, sha256, uriFamily, uriToLocal,
 } from "./darkmem-mirror.mjs";
 import { importRepository } from "./darkmem-import.mjs";
@@ -290,6 +290,7 @@ async function main(argv, {
   let unsavable = false;
   try {
     state = loadState(cfg.statePath);
+    if (cfg.enabled) checkRemote(cfg.statePath, state, cfg.url, cfg.project);
     // A StateError has no syscall, so no command's per-item catch of a file
     // error reads a failed save as its item's failure.
     const persist = () => {

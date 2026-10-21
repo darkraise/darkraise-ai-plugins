@@ -670,3 +670,23 @@ test("a named pipe at a document or ledger path is one failure each, not a block
   assert.match(result.stdout, /^failed: sdd\/p1\/progress\.md: the local ledger could not be read or written \(EFTYPE\); not pulled$/m);
   assert.equal(read(path.join(s.docsRoot, "b.md")), "b\n");
 });
+
+test("a mirror synced with another server or project is refused, not read as remote deletions", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/specs/a.md", content: "# A\n" });
+  assert.equal((await s.pull()).code, 0);
+  assert.deepEqual(s.state().remote, { url: s.stub.url, project: "proj" });
+  const other = await startStub();
+  t.after(() => other.close());
+  const config = path.join(s.home, ".dforge", "config.json");
+  const mapping = JSON.parse(read(config));
+  const switched = { ...mapping, darkmem: { ...mapping.darkmem, url: other.url } };
+  fs.writeFileSync(config, JSON.stringify(switched));
+  const result = await s.pull();
+  assert.equal(result.code, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, /\.sync-state\.json was synced with project proj at http:\/\/127\.0\.0\.1:\d+, not project proj at http:\/\/127\.0\.0\.1:\d+; map the repository back, or move it aside/);
+  assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "# A\n");
+  assert.equal(other.db.requests.length, 0);
+  fs.writeFileSync(config, JSON.stringify(mapping));
+  assert.equal((await s.pull()).code, 0);
+});
