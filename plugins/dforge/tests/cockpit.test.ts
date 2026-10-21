@@ -2609,6 +2609,25 @@ describe('shells and remote', () => {
     expect(await ui.find({ key: 'shells' })).toBeUndefined()
   })
 
+  test("keeps the main conversation's and a legacy shell when a subagent ends", async ($, on) => {
+    let n = 0
+    world(on, { ...SIGNED_IN, tools: { Bash: () => ({ ...SHELL, result: { ...SHELL.result, backgroundTaskId: `b${++n}` } }) } })
+    signedIn(on)
+    // A row saved before shells kept their loop has no agentId field.
+    on('state.set', { plugin: 'dforge', key: 'shells' } as never, ((_$: unknown, e: { value: { command: string; agentId?: string | null }[] }, next: (e: unknown) => unknown) =>
+      next({ ...e, value: e.value.map(({ agentId, ...rest }) => (rest.command === 'make watch' ? rest : { ...rest, agentId })) })) as never)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'make watch', run_in_background: true } as never)
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true, agentId: 'agent-1' } as never)
+    await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^\$ make watch/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\$ npm test/ })).toBeUndefined()
+  })
+
   test("drops the shells of a subagent with no recorded spawn when it ends", async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
     signedIn(on)
