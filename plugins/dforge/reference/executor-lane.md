@@ -275,9 +275,9 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 
 | Failure | Response |
 |---------|----------|
+| `note=writer-unconfirmed`, after a timeout or a transport error | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the Codex turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section | Retry once at the same rung |
 | Timeout - `note=timed-out` on the status line, `exit=124` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
-| `note=writer-unconfirmed` beside `note=timed-out` | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the Codex turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | Refusal - `refusal=true` in the report's `## Codex error` section | `HANDBACK` now. The account does not offer that model or effort, and every successor rung is the same model, so a retry or a successor would be refused too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
@@ -309,6 +309,9 @@ report still tails it underneath.
   background call and you are not watching the clock. When the interrupt was
   not acknowledged and the broker was not one this run could reap, the line
   also carries `note=writer-unconfirmed` and the task is recorded `blocked`.
+  A transport error the client reports as `reason=plugin-api` without a turn
+  status gets the same note and record under the same condition, because the
+  turn may have started before the connection failed.
 
 A second `NEEDS_CONTEXT` on the same task is a capability failure: take the
 successor rung or hand back. A one-shot agent that could not resolve the brief

@@ -126,6 +126,16 @@ check 'an unconfirmed stop never claims codex was stopped' "$(grep -cE 'was (sto
 run --cwd "$fixture/unstopped"
 check 'a blocked unconfirmed task cannot relaunch' "$?" 2
 
+# A transport error on a broker the run did not start may follow a turn that
+# is still writing, so it blocks the task exactly as an unconfirmed stop does.
+git -C "$fixture/primary" worktree add -qb transport-case "$fixture/transport"
+STUB_MODE=throw STUB_PRE_EXISTING=1 run --cwd "$fixture/transport"
+check 'an unreaped transport error returns executed non-DONE' "$?" 1
+check 'an unreaped transport error blocks the task' \
+  "$(jq -r .phase "$(git -C "$fixture/transport" rev-parse --absolute-git-dir)/dforge/tasks/$(printf task-one | git hash-object --stdin)/state.json")" blocked
+check 'an unreaped transport error is flagged on the status line' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 1
+check 'an unreaped transport error is not reported as a timeout' "$(grep -c 'note=timed-out' "$fixture/out")" 0
+
 git -C "$fixture/primary" worktree add -qb handback-case "$fixture/handback"
 STUB_FINAL_MESSAGE="$(final_message BLOCKED)" run --cwd "$fixture/handback"
 check 'handback fixture has pending work' "$?" 1

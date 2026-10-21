@@ -288,10 +288,12 @@ rc=0
 [ "$timed_out" = yes ] && rc=124
 # Only an acknowledged interrupt or a reaped broker proves the turn stopped. A
 # pre-existing broker is never reaped, so a failed interrupt there - or a client
-# killed by the outer bound - can leave Codex writing into this worktree.
+# killed by the outer bound - can leave Codex writing into this worktree. A
+# plugin-api failure without a turn status is a transport error that may have
+# come after the turn started, so it proves no more than a timeout does.
 writer_stopped=yes
-if [ "$timed_out" = yes ] && [ "$(jq -r '.interrupted == true or .reaped == true' <<<"$result")" != true ]; then
-  writer_stopped=no
+if [ "$timed_out" = yes ] || [ "$(jq -r '.reason == "plugin-api" and (.turnStatus | type) != "number"' <<<"$result")" = true ]; then
+  [ "$(jq -r '.interrupted == true or .reaped == true' <<<"$result")" = true ] || writer_stopped=no
 fi
 
 # Event field naming has varied across Codex releases, so match on any of the
@@ -344,7 +346,7 @@ fi
 
 committed=no
 if [ "$writer_stopped" = no ]; then
-  dr_task_block 'codex turn not confirmed stopped after the deadline; confirm it ended before recovery' \
+  dr_task_block 'codex turn not confirmed stopped; confirm it ended before recovery' \
     || die 'cannot persist blocked task'
 elif [ "$status" = DONE ]; then
   dr_task_stage "$before_snapshot" "$subject" || die 'staging/commit failed; inspect durable task record and recover explicitly'
@@ -365,8 +367,10 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- exit: %s\n' "$rc"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
-  if [ "$writer_stopped" = no ]; then
+  if [ "$writer_stopped" = no ] && [ "$timed_out" = yes ]; then
     printf -- '- note: timed out after %ss and the codex turn could not be confirmed stopped; the task is blocked until it is\n' "$timeout_s"
+  elif [ "$writer_stopped" = no ]; then
+    printf -- '- note: the connection to codex failed and the codex turn could not be confirmed stopped; the task is blocked until it is\n'
   elif [ "$timed_out" = yes ]; then
     printf -- '- note: timed out after %ss and the codex turn was stopped; raise --timeout rather than taking the successor rung\n' "$timeout_s"
   fi
