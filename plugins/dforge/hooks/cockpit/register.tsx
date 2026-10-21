@@ -455,7 +455,7 @@ export const register: Register = on => {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
       // The engine's or the person's compaction: the run's rule still applies after it.
-      if (e.trigger === 'auto' || e.trigger === 'manual') await bookAutoCompaction($)
+      if ((e.trigger === 'auto' || e.trigger === 'manual') && !S.isPaneCompacting) await bookAutoCompaction($)
     }
 
     return done
@@ -822,7 +822,7 @@ export const register: Register = on => {
         )}
         {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
         {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
-        {button('pane-compact', 'Compact', () => $.session.compact(), { hotkey: 'c', isCompact: isDense })}
+        {button('pane-compact', 'Compact', () => compactFromPane($), { hotkey: 'c', isCompact: isDense })}
         {button('pane-density', isDense ? 'Detailed' : 'Dense', () => setOption($, 'density', isDense ? 'detailed' : 'dense'), { hotkey: 'd', isCompact: isDense })}
         {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's', isCompact: isDense })}
         {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm', isCompact: isDense })}
@@ -2307,6 +2307,8 @@ const S = {
   // Whether a main-loop turn is running; a subagent's approval wait does not set it, as it does isTurnLive.
   isMainTurn: false,
   isBudgetSent: false,
+  // The pane's Compact runs: it books its compaction itself.
+  isPaneCompacting: false,
   // Ledger events already seen, by the plan the ledger names; the first read
   // of a plan's ledger only records them, so a reload, a re-read or a resumed
   // plan sends nothing twice.
@@ -2807,6 +2809,19 @@ async function endUnboundRun($: EngineInterface, owner: string, reason: string) 
   await update($, autoRun, () => null)
   await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: reason, isPlain: true })
   await $.prompt.submit({ text: `The auto run stopped: ${reason}. End as reference/auto-run.md §Stopping says.`, asUser: true }).catch(() => undefined)
+}
+
+// The person's compaction from the pane, booked as /compact is. The mod's own
+// session.compact hook did not see it under claude plugin test; where it
+// does, it leaves the booking to this.
+async function compactFromPane($: EngineInterface) {
+  S.isPaneCompacting = true
+  try {
+    const done = await $.session.compact()
+    if (!('skip' in done)) await bookAutoCompaction($)
+  } finally {
+    S.isPaneCompacting = false
+  }
 }
 
 // A compaction the cockpit did not make, booked so the run's rule applies after it.
