@@ -153,6 +153,10 @@ check "task-brief: excerpt carries Global Constraints" "$(grep -c '^- Bash only.
 check "task-brief: brief ends with Contracts" "$(tail -n 1 "$TMP/b1.md")" '- `greet NAME` prints `hello NAME`.'
 check "task-brief: excerpt carries Contracts" "$(grep -c '^- `greet NAME` prints `hello NAME`.$' "$TMP/b1.md")" "1"
 check "task-brief: excerpt omits Task index" "$(grep -c '^## Task index$' "$TMP/b1.md")" "0"
+# plan-lint accepts a heading with trailing spaces, so the brief must too.
+sed 's/^## Contracts$/## Contracts  /' docs/full.md > docs/spaced.md
+bash "$P/scripts/task-brief" docs/spaced.md 1 "$TMP/b-spaced.md" >/dev/null 2>&1
+check "task-brief: a trailing-space heading keeps its section" "$(grep -c '^- `greet NAME` prints `hello NAME`.$' "$TMP/b-spaced.md")" "1"
 
 # A fenced `## ` line inside Contracts must not end the excerpt.
 cat > docs/fenced.md <<'EOF'
