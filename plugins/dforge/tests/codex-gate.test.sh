@@ -217,6 +217,18 @@ check "a connect that throws is off" "$out" \
 fresh; GATE_MS=1500 gate hang
 check "a hung connect times out" "$out" \
   "codex-gate usable=false reason=timeout review=false lane=false resets_at=- source=probe"
+# A PATH without timeout, as on macOS: the probe still answers.
+NOTIMEOUT="$TMP/no-timeout-bin"
+mkdir -p "$NOTIMEOUT"
+for dir in $(tr ':' ' ' <<<"$PATH"); do
+  for tool in "$dir"/*; do
+    name=${tool##*/}
+    [ "$name" = timeout ] || [ -e "$NOTIMEOUT/$name" ] || ln -s "$tool" "$NOTIMEOUT/$name" 2>/dev/null
+  done
+done
+fresh; PATH="$NOTIMEOUT" gate usable
+check "without timeout on PATH the probe still answers" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
 fresh; started=$SECONDS; GATE_MS=1500 gate close-hangs
 check "a close that never settles still answers, within its grace" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"

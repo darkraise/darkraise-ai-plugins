@@ -71,16 +71,21 @@ if [ "$source" = probe ]; then
       version=$(sed -n 's/^codex-plugin ok version=\([^ ]*\) root=.*/\1/p' <<<"$line")
       root=$(sed -n 's/^codex-plugin ok version=[^ ]* root=//p' <<<"$line")
       # The probe owns its deadline; this outer bound only guarantees the gate
-      # returns if node itself wedges.
+      # returns if node itself wedges, so where timeout is missing (macOS
+      # ships none) the probe runs without it.
       ms="${DR_CODEX_GATE_TIMEOUT_MS:-30000}"
-      answer=$(timeout $((ms / 1000 + 15)) node "$HERE/lib/codex-gate.mjs" "$root" "$(dr_native_path "$PWD")" "$ms" 2>/dev/null | tail -1)
+      bound=()
+      command -v timeout >/dev/null 2>&1 && bound=(timeout $((ms / 1000 + 15)))
+      answer=$(${bound[@]+"${bound[@]}"} node "$HERE/lib/codex-gate.mjs" "$root" "$(dr_native_path "$PWD")" "$ms" 2>/dev/null | tail -1)
       usable=$(jq -r '.usable | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')
       reason=$(jq -r '.reason // empty' <<<"$answer" 2>/dev/null | tr -d '\r')
       epoch=$(jq -r '.resets_at_epoch // empty' <<<"$answer" 2>/dev/null | tr -d '\r')
       if [ "$usable" != true ] && [ "$usable" != false ]; then
         usable=false reason=timeout epoch=""
       fi
-      [ -z "$epoch" ] || resets=$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
+      # -d is GNU date's, -r BSD date's.
+      [ -z "$epoch" ] || resets=$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -r "$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
       ;;
     1) usable=false reason=$(sed -n 's/^codex-plugin off reason=//p' <<<"$line") ;;
     *) die "codex-plugin failed" ;;
