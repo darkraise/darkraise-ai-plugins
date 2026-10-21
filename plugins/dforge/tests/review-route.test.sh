@@ -324,6 +324,7 @@ present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-sc
 # review of nothing - scoring every criterion 10, the schema's "uncertain".
 present "the Codex round-1 prompt permits read-only commands" "$PRP" 'You are running read-only'
 present "the Codex round-1 prompt still forbids edits and subagents" "$PRP" 'Do not modify any file, and do not dispatch subagents'
+present "a native Codex judge gets the read-only line in every round" "$PRP" 'In this template and the Later rounds one, make change 3 of'
 present "the prompt file has a delta template" "$PRP" '## Later rounds'
 present "the delta template takes the delta file" "$PRP" '[DELTA_FILE]'
 present "the delta template verdicts prior findings" "$PRP" '[ADDRESSED|NOT ADDRESSED]'

@@ -77,6 +77,11 @@ Subagent ([JUDGE]):
 **Reviewer returns:** findings graded Critical, Important or Minor, and four
 scores. Bands: 1-8 fails, 9-13 borderline, 14-20 passes.
 
+**A native judge on Codex** has no Read tool either: running a command is its
+only file access. In this template and the Later rounds one, make change 3 of
+Round 1 on Codex below before dispatching it, or the judge cannot open the
+plan.
+
 ## Round 1 on Codex
 
 When `scripts/review-route` prints `primary=codex:plan`, send the template
