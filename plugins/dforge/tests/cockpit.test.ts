@@ -5451,6 +5451,22 @@ describe('auto run', () => {
     expect(w.autoRuns).toContain('--session sess-1 stalled')
   })
 
+  test("a subagent's approvals around an Esc leave the turn interrupted", async ($, on) => {
+    world(on, { tokens: 50_000 })
+    on('tool.check', () => ({ decision: 'ask' }))
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
+    await $.tool.check({ tool: 'Bash', input: { command: 'ls -a' }, tool_use_id: 'toolu_10', agentId: 'agent-1' })
+    await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'ls -a', tool_use_id: 'toolu_10', agentId: 'agent-1' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^■ interrupted · 1 agent still running/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /running \d/ })).toBeUndefined()
+  })
+
   test('leaves the run to the owner after an Esc', async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
