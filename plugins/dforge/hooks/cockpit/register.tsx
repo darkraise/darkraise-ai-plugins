@@ -2299,6 +2299,9 @@ const S = {
   // timer, the Discord message sent for it (edited once it is answered), and
   // the subagent whose approval it is.
   waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null }>(),
+  // The activity the first open wait replaced, given back when the last wait
+  // ends outside a main turn.
+  waitFrom: null as CockpitActivity | null,
   ticker: null as Timer | null,
   isTurnLive: false,
   // Whether a main-loop turn is running; a subagent's approval wait does not set it, as it does isTurnLive.
@@ -2472,6 +2475,8 @@ async function settleWait($: EngineInterface, id: string, outcome: string) {
 // notifyAskAfter seconds if it is still unanswered.
 async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'asking', event: NotifyEvent, agentId: string | null) {
   const stamp = await $.clock.now()
+  const before = await read($, activity)
+  if (before.kind !== 'waiting' && before.kind !== 'asking') S.waitFrom = before
   await setActivity($, now => ({ ...now, kind, since: stamp, detail: event.detail ?? null, isSent: false }))
   const send = async () => {
     const wait = S.waits.get(id)
@@ -2487,12 +2492,21 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
   if (delay === 0) await send()
 }
 
-// Back to running once nothing S.waits on the person.
+// Back to running once nothing S.waits on the person, or, after the main
+// turn ended, back to how it ended: a subagent's wait never leaves a turn
+// live that no turn will end, which would hold the auto run's stages.
 async function endWait($: EngineInterface, id: string, outcome: string) {
   await settleWait($, id, outcome)
   if (S.waits.size > 0) return
-  const kind = S.isMainTurn || S.heldDone === null ? 'running' : 'background'
-  await setActivity($, now => (now.kind === 'waiting' || now.kind === 'asking' ? { ...now, kind, detail: null, isSent: false } : now))
+  const before = S.waitFrom
+  S.waitFrom = null
+  const kind = S.isMainTurn ? 'running' : S.heldDone !== null ? 'background' : null
+  await setActivity($, now => {
+    if (now.kind !== 'waiting' && now.kind !== 'asking') return now
+    if (kind !== null) return { ...now, kind, detail: null, isSent: false }
+    if (before === null || before.kind === 'running') return { ...now, kind: 'idle', detail: null, isSent: false }
+    return { ...now, kind: before.kind, since: before.since, detail: before.detail, isSent: before.isSent }
+  })
   if (kind === 'background') await settleBackground($)
 }
 

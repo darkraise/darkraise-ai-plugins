@@ -5087,6 +5087,22 @@ describe('auto run', () => {
     expect(w.prompts).toHaveLength(1)
   })
 
+  test("a subagent's approval after a failed turn leaves the turn ended", async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    on('tool.check', () => ({ decision: 'ask' }))
+    await $.session.start(START)
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
+    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
+    await clock.advance(240_000)
+    expect(w.autoRuns).toContain('--session sess-1 stalled')
+  })
+
   test('leaves the run to the owner after an Esc', async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
