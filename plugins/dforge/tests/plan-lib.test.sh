@@ -22,6 +22,8 @@ check "plan_tasks: numbers outside fences" "$(plan_tasks "$TMP/plan.md" | cut -f
 check "plan_tasks: titles" "$(plan_tasks "$TMP/plan.md" | cut -f2 | tr '\n' '|')" "First thing|Second|Tenth|"
 sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 check "plan_tasks: CRLF" "$(plan_tasks "$TMP/crlf.md" | cut -f2 | tr '\n' '|')" "First thing|Second|Tenth|"
+printf '# P\n\n### Task 1: One\n\n### Task 10x: not a task\n\n### Task 2\n' > "$TMP/suffix.md"
+check "plan_tasks: a number with a letter after it is no task" "$(plan_tasks "$TMP/suffix.md" | cut -f1 | tr '\n' ' ')" "1 2 "
 printf '# Empty\n' > "$TMP/none.md"
 check "plan_tasks: no tasks prints nothing" "$(plan_tasks "$TMP/none.md")" ""
 printf '# P\n\n### Task 1: One\n\n````markdown\n```bash\necho hi\n```\n### Task 9: inside\n````\n\n~~~\n### Task 8: tilde\n~~~\n\n### Task 2: Two\n' > "$TMP/nested.md"

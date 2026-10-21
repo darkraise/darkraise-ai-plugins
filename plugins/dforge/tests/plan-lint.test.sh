@@ -199,6 +199,9 @@ has "malformed heading (Task N) suffix" "$out" "ERROR header: malformed task hea
 variant v5.md 's/^### Task 2: Second thing$/### task 2: Second thing/'
 lint v5.md
 has "malformed heading lowercase" "$out" "ERROR header: malformed task heading: ### task 2: Second thing"
+variant v5b.md 's/^### Task 2: Second thing$/### Task 2b: Second thing/'
+lint v5b.md
+has "malformed heading with a letter after the number" "$out" "ERROR header: malformed task heading: ### Task 2b: Second thing"
 variant v6.md 's/^- \[ \] \*\*Step 1: Write it\*\*$/#### Step 1: Run Task 2 tests/'
 lint v6.md
 lacks "a step heading mentioning a task is not a finding" "$out" "malformed task heading"

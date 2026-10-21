@@ -28,7 +28,7 @@ function in_fence(line,   mk) {
   return 0
 }
 function is_task(line,   n) {
-  if (line !~ /^#+[ \t]+Task[ \t]+[0-9]+/) return -1
+  if (line !~ /^#+[ \t]+Task[ \t]+[0-9]+([ \t:.-]|$)/) return -1
   n = line; sub(/^#+[ \t]+Task[ \t]+/, "", n); sub(/[^0-9].*$/, "", n)
   return n + 0
 }

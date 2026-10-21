@@ -191,7 +191,7 @@ awk "$_PLAN_AWK"'
   in_fence($0) { next }
   /^#+[ \t]+/ {
     t = $0; sub(/^#+[ \t]+/, "", t)
-    if ((tolower(t) ~ /^task[^a-z]*[0-9]/ && t !~ /^Task[ \t]+[0-9]+/) || t ~ /\(Task [0-9]+\)[ \t]*$/)
+    if ((tolower(t) ~ /^task[^a-z]*[0-9]/ && t !~ /^Task[ \t]+[0-9]+([ \t:.-]|$)/) || t ~ /\(Task [0-9]+\)[ \t]*$/)
       print "ERROR header: malformed task heading: " $0
   }
 ' "$src" >> "$findings"
