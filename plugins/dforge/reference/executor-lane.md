@@ -277,6 +277,7 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 |---------|----------|
 | Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section | Retry once at the same rung |
 | Timeout - `note=timed-out` on the status line, `exit=124` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
+| `note=writer-unconfirmed` beside `note=timed-out` | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the Codex turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | Refusal - `refusal=true` in the report's `## Codex error` section | `HANDBACK` now. The account does not offer that model or effort, and every successor rung is the same model, so a retry or a successor would be refused too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
@@ -305,7 +306,9 @@ underneath.
 - **`note=timed-out`**, with `exit=124`, means the client reported that its own
   deadline expired and it interrupted the turn. You do not have to infer this
   from wall time - which you could not do anyway, since the wrapper runs as a
-  background call and you are not watching the clock.
+  background call and you are not watching the clock. When the interrupt was
+  not acknowledged and the broker was not one this run could reap, the line
+  also carries `note=writer-unconfirmed` and the task is recorded `blocked`.
 
 A second `NEEDS_CONTEXT` on the same task is a capability failure: take the
 successor rung or hand back. A one-shot agent that could not resolve the brief
@@ -383,7 +386,8 @@ bounded by their own rule below and by the five-round cap.
 | Resume outcome | Response |
 |----------------|----------|
 | Transient - the report's `## Codex error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread |
-| `note=timed-out` with `exit=124` | Retry the same resume once with `--timeout` raised |
+| `note=timed-out` with `exit=124`, without `note=writer-unconfirmed` | Retry the same resume once with `--timeout` raised |
+| `note=writer-unconfirmed` | As for an initial run: confirm the turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | `exit=2` | **Read the durable record's `phase` first: exit 2 does not prove nothing ran.** The wrapper also exits 2 after the turn, on thread-persistence, reap-persistence, scope-validation, staging, commit or report-copy failure. On a preflight phase, nothing ran and the thread is untouched: fix what you passed and re-issue the same resume, which does not count as a failed round. On any later phase, follow [external-task-recovery.md](external-task-recovery.md) before re-issuing anything |
 | `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 4 |
 | A second failure of any kind in the same round | `HANDBACK` |

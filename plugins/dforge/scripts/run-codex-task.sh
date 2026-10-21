@@ -251,6 +251,7 @@ plugin_root=${plugin_line#*root=}
 dr_task_update '.phase = "running" | .processes = []' || die 'cannot persist running phase'
 
 result=$(build_request | timeout $((timeout_s + 60)) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$report.stderr")
+client_rc=$?
 # A node that died before printing leaves $result empty, and every jq below would
 # then fail and take the runner with it. One guard here covers all of them.
 [ -n "$result" ] || result='{}'
@@ -281,9 +282,17 @@ dr_task_update '.reaped = $reaped' \
 
 timed_out=no
 [ "$(jq -r '.timedOut' <<<"$result")" = true ] && timed_out=yes
+[ "$client_rc" -eq 124 ] && timed_out=yes
 rc=0
 [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
 [ "$timed_out" = yes ] && rc=124
+# Only an acknowledged interrupt or a reaped broker proves the turn stopped. A
+# pre-existing broker is never reaped, so a failed interrupt there - or a client
+# killed by the outer bound - can leave Codex writing into this worktree.
+writer_stopped=yes
+if [ "$timed_out" = yes ] && [ "$(jq -r '.interrupted == true or .reaped == true' <<<"$result")" != true ]; then
+  writer_stopped=no
+fi
 
 # Event field naming has varied across Codex releases, so match on any of the
 # shapes rather than pinning one that a later version may rename.
@@ -334,7 +343,10 @@ fi
 [ "$rc" -eq 0 ] || status=BLOCKED
 
 committed=no
-if [ "$status" = DONE ]; then
+if [ "$writer_stopped" = no ]; then
+  dr_task_block 'codex turn not confirmed stopped after the deadline; confirm it ended before recovery' \
+    || die 'cannot persist blocked task'
+elif [ "$status" = DONE ]; then
   dr_task_stage "$before_snapshot" "$subject" || die 'staging/commit failed; inspect durable task record and recover explicitly'
   if [ "$(git -C "$cwd" rev-parse HEAD)" = "$base" ]; then committed=empty; else committed=yes; fi
 else
@@ -353,7 +365,11 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- exit: %s\n' "$rc"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
-  [ "$timed_out" = yes ] && printf -- '- note: timed out after %ss and codex was killed; raise --timeout rather than taking the successor rung\n' "$timeout_s"
+  if [ "$writer_stopped" = no ]; then
+    printf -- '- note: timed out after %ss and the codex turn could not be confirmed stopped; the task is blocked until it is\n' "$timeout_s"
+  elif [ "$timed_out" = yes ]; then
+    printf -- '- note: timed out after %ss and the codex turn was stopped; raise --timeout rather than taking the successor rung\n' "$timeout_s"
+  fi
   printf '\n## Summary\n\n%s\n' "$summary"
   printf '\n## Discovered issues (not fixed)\n\n%s\n' "${discovered:-None}"
   printf '\n## Assumptions made\n\n%s\n' "${assumptions:-None}"
@@ -382,6 +398,7 @@ cp -- "$report" "$human_report" || die 'cannot write human-readable report; auth
 # reports both.
 notes=""
 [ "$timed_out" = yes ] && notes="$notes note=timed-out"
+[ "$writer_stopped" = no ] && notes="$notes note=writer-unconfirmed"
 printf 'codex %s/%s status=%s exit=%s commits=%s..%s thread=%s report=%s%s\n' \
   "$model" "$effort" "$status" "$rc" "${base:0:7}" "${head:0:7}" "$thread_id" "$human_report" "$notes"
 

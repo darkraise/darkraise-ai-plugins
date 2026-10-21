@@ -47,6 +47,9 @@ export async function interruptAppServerTurn(cwd, { threadId, turnId } = {}) {
   if (!threadId || !turnId) {
     return { attempted: false, interrupted: false, transport: null, detail: "missing threadId or turnId" };
   }
+  if (process.env.STUB_INTERRUPT_FAILS === "1") {
+    return { attempted: true, interrupted: false, transport: "stub", detail: "stub: interrupt refused" };
+  }
   return { attempted: true, interrupted: true, transport: "stub", detail: `Interrupted ${turnId}.` };
 }
 
