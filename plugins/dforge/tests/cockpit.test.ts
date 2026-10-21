@@ -2988,6 +2988,14 @@ describe('run card', () => {
     ])
   })
 
+  test('reads no task heading inside a fence, as plan.sh does', () => {
+    const plan = ['# Plan', '', '````md', '```', '### Task 99: Example', '```', '````', '~~~', '## Task 98: Also an example', '~~~', '#### Task 1: Real', '# Task 2: Top level', '  ### Task 3: Indented'].join('\n')
+    expect(planTasks(plan)).toEqual([
+      { n: 1, title: 'Real' },
+      { n: 2, title: 'Top level' },
+    ])
+  })
+
   test('starts no task from a Ruling, parked or deferred line', () => {
     const ledger = parseLedger(`${LEDGER}\nTask 1: Ruling: the meter — kept\nTask 3: parked — width — Ruling: fine\nTask 4: minor (deferred): rename\nTask 5: escalated inline -> subagent — two rounds`)
     expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([

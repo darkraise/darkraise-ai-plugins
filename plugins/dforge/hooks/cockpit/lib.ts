@@ -747,11 +747,23 @@ export function parseLedger(text: string): Ledger {
   return { plan, tasks: [...tasks.values()].sort((a, b) => a.n - b.n), isFinished }
 }
 
-/** A plan file's tasks, from its "### Task N: title" headings. */
+/** A plan file's tasks, from its "### Task N: title" headings outside fenced blocks, as plan_tasks in scripts/lib/plan.sh reads them. */
 export function planTasks(text: string): { n: number; title: string }[] {
   const out: { n: number; title: string }[] = []
+  // CommonMark's rule, as plan.sh has it: a fence closes only at a bare marker of its character at least as long.
+  let fence = ''
   for (const line of text.split(/\r?\n/)) {
-    const match = /^#{2,4}\s+Task\s+(\d+)\s*[:.\-—]?\s*(.*)$/.exec(line.trim())
+    if (fence !== '') {
+      const marker = line.replace(/^ {0,3}/, '').trimEnd()
+      if (/^(`+|~+)$/.test(marker) && marker[0] === fence[0] && marker.length >= fence.length) fence = ''
+      continue
+    }
+    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line)
+    if (open) {
+      fence = open[1] ?? ''
+      continue
+    }
+    const match = /^#+[ \t]+Task[ \t]+(\d+)[ \t]*[:.\-—]?[ \t]*(.*)$/.exec(line)
     if (match && !out.some(one => one.n === Number(match[1]))) out.push({ n: Number(match[1]), title: (match[2] ?? '').trim() })
   }
   return out
