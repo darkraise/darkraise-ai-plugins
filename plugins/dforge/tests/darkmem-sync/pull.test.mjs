@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
-import { makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
+import { makeHome, makeRepo, namedPipe, read, run, scratch, write } from "./helpers.mjs";
 
 async function setup(t, stubOptions = {}) {
   const stub = await startStub(stubOptions);
@@ -655,4 +655,18 @@ test("a pull never reads, writes or removes through a linked directory or a plan
   assert.equal(read(path.join(outside, "victim")), "unrelated\n");
   assert.equal(read(path.join(s.docsRoot, "b.md")), "# B, changed\n");
   assert.equal(fs.existsSync(path.join(s.docsRoot, ".b.md.tmp")), false);
+});
+
+test("a named pipe at a document or ledger path is one failure each, not a blocked pull", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/b.md", content: "b\n" });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  namedPipe(path.join(s.docsRoot, "a.md"));
+  namedPipe(path.join(s.workRoot, "sdd", "p1", "progress.md"));
+  const result = await s.pull();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: dforge\/a\.md: the local copy could not be read or written \(EFTYPE\); not pulled$/m);
+  assert.match(result.stdout, /^failed: sdd\/p1\/progress\.md: the local ledger could not be read or written \(EFTYPE\); not pulled$/m);
+  assert.equal(read(path.join(s.docsRoot, "b.md")), "b\n");
 });

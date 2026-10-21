@@ -8,6 +8,7 @@ import {
   DOC_PREFIX, caseGroups, familiesOf, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, sha256, uriFamily, uriProblem,
   uriToLocal, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
+import { readRegular } from "./darkmem-progress-move.mjs";
 
 const RESOLVE = "move the local file aside, pull, and re-apply your change";
 
@@ -15,7 +16,21 @@ const RESOLVE = "move the local file aside, pull, and re-apply your change";
 // reached through a symbolic link below it.
 const mirrorOf = roots => path.dirname(roots.workRoot);
 
-const localHash = file => (fs.existsSync(file) ? sha256(fs.readFileSync(file)) : null);
+// A mirror file's bytes, or null when there is none; a named pipe or other
+// non-file throws rather than blocking the pull.
+function localBytes(file) {
+  try {
+    return readRegular(file, { follow: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+const localHash = file => {
+  const bytes = localBytes(file);
+  return bytes && sha256(bytes);
+};
 
 const sameFile = (a, b) => {
   try {
@@ -185,7 +200,7 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
     const synced = { offset: remote.length, prefix: sha256(remote), lastSeq };
     const file = path.join(roots.workRoot, "sdd", ws.key, "progress.md");
     try {
-      const local = fs.existsSync(file) ? fs.readFileSync(file) : null;
+      const local = localBytes(file);
       const record = state.ledgers[ws.key];
       if (local && local.length >= remote.length && local.subarray(0, remote.length).equals(remote)) {
         // Equal, or ahead by lines push has not sent yet.

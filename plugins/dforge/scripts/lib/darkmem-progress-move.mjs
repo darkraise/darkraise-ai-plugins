@@ -20,17 +20,18 @@ const local = (base, rel) => path.join(base, ...rel.split("/"));
 
 // `file`'s bytes, read without blocking on a FIFO or device: it throws an
 // error whose code is EISDIR for a directory, EFTYPE for any other file that
-// is not regular, or the open's or read's own (ENOENT, EACCES, ENOTDIR).
+// is not regular, or the open's or read's own (ENOENT, EACCES, ENOTDIR); each
+// carries a syscall, so a caller's per-file catch reports it as a file error.
 // Without `follow`, a symbolic link at the last component (a dangling one
 // too) throws ELOOP; links earlier in the path are always followed. Function
-// declarations, since darkmem-reconcile.mjs imports them across the import
-// cycle between the two modules. Without O_NOFOLLOW or O_NONBLOCK (Windows,
+// declarations, since darkmem-reconcile.mjs and darkmem-pull.mjs import them
+// across their import cycles with this module. Without O_NOFOLLOW or O_NONBLOCK (Windows,
 // which has no FIFOs) a link is refused by lstat before the read, which
 // leaves a window between the two. fs.constants cannot be stubbed, so a test
 // passes a copy without them as `constants`.
 export function readRegular(file, { follow = false } = {}, constants = fs.constants) {
   if (constants.O_NOFOLLOW === undefined || constants.O_NONBLOCK === undefined) {
-    if (!follow && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw Object.assign(new Error(`${file} is a symbolic link`), { code: "ELOOP" });
+    if (!follow && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw Object.assign(new Error(`${file} is a symbolic link`), { code: "ELOOP", syscall: "lstat" });
     return fs.readFileSync(file);
   }
   let fd;
@@ -38,12 +39,12 @@ export function readRegular(file, { follow = false } = {}, constants = fs.consta
     fd = fs.openSync(file, constants.O_RDONLY | constants.O_NONBLOCK | (follow ? 0 : constants.O_NOFOLLOW));
   } catch (error) {
     // A socket cannot be opened for reading: open(2) fails with ENXIO.
-    if (error.code === "ENXIO") throw Object.assign(new Error(`${file} is not a regular file`), { code: "EFTYPE" });
+    if (error.code === "ENXIO") throw Object.assign(new Error(`${file} is not a regular file`), { code: "EFTYPE", syscall: "open" });
     throw error;
   }
   try {
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile()) throw Object.assign(new Error(`${file} is not a regular file`), { code: stat.isDirectory() ? "EISDIR" : "EFTYPE" });
+    if (!stat.isFile()) throw Object.assign(new Error(`${file} is not a regular file`), { code: stat.isDirectory() ? "EISDIR" : "EFTYPE", syscall: "fstat" });
     return fs.readFileSync(fd);
   } finally {
     fs.closeSync(fd);
