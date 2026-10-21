@@ -406,6 +406,8 @@ check "plan_locate: applied mirror wins over leftover checkout" \
   "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
 check "plan_locate: absolute checkout path follows applied mirror" \
   "$(cd "$SR" && HOME=$SH plan_locate "$SR/docs/dforge/plans/mp.md")" "$M/dforge/plans/mp.md"
+check "plan_locate: an absolute plan outside cwd keeps its store context" \
+  "$(cd "$TMP" && HOME=$SH plan_locate "$SR/docs/dforge/plans/mp.md")" "$M/dforge/plans/mp.md"
 mv "$M/dforge/plans/mp.md" "$M/dforge/plans/mp.saved"
 check "plan_locate: missing mirror does not revive stale checkout" \
   "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"

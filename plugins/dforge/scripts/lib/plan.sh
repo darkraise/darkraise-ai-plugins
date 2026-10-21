@@ -339,10 +339,11 @@ _plan_ctx() {
 # plan_locate PLAN — prefer the applied document store, then an existing
 # checkout file; a missing mirror copy never falls back to stale local docs.
 plan_locate() {
-  local found name
-  dforge_stores_init "$(_plan_ctx "$1")"
-  name=$(dforge_name "$1")
-  found=$(dforge_resolve "$name")
+  local found name ctx
+  ctx=$(_plan_ctx "$1")
+  dforge_stores_init "$ctx"
+  name=$(dforge_name "$1" "$ctx")
+  found=$(dforge_resolve "$name" "$ctx")
   if [ "$_DFORGE_DOCS_STORE" = darkmem ]; then
     case $(dforge_name_key "$name") in
       docs/dforge/*)
