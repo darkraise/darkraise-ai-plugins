@@ -154,6 +154,19 @@ export function writesGitText(command: string): boolean {
   return /\bgit\b[^\n|;&]*\bcommit\b/.test(command) || /\bgh\s+pr\s+(create|edit)\b/.test(command)
 }
 
+/** The files a commit or pull request command takes its text from (`git commit -F`, `gh pr create --body-file`); stdin's `-` is the command's own text. */
+export function gitTextFiles(command: string): string[] {
+  const files: string[] = []
+  for (const part of command.split(/[;&|\n]+/)) {
+    if (!writesGitText(part)) continue
+    for (const match of part.matchAll(/(?:^|\s)(?:-F[ \t]*|--(?:body-)?file(?:=|[ \t]+))("[^"]*"|'[^']*'|[^\s"';&|]+)/g)) {
+      const file = (match[1] ?? '').replace(/^(["'])(.*)\1$/, '$2')
+      if (file !== '' && file !== '-') files.push(file)
+    }
+  }
+  return files
+}
+
 /** Whether a tool by this name writes a pull request or commits files. */
 export function isGitWriteTool(tool: string): boolean {
   return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)

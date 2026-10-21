@@ -10,6 +10,7 @@ import {
   autoRunFor,
   isAbsolutePath,
   isDforge,
+  gitTextFiles,
   isPlanTail,
   attributionIn,
   bar,
@@ -622,6 +623,26 @@ describe('attribution guard', () => {
     expect(clean.deny).toBeUndefined()
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /✗ Bash: Claude-Session/ })).toBeDefined()
+  })
+
+  test('names the files a commit or pull request takes its text from', () => {
+    expect(gitTextFiles('git commit -F msg.txt && git push')).toEqual(['msg.txt'])
+    expect(gitTextFiles('git -C repo commit --file="/tmp/a b.txt"; gh pr create --body-file body.md -t x')).toEqual(['/tmp/a b.txt', 'body.md'])
+    expect(gitTextFiles('git commit -F - <<EOF\nx\nEOF')).toEqual([])
+    expect(gitTextFiles('grep -F needle file && git commit -m x')).toEqual([])
+  })
+
+  test('refuses a commit whose message file carries a trailer', async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/shop/web/msg.txt': { text: 'fix: tidy\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' },
+      '/tmp/clean.md': { text: 'A clean body.' },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    const dirty = await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
+    expect(dirty.deny).toBe('dforge: this project keeps AI attribution out of git. Remove "Co-Authored-By: Claude <noreply@anthropic.com>" and try again.')
+    const clean = await $.tool.call({ tool: 'Bash', command: 'gh pr create --title x --body-file /tmp/clean.md' })
+    expect(clean.deny).toBeUndefined()
   })
 
   test('is off when configured off', async ($, on) => {

@@ -44,6 +44,8 @@ import {
   isAtLeast,
   isGitWriteTool,
   isDforge,
+  gitTextFiles,
+  isAbsolutePath,
   isPlanTail,
   isServiceCommand,
   kTokens,
@@ -669,7 +671,7 @@ export const register: Register = on => {
   // only point its context grows between turns.
   on('tool.call', async ($, e, next) => {
     const tool = String(e.tool)
-    const line = (await live($)).guardAttribution ? attributionLine(tool, e) : undefined
+    const line = (await live($)).guardAttribution ? await attributionLine($, tool, e) : undefined
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
       await update($, refusals, list => [...list, refusal].slice(-20))
@@ -3714,10 +3716,22 @@ function planWindow(items: readonly CockpitPlanItem[], size: number): CockpitPla
   return items.slice(start, start + size)
 }
 
-function attributionLine(tool: string, e: object): string | undefined {
+async function attributionLine($: EngineInterface, tool: string, e: object): Promise<string | undefined> {
   if (tool === 'Bash') {
     const command = String((e as { command?: unknown }).command ?? '')
-    return writesGitText(command) ? attributionIn(command) : undefined
+    if (!writesGitText(command)) return undefined
+    const inline = attributionIn(command)
+    if (inline !== undefined) return inline
+    // A relative file is read from the session's directory: a cd earlier in
+    // the command is not followed, and a file that cannot be read passes.
+    const cwd = await $.session.cwd().catch(() => null)
+    for (const file of gitTextFiles(command)) {
+      const path = isAbsolutePath(file) || cwd === null ? file : `${cwd.replace(/[\\/]+$/, '')}/${file}`
+      const text = await $.fs.read(path).catch(() => null)
+      const line = text === null ? undefined : attributionIn(String(text))
+      if (line !== undefined) return line
+    }
+    return undefined
   }
   return isGitWriteTool(tool) ? attributionIn(JSON.stringify(e)) : undefined
 }
