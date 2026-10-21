@@ -8,9 +8,9 @@
 
 # plan.sh brings roots.sh, and the plan and ledger readers ar_enter_final uses.
 . "$(dirname "${BASH_SOURCE[0]}")/plan.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/lock.sh"
 
 AR_STALE_MINUTES=60
-AR_LOCK_TENTHS=100
 AR_RESUME_CAP=3
 AR_FAILURE_CAP=2
 AR_STALL_CAP=3
@@ -58,48 +58,20 @@ ar_bound() {
 
 # ar_update FILTER [jq options…] — apply a jq filter to the state atomically.
 # Concurrent updates (a Stop auto press beside a ruling add) queue instead of
-# each reading the file the other is about to replace.
+# each reading the file the other is about to replace. The binding is checked
+# again under the lock: a caller that saw the run bound before it waited may
+# find it stopped, replaced or rebound to another session.
 ar_update() {
   local path
   path=$(ar_path) || return 1
-  ar_locked "$path" ar_write "$path" "$@"
-}
-
-# ar_locked PATH COMMAND [ARGS…] — run COMMAND holding the state file's lock:
-# flock where there is one, else the lock directory.
-ar_locked() {
-  local path=$1 status
-  shift
-  if command -v "${DFORGE_FLOCK:-flock}" >/dev/null 2>&1; then
-    (
-      "${DFORGE_FLOCK:-flock}" -w 10 9 || exit 1
-      "$@"
-    ) 9>>"$path.lock"
-    return
-  fi
-  ar_lock_dir "$path.lockd" || return 1
-  "$@"
-  status=$?
-  rmdir "$path.lockd" 2>/dev/null
-  return $status
-}
-
-# ar_lock_dir DIR — mkdir as the lock where flock is missing (macOS, some Git
-# Bash builds). A write holds it for milliseconds, so a lock still held after
-# AR_LOCK_TENTHS tenths of a second belongs to a process that died: take it.
-ar_lock_dir() {
-  local i
-  for ((i = 0; i < AR_LOCK_TENTHS; i++)); do
-    mkdir "$1" 2>/dev/null && return 0
-    sleep 0.1
-  done
-  rmdir "$1" 2>/dev/null
-  mkdir "$1" 2>/dev/null
+  dr_locked "$path" ar_write "$path" "$@"
 }
 
 ar_write() { # ar_write PATH FILTER [jq options…]
   local path=$1 filter=$2 tmp
   shift 2
+  ar_jq -e --arg s "${AR_SESSION:-}" '.active == true and .session == $s' < "$path" >/dev/null 2>&1 \
+    || { echo "auto-run: no auto run is bound to this session" >&2; return 3; }
   tmp=$(mktemp "$path.XXXXXX") || return 1
   if ar_jq "$@" "$filter" < "$path" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
     mv -f "$tmp" "$path"
@@ -228,7 +200,7 @@ ar_start() {
   dforge_self_ignore "$(dirname "$path")"
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
-  ar_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
+  dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
     --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),

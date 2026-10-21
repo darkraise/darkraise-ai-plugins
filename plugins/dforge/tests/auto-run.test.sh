@@ -286,6 +286,23 @@ mkdir "$STATE.lockd"
 DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
 check "no flock: a lock its holder left behind is taken after the wait" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
+# A held lock is taken over only from an owner that provably exited: a live
+# but slow holder keeps it, and the waiter gives up rather than writing.
+sleep 30 & live_holder=$!
+mkdir "$STATE.lockd" && printf '%s\n' "$live_holder" > "$STATE.lockd/pid" && uname -n > "$STATE.lockd/host"
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a live holder' 2>/dev/null; status=$?
+check "no flock: a live holder's lock is never taken" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
+kill "$live_holder"; wait "$live_holder" 2>/dev/null
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a dead holder'; status=$?
+check "no flock: a dead holder's lock is taken" "$status:$(jq -r '.rulings | length' "$STATE")" "0:1"
+check "no flock: and released after" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
+
+# The binding is checked again under the lock, so a caller that passed the
+# first check before the run moved to another session changes nothing.
+ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+( cd "$REPO" && . "$HERE/../scripts/lib/context.sh" && . "$HERE/../scripts/lib/auto-run.sh" && AR_SESSION=s-1 ar_stop 'from s-1' ) 2>/dev/null
+status=$?
+check "an update for a session the run left is refused" "$status:$(field active):$(field session)" "3:true:s-2"
 
 # --- a start writes under the same lock as an update ---
 # The holder reads the state, keeps the lock two seconds, then writes back what
