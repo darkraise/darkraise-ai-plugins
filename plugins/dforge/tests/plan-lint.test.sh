@@ -743,6 +743,10 @@ write_plan "next: Two" "**Items:** \`r#1\`, \`r2#1\`"
 OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 lacks "plan-lint: qualified citations cover both rows" "$OUT" "register row"
 lacks "plan-lint: qualified citations are held" "$OUT" "**Items:** cites"
+write_plan "next: Two" "**Items:** r.md#1, r2.md#1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+lacks "plan-lint: a citation spelled with the .md suffix covers its row" "$OUT" "register row"
+lacks "plan-lint: a citation spelled with the .md suffix is held" "$OUT" "**Items:** cites"
 write_plan "next: Two" "**Items:** r2#2, r#1"
 OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 has "plan-lint: a qualified citation of a missing row is an error" "$OUT" \

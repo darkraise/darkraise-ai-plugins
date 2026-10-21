@@ -152,6 +152,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
         while (match(line, /[A-Za-z0-9._-]*[A-Za-z._-][A-Za-z0-9._-]*#[0-9]+/)) {
           q = substr(line, RSTART, RLENGTH)
           line = substr(line, 1, RSTART - 1) " " substr(line, RSTART + RLENGTH)
+          sub(/\.md#/, "#", q)
           sub(/#/, "\037", q)
           print q
         }
