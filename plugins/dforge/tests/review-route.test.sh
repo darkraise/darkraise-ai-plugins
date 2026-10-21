@@ -351,7 +351,6 @@ present "brainstorming flags a skipped round" "$BS" 'I'"'"'ll skip the self-revi
 absent "brainstorming no longer re-runs a review loop" "$BS" 're-run the spec review loop'
 
 # --- what a spec must carry -------------------------------------------------------
-SRP="$P/skills/brainstorming/references/spec-document-reviewer-prompt.md"
 present "brainstorming proposes a do-less approach" "$BS" 'Make one of them the do-less option'
 present "a spec carries an Acceptance section" "$BS" 'Every spec has an `## Acceptance` section'
 present "acceptance names what must not happen" "$BS" 'at least one thing that must not happen'
@@ -360,8 +359,8 @@ present "an unverified riskiest assumption goes first in the plan" "$BS" '`unver
 present "the spec self-review checks acceptance" "$BS" '6. **Acceptance:**'
 present "the spec self-review checks the riskiest assumption" "$BS" '7. **Riskiest assumption:**'
 present "the plan's first task verifies the spec's riskiest assumption" "$WP" 'Task 1 is that verifying step'
-present "the spec reviewer checks acceptance" "$SRP" '| Acceptance |'
-present "the spec reviewer checks the riskiest assumption" "$SRP" '| Riskiest assumption |'
+present "the live spec self-review checks acceptance ratings" "$BS" 'no rating other than `high` or `confirmed` appears'
+present "the live spec self-review requires assumption evidence" "$BS" 'section is present and names its evidence'
 
 # --- task review prose -----------------------------------------------------------
 SDD="$P/skills/subagent-driven-development/SKILL.md"

@@ -44,8 +44,8 @@ offer=$(grep -n '^\*\*Offering an auto run:\*\*$' "$BS" | cut -d: -f1)
 check "analyst: drafting sits between After the Design and the auto-run offer" \
   "$([ -n "$after" ] && [ -n "$draft" ] && [ -n "$offer" ] && [ "$after" -lt "$draft" ] && [ "$draft" -lt "$offer" ] && echo yes || echo no)" "yes"
 names "analyst: the process graph" "$BS" '"Draft acceptance\n(rate; ask below high)" -> "Offer an auto run\n(once, unless autoRun=off)";'
-names "analyst: spec reviewer checks the format" "$P/skills/brainstorming/references/spec-document-reviewer-prompt.md" \
-  'a rating other than `high` or `confirmed`'
+names "analyst: live spec self-review checks the format" "$BS" \
+  'no rating other than `high` or `confirmed` appears'
 names "analyst: plans never build on a deferred statement" "$P/skills/writing-plans/SKILL.md" \
   'A row whose Item begins `A<n>:` is a deferred acceptance statement'
 
@@ -60,8 +60,8 @@ names "critic: one change" "$CP" 'If I could change one thing, it would be'
 names "critic: checklist step" "$BS" '11. **Architecture critic** — one `dforge:judge-opus` round'
 names "critic: findings section" "$BS" 'answered in a `## Critic findings` section'
 names "critic: counts in the review request" "$BS" 'Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium'
-names "critic: spec reviewer checks answers" "$P/skills/brainstorming/references/spec-document-reviewer-prompt.md" \
-  'a Blocker or High critic finding with neither a fix nor an answer'
+names "critic: live Fable review checks answers" "$P/reference/auto-run.md" \
+  'each answer to a Blocker or High finding'
 names "critic: the process graph" "$BS" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
 
 FR="$P/reference/final-review.md"
