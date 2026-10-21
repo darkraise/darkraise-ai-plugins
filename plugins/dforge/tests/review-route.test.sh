@@ -683,6 +683,11 @@ native --plan-round 4
 check "native plan round: past the cap exits 2" "$rc" "2"
 native --task 1
 check "native: a task seat still exits 2" "$rc" "2"
+# A score with a leading zero is read as decimal, as plan_scores reads it.
+sed 's/^\*\*Evaluation:\*\* files=0,/**Evaluation:** files=08,/' "$FF/docs/native.md" > "$FF/docs/native-zero.md"
+out=$(bash "$ROUTE" "$FF/docs/native-zero.md" --plan-round 1 2>"$TMP/err"); rc=$?
+check "native plan round: a score written 08 is read as 8" "$rc:$out" \
+  "0:review-seat plan-round=1 primary=native:gpt-6-astra/high fallback=- reason=round cap=3"
 NATIVE="review-seat final-fix primary=native"
 native --final-fix zzz.txt
 check "native final-fix: no matched task is rank 5" "$out" "$NATIVE:gpt-6.1-sol/high fallback=- reason=floor"

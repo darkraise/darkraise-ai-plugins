@@ -89,7 +89,7 @@ native_shape() {
       [ -n "$ev" ] || continue
       [[ "$ev" =~ files=([0-9]+),\ spec=([0-9]+),\ coupling=([0-9]+),\ risk=([0-9]+)\; ]] \
         || die "Task $n: the Evaluation line does not parse: $ev"
-      t=$((BASH_REMATCH[1] + BASH_REMATCH[2] + BASH_REMATCH[3] + BASH_REMATCH[4]))
+      t=$((10#${BASH_REMATCH[1]} + 10#${BASH_REMATCH[2]} + 10#${BASH_REMATCH[3]} + 10#${BASH_REMATCH[4]}))
       [ "$t" -le "$max" ] || max=$t
     done < <(plan_task_text "$src" "$n" | plan_eval_lines)
   done < <(plan_tasks "$src")
