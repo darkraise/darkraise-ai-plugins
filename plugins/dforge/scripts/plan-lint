@@ -95,7 +95,7 @@ fi
 for label in Goal Spec Execution; do
   [ -n "$(header_line "$label")" ] || say ERROR header "missing **$label:** line"
 done
-header_headings=$(awk "$_PLAN_AWK"'in_fence($0) { next } /^## / { print }' <<<"$header")
+header_headings=$(awk "$_PLAN_AWK"'in_fence($0) { next } /^## / { sub(/[ \t]+$/, ""); print }' <<<"$header")
 for section in "Global Constraints" "Contracts" "Assumptions (evidence)" "Task index"; do
   grep -qxF "## $section" <<<"$header_headings" || say ERROR header "missing '## $section' section"
 done
@@ -196,9 +196,12 @@ awk "$_PLAN_AWK"'
   }
 ' "$src" >> "$findings"
 
-index_lines=$(awk '$0 == "## Task index" { on = 1; next } on && /^## / { exit } on && /^[0-9]+\. / { print }' <<<"$header" \
+index_lines=$(awk '{ h = $0; sub(/[ \t]+$/, "", h) } h == "## Task index" { on = 1; next } on && /^## / { exit } on && /^[0-9]+\. / { print }' <<<"$header" \
   | sed -E 's/^([0-9]+)\. /\1\t/')
-[ -n "$lettered" ] || [ "$index_lines" = "$tasks" ] || say ERROR header "Task index does not match the task headings (numbers and titles, in order)"
+# A missing index is already reported as a missing section.
+if [ -z "$lettered" ] && grep -qxF "## Task index" <<<"$header_headings"; then
+  [ "$index_lines" = "$tasks" ] || say ERROR header "Task index does not match the task headings (numbers and titles, in order)"
+fi
 
 # --- Execution line (R6) ---
 execution=$(header_line Execution)

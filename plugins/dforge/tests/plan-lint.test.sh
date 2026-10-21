@@ -199,6 +199,12 @@ has "malformed heading (Task N) suffix" "$out" "ERROR header: malformed task hea
 variant v5.md 's/^### Task 2: Second thing$/### task 2: Second thing/'
 lint v5.md
 has "malformed heading lowercase" "$out" "ERROR header: malformed task heading: ### task 2: Second thing"
+variant v5c.md '/^## Task index$/,/^2\. Second thing$/d'
+lint v5c.md
+check "a missing Task index is one error" "$(grep -c 'Task index' <<<"$out")" "1"
+variant v5d.md 's/^## Task index$/## Task index  /'
+lint v5d.md
+lacks "a heading with trailing blanks is still found" "$out" "Task index"
 variant v5b.md 's/^### Task 2: Second thing$/### Task 2b: Second thing/'
 lint v5b.md
 has "malformed heading with a letter after the number" "$out" "ERROR header: malformed task heading: ### Task 2b: Second thing"
