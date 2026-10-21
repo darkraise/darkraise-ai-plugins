@@ -250,6 +250,26 @@ check "an unlockable register: set and add exit 2" "$set_rc:$add_rc" "2:2"
 check "an unlockable register is left unchanged" "$(register_rows "$LR/r.md" | cut -f1,5 | tr '\t\n' ': ')" "1:open "
 check "an unlockable register leaves no lock in the working directory" "$(ls -A "$TMP/elsewhere")" ""
 
+# A lock that is held by another writer is reported as that; a flock that fails
+# for another reason is not.
+BR="$TMP/busy-repo"; git init -q "$BR"
+reg "$BR/r.md" '| 1 | A | - | - | open | - |'
+BASE=$(. "$HERE/../scripts/lib/lock.sh"; dr_lock_base "$BR/r.md")
+if command -v flock >/dev/null 2>&1; then
+  flock "$BASE.lock" sleep 3 &
+  sleep 0.5
+  out=$(DR_LOCK_TENTHS=10 bash "$REG" set "$BR/r.md" 1 done 2>&1); rc=$?
+  wait
+  check "a busy lock: exit 1" "$rc" "1"
+  check "a busy lock: says another process holds it" "$(grep -c 'is locked by another process' <<<"$out")" "1"
+fi
+printf '#!/bin/sh\nexit 64\n' > "$TMP/broken-flock"; chmod +x "$TMP/broken-flock"
+out=$(DFORGE_FLOCK="$TMP/broken-flock" bash "$REG" set "$BR/r.md" 1 done 2>&1); rc=$?
+check "a flock that fails: exit 1" "$rc" "1"
+check "a flock that fails: is not called a busy lock" "$(grep -c 'locked by another process' <<<"$out")" "0"
+check "a flock that fails: names the failure" "$(grep -c 'cannot lock .*flock exited 64' <<<"$out")" "1"
+check "a flock that fails: leaves the register unchanged" "$(register_rows "$BR/r.md" | cut -f5)" "open"
+
 # --- the repository's own registers ---
 # They are load-bearing for three scripts and two skills, so one that stopped
 # parsing would otherwise go unnoticed.

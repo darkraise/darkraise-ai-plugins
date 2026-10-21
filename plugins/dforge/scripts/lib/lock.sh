@@ -105,13 +105,21 @@ dr_lock_base() {
 
 # dr_locked BASE COMMAND [ARGS…] — run COMMAND in a subshell holding BASE's
 # lock: flock on BASE.lock, else the directory BASE.lockd. Returns COMMAND's
-# status, or 1 when the lock is not had within DR_LOCK_TENTHS tenths.
+# status, or 1 when the lock is not had within DR_LOCK_TENTHS tenths or flock
+# fails for another reason; the message says which.
 dr_locked() {
   local base="$1" status i claimed=0
   shift
   if command -v "${DFORGE_FLOCK:-flock}" >/dev/null 2>&1; then
     (
-      "${DFORGE_FLOCK:-flock}" -w $(( (DR_LOCK_TENTHS + 9) / 10 )) 9 || { echo "dforge: $base is locked by another process" >&2; exit 1; }
+      # 75 is no code flock itself uses, so only a timeout reads as a busy lock.
+      "${DFORGE_FLOCK:-flock}" -w $(( (DR_LOCK_TENTHS + 9) / 10 )) -E 75 9
+      status=$?
+      case $status in
+        0) ;;
+        75) echo "dforge: $base is locked by another process" >&2; exit 1 ;;
+        *) echo "dforge: cannot lock $base (flock exited $status)" >&2; exit 1 ;;
+      esac
       "$@"
     ) 9>>"$base.lock"
     return
