@@ -3073,6 +3073,22 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
   })
 
+  test("reads the ledger after a call naming it, not after one whose content does", async ($, on) => {
+    const files = runFiles(LEDGER) ?? {}
+    const reads: string[] = []
+    world(on, { ...SIGNED_IN, files, isPaneShut: true })
+    signedIn(on, files, reads)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    const stats = () => reads.filter(path => path.endsWith('/progress.md')).length
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.mtimeMs = 2_100_000
+    const before = stats()
+    await $.tool.call({ tool: 'Write', file_path: '/home/me/notes.md', content: 'see .dforge/sdd/p/progress.md' } as never)
+    expect(stats()).toBe(before)
+    await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/.dforge/sdd/p/progress.md', old_string: 'a', new_string: 'b' } as never)
+    expect(stats()).toBe(before + 1)
+  })
+
   test('picks up a ledger change within one poll tick', async ($, on) => {
     const files = runFiles(LEDGER) ?? {}
     const clock = world(on, { ...SIGNED_IN, files })

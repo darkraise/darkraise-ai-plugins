@@ -708,7 +708,7 @@ export const register: Register = on => {
       await trackAutoRun($)
       // The controller writes its ledger with its own tool calls; read it
       // before the budget, which measures a plan's tail by it.
-      if (/\.dforge|finish-choice/.test(JSON.stringify(e))) await readRun($)
+      if (touchesRun(e)) await readRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
     }
 
@@ -3743,6 +3743,15 @@ function cacheShare(seat: CockpitSeat): number {
 // The round of the task in flight, as the ledger writes it ("2/5"), for the Run card's head.
 function runRound(summary: CockpitRun): string | null {
   return summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null
+}
+
+// Whether a call's command or file names a .dforge path or finish-choice, as a ledger write or the finish choice does.
+function touchesRun(e: object): boolean {
+  const args = e as Record<string, unknown>
+  return ['command', 'file_path', 'notebook_path', 'path'].some(key => {
+    const value = args[key]
+    return typeof value === 'string' && /\.dforge|finish-choice/.test(value)
+  })
 }
 
 // What a call asks permission for, in a line: the command, the file, or the URL.
