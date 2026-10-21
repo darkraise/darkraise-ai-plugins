@@ -8,18 +8,7 @@ turn_refs() {
   common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
   top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 1
   printf '%s\n%s\n' "$common" "$top"
-  # %(worktreepath) needs git 2.23; older git reads the same from worktree list.
-  { git -C "$1" for-each-ref --format='%(objectname)%09%(worktreepath)' refs/heads 2>/dev/null ||
-    awk -v OFS='\t' '
-      FILENAME == ARGV[1] {
-        sub(/\r$/, "")
-        if ($0 ~ /^worktree /) wt = substr($0, 10)
-        else if ($0 ~ /^branch /) held[substr($0, 8)] = wt
-        next
-      }
-      { split($0, f, "\t"); print f[1], held[f[2]] }
-    ' <(git -C "$1" worktree list --porcelain 2>/dev/null) \
-      <(git -C "$1" for-each-ref --format='%(objectname)%09%(refname)' refs/heads 2>/dev/null); } | sort -u
+  git -C "$1" for-each-ref --format='%(objectname)%09%(worktreepath)' refs/heads 2>/dev/null | sort -u
 }
 
 # turn_refs_moved WAS NOW TOP… — whether a branch moved between two turn_refs

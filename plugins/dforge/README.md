@@ -362,7 +362,9 @@ action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
-**Bash, jq, Git, and GNU timeout/coreutils.** These are requirements of the external executor lane:
+**Bash, jq, Git, and GNU timeout/coreutils.** The scripts need Git 2.31 or
+later: they ask `git rev-parse` for `--path-format=absolute`. The rest are
+requirements of the external executor lane:
 `scripts/detect-executors.sh` builds every field with `jq`, and
 `scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a
 message naming the dependency rather than degrading, because a missing `jq`

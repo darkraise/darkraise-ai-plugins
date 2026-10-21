@@ -391,20 +391,8 @@ sleep 1; prompt s-4 "$outside"
 check "unplanned: a prompt outside git records no heads" \
   "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"
 
-# --- turn_refs on a git without %(worktreepath), and a stamp from before it ---
+# --- a stamp written before the worktree column ---
 . "$HERE/../scripts/lib/turn-refs.sh"
-OLDGIT="$TMP/oldgit"; mkdir -p "$OLDGIT"
-REALGIT=$(command -v git)
-cat > "$OLDGIT/git" <<SHIM
-#!/bin/sh
-case "\$*" in *worktreepath*) echo "fatal: unknown field name: worktreepath" >&2; exit 128 ;; esac
-exec "$REALGIT" "\$@"
-SHIM
-chmod +x "$OLDGIT/git"
-check "turn_refs: a git without worktreepath names the same worktrees" \
-  "$(PATH="$OLDGIT:$PATH" turn_refs "$REPO")" "$(turn_refs "$REPO")"
-check "turn_refs: the fallback still names a worktree" \
-  "$(PATH="$OLDGIT:$PATH" turn_refs "$REPO" | grep -cF "$TMP/elsewhere")" "1"
 STAMPED="$TMP/stamped"; git init -q "$STAMPED"; commit_in "$STAMPED" first
 was=$(printf '%s\n%s\n' "$(git -C "$STAMPED" rev-parse --path-format=absolute --git-common-dir)" "$(git -C "$STAMPED" rev-parse HEAD)")
 turn_refs_moved "$was" "$(turn_refs "$STAMPED")" "$STAMPED"
