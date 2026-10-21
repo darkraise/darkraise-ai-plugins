@@ -1010,13 +1010,14 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
 // Commands that start something meant to run until stopped: a dev server, a
 // watcher, a followed log.
 const SERVICES = [
-  /^(npm|pnpm|yarn|bun)( run)? (dev|start|serve|preview|watch)(:|\s|$)/,
+  /^(npm|pnpm|yarn|bun)( run)? (dev|start|serve|preview|watch)(:(?!build\b)|\s|$)/,
   /^((npx|bunx|pnpm exec) )?(vite(?! build)(\s|$)|next (dev|start)|nuxt dev|astro dev|webpack serve|ng serve|nodemon)/,
   /^python3? -m http\.server/,
   /^(uvicorn|flask run|rails (s|server))(\s|$)/,
   /^docker(-| )compose up(?!.*\s(-d|--detach)(\s|$))/,
   /^tail -[fF](\s|$)/,
-  /\s--watch(=|\s|$)/,
+  /^cargo watch(\s|$)/,
+  /\s--watch(All)?(=|\s|$)/,
 ]
 
 /** Whether a background command, by its first line, starts a service that never ends on its own. */

@@ -2370,9 +2370,9 @@ describe('now row', () => {
   })
 
   test('tells a service from a job that ends', () => {
-    for (const command of ['npm run dev', 'pnpm dev', 'yarn start', 'npm run dev:api', 'vite --port 3000', 'npx next dev', 'python3 -m http.server 8000', 'docker compose up', 'tail -f app.log', 'jest --watch', 'cd web && npm run dev', 'PORT=3000 npm start'])
+    for (const command of ['npm run dev', 'pnpm dev', 'yarn start', 'npm run dev:api', 'vite --port 3000', 'npx next dev', 'python3 -m http.server 8000', 'docker compose up', 'tail -f app.log', 'jest --watch', 'jest --watchAll', 'cargo watch -x run', 'cd web && npm run dev', 'PORT=3000 npm start'])
       expect(isServiceCommand(command)).toBe(true)
-    for (const command of ['npm test', 'npm run build', 'vite build', 'vitest', 'docker compose up -d', 'node codex-companion.mjs review', 'echo "npm run dev"', 'make\nnpm run dev'])
+    for (const command of ['npm test', 'npm run build', 'vite build', 'vitest', 'docker compose up -d', 'npm run start:build', 'node codex-companion.mjs review', 'echo "npm run dev"', 'make\nnpm run dev'])
       expect(isServiceCommand(command)).toBe(false)
   })
 
