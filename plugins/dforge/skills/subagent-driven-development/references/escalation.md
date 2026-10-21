@@ -153,3 +153,10 @@ session's model and effort and nothing in the output would reveal it.
   reached Fable precisely by exhausting those Opus rungs; re-dispatching one of
   them would re-run an agent that already failed. Write `Task <N>: BLOCKED`
   with the reason instead.
+- **A substitute that is itself unavailable.** A model found unavailable stays
+  unavailable for the session, so never substitute onto it again: `impl-opus-low`
+  to `impl-sonnet-low` and back to its successor `impl-opus-low` would loop.
+  Walk the substitute's escalation successors past every agent on a model
+  already found unavailable. When the walk reaches `SPLIT` or an agent already
+  tried for this dispatch, write
+  `Task <N>: BLOCKED — no available implementer — <the models found unavailable>`.

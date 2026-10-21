@@ -128,6 +128,7 @@ present "escalation names the inline exit" "$ESC" '## Escalating out of inline m
 present "escalation walks from the higher rung" "$ESC" 'dispatch its successor on the'
 present "escalation gives the worked example" "$ESC" '`impl-opus-high`, not `impl-opus-low`'
 present "escalation names the session rung" "$ESC" '`impl-<model>-<effort>` (`haiku` as `impl-haiku`)'
+present "an unavailable substitute ends in BLOCKED, not a loop" "$ESC" '`Task <N>: BLOCKED — no available implementer — <the models found unavailable>`'
 present "inline fix rounds record their outcome" "$INLINE" "passing | still failing"
 absent "inline no longer marks the switch on a fix-round line" "$INLINE" "escalated inline -> subagent)"
 
