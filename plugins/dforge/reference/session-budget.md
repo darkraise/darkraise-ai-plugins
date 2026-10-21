@@ -84,7 +84,8 @@ apply the count rule on Codex and the phase stops everywhere.
 
 `scripts/task-brief` and `scripts/review-package` print it as their last line,
 so checking before every task and every review costs no extra request.
-`scripts/context-size` prints it on demand (exit 0 ok, 5 handoff, 3 unknown);
+`scripts/context-size` prints it on demand (exit 0 ok, 5 handoff, 6 compact
+in an auto run, 3 unknown);
 `scripts/repo-audit` includes it. Only the verdict matters: a high percentage
 under `ok` is not a reason to stop.
 
