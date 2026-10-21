@@ -2436,6 +2436,16 @@ describe('band lines', () => {
     expect(whole(bottomRule('? for shortcuts', 0))).toBe('')
     expect(whole(bottomRule('? for shortcuts', 1))).toBe('╰')
     expect(whole(bottomRule(null, 1))).toBe('╰')
+    expect(whole(bottomRule('? for shortcuts', 2))).toBe('╰╯')
+    for (let width = 0; width <= 12; width += 1) expect(cellWidth(whole(bottomRule('? for shortcuts', width)))).toBe(width)
+  })
+
+  test('sets a label into the bottom rule only from ten cells, where four are left for it', () => {
+    const whole = (rule: { lead: string; label: string; tail: string }) => rule.lead + rule.label + rule.tail
+    expect(bottomRule('? for shortcuts', 9)).toEqual({ lead: '╰───────╯', label: '', tail: '' })
+    expect(bottomRule('? for shortcuts', 10)).toEqual({ lead: '╰─ ', label: '? f…', tail: ' ─╯' })
+    expect(whole(bottomRule('?', 10))).toBe('╰─ ? ────╯')
+    expect(whole(bottomRule('? for shortcuts', 3))).toBe('╰─╯')
   })
 
   test('sets a label into the bottom rule, cut to fit', () => {
