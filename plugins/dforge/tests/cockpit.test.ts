@@ -21,6 +21,7 @@ import {
   cellWidth,
   collapsedFrom,
   collapsedToggled,
+  denseLabel,
   denseLine,
   duration,
   elapsed,
@@ -2537,6 +2538,13 @@ describe('dense rows', () => {
     expect(flat(denseLine('repo', INPUT) ?? [])).toBe('⎇    main ↑2 · ~3 changed · ?1')
     expect(denseLine('guard', INPUT)).toBeNull()
     expect(flat(denseLine('guard', { ...INPUT, refused: 2 }) ?? [])).toBe('grd  ✗ 2 refused')
+  })
+
+  test('pad each label to five cells, whatever cells its characters take', () => {
+    for (const section of ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo'] as const) expect(cellWidth(denseLine(section, INPUT)?.[0]?.text ?? '')).toBe(5)
+    expect(denseLabel('中').text).toBe('中   ')
+    expect(denseLabel('e\u0301').text).toBe('e\u0301    ')
+    expect(denseLabel('agents').text).toBe('agents')
   })
 
   test('leave out the Remote label with no remote to name', () => {

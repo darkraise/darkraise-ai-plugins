@@ -952,8 +952,8 @@ export type DenseInput = {
 }
 
 /** A dense row's label, padded to five cells so the rows line up. */
-function denseLabel(label: string, color?: string): Run {
-  return { text: label.padEnd(5), color, dim: color === undefined }
+export function denseLabel(label: string, color?: string): Run {
+  return { text: label + ' '.repeat(Math.max(0, 5 - cellWidth(label))), color, dim: color === undefined }
 }
 
 /** One dense pane row for a section, or null when the section has nothing to show. */
