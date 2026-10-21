@@ -123,5 +123,10 @@ check "the stub probe can answer logged out" \
   "$(printf '{"op":"auth","cwd":"."}' | STUB_PROBE=logged-out node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed')" "false"
 check "the stub probe can fail without an authed field" \
   "$(printf '{"op":"auth","cwd":"."}' | STUB_PROBE=throw node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed // "absent"')" "absent"
+# The runner returns one client-result object; no prose may send a reader to a
+# streamed --json event that the wrapper no longer writes.
+check "no prose describes the retired --json error stream" \
+  "$(grep -lF -e '`--json` stream into a `## Codex error`' -e 'events on its `--json` stream' "$HERE/../README.md" "$HERE/../reference/executor-lane.md" | tr '\n' ' ')" ""
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

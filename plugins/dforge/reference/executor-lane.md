@@ -283,13 +283,13 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Any failure a second time | `HANDBACK` |
 
-**Read `## Codex error` in the report, not `<report>.stderr`.** Codex reports API
-failures - quota, rate limit, auth, 5xx - as events on its `--json` stream, which
-is stdout, so they land in `<report>.jsonl` and never in `<report>.stderr`. The
-wrapper lifts the first such event into that section for you. stderr holds the
-CLI's own complaints instead - a rejected flag, a missing directory - which are
-the failures that produce no error event at all, and the report still tails it
-underneath.
+**Read `## Codex error` in the report, not `<report>.stderr`.** The Codex
+client classifies a failed turn - quota, refusal, timeout, a plugin fault - in
+the one result object it returns, which the wrapper keeps as `<report>.jsonl`.
+The wrapper copies that object's `reason`, `refusal=true`, `quota=true`,
+`timedOut=true` and `stderr` text into that section for you.
+`<report>.stderr` holds only the client process's own complaints, and the
+report still tails it underneath.
 
 `status` alone cannot tell you which failure you have, because it is forced to
 `BLOCKED` on any non-zero exit. Two other fields separate the cases:

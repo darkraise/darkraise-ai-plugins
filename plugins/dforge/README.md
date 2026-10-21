@@ -1168,12 +1168,14 @@ review, `codex-review-schema.json` for the Codex task seats, and
   one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
   no status line - either a refusal before launch or a git failure after the run,
   which the dispatching skill tells the controller apart and recovers from
-  differently. The status line also carries Codex's own `exit=` code and a
-  `note=timed-out` marker, and the report lifts Codex's error text out of the
-  `--json` stream into a `## Codex error` section. All three exist because
-  `status` is forced to `BLOCKED` on any non-zero exit, so on its own it cannot
-  separate a parse failure, a timeout, and a model that gave up - and the error
-  text is on stdout, where a controller reading `<report>.stderr` never finds it.
+  differently. The status line also carries the wrapper's normalized `exit=`
+  code for the turn (0 when the client reports `ok`, 1 when it does not, 124 on
+  a deadline) and a `note=timed-out` marker, and the report copies the client
+  result's `reason`, `refusal`, `quota`, `timedOut` and `stderr` fields into a
+  `## Codex error` section; the whole client result is kept as `<report>.jsonl`.
+  All three exist because `status` is forced to `BLOCKED` on any non-zero exit,
+  so on its own it cannot separate a parse failure, a timeout, and a model that
+  gave up.
 - `codex-report-schema.json` is the `--output-schema` the wrapper passes, and
   the shape of the verdict it parses back.
 - `codex-task-contract.md` is appended to every prompt the wrapper sends,
