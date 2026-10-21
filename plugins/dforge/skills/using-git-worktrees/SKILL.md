@@ -105,17 +105,24 @@ cd "$path"
 
 ## Step 2: Project Setup
 
-A plan's `**Worktree setup:**` command, or the setup the repository's README or
-`CLAUDE.md` names, wins over detection. Otherwise detect from the lockfile,
-which names the tool the project actually uses; a manifest alone does not:
+A plan's `**Worktree setup:**` command, or the setup the repository's README,
+`CLAUDE.md` or `AGENTS.md` names, wins over detection. Otherwise detect from
+the lockfile, which names the tool the project actually uses; a manifest alone
+does not:
 
 - Node: `packageManager` in `package.json` (such as `pnpm@9.12.0`) names the
   tool and its version, and wins over the lockfile. Use the declared npm,
-  pnpm, Yarn or Bun at that version, and never create a second lockfile.
+  pnpm, Yarn or Bun at that version, and never create a second lockfile. A
+  pinned pnpm or Yarn is supplied by Corepack, so run `corepack enable` first
+  (`npm install -g corepack` when the Node install lacks it).
 
 ```bash
 # Node.js
-if [ -f pnpm-lock.yaml ]; then pnpm install
+pm=$(sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([a-z]*\)@.*/\1/p' package.json 2>/dev/null)
+if [ -n "$pm" ]; then
+  case "$pm" in pnpm|yarn) corepack enable ;; esac
+  "$pm" install
+elif [ -f pnpm-lock.yaml ]; then pnpm install
 elif [ -f yarn.lock ]; then yarn install
 elif [ -f bun.lock ] || [ -f bun.lockb ]; then bun install
 elif [ -f package.json ]; then npm install; fi
