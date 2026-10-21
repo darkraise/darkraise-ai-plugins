@@ -684,7 +684,8 @@ test("a mirror synced with another server or project is refused, not read as rem
   fs.writeFileSync(config, JSON.stringify(switched));
   const result = await s.pull();
   assert.equal(result.code, 2, result.stdout + result.stderr);
-  assert.match(result.stderr, /\.sync-state\.json was synced with project proj at http:\/\/127\.0\.0\.1:\d+, not project proj at http:\/\/127\.0\.0\.1:\d+; map the repository back, or move it aside/);
+  assert.match(result.stderr, /\.sync-state\.json was synced with project proj at http:\/\/127\.0\.0\.1:\d+, not project proj at http:\/\/127\.0\.0\.1:\d+; map the repository back, or keep unpushed edits by turning darkmem off/);
+  assert.doesNotMatch(result.stderr, /move it aside/);
   assert.equal(read(path.join(s.docsRoot, "specs", "a.md")), "# A\n");
   assert.equal(other.db.requests.length, 0);
   fs.writeFileSync(config, JSON.stringify(mapping));

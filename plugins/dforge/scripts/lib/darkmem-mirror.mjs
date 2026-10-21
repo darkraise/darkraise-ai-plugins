@@ -261,7 +261,7 @@ export function checkRemote(file, state, url, project) {
     return;
   }
   if (state.remote.url !== url || state.remote.project !== project) {
-    throw new StateError(`${file} was synced with project ${state.remote.project} at ${state.remote.url}, not project ${project} at ${url}; map the repository back, or ${REBUILD}`);
+    throw new StateError(`${file} was synced with project ${state.remote.project} at ${state.remote.url}, not project ${project} at ${url}; map the repository back, or keep unpushed edits by turning darkmem off (dforge-config set darkmemEnabled false), letting the next session start with no plan in progress move the files home, then turning it back on`);
   }
 }
 
