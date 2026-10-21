@@ -494,9 +494,21 @@ export function bottomRule(label: string | null, width: number): { lead: string;
   return { lead: '╰─ ', label: shown, tail: ` ${'─'.repeat(Math.max(1, width - 5 - [...shown].length))}╯` }
 }
 
+// A terminal draws a combining mark, a joiner or a variation selector in no
+// cell of its own, and an emoji or an East Asian wide or fullwidth character in two.
+const ZERO_CELLS = /[\p{Mn}\p{Me}\u200b-\u200f\ufe00-\ufe0f]/u
+const TWO_CELLS = /[\p{Emoji_Presentation}\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u
+
+/** The terminal cells a text takes. */
+export function cellWidth(text: string): number {
+  let cells = 0
+  for (const char of text) cells += ZERO_CELLS.test(char) ? 0 : TWO_CELLS.test(char) ? 2 : 1
+  return cells
+}
+
 /** The cells a row of runs takes. */
 export function runsWidth(runs: readonly Run[]): number {
-  return runs.reduce((sum, run) => sum + [...run.text].length, 0)
+  return runs.reduce((sum, run) => sum + cellWidth(run.text), 0)
 }
 
 /** A row cut to `width` cells, ending in an ellipsis when anything was cut. */
@@ -505,13 +517,19 @@ export function runsCut(runs: readonly Run[], width: number): Run[] {
   const out: Run[] = []
   let left = Math.max(0, width - 1)
   for (const run of runs) {
-    const chars = [...run.text]
-    if (chars.length <= left) {
+    const cells = cellWidth(run.text)
+    if (cells <= left) {
       out.push(run)
-      left -= chars.length
+      left -= cells
       continue
     }
-    if (left > 0) out.push({ ...run, text: chars.slice(0, left).join('') })
+    let text = ''
+    for (const char of run.text) {
+      if (cellWidth(char) > left) break
+      text += char
+      left -= cellWidth(char)
+    }
+    if (text !== '') out.push({ ...run, text })
     break
   }
   if (width > 0) out.push({ text: '…', dim: true })

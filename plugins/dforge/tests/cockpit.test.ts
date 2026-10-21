@@ -48,6 +48,7 @@ import {
   resumeOfferOf,
   runList,
   runsWidth,
+  runsCut,
   sectionsToggled,
   sparkline,
   stackedRuns,
@@ -2261,6 +2262,11 @@ describe('band lines', () => {
     const [one, two] = bandLines(input, 0)
     expect(text(one)).toBe('ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 2h0m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h')
     expect(text(two)).toBe('● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
+  })
+
+  test('measures and cuts a row by terminal cells', () => {
+    expect(runsWidth([{ text: '⏳ approve? ' }, { text: 'e\u0301' }])).toBe(13)
+    expect(runsCut([{ text: 'ok ' }, { text: '日本語のブランチ' }], 8)).toEqual([{ text: 'ok ' }, { text: '日本' }, { text: '…', dim: true }])
   })
 
   test('steps each line down until it fits, never naming a command', () => {
