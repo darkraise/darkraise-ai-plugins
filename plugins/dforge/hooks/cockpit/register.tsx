@@ -2932,10 +2932,14 @@ async function readRun($: EngineInterface) {
     }
     // A ledger counts once this session works on it, or when it is the one
     // the session started next to.
-    if (newest === null || (!(await read($, isPlanSession)) && isOlder)) return clear()
+    if (newest === null || (!(await read($, isPlanSession)) && isOlder)) {
+      S.runKey = ''
+      return clear()
+    }
     const planStat = S.runPlan === null ? null : await $.fs.stat(S.runPlan).catch(() => null)
     const runKey = `${newest.path}:${newest.at}:${planStat?.mtimeMs ?? ''}`
-    if (runKey === S.runKey && (await read($, run)) !== null) return
+    // The key stays set while the card shows its run, or a run set aside as history.
+    if (runKey === S.runKey) return
     const ledger = parseLedger(String(await $.fs.read(newest.path)))
     let titles: { n: number; title: string }[] = []
     let planPath: string | null = null

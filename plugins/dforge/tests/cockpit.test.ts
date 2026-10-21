@@ -3055,6 +3055,22 @@ describe('run card', () => {
     expect(ledgerReads()).toBe(before)
   })
 
+  test('reads a finished ledger from before the session once', async ($, on) => {
+    const files = runFiles(`${LEDGER}\nFinal review: clean (commits a..b)`) ?? {}
+    const reads: string[] = []
+    const clock = world(on, { ...SIGNED_IN, files, startedAt: 3_000_000 })
+    signedIn(on, files, reads)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    await clock.advance(4_000)
+    const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
+    const before = ledgerReads()
+    await clock.advance(10_000)
+    expect(ledgerReads()).toBe(before)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
+  })
+
   test('picks up a ledger change within one poll tick', async ($, on) => {
     const files = runFiles(LEDGER) ?? {}
     const clock = world(on, { ...SIGNED_IN, files })
