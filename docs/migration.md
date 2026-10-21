@@ -14,6 +14,42 @@ registration, add the new root, and reinstall the selected supported plugins.
 Preserve plugin data when uninstalling; do not assume that removing a
 marketplace keeps its installations.
 
+## From the previous public catalog
+
+The catalog's previous public release listed `dr-superpowers`, `dr-cockpit`,
+`dcc-darkraise-ui`, `dcc-darkraise-win32ui` and `dr-status`. The first four
+are replaced; `dr-status` keeps its name.
+
+| Installed | Install instead |
+|---|---|
+| `dr-superpowers`, `dr-cockpit` | `dforge` |
+| `dcc-darkraise-ui` | `darkraise-ui` |
+| `dcc-darkraise-win32ui` | `darkraise-win32ui` |
+
+1. Refresh the marketplace registration (see above), so the new names are
+   listed.
+2. Install `dforge` and start one session before you uninstall the old
+   plugins: that first session imports `dr-cockpit`'s options and its Discord
+   webhook and mention, once. Then uninstall both:
+
+       /plugin install dforge@darkraise
+       /plugin uninstall dr-superpowers@darkraise
+       /plugin uninstall dr-cockpit@darkraise
+
+   On Codex: `codex plugin add dforge@darkraise`, then
+   `codex plugin remove dr-superpowers@darkraise`.
+3. In each repository that used `dr-superpowers`, run `/dforge:migrate` (on
+   Codex, ask for the `dforge:migrate` skill). It moves the old directories
+   and the home to their dforge names in one step.
+4. Rename any `DR_SUPERPOWERS_*` variable a shell profile sets to its
+   `DFORGE_*` name. The document-store and progress-source variables have
+   none: set `documentStore` and `progressSource` with `dforge-config`.
+5. Install `darkraise-ui` and `darkraise-win32ui` in place of the `dcc-`
+   plugins, which have the same skills, then uninstall the old ones.
+
+The dr-forge releases described next never reached the public catalog; skip
+them.
+
 ## Replaced plugins
 
 Disable the old Claude `dcc-statusline` and `dcc-superpower-companions` plugins
