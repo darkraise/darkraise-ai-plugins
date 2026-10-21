@@ -451,7 +451,7 @@ its task, and the paths it needs, with the findings copied verbatim. Run
 [ruling-prompt.md](../subagent-driven-development/references/ruling-prompt.md),
 expanding its placeholders. On any exit 2, dispatch
 `dforge:judge-opus` and say why, quoting its message - except on a
-Codex host, where `review-route` exits 2 on every `Host: codex` plan and the
+Codex host, where `review-route --ruling` exits 2 on every `Host: codex` plan and the
 seat is the native judge named in Select the host first.
 
 **Carry out each verdict**, and copy its `Ruling:` line into the ledger

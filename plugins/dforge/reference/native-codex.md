@@ -160,11 +160,24 @@ names the execution tier at its highest weighted routing score. `scripts/plan-li
 warns on any other pair and errors on an inline pair below that score. Design
 handoffs from `scripts/next-step` launch Sol high as well.
 
-`scripts/review-route` exits 2 on every `Host: codex` plan by design: seats come
-from this file, not from the Claude roster. The task reviewer, the ruling seat
-and the final-review seat are all native judges at rank 8 (Astra high) or above,
-dispatched as Dispatch and review below describes. An exit 2 is never a reason
-to fall back to a Claude agent name.
+`scripts/review-route` exits 2 for a task, a ruling or the final review on
+every `Host: codex` plan by design: seats come from this file, not from the
+Claude roster. The task reviewer, the ruling seat and the final-review seat are
+all native judges at rank 8 (Astra high) or above, dispatched as Dispatch and
+review below describes. An exit 2 is never a reason to fall back to a Claude
+agent name. Two routes do answer on a Codex plan, printing the seat as
+`primary=native:<model>/<effort>`:
+
+- `--plan-round <r>` prints the judge floor's pair and `cap=`, from each
+  task's raw total (files+spec+coupling+risk, 0-6) under Claude's bands, never
+  from the weighted routing score.
+- `--final-fix <file> ...` prints the highest native rank the ledger recorded
+  for the tasks whose `**Files:**` blocks name those paths (an escalation
+  counts, and an `inline` implementer counts as the Execution pair), raised to
+  rank 5 (`gpt-6.1-sol / high`) and capped at rank 9 (`gpt-6-astra / xhigh`).
+  Append `Final fix: implementer codex <model> / <effort> (assigned; base <sha7>)`
+  and dispatch that exact pair when it is advertised and allowed; otherwise
+  ask your human partner, as an unavailable pin does.
 
 Sessions end on the count rule rather than on a budget verdict: hand off after
 every 3 completed tasks, or after any task that needed 3 or more fix rounds. The

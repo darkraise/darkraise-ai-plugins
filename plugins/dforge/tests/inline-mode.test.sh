@@ -201,7 +201,7 @@ present "subagent mode links the delegated loop" "$SDD" "../../reference/delegat
 present "subagent mode defers per-task recovery" "$SDD" 'Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery'
 
 # A Codex host reaches both documents by the same paths a Claude host does, and
-# `review-route` exits 2 on every `Host: codex` plan. Each place that reads an
+# `review-route` exits 2 for task and ruling seats on every `Host: codex` plan. Each place that reads an
 # exit 2 must name the native judge there, not a Claude agent that host has no
 # way to dispatch.
 NC="$P/reference/native-codex.md"
@@ -212,8 +212,10 @@ present "the delegated loop handles a reply with no status" "$DT"   '**No status
 present "a reply with no status is never DONE" "$DT"   'A reply without a status is not DONE'
 present "no-status continuations are bounded" "$DT"   'After two continuations with no status'
 present "a lost agent id means a fresh dispatch" "$DT"   'dispatch the same agent fresh with the brief path'
-present "inline mode routes a Codex host's exit 2" "$INLINE"   'Codex host, where `review-route` exits 2 on every'
-present "native Codex claims the exit 2" "$NC"   '`scripts/review-route` exits 2 on every `Host: codex` plan by design'
+present "inline mode routes a Codex host's exit 2" "$INLINE"   'Codex host, where `review-route --ruling` exits 2 on every'
+present "native Codex claims the exit 2" "$NC"   '`scripts/review-route` exits 2 for a task, a ruling or the final review on'
+present "native Codex routes the plan-review cap" "$NC"   'task'"'"'s raw total (files+spec+coupling+risk, 0-6) under Claude'"'"'s bands'
+present "native Codex routes the final fix" "$NC"   'rank 5 (`gpt-6.1-sol / high`) and capped at rank 9 (`gpt-6-astra / xhigh`)'
 present "native Codex states plans carry no delegated task" "$NC"   'A Codex plan therefore carries no delegated task'
 # The budget line exists on Codex now, and carries no verdict. Four documents
 # said it did not exist at all.

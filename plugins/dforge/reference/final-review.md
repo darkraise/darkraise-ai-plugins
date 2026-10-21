@@ -242,7 +242,8 @@ the Execution line's rung), raised to `impl-sonnet-high` and capped at
 `impl-opus-high`; no matched task gives `reason=floor`. Append
 `Final fix: implementer <agent> (assigned; base <sha7>)` to the ledger, then
 dispatch the printed `primary` as `subagent_type`, with no `model` or `effort`
-argument.
+argument. On a Codex-host plan it prints `primary=native:<model>/<effort>`,
+which [native-codex.md](native-codex.md) says how to record and dispatch.
 
 Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the

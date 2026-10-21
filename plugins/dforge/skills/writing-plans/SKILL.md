@@ -528,11 +528,14 @@ A revision your human partner asks for gets one new round.
    keeps an off answer for the session, so add `--refresh` when Codex may have
    come back since then, such as after a login. Every seat
    scores executability, coherence, coverage and assumptions (1-20) against
-   [plan-review.md](../../criteria/plan-review.md) and lists findings. If
-   `review-route` exits 2 naming `native-codex.md`, the plan is a Codex-host
-   plan: dispatch the native judge the prompt's `[JUDGE]` placeholder
-   describes. On any other exit 2, review with `dforge:judge-opus`
-   and say why, quoting its message.
+   [plan-review.md](../../criteria/plan-review.md) and lists findings. On
+   exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native
+   judge at Astra high or above) and say why, quoting its message.
+   - **`primary=native:<model>/<effort>`** (every round of a Codex-host plan).
+     Dispatch a native judge at that pair or above
+     ([native-codex.md](../../reference/native-codex.md)): the full-plan
+     template in round 1, the Later rounds template after it, saving each
+     reply to `<workspace>/plan-review-round-<r>.md`. No Codex CLI round runs.
    - **`primary=codex:plan`** (round 1). Write the prompt its Round 1 on Codex
      section describes to `<workspace>/plan-review-prompt.md`, then run, as a
      background Bash call with `timeout` = (row bound + 120) × 1000 ms, 5520000
@@ -567,7 +570,8 @@ A revision your human partner asks for gets one new round.
    Minor findings are advisory. Run the next round only when a round returned
    a Critical finding or any score of 8 or below, and only while the round is
    below the `cap=` that `review-route` printed: 1 when the plan's highest
-   task total is 3 or less, 2 for 4 or 5, 3 for 6. A delta round replaces a
+   task total is 3 or less, 2 for 4 or 5, 3 for 6 (on a Codex-host plan, the
+   raw total, not the weighted routing score). A delta round replaces a
    fresh full review. At the cap, a Critical finding earns exactly one more
    delta round (`reason=cap-critical`), scoped to its fix, which earns no
    other. Any Critical finding still open after it, and any score of 8 or

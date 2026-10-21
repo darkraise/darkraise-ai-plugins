@@ -310,7 +310,9 @@ present "writing-plans re-rounds only on Critical or a low score" "$WP" 'Run the
 present "writing-plans gives a Critical at the cap one more round" "$WP" 'earns exactly one more'
 present "writing-plans states the heavy-majority rule" "$WP" '`subagent` when more than half the tasks are heavy'
 present "writing-plans raises a delegating inline effort" "$WP" 'raised to `high` when any task is'
-present "writing-plans falls back to Opus on exit 2" "$WP" 'On any other exit 2, review with `dforge:judge-opus`'
+present "writing-plans falls back to Opus on exit 2" "$WP" 'exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native'
+present "writing-plans dispatches the native plan-review seat" "$WP" '**`primary=native:<model>/<effort>`** (every round of a Codex-host plan)'
+present "final review records the native fix seat" "$P/reference/final-review.md" 'On a Codex-host plan it prints `primary=native:<model>/<effort>`'
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
 present "using-dforge states the mixed-mode rule" "$P/skills/using-dforge/SKILL.md" 'an inline plan delegates those'
 present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
@@ -605,6 +607,95 @@ check "final-fix: a file amended away no longer matches" "$out" "$FIXSEAT:impl-s
 rm -f "$FF/.dforge/sdd/plan/amendments.md"
 fix
 check "final-fix: no file exits 2" "$rc" "2"
+
+# --- a Codex-host plan: the plan-review cap and the final fix wave ---
+# The cap reads the raw total (Task 2: raw 5, weighted 7), so it is 2, not 3.
+mkdir -p "$FF/.dforge/sdd/native"
+sed 's/^|//' > "$FF/docs/native.md" <<'EOF'
+|# Native Fixture
+|
+|**Host:** codex
+|**Routing policy:** codex-v4
+|**Execution:** inline — codex gpt-6.1-sol / xhigh — x
+|
+|### Task 1: low
+|
+|**Files:**
+|- Modify: `a.txt`
+|
+|**Implementer:** codex gpt-6-luna / high
+|**Evaluation:** files=0, spec=1, coupling=0, risk=0; weighted routing score=1
+|**Assignment source:** rubric
+|
+|### Task 2: weighted above raw
+|
+|**Files:**
+|- Modify: `b.txt`
+|
+|**Implementer:** codex gpt-6-astra / medium
+|**Evaluation:** files=1, spec=1, coupling=1, risk=2; weighted routing score=7
+|**Assignment source:** rubric
+|
+|### Task 3: escalated
+|
+|**Files:**
+|- Modify: `c.txt`
+|
+|**Implementer:** codex gpt-6.1-sol / high
+|**Evaluation:** files=1, spec=1, coupling=1, risk=1; weighted routing score=5
+|**Assignment source:** rubric
+|
+|### Task 4: reserve
+|
+|**Files:**
+|- Modify: `d.txt`
+|
+|**Implementer:** codex gpt-6-astra / max
+|**Evaluation:** files=1, spec=1, coupling=1, risk=1; weighted routing score=5
+|**Assignment source:** human
+|
+|### Task 5: inline
+|
+|**Files:**
+|- Modify: `e.txt`
+|
+|**Implementer:** codex gpt-6-luna / low
+|**Evaluation:** files=0, spec=0, coupling=0, risk=0; weighted routing score=0
+|**Assignment source:** rubric
+EOF
+sed 's/^|//' > "$FF/.dforge/sdd/native/progress.md" <<'EOF'
+|# SDD ledger — plan: docs/native.md
+|Task 3: implementer codex gpt-6.1-sol / high (assigned; base aaaaaaa)
+|Task 3: fix round 4/5 (1 addressed, 1 open — x; commits aaaaaaa..bbbbbbb; escalated gpt-6.1-sol / high -> gpt-6-astra / high)
+|Task 3: complete (commits aaaaaaa..ccccccc, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat codex gpt-6-astra/xhigh) — done: x
+|Task 5: implementer inline (assigned; base ddddddd)
+EOF
+native() { out=$(bash "$ROUTE" "$FF/docs/native.md" "$@" 2>"$TMP/err"); rc=$?; }
+native --plan-round 1
+check "native plan round: the raw total sets the cap, at the judge floor" "$out" \
+  "review-seat plan-round=1 primary=native:gpt-6-astra/high fallback=- reason=round cap=2"
+native --plan-round 3
+check "native plan round: one cap-critical round" "$out" \
+  "review-seat plan-round=3 primary=native:gpt-6-astra/high fallback=- reason=cap-critical cap=2"
+native --plan-round 4
+check "native plan round: past the cap exits 2" "$rc" "2"
+native --task 1
+check "native: a task seat still exits 2" "$rc" "2"
+NATIVE="review-seat final-fix primary=native"
+native --final-fix zzz.txt
+check "native final-fix: no matched task is rank 5" "$out" "$NATIVE:gpt-6.1-sol/high fallback=- reason=floor"
+native --final-fix a.txt
+check "native final-fix: a low rank is raised to rank 5" "$out" "$NATIVE:gpt-6.1-sol/high fallback=- reason=tasks:1"
+native --final-fix b.txt
+check "native final-fix: the plan's pair without a ledger line" "$out" "$NATIVE:gpt-6-astra/medium fallback=- reason=tasks:2"
+native --final-fix c.txt
+check "native final-fix: the escalation counts, the review seat does not" "$out" "$NATIVE:gpt-6-astra/high fallback=- reason=tasks:3"
+native --final-fix d.txt
+check "native final-fix: a reserve pair is capped at rank 9" "$out" "$NATIVE:gpt-6-astra/xhigh fallback=- reason=tasks:4"
+native --final-fix e.txt
+check "native final-fix: an inline implementer is the Execution pair" "$out" "$NATIVE:gpt-6.1-sol/xhigh fallback=- reason=tasks:5"
+native --final-fix a.txt b.txt c.txt
+check "native final-fix: the highest of the matched tasks" "$out" "$NATIVE:gpt-6-astra/high fallback=- reason=tasks:1,2,3"
 
 # --- README, version and program amendment -------------------------------------
 RD="$P/README.md"

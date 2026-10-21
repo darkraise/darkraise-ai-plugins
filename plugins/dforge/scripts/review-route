@@ -18,8 +18,11 @@
 # ID is a task number, or a task number and part letter for a split task (7B).
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
 #         (a plan round appends cap=<n>)
-# Exit: 0 routed; 2 usage error, missing task, unparseable Evaluation, or a
-# Codex-host plan.
+# A Host: codex plan routes only --plan-round and --final-fix, to a native seat
+# printed as primary=native:<model>/<effort>; its other seats come from
+# reference/native-codex.md.
+# Exit: 0 routed; 2 usage error, missing task, unparseable Evaluation, or any
+# other route on a Codex-host plan.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -28,6 +31,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 SONNET=dforge:judge-sonnet-high
 OPUS=dforge:judge-opus
+ROUTING="$HERE/../reference/codex-routing.json"
 SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
@@ -47,7 +51,9 @@ plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/
 # Captured, not piped: grep -q exits at its first match, and under pipefail the
 # writer's SIGPIPE would decide the if, not the match.
 header=$(plan_header "$src")
-if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
+native=0
+grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && native=1
+if [ "$native" -eq 1 ] && [ "$1" != --plan-round ] && [ "$1" != --final-fix ]; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 
@@ -64,7 +70,46 @@ plan_shape() {
     [ "$t" -le "$max" ] || max=$t
     if [ "$r" -ge 3 ] || [ "$t" -ge 6 ]; then intricate=1; fi
   done < <(plan_scores "$src")
-  if [ "$max" -ge 6 ]; then cap=3; elif [ "$max" -ge 4 ]; then cap=2; fi
+  cap_for "$max"
+}
+
+cap_for() { # cap_for MAX — cap from the highest task total
+  cap=1
+  if [ "$1" -ge 6 ]; then cap=3; elif [ "$1" -ge 4 ]; then cap=2; fi
+}
+
+# native_shape — sets cap as plan_shape does, from each task's raw total
+# (files+spec+coupling+risk, still 0-6), never the weighted routing score: the
+# bands were drawn for the raw total.
+native_shape() {
+  local n _title ev max=-1 t
+  while IFS=$'\t' read -r n _title; do
+    [ -n "$n" ] || continue
+    while IFS= read -r ev; do
+      [ -n "$ev" ] || continue
+      [[ "$ev" =~ files=([0-9]+),\ spec=([0-9]+),\ coupling=([0-9]+),\ risk=([0-9]+)\; ]] \
+        || die "Task $n: the Evaluation line does not parse: $ev"
+      t=$((BASH_REMATCH[1] + BASH_REMATCH[2] + BASH_REMATCH[3] + BASH_REMATCH[4]))
+      [ "$t" -le "$max" ] || max=$t
+    done < <(plan_task_text "$src" "$n" | plan_eval_lines)
+  done < <(plan_tasks "$src")
+  cap_for "$max"
+}
+
+# native_rank MODEL EFFORT — the pair's execution rank in codex-routing.json,
+# 10 (above every execution rank) for a reserve pair, nothing for any other.
+native_rank() {
+  jq -r --arg m "$1" --arg e "$2" '
+    [.execution[] | select(.model == $m and .effort == $e) | .rank][0]
+    // (if any(.reserve[]; .model == $m and .effort == $e) then 10 else empty end)' "$ROUTING" | tr -d '\r'
+}
+
+native_pair() { # native_pair RANK — model/effort of an execution rank
+  jq -r --argjson r "$1" '.execution[] | select(.rank == $r) | "\(.model)/\(.effort)"' "$ROUTING" | tr -d '\r'
+}
+
+pairs_in() { # pairs_in TEXT — "model effort" for every native pair TEXT names
+  grep -oE 'gpt-[a-z0-9.-]+ ?/ ?[a-z]+' <<<"$1" | sed -E 's# ?/ ?# #'
 }
 
 # agent_rank AGENT — reference/ladder.md §Why this terminates: model_rank * 10 +
@@ -118,12 +163,30 @@ task_agents() {
   plan_task_text "$src" "$1" | sed -nE 's/^\*\*Implementer:\*\*[ \t]*`?([^` \t]+)`?.*/\1/p' | sed 's/^.*://'
 }
 
+# matched_tasks FILE... — the tasks whose Files blocks name one of FILE, comma
+# separated.
+matched_tasks() {
+  local n _title files file hit tasks=""
+  while IFS=$'\t' read -r n _title; do
+    [ -n "$n" ] || continue
+    files=$(task_files "$n")
+    hit=0
+    for file in "$@"; do
+      file=${file#./}
+      [[ "$file" =~ ^(.+):[0-9][0-9,-]*$ ]] && file=${BASH_REMATCH[1]}
+      if grep -qxF -- "$file" <<<"$files"; then hit=1; break; fi
+    done
+    [ "$hit" -eq 0 ] || tasks="${tasks:+$tasks,}$n"
+  done < <(plan_tasks "$src")
+  printf '%s\n' "$tasks"
+}
+
 # final_fix FILE... — the fix wave takes the highest tier among the tasks whose
 # Files blocks name the findings' paths, between impl-sonnet-high and
 # impl-opus-high: the wave has no second wave and no escalation, so its tier
 # follows the work it touches.
 final_fix() {
-  local execution m e rung="" n _title agents agent rank best=-1 tasks="" files file hit
+  local execution m e rung="" n agents agent rank best=-1 tasks
   local models=(haiku sonnet opus fable) efforts=(low medium high xhigh max)
   ledger=$(plan_ledger "$plan")
   execution=$(plan_header_line "$src" Execution)
@@ -136,24 +199,15 @@ final_fix() {
       *fable*) rung=impl-fable-$e ;;
     esac
   fi
-  while IFS=$'\t' read -r n _title; do
-    [ -n "$n" ] || continue
-    files=$(task_files "$n")
-    hit=0
-    for file in "$@"; do
-      file=${file#./}
-      [[ "$file" =~ ^(.+):[0-9][0-9,-]*$ ]] && file=${BASH_REMATCH[1]}
-      if grep -qxF -- "$file" <<<"$files"; then hit=1; break; fi
-    done
-    [ "$hit" -eq 1 ] || continue
-    tasks="${tasks:+$tasks,}$n"
+  tasks=$(matched_tasks "$@")
+  for n in ${tasks//,/ }; do
     agents=$(task_agents "$n")
     while IFS= read -r agent; do
       [ "$agent" != inline ] || agent=$rung
       rank=$(agent_rank "$agent")
       [ -z "$rank" ] || [ "$rank" -le "$best" ] || best=$rank
     done <<<"$agents"
-  done < <(plan_tasks "$src")
+  done
   if [ -z "$tasks" ]; then
     printf 'review-seat final-fix primary=dforge:impl-sonnet-high fallback=- reason=floor\n'
     return
@@ -164,13 +218,59 @@ final_fix() {
     "impl-${models[best / 10]}-${efforts[best % 10]}" "$tasks"
 }
 
+# native_task_pairs N — "model effort" for every native pair the ledger assigned
+# task N: its implementer lines, escalations and handbacks, an inline implementer
+# being the Execution line's pair. Without one, the task's **Implementer:** pairs.
+native_task_pairs() {
+  local lines="" segs
+  [ -z "$ledger" ] || lines=$(tr -d '\r' < "$ledger" | awk -v p="Task $1: " 'index($0, p) == 1')
+  # Only assignments: a complete line's seat clause names the reviewer's pair.
+  segs=$(grep -oE ': implementer [^(]*\(assigned|escalated [^;)]*|HANDBACK to [^;)]*' <<<"$lines")
+  if grep -qF ': implementer inline (assigned' <<<"$segs"; then
+    segs+=$'\n'$(plan_header_line "$src" Execution)
+  fi
+  [ -n "$(pairs_in "$segs")" ] || segs=$(plan_task_text "$src" "$1" | plan_lines Implementer)
+  pairs_in "$segs"
+}
+
+# final_fix_native FILE... — final_fix for a Host: codex plan: the highest native
+# rank the ledger recorded among the matched tasks, between rank 5 (gpt-6.1-sol
+# high, Acceptance QA's native seat and the impl-sonnet-high row) and the top
+# execution rank. A reserve pair is capped there, as impl-opus-high caps one.
+final_fix_native() {
+  local tasks n m e rank best=-1 floor=5 top
+  ledger=$(plan_ledger "$plan")
+  top=$(jq '[.execution[].rank] | max' "$ROUTING" | tr -d '\r')
+  tasks=$(matched_tasks "$@")
+  if [ -z "$tasks" ]; then
+    printf 'review-seat final-fix primary=native:%s fallback=- reason=floor\n' "$(native_pair "$floor")"
+    return
+  fi
+  for n in ${tasks//,/ }; do
+    while read -r m e; do
+      [ -n "$m" ] || continue
+      rank=$(native_rank "$m" "$e")
+      [ -z "$rank" ] || [ "$rank" -le "$best" ] || best=$rank
+    done < <(native_task_pairs "$n")
+  done
+  [ "$best" -ge "$floor" ] || best=$floor
+  [ "$best" -le "$top" ] || best=$top
+  printf 'review-seat final-fix primary=native:%s fallback=- reason=tasks:%s\n' "$(native_pair "$best")" "$tasks"
+}
+
 case "$1" in
   --plan-round)
     [ $# -eq 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
-    plan_shape
     r=$2 claude=$OPUS
+    if [ "$native" -eq 1 ]; then native_shape; else plan_shape; fi
     if [ "$r" -gt $((cap + 1)) ]; then
       die "plan round $r is past the cap ($cap) and its one cap-critical round"
+    elif [ "$native" -eq 1 ]; then
+      # Every round takes the judge floor's pair; there is no external Codex round.
+      judge=native:$(native_pair "$(jq '.role_floors.judge' "$ROUTING" | tr -d '\r')")
+      reason=round
+      [ "$r" -le "$cap" ] || reason=cap-critical
+      printf 'review-seat plan-round=%s primary=%s fallback=- reason=%s cap=%s\n' "$r" "$judge" "$reason" "$cap"
     elif [ "$r" -eq 1 ] && executor_session_on codex review; then
       printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round cap=%s\n' "$claude" "$cap"
     elif [ "$r" -eq 1 ]; then
@@ -223,7 +323,7 @@ case "$1" in
   --final-fix)
     shift
     [ $# -ge 1 ] || usage
-    final_fix "$@"
+    if [ "$native" -eq 1 ]; then final_fix_native "$@"; else final_fix "$@"; fi
     exit 0 ;;
   --task) shift; [ $# -ge 1 ] || usage ;;
   *) usage ;;

@@ -190,7 +190,7 @@ needed.
   clause records `(codex off — <reason>)` with the gate line's `reason`
   (`untrusted` when it printed `usable=true`). If `review-route` exits 2,
   review with `dforge:judge-opus` and say why, quoting its message.
-  Codex hosts are the exception: `review-route` exits 2 on every `Host: codex`
+  Codex hosts are the exception: `review-route --task` exits 2 on every `Host: codex`
   plan, and the seat is a native judge at Astra high or above
   ([native-codex.md](native-codex.md)).
 - **Lenses:** run `scripts/lens-route PLAN_FILE --task <N>`. For each `lens`

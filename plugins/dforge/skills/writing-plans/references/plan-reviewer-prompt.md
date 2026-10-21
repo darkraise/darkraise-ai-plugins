@@ -67,7 +67,7 @@ Subagent ([JUDGE]):
 **Placeholders:**
 - `[JUDGE]` - the seat that `scripts/review-route PLAN_FILE --plan-round 1`
   prints: its `primary` when Codex is off, or its `fallback` when the Codex
-  round produced nothing (`dforge:judge-opus`); no `model` or `effort` argument. On Codex, a native judge at Astra high or above.
+  round produced nothing (`dforge:judge-opus`); no `model` or `effort` argument. On Codex, a native judge at the `primary=native:<model>/<effort>` pair it prints, or above.
 - `[PLUGIN_ROOT]` - REQUIRED: the resolved dforge plugin directory.
   Expand it before sending.
 - `[PLAN_FILE]`, `[SPEC_FILE]` - REQUIRED: absolute paths.
