@@ -72,12 +72,12 @@ Subagent ([JUDGE]):
 
     The implementer already ran the tests and reported results with TDD
     evidence for exactly this code. Do not re-run the suite to confirm their
-    report. Run a test only when reading the code raises a specific doubt
-    that no existing run answers — and then a focused test, never a
-    package-wide suite, race detector run, or repeated/high-count loop. If
-    heavy validation seems warranted, recommend it in your report instead of
-    running it. If you cannot run commands in this environment, name the
-    test you would run.
+    report. The judge agents carry no shell: when you have none, a specific
+    doubt that no existing run answers is a finding naming the focused test
+    you would run and what it would settle. With a shell, run a test only for
+    such a doubt — and then a focused test, never a package-wide suite, race
+    detector run, or repeated/high-count loop. If heavy validation seems
+    warranted, recommend it in your report instead of running it.
 
     Warnings or other noise in the implementer's reported test output are
     findings — test output should be pristine.
