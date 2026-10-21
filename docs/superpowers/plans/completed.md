@@ -59,3 +59,4 @@ Backfilled on 2026-10-20 for plans that landed before this index began; each lin
 - 2026-09-14 `docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md` — merged into `main` at 25dea81
 - 2026-09-14 `docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md` — merged into `main` at 6d54b1e
 - 2026-10-20 `docs/superpowers/plans/2026-10-20-status-cleanup.md` — merged into `main` at a4e1062
+- 2026-10-21 `docs/superpowers/plans/2026-10-21-cockpit-live-state.md` — merged into `main` at 6ae5c60
