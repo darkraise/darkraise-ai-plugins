@@ -336,14 +336,22 @@ _plan_ctx() {
   if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$PWD"; fi
 }
 
-# plan_locate PLAN — PLAN when it is a file; otherwise the file its name
-# resolves to, so docs/dforge/plans/x.md finds the mirror's copy while
-# documents live in darkmem; otherwise PLAN, for the caller's own message.
+# plan_locate PLAN — prefer the applied document store, then an existing
+# checkout file; a missing mirror copy never falls back to stale local docs.
 plan_locate() {
-  local found
-  if [ -f "$1" ]; then printf '%s\n' "$1"; return 0; fi
-  found=$(dforge_resolve "$1")
-  if [ -f "$found" ]; then printf '%s\n' "$found"; else printf '%s\n' "$1"; fi
+  local found name
+  dforge_stores_init "$(_plan_ctx "$1")"
+  name=$(dforge_name "$1")
+  found=$(dforge_resolve "$name")
+  if [ "$_DFORGE_DOCS_STORE" = darkmem ]; then
+    case $(dforge_name_key "$name") in
+      docs/dforge/*)
+        if [ -f "$found" ] || [ -f "$1" ]; then printf '%s\n' "$found"; return 0; fi ;;
+    esac
+  fi
+  if [ -f "$1" ]; then printf '%s\n' "$1"
+  elif [ -f "$found" ]; then printf '%s\n' "$found"
+  else printf '%s\n' "$1"; fi
 }
 
 # plan_ledger PLAN — the plan's ledger file when it exists and its identity line

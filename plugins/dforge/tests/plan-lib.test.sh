@@ -16,6 +16,9 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+printf '# Plan\n### Task 10x: Invalid\n### Task 11: Valid\n' > "$TMP/invalid-number.md"
+check "plan_tasks: numeric prefix is not a task number" "$(plan_tasks "$TMP/invalid-number.md" | cut -f1)" "11"
+
 # --- plan_tasks and ledger_done ---
 printf '# Plan\n\n### Task 1: First thing\n\n```bash\n### Task 9: fenced\n```\n\n## Task 2 - Second\n\n### Task 10: Tenth\n' > "$TMP/plan.md"
 check "plan_tasks: numbers outside fences" "$(plan_tasks "$TMP/plan.md" | cut -f1 | tr '\n' ' ')" "1 2 10 "
@@ -397,6 +400,17 @@ check "plan_ledger: the pre-2.0 prefix names a mirror plan" \
   "$(cd "$SR" && HOME=$SH plan_ledger "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
 check "plan_locate: a document name finds the mirror's copy" \
   "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
+mkdir -p "$SR/docs/dforge/plans"
+printf '# Stale checkout copy\n' > "$SR/docs/dforge/plans/mp.md"
+check "plan_locate: applied mirror wins over leftover checkout" \
+  "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
+check "plan_locate: absolute checkout path follows applied mirror" \
+  "$(cd "$SR" && HOME=$SH plan_locate "$SR/docs/dforge/plans/mp.md")" "$M/dforge/plans/mp.md"
+mv "$M/dforge/plans/mp.md" "$M/dforge/plans/mp.saved"
+check "plan_locate: missing mirror does not revive stale checkout" \
+  "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
+mv "$M/dforge/plans/mp.saved" "$M/dforge/plans/mp.md"
+rm "$SR/docs/dforge/plans/mp.md"
 check "plan_locate: an existing file stays" "$(cd "$REPO" && plan_locate docs/demo.md)" "docs/demo.md"
 check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/none.md)" "docs/dforge/plans/none.md"
 mkdir -p "$STOP/.dforge/sdd/mp"
