@@ -112,7 +112,7 @@ dr_replace() {
 dr_lock_base() {
   local file dir name common key
   file="$(dr_link_target "$1")" || return 1
-  dir="$(cd "$(dirname "$file")" && pwd -P)" || return 1
+  dir="$(cd -P "$(dirname "$file")" && pwd -P)" || return 1
   name="$(basename "$file")"
   if common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
     key="$(printf '%s' "$dir/$name" | git -C "$dir" hash-object --stdin)" || return 1

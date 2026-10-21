@@ -291,6 +291,13 @@ check "a symlinked register: the link survives" "$([ -L "$TMP/link.md" ] && echo
 check "a symlinked register: the target changes" "$(register_rows "$TMP/linked/real.md" | cut -f5)" "done"
 check "a symlinked register shares its target's lock" \
   "$(. "$HERE/../scripts/lib/lock.sh"; [ "$(dr_lock_base "$TMP/link.md")" = "$(dr_lock_base "$TMP/linked/real.md")" ] && echo same || echo different)" "same"
+# A link's ../ under a linked directory climbs from the directory it points to.
+mkdir -p "$TMP/up/a" "$TMP/up/b"
+ln -s "$TMP/up/b" "$TMP/up/a/d"
+reg "$TMP/up/real.md" '| 1 | A | - | - | open | - |'
+ln -s ../real.md "$TMP/up/b/x.md"
+check "a link climbing out of a linked directory shares its target's lock" \
+  "$(. "$HERE/../scripts/lib/lock.sh"; [ "$(dr_lock_base "$TMP/up/a/d/x.md")" = "$(dr_lock_base "$TMP/up/real.md")" ] && echo same || echo different)" "same"
 
 # --- the repository's own registers ---
 # They are load-bearing for three scripts and two skills, so one that stopped
