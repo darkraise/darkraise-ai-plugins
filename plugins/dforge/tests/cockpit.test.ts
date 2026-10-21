@@ -2540,6 +2540,53 @@ describe('dense rows', () => {
     expect(flat(denseLine('guard', { ...INPUT, refused: 2 }) ?? [])).toBe('grd  ✗ 2 refused')
   })
 
+  test('colour and dim each part as the row reads it', () => {
+    const run = (runs: Run[] | null, text: string) => runs?.find(one => one.text === text)
+    const account = denseLine('account', INPUT)
+    expect(run(account, 'acct ')).toMatchObject({ dim: true, color: undefined })
+    expect(run(account, 'me@example.com')).toMatchObject({ bold: true })
+    expect(run(account, 'subscription')).toMatchObject({ dim: true })
+    const context = denseLine('context', INPUT)
+    expect(run(context, '▰▰▰▰▰▰▱▱▱▱')).toMatchObject({ color: 'warning' })
+    expect(run(context, ' 61%')).toMatchObject({ color: 'warning', bold: true })
+    expect(run(context, ' 284k/465k')).toMatchObject({ dim: true })
+    expect(run(context, '≈8 turns')).toMatchObject({ dim: true, color: undefined })
+    expect(run(denseLine('shells', INPUT), '$    ')).toMatchObject({ color: 'yellow', dim: false })
+    expect(run(denseLine('shells', INPUT), '2 shells')).toMatchObject({ color: 'yellow' })
+    expect(run(denseLine('shells', INPUT), '3m')).toMatchObject({ dim: true })
+    expect(run(denseLine('agents', INPUT), 'agt  ')).toMatchObject({ color: 'cyan', dim: false })
+    expect(run(denseLine('plan', INPUT), 'plan ')).toMatchObject({ color: 'magenta', dim: false })
+    expect(run(denseLine('plan', INPUT), ' 3/5')).toMatchObject({ bold: true })
+    const repo = denseLine('repo', INPUT)
+    expect(run(repo, 'main')).toMatchObject({ color: 'magenta', bold: true })
+    expect(run(repo, '~3 changed')).toMatchObject({ color: 'yellow' })
+    expect(run(repo, '?1')).toMatchObject({ dim: true })
+    expect(run(denseLine('guard', { ...INPUT, refused: 2 }), '✗ 2 refused')).toMatchObject({ color: 'red' })
+  })
+
+  test('turn amber at three turns left, and say one turn', () => {
+    const turns = (turnsLeft: number | null) => denseLine('context', { ...INPUT, turnsLeft })?.slice(4)
+    expect(turns(4)).toEqual([{ text: ' · ', dim: true }, { text: '≈4 turns', color: undefined, dim: true }])
+    expect(turns(3)).toEqual([{ text: ' · ', dim: true }, { text: '≈3 turns', color: '#ffaf5f', dim: false }])
+    expect(turns(1)?.[1]).toEqual({ text: '≈1 turn', color: '#ffaf5f', dim: false })
+    expect(turns(null)).toEqual([])
+  })
+
+  test('name only the repo counts above zero', () => {
+    const repo = (ahead: number, behind: number, changed: number, untracked: number) => flat(denseLine('repo', { ...INPUT, repo: { branch: 'main', ahead, behind, changed, untracked } }) ?? [])
+    expect(repo(0, 0, 0, 0)).toBe('⎇    main')
+    expect(repo(0, 3, 0, 0)).toBe('⎇    main ↓3')
+    expect(repo(1, 3, 0, 2)).toBe('⎇    main ↑1 ↓3 · ?2')
+    expect(repo(0, 0, 4, 0)).toBe('⎇    main · ~4 changed')
+  })
+
+  test('draw no plan row for a plan with no tasks', () => {
+    expect(denseLine('plan', { ...INPUT, run: { done: 0, total: 0, current: null } })).toBeNull()
+    expect(denseLine('plan', { ...INPUT, run: { done: 0, total: 0, current: null }, todos: { done: 1, total: 2, current: 'Write it' } })).toBeNull()
+    expect(denseLine('plan', { ...INPUT, run: null, todos: { done: 0, total: 0, current: null } })).toBeNull()
+    expect(flat(denseLine('plan', { ...INPUT, run: { done: 2, total: 2, current: null } }) ?? [])).toBe('plan ▰▰ 2/2')
+  })
+
   test('pad each label to five cells, whatever cells its characters take', () => {
     for (const section of ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo'] as const) expect(cellWidth(denseLine(section, INPUT)?.[0]?.text ?? '')).toBe(5)
     expect(denseLabel('中').text).toBe('中   ')
