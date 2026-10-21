@@ -185,6 +185,11 @@ jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-1",transcript_path:$tp,cw
   | bash "$HERE/../scripts/session-start.sh" >/dev/null
 check "compaction keeps the running work's start time" \
   "$(cat "$HOME/.claude/dforge/sessions/turns/s-1.since")" "$before"
+# A session running past the week-long prune keeps its resume time.
+touch -d '10 days ago' "$HOME/.claude/dforge/sessions/turns/s-1.since"
+prompt s-1
+check "a live session's resume time survives the prune" \
+  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-1.since" ] && echo yes || echo no)" "yes"
 rm -f "$HOME/.claude/dforge/sessions/turns/s-1.since"
 H3="$TMP/home-no-record"
 mkdir -p "$H3"
