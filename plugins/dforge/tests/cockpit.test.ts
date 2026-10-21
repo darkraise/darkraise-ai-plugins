@@ -2648,6 +2648,36 @@ describe('shells and remote', () => {
       expect(await ui.find({ type: 'Text', text: /^○ idle/ })).toBeDefined()
     })
 
+    test('the turn the work wakes sends no second Done once the grace sent it', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
+      await $.turn.start({ text: '', turnId: 't2' })
+      await clock.advance(70_000)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 70_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
+      await $.prompt.submit({ text: 'what next?', origin: { kind: 'composer' }, wait: false } as never)
+      await $.turn.start({ text: 'what next?', turnId: 't3' })
+      await clock.advance(70_000)
+      await $.turn.complete({ answer: 'Nothing left.', durationMs: 70_000, isAborted: false, turnId: 't3', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s', '✅ Done in 1m10s'])
+    })
+
+    test('the turn the work wakes sends no second Done once the watchdog sent it', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(1_860_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 31m00s'])
+      await $.session.append(notified(ENDED))
+      await $.turn.start({ text: '', turnId: 't2' })
+      await clock.advance(70_000)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 70_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 31m00s'])
+    })
+
     test('a turn starting in the grace carries the held Done', async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)

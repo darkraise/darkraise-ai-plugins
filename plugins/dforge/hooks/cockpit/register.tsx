@@ -444,6 +444,7 @@ export const register: Register = on => {
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     S.heldDone = null
+    S.isChainSent = false
     S.poll?.cancel()
     S.poll = null
     S.isMainTurn = false
@@ -536,7 +537,10 @@ export const register: Register = on => {
   // for the last one is dropped. A wake-up keeps it, and so does an origin not
   // listed, since a Done covering more work beats a lost one.
   on('prompt.submit', async ($, e, next) => {
-    if (NEW_CHAIN_ORIGINS.has(e.origin.kind)) S.heldDone = null
+    if (NEW_CHAIN_ORIGINS.has(e.origin.kind)) {
+      S.heldDone = null
+      S.isChainSent = false
+    }
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -617,8 +621,10 @@ export const register: Register = on => {
       const why = failed ? failureOf(e) : null
       const isHeld = e.reason === 'answer' && (await holdsDone($))
       const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
-      if (e.reason !== 'answer') S.heldDone = null
-      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp }
+      if (e.reason !== 'answer') {
+        S.heldDone = null
+        S.isChainSent = false
+      } else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp }
       await readRemote($)
       await setActivity($, now => ({
         ...IDLE,
@@ -2351,6 +2357,8 @@ const S = {
   // A Done held while the main conversation's background work runs: when its
   // chain of turns began, and when a turn last ended with the work pending.
   heldDone: null as { startedAt: number; heldAt: number } | null,
+  /** The grace or the cap already sent this chain's Done: the turn its work wakes sends none. */
+  isChainSent: false,
   // Sends the held Done if no turn starts within RELEASE_GRACE_MS of the work ending.
   releaseTimer: null as Timer | null,
   // The poll's timer, whether a tick is running, how many ran, and when the slower readings last ran.
@@ -2396,14 +2404,18 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string): 
 }
 
 /**
- * Sends a turn's Done, timed from the start of the held chain when one is
- * held, else from the turn alone; one under notifyAfter sends nothing.
+ * Sends a chain's Done, timed from its start when one is held, else from the
+ * turn alone; one under notifyAfter sends nothing, and a chain whose Done went
+ * out already sends no second. Resolves whether the chain has had its Done.
  */
-async function sendDone($: EngineInterface, answer: string, durationMs: number) {
+async function sendDone($: EngineInterface, answer: string, durationMs: number): Promise<boolean> {
   const held = S.heldDone
   S.heldDone = null
+  const wasSent = S.isChainSent
+  S.isChainSent = false
+  if (wasSent) return true
   const took = held === null ? durationMs : (await $.clock.now()) - held.startedAt
-  if (took < Math.max(0, (await live($)).notifyAfter) * 1000) return
+  if (took < Math.max(0, (await live($)).notifyAfter) * 1000) return false
   const messageId = await notify($, {
     kind: 'done',
     title: `✅ Done in ${elapsed(took)}`,
@@ -2411,6 +2423,7 @@ async function sendDone($: EngineInterface, answer: string, durationMs: number) 
     fields: await turnFields($),
   })
   if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+  return true
 }
 
 /**
@@ -2445,7 +2458,7 @@ async function settleBackground($: EngineInterface) {
 
 async function releaseHeld($: EngineInterface) {
   S.releaseTimer = null
-  if (S.heldDone !== null && !S.isMainTurn) await sendDone($, '', 0)
+  if (S.heldDone !== null && !S.isMainTurn) S.isChainSent = await sendDone($, '', 0)
 }
 
 // The context, cost and plan fields most messages carry.
@@ -2787,7 +2800,7 @@ async function watchdogTick($: EngineInterface) {
   await beat($)
   if (S.heldDone !== null && !S.isMainTurn && (await $.clock.now()) - S.heldDone.heldAt > DEFER_CAP_MS) {
     if ((await read($, activity)).kind === 'background') await setActivity($, now => ({ ...now, kind: 'idle' }))
-    await sendDone($, '', 0)
+    S.isChainSent = await sendDone($, '', 0)
   }
   if (S.isTurnLive || S.autoBusy) return
   const auto = await readAutoRun($)
