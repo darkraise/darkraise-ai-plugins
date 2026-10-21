@@ -8,11 +8,13 @@
 # BLOCK_FILE heading: "## A? — Task N", "## Task N", "## A? — Header" or
 # "## Header" ("-" accepted for the dash), then "Reason:", "Cost if wrong:",
 # "### Old" and "### New", each followed by a fence of 4 or more backticks.
-# Exit: 0 appended ("amended: A<k> <target>"); 1 rejected; 2 usage.
+# Exit: 0 appended ("amended: A<k> <target>"); 1 rejected, or the lock is
+# busy; 2 usage, or the write failed.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/lock.sh"
 
 [ $# -eq 2 ] || { echo "usage: plan-amend PLAN_FILE BLOCK_FILE" >&2; exit 2; }
 plan=$(plan_locate "$1") block=$2
@@ -57,29 +59,40 @@ if grep -qE "$protected" "$TMP/new"; then
   reject "New text adds a line that cannot be amended (Spec, Execution, Parallelism, Program, Plan review, Host, Routing policy)"
 fi
 
-[ -f "$amend" ] && tr -d '\r' < "$amend" > "$TMP/before" || : > "$TMP/before"
-plan_apply_amendments "$plan" "$TMP/before" > "$TMP/current" 2>/dev/null \
-  || reject "the existing amendments no longer apply"
-if [ -n "$n" ]; then
-  plan_task_text "$TMP/current" "$n" > /dev/null || reject "no Task $n in the plan"
-fi
+# Numbering, validation and the write happen under one lock, so two
+# amendments never both take A<k> and lose one.
+publish() {
+  [ -f "$amend" ] && tr -d '\r' < "$amend" > "$TMP/before" || : > "$TMP/before"
+  plan_apply_amendments "$plan" "$TMP/before" > "$TMP/current" 2>/dev/null \
+    || reject "the existing amendments no longer apply"
+  if [ -n "$n" ]; then
+    plan_task_text "$TMP/current" "$n" > /dev/null || reject "no Task $n in the plan"
+  fi
 
-k=$(( $(sed -n 's/^## A\([0-9][0-9]*\) .*/\1/p' "$TMP/before" | sort -n | tail -n 1) + 0 + 1 ))
-{
-  cat "$TMP/before"
-  [ -s "$TMP/before" ] && echo
-  echo "## A$k — $target"
-  awk 'seen { lines[++c] = $0; if (NF) last = c } /^## / && !seen { seen = 1 }
-       END { for (i = 1; i <= last; i++) print lines[i] }' "$TMP/block"
-} > "$TMP/after"
+  k=$(( $(sed -n 's/^## A\([0-9][0-9]*\) .*/\1/p' "$TMP/before" | sort -n | tail -n 1) + 0 + 1 ))
+  {
+    cat "$TMP/before"
+    [ -s "$TMP/before" ] && echo
+    echo "## A$k — $target"
+    awk 'seen { lines[++c] = $0; if (NF) last = c } /^## / && !seen { seen = 1 }
+         END { for (i = 1; i <= last; i++) print lines[i] }' "$TMP/block"
+  } > "$TMP/after"
 
-plan_apply_amendments "$plan" "$TMP/after" > /dev/null 2>&1 \
-  || reject "Old text does not match exactly once in $target"
+  plan_apply_amendments "$plan" "$TMP/after" > /dev/null 2>&1 \
+    || reject "Old text does not match exactly once in $target"
 
-bash "$HERE/plan-lint" "$plan" --amendments "$TMP/before" --no-probe | grep '^ERROR' | sort > "$TMP/lint-before"
-bash "$HERE/plan-lint" "$plan" --amendments "$TMP/after" --no-probe | grep '^ERROR' | sort > "$TMP/lint-after"
-new_errors=$(comm -13 "$TMP/lint-before" "$TMP/lint-after")
-[ -z "$new_errors" ] || { echo "rejected: the amendment introduces lint errors:"; printf '%s\n' "$new_errors"; exit 1; }
+  bash "$HERE/plan-lint" "$plan" --amendments "$TMP/before" --no-probe | grep '^ERROR' | sort > "$TMP/lint-before"
+  bash "$HERE/plan-lint" "$plan" --amendments "$TMP/after" --no-probe | grep '^ERROR' | sort > "$TMP/lint-after"
+  new_errors=$(comm -13 "$TMP/lint-before" "$TMP/lint-after")
+  [ -z "$new_errors" ] || { echo "rejected: the amendment introduces lint errors:"; printf '%s\n' "$new_errors"; exit 1; }
 
-cp "$TMP/after" "$amend"
-echo "amended: A$k $target"
+  # A dotfile beside the target, so the rename is atomic and darkmem never
+  # syncs a half-written copy.
+  local tmp
+  tmp="$(dirname "$amend")/.$(basename "$amend").$$"
+  cp "$TMP/after" "$tmp" && mv -f "$tmp" "$amend" \
+    || { rm -f "$tmp"; echo "could not write $amend" >&2; exit 2; }
+  echo "amended: A$k $target"
+}
+base=$(dr_lock_base "$amend") || { echo "cannot lock $amend" >&2; exit 2; }
+dr_locked "$base" publish

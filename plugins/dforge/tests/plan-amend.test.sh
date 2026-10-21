@@ -190,6 +190,32 @@ run docs/inject-plan.md "$TMP/inject.md"
 check "injected Execution line: rejected" "$status" "1"
 has "injected Execution line: names the rule" "$out" "New text adds a line that cannot be amended"
 
+# Two amendments at once each get a number of their own, and neither is lost.
+cp docs/plan.md docs/race.md
+entry r1.md '## Task 1' 'Print `hello NAME`.' 'Print `hello, NAME`.'
+entry r2.md '## Task 2' 'Print `hello NAME` twice.' 'Print `hello NAME` thrice.'
+bash "$AMEND" docs/race.md r1.md > "$TMP/race1" 2>&1 &
+bash "$AMEND" docs/race.md r2.md > "$TMP/race2" 2>&1 &
+wait
+check "concurrent amendments: both numbered apart" \
+  "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
+check "concurrent amendments: both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race/amendments.md")" "2"
+
+# A write that fails is reported, never "amended".
+mkdir -p "$TMP/failcp"
+printf '#!/usr/bin/env bash
+case "$*" in *amendments.md.*) exit 1 ;; esac
+exec %s "$@"
+' "$(command -v cp)" > "$TMP/failcp/cp"
+chmod +x "$TMP/failcp/cp"
+cp "$REPO/.dforge/sdd/race/amendments.md" "$TMP/race-snapshot"
+entry r3.md '## Task 1' 'Print `hello, NAME`.' 'Print `hi NAME`.'
+out=$(PATH="$TMP/failcp:$PATH" bash "$AMEND" docs/race.md r3.md 2>&1); status=$?
+check "a failed write: exit 2" "$status" "2"
+check "a failed write: never says amended" "$(grep -c '^amended' <<<"$out")" "0"
+check "a failed write: amendments unchanged" \
+  "$(cmp -s "$REPO/.dforge/sdd/race/amendments.md" "$TMP/race-snapshot" && echo same)" "same"
+
 # A linked worktree session must not amend the primary checkout's plan: the
 # worktree's task-brief would never see the amendment.
 git add -A && git commit -qm 'test: seed' && git worktree add -q "$TMP/wt"
