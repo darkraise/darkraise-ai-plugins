@@ -466,6 +466,27 @@ rmdir "$REPO/.dforge/handoff/latest.md.tmp"
 wait
 check "handoff: concurrent writers leave one Next session block" "$(grep -c '^## Next session' "$REPO/.dforge/handoff/latest.md")" "1"
 check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dforge/handoff" | grep -cv '^latest.md$')" "0"
+# A note another writer adds to the handoff while next-step holds its copy must
+# survive: the slowed awk delivers the merged copy two seconds after it read
+# the file, and the other writer appends under the same lock meanwhile.
+REAL_AWK=$(command -v awk)
+SLOW_BIN="$TMP/slow-awk"; mkdir -p "$SLOW_BIN"
+cat > "$SLOW_BIN/awk" <<SLOW
+#!/usr/bin/env bash
+case "\$*" in
+  *'## Next session'*) "$REAL_AWK" "\$@" > "$TMP/awk-out"; touch "$TMP/awk-read"; sleep 2; cat "$TMP/awk-out" ;;
+  *) exec "$REAL_AWK" "\$@" ;;
+esac
+SLOW
+chmod +x "$SLOW_BIN/awk"
+rm -f "$TMP/awk-read"
+(cd "$REPO" && PATH="$SLOW_BIN:$PATH" bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
+for _ in $(seq 100); do [ -e "$TMP/awk-read" ] && break; sleep 0.1; done
+( . "$HERE/../scripts/lib/lock.sh"
+  dr_locked "$(dr_lock_base "$REPO/.dforge/handoff/latest.md")" bash -c 'printf "\n## Notes\nkept by the other writer\n" >> "$1"' _ "$REPO/.dforge/handoff/latest.md" )
+wait
+check "handoff: a note added during the write is kept" "$(grep -c 'kept by the other writer' "$REPO/.dforge/handoff/latest.md")" "1"
+check "handoff: and one Next session block remains" "$(grep -c '^## Next session' "$REPO/.dforge/handoff/latest.md")" "1"
 
 # --- Codex host: the launch command names the Codex client, not Claude ---
 # The session knows its host (native-codex.md identifies it from callable tool
