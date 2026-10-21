@@ -103,6 +103,7 @@ export class CodexAppServerClient {
     log(`connect disableBroker=${options?.disableBroker === true}`);
     if (mode === "connect-throws") throw new Error("spawn failed");
     if (mode === "hang") await new Promise(() => setInterval(() => {}, 1000));
+    if (mode === "slow-connect") await new Promise((resolve) => setTimeout(resolve, 1500));
     return new CodexAppServerClient();
   }
   async request(method) {
@@ -233,6 +234,11 @@ done
 fresh; PATH="$NOTIMEOUT" gate usable
 check "without timeout on PATH the probe still answers" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+# A connect that resolves after the deadline still has its client closed.
+fresh; GATE_MS=1000 gate slow-connect
+check "a connect that resolves after the deadline is a timeout" "$out" \
+  "codex-gate usable=false reason=timeout review=false lane=false resets_at=- source=probe"
+check "a connect that resolves after the deadline has its client closed" "$(grep -c '^close$' "$TMP/log")" "1"
 fresh; started=$SECONDS; GATE_MS=1500 gate close-hangs
 check "a close that never settles still answers, within its grace" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"

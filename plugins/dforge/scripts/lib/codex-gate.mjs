@@ -13,11 +13,19 @@ import { pathToFileURL } from "node:url";
 
 const [root, cwd, timeoutArg] = process.argv.slice(2);
 let client = null;
+let connecting = null;
 let settled = false;
 
 // The answer is known before the close, so a close that never settles is
 // waited on only this long: once settled, the deadline below no longer acts.
 const CLOSE_GRACE_MS = 5000;
+
+// A connect still in flight at the deadline may yet return a client, and its
+// app-server would be stranded by the exit below; wait for it, within the grace.
+async function closeClient() {
+  const connected = client ?? await connecting?.catch(() => null);
+  await connected?.close();
+}
 
 async function finish(usable, reason, resetsAtEpoch = null) {
   if (settled) return;
@@ -25,7 +33,7 @@ async function finish(usable, reason, resetsAtEpoch = null) {
   let grace = null;
   try {
     await Promise.race([
-      Promise.resolve(client?.close()),
+      closeClient(),
       new Promise((resolve) => {
         grace = setTimeout(resolve, CLOSE_GRACE_MS);
       })
@@ -41,7 +49,7 @@ async function finish(usable, reason, resetsAtEpoch = null) {
 
 // The deadline is ours, not coreutils timeout: on Windows `timeout` kills only
 // node and strands the app-server it spawned, while close() ends that tree. A
-// connect that hangs before returning a client leaves nothing to close.
+// connect that never returns a client leaves nothing to close.
 setTimeout(() => finish(false, "timeout"), Number(timeoutArg) > 0 ? Number(timeoutArg) : 30000);
 
 async function probe() {
@@ -55,7 +63,8 @@ async function probe() {
   if (typeof Client?.connect !== "function") return finish(false, "plugin-api");
 
   try {
-    client = await Client.connect(cwd, { disableBroker: true });
+    connecting = Client.connect(cwd, { disableBroker: true });
+    client = await connecting;
   } catch {
     return finish(false, "plugin-api");
   }
