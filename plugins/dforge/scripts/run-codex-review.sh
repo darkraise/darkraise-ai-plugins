@@ -149,16 +149,26 @@ if [ "$dry_run" = true ]; then
   exit 0
 fi
 
-# Valid output is defined per kind. task and plan must parse as their schema's
-# keys; final has no schema and only has to be non-empty.
+# Structured reports must satisfy the bundled schema before they can be used.
+# Final reviews are prose and only have to be non-empty.
 valid_output() {
-  case "$kind" in
-    task) jq -e 'has("spec_verdict") and has("task_quality") and has("cannot_verify")' \
-      "$out" >/dev/null 2>&1 ;;
-    plan) jq -e 'has("executability") and has("coherence") and has("coverage") and has("assumptions") and has("findings")' \
-      "$out" >/dev/null 2>&1 ;;
-    *) [ -s "$out" ] ;;
-  esac
+  [ -n "$schema" ] || { [ -s "$out" ]; return; }
+  jq -e -s --slurpfile schema "$schema" '
+    def valid($s):
+      . as $v |
+      (if $s.type == "object" then
+         type == "object" and
+         (($s.required - keys) | length == 0) and
+         (if $s.additionalProperties == false then
+            ((keys - ($s.properties | keys)) | length == 0)
+          else true end) and
+         all(to_entries[]; .key as $k | .value | valid($s.properties[$k]))
+       elif $s.type == "array" then type == "array" and all(.[]; valid($s.items))
+       elif $s.type == "integer" then type == "number" and floor == .
+       else type == $s.type end) and
+      (if $s | has("enum") then $s.enum | index($v) != null else true end);
+    length == 1 and (.[0] | valid($schema[0]))
+  ' "$out" >/dev/null 2>&1
 }
 
 # The plugin root, resolved once. scripts/codex-plugin owns the locator and the

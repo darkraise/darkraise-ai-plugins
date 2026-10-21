@@ -174,7 +174,7 @@ check "FAILED exits 1" "$rc" "1"
 out=$(STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main)
 present "no report at all is FAILED" "$out" "status=FAILED"
 
-out=$(STUB_FINAL_MESSAGE='{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}'   seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a schema-shaped risk3 report is OK" "$out" "status=OK"
 
 out=$(seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
@@ -219,6 +219,28 @@ check "both seats ran, preferred rung first"   "$(awk '/^runAppServerTurn/{print
 ' ',')"   "gpt-6-astra/high,gpt-6.1-sol/high,"
 check "no seat ever reaches a review entry point"   "$(grep -c 'runAppServerReview' "$TMP/events.log")" "0"
 
+# Malformed structured output must fail on both the preferred and fallback seats.
+valid_task='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'
+valid_plan='{"executability":18,"coherence":18,"coverage":18,"assumptions":18,"findings":[]}'
+for kind in task plan; do
+  if [ "$kind" = task ]; then valid=$valid_task; score=spec; else valid=$valid_plan; score=coverage; fi
+  for mutation in 'del(.findings)' ".${score}=0" ".${score}=21" ".${score}=1.5" ".${score}=\"18\"" '.findings={}' '.findings=[{}]' '.extra=true' 'null'; do
+    report=$(jq -c "$mutation" <<<"$valid")
+    out=$(STUB_FINAL_MESSAGE="$report" seat "$kind" --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+    present "$kind rejects $mutation" "$out" 'status=FAILED'
+    check "$kind invalid report exits 1" "$rc" 1
+  done
+  out=$(STUB_FINAL_MESSAGE="$valid $valid" seat "$kind" --out "$TMP/o.json" --prompt "$TMP/p.txt")
+  present "$kind rejects multiple reports" "$out" 'status=FAILED'
+done
+for mutation in '.spec_verdict="met"' '.task_quality=18' '.cannot_verify=[42]' '.findings=[{"severity":"bad","file":"x","line":1,"summary":"x"}]' '.findings=[{"severity":"Minor","file":"x","line":"1","summary":"x"}]'; do
+  report=$(jq -c "$mutation" <<<"$valid_task")
+  out=$(STUB_FINAL_MESSAGE="$report" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+  present "task rejects $mutation" "$out" 'status=FAILED'
+done
+out=$(STUB_REFUSE_ONCE=1 STUB_FINAL_MESSAGE='{}' seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "malformed fallback is FAILED" "$out" 'status=FAILED'
+
 # --- task and plan kinds, and the light tier ---------------------------------
 write_roster
 out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
@@ -253,9 +275,9 @@ check "an unknown tier is a usage error" "$rc" "2"
 out=$(STUB_FINAL_MESSAGE='{"executability":17,"coherence":16,"coverage":17,"assumptions":16,"findings":[]}'   seat plan --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
 present "a schema-shaped plan report is OK" "$out" "status=OK"
 check "a plan OK exits 0" "$rc" "0"
-out=$(STUB_FINAL_MESSAGE='{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}'   seat plan --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat plan --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a task-shaped report is not a plan review" "$out" "status=FAILED"
-out=$(STUB_FINAL_MESSAGE='{"spec_verdict":"met","task_quality":18,"cannot_verify":[]}'   seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a schema-shaped task report is OK" "$out" "status=OK"
 out=$(STUB_MODE=refusal seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a refused light run is FAILED" "$out" "status=FAILED"
