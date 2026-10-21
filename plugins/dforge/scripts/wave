@@ -105,9 +105,16 @@ case $cmd in
     need_commit "$2"
     [ "$(git rev-parse --absolute-git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ] \
       || die 2 "not a linked worktree; a parallel task runs in a worktree of its own"
-    git switch -q --detach "$2" || die 1 "cannot detach at $2"
-    mark=$(wave_mark) && mkdir -p "$(dirname "$mark")" && printf '%s\n' "$ref" > "$mark" \
-      || die 2 "cannot mark this worktree as Task $1's"
+    # The mark is written first: a worktree detached without one is skipped by
+    # `wave clean` without a word.
+    mark=$(wave_mark) && mkdir -p "$(dirname "$mark")" || die 2 "cannot mark this worktree as Task $1's"
+    previous=""
+    [ ! -f "$mark" ] || previous=$(cat "$mark")
+    printf '%s\n' "$ref" > "$mark" || die 2 "cannot mark this worktree as Task $1's"
+    if ! git switch -q --detach "$2"; then
+      if [ -n "$previous" ]; then printf '%s\n' "$previous" > "$mark"; else rm -f "$mark"; fi
+      die 1 "cannot detach at $2"
+    fi
     echo "entered Task $1 at $(git rev-parse --short HEAD)"
     ;;
 

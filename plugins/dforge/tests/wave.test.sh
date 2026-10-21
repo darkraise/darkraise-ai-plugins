@@ -85,6 +85,14 @@ run status "$TMP/bad.md" 1 HEAD
 check "status: waves that do not parse exit 4" "$status" "4"
 run enter docs/plan.md 2 HEAD
 check "enter: refuses the primary checkout" "$status" "2"
+# A mark that cannot be written leaves the worktree where it was, not detached
+# and unmarked, which `wave clean` would skip without a word.
+git worktree add -q -b markfail "$TMP/wt-markfail" main
+touch "$(git -C "$TMP/wt-markfail" rev-parse --absolute-git-dir)/dforge"
+out=$(cd "$TMP/wt-markfail" && bash "$WAVE" enter "$REPO/docs/plan.md" 2 "$BASE" 2>&1); status=$?
+check "enter: a mark that cannot be written exits 2" "$status" "2"
+check "enter: and the worktree is not left detached" "$(git -C "$TMP/wt-markfail" branch --show-current)" "markfail"
+git worktree remove --force "$TMP/wt-markfail" && git branch -q -D markfail
 
 # --- a task worktree, as an implementer would leave it ---
 task() { # task <N> <file> — commit <file> in a detached worktree and move the ref
