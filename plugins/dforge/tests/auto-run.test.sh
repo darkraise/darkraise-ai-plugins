@@ -292,9 +292,9 @@ check "no flock: the lock directory is gone" "$([ -e "$STATE.lockd" ] && echo le
 mkdir "$STATE.lockd"
 DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh claim' 2>/dev/null; status=$?
 check "no flock: a lock still being claimed is never taken" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
-touch -t 202001010000 "$STATE.lockd"
+touch -d "@$(( $(date +%s) - 7 ))" "$STATE.lockd"
 DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
-check "no flock: a lock its holder left behind is taken" "$status:$(field resumes)" "0:0"
+check "no flock: a lock its holder left behind is taken within the wait" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 # A held lock is taken over only from an owner that provably exited: a live
 # but slow holder keeps it, and the waiter gives up rather than writing.
