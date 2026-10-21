@@ -28,7 +28,8 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    dforge:project-status does, and stop. `verify` rows are the
    exception: they are built and wait on this audit, so continue with them.
 3. **Gates.** When `<docs>/gates.md` exists, run
-   dforge:running-gates on the integration branch. A red gate stops the
+   dforge:running-gates on the integration branch with the base `all`, so
+   every gate runs, conditional ones included. A red gate stops the
    close. Keep each gate's output; the judge cannot run anything.
 4. **Collect the rows.** Every row of the milestone register, and every row of
    each register covering an epic's spec, with its Acceptance cell. Rows

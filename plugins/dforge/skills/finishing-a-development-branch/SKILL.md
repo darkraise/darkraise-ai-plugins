@@ -238,11 +238,13 @@ cd "$MAIN_ROOT"
 # Merge first — verify success before removing anything
 git checkout <base-branch>
 git pull
+PRE_MERGE=$(git rev-parse HEAD)
 git merge <feature-branch>
 
 # Verify the merged result: gates when the project declares a manifest
-# (dforge:running-gates), otherwise the full test suite. Gates that
-# passed on the branch say nothing about the merged tree.
+# (dforge:running-gates, with $PRE_MERGE as its base), otherwise the full
+# test suite. Gates that passed on the branch say nothing about the merged
+# tree.
 <test command>
 ```
 

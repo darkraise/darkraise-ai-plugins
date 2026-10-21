@@ -56,6 +56,11 @@ present "known-flaky retries only its own failure" "$SKILL" 'matches the `Known-
 present "a non-launching gate is a manifest defect" "$SKILL" 'manifest defect'
 present "gates computes its own base" "$SKILL" 'merge-base'
 present "gates states a skip" "$SKILL" 'silent skip'
+# After a merge, merge-base is HEAD and the change set is empty; a post-merge
+# caller must name the base or every conditional gate is skipped.
+present "a merged caller names the base" "$SKILL" 'a caller that has already merged names the'
+present "finishing passes the pre-merge base" "$P/skills/finishing-a-development-branch/SKILL.md" 'PRE_MERGE=$(git rev-parse HEAD)'
+present "milestone closure runs every gate" "$P/skills/closing-a-milestone/SKILL.md" 'with the base `all`'
 
 TPL="$P/skills/running-gates/references/gates-template.md"
 check "exists: references/gates-template.md" \
