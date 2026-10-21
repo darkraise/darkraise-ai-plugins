@@ -624,7 +624,11 @@ export const register: Register = on => {
       if (e.reason !== 'answer') {
         S.heldDone = null
         S.isChainSent = false
-      } else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp }
+      } else if (isHeld) {
+        // Work held for after the chain's Done went out is new: it gets its own.
+        S.isChainSent = false
+        S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp }
+      }
       await readRemote($)
       await setActivity($, now => ({
         ...IDLE,
