@@ -101,10 +101,13 @@ If something appears during tests but you don't know which test:
 Use the bisection script `find-polluter.sh` in this directory:
 
 ```bash
-./find-polluter.sh '.git' 'src/**/*.test.ts'
+./find-polluter.sh 'packages/core/.git' 'src/**/*.test.ts'
 ```
 
-Runs tests one-by-one, stops at first polluter. See script for usage.
+Runs tests one-by-one, stops at first polluter. Name a path that does not
+exist yet: the script refuses one that already does. It exits 0 when no test
+creates the path, 1 when it names the polluter (or on a usage error), and 2
+when it could not diagnose: the path already exists or no test matches.
 
 ## Real Example: Empty projectDir
 
