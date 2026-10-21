@@ -382,6 +382,10 @@ present "the delegated loop writes the seat clause" "$DT" ', seat <seat>'
 present "the delegated loop keeps the runner name" "$DT" 'run-codex-review.sh'
 # ladder.test.sh holds every implementer to one escalation-table row, so an
 # agent known to the escalation table is a real one a human may pin.
+# A breaker CONFIRMED-GAP is carried into the next dependent task; completion
+# has to accept it, or the loop has no legal next step.
+present "a carried breaker gap lets the task complete" "$DT" 'confirmed and carried into a later task, with a ruling at the cap'
+present "the dependent task's dispatch takes the carried gap" "$DT" 'carried a CONFIRMED-GAP to this task, the dispatch names the gap'
 present "a pinned escalation-only implementer is not unknown" "$DT" "A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables"
 present "the delegated loop keeps the FAILED deferral" "$DT" 'TIMEOUT or FAILED'
 present "the delegated loop keeps the no-redispatch rule" "$DT" 'never re-dispatch the Codex seat'

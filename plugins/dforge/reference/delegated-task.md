@@ -87,7 +87,10 @@ these steps directly.
   not helpers, and never a reviewer. Review arrives from you, after the
   report.
 - If an earlier task parked a finding in the area this task touches, carry
-  a pointer to that ledger entry in the dispatch.
+  a pointer to that ledger entry in the dispatch. If an earlier task's breaker
+  carried a CONFIRMED-GAP to this task, the dispatch names the gap and the
+  ruling's smallest unblocking change as part of this task's work, and its
+  review checks that change.
 - Dispatch with the agent as `subagent_type` and no `model` or `effort` argument, using
   [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md). Never dispatch a
   `fork` implementer: it would inherit your whole context.
@@ -372,12 +375,12 @@ discard is forbidden.
 
 ## 5. Complete the task
 
-When the review comes back clean — or every open finding is parked with a
-ruling at the cap — append the completion line to the ledger in the same
-message as your other bookkeeping:
+When the review comes back clean — or every open finding is parked, or
+confirmed and carried into a later task, with a ruling at the cap — append the
+completion line to the ledger in the same message as your other bookkeeping:
 
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
-- `Task <N>: complete (commits <base7>..<head7>, <K> parked; scores …, seat <seat>) — …; remaining: <parked one-liners>; …` after a tripped breaker
+- `Task <N>: complete (commits <base7>..<head7>, <K> parked, <C> carried to Task <M>; scores …, seat <seat>) — …; remaining: <parked and carried one-liners>; …` after a tripped breaker; drop the `carried` clause when nothing was
 - end the scores clause with `, seat <seat>`: `codex gpt-6.1-sol/xhigh`,
   `codex gpt-6-astra/xhigh+judge-opus`, or the judge's short name, followed by
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
@@ -413,7 +416,7 @@ preflight.
 
 Then mark the todo complete and move on. Never move to the next task while
 the review has open Critical/Important issues that are neither fixed nor
-parked-with-ruling at the cap.
+parked or carried with a ruling at the cap.
 
 ## Recovery
 
