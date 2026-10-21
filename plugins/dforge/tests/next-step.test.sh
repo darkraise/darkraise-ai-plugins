@@ -822,6 +822,35 @@ OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md
 has "roadmap: nothing open goes to the audit" "$OUT" "Milestone M1 (MVP) has nothing open: audit and close it with dforge:closing-a-milestone."
 has "roadmap: the audit gets a launch prompt" "$OUT" "Close milestone M1 (MVP)"
 
+# A register covering the plan's spec but sitting outside the milestone is not
+# below it, so the audit cannot resolve its verify rows.
+: > "$MD/specs/other-design.md"
+cat > "$MD/plans/other.md" <<'PLAN'
+# Other
+
+**Goal:** Other
+**Spec:** docs/superpowers/specs/other-design.md
+**Execution:** inline — `claude --model sonnet --effort high` — small
+**Program:** `docs/superpowers/specs/other-design.md` — sub-project 1 of 1 — last
+
+### Task 1: One
+PLAN
+cat > "$MD/registers/other.md" <<'REG'
+# Other — item register
+
+**Source:** spec
+**Covers:** docs/superpowers/specs/other-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Outside the milestone | - | owner check | verify | built |
+REG
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/other.md 2>&1)
+has "roadmap: a verify row outside the milestone waits on the owner" "$OUT" "Awaiting your check (verify): #1."
+lacks "roadmap: a verify row outside the milestone is not an audit" "$OUT" "Close milestone M1 (MVP)"
+lacks "roadmap: a verify row outside the milestone is not audited" "$OUT" "audit and close it"
+rm "$MD/plans/other.md" "$MD/registers/other.md"
+
 bash "$HERE/../scripts/roadmap" close --root "$MREPO" M1 --note "audit: 1 MET" >/dev/null
 OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
 has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`docs/dforge/roadmap.md\` is closed."

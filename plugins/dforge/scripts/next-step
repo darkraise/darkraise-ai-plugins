@@ -298,11 +298,14 @@ else
     roadmap=$(roadmap_file "$root")
     current_ms=""
     [ -z "$roadmap" ] || current_ms=$(roadmap_current "$roadmap")
-    open_rows="" reg_list=""
+    open_rows="" reg_list="" ms_regs="" outside_ms=""
+    [ -z "$current_ms" ] || ms_regs=$(roadmap_registers "$root" "$(cut -f4 <<<"$current_ms")")
     while IFS= read -r reg_file; do
       [ -n "$reg_file" ] || continue
       rows=$(register_open "$reg_file")
       [ -n "$rows" ] || continue
+      # The milestone audit reads only the registers below the milestone.
+      if [ -n "$current_ms" ] && ! grep -qxF -- "$reg_file" <<<"$ms_regs"; then outside_ms=1; fi
       # Several registers may cover one spec; every one that has open rows is
       # named, so the count is never attributed to the wrong file.
       reg_list="${reg_list:+$reg_list, }\`$(dforge_name "$reg_file")\`"
@@ -371,7 +374,7 @@ else
           [ -z "$elsewhere" ] || action="${action:+$action }Assigned outside this repository: $elsewhere."
           # The milestone audit is the check a verify row waits on, so a
           # milestone with nothing else unresolved goes to it.
-          if [ -n "$current_ms" ] && [ -n "$waiting" ] && [ -z "$stale$elsewhere" ]; then
+          if [ -n "$current_ms" ] && [ -n "$waiting" ] && [ -z "$stale$elsewhere$outside_ms" ]; then
             kind=milestone
             ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
             action="$action Milestone $ms_id ($ms_name) has nothing else open: audit and close it with dforge:closing-a-milestone."
