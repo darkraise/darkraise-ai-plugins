@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { startStub } from "./stub-server.mjs";
+import { startStub, storedDocument } from "./stub-server.mjs";
 import { makeHome, makeRepo, run, scratch, write } from "./helpers.mjs";
 
 const LEDGER = "# SDD ledger — plan: docs/superpowers/plans/p1.md\n\nTask 1: implementer (assigned)\nTask 1: complete\n\n\n| a | b |\r\n\r\nTask 2: complete\n";
@@ -95,6 +95,33 @@ test("a refused document and a refused ledger are reported once, and no scratch 
   assert.match(result.stdout, /^failed: sdd\/p1\/progress\.md: darkmem refused an entry: refused$/m);
   assert.doesNotMatch(result.stdout, /a pull of darkmem's copy differs/);
   assert.deepEqual(fs.readdirSync(tmp).filter(name => name.startsWith("darkmem-import-")), []);
+});
+
+test("a document darkmem holds with other content refuses the import; --replace overwrites only the version it read", async t => {
+  const s = await setup(t);
+  const key = "proj\u0000dforge/specs/s.md";
+  s.stub.db.documents.set(key, storedDocument("proj", "dforge/specs/s.md", "# Spec, newer on darkmem\n"));
+  const refused = await s.importing();
+  assert.equal(refused.code, 1, refused.stdout);
+  assert.match(refused.stdout, /failed: darkmem already holds different content for dforge\/specs\/s\.md; pull and compare, or run import --replace/);
+  assert.match(refused.stdout, /note: nothing was imported/);
+  assert.equal(s.stub.db.documents.get(key).content, "# Spec, newer on darkmem\n");
+  assert.equal(s.stub.db.requests.filter(r => r.method !== "GET").length, 0);
+
+  // Another client edits it between the manifest read and the put.
+  s.stub.db.onRequest = (method, route) => {
+    if (method !== "POST" || route !== "/api/v1/documents") return;
+    s.stub.db.onRequest = null;
+    s.stub.db.documents.set(key, storedDocument("proj", "dforge/specs/s.md", "# Spec, edited again\n"));
+  };
+  const raced = await s.importing("--replace");
+  assert.equal(raced.code, 1, raced.stdout);
+  assert.match(raced.stdout, /failed: dforge\/specs\/s\.md: changed on darkmem during the import, so it was not overwritten/);
+  assert.equal(s.stub.db.documents.get(key).content, "# Spec, edited again\n");
+
+  const replaced = await s.importing("--replace");
+  assert.equal(replaced.code, 0, replaced.stdout);
+  assert.equal(s.stub.db.documents.get(key).content, "# Spec\n");
 });
 
 test("an empty source file refuses the whole import before any write", async t => {

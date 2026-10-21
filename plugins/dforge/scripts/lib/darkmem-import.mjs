@@ -10,7 +10,7 @@ import { HttpError } from "./darkmem-client.mjs";
 import { dforgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
-  unsupportedPlanDirs, uriToLocal,
+  sha256, unsupportedPlanDirs, uriToLocal,
 } from "./darkmem-mirror.mjs";
 import { pullDocuments, pullLedgers } from "./darkmem-pull.mjs";
 
@@ -135,8 +135,15 @@ export async function importRepository(context) {
     const answer = await client.resume(cfg.project, ledger.slug);
     if (answer) existing.set(ledger.slug, answer.workstream.id);
   }
-  if (existing.size && !options["--replace"]) {
-    report.failures.push(`already in darkmem: ${[...existing.keys()].join(", ")}; run import --replace to purge and re-import them (needs an admin key)`);
+  // A document darkmem holds with other content may be newer than this
+  // checkout's copy, so only --replace overwrites it, and then only the
+  // version read here: one changed since is a 409, not a silent overwrite.
+  const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+  for (const doc of snapshot.documents) doc.expectedHash = remote.get(doc.uri);
+  const differing = snapshot.documents.filter(doc => doc.expectedHash !== undefined && doc.expectedHash !== sha256(doc.buffer)).map(doc => doc.uri);
+  if ((existing.size || differing.length) && !options["--replace"]) {
+    if (existing.size) report.failures.push(`already in darkmem: ${[...existing.keys()].join(", ")}; run import --replace to purge and re-import them (needs an admin key)`);
+    if (differing.length) report.failures.push(`darkmem already holds different content for ${differing.join(", ")}; pull and compare, or run import --replace to overwrite them`);
     report.notes.push("nothing was imported");
     return;
   }
@@ -145,11 +152,13 @@ export async function importRepository(context) {
   for (const id of existing.values()) await client.purgeWorkstream(id);
   for (const doc of snapshot.documents) {
     try {
-      await client.putDocument({ project: cfg.project, uri: doc.uri, content: doc.content });
+      await client.putDocument({ project: cfg.project, uri: doc.uri, content: doc.content, expectedHash: doc.expectedHash });
       report.counts.documents += 1;
     } catch (error) {
-      if (!(error instanceof HttpError && error.status === 422)) throw error;
-      report.failures.push(`${doc.uri}: darkmem refused it: ${error.detail}`);
+      if (!(error instanceof HttpError && (error.status === 422 || error.status === 409))) throw error;
+      report.failures.push(error.status === 409
+        ? `${doc.uri}: changed on darkmem during the import, so it was not overwritten: ${error.detail}`
+        : `${doc.uri}: darkmem refused it: ${error.detail}`);
       doc.refused = true;
     }
   }
