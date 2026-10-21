@@ -44,8 +44,9 @@ import {
   isAtLeast,
   isGitWriteTool,
   isDforge,
-  isTypedPrompt,
   isPlanTail,
+  isServiceCommand,
+  isTypedPrompt,
   kTokens,
   levelOf,
   limitForecast,
@@ -2391,10 +2392,10 @@ async function sendDone($: EngineInterface, answer: string, durationMs: number) 
   if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
 }
 
-/** Whether the main conversation still waits on work it sent to the background: its own shells, or a subagent still running. */
+/** Whether the main conversation still waits on work it sent to the background: its own shells short of a service, or a subagent still running. */
 async function isMainBackground($: EngineInterface): Promise<boolean> {
   if ((await read($, spawns)).some(one => !one.isDone)) return true
-  return (await read($, shells)).some(one => (one.agentId ?? null) === null)
+  return (await read($, shells)).some(one => (one.agentId ?? null) === null && !isServiceCommand(one.command))
 }
 
 /**

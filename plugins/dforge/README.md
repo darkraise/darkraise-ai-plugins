@@ -595,9 +595,10 @@ desktop window joins the session, unless you closed it.
   `◐ background` with the shells, the newest command and the subagents, and the
   Done notification waits: one Done goes out after the turn their notification
   wakes ends, timed from the first turn. A prompt you type starts the count
-  again, a subagent's own shells hold nothing, and after 30 minutes the Done
-  goes out anyway. It adds `Discord ✓` once a notification went out for what
-  it shows.
+  again; a subagent's own shells and a service that runs until stopped (a dev
+  server, a `--watch` run, `tail -f`) hold nothing; and after 30 minutes the
+  Done goes out anyway. It adds `Discord ✓` once a notification went out for
+  what it shows.
 - **Account** is who the session runs as: the email, name, organization and
   role from the account's `.claude.json` (under `CLAUDE_CONFIG_DIR` when set),
   the billing type, the model and effort the last request used, Remote Control,

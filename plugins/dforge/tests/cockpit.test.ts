@@ -29,6 +29,7 @@ import {
   folderRuns,
   handedOff,
   isAtLeast,
+  isServiceCommand,
   isTypedPrompt,
   levelOf,
   limitForecast,
@@ -1332,7 +1333,7 @@ describe('minimized band', () => {
     signedIn(on, configured({ layout: 'compact' }))
     await $.session.start(START)
     await $.turn.start({ text: 'go', turnId: 't1' })
-    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 't1', reason: 'answer' })
     const box = await $.ui.mount(minimized('terminal'))
     expect(await box.find({ type: 'Text', text: /^│ ◐ \$ 1 shell/ })).toBeDefined()
@@ -2310,6 +2311,13 @@ describe('now row', () => {
     expect(isTypedPrompt('<task-notification>\n<task-id>b7k2</task-id>\n<status>completed</status>\n</task-notification>')).toBe(false)
   })
 
+  test('tells a service from a job that ends', () => {
+    for (const command of ['npm run dev', 'pnpm dev', 'yarn start', 'npm run dev:api', 'vite --port 3000', 'npx next dev', 'python3 -m http.server 8000', 'docker compose up', 'tail -f app.log', 'jest --watch', 'cd web && npm run dev', 'PORT=3000 npm start'])
+      expect(isServiceCommand(command)).toBe(true)
+    for (const command of ['npm test', 'npm run build', 'vite build', 'vitest', 'docker compose up -d', 'node codex-companion.mjs review', 'echo "npm run dev"', 'make\nnpm run dev'])
+      expect(isServiceCommand(command)).toBe(false)
+  })
+
   test('follows a turn from start to end, and its tool calls', async ($, on) => {
     const w: World = { tokens: 50_000 }
     const clock = world(on, w)
@@ -2530,6 +2538,38 @@ describe('shells and remote', () => {
       await clock.advance(5_000)
       await $.turn.complete({ answer: 'Review clean.', durationMs: 5_000, isAborted: false, turnId: 't3', reason: 'answer' })
       expect(titles(fetches)).toEqual(['✅ Done in 1m15s'])
+    })
+
+    test('a service shell holds nothing', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, tools: { Bash: () => SHELL } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.turn.start({ text: 'start the app', turnId: 't1' })
+      await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+      await $.turn.complete({ answer: 'Running on :5173.', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 5s'])
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /^○ idle/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeDefined()
+    })
+
+    test('a service beside a held job releases with the job', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const ids = ['b7k2', 'b9d1']
+      const clock = world(on, { tokens: 50_000, fetches, config: { notifyAfter: 60 }, tools: { Bash: () => ({ ...SHELL, result: { ...SHELL.result, backgroundTaskId: ids.shift() } }) } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.turn.start({ text: 'review it', turnId: 't1' })
+      await $.tool.call({ tool: 'Bash', command: 'node codex-companion.mjs review', run_in_background: true } as never)
+      await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+      await clock.advance(30_000)
+      await $.turn.complete({ answer: 'Started the review.', durationMs: 30_000, isAborted: false, turnId: 't1', reason: 'answer' })
+      expect(fetches).toHaveLength(0)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
     })
 
     test("a subagent's shell holds nothing", async ($, on) => {

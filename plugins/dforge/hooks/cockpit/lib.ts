@@ -965,6 +965,27 @@ export function isTypedPrompt(text: string): boolean {
   return text.trim() !== '' && !text.includes('<task-notification>')
 }
 
+// Commands that start something meant to run until stopped: a dev server, a
+// watcher, a followed log.
+const SERVICES = [
+  /^(npm|pnpm|yarn|bun)( run)? (dev|start|serve|preview|watch)(:|\s|$)/,
+  /^((npx|bunx|pnpm exec) )?(vite(?! build)(\s|$)|next (dev|start)|nuxt dev|astro dev|webpack serve|ng serve|nodemon)/,
+  /^python3? -m http\.server/,
+  /^(uvicorn|flask run|rails (s|server))(\s|$)/,
+  /^docker(-| )compose up(?!.*\s(-d|--detach)(\s|$))/,
+  /^tail -[fF](\s|$)/,
+  /\s--watch(=|\s|$)/,
+]
+
+/** Whether a background command, by its first line, starts a service that never ends on its own. */
+export function isServiceCommand(command: string): boolean {
+  return command
+    .split('\n')[0]!
+    .split(/&&|\|\||;/)
+    .map(part => part.trim().replace(/^(\w+=\S*\s+)+/, ''))
+    .some(part => SERVICES.some(pattern => pattern.test(part)))
+}
+
 /** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */
 export function isAtLeast(base: string | undefined, least: string): boolean {
   const parts = (text: string) => text.split('-')[0]!.split('.').map(Number)
