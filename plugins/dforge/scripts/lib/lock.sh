@@ -60,6 +60,17 @@ dr_lock_reclaim() {
   return "$stale"
 }
 
+# dr_replace FILE SOURCE — replace FILE with SOURCE's content through a
+# dotfile beside FILE: the rename is atomic (a temp file elsewhere may sit on
+# another filesystem), darkmem never syncs the partial copy, and FILE keeps
+# its mode.
+dr_replace() {
+  local tmp
+  tmp="$(mktemp "$(dirname "$1")/.$(basename "$1").XXXXXX")" || return 1
+  { [ ! -e "$1" ] || cp -p -- "$1" "$tmp"; } && cat -- "$2" > "$tmp" && mv -f -- "$tmp" "$1" ||
+    { rm -f -- "$tmp"; return 1; }
+}
+
 # dr_lock_base FILE — the path FILE's lock is named from: inside the git
 # directory for a file in a checkout, where a lock never shows as an untracked
 # file, else a dotfile beside FILE, which darkmem never syncs.

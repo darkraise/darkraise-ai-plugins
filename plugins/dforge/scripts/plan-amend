@@ -86,12 +86,7 @@ publish() {
   new_errors=$(comm -13 "$TMP/lint-before" "$TMP/lint-after")
   [ -z "$new_errors" ] || { echo "rejected: the amendment introduces lint errors:"; printf '%s\n' "$new_errors"; exit 1; }
 
-  # A dotfile beside the target, so the rename is atomic and darkmem never
-  # syncs a half-written copy.
-  local tmp
-  tmp="$(dirname "$amend")/.$(basename "$amend").$$"
-  cp "$TMP/after" "$tmp" && mv -f "$tmp" "$amend" \
-    || { rm -f "$tmp"; echo "could not write $amend" >&2; exit 2; }
+  dr_replace "$amend" "$TMP/after" || { echo "could not write $amend" >&2; exit 2; }
   echo "amended: A$k $target"
 }
 base=$(dr_lock_base "$amend") || { echo "cannot lock $amend" >&2; exit 2; }

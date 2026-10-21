@@ -12,13 +12,16 @@
 #        register add FILE "ITEM" [--assigned TEXT] [--acceptance TEXT] [--state STATE] [--note TEXT]
 # Exit: check 0 clean, 1 errors, 2 usage or missing file
 #       open  0 nothing open, 1 rows are open, 2 usage
-#       set   0 written, 2 usage, unknown identifier, unknown state, or a
-#             missing mandatory note
-#       add   0 written, 2 usage or a missing mandatory note
+#       set   0 written, 1 the register is locked by another writer, 2 usage,
+#             unknown identifier, unknown state, a missing mandatory note, or
+#             a value with a line break or other control character
+#       add   0 written, 1 locked, 2 usage, a missing mandatory note, or a
+#             value with a control character
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/register.sh"
+. "$HERE/lib/lock.sh"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -30,12 +33,28 @@ USAGE
   exit 2
 }
 
-state_known() { case " $REGISTER_STATES " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+state_known() {
+  case $1 in ''|*[[:space:]]*) return 1 ;; esac
+  case " $REGISTER_STATES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
 note_required() { case " $REGISTER_NOTE_REQUIRED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 blank_note() { [ -z "$1" ] || [ "$1" = "-" ]; }
 
 need_file() {
   [ -f "$1" ] || { echo "no such register file: $1" >&2; exit 2; }
+}
+
+# need_cells TEXT… — every value fits one table cell: a line break would end
+# the row, and a tab would split the parsed row.
+need_cells() {
+  local v
+  for v in "$@"; do
+    case $v in *[[:cntrl:]]*) echo "a cell value cannot hold a line break or a control character: $v" >&2; exit 2 ;; esac
+  done
+}
+
+lock_file() { # lock_file FILE — the lock base for FILE, or exit 2
+  dr_lock_base "$1" || { echo "cannot lock $1" >&2; exit 2; }
 }
 
 cmd_check() {
@@ -62,7 +81,7 @@ cmd_check() {
     done < <(register_covers "$file")
   fi
 
-  while IFS=$'\t' read -r line n id item assigned acceptance state note; do
+  while IFS=$'\037' read -r line n id item assigned acceptance state note; do
     if [ "$n" -ne 8 ]; then
       echo "ERROR $line: a row needs six cells, found $((n - 2)); write a literal pipe as \\|"
       errors=$((errors + 1))
@@ -87,7 +106,7 @@ cmd_check() {
       echo "ERROR $line: state $state needs a note"
       errors=$((errors + 1))
     fi
-  done < <(register_scan "$file")
+  done < <(register_scan "$file" | register_cells)
 
   echo "register: $errors errors"
   [ "$errors" -eq 0 ]
@@ -116,10 +135,10 @@ cmd_open() {
     [ -n "$f" ] || continue
     rel=$f
     [ -z "$root" ] || rel=$(dforge_name "$f" "$root")
-    while IFS=$'\t' read -r id item assigned acceptance state note; do
+    while IFS=$'\037' read -r id item assigned acceptance state note; do
       found=1
       printf '%s: #%s %s — %s, assigned %s\n' "$rel" "$id" "$item" "$state" "${assigned:--}"
-    done < <(register_open "$f")
+    done < <(register_open "$f" | register_cells)
   done < <(if [ -n "$spec" ]; then register_for_spec "$root" "$spec"; else printf '%s\n' "$file"; fi)
 
   [ "$found" -eq 0 ]
@@ -131,7 +150,7 @@ cmd_set() {
   [ $# -ge 3 ] || usage
   local file=$1 id=$2 state=$3
   shift 3
-  local note="" assigned="" acceptance="" note_given=0 assigned_given=0 acceptance_given=0 row tmp
+  local note="" assigned="" acceptance="" note_given=0 assigned_given=0 acceptance_given=0
   while [ $# -gt 0 ]; do
     case $1 in
       --note) [ $# -ge 2 ] || usage; note=$2 note_given=1; shift 2 ;;
@@ -142,6 +161,14 @@ cmd_set() {
   done
   need_file "$file"
   state_known "$state" || { echo "unknown state: $state; one of $REGISTER_STATES" >&2; exit 2; }
+  need_cells "$note" "$assigned" "$acceptance"
+  dr_locked "$(lock_file "$file")" set_row
+}
+
+# set_row — cmd_set's read, check and write, under the register's lock so a
+# concurrent writer's row is never overwritten with the copy read before it.
+set_row() {
+  local row tmp
   row=$(register_rows "$file" | awk -F'\t' -v i="$id" '$1 == i')
   [ -n "$row" ] || { echo "no row with identifier $id in $file" >&2; exit 2; }
   [ "$note_given" -eq 1 ] || note=$(cut -f6 <<<"$row")
@@ -150,7 +177,7 @@ cmd_set() {
     exit 2
   fi
 
-  tmp=$(mktemp)
+  tmp=$(mktemp) || exit 2
   tr -d '\r' < "$file" | REG_STATE="$state" REG_NOTE="$note" REG_ASSIGNED="$assigned" REG_ACCEPT="$acceptance" \
     awk -v want="$id" -v ag="$assigned_given" -v kg="$acceptance_given" "$_PLAN_AWK$_REGISTER_AWK"'
       function esc(s) { gsub(/\|/, "\\|", s); return s }
@@ -162,15 +189,15 @@ cmd_set() {
         k = (kg == "1") ? ENVIRON["REG_ACCEPT"] : c[5]
         printf "| %s | %s | %s | %s | %s | %s |\n", c[2], esc(c[3]), esc(a), esc(k), ENVIRON["REG_STATE"], esc(ENVIRON["REG_NOTE"])
       }
-    ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $file" >&2; exit 2; }
-  mv "$tmp" "$file"
+    ' > "$tmp" && dr_replace "$file" "$tmp" || { rm -f "$tmp"; echo "could not rewrite $file" >&2; exit 2; }
+  rm -f "$tmp"
 }
 
 cmd_add() {
   [ $# -ge 2 ] || usage
   local file=$1 item=$2
   shift 2
-  local assigned="-" acceptance="-" state="open" note="-" max id at tmp
+  local assigned="-" acceptance="-" state="open" note="-"
   while [ $# -gt 0 ]; do
     case $1 in
       --assigned) [ $# -ge 2 ] || usage; assigned=$2; shift 2 ;;
@@ -188,6 +215,14 @@ cmd_add() {
     exit 2
   fi
 
+  need_cells "$item" "$assigned" "$acceptance" "$note"
+  dr_locked "$(lock_file "$file")" add_row
+}
+
+# add_row — cmd_add's numbering and write, under the register's lock so two
+# additions never take one identifier.
+add_row() {
+  local max id at tmp
   max=$(register_rows "$file" | awk -F'\t' '$1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
   id=$((max + 1))
   # Insert after the last table line rather than at end of file, so a register
@@ -198,7 +233,7 @@ cmd_add() {
     END { print n + 0 }')
   [ "$at" -gt 0 ] || { echo "no table in $file" >&2; exit 2; }
 
-  tmp=$(mktemp)
+  tmp=$(mktemp) || exit 2
   tr -d '\r' < "$file" | REG_ITEM="$item" REG_ASSIGNED="$assigned" REG_ACCEPT="$acceptance" \
     REG_STATE="$state" REG_NOTE="$note" \
     awk -v at="$at" -v id="$id" '
@@ -208,8 +243,8 @@ cmd_add() {
         printf "| %s | %s | %s | %s | %s | %s |\n", id, esc(ENVIRON["REG_ITEM"]), \
           esc(ENVIRON["REG_ASSIGNED"]), esc(ENVIRON["REG_ACCEPT"]), ENVIRON["REG_STATE"], esc(ENVIRON["REG_NOTE"])
       }
-    ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $file" >&2; exit 2; }
-  mv "$tmp" "$file"
+    ' > "$tmp" && dr_replace "$file" "$tmp" || { rm -f "$tmp"; echo "could not rewrite $file" >&2; exit 2; }
+  rm -f "$tmp"
 }
 
 [ $# -ge 1 ] || usage

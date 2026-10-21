@@ -60,6 +60,13 @@ register_scan() {
   return 0
 }
 
+# register_cells — tab-separated rows on stdin, split on \037 instead: `read`
+# collapses runs of a whitespace IFS, so an empty cell would shift every later
+# cell left. Read the result with IFS=$'\037'.
+register_cells() {
+  tr '\t' '\037'
+}
+
 # register_rows FILE — the well-formed rows, as
 # "id<TAB>item<TAB>assigned<TAB>acceptance<TAB>state<TAB>note".
 register_rows() {

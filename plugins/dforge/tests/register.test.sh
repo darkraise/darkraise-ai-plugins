@@ -116,6 +116,11 @@ run bash "$REG" check "$ROOT/state.md"
 check "check: unknown state fails" "$RC" "1"
 check "check: names the state" "$(grep -c 'unknown state: finished' <<<"$OUT")" "1"
 
+# An empty cell must not shift the cells after it into place.
+reg "$ROOT/gap.md" '| 1 | A |  | acceptance | garbage | done |'
+run bash "$REG" check "$ROOT/gap.md"
+check "check: an empty cell does not hide an unknown state" "$(grep -c 'unknown state: garbage' <<<"$OUT")" "1"
+
 reg "$ROOT/note.md" '| 1 | A | - | - | deferred | - |'
 run bash "$REG" check "$ROOT/note.md"
 check "check: a ruling without its reason fails" "$RC" "1"
@@ -189,6 +194,14 @@ check "set: an unknown identifier is refused" "$RC" "2"
 run bash "$REG" set "$ROOT/w.md" 1 finished
 check "set: an unknown state is refused" "$RC" "2"
 
+run bash "$REG" set "$ROOT/w.md" 1 'done deferred' --note x
+check "set: two states in one value are refused" "$RC" "2"
+run bash "$REG" set "$ROOT/w.md" 2 verify --note $'line one\nline two'
+check "set: a multiline note is refused" "$RC" "2"
+check "set: the refused row still parses" "$(register_rows "$ROOT/w.md" | awk -F'\t' '$1 == 2 { print $5 }')" "planned"
+run bash "$REG" add "$ROOT/w.md" $'Item\twith a tab'
+check "add: a control character is refused" "$RC" "2"
+
 run bash "$REG" add "$ROOT/w.md" "Discovered during execution"
 check "add: appends" "$RC" "0"
 check "add: takes the next identifier" "$(register_rows "$ROOT/w.md" | cut -f1 | tr '\n' ' ')" "1 2 3 "
@@ -211,6 +224,19 @@ printf '# E — item register\n\n**Source:** s\n**Covers:** -\n\n| # | Item | As
 run bash "$REG" add "$ROOT/empty.md" "The first item"
 check "add: the first row of an empty table" "$(register_rows "$ROOT/empty.md" | cut -f1)" "1"
 check "add: trailing prose survives" "$(tail -n 1 "$ROOT/empty.md")" "Trailing prose."
+
+# --- concurrent writers: every row update lands, the file keeps its mode ---
+reg "$ROOT/many.md" '| 1 | A | - | - | open | - |' '| 2 | B | - | - | open | - |' '| 3 | C | - | - | open | - |' \
+  '| 4 | D | - | - | open | - |' '| 5 | E | - | - | open | - |' '| 6 | F | - | - | open | - |'
+chmod 664 "$ROOT/many.md"
+mode_before=$(ls -l "$ROOT/many.md" | cut -c1-10)
+for i in 1 2 3 4 5 6; do bash "$REG" set "$ROOT/many.md" "$i" done >/dev/null 2>&1 & done
+for i in 1 2 3; do bash "$REG" add "$ROOT/many.md" "Added $i" >/dev/null 2>&1 & done
+wait
+check "concurrent sets: every row is done" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 <= 6 && $5 == "done"' | grep -c .)" "6"
+check "concurrent adds: three distinct new rows" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 > 6 { print $1 }' | sort -u | grep -c .)" "3"
+check "a rewrite keeps the file's mode" "$(ls -l "$ROOT/many.md" | cut -c1-10)" "$mode_before"
+check "a rewrite leaves no temporary file" "$(ls -A "$ROOT" | grep -c '^\.many')" "0"
 
 # --- the repository's own registers ---
 # They are load-bearing for three scripts and two skills, so one that stopped
