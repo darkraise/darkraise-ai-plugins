@@ -18,6 +18,7 @@ import {
   billingLabel,
   bottomRule,
   budgetFor,
+  cellWidth,
   collapsedFrom,
   collapsedToggled,
   denseLine,
@@ -2332,6 +2333,15 @@ describe('band lines', () => {
   test('measures and cuts a row by terminal cells', () => {
     expect(runsWidth([{ text: '⏳ approve? ' }, { text: 'e\u0301' }])).toBe(13)
     expect(runsCut([{ text: 'ok ' }, { text: '日本語のブランチ' }], 8)).toEqual([{ text: 'ok ' }, { text: '日本' }, { text: '…', dim: true }])
+  })
+
+  test('measures an emoji its presentation selector asks for as two cells', () => {
+    expect(cellWidth('⚠️')).toBe(2)
+    expect(cellWidth('⚠')).toBe(1)
+    expect(cellWidth('✅')).toBe(2)
+    expect(cellWidth('a\ufe0f')).toBe(1)
+    expect(runsWidth([{ text: '⚠️ low' }])).toBe(6)
+    expect(runsWidth(runsCut([{ text: 'ab⚠️cd' }], 4))).toBeLessThanOrEqual(4)
   })
 
   test('steps each line down until it fits, never naming a command', () => {

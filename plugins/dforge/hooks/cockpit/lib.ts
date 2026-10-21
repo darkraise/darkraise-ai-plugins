@@ -495,14 +495,22 @@ export function bottomRule(label: string | null, width: number): { lead: string;
 }
 
 // A terminal draws a combining mark, a joiner or a variation selector in no
-// cell of its own, and an emoji or an East Asian wide or fullwidth character in two.
+// cell of its own, and an emoji or an East Asian wide or fullwidth character in
+// two. An emoji drawn as text by default (⚠) takes two once U+FE0F asks for its
+// emoji presentation (⚠️).
 const ZERO_CELLS = /[\p{Mn}\p{Me}\u200b-\u200f\ufe00-\ufe0f]/u
 const TWO_CELLS = /[\p{Emoji_Presentation}\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u
+const EMOJI = /\p{Emoji}/u
 
 /** The terminal cells a text takes. */
 export function cellWidth(text: string): number {
   let cells = 0
-  for (const char of text) cells += ZERO_CELLS.test(char) ? 0 : TWO_CELLS.test(char) ? 2 : 1
+  let previous = ''
+  for (const char of text) {
+    const isWidened = char === '\ufe0f' && EMOJI.test(previous) && !TWO_CELLS.test(previous)
+    cells += isWidened ? 1 : ZERO_CELLS.test(char) ? 0 : TWO_CELLS.test(char) ? 2 : 1
+    previous = char
+  }
   return cells
 }
 
@@ -525,9 +533,8 @@ export function runsCut(runs: readonly Run[], width: number): Run[] {
     }
     let text = ''
     for (const char of run.text) {
-      if (cellWidth(char) > left) break
+      if (cellWidth(text + char) > left) break
       text += char
-      left -= cellWidth(char)
     }
     if (text !== '') out.push({ ...run, text })
     break
