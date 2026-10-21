@@ -40,7 +40,7 @@ const result = getResult();
 expect(result).toBeDefined();
 
 // ✅ AFTER: Waiting for condition
-await waitFor(() => getResult() !== undefined);
+await waitFor(() => getResult() !== undefined, 'result');
 const result = getResult();
 expect(result).toBeDefined();
 ```
@@ -49,11 +49,11 @@ expect(result).toBeDefined();
 
 | Scenario | Pattern |
 |----------|---------|
-| Wait for event | `waitFor(() => events.find(e => e.type === 'DONE'))` |
-| Wait for state | `waitFor(() => machine.state === 'ready')` |
-| Wait for count | `waitFor(() => items.length >= 5)` |
-| Wait for file | `waitFor(() => fs.existsSync(path))` |
-| Complex condition | `waitFor(() => obj.ready && obj.value > 10)` |
+| Wait for event | `waitFor(() => events.find(e => e.type === 'DONE'), 'DONE event')` |
+| Wait for state | `waitFor(() => machine.state === 'ready', 'ready state')` |
+| Wait for count | `waitFor(() => items.length >= 5, '5 items')` |
+| Wait for file | `waitFor(() => fs.existsSync(path), path)` |
+| Complex condition | `waitFor(() => obj.ready && obj.value > 10, 'ready with value > 10')` |
 
 ## Implementation
 
