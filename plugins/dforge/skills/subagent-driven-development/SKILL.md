@@ -354,7 +354,7 @@ Task <N>: BLOCKED — <agent> exhausted — <what a human must decide>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
-Task <N>: complete (commits a..b[; merged <sha7>], review clean | K parked[; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
+Task <N>: complete (commits a..b[; merged <sha7>], review clean | K parked[, C carried to Task M | C carried to final review][; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
 Acceptance QA: dispatched (base <sha7>)
 Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo
