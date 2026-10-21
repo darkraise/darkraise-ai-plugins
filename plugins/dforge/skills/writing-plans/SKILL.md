@@ -311,8 +311,9 @@ If a plan ends up with no wave of two or more tasks, say so and write
   Contracts; this block is how they learn which names they touch.]
 
 **Items:** [only when a register covers this plan's spec: the register row
-identifiers this task discharges, comma-separated, for example `4, 16`. Omit
-the line otherwise.]
+identifiers this task discharges, comma-separated, for example `4, 16`. When
+more than one register covers it, name each row's register by its file's
+basename, for example `core#4, review#16`. Omit the line otherwise.]
 
 **Depends on:** [waves plans only: `none`, or the tasks whose output this one
 consumes, for example `Task 1, Task 3`. Omit the line in a sequential plan.]
@@ -462,7 +463,8 @@ work.
    line names it, and no task builds on it.
 
 `plan-lint` then checks both directions: an assigned row no task cites, and a
-task citing a row no register holds.
+task citing a row no register holds. It also rejects a bare identifier that
+more than one covering register holds.
 
 ## No Placeholders
 

@@ -366,8 +366,9 @@ left open, and Step 6 deletes it.
 When a register covers this plan's spec, it is where open work lives, and the
 prose note is not written. In the same commit as the index line:
 
-- resolve every row this plan covered — one its tasks cite, or one whose
-  `Assigned` cell is this plan's path — with
+- resolve every row this plan covered — one its tasks cite (a `<register>#<id>`
+  citation names its register; a bare id is the one covering register's row),
+  or one whose `Assigned` cell is this plan's path — with
   `scripts/register set <register> <id> done`, or `verify --note <what is owed>`
   when the row's acceptance names a check only your human partner can perform;
   a row cited only by a task whose complete line reads

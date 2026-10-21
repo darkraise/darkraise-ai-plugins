@@ -718,6 +718,41 @@ OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 has "plan-lint: an empty Item cell: 'last' names only the other row" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
+# Two covering registers each number their rows from 1, so a bare id cannot
+# say which row a task discharges; a citation names the register.
+cat > "$LREPO/docs/dforge/registers/r2.md" <<'REG'
+# R2 — item register
+
+**Source:** review 2026-09-21
+**Covers:** docs/superpowers/specs/s-design.md
+
+| # | Item | Assigned | Acceptance | State | Note |
+|---|---|---|---|---|---|
+| 1 | Also this plan's | docs/superpowers/plans/p.md | - | planned | - |
+REG
+write_plan "next: Two" "**Items:** 1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: a bare id two registers hold is ambiguous" "$OUT" \
+  "ERROR header: **Items:** cites #1, which more than one covering register holds: write it as <register>#1"
+write_plan "next: Two" "**Items:** r#1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: a qualified citation leaves the other register's row uncited" "$OUT" \
+  "ERROR header: register row r2#1 is assigned to this plan but no task cites it"
+lacks "plan-lint: a qualified citation covers its own row" "$OUT" "register row r#1"
+write_plan "next: Two" "**Items:** \`r#1\`, \`r2#1\`"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+lacks "plan-lint: qualified citations cover both rows" "$OUT" "register row"
+lacks "plan-lint: qualified citations are held" "$OUT" "**Items:** cites"
+write_plan "next: Two" "**Items:** r2#2, r#1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: a qualified citation of a missing row is an error" "$OUT" \
+  "ERROR header: **Items:** cites r2#2, which no covering register holds"
+write_plan "last" "**Items:** r#1, r2#1"
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+has "plan-lint: 'last' names the open row with its register" "$OUT" \
+  "ERROR header: Program line says 'last' while register rows are open: r#2"
+rm "$LREPO/docs/dforge/registers/r2.md"
+
 # A plan with no covering register lints exactly as it did before.
 rm "$LREPO/docs/dforge/registers/r.md"
 write_plan "last" ""

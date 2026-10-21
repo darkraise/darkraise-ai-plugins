@@ -131,40 +131,63 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
   : > "$TMP/reg-open"
   # reg-open holds the rows split on \037, not a tab: `read` collapses runs of
   # a whitespace IFS, so an empty cell would shift every later cell left.
+  # Every row is prefixed with its register's basename: each register numbers
+  # its rows from 1, so a bare id is ambiguous once two registers cover a plan.
   while IFS= read -r reg_file; do
     [ -n "$reg_file" ] || continue
-    register_rows "$reg_file" | cut -f1 >> "$TMP/reg-ids"
-    register_open "$reg_file" | tr '\t' '\037' >> "$TMP/reg-open"
+    rname=$(basename "$reg_file" .md)
+    register_rows "$reg_file" | cut -f1 | awk -v r="$rname" '{ print r "\037" $0 }' >> "$TMP/reg-ids"
+    register_open "$reg_file" | tr '\t' '\037' | awk -v r="$rname" '{ print r "\037" $0 }' >> "$TMP/reg-open"
   done < <(register_for_spec "$root" "${reg_specs[@]}")
+  multi=$(cut -d$'\037' -f1 "$TMP/reg-ids" | sort -u | wc -l | tr -d ' ')
+  rlabel() { if [ "$multi" -gt 1 ]; then printf '%s#%s' "$1" "$2"; else printf '#%s' "$2"; fi; }
 
   if [ -s "$TMP/reg-ids" ]; then
+    # One "<register>\037<id>" line per citation; a bare id has an empty
+    # register field.
     cited=$(awk "$_PLAN_AWK"'
       in_fence($0) { next }
       index($0, "**Items:**") == 1 {
         line = substr($0, 11)
+        while (match(line, /[A-Za-z0-9._-]*[A-Za-z._-][A-Za-z0-9._-]*#[0-9]+/)) {
+          q = substr(line, RSTART, RLENGTH)
+          line = substr(line, 1, RSTART - 1) " " substr(line, RSTART + RLENGTH)
+          sub(/#/, "\037", q)
+          print q
+        }
         gsub(/[^0-9]+/, " ", line)
-        print line
+        n = split(line, ids, " ")
+        for (i = 1; i <= n; i++) print "\037" ids[i]
       }
-    ' "$src" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un || true)
+    ' "$src" | sort -u || true)
 
     [ -n "$cited" ] \
       || say WARN header "a register covers this plan's spec but no task carries an **Items:** line"
 
-    while IFS=$'\037' read -r rid ritem rassigned _ _ _; do
+    while IFS=$'\037' read -r rname rid ritem rassigned _ _ _; do
       [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || continue
-      grep -qx "$rid" <<<"$cited" \
-        || say ERROR header "register row #$rid is assigned to this plan but no task cites it"
+      grep -qxF -e "$rname"$'\037'"$rid" -e $'\037'"$rid" <<<"$cited" \
+        || say ERROR header "register row $(rlabel "$rname" "$rid") is assigned to this plan but no task cites it"
     done < "$TMP/reg-open"
 
-    for rid in $cited; do
-      grep -qx "$rid" "$TMP/reg-ids" \
-        || say ERROR header "**Items:** cites #$rid, which no covering register holds"
-    done
+    while IFS=$'\037' read -r rname rid; do
+      [ -n "$rid" ] || continue
+      if [ -n "$rname" ]; then
+        grep -qxF "$rname"$'\037'"$rid" "$TMP/reg-ids" \
+          || say ERROR header "**Items:** cites $rname#$rid, which no covering register holds"
+        continue
+      fi
+      case $(grep -cE $'\037'"$rid\$" "$TMP/reg-ids") in
+        0) say ERROR header "**Items:** cites #$rid, which no covering register holds" ;;
+        1) ;;
+        *) say ERROR header "**Items:** cites #$rid, which more than one covering register holds: write it as <register>#$rid" ;;
+      esac
+    done <<<"$cited"
 
     if grep -qE "$SEP"'last[ \t]*$' <<<"$program"; then
       others=""
-      while IFS=$'\037' read -r rid _ rassigned _; do
-        [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }#$rid"
+      while IFS=$'\037' read -r rname rid _ rassigned _; do
+        [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }$(rlabel "$rname" "$rid")"
       done < "$TMP/reg-open"
       [ -z "$others" ] \
         || say ERROR header "Program line says 'last' while register rows are open: $others"
