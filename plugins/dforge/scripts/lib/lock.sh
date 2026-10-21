@@ -79,11 +79,17 @@ dr_lock_reclaim() {
 # dr_replace FILE SOURCE — replace FILE with SOURCE's content through a
 # dotfile beside FILE: the rename is atomic (a temp file elsewhere may sit on
 # another filesystem), darkmem never syncs the partial copy, and FILE keeps
-# its mode.
+# its mode. A symbolic link is written through: its target is replaced and the
+# link stays.
 dr_replace() {
-  local tmp
-  tmp="$(mktemp "$(dirname "$1")/.$(basename "$1").XXXXXX")" || return 1
-  { [ ! -e "$1" ] || cp -p -- "$1" "$tmp"; } && cat -- "$2" > "$tmp" && mv -f -- "$tmp" "$1" ||
+  local file="$1" tmp target hops=0
+  while [ -L "$file" ]; do
+    [ $((++hops)) -le 40 ] || return 1
+    target="$(readlink -- "$file")" || return 1
+    case $target in /*) file=$target ;; *) file="$(dirname "$file")/$target" ;; esac
+  done
+  tmp="$(mktemp "$(dirname "$file")/.$(basename "$file").XXXXXX")" || return 1
+  { [ ! -e "$file" ] || cp -p -- "$file" "$tmp"; } && cat -- "$2" > "$tmp" && mv -f -- "$tmp" "$file" ||
     { rm -f -- "$tmp"; return 1; }
 }
 

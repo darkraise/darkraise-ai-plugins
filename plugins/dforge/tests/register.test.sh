@@ -270,6 +270,16 @@ check "a flock that fails: is not called a busy lock" "$(grep -c 'locked by anot
 check "a flock that fails: names the failure" "$(grep -c 'cannot lock .*flock exited 64' <<<"$out")" "1"
 check "a flock that fails: leaves the register unchanged" "$(register_rows "$BR/r.md" | cut -f5)" "open"
 
+# A register reached through a symbolic link is written through it: the link
+# stays a link and its target changes.
+mkdir "$TMP/linked"
+reg "$TMP/linked/real.md" '| 1 | A | - | - | open | - |'
+ln -s linked/real.md "$TMP/link.md"
+run bash "$REG" set "$TMP/link.md" 1 done
+check "a symlinked register: set exits 0" "$RC" "0"
+check "a symlinked register: the link survives" "$([ -L "$TMP/link.md" ] && echo link || echo file)" "link"
+check "a symlinked register: the target changes" "$(register_rows "$TMP/linked/real.md" | cut -f5)" "done"
+
 # --- the repository's own registers ---
 # They are load-bearing for three scripts and two skills, so one that stopped
 # parsing would otherwise go unnoticed.
