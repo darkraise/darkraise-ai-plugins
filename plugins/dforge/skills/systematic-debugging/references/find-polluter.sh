@@ -14,6 +14,11 @@ fi
 POLLUTION_CHECK="$1"
 TEST_PATTERN="$2"
 
+if [ -e "$POLLUTION_CHECK" ] || [ -L "$POLLUTION_CHECK" ]; then
+  echo "Pollution already exists; no diagnosis performed: $POLLUTION_CHECK"
+  exit 2
+fi
+
 echo "🔍 Searching for test that creates: $POLLUTION_CHECK"
 echo "Test pattern: $TEST_PATTERN"
 echo ""
@@ -26,7 +31,8 @@ TEST_PATTERN="${TEST_PATTERN#./}"
 # with '**/' collapsed to cover files directly under the base directory.
 TEST_FILES=$(find . \( -path "./$TEST_PATTERN" -o -path "./${TEST_PATTERN//\*\*\//}" \) | sort -u)
 if [ -z "$TEST_FILES" ]; then
-  TOTAL=0
+  echo "No matching tests; no diagnosis performed. "
+  exit 2
 else
   TOTAL=$(printf '%s\n' "$TEST_FILES" | wc -l | tr -d ' ')
 fi
@@ -37,13 +43,6 @@ echo ""
 COUNT=0
 for TEST_FILE in $TEST_FILES; do
   COUNT=$((COUNT + 1))
-
-  # Skip if pollution already exists
-  if [ -e "$POLLUTION_CHECK" ]; then
-    echo "⚠️  Pollution already exists before test $COUNT/$TOTAL"
-    echo "   Skipping: $TEST_FILE"
-    continue
-  fi
 
   echo "[$COUNT/$TOTAL] Testing: $TEST_FILE"
 
