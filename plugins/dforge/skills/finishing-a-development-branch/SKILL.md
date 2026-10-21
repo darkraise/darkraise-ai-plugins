@@ -34,7 +34,7 @@ When `scripts/auto-run status` exits 0
   on a detached HEAD (Step 2) there is no merge, so `merge` keeps and `pr`
   pushes a new branch (`git push origin HEAD:refs/heads/<new-branch>`); when
   the base is `none`, `merge` keeps and `pr` opens its request against the
-  dforge's default branch; and `merge` keeps when the ledger holds a
+  code host's default branch; and `merge` keeps when the ledger holds a
   `Task <N>: complete (deferred by the auto run)` line, so a deferred task's
   partial commits never reach the base unreviewed.
   `merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of
@@ -272,7 +272,7 @@ git push -u origin <feature-branch>
 # git push origin HEAD:refs/heads/<new-branch>
 ```
 
-Then create the pull/merge request against <base-branch> with the dforge's
+Then create the pull/merge request against <base-branch> with the code host's
 tooling — its CLI if one is available, or the creation URL most forges
 print when you push — following the repo's PR template and conventions if
 present, and report the URL to your human partner.

@@ -117,5 +117,8 @@ names "README: the default" "$P/README.md" 'The default on Claude Code (`autoRun
 names "README: the opt-outs" "$P/README.md" '`autoRun=ask` offers the run once the design is approved instead, and'
 names "README: the autoRun row" "$P/README.md" '| Workflow | `autoRun` | `on` |'
 names "README: the strategy row" "$P/README.md" '| Workflow | `executionStrategy` | `parallel` |'
+# The rename to dforge rewrote "the forge" (the code host) as "the dforge".
+check "no prose names the code host 'the dforge'" "$(grep -rlF "the dforge's" "$P/skills" "$P/reference" | tr '\n' ' ')" ""
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

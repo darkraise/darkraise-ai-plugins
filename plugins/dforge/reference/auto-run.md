@@ -337,7 +337,7 @@ deferred at the spec review, before the run started, counts as one the run
 added. `merge` also keeps the branch when the run added a deferred row whose
 Note is `final review residual`. On a detached HEAD there is no merge: `merge`
 keeps the branch and `pr` pushes a new branch from the detached HEAD. A `pr`
-with base `none` opens its request against the dforge's default branch. No
+with base `none` opens its request against the code host's default branch. No
 menu. Its final message lists every `Ruling:` ledger line, every line of
 `scripts/auto-run ruling list`, every deferred row the run added,
 every `demo` statement of the spec, every lens
