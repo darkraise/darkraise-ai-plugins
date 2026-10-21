@@ -81,6 +81,8 @@ names "final review: a spent re-dispatch writes the report" "$FR" 'is spent: wri
 names "final review: the QA timer outlives the background default" "$FR" 'call'"'"'s `timeout` set to 2820000 ms'
 names "final review: V2 waits for QA to stop before cleanup" "$FR" 'Clean up only once it has stopped'
 names "final review: a skipped Codex round has no status line to wait for" "$FR" 'nothing to wait for: go straight to the one-list case'
+names "final review: both acceptance test name forms are protected" "$FR" 'or with `a<n>_` where the framework forbids a colon'
+names "re-review: both acceptance test name forms" "$P/skills/subagent-driven-development/references/re-review-prompt.md" 'starts with `A<n>:` or'
 names "final review: demos are counted from the spec" "$FR" 'counted from the final report, except `<d>`: the number of the spec'"'"'s'
 names "final review: qa findings join the Claude list" "$FR" '`[qa]` finding from step 0.5 and every lens finding'
 names "final review: qa findings skip the verifier" "$FR" 'A `[qa]` finding is not given to the verifier: it enters the fix wave as'
