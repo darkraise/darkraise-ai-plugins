@@ -73,11 +73,18 @@ running=$(inflight_scan "$transcript_path" "$(inflight_since "$session_id")") \
 pending=$(grep -c . <<<"$running" || true)
 has_pending_background() { [ "$pending" -gt 0 ]; }
 
+# last_text — the text of the last assistant entry on stdin. Streamed, never
+# slurped: a transcript reaches hundreds of megabytes.
+last_text() {
+  jq -nrR 'reduce (inputs | fromjson? | objects | select(.type == "assistant")) as $e (null; $e)
+    | values | .message.content
+    | if type == "string" then . elif type == "array" then map(select(.type == "text") | .text) | join("\n") else "" end' \
+    2>/dev/null || true
+}
 last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")
 if [ -z "$last" ] && [ -f "$transcript_path" ]; then
-  last=$(jq -rs '[.[] | select(.type == "assistant")] | last | .message.content
-    | if type == "string" then . elif type == "array" then map(select(.type == "text") | .text) | join("\n") else "" end' \
-    "$transcript_path" 2>/dev/null || true)
+  last=$(tail -n 400 "$transcript_path" | last_text)
+  [ -n "$last" ] || last=$(last_text < "$transcript_path")
 fi
 
 # While background work runs, a plain stop is the controller waiting for it and

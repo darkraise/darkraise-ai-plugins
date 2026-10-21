@@ -65,6 +65,14 @@ check "mid-plan summary: the plugin root is quoted" \
 check "mid-plan summary: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dforge held the stop')" "1"
 check "retry with stop_hook_active: passes" "$(stop s-1 'Task 1 is done.' true)" ""
 check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
+# Without last_assistant_message the transcript's last assistant entry is read,
+# however far back it sits.
+TR="$TMP/fallback.jsonl"
+jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Stopping here.\n\n## Next session\n\n**Status:** x"}]}}' > "$TR"
+for i in $(seq 500); do printf '{"type":"progress","n":%s}\n' "$i"; done >> "$TR"
+check "no message field, the block far back in the transcript: passes" "$(stop s-1 '' false "$TR")" ""
+jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Task 1 is done."}]}}' >> "$TR"
+check "no message field, a later summary: blocks" "$(decision "$(stop s-1 '' false "$TR")")" "block"
 check "finish-preference question: passes" "$(stop s-1 $'Before I start: when the implementation is done and its final review is\nclean, what should I do?\n\n1. Merge back to main locally\n2. Push and create a Pull Request\n3. Keep the branch as-is\n4. Ask me then: show the finish menu and wait for my answer\n\nWhich option?')" ""
 check "finish-preference question on a detached HEAD: passes" "$(stop s-1 $'Before I start: when the implementation is done and its final review is\nclean, what should I do?\n\n1. Push as new branch and create a Pull Request\n2. Keep as-is\n3. Ask me then: show the finish menu and wait for my answer\n\nWhich option?')" ""
 write_ledger 'Task 1: complete (commits a..b, review clean)'
