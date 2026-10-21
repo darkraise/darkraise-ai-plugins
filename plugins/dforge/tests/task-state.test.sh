@@ -67,7 +67,7 @@ dr_task_open "$fixture/work" task-1 "$fixture/scope.json" 2>/dev/null
 check 'a reused pid with another start time is reclaimed' "$?" 0
 dr_task_unlock
 # Without /proc the start time comes from ps, and none at all still locks.
-(_dr_proc_start() { return 1; }; dr_task_open "$fixture/work" task-1 "$fixture/scope.json" && dr_task_unlock) 2>/dev/null
+(dr_proc_start() { return 1; }; dr_task_open "$fixture/work" task-1 "$fixture/scope.json" && dr_task_unlock) 2>/dev/null
 check 'a host without a start time source can still lock' "$?" 0
 (dr_task_open "$fixture/work" task-2 "$fixture/scope.json") >/dev/null 2>&1
 check 'persistent owner survives unlocking' "$?" 2

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "${BASH_SOURCE[0]}")/lock.sh"
 
 dr_state_error() { printf 'task-state: %s\n' "$1" >&2; return 2; }
 dr_canonical() { (cd -- "$1" && pwd -P); }
@@ -162,64 +163,19 @@ dr_task_update() {
   return "$result"
 }
 
-# _dr_proc_start PID — when PID's process started, so a reused PID reads as a
-# different process; empty where neither /proc nor `ps -o lstart` exists.
-_dr_proc_start() {
-  if [ -r "/proc/$1/stat" ]; then
-    # The command name in field 2 may hold spaces, so count from its ")".
-    sed 's/^.*) //' "/proc/$1/stat" 2>/dev/null | awk '{print $20}'
-  else
-    ps -o lstart= -p "$1" 2>/dev/null
-  fi
-}
-
-# _dr_task_reclaim LOCK — remove LOCK when its recorded owner provably exited:
-# same host, and its PID is gone or names a process started at another time.
-# A lock missing any of those records is uncertain and stays. Reclaims are
-# serialized so one cannot remove a lock another reclaimer just took.
-_dr_task_reclaim() {
-  local lock="$1" guard="$1.reclaim" pid host start now stale=1
-  mkdir -- "$guard" 2>/dev/null || return 1
-  pid="$(cat "$lock/pid" 2>/dev/null)"
-  host="$(cat "$lock/host" 2>/dev/null)"
-  start="$(cat "$lock/start" 2>/dev/null)"
-  if [[ "$pid" =~ ^[0-9]+$ ]] && [ -n "$host" ] && [ "$host" = "$(uname -n)" ]; then
-    if ! kill -0 "$pid" 2>/dev/null; then
-      stale=0
-    else
-      now="$(_dr_proc_start "$pid")"
-      [ -n "$start" ] && [ -n "$now" ] && [ "$now" != "$start" ] && stale=0
-    fi
-  fi
-  if [ "$stale" -eq 0 ]; then
-    rm -f -- "$lock/pid" "$lock/start" "$lock/host"
-    rmdir -- "$lock" 2>/dev/null || stale=1
-  fi
-  rmdir -- "$guard"
-  return "$stale"
-}
-
 dr_task_lock() {
   local lock="$DR_TASK_ROOT/run.lock"
   if ! mkdir -- "$lock" 2>/dev/null; then
-    _dr_task_reclaim "$lock" && mkdir -- "$lock" 2>/dev/null ||
+    dr_lock_reclaim "$lock" && mkdir -- "$lock" 2>/dev/null ||
       { dr_state_error 'worktree run lock exists; confirm prior writers stopped before reconciliation'; return 2; }
   fi
-  # The pid is written last: a lock whose pid is missing is never reclaimed.
-  # An unknown start time only narrows reclaiming to a PID that is gone.
-  _dr_proc_start "$$" > "$lock/start" || true
-  if ! { uname -n > "$lock/host" && printf '%s\n' "$$" > "$lock/pid"; }; then
-    rm -f -- "$lock/start" "$lock/host" "$lock/pid"; rmdir -- "$lock" 2>/dev/null
-    dr_state_error 'cannot record the run lock owner'; return 2
-  fi
+  dr_lock_claim "$lock" || { dr_state_error 'cannot record the run lock owner'; return 2; }
   DR_TASK_LOCK="$lock"
 }
 
 dr_task_unlock() {
   [ -n "${DR_TASK_LOCK:-}" ] || return 0
-  [ "$(cat "$DR_TASK_LOCK/pid" 2>/dev/null)" = "$$" ] || return 2
-  rm -f -- "$DR_TASK_LOCK/pid" "$DR_TASK_LOCK/start" "$DR_TASK_LOCK/host"
-  rmdir -- "$DR_TASK_LOCK" || return 2
+  dr_lock_release "$DR_TASK_LOCK" || return 2
   DR_TASK_LOCK=''
 }
 
