@@ -80,6 +80,7 @@ names "final review: residual acceptance failure" "$FR" 'is the one edit allowed
 names "final review: a spent re-dispatch writes the report" "$FR" 'is spent: write `<workspace>/acceptance-report.md` yourself, with'
 names "final review: the QA timer outlives the background default" "$FR" 'call'"'"'s `timeout` set to 2820000 ms'
 names "final review: V2 waits for QA to stop before cleanup" "$FR" 'Clean up only once it has stopped'
+names "final review: a skipped Codex round has no status line to wait for" "$FR" 'nothing to wait for: go straight to the one-list case'
 names "final review: demos are counted from the spec" "$FR" 'counted from the final report, except `<d>`: the number of the spec'"'"'s'
 names "final review: qa findings join the Claude list" "$FR" '`[qa]` finding from step 0.5 and every lens finding'
 names "final review: qa findings skip the verifier" "$FR" 'A `[qa]` finding is not given to the verifier: it enters the fix wave as'

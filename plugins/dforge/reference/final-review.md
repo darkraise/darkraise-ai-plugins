@@ -179,10 +179,13 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say
    which, and go to step 3 with the Claude review alone. An absent or empty
    report is never a clean round.
-3. **Wait for the round's status line first.** Until the runner has printed
-   `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`, there is no step 3: end the turn
-   and resume on its notification. An absent report is a round still running,
-   never a one-list case.
+3. **Wait for the round's status line first.** When step 2 launched the
+   runner, there is no step 3 until it has printed `OK`, `FALLBACK`,
+   `TIMEOUT` or `FAILED`: end the turn and resume on its notification. An
+   absent report from a launched runner is a round still running, never a
+   one-list case. When step 2 skipped the round without launching one
+   (`codexReview` off, or the gate did not print `review=true`), there is
+   nothing to wait for: go straight to the one-list case.
 
    **Dedupe and verify, only with two lists.** When the Claude review and the
    Codex round each produced at least one finding, dispatch a fresh
@@ -195,7 +198,7 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    confirmed, because only the scoped re-review decides a `REJECTED: A<n>`
    dispute (Fixing what it finds).
 
-   **With one list** — Codex off, `TIMEOUT`, `FAILED`, or either reviewer
+   **With one list** — Codex off or the round skipped, `TIMEOUT`, `FAILED`, or either reviewer
    returning no findings — there is no step-3 seat. Every finding in the list
    enters the fix wave unverified, and the fixer triages it (Fixing what it
    finds).
