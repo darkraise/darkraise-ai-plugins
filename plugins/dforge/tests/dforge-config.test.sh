@@ -29,6 +29,9 @@ check "isValidValue: 0 under a floor means unset" "$(vv '{ type: "number", floor
 check "isValidValue: under the floor" "$(vv '{ type: "number", floor: 1000 }' '5')" "false"
 check "isValidValue: enum member" "$(vv '{ type: "enum", values: ["a"] }' '"a"')" "true"
 check "isValidValue: unknown type" "$(vv '{ type: "list" }' '[]')" "false"
+check "isValidValue: a list of known names, any case and separator" "$(vv '{ type: "string", values: ["a", "b"] }' '"B, a b"')" "true"
+check "isValidValue: an empty list" "$(vv '{ type: "string", values: ["a"] }' '""')" "true"
+check "isValidValue: a list naming an unknown name" "$(vv '{ type: "string", values: ["a"] }' '"a,typo"')" "false"
 
 # --- defaults, set, get, unset ---
 fresh a
@@ -52,6 +55,9 @@ fc set nope 1; check "unknown key: exit 2" "$?" "2"
 fc set warnAt 500; check "out of range: exit 2" "$?" "2"
 fc set layout tiles; check "not an option: exit 2" "$?" "2"
 fc set guardAttribution maybe; check "not a boolean: exit 2" "$?" "2"
+fc set sections "plan, sesions"; check "a misspelt section: exit 2" "$?" "2"
+fc set notifyOn none; check "notifyOn none is a valid list" "$?" "0"
+fc unset notifyOn
 fc get; check "usage: exit 2" "$?" "2"
 fc get constructor; check "an inherited name is unknown: exit 2" "$?" "2"
 fc unset toString; check "unset of an inherited name: exit 2" "$?" "2"

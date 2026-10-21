@@ -10,7 +10,8 @@
 // enforcedBy names what obeys a workflow key: `script`, the script that already
 // makes the decision, or `skill`, through the `dforge-config workflow` line.
 // keepDefault writes the key even at its default, for a key whose absence
-// means something of its own.
+// means something of its own. values on a string makes it a list: names from
+// values, in any case, separated by commas or spaces, as the cockpit reads it.
 // A value as ~/.dforge/config.json must hold it: exactly the setting's type.
 // scripts/lib/dforge-config.mjs and the cockpit's config.ts both call this, so
 // the two readers cannot disagree about what the file may contain.
@@ -23,7 +24,9 @@ export function isValidValue(spec, value) {
       if (spec.floor !== undefined) return value === 0 || (value >= spec.floor && (spec.max === undefined || value <= spec.max));
       return (spec.min === undefined || value >= spec.min) && (spec.max === undefined || value <= spec.max);
     case "enum": return typeof value === "string" && (spec.values ?? []).includes(value);
-    case "string": return typeof value === "string";
+    case "string":
+      return typeof value === "string"
+        && (spec.values === undefined || value.split(/[\s,]+/).every(name => name === "" || spec.values.includes(name.toLowerCase())));
     default: return false;
   }
 }
@@ -45,12 +48,12 @@ export default {
     description: 'detailed: cards, charts and lists. dense: one line per section. The pane\'s Dense and Detailed buttons set it.',
   },
   sections: {
-    type: 'string', default: '', group: 'Cockpit', target: 'dforge',
+    type: 'string', values: ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'], default: '', group: 'Cockpit', target: 'dforge',
     label: 'Sections', title: 'Pane sections',
     description: 'Which sections the full pane shows, in order, comma-separated: account, context, usage, shells, agents, plan, repo, guard. Empty shows all eight.',
   },
   collapsed: {
-    type: 'string', default: '', group: 'Cockpit', target: 'dforge',
+    type: 'string', values: ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'], default: '', group: 'Cockpit', target: 'dforge',
     label: 'Collapsed', title: 'Collapsed sections',
     description: 'Sections drawn as their title row only, comma-separated: account, context, usage, shells, agents, plan, repo, guard. Empty expands all eight.',
   },
@@ -160,7 +163,7 @@ export default {
     description: 'Send the Discord limit message once when the 5-hour or 7-day limit crosses this share, again after it resets. 0 turns it off.',
   },
   notifyOn: {
-    type: 'string', default: '', group: 'Notifications', target: 'dforge',
+    type: 'string', values: ['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit', 'task', 'session', 'agent', 'none'], default: '', group: 'Notifications', target: 'dforge',
     label: 'Send on', title: 'Discord: events to send',
     description: 'Comma-separated: ask, question, done, error, blocked, budget, limit, task, session, agent. Empty sends ask, question, done, error, blocked, budget and limit; none sends nothing.',
   },
