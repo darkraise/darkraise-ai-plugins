@@ -4884,6 +4884,18 @@ describe('auto run', () => {
     expect(w.compacts).toEqual([])
   })
 
+  test('a dev server left running in the background defers no stage', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO], tools: { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }) } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+  })
+
   test('a live turn restarts the deferral, so the cap counts background work alone', async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
@@ -5141,11 +5153,23 @@ describe('auto run', () => {
     const clock = world(on, w)
     signedIn(on, files)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
-    await $.turn.complete({ answer: 'Waiting for the server.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'Waiting for the tests.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await clock.advance(600_000)
     expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
     expect(w.prompts).toEqual([])
+  })
+
+  test('a dev server in the background does not hide a stall', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) } }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'The server is up.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(600_000)
+    expect(w.autoRuns).toContain('--session sess-1 stalled')
   })
 
   test('leaves the run alone while a turn runs', async ($, on) => {

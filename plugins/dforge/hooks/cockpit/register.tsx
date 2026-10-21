@@ -2564,7 +2564,7 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
     S.autoDeferredSince = null
     return
   }
-  const isBackground = (await read($, spawns)).some(one => !one.isDone) || (await read($, shells)).length > 0
+  const isBackground = await isMainBackground($)
   if (S.isTurnLive || isBackground) {
     const stamp = await $.clock.now()
     // Only background work with no turn live counts toward the cap: a live
@@ -2754,7 +2754,7 @@ async function watchdogTick($: EngineInterface) {
   if (S.isTurnLive || S.autoBusy) return
   const auto = await readAutoRun($)
   if (auto === null || !auto.active) return
-  if ((await read($, spawns)).some(one => !one.isDone) || (await read($, shells)).length > 0) return
+  if (await isMainBackground($)) return
   const now = await read($, activity)
   if (now.kind !== 'idle' && now.kind !== 'failed') return
   const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.autoActedAt ?? 0, (auto.stalledAt ?? 0) * 1000)
