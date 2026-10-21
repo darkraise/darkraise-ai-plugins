@@ -381,6 +381,14 @@ roll 15 c "$REPO_NATIVE" codex_exec exec >/dev/null
 ( cd "$REPO" && ctx_find_rollout ) >/dev/null 2>&1
 check "discovery: an executor-lane rollout alone is no match" "$?" "1"
 
+# The codex plugin's app-server runs, which carry the review and task lanes,
+# tag their rollouts as the Claude Code client rather than as exec.
+rm -rf "$CODEX_HOME"
+R2=$(roll 15 e "$REPO_NATIVE")
+roll 16 f "$REPO_NATIVE" 'Claude Code' vscode >/dev/null
+( cd "$REPO" && ctx_find_rollout && printf '%s' "$CTX_ROLLOUT" ) > "$TMP/found3"
+check "discovery: prefers the interactive rollout over a newer plugin one" "$(cat "$TMP/found3")" "$R2"
+
 rm -rf "$CODEX_HOME"
 roll 15 d 'C:\somewhere\else' >/dev/null
 ( cd "$REPO" && ctx_find_rollout ) >/dev/null 2>&1

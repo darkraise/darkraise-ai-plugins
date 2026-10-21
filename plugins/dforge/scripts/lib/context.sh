@@ -194,9 +194,10 @@ ctx_rollout_files() {
 
 # Sets CTX_ROLLOUT to this session's rollout; returns 1 when none matches.
 # Only interactive rollouts count. This plugin makes a Claude controller run
-# Codex tasks in its own worktree through run-codex-task.sh, and those runs
-# write rollouts carrying the controller's cwd; selecting one would replace a
-# live Claude session's verdict with an unknown.
+# Codex tasks and reviews in its own worktrees, and those runs write rollouts
+# carrying the controller's cwd; selecting one would replace a live Claude
+# session's verdict with an unknown. `codex exec` tags its rollouts
+# codex_exec/exec, and the codex plugin's app-server tags them "Claude Code".
 ctx_find_rollout() {
   CTX_ROLLOUT=""
   local sessions cands f cwd n=0
@@ -218,7 +219,8 @@ ctx_find_rollout() {
     [ "$n" -le "$CTX_ROLLOUT_SCAN" ] || return 1
     cwd=$(head -n 1 "$f" 2>/dev/null | tr -d '\r' | ctx_jq -r '
       .payload
-      | select((.originator // "") != "codex_exec" and (.source // "") != "exec")
+      | select((.originator // "") as $o | $o != "codex_exec" and $o != "Claude Code"
+          and (.source // "") != "exec")
       | .cwd // empty' 2>/dev/null)
     [ -n "$cwd" ] || continue
     if grep -qxF -- "$cwd" <<<"$cands"; then CTX_ROLLOUT=$f; return 0; fi
