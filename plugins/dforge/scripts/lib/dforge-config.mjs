@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import SCHEMA, { isValidValue } from "../../config/schema.mjs";
+import { acquireLock } from "./darkmem-mirror.mjs";
 
 export class SettingError extends Error {}
 
@@ -19,6 +20,27 @@ function homeOf(env) {
 
 export function configPath(env = process.env) {
   return path.join(homeOf(env), ".dforge", "config.json");
+}
+
+const HOME_LOCK_WAIT_MS = 10000;
+
+// Runs `change` holding the lock every writer of a file in ~/.dforge
+// (config.json, stores.json) takes across its read, merge and replace, so two
+// sessions changing different keys never drop each other's change. A holder
+// keeps it for milliseconds, so a wait that long means it is stuck.
+export function withHomeLock(env, change, Busy = Error) {
+  const dir = path.join(homeOf(env), ".dforge", ".lock");
+  const deadline = Date.now() + HOME_LOCK_WAIT_MS;
+  let release;
+  while (!(release = acquireLock(dir))) {
+    if (Date.now() >= deadline) throw new Busy(`another dforge process has held ${dir} for ${HOME_LOCK_WAIT_MS / 1000} s; if none is running, remove it`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+  }
+  try {
+    return change();
+  } finally {
+    release();
+  }
 }
 
 // A value as the file holds it: exactly the schema's type.
@@ -228,10 +250,12 @@ export function setValue(key, text, env = process.env) {
     return value;
   }
   const file = configPath(env);
-  const data = readFile(file) ?? {};
-  if (value === spec.default && !spec.keepDefault) delete data[key];
-  else data[key] = value;
-  writeFile(file, data);
+  withHomeLock(env, () => {
+    const data = readFile(file) ?? {};
+    if (value === spec.default && !spec.keepDefault) delete data[key];
+    else data[key] = value;
+    writeFile(file, data);
+  });
   return value;
 }
 
@@ -239,9 +263,11 @@ export function unsetValue(key, env = process.env) {
   const spec = need(key);
   if (spec.target === "claude") { writeClaude(env, key, undefined); return; }
   const file = configPath(env);
-  const data = readFile(file) ?? {};
-  delete data[key];
-  writeFile(file, data);
+  withHomeLock(env, () => {
+    const data = readFile(file) ?? {};
+    delete data[key];
+    writeFile(file, data);
+  });
 }
 
 // Once per machine, while ~/.dforge/config.json does not exist: dr-cockpit's

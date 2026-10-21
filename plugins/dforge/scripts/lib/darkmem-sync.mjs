@@ -235,7 +235,13 @@ async function main(argv, {
   const families = { documents: cfg.documents.applied === "darkmem", progress: cfg.progress.applied === "darkmem" };
   // A 2.x record names no project or mirror; without them a family in the
   // mirror could not be found once the mapping is gone.
-  if (families.documents || families.progress) recordWhere(env, cfg.repoRoot, { project: cfg.project, mirror: cfg.mirror });
+  try {
+    if (families.documents || families.progress) recordWhere(env, cfg.repoRoot, { project: cfg.project, mirror: cfg.mirror });
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    err(`darkmem-sync: ${error.message}`);
+    return 2;
+  }
   // Disabled or unmapped with a family still in the mirror: only reconcile,
   // which moves it back, and status act.
   if (!cfg.enabled && parsed.name !== "reconcile" && parsed.name !== "status") {

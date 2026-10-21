@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolve as resolveSettings } from "./dforge-config.mjs";
+import { resolve as resolveSettings, withHomeLock } from "./dforge-config.mjs";
 import { DOC_PREFIX } from "./darkmem-mirror.mjs";
 
 export class ConfigError extends Error {}
@@ -103,19 +103,21 @@ export function recordWhere(env, repoRoot, where) {
 // applied darkmem can still be found once darkmem is disabled or unmapped.
 export function writeApplied(env, repoRoot, applied, where = {}) {
   const file = storesPath(env);
-  const data = readRecord(env);
-  let entry = {};
-  for (const key of Object.keys(data)) {
-    if (!samePath(key, repoRoot)) continue;
-    entry = { ...entry, ...data[key] };
-    delete data[key];
-  }
-  const known = Object.fromEntries(Object.entries(where).filter(([, value]) => value !== undefined && value !== null));
-  data[repoRoot] = { ...entry, ...known, ...applied };
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = path.join(path.dirname(file), `.stores.json.${process.pid}.tmp`);
-  fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`);
-  fs.renameSync(temporary, file);
+  withHomeLock(env, () => {
+    const data = readRecord(env);
+    let entry = {};
+    for (const key of Object.keys(data)) {
+      if (!samePath(key, repoRoot)) continue;
+      entry = { ...entry, ...data[key] };
+      delete data[key];
+    }
+    const known = Object.fromEntries(Object.entries(where).filter(([, value]) => value !== undefined && value !== null));
+    data[repoRoot] = { ...entry, ...known, ...applied };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const temporary = path.join(path.dirname(file), `.stores.json.${process.pid}.tmp`);
+    fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`);
+    fs.renameSync(temporary, file);
+  }, ConfigError);
 }
 
 export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {

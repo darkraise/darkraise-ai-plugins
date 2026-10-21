@@ -106,6 +106,32 @@ case $(tr -d ' \n' < "$FILE") in '{"layout":"compact"}'|'{"layout":"full","warnA
 check "concurrent first runs: one whole import" "$whole" "yes"
 check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dforge" | grep -c '\.import$')" "0"
 
+# --- two setters at once: both keys land ---
+# Each setter holds its read of config.json for 300 ms, so without a lock both
+# read the same file and the later rename drops the other's key.
+fresh race
+mkdir -p "$HOME/.dforge"
+printf '{}\n' > "$FILE"
+slow_set() { # slow_set KEY VALUE
+  DFORGE_CONFIG_MJS="$HERE/../scripts/lib/dforge-config.mjs" node --input-type=module -e '
+    import fs from "node:fs";
+    const { main } = await import(process.env.DFORGE_CONFIG_MJS);
+    const read = fs.readFileSync;
+    fs.readFileSync = function (file, ...rest) {
+      const data = read.call(this, file, ...rest);
+      if (String(file).endsWith("config.json")) { const until = Date.now() + 300; while (Date.now() < until); }
+      return data;
+    };
+    process.exitCode = main(["set", process.argv[1], process.argv[2]]);
+  ' "$1" "$2" > /dev/null 2>&1
+}
+slow_set notifyAfter 120 &
+p1=$!
+slow_set finishAction merge &
+p2=$!
+wait "$p1" "$p2"
+check "concurrent setters: both keys kept" "$(fc get notifyAfter) $(fc get finishAction)" "120 merge"
+
 # --- the workflow keys: defaults and refusals ---
 fresh w
 check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.autoRun].join(" "))')" \

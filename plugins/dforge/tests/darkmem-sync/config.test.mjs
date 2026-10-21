@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -143,6 +143,34 @@ test("writeApplied records one family and keeps the other, with the project and 
   writeApplied(env, repo, { documents: "darkmem" }, { project: "proj", mirror: "/m", unknown: undefined });
   assert.deepEqual(JSON.parse(fs.readFileSync(storesPath(env), "utf8")), { [repo]: { documents: "darkmem", progress: "local", project: "proj", mirror: "/m" } });
   assert.deepEqual(applied(resolveStores({ cwd: repo, env })), ["darkmem", "local"]);
+});
+
+test("two sessions writing stores.json at once keep both repositories' records", async () => {
+  const home = scratch("dms-home-");
+  write(path.join(home, ".dforge", "stores.json"), JSON.stringify({
+    "/repo/a": { project: "a", mirror: "/m/a", documents: "darkmem", progress: "darkmem" },
+    "/repo/b": { project: "b", mirror: "/m/b", documents: "darkmem", progress: "darkmem" },
+  }));
+  // Each writer holds its read for 300 ms, so without a lock both read the
+  // same record and the later rename drops the other's change.
+  const writer = repo => new Promise((resolve, reject) => {
+    const code = `
+      import fs from "node:fs";
+      import { writeApplied } from ${JSON.stringify(MODULE)};
+      const read = fs.readFileSync;
+      fs.readFileSync = function (file, ...rest) {
+        const data = read.call(this, file, ...rest);
+        if (String(file).endsWith("stores.json")) { const until = Date.now() + 300; while (Date.now() < until); }
+        return data;
+      };
+      writeApplied({ HOME: ${JSON.stringify(home)} }, ${JSON.stringify(repo)}, { documents: "local" });
+    `;
+    execFile(process.execPath, ["--input-type=module", "-e", code], { timeout: 20000 }, error => (error ? reject(error) : resolve()));
+  });
+  await Promise.all([writer("/repo/a"), writer("/repo/b")]);
+  const record = JSON.parse(fs.readFileSync(path.join(home, ".dforge", "stores.json"), "utf8"));
+  assert.equal(record["/repo/a"].documents, "local");
+  assert.equal(record["/repo/b"].documents, "local");
 });
 
 test("a pre-2.0 checkout's directories and home are not read", () => {
