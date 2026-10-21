@@ -80,6 +80,8 @@ names "final review: residual acceptance failure" "$FR" 'is the one edit allowed
 names "final review: a spent re-dispatch writes the report" "$FR" 'is spent: write `<workspace>/acceptance-report.md` yourself, with'
 names "final review: the QA timer outlives the background default" "$FR" 'call'"'"'s `timeout` set to 2820000 ms'
 names "final review: V2 waits for QA to stop before cleanup" "$FR" 'Clean up only once it has stopped'
+names "final review: the wait for a stopped QA agent is bounded" "$FR" 'finished, for 10 minutes at most in all.'
+names "final review: a QA agent that cannot be stopped keeps its files" "$FR" 'If it cannot be stopped, leave its files in place'
 names "final review: a skipped Codex round has no status line to wait for" "$FR" 'nothing to wait for: go straight to the one-list case'
 names "final review: both acceptance test name forms are protected" "$FR" 'or with `a<n>_` where the framework forbids a colon'
 names "re-review: both acceptance test name forms" "$P/skills/subagent-driven-development/references/re-review-prompt.md" 'starts with `A<n>:` or'

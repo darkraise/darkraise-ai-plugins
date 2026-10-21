@@ -80,8 +80,11 @@ review package, so the package includes the acceptance tests step 0.5 commits.
       Codex, `close_agent` where your tools offer it. V2 has none: send the
       child a `followup_task` telling it to stop and return now, then wait for
       it in bounded `wait_agent` stretches until `list_agents` shows it
-      finished. Clean up only once it has stopped, since removing files a
-      live writer still owns races it. Run `git status --porcelain` again: each path it
+      finished, for 10 minutes at most in all.
+      Clean up only once it has stopped, since removing files a live writer
+      still owns races it. If it cannot be stopped, leave its files in place
+      and report the blocked cleanup.
+      Once it has stopped, run `git status --porcelain` again: each path it
       lists that `<workspace>/qa-status-before.txt` does not is QA's
       unfinished work. Restore a tracked one with
       `git restore --staged --worktree -- <path>`, delete an untracked one,
