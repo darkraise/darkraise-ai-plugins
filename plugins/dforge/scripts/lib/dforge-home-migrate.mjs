@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { HttpError } from "./darkmem-client.mjs";
 import { DOC_PREFIX, LEGACY_PREFIX, StateError, acquireLock, loadState, saveState } from "./darkmem-mirror.mjs";
+import { withHomeLock } from "./dforge-config.mjs";
 
 // dr-superpowers wrote superpowers/, dr-forge forge/.
 export const OLD_PREFIXES = [LEGACY_PREFIX, "forge"];
@@ -162,6 +163,9 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
     refused += 1;
   };
   const did = (done, would) => lines.push(dryRun ? would : done);
+  // A change to config.json or stores.json reads and writes under the lock
+  // every other writer of those files takes.
+  const locked = change => (dryRun ? change() : withHomeLock(env, change));
   // [from, to, whole]: whole marks a home's mirror folder moving, not one mirror.
   const moves = [];
   // In a dry run nothing has moved, so a path in the new home is read where
@@ -197,28 +201,30 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       const from = path.join(forgeHome, entry.name);
       const to = path.join(newHome, entry.name);
       if (entry.name === "config.json" && entry.isFile() && fs.existsSync(to)) {
-        const old = readOrRefuse(from);
-        const next = readOrRefuse(to);
-        if (old === UNREADABLE || next === UNREADABLE) continue;
-        const bad = [[from, old], [to, next]].find(([, value]) => notObject(value));
-        if (bad) {
-          badConfigs.add(bad[0]);
-          refuse(`${bad[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
-          continue;
-        }
-        const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
-        if (clash.length) {
-          refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dforge-migrate again`);
-          continue;
-        }
-        const copied = Object.keys(old).filter(key => !(key in next));
-        merged = { ...next, ...old };
-        if (!dryRun) {
-          writeJson(to, merged);
-          fs.rmSync(from);
-        }
-        did(`merged ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`,
-          `would merge ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`);
+        locked(() => {
+          const old = readOrRefuse(from);
+          const next = readOrRefuse(to);
+          if (old === UNREADABLE || next === UNREADABLE) return;
+          const bad = [[from, old], [to, next]].find(([, value]) => notObject(value));
+          if (bad) {
+            badConfigs.add(bad[0]);
+            refuse(`${bad[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+            return;
+          }
+          const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
+          if (clash.length) {
+            refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dforge-migrate again`);
+            return;
+          }
+          const copied = Object.keys(old).filter(key => !(key in next));
+          merged = { ...next, ...old };
+          if (!dryRun) {
+            writeJson(to, merged);
+            fs.rmSync(from);
+          }
+          did(`merged ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`,
+            `would merge ${from} into ${to} (${copied.length ? copied.join(", ") : "no new keys"})`);
+        });
         continue;
       }
       if (entry.name === "mirror" && entry.isDirectory() && fs.existsSync(to)) {
@@ -280,22 +286,22 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   if (oldConfig !== UNREADABLE && oldConfig?.darkmem && typeof oldConfig.darkmem === "object") {
     const file = path.join(newHome, "config.json");
     const source = view("config.json");
-    const current = (dryRun && merged) ? { ...merged } : readOrRefuse(source);
-    const config = current ?? {};
-    if (current === UNREADABLE || (current !== undefined && notObject(current))) {
-      if (!badConfigs.has(source)) refuse(`${source} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
-    } else if (config.darkmem === undefined) {
-      config.darkmem = oldConfig.darkmem;
-      if (!dryRun) {
-        fs.mkdirSync(newHome, { recursive: true });
-        writeJson(file, config);
+    if (!dryRun) fs.mkdirSync(newHome, { recursive: true });
+    locked(() => {
+      const current = (dryRun && merged) ? { ...merged } : readOrRefuse(source);
+      const config = current ?? {};
+      if (current === UNREADABLE || (current !== undefined && notObject(current))) {
+        if (!badConfigs.has(source)) refuse(`${source} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+      } else if (config.darkmem === undefined) {
+        config.darkmem = oldConfig.darkmem;
+        if (!dryRun) writeJson(file, config);
+        did(`copied the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`,
+          `would copy the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`);
+        if (config.darkmemEnabled === undefined) lines.push("darkmem is off until you turn it on: bash <plugin-root>/scripts/dforge-config set darkmemEnabled true");
+      } else {
+        lines.push(`${file} already has a darkmem section; ${path.join(oldHome, "config.json")} was not copied`);
       }
-      did(`copied the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`,
-        `would copy the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`);
-      if (config.darkmemEnabled === undefined) lines.push("darkmem is off until you turn it on: bash <plugin-root>/scripts/dforge-config set darkmemEnabled true");
-    } else {
-      lines.push(`${file} already has a darkmem section; ${path.join(oldHome, "config.json")} was not copied`);
-    }
+    });
   }
   const oldMirrors = path.join(oldHome, "mirror");
   const newMirrors = path.join(newHome, "mirror");
@@ -316,22 +322,26 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   }
 
   const stores = view("stores.json");
-  const data = readOrRefuse(stores);
-  if (data !== UNREADABLE && data && typeof data === "object" && !Array.isArray(data)) {
-    let pointed = 0;
-    for (const record of Object.values(data)) {
-      if (!record || typeof record.mirror !== "string") continue;
-      const move = moves.find(([from]) => record.mirror === from || record.mirror.startsWith(`${from}${path.sep}`));
-      if (!move) continue;
-      record.mirror = `${move[1]}${record.mirror.slice(move[0].length)}`;
-      pointed += 1;
+  // A home with no stores.json has nothing to point, and no lock to take.
+  const pointStores = () => {
+    const data = readOrRefuse(stores);
+    if (data !== UNREADABLE && data && typeof data === "object" && !Array.isArray(data)) {
+      let pointed = 0;
+      for (const record of Object.values(data)) {
+        if (!record || typeof record.mirror !== "string") continue;
+        const move = moves.find(([from]) => record.mirror === from || record.mirror.startsWith(`${from}${path.sep}`));
+        if (!move) continue;
+        record.mirror = `${move[1]}${record.mirror.slice(move[0].length)}`;
+        pointed += 1;
+      }
+      if (pointed) {
+        if (!dryRun) writeJson(path.join(newHome, "stores.json"), data);
+        did(`pointed ${pointed} ${path.join(newHome, "stores.json")} record(s) at the moved mirrors`,
+          `would point ${pointed} ${path.join(newHome, "stores.json")} record(s) at the moved mirrors`);
+      }
     }
-    if (pointed) {
-      if (!dryRun) writeJson(path.join(newHome, "stores.json"), data);
-      did(`pointed ${pointed} ${path.join(newHome, "stores.json")} record(s) at the moved mirrors`,
-        `would point ${pointed} ${path.join(newHome, "stores.json")} record(s) at the moved mirrors`);
-    }
-  }
+  };
+  if (fs.existsSync(stores)) locked(pointStores);
 
   const mirrors = new Set();
   for (const entry of fs.existsSync(view("mirror")) ? fs.readdirSync(view("mirror"), { withFileTypes: true }) : []) {

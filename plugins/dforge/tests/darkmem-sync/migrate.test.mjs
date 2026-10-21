@@ -177,6 +177,28 @@ test("migrateHome renames ~/.dr-forge whole and points stores.json at the moved 
   assert.deepEqual(migrateHome({ HOME: home }), { lines: [], refused: 0 });
 });
 
+test("migrateHome writes config.json and stores.json holding the home lock", t => {
+  const home = scratch("dms-home-");
+  const forge = path.join(home, ".dr-forge");
+  const dforge = path.join(home, ".dforge");
+  const superpowers = path.join(home, ".dr-superpowers");
+  write(path.join(forge, "config.json"), JSON.stringify({ handoffTokens: 325000 }));
+  write(path.join(forge, "stores.json"), JSON.stringify({ "/r": { project: "p", mirror: path.join(forge, "mirror", "p") } }));
+  write(path.join(forge, "mirror", "p", "forge", "a.md"), "a\n");
+  write(path.join(dforge, "config.json"), JSON.stringify({ layout: "auto" }));
+  write(path.join(superpowers, "config.json"), JSON.stringify({ darkmem: { url: "http://127.0.0.1:9" } }));
+  const written = [];
+  const writeFile = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (file, ...rest) => {
+    const name = /^\.(config|stores)\.json\./.exec(path.basename(String(file)))?.[1];
+    if (name) written.push(`${name} ${fs.existsSync(path.join(dforge, ".lock", ".sync.lock")) ? "locked" : "unlocked"}`);
+    return writeFile(file, ...rest);
+  });
+  const { lines, refused } = migrateHome({ HOME: home });
+  assert.equal(refused, 0, lines.join("\n"));
+  assert.deepEqual(written, ["config locked", "config locked", "stores locked"]);
+});
+
 test("migrateHome merges ~/.dr-forge into an existing ~/.dforge entry by entry", () => {
   const home = scratch("dms-home-");
   const forge = path.join(home, ".dr-forge");
