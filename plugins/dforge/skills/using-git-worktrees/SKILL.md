@@ -79,10 +79,12 @@ Follow this priority order. Explicit user preference always beats observed files
 
 #### Safety Verification (project-local directories only)
 
-**MUST verify directory is ignored before creating worktree:**
+**MUST verify the chosen directory is ignored before creating worktree** —
+the one `$LOCATION` names, not any of the candidates. The trailing slash lets
+a directory pattern such as `.worktrees/` match before the directory exists:
 
 ```bash
-git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/dev/null
+git check-ignore -q "$LOCATION/" 2>/dev/null
 ```
 
 **If NOT ignored:** Add to .gitignore, commit the change, then proceed.
@@ -103,22 +105,31 @@ cd "$path"
 
 ## Step 2: Project Setup
 
-Auto-detect and run appropriate setup:
+A plan's `**Worktree setup:**` command, or the setup the repository's README or
+`CLAUDE.md` names, wins over detection. Otherwise detect from the lockfile,
+which names the tool the project actually uses; a manifest alone does not:
 
 ```bash
 # Node.js
-if [ -f package.json ]; then npm install; fi
+if [ -f pnpm-lock.yaml ]; then pnpm install
+elif [ -f yarn.lock ]; then yarn install
+elif [ -f bun.lock ] || [ -f bun.lockb ]; then bun install
+elif [ -f package.json ]; then npm install; fi
 
 # Rust
 if [ -f Cargo.toml ]; then cargo build; fi
 
 # Python
-if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-if [ -f pyproject.toml ]; then poetry install; fi
+if [ -f poetry.lock ]; then poetry install
+elif [ -f uv.lock ]; then uv sync
+elif [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
 # Go
 if [ -f go.mod ]; then go mod download; fi
 ```
+
+A `pyproject.toml` with none of those files names no tool: read its
+`[build-system]` and the README rather than guessing.
 
 ## Step 3: Verify Clean Baseline
 

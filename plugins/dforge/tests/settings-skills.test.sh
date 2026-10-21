@@ -43,6 +43,8 @@ names "writing-plans: instructions outrank a setting" "$W" 'own instructions out
 names "writing-plans: executionMode fixes the line" "$W" 'line when it is `inline` or `subagent`, in place of the majority rule.'
 names "writing-plans: an inline plan is sequential" "$W" '`**Parallelism:** sequential — executionMode is inline`'
 names "writing-plans: executionStrategy answers the question" "$W" 'that value and do not ask. On a Codex host do not ask:'
+names "using-git-worktrees checks only the chosen directory" "$G" 'git check-ignore -q "$LOCATION/"'
+names "using-git-worktrees picks pnpm from its lockfile" "$G" 'if [ -f pnpm-lock.yaml ]; then pnpm install'
 names "using-git-worktrees loads the settings when no line is in context" "$G" 'run `scripts/dforge-config workflow` when no such line is in context'
 names "using-git-worktrees: what each value does" "$G" '`worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2'
 names "using-git-worktrees: the setting decides only when no preference was stated" "$G" 'If not, the `worktree` setting decides'
