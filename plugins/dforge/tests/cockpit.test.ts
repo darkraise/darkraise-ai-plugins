@@ -3063,6 +3063,15 @@ describe('run card', () => {
     ])
   })
 
+  test('reads a task number only where it ends, as plan.sh does', () => {
+    const plan = ['# Plan', '### Task 10x: Not a task', '### Task 7th: Nor this', '### Task 4', '### Task 5. Dotted', '### Task 6 - Dashed'].join('\n')
+    expect(planTasks(plan)).toEqual([
+      { n: 4, title: '' },
+      { n: 5, title: 'Dotted' },
+      { n: 6, title: 'Dashed' },
+    ])
+  })
+
   test('starts no task from a Ruling, parked or deferred line', () => {
     const ledger = parseLedger(`${LEDGER}\nTask 1: Ruling: the meter — kept\nTask 3: parked — width — Ruling: fine\nTask 4: minor (deferred): rename\nTask 5: escalated inline -> subagent — two rounds`)
     expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([

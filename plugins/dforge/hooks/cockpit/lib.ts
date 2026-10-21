@@ -794,7 +794,7 @@ export function planTasks(text: string): { n: number; title: string }[] {
       fence = open[1] ?? ''
       continue
     }
-    const match = /^#+[ \t]+Task[ \t]+(\d+)[ \t]*[:.\-—]?[ \t]*(.*)$/.exec(line)
+    const match = /^#+[ \t]+Task[ \t]+(\d+)(?=[ \t:.-]|$)[ \t]*[:.\-—]?[ \t]*(.*)$/.exec(line)
     if (match && !out.some(one => one.n === Number(match[1]))) out.push({ n: Number(match[1]), title: (match[2] ?? '').trim() })
   }
   return out
