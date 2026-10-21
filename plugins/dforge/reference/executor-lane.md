@@ -276,8 +276,8 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 | Failure | Response |
 |---------|----------|
 | `note=writer-unconfirmed`, after a timeout or a transport error | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the Codex turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
-| Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section | Retry once at the same rung |
-| Timeout - `note=timed-out` on the status line, `exit=124` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
+| Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section, without `note=writer-unconfirmed` | Retry once at the same rung |
+| Timeout - `note=timed-out` on the status line, `exit=124`, without `note=writer-unconfirmed` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
 | Refusal - `refusal=true` in the report's `## Codex error` section | `HANDBACK` now. The account does not offer that model or effort, and every successor rung is the same model, so a retry or a successor would be refused too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
