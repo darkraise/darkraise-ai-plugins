@@ -65,7 +65,8 @@ const SECRETS: [RegExp, string][] = [
   [/\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g, '[token]'],
   [/\b(sk-[A-Za-z0-9_-]{16,}|xox[abposr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})/g, '[token]'],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [token]'],
-  [/\b((?:api[_-]?key|token|secret|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1[hidden]'],
+  // A key may end its own quoting (JSON's "password": or an escaped \"password\":) before the separator.
+  [/\b(\w*(?:api[_-]?key|token|secret|password|passwd|pwd)\\?["']?\s*[=:]\s*)("(?:[^"\\]|\\.)*"|'[^']*'|\S+)/gi, '$1[hidden]'],
   [/https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\S+/g, '[webhook]'],
 ]
 
