@@ -557,6 +557,8 @@ describe('pane helpers', () => {
     expect(duration(13_200_000)).toBe('3h40m')
     expect(duration(190_800_000)).toBe('2d5h')
     expect(duration(-5)).toBe('')
+    expect(duration(59_999)).toBe('')
+    expect(duration(60_000)).toBe('1m')
     expect(repoFromPorcelain(PORCELAIN)).toEqual({ branch: 'feat/pane', ahead: 2, behind: 1, changed: 1, untracked: 1 })
     expect(repoFromPorcelain('# branch.oid abc1234def\n# branch.head (detached)\n')?.branch).toBe('@abc1234')
     expect(repoFromPorcelain('')).toBeNull()

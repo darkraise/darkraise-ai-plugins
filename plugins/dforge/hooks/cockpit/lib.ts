@@ -179,9 +179,9 @@ export function rampColor(percent: number): string {
   return percent >= 50 ? 'warning' : 'success'
 }
 
-/** Milliseconds → "3h40m", "2d4h", "12m"; nothing at or below zero. */
+/** Milliseconds → "3h40m", "2d4h", "12m"; nothing under a minute, so a caller says "now" or "<1m" itself. */
 export function duration(ms: number): string {
-  if (!(ms > 0)) return ''
+  if (!(ms >= 60_000)) return ''
   const minutes = Math.floor(ms / 60_000)
   const days = Math.floor(minutes / 1440)
   const hours = Math.floor((minutes % 1440) / 60)
