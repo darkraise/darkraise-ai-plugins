@@ -94,6 +94,26 @@ roadmap_unresolved() {
   return 0
 }
 
+# roadmap_registers ROOT REGISTER — the register files roadmap_unresolved
+# reads, one path per line, whether or not they exist: the milestone's own,
+# then every register covering a spec one of its open or done epic rows is
+# assigned to.
+roadmap_registers() {
+  local root=$1 path id item assigned acceptance state note a
+  path=$(dforge_resolve "$2" "$root")
+  printf '%s\n' "$path"
+  [ -f "$path" ] || return 0
+  while IFS=$'\037' read -r id item assigned acceptance state note; do
+    [ "$state" = "n/a" ] || [ "$state" = "deferred" ] && continue
+    a=${assigned#\`}
+    a=${a%\`}
+    case $a in ''|-) continue ;; esac
+    [ -f "$(dforge_resolve "$a" "$root")" ] || continue
+    register_for_spec "$root" "$a"
+  done < <(register_rows "$path" | register_cells) | awk '!seen[$0]++'
+  return 0
+}
+
 # roadmap_epic_counts ROOT REGISTER — "<resolved> <total>" over the epic rows.
 roadmap_epic_counts() {
   local path

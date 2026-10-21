@@ -203,6 +203,38 @@ check "check: duplicate milestone" "$(grep -c 'duplicate milestone: M1' <<<"$OUT
 check "check: missing register" "$(grep -c 'register does not exist' <<<"$OUT")" "1"
 check "check: unknown state" "$(grep -c 'unknown state: finished' <<<"$OUT")" "1"
 
+# --- close refuses evidence it cannot read ---
+R2="$TMP/repo2"
+git init -q -b main "$R2"
+D2="$R2/docs/dforge"
+mkdir -p "$D2/registers" "$D2/specs"
+printf '# Product design\n' > "$D2/specs/2026-10-07-shop-design.md"
+cat > "$D2/roadmap.md" <<EOF
+# Shop — roadmap
+
+**Product:** an online shop
+**Spec:** $PRODUCT
+
+| M | Name | Exit criteria | Register | State | Note |
+|---|---|---|---|---|---|
+| M1 | MVP |  | docs/superpowers/registers/gone.md | open | - |
+EOF
+run bash "$RM" close --root "$R2" M1 --note "audit"
+check "close: a missing register is refused" "$RC:$(grep -c 'register does not exist' <<<"$OUT")" "1:1"
+check "close: an empty cell does not shift the register" "$(grep -c 'gone.md' <<<"$OUT")" "1"
+register "$D2/registers/gone.md" "$PRODUCT" '| 1 | Epic |  | x | garbage | done |'
+run bash "$RM" close --root "$R2" M1 --note "audit"
+check "close: a register failing check is refused" "$RC:$(grep -c 'fails register check' <<<"$OUT")" "1:1"
+check "close: the roadmap is unchanged" "$(roadmap_row "$D2/roadmap.md" M1 | cut -f5)" "open"
+register "$D2/registers/gone.md" "$PRODUCT" '| 1 | Epic | - | x | done | - |'
+run bash "$RM" close --root "$R2" M1 --note $'audit\nsecond line'
+check "close: a multiline note is refused" "$RC" "2"
+run bash "$RM" close --root "$R2" M1 --note "audit"
+check "close: readable evidence closes" "$RC" "0"
+for i in 1 2 3 4; do bash "$RM" add --root "$R2" "Next $i" --exit x --register docs/superpowers/registers/gone.md >/dev/null 2>&1 & done
+wait
+check "add: concurrent additions get distinct milestones" "$(roadmap_rows "$D2/roadmap.md" | cut -f1 | sort -u | tr '\n' ' ')" "M1 M2 M3 M4 M5 "
+
 run bash "$RM"
 check "usage: no verb" "$RC" "2"
 run bash "$RM" frobnicate --root "$ROOT"

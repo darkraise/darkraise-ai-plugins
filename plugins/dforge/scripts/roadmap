@@ -18,15 +18,17 @@
 # Exit: check  0 clean, 1 errors, 2 usage or no roadmap
 #       status 0 ok, 2 usage or no roadmap (--line: 0 and nothing printed)
 #       open   0 the milestone is ready to close, 1 rows are open, 2 usage
-#       add    0 written, 2 usage
-#       close  0 written, 1 refused (rows open or an earlier milestone open),
-#              2 usage, unknown milestone or a missing note
+#       add    0 written, 1 the roadmap is locked by another writer, 2 usage
+#       close  0 written, 1 refused (rows open, an earlier milestone open, or
+#              a register below it missing or failing register check) or
+#              locked, 2 usage, unknown milestone or a missing note
 #       reopen 0 written, 2 usage, unknown milestone or a missing note
 #       settle 0 done (whether or not a row changed), 2 usage
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/roadmap.sh"
+. "$HERE/lib/lock.sh"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -66,12 +68,28 @@ need_roadmap() {
 
 blank() { [ -z "$1" ] || [ "$1" = "-" ]; }
 
+# need_cells TEXT… — every value fits one table cell: a line break would end
+# the row, and a tab would split the parsed row.
+need_cells() {
+  local v
+  for v in "$@"; do
+    case $v in *[[:cntrl:]]*) echo "a cell value cannot hold a line break or a control character: $v" >&2; exit 2 ;; esac
+  done
+}
+
+# locked COMMAND [ARGS…] — run COMMAND holding the roadmap's lock.
+locked() {
+  local base
+  base=$(dr_lock_base "$FILE") || { echo "cannot lock $FILE" >&2; exit 2; }
+  dr_locked "$base" "$@"
+}
+
 # rewrite_row M STATE NOTE — replace one milestone's State and Note cells.
 # Free text reaches awk through the environment, not -v, which would process
 # backslash escapes in a note.
 rewrite_row() {
   local tmp
-  tmp=$(mktemp)
+  tmp=$(mktemp) || exit 2
   tr -d '\r' < "$FILE" | RM_STATE="$2" RM_NOTE="$3" awk -v want="$1" "$_PLAN_AWK$_REGISTER_AWK"'
     function esc(s) { gsub(/\|/, "\\|", s); return s }
     { if (in_fence($0)) { print; next } }
@@ -80,8 +98,8 @@ rewrite_row() {
       if (n != 8 || c[2] != want) { print; next }
       printf "| %s | %s | %s | %s | %s | %s |\n", c[2], esc(c[3]), esc(c[4]), esc(c[5]), ENVIRON["RM_STATE"], esc(ENVIRON["RM_NOTE"])
     }
-  ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $FILE" >&2; exit 2; }
-  mv "$tmp" "$FILE"
+  ' > "$tmp" && dr_replace "$FILE" "$tmp" || { rm -f "$tmp"; echo "could not rewrite $FILE" >&2; exit 2; }
+  rm -f "$tmp"
 }
 
 cmd_check() {
@@ -100,7 +118,7 @@ cmd_check() {
     echo "ERROR 1: Spec path does not exist: $spec"; errors=$((errors + 1))
   fi
 
-  while IFS=$'\t' read -r line n m name exit_c reg state note; do
+  while IFS=$'\037' read -r line n m name exit_c reg state note; do
     if [ "$n" -ne 8 ]; then
       echo "ERROR $line: a milestone needs six cells, found $((n - 2)); write a literal pipe as \\|"
       errors=$((errors + 1)); continue
@@ -141,7 +159,7 @@ cmd_check() {
     elif [ -z "$open_seen" ]; then
       open_seen=$m
     fi
-  done < <(roadmap_scan "$FILE")
+  done < <(roadmap_scan "$FILE" | register_cells)
 
   [ -n "$seen" ] || { echo "ERROR 1: the roadmap has no milestones"; errors=$((errors + 1)); }
   echo "roadmap: $errors errors"
@@ -159,7 +177,7 @@ cmd_status() {
   fi
   need_roadmap
   local m name exit_c reg state note resolved total open_list cur extra
-  while IFS=$'\t' read -r m name exit_c reg state note; do
+  while IFS=$'\037' read -r m name exit_c reg state note; do
     read -r resolved total < <(roadmap_epic_counts "$root" "$reg")
     if [ "$state" = closed ]; then
       printf '%s %s — closed — %s\n' "$m" "$name" "$note"
@@ -172,10 +190,10 @@ cmd_status() {
     [ -z "$open_list" ] || printf '; open: %s' "$open_list"
     [ "$extra" -eq 0 ] || printf '; %s requirement rows open below its epics' "$extra"
     printf '\n'
-  done < <(roadmap_rows "$FILE")
+  done < <(roadmap_rows "$FILE" | register_cells)
   cur=$(roadmap_current "$FILE")
   if [ -n "$cur" ]; then
-    IFS=$'\t' read -r m name _ reg _ _ <<<"$cur"
+    IFS=$'\037' read -r m name _ reg _ _ < <(register_cells <<<"$cur")
     if [ -z "$(roadmap_unresolved "$root" "$reg")" ]; then
       printf 'Current: %s %s — ready to close with dforge:closing-a-milestone\n' "$m" "$name"
     else
@@ -197,18 +215,18 @@ cmd_open() {
     row=$(roadmap_current "$FILE")
     [ -n "$row" ] || { echo "every milestone is closed"; return 0; }
   fi
-  IFS=$'\t' read -r m _ _ reg _ _ <<<"$row"
-  while IFS=$'\t' read -r rel id item state assigned; do
+  IFS=$'\037' read -r m _ _ reg _ _ < <(register_cells <<<"$row")
+  while IFS=$'\037' read -r rel id item state assigned; do
     found=1
     printf '%s: %s #%s %s — %s, assigned %s\n' "$m" "$rel" "$id" "$item" "$state" "$assigned"
-  done < <(roadmap_unresolved "$root" "$reg")
+  done < <(roadmap_unresolved "$root" "$reg" | register_cells)
   [ "$found" -eq 0 ] && echo "$m: nothing open — ready to close"
   [ "$found" -eq 0 ]
 }
 
 cmd_add() {
   [ $# -ge 1 ] || usage
-  local name=$1 exit_c="" reg="" max at tmp
+  local name=$1 exit_c="" reg=""
   shift
   while [ $# -gt 0 ]; do
     case $1 in
@@ -219,19 +237,26 @@ cmd_add() {
   done
   need_roadmap
   { [ -n "$name" ] && ! blank "$exit_c" && ! blank "$reg"; } || usage
+  need_cells "$name" "$exit_c" "$reg"
+  locked add_row
+}
+
+# add_row — cmd_add's numbering and write, under the roadmap's lock.
+add_row() {
+  local max at tmp
   max=$(roadmap_rows "$FILE" | awk -F'\t' '{ n = substr($1, 2) + 0; if (!seen || n > m) m = n; seen = 1 } END { print seen ? m : -1 }')
   at=$(tr -d '\r' < "$FILE" | awk "$_PLAN_AWK"'
     { if (in_fence($0)) next }
     /^[ \t]*\|/ { n = NR }
     END { print n + 0 }')
   [ "$at" -gt 0 ] || { echo "no table in $FILE" >&2; exit 2; }
-  tmp=$(mktemp)
+  tmp=$(mktemp) || exit 2
   tr -d '\r' < "$FILE" | RM_NAME="$name" RM_EXIT="$exit_c" RM_REG="$reg" awk -v at="$at" -v id="M$((max + 1))" '
     function esc(s) { gsub(/\|/, "\\|", s); return s }
     { print }
     NR == at { printf "| %s | %s | %s | %s | open | - |\n", id, esc(ENVIRON["RM_NAME"]), esc(ENVIRON["RM_EXIT"]), esc(ENVIRON["RM_REG"]) }
-  ' > "$tmp" || { rm -f "$tmp"; echo "could not rewrite $FILE" >&2; exit 2; }
-  mv "$tmp" "$FILE"
+  ' > "$tmp" && dr_replace "$FILE" "$tmp" || { rm -f "$tmp"; echo "could not rewrite $FILE" >&2; exit 2; }
+  rm -f "$tmp"
   echo "added M$((max + 1)) $name"
 }
 
@@ -245,18 +270,39 @@ parse_m_note() {
   need_roadmap
   [ -n "$(roadmap_row "$FILE" "$want")" ] || { echo "no milestone $want in $FILE" >&2; exit 2; }
   ! blank "$note" || { echo "--note is required" >&2; exit 2; }
+  need_cells "$note"
 }
 
 cmd_close() {
-  local want note m reg state earlier
+  local want note
   parse_m_note "$@"
-  IFS=$'\t' read -r m _ _ reg state _ <<<"$(roadmap_row "$FILE" "$want")"
+  locked close_row
+}
+
+# close_row — cmd_close's checks and write, under the roadmap's lock so the
+# row it judged is the row it writes.
+close_row() {
+  local m reg state earlier f out
+  IFS=$'\037' read -r m _ _ reg state _ < <(register_cells <<<"$(roadmap_row "$FILE" "$want")")
   [ "$state" != closed ] || { echo "$want is already closed"; return 0; }
   earlier=$(roadmap_rows "$FILE" | awk -F'\t' -v w="$want" '$1 == w { exit } $5 != "closed" { print $1 }' | tr '\n' ' ')
   if [ -n "$earlier" ]; then
     echo "refused: close ${earlier% } first — milestones close in order"
     exit 1
   fi
+  # Unresolved rows are read from these registers, and one that is missing or
+  # malformed would read as having none.
+  while IFS= read -r f; do
+    if [ ! -f "$f" ]; then
+      echo "refused: $want's register does not exist: $reg"
+      exit 1
+    fi
+    if ! out=$(bash "$HERE/register" check "$f" 2>&1); then
+      echo "refused: $(dforge_name "$f" "$root") fails register check:"
+      grep '^ERROR' <<<"$out" | sed 's/^/  /'
+      exit 1
+    fi
+  done < <(roadmap_registers "$root" "$reg")
   if [ -n "$(roadmap_unresolved "$root" "$reg")" ]; then
     echo "refused: rows below $want are unresolved:"
     roadmap_unresolved "$root" "$reg" | awk -F'\t' '{ printf "  %s #%s %s — %s\n", $1, $2, $3, $4 }'
@@ -269,7 +315,7 @@ cmd_close() {
 cmd_reopen() {
   local want note
   parse_m_note "$@"
-  rewrite_row "$want" open "$note"
+  locked rewrite_row "$want" open "$note" || exit $?
   echo "reopened $want"
 }
 
@@ -285,9 +331,9 @@ cmd_settle() {
     echo "not settled: registers covering $spec still have unresolved rows"
     return 0
   fi
-  while IFS=$'\t' read -r m _ _ reg _ _; do
+  while IFS=$'\037' read -r m _ _ reg _ _; do
     [ -f "$(dforge_resolve "$reg" "$root")" ] || continue
-    while IFS=$'\t' read -r rid ritem rassigned racc rstate rnote; do
+    while IFS=$'\037' read -r rid ritem rassigned racc rstate rnote; do
       a=${rassigned#\`}; a=${a%\`}
       [ "$(dforge_name_key "$a")" = "$(dforge_name_key "$spec")" ] || continue
       case " $REGISTER_UNRESOLVED " in *" $rstate "*) ;; *) continue ;; esac
@@ -295,8 +341,8 @@ cmd_settle() {
       bash "$HERE/register" set "$(dforge_resolve "$reg" "$root")" "$rid" verify --note "built; owner confirms at the milestone audit" || exit 2
       echo "$m: #$rid $ritem — verify"
       changed=1
-    done < <(register_rows "$(dforge_resolve "$reg" "$root")")
-  done < <(roadmap_rows "$FILE")
+    done < <(register_rows "$(dforge_resolve "$reg" "$root")" | register_cells)
+  done < <(roadmap_rows "$FILE" | register_cells)
   [ "$changed" -eq 1 ] || echo "no open epic row is assigned to $spec"
   return 0
 }
