@@ -261,7 +261,7 @@ ar_task_complete() {
   local phase
   phase=$(ar_get phase)
   if { [ "$phase" = execute ] || [ "$phase" = final ]; } && ar_in_primary; then
-    ar_stop "a task was completed in the primary checkout" || return 1
+    ar_stop "a task was completed in the primary checkout" || return $?
     echo "auto-run: a task was completed in the primary checkout; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
     return 5
   fi
@@ -321,10 +321,10 @@ ar_clear() {
   local is_phase=$1 resumes
   ar_handoff || return 1
   if [ "$is_phase" != 1 ]; then
-    ar_update '.resumes = ((.resumes // 0) + 1)' || return 1
+    ar_update '.resumes = ((.resumes // 0) + 1)' || return $?
     resumes=$(ar_get resumes)
     if [ "${resumes:-0}" -ge "$AR_RESUME_CAP" ]; then
-      ar_stop "$AR_RESUME_CAP self-resumes without a completed task" || return 1
+      ar_stop "$AR_RESUME_CAP self-resumes without a completed task" || return $?
       echo "auto-run: stopped — $AR_RESUME_CAP self-resumes in a row without a completed task" >&2
       return 5
     fi
@@ -371,21 +371,21 @@ ar_compacted() {
   ar_update '.compactions += 1 | .failures = 0 | .pending = $n
     | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")
     | if $n == "after-compact" and .phase == "execute"
-      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --arg n "$next" || return 1
+      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --arg n "$next" || return $?
   [ "$next" = after-compact ] || return 0
   n=$(ar_get compactionsSinceTask)
   if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
-    ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return 1
+    ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return $?
     return 5
   fi
 }
 
 ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the run
   local n
-  ar_update '.failures = ((.failures // 0) + 1)' || return 1
+  ar_update '.failures = ((.failures // 0) + 1)' || return $?
   n=$(ar_get failures)
   if [ "${n:-0}" -ge "$AR_FAILURE_CAP" ]; then
-    ar_stop "${1:-the cockpit could not compact or clear}" || return 1
+    ar_stop "${1:-the cockpit could not compact or clear}" || return $?
     return 5
   fi
 }
@@ -395,10 +395,10 @@ ar_failure() { # ar_failure [REASON] — return 5 when this failure stops the ru
 # (return 5).
 ar_stalled() {
   local n
-  ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now' --argjson now "$(date +%s)" || return 1
+  ar_update '.stalls = ((.stalls // 0) + 1) | .stalledAt = $now' --argjson now "$(date +%s)" || return $?
   n=$(ar_get stalls)
   if [ "${n:-0}" -ge "$AR_STALL_CAP" ]; then
-    ar_stop "$AR_STALL_CAP stalls without a completed task" || return 1
+    ar_stop "$AR_STALL_CAP stalls without a completed task" || return $?
     return 5
   fi
 }
@@ -460,11 +460,11 @@ ar_settle() {
   result=$(ar_after "$1" "$2" "$3")
   if [ "$result" = handoff ] && ar_holds_session; then result=high; fi
   if [ "$result" = handoff ]; then
-    ar_update '.pending = "handoff"' || return 1
+    ar_update '.pending = "handoff"' || return $?
     echo handoff
     return
   fi
-  ar_update '.regime = $r | .pending = null' --arg r "$result" || return 1
+  ar_update '.regime = $r | .pending = null' --arg r "$result" || return $?
   echo continue
 }
 
@@ -478,7 +478,7 @@ ar_verdict() {
   local tokens=$1 budget=$2 window=$3 n=${4:-1} pending regime limit settled
   pending=$(ar_get pending)
   if [ "$pending" = after-compact ]; then
-    settled=$(ar_settle "$tokens" "$budget" "$window") || return 1
+    settled=$(ar_settle "$tokens" "$budget" "$window") || return $?
     [ "$settled" != handoff ] || pending=handoff
   fi
   regime=$(ar_get regime)
@@ -487,10 +487,10 @@ ar_verdict() {
   if [ "$pending" = handoff ] || [ "$pending" = clear ]; then
     echo "handoff $limit $regime"
   elif [ "$tokens" -ge "$limit" ] && ! ar_state | ar_jq -e '.finalCompacted == true' >/dev/null 2>&1; then
-    ar_update '.pending = "compact"' || return 1
+    ar_update '.pending = "compact"' || return $?
     echo "compact $limit $regime"
   else
-    if [ "$pending" = compact ] || [ "$pending" = resume ]; then ar_update '.pending = null' || return 1; fi
+    if [ "$pending" = compact ] || [ "$pending" = resume ]; then ar_update '.pending = null' || return $?; fi
     echo "ok $limit $regime"
   fi
 }
