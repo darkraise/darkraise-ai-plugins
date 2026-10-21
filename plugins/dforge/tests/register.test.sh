@@ -289,6 +289,8 @@ run bash "$REG" set "$TMP/link.md" 1 done
 check "a symlinked register: set exits 0" "$RC" "0"
 check "a symlinked register: the link survives" "$([ -L "$TMP/link.md" ] && echo link || echo file)" "link"
 check "a symlinked register: the target changes" "$(register_rows "$TMP/linked/real.md" | cut -f5)" "done"
+check "a symlinked register shares its target's lock" \
+  "$(. "$HERE/../scripts/lib/lock.sh"; [ "$(dr_lock_base "$TMP/link.md")" = "$(dr_lock_base "$TMP/linked/real.md")" ] && echo same || echo different)" "same"
 
 # --- the repository's own registers ---
 # They are load-bearing for three scripts and two skills, so one that stopped

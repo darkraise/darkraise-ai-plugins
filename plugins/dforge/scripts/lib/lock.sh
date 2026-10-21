@@ -76,30 +76,40 @@ dr_lock_reclaim() {
   return "$stale"
 }
 
+# dr_link_target FILE — FILE with its symbolic links followed to the file they
+# name, which need not exist; fails on a loop.
+dr_link_target() {
+  local file="$1" target hops=0
+  while [ -L "$file" ]; do
+    [ $((++hops)) -le 40 ] || return 1
+    target="$(readlink -- "$file")" || return 1
+    case $target in /*) file=$target ;; *) file="$(dirname "$file")/$target" ;; esac
+  done
+  printf '%s\n' "$file"
+}
+
 # dr_replace FILE SOURCE — replace FILE with SOURCE's content through a
 # dotfile beside FILE: the rename is atomic (a temp file elsewhere may sit on
 # another filesystem), darkmem never syncs the partial copy, and FILE keeps
 # its mode. A symbolic link is written through: its target is replaced and the
 # link stays.
 dr_replace() {
-  local file="$1" tmp target hops=0
-  while [ -L "$file" ]; do
-    [ $((++hops)) -le 40 ] || return 1
-    target="$(readlink -- "$file")" || return 1
-    case $target in /*) file=$target ;; *) file="$(dirname "$file")/$target" ;; esac
-  done
+  local file tmp
+  file="$(dr_link_target "$1")" || return 1
   tmp="$(mktemp "$(dirname "$file")/.$(basename "$file").XXXXXX")" || return 1
   { [ ! -e "$file" ] || cp -p -- "$file" "$tmp"; } && cat -- "$2" > "$tmp" && mv -f -- "$tmp" "$file" ||
     { rm -f -- "$tmp"; return 1; }
 }
 
-# dr_lock_base FILE — the path FILE's lock is named from: inside the git
+# dr_lock_base FILE — the path FILE's lock is named from, after its links are
+# followed, so a link and its target share one lock: inside the git
 # directory for a file in a checkout, where a lock never shows as an untracked
 # file, else a dotfile beside FILE, which darkmem never syncs.
 dr_lock_base() {
-  local dir name common key
-  dir="$(cd "$(dirname "$1")" && pwd -P)" || return 1
-  name="$(basename "$1")"
+  local file dir name common key
+  file="$(dr_link_target "$1")" || return 1
+  dir="$(cd "$(dirname "$file")" && pwd -P)" || return 1
+  name="$(basename "$file")"
   if common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
     key="$(printf '%s' "$dir/$name" | git -C "$dir" hash-object --stdin)" || return 1
     mkdir -p -- "$common/dforge/locks" || return 1
