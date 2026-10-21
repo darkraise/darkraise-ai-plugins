@@ -57,7 +57,7 @@ When the darkmem MCP is configured, prefer its `code_search` over Explore subage
 
 ## Session Budget
 
-- Call every `scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working directory inside the project's worktree; a relative `PLAN_FILE` resolves against it. The plugin root is printed below this entry point (on Codex: two levels above any skill file).
+- Call every `scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working directory inside the project's worktree; a relative `PLAN_FILE` resolves against it. The plugin root is printed below this entry point (on Codex: the parent of the `skills/` directory).
 - The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok` means continue at any percentage; `handoff` means finish the task in flight, then use dforge:handoff. See [session-budget.md](../../reference/session-budget.md).
 - Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dforge:resume-execution.
 - After compaction, trust the snapshot, ledger and `git log` over the summary.
