@@ -675,11 +675,15 @@ function worktreeDocsRoots(worktreeRoot) {
 export function pathToUri(roots, file) {
   const text = String(file).replace(/\\/g, "/");
   const name = /^(?:\.\/)?docs\/(?:dforge|forge|superpowers)\/(.+)$/.exec(text);
-  if (name) return name[1].split("/").some(segment => segment === "" || segment === ".." || segment === ".") ? null : `${DOC_PREFIX}/${name[1]}`;
+  if (name) {
+    const uri = `${DOC_PREFIX}/${name[1]}`;
+    return uriToLocal(roots, uri) ? uri : null;
+  }
   if (!path.isAbsolute(String(file))) return null;
   const under = base => {
     const rel = path.relative(path.resolve(base), path.resolve(String(file)));
-    return rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel) ? `${DOC_PREFIX}/${rel.split(path.sep).join("/")}` : null;
+    const uri = rel && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel) ? `${DOC_PREFIX}/${rel.split(path.sep).join("/")}` : null;
+    return uri && uriToLocal(roots, uri) ? uri : null;
   };
   const bases = [roots.docsRoot];
   if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "dforge"));
