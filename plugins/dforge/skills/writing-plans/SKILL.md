@@ -575,8 +575,8 @@ A revision your human partner asks for gets one new round.
    a one-line decision in the plan's Assumptions.
 4. **Record.** Only now, add the header line
    `**Plan review:** <YYYY-MM-DD> — <seat> — executability e / coherence c / coverage v / assumptions a (round r)`
-   below the `**Program:**` line (below `**Execution:**` when there is no
-   Program line). `<seat>` is the seat that ran the last round:
+   as the last line of the header, directly above `## Global Constraints`.
+   `<seat>` is the seat that ran the last round:
    `codex <model> / <effort>` from the runner's status line, or the judge
    agent. The header template deliberately omits it, so `plan-lint` warns
    until the review has run.
