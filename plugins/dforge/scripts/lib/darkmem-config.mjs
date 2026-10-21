@@ -157,9 +157,15 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
   const mapped = readMapping(env, repoRoot);
   const settings = resolveSettings(env, () => {});
   const enabled = settings.darkmemEnabled === true;
+  // A mapping changed to another project while a family is in the old one's
+  // mirror leaves that project as an unmapped one would be: its families move
+  // back to the checkout, and from there into the new project.
+  const remapped = enabled && mapped.entry && inMirror && typeof recorded.project === "string"
+    && (recorded.project !== mapped.entry.project
+      || (typeof recorded.mirror === "string" && !samePath(recorded.mirror, path.join(dforgeHome(env), "mirror", mapped.entry.project))));
   // Disabled or unmapped: both families belong in the checkout. A family
   // still in the mirror resolves there, offline, until reconcile moves it.
-  if (!enabled || !mapped.entry) {
+  if (!enabled || !mapped.entry || remapped) {
     if (!inMirror) return result(!enabled ? "darkmem is disabled (darkmemEnabled is false)" : mapped.reason, LOCAL, LOCAL, null);
     // 3.0 made darkmem opt-in. A family a 2.x run put in the mirror is not
     // moved by the upgrade alone: it stays, unsynced, until darkmemEnabled is
@@ -167,13 +173,16 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
     const undecided = !enabled && mapped.entry && !mapped.decided;
     const reason = undecided
       ? "darkmem is off by default since dforge 3.0 and darkmemEnabled is unset"
-      : !enabled ? "darkmem is disabled (darkmemEnabled is false)" : mapped.reason;
+      : !enabled ? "darkmem is disabled (darkmemEnabled is false)"
+      : remapped ? `the mapping names project ${mapped.entry.project}, but the mirror in use is project ${recorded.project}'s; it moves back to the checkout first`
+      : mapped.reason;
     const project = recorded.project ?? mapped.entry?.project;
     const mirror = recorded.mirror ?? (mapped.entry && path.join(dforgeHome(env), "mirror", mapped.entry.project));
     if (typeof project !== "string" || !PROJECT.test(project) || typeof mirror !== "string" || !path.isAbsolute(mirror)) {
       throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dforge/config.json again (or run scripts/dforge-migrate if it was mapped before 3.0) so reconcile can move it back`);
     }
-    return result(reason, undecided ? applied : LOCAL, applied, syncOf(env, mapped, project, mirror, false));
+    const sync = syncOf(env, mapped, project, mirror, false);
+    return result(reason, undecided ? applied : LOCAL, applied, remapped ? { ...sync, remappedTo: mapped.entry.project } : sync);
   }
   const entry = mapped.entry;
   const configured = {};

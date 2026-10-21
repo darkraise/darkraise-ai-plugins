@@ -1193,3 +1193,35 @@ test("a sync state that cannot be saved after the set-aside stops reconcile with
   assert.equal(fs.existsSync(path.join(s.mirror, ".sync.lock")), false, "the lock is released");
   assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
 });
+
+test("a mapping changed to another project moves the old mirror's families back to the checkout, then into the new project", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const repo = makeRepo();
+  const home = mapped(repo, { url: stub.url, entry: { progressSource: "local" }, stores: { documents: "darkmem", progress: "local" } });
+  const s = { stub, repo, ...home, stores: () => storesOf(home.home, repo), reconcile: () => reconcile(repo, home.env) };
+  write(path.join(s.docsRoot, "specs", "a.md"), "# A, never pushed\n");
+  const config = path.join(s.home, ".dforge", "config.json");
+  const mapping = JSON.parse(read(config));
+  mapping.darkmem.repos[s.repo].project = "renamed";
+  fs.writeFileSync(config, JSON.stringify(mapping));
+  const stores = resolveStores({ cwd: s.repo, env: s.env });
+  assert.equal(stores.documents.root, s.docsRoot, "the families still resolve through the old mirror");
+  assert.equal(stores.sync.project, "proj");
+  assert.equal(stores.sync.enabled, false);
+  assert.match(stores.reason, /the mapping names project renamed, but the mirror in use is project proj's/);
+  const back = await s.reconcile();
+  assert.equal(back.code, 0, back.stdout + back.stderr);
+  assert.match(back.stdout, /^darkmem-sync reconcile: documents moved to local from the mirror, without darkmem \(the repository is now mapped to project renamed\)$/m);
+  assert.equal(read(path.join(s.repo, "docs", "dforge", "specs", "a.md")), "# A, never pushed\n");
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+  assert.equal(s.stub.db.documents.size, 0, "nothing was written to either project on the way back");
+  commitAll(s.repo, "docs back from the old mirror");
+  const into = await s.reconcile();
+  assert.equal(into.code, 0, into.stdout + into.stderr);
+  assert.match(into.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
+  assert.deepEqual([...s.stub.db.documents.keys()], ["renamed\u0000dforge/specs/a.md"]);
+  const record = JSON.parse(read(path.join(s.home, ".dforge", "stores.json")))[s.repo];
+  assert.equal(record.project, "renamed");
+  assert.equal(read(path.join(s.home, ".dforge", "mirror", "renamed", "dforge", "specs", "a.md")), "# A, never pushed\n");
+});

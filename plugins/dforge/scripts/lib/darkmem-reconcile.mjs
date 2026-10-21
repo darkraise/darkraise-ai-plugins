@@ -648,7 +648,9 @@ export async function reconcile(context) {
   // mirror's own files are carried (offline). A move into darkmem needs it.
   // Turned off, darkmem is never asked: push is off too, so a mirror edit
   // darkmem lacks could never be resolved before an online move.
-  let offline = context.cfg.enabled ? null : context.cfg.url ? "darkmem is turned off" : "the repository is not mapped to darkmem";
+  let offline = context.cfg.enabled ? null
+    : context.cfg.remappedTo ? `the repository is now mapped to project ${context.cfg.remappedTo}`
+    : context.cfg.url ? "darkmem is turned off" : "the repository is not mapped to darkmem";
   try {
     offline ??= await context.migrate?.() ?? null;
   } catch (error) {
