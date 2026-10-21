@@ -960,11 +960,6 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
   }
 }
 
-/** Whether a main turn's text is a prompt the person typed: a continuation starts with none, a task notification's wake-up with the notification. */
-export function isTypedPrompt(text: string): boolean {
-  return text.trim() !== '' && !text.includes('<task-notification>')
-}
-
 // Commands that start something meant to run until stopped: a dev server, a
 // watcher, a followed log.
 const SERVICES = [

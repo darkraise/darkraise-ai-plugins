@@ -30,7 +30,6 @@ import {
   handedOff,
   isAtLeast,
   isServiceCommand,
-  isTypedPrompt,
   levelOf,
   limitForecast,
   modelName,
@@ -2304,13 +2303,6 @@ describe('now row', () => {
     expect(flat(nowLine({ ...IDLE, kind: 'background', isSent: true }, at, { shells: [], agents: 1 }))).toBe('◐ background · 1 agent · Discord ✓')
   })
 
-  test('tells a typed prompt from a continuation', () => {
-    expect(isTypedPrompt('go')).toBe(true)
-    expect(isTypedPrompt('')).toBe(false)
-    expect(isTypedPrompt('  \n')).toBe(false)
-    expect(isTypedPrompt('<task-notification>\n<task-id>b7k2</task-id>\n<status>completed</status>\n</task-notification>')).toBe(false)
-  })
-
   test('tells a service from a job that ends', () => {
     for (const command of ['npm run dev', 'pnpm dev', 'yarn start', 'npm run dev:api', 'vite --port 3000', 'npx next dev', 'python3 -m http.server 8000', 'docker compose up', 'tail -f app.log', 'jest --watch', 'cd web && npm run dev', 'PORT=3000 npm start'])
       expect(isServiceCommand(command)).toBe(true)
@@ -2528,6 +2520,7 @@ describe('shells and remote', () => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(60_000)
+      await $.prompt.submit({ text: 'what next?', origin: { kind: 'composer' }, wait: false } as never)
       await $.turn.start({ text: 'what next?', turnId: 't2' })
       await clock.advance(10_000)
       await $.turn.complete({ answer: 'Waiting on the review.', durationMs: 10_000, isAborted: false, turnId: 't2', reason: 'answer' })
@@ -2538,6 +2531,34 @@ describe('shells and remote', () => {
       await clock.advance(5_000)
       await $.turn.complete({ answer: 'Review clean.', durationMs: 5_000, isAborted: false, turnId: 't3', reason: 'answer' })
       expect(titles(fetches)).toEqual(['✅ Done in 1m15s'])
+    })
+
+    test("auto run's prompt starts a new chain", async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(60_000)
+      await $.prompt.submit({ text: 'Continue the plan.', origin: { kind: 'plugin', name: 'dforge', asUser: true }, wait: false } as never)
+      await $.turn.start({ text: '', turnId: 't2' })
+      await clock.advance(10_000)
+      await $.turn.complete({ answer: 'Waiting on the review.', durationMs: 10_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      await clock.advance(60_000)
+      await $.session.append(notified(ENDED))
+      await $.turn.start({ text: '', turnId: 't3' })
+      await clock.advance(5_000)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 5_000, isAborted: false, turnId: 't3', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 1m15s'])
+    })
+
+    test('a wake-up keeps the chain whatever its text', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await $.prompt.submit({ text: 'The review finished.', origin: { kind: 'task-notification' }, wait: false } as never)
+      await $.turn.start({ text: 'The review finished.', turnId: 't2' })
+      await clock.advance(5_000)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 5_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
     })
 
     test('a service shell holds nothing', async ($, on) => {

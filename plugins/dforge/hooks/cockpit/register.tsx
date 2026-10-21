@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderChildren, RenderInput, Timer, TurnUsage } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderChildren, RenderInput, Timer, TurnUsage } from 'claude-code'
 
 import type {
   CockpitAccount,
@@ -46,7 +46,6 @@ import {
   isDforge,
   isPlanTail,
   isServiceCommand,
-  isTypedPrompt,
   kTokens,
   levelOf,
   limitForecast,
@@ -161,6 +160,8 @@ const DEFER_CAP_MS = 1_800_000
 const STALL_MS = 180_000
 // How long a Done held for background work waits, once the work ends, for the turn its notification wakes.
 const RELEASE_GRACE_MS = 5_000
+// The prompt.submit origins that are the person's own request, or auto run's.
+const NEW_CHAIN_ORIGINS = new Set<PromptOrigin['kind']>(['composer', 'bridge', 'sdk', 'channel', 'slack-ping', 'plugin'])
 // While the cockpit is drawn its files are checked every POLL_MS, git and the context breakdown every DETAIL_EVERY ticks.
 const POLL_MS = 2_000
 const DETAIL_EVERY = 5
@@ -527,13 +528,20 @@ export const register: Register = on => {
     return kept
   }).catch(($, e, next) => next(e))
 
+  // A prompt from the person, or auto run's, starts a new chain: the Done held
+  // for the last one is dropped. A wake-up keeps it, and so does an origin not
+  // listed, since a Done covering more work beats a lost one.
+  on('prompt.submit', async ($, e, next) => {
+    if (NEW_CHAIN_ORIGINS.has(e.origin.kind)) S.heldDone = null
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   // A main turn begins: the Now row starts its clock.
   on('turn.start', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
     S.isMainTurn = true
     S.releaseTimer?.cancel()
     S.releaseTimer = null
-    if (isTypedPrompt(e.text)) S.heldDone = null
     const stamp = await $.clock.now()
     for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
     await setActivity($, now => ({
