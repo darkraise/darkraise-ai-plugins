@@ -73,7 +73,8 @@ Subagent (general-purpose):
     never a package-wide suite.
 
     When the fix diff touches a test whose name starts with `A<n>:` or
-    `a<n>_` (an acceptance test the final review's QA seat wrote), ask: would this test
+    `a<n>_`, or which the QA report identifies as an acceptance test (an
+    acceptance test the final review's QA seat wrote), ask: would this test
     still fail if the code violated statement A<n> of the spec? A change that
     makes the answer no weakens the test: report it under New Breakage in the
     Fix Diff, even when the fix report argues for it.

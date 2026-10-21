@@ -84,6 +84,8 @@ names "final review: the wait for a stopped QA agent is bounded" "$FR" 'finished
 names "final review: a QA agent that cannot be stopped keeps its files" "$FR" 'If it cannot be stopped, leave its files in place'
 names "final review: a skipped Codex round has no status line to wait for" "$FR" 'nothing to wait for: go straight to the one-list case'
 names "final review: both acceptance test name forms are protected" "$FR" 'or with `a<n>_` where the framework forbids a colon'
+names "final review: a test the QA report names is protected" "$FR" 'or which the QA report identifies as an'
+names "re-review: a test the QA report names is protected" "$P/skills/subagent-driven-development/references/re-review-prompt.md" 'or which the QA report identifies as an acceptance test'
 names "re-review: both acceptance test name forms" "$P/skills/subagent-driven-development/references/re-review-prompt.md" 'starts with `A<n>:` or'
 names "final review: demos are counted from the spec" "$FR" 'counted from the final report, except `<d>`: the number of the spec'"'"'s'
 names "final review: qa findings join the Claude list" "$FR" '`[qa]` finding from step 0.5 and every lens finding'

@@ -262,7 +262,8 @@ still gets an independent reader.
 
 **Acceptance tests.** The fixer never weakens a test whose name starts with
 `A<n>:`, or with `a<n>_` where the framework forbids a colon in a test name
-([acceptance-qa.md](acceptance-qa.md)); to dispute one it records `REJECTED: A<n> — <evidence>`, and the
+([acceptance-qa.md](acceptance-qa.md)), or which the QA report identifies as an
+acceptance test; to dispute one it records `REJECTED: A<n> — <evidence>`, and the
 scoped re-review decides. The fix wave's verification runs the acceptance file
 again. A `fail` or `flaky` acceptance test that survives the fix wave (the
 rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
