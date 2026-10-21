@@ -2988,6 +2988,14 @@ describe('run card', () => {
     ])
   })
 
+  test('starts no task from a Ruling, parked or deferred line', () => {
+    const ledger = parseLedger(`${LEDGER}\nTask 1: Ruling: the meter — kept\nTask 3: parked — width — Ruling: fine\nTask 4: minor (deferred): rename\nTask 5: escalated inline -> subagent — two rounds`)
+    expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([
+      [1, 'complete'],
+      [2, 'assigned'],
+    ])
+  })
+
   test('lists running, blocked and pending tasks before done ones', () => {
     const states = ['complete', 'assigned', 'pending', 'blocked', 'pending', 'complete', 'assigned', 'pending'] as const
     const tasks = states.map((state, i) => ({ n: i + 1, state }))

@@ -714,10 +714,12 @@ export function parseLedger(text: string): Ledger {
     }
     const match = /^Task (\d+): (.*)$/.exec(line)
     if (!match) continue
-    const one = task(Number(match[1]))
+    // A Ruling, parked or deferred line names a task without starting it.
+    const n = Number(match[1])
     const rest = match[2] ?? ''
     const assigned = /^implementer (\S+) \(assigned/.exec(rest)
     if (assigned) {
+      const one = task(n)
       one.seat = assigned[1] ?? null
       if (one.state !== 'complete') one.state = 'assigned'
       one.reason = null
@@ -725,10 +727,11 @@ export function parseLedger(text: string): Ledger {
     }
     const round = /^fix round (\d+\/\d+)/.exec(rest)
     if (round) {
-      one.round = round[1] ?? null
+      task(n).round = round[1] ?? null
       continue
     }
     if (/^complete\b/.test(rest)) {
+      const one = task(n)
       one.state = 'complete'
       one.round = null
       one.isClean = /review clean/.test(rest)
@@ -736,6 +739,7 @@ export function parseLedger(text: string): Ledger {
     }
     const blocked = /^BLOCKED\s*[—-]+\s*(.*)$/.exec(rest)
     if (blocked) {
+      const one = task(n)
       one.state = 'blocked'
       one.reason = blocked[1]?.trim() || null
     }
