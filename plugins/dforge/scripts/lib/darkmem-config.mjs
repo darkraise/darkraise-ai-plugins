@@ -208,7 +208,8 @@ function readMapping(env, repoRoot) {
   } catch (error) {
     throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
   }
-  const darkmem = config?.darkmem;
+  if (!config || typeof config !== "object" || Array.isArray(config)) throw new ConfigError(`${file} must hold a JSON object`);
+  const darkmem = config.darkmem;
   if (darkmem === undefined) return { reason: `${file} has no darkmem section` };
   if (!darkmem || typeof darkmem !== "object") throw new ConfigError(`${file}: darkmem must be an object`);
   const mapping = Object.entries(darkmem.repos ?? {}).find(([key]) => samePath(key, repoRoot));

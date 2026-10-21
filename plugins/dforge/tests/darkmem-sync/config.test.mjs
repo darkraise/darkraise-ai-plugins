@@ -211,6 +211,9 @@ test("an unmapped repository and no git repository are local", () => {
 test("a malformed config file, a climbing project or a bad url is a ConfigError", () => {
   const repo = makeRepo();
   assert.throws(() => resolveStores({ cwd: repo, env: makeHome({ repo, config: "{not json" }).env }), ConfigError);
+  for (const config of ["[]", "7", "null"]) {
+    assert.throws(() => resolveStores({ cwd: repo, env: makeHome({ repo, config }).env }), error => error instanceof ConfigError && /must hold a JSON object$/.test(error.message), config);
+  }
   assert.throws(() => resolveStores({ cwd: repo, env: makeHome({ repo, project: "../up" }).env }), /needs a project/);
   assert.throws(() => resolveStores({ cwd: repo, env: makeHome({ repo, url: "darkmem.test" }).env }), /darkmem\.url/);
 });
