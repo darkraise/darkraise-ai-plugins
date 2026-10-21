@@ -214,6 +214,7 @@ digraph process {
     "R = 5?" -> "Ruling seat adjudicates each open finding" [label="yes - breaker trips"];
     "Ruling seat adjudicates each open finding" -> "Any CONFIRMED-GAP or AMEND?";
     "Any CONFIRMED-GAP or AMEND?" -> "Carry the fix or amendment forward; BLOCKED stops" [label="yes"];
+    "Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete" [label="gap carried"];
     "Any CONFIRMED-GAP or AMEND?" -> "Park findings in ledger with rulings" [label="no"];
     "Park findings in ledger with rulings" -> "Append completion to ledger, mark todo complete";
     "Append completion to ledger, mark todo complete" -> "More tasks remain?";

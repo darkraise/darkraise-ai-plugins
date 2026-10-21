@@ -457,9 +457,13 @@ seat is the native judge named in Select the host first.
 **Carry out each verdict**, and copy its `Ruling:` line into the ledger
 verbatim:
 
-- **CONFIRMED-GAP** - the finding is real. Make the smallest fix the ruling
-  names. A CONFIRMED-GAP whose fix you attempt and fail is a trigger in
-  Switching to subagent mode.
+- **CONFIRMED-GAP** - the finding is real. For a task you implement, make
+  the smallest fix the ruling names. A CONFIRMED-GAP whose fix you attempt and
+  fail is a trigger in Switching to subagent mode. A delegated task's gap is
+  never yours to fix: mid-task it enters that task's fix loop, and at the
+  breaker it is logged `Task <N>: Ruling: <finding> — <ruling>` and carried
+  into the next dependent task's dispatch, as
+  [delegated-task.md](../../reference/delegated-task.md) §5 completes it.
 - **PARK** - log `Task <N>: parked — <finding> — Ruling: <why>`; the code
   stands.
 - **AMEND** - copy the entry, from its `## A?` line through the New fence's

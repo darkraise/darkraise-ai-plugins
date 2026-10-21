@@ -380,13 +380,16 @@ absent "SDD no longer writes K=3" "$SDD" 'K=3'
 absent "the delegated loop does not write K=3" "$DT" 'K=3'
 present "the delegated loop writes the seat clause" "$DT" ', seat <seat>'
 present "the delegated loop keeps the runner name" "$DT" 'run-codex-review.sh'
-# ladder.test.sh holds every implementer to one escalation-table row, so an
-# agent known to the escalation table is a real one a human may pin.
+present "the scoped re-review names its model" "$DT" '| Scoped re-review | general-purpose | `sonnet`; `opus` for a subtle concurrency fix |'
 # A breaker CONFIRMED-GAP is carried into the next dependent task; completion
 # has to accept it, or the loop has no legal next step.
-present "the scoped re-review names its model" "$DT" '| Scoped re-review | general-purpose | `sonnet`; `opus` for a subtle concurrency fix |'
 present "a carried breaker gap lets the task complete" "$DT" 'confirmed and carried into a later task, with a ruling at the cap'
 present "the dependent task's dispatch takes the carried gap" "$DT" 'carried a CONFIRMED-GAP to this task, the dispatch names the gap'
+present "the flow graph completes a task whose gap is carried" "$SDD" '"Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete"'
+present "inline mode never fixes a delegated task's gap itself" "$P/skills/executing-plans/SKILL.md" "A delegated task's gap is"
+present "inline mode carries a delegated breaker gap forward" "$P/skills/executing-plans/SKILL.md" 'into the next dependent task'"'"'s dispatch, as'
+# ladder.test.sh holds every implementer to one escalation-table row, so an
+# agent known to the escalation table is a real one a human may pin.
 present "a pinned escalation-only implementer is not unknown" "$DT" "A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables"
 present "the delegated loop keeps the FAILED deferral" "$DT" 'TIMEOUT or FAILED'
 present "the delegated loop keeps the no-redispatch rule" "$DT" 'never re-dispatch the Codex seat'
