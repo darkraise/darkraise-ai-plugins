@@ -52,6 +52,15 @@ present "status calls repo-audit" "$SKILL" 'scripts/repo-audit'
 present "status forbids sdd-workspace" "$SKILL" 'never call `scripts/sdd-workspace`'
 present "status forbids next-step" "$SKILL" 'never calls `scripts/next-step`'
 
+# A ledger lives in the darkmem mirror while progress is applied there, not in
+# the checkout workspace sdd-workspace prints; reading the workspace finds a
+# stale or missing ledger and repeats finished work.
+present "status reads the ledger dir" "$SKILL" '`<ledger dir>/progress.md` exists with incomplete tasks'
+for s in subagent-driven-development executing-plans; do
+  present "$s recovery reads the ledger dir" "$P/skills/$s/SKILL.md" 'and read `progress.md` and `handoff.md` in `<ledger dir>`'
+done
+present "finishing reads rulings from the ledger dir" "$P/skills/finishing-a-development-branch/SKILL.md" '(`<ledger dir>/progress.md`)'
+
 # The plan discriminator. Most plans predate the Execution header, so keying on
 # it would make the skill ignore them.
 present "status uses the task-heading discriminator" "$SKILL" 'plan_tasks'

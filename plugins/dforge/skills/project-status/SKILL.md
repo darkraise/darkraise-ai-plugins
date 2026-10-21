@@ -28,10 +28,13 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
    Do **not** use the `**Execution:**` header as the discriminator:
    `plan-lint` requires it, but only plans written since 1.4.0 have one, so it
    would hide most plans. Then, in order:
-   - **In flight** — `<worktree>/<state>/sdd/<basename minus .md>/progress.md`
-     exists with incomplete tasks, checked under every worktree the audit lists,
-     because a ledger lives in the worktree executing it. Compute that path
-     directly; never call `scripts/sdd-workspace`, which creates the directory.
+   - **In flight** — `<ledger dir>/progress.md` exists with incomplete tasks.
+     While progress is local, check it under every worktree the audit lists
+     (`<worktree>/<state>/sdd/<basename minus .md>/progress.md`), because a
+     ledger lives in the worktree executing it; while it lives in darkmem,
+     every worktree shares the mirror's one. Use `scripts/dforge-path ledger`
+     or compute the path directly; never call `scripts/sdd-workspace`, which
+     creates the directory.
      A plan whose tasks are all complete but which is not yet indexed as merged
      is also in flight — a review or an integration is still ahead of it.
    - **Complete** — listed in `<docs>/plans/completed.md`. That index

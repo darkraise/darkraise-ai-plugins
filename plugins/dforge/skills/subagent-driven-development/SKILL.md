@@ -15,8 +15,8 @@ back. Before anything else:
    no ledger names this plan, no task has started: skip the rest of this
    section and follow Setup from its first step.
 1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dforge §Session Budget),
-   and read `progress.md` and `handoff.md` in
-   the directory it prints.
+   and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
+   directory it prints: while progress lives in darkmem the two differ.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides: `complete` is done; `fix round R/5` resumes at round
    R+1 with a fresh dispatch; an assigned line with commits after its base
