@@ -369,11 +369,21 @@ else
           action=""
           [ -z "$waiting" ] || action="Awaiting your check (verify): $waiting."
           [ -z "$elsewhere" ] || action="${action:+$action }Assigned outside this repository: $elsewhere."
+          # The milestone audit is the check a verify row waits on, so a
+          # milestone with nothing else unresolved goes to it.
+          if [ -n "$current_ms" ] && [ -n "$waiting" ] && [ -z "$stale$elsewhere" ]; then
+            kind=milestone
+            ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
+            action="$action Milestone $ms_id ($ms_name) has nothing else open: audit and close it with dforge:closing-a-milestone."
+          fi
           ;;
       esac
       status_line="Plan \`$rel\` is complete."
       next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
-      if [ -n "$kind" ]; then
+      if [ "$kind" = milestone ]; then
+        prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone; rows awaiting the owner's check (verify): $waiting."
+        launch=1
+      elif [ -n "$kind" ]; then
         prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
         launch=1
       fi

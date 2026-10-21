@@ -789,6 +789,12 @@ has "roadmap: the built epic waits on the owner" "$OUT" "#1 Billing"
 lacks "roadmap: the Program line's 'last' is not believed" "$OUT" "Nothing — every sub-project"
 
 bash "$HERE/../scripts/register" set "$MD/registers/m1.md" 2 n/a --note "owner dropped search" >/dev/null
+# A verify row waits on the milestone audit, so it must lead there rather than
+# stop at "awaiting your check".
+OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
+has "roadmap: only verify rows go to the audit" "$OUT" "Milestone M1 (MVP) has nothing else open: audit and close it with dforge:closing-a-milestone."
+has "roadmap: the verify rows are named" "$OUT" "Awaiting your check (verify): #1."
+has "roadmap: a verify-only audit gets a launch prompt" "$OUT" "Close milestone M1 (MVP)"
 bash "$HERE/../scripts/register" set "$MD/registers/m1.md" 1 done >/dev/null
 OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
 has "roadmap: nothing open goes to the audit" "$OUT" "Milestone M1 (MVP) has nothing open: audit and close it with dforge:closing-a-milestone."

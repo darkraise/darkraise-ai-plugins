@@ -49,8 +49,11 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
      would settle it. It counts as a GAP until they rule.
    - All `MET`: go to step 7.
 7. **Owner sign-off.** Present the verdict table and the exit criteria. On your
-   human partner's approval, set each `verify` epic row to `done` with
-   `scripts/register set`, then run
+   human partner's approval, set every `verify` row the audit covered to
+   `done` with `scripts/register set` — epic rows in the milestone register
+   and requirement rows in the registers below them alike, each in its own
+   register: `roadmap close` refuses while any of them is still `verify`. Then
+   run
    `scripts/roadmap close M<n> --note "audit <date> <sha7>: <k> MET, <d> deferred"`,
    and commit the registers and the roadmap together (or push them, while documents live in darkmem).
 8. **Next.** Run `scripts/roadmap status` and name the next milestone's first

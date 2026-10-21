@@ -131,6 +131,8 @@ present "state: the roadmap is listed" "$STATE" "<docs>/roadmap.md"
 present "status: reads the roadmap" "$SKILL" "scripts/roadmap status"
 present "status: a milestone is done only when closed" "$SKILL" "Only \`closed\` in \`roadmap status\` means done"
 present "status: routes a finished milestone to its audit" "$SKILL" "| dforge:closing-a-milestone |"
+present "status: verify-only rows fall to the milestone audit" "$SKILL" 'when the set-aside rows are only `verify` rows and a roadmap milestone is open, fall to rule 7'
+present "closing: sign-off resolves requirement verify rows too" "$CLOSE" 'and requirement rows in the registers below them alike'
 present "closing: the only path to close" "$CLOSE" "scripts/roadmap close M<n>"
 present "closing: a fresh judge audits" "$CLOSE" "dforge:judge-opus"
 present "closing: never claim done without closed" "$CLOSE" "unless \`scripts/roadmap status\` shows it \`closed\`"
