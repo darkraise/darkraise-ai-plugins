@@ -369,8 +369,8 @@ subagent mode is always a handoff.
 
 For each task, in order:
 
-1. **Read the brief.** Run `scripts/task-brief PLAN_FILE N`, from the plugin
-   root, and read the file it prints. It carries the task text with every
+1. **Read the brief.** Run `scripts/task-brief PLAN_FILE N` and read the
+   file it prints. It carries the task text with every
    amendment applied, the header's Global Constraints and Contracts, and the
    budget line. You never read task text any other way: reading the plan file
    directly skips the amendments. If the brief's second line is
@@ -464,8 +464,7 @@ verbatim:
   stands.
 - **AMEND** - copy the entry, from its `## A?` line through the New fence's
   closing line, to `<workspace>/amend-<id>.md` and run
-  `scripts/plan-amend PLAN_FILE <workspace>/amend-<id>.md`, from the plugin
-  root. On `amended: A<k> …`, write the amendment ledger line; your next
+  `scripts/plan-amend PLAN_FILE <workspace>/amend-<id>.md`. On `amended: A<k> …`, write the amendment ledger line; your next
   `task-brief` carries the amendment. On `rejected: …`, make one fresh seat
   dispatch carrying the entry and the rejection output; a second rejection is
   BLOCKED. A Header amendment is confirmed by a second, independent `judge-opus` dispatch

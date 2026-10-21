@@ -129,8 +129,9 @@ has "spaced path: next-step reads the register its spec covers" "$out" "Register
 
 # --- the prose names one contract ---
 P="$HERE/.."
+# Prose wraps, so the phrase is matched with its line breaks folded to spaces.
 check "no skill, reference or script says 'from the plugin root'" \
-  "$(grep -rlF 'from the plugin root' "$P/skills" "$P/reference" "$P/scripts" 2>/dev/null)" ""
+  "$(grep -rlzE 'from[[:space:]]+the[[:space:]]+plugin[[:space:]]+root' "$P/skills" "$P/reference" "$P/scripts" 2>/dev/null)" ""
 check "no skill or reference re-explains where the plugin root is" \
   "$(grep -rlF "the path the session's entry point names" "$P/skills" "$P/reference" 2>/dev/null)" ""
 check "the compaction snapshot names the contract" \

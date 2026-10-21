@@ -460,8 +460,7 @@ verbatim:
   stands.
 - **AMEND** — copy the entry, from its `## A?` line through the New fence's
   closing line, to `<workspace>/amend-<id>.md` and run
-  `scripts/plan-amend PLAN_FILE <workspace>/amend-<id>.md`, from the plugin
-  root. On `amended: A<k> …`, write the amendment ledger line; the next
+  `scripts/plan-amend PLAN_FILE <workspace>/amend-<id>.md`. On `amended: A<k> …`, write the amendment ledger line; the next
   dispatch uses a fresh `task-brief`, which carries the amendment. On
   `rejected: …`, make one fresh seat dispatch carrying the entry and the
   rejection output; a second rejection is BLOCKED.
