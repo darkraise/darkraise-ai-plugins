@@ -1685,6 +1685,49 @@ describe('dense pane', () => {
     expect(await ui.find({ key: 'dense-context' })).toBeDefined()
   })
 
+  test('reads an unknown density as detailed', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ density: 'tiles' }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeDefined()
+    expect(await ui.find({ key: 'dense-context' })).toBeUndefined()
+    expect((await ui.find({ key: 'pane-density' }))?.props).toMatchObject({ label: 'Dense', plain: true })
+    expect(await ui.find({ key: 'pane-density-box' })).toBeDefined()
+  })
+
+  test('offers Hand off as a one-line button, the main one near the budget', async ($, on) => {
+    const prompts: string[] = []
+    world(on, { ...SIGNED_IN, tokens: 470_000, prompts })
+    signedIn(on, configured({ density: 'dense' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'pane-handoff-box' })).toBeUndefined()
+    const handoff = await ui.find({ key: 'pane-handoff' })
+    expect(handoff?.type).toBe('Button')
+    expect(handoff?.props).toMatchObject({ label: 'Hand off', hotkey: 'h', variant: 'primary' })
+    await ui.press({ key: 'pane-handoff' })
+    expect(prompts).toHaveLength(1)
+  })
+
+  test('offers Stop auto as a one-line button that stops the run', async ($, on) => {
+    const files = { ...autoFiles({ pending: null }), ...configured({ density: 'dense' }) }
+    const w: World = { ...SIGNED_IN, autoRuns: [], autoFile: files[AUTO] }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const stop = await ui.find({ key: 'pane-stop-auto' })
+    expect(stop?.type).toBe('Button')
+    expect(stop?.props).toMatchObject({ label: 'Stop auto' })
+    expect(await ui.find({ key: 'pane-stop-auto-box' })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
+    await ui.press({ key: 'pane-stop-auto' })
+    expect(w.autoRuns).toContain('--session sess-1 stop --reason owner pressed Stop auto')
+  })
+
   test('draws the same rows as text on the desktop', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on, configured({ density: 'dense' }))
