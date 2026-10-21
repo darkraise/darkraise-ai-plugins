@@ -68,10 +68,14 @@ ar_update() {
 }
 
 ar_write() { # ar_write PATH FILTER [jq options…]
+  ar_jq -e --arg s "${AR_SESSION:-}" '.active == true and .session == $s' < "$1" >/dev/null 2>&1 \
+    || { echo "auto-run: no auto run is bound to this session" >&2; return 3; }
+  ar_put "$@"
+}
+
+ar_put() { # ar_put PATH FILTER [jq options…] — ar_write without the binding check
   local path=$1 filter=$2 tmp
   shift 2
-  ar_jq -e --arg s "${AR_SESSION:-}" '.active == true and .session == $s' < "$path" >/dev/null 2>&1 \
-    || { echo "auto-run: no auto run is bound to this session" >&2; return 3; }
   tmp=$(mktemp "$path.XXXXXX") || return 1
   if ar_jq "$@" "$filter" < "$path" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
     mv -f "$tmp" "$path"
@@ -330,10 +334,20 @@ ar_clear() {
     --arg p "$AR_PROMPT" --arg m "$AR_MODEL" --arg e "$AR_EFFORT"
 }
 
+# The cockpit rebinds from the session that replaced the cleared one, so no
+# session check applies: the waiting clear is what authorises the rebind.
 ar_rebind() { # ar_rebind ID
+  local path
   ar_state | ar_jq -e '.active == true and .rebind == true' >/dev/null 2>&1 \
     || { echo "auto-run: no clear is waiting for its session" >&2; return 4; }
-  ar_update '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$1"
+  path=$(ar_path) || return 1
+  dr_locked "$path" ar_rebind_locked "$path" "$1"
+}
+
+ar_rebind_locked() { # ar_rebind_locked PATH ID
+  ar_jq -e '.active == true and .rebind == true' < "$1" >/dev/null 2>&1 \
+    || { echo "auto-run: no clear is waiting for its session" >&2; return 4; }
+  ar_put "$1" '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$2"
 }
 
 # ar_resumed — the cockpit submitted its stage's prompt. After a switch the

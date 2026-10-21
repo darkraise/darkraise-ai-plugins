@@ -240,6 +240,12 @@ ar --session s-9 resumed
 check "resumed: nothing pending" "$(field pending)" "null"
 ar --session s-7 rebind --to s-7 >/dev/null 2>&1; status=$?
 check "rebind without a clear: exit 4" "$status:$(field session)" "4:s-9"
+# The cockpit calls rebind from the session that replaced the cleared one.
+ar --session s-9 clear --phase
+ar --session s-20 rebind --to s-20; status=$?
+check "rebind from the new session: exit 0" "$status:$(field session):$(field pending)" "0:s-20:resume"
+ar --session s-20 resumed
+ar --session s-20 clear --phase; ar --session s-9 rebind --to s-9; ar --session s-9 resumed
 
 # --- self-resumes ---
 ar --session s-9 clear; ar --session s-9 rebind --to s-10
