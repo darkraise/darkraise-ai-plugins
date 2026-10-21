@@ -490,8 +490,10 @@ export function bottomRule(label: string | null, width: number): { lead: string;
   const text = (label ?? '').trim()
   const room = width - 6
   if (text === '' || room < 4) return { lead: `╰${'─'.repeat(Math.max(0, width - 2))}╯`, label: '', tail: '' }
-  const shown = commandExcerpt(text, room)
-  return { lead: '╰─ ', label: shown, tail: ` ${'─'.repeat(Math.max(1, width - 5 - [...shown].length))}╯` }
+  const shown = runsCut([{ text: text.split('\n')[0] ?? '' }], room)
+    .map(run => run.text)
+    .join('')
+  return { lead: '╰─ ', label: shown, tail: ` ${'─'.repeat(Math.max(1, width - 5 - cellWidth(shown)))}╯` }
 }
 
 // A terminal draws a combining mark, a joiner or a variation selector in no

@@ -2376,6 +2376,8 @@ describe('band lines', () => {
     expect(whole(bottomRule(null, 10))).toBe('╰────────╯')
     expect(whole(bottomRule('  ', 10))).toBe('╰────────╯')
     for (const width of [10, 20, 30]) expect([...whole(bottomRule('esc to interrupt and more', width))].length).toBe(width)
+    expect(whole(bottomRule('日本語のヒント', 14))).toBe('╰─ 日本語… ──╯')
+    for (const width of [12, 20, 30]) expect(cellWidth(whole(bottomRule('日本語のヒントです', width)))).toBe(width)
     expect(MODE_LABEL_RESERVE).toBe(29)
   })
 })
