@@ -24,7 +24,8 @@ back. Before anything else:
    phase never hands off. In an auto run it also moves the run to the final
    phase, and a `compact` line still ends the turn on `Auto run: compacting`.
    Otherwise run `scripts/context-size`; on exit 5, finish the task in
-   flight, then invoke dforge:handoff.
+   flight, then invoke dforge:handoff. In an auto run, exit 6 (`compact`) is
+   [auto-run.md](../../reference/auto-run.md) §The budget line.
 4. Re-read this skill in full before the next task. If a task's last ledger
    line is an agent-named assigned line or `fix round R/5`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
