@@ -121,9 +121,9 @@ export function agentGroups<T extends { agentId: string; isDone: boolean; outcom
   return AGENT_GROUPS.map(group => ({ ...group, spawns: members[group.key] })).filter(group => group.spawns.length > 0)
 }
 
-/** 465000 → "465k"; 1234567 → "1.2M". */
+/** 465000 → "465k"; 1234567 → "1.2M"; 999500, which rounds to 1000k, → "1.0M". */
 export function kTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 999_500) return `${(n / 1_000_000).toFixed(1)}M`
   return `${Math.round(n / 1000)}k`
 }
 

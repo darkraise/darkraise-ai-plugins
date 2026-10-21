@@ -12,6 +12,7 @@ import {
   isDforge,
   gitTextFiles,
   isPlanTail,
+  kTokens,
   attributionIn,
   bar,
   billingLabel,
@@ -561,6 +562,7 @@ describe('pane helpers', () => {
     expect(bar(0.99, 10)).toBe('▰▰▰▰▰▰▰▰▰▱')
     expect(bar(1.4, 4)).toBe('▰▰▰▰')
     expect(duration(13_200_000)).toBe('3h40m')
+    expect([kTokens(465_000), kTokens(999_499), kTokens(999_500), kTokens(1_234_567)]).toEqual(['465k', '999k', '1.0M', '1.2M'])
     expect(duration(190_800_000)).toBe('2d5h')
     expect(duration(-5)).toBe('')
     expect(duration(59_999)).toBe('')
