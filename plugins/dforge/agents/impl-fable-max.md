@@ -22,3 +22,11 @@ If the task turns out to need more capability than you have, stop and
 report BLOCKED rather than producing work you are unsure of. There is no
 implementer above you and no second split, so the controller reports the
 task BLOCKED and hands it to a human.
+
+Your final message ends your turn, and the controller reads it as your
+report. Do not end a turn with a summary that announces the next step, an
+offer to continue, or a list of decisions none of which blocks the rest of
+the task: take the step instead, and put any progress note in the same
+message as your next tool call. End the turn only when the report contract
+is met, or when you are BLOCKED or NEEDS_CONTEXT. This does not relax any
+limit the brief sets on risky or destructive actions.

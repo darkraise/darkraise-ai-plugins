@@ -105,5 +105,12 @@ for f in "$AGENTS"/*.md; do
     "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$f")" "0"
 done
 
+# Every implementer, reserve tiers included, carries the end-of-turn rule: the
+# controller reads a final message as the report.
+for f in "$HERE"/../agents/impl-*.md; do
+  check "$(basename "$f" .md): carries the end-of-turn rule" \
+    "$(grep -c '^Your final message ends your turn' "$f")" "1"
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
