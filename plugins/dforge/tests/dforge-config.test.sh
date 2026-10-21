@@ -132,6 +132,11 @@ p2=$!
 wait "$p1" "$p2"
 check "concurrent setters: both keys kept" "$(fc get notifyAfter) $(fc get finishAction)" "120 merge"
 
+# --- run through a symbolic link to the scripts directory, it still runs ---
+fresh linked
+ln -s "$(cd "$HERE/../scripts" && pwd)" "$TMP/linked-scripts"
+check "through a linked directory: get answers" "$(node "$TMP/linked-scripts/lib/dforge-config.mjs" get warnAt 2>&1)" "80"
+
 # --- the workflow keys: defaults and refusals ---
 fresh w
 check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.autoRun].join(" "))')" \
