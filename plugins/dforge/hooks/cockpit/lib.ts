@@ -963,7 +963,7 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
   switch (section) {
     case 'account':
       if (input.email === null) return null
-      return [denseLabel('acct'), ...join([[{ text: input.email, bold: true }], input.billing === null ? [] : [{ text: input.billing, dim: true }], [{ text: 'Remote ', dim: true }, ...input.remote]])]
+      return [denseLabel('acct'), ...join([[{ text: input.email, bold: true }], input.billing === null ? [] : [{ text: input.billing, dim: true }], input.remote.length === 0 ? [] : [{ text: 'Remote ', dim: true }, ...input.remote]])]
     case 'context': {
       if (input.context === null) return [denseLabel('ctx'), { text: 'no reading yet', dim: true }]
       const { tokens, limit } = input.context

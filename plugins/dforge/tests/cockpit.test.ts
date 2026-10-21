@@ -2539,6 +2539,11 @@ describe('dense rows', () => {
     expect(flat(denseLine('guard', { ...INPUT, refused: 2 }) ?? [])).toBe('grd  ✗ 2 refused')
   })
 
+  test('leave out the Remote label with no remote to name', () => {
+    expect(flat(denseLine('account', { ...INPUT, remote: [] }) ?? [])).toBe('acct me@example.com · subscription')
+    expect(flat(denseLine('account', { ...INPUT, billing: null, remote: [] }) ?? [])).toBe('acct me@example.com')
+  })
+
   test('leave out what has nothing to show, and say when nothing was read yet', () => {
     const empty: DenseInput = { ...INPUT, email: null, context: null, limits: [], shells: [], agents: [], run: null, todos: null, repo: null }
     expect(denseLine('account', empty)).toBeNull()
