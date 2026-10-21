@@ -287,8 +287,6 @@ declare module 'claude-code' {
       turnTokens: number[]
       run: CockpitRun | null
       finish: CockpitFinish | null
-      /** When the newest handoff note was written, in milliseconds since the epoch. */
-      handoffAt: number | null
       /** The handoff this session could resume; null when the note starts no next session. */
       resumeOffer: CockpitResumeOffer | null
       /** The handoff time whose offer this session resumed or dismissed. */

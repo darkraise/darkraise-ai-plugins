@@ -219,7 +219,6 @@ const activity = atom({ plugin: 'dforge', key: 'activity' } as const, IDLE)
 const turnTokens = atom({ plugin: 'dforge', key: 'turnTokens' } as const, [])
 const run = atom({ plugin: 'dforge', key: 'run' } as const, null)
 const finish = atom({ plugin: 'dforge', key: 'finish' } as const, null)
-const handoffAt = atom({ plugin: 'dforge', key: 'handoffAt' } as const, null)
 const resumeOffer = atom({ plugin: 'dforge', key: 'resumeOffer' } as const, null)
 const resumeDismissed = atom({ plugin: 'dforge', key: 'resumeDismissed' } as const, null)
 const rootsNote = atom({ plugin: 'dforge', key: 'rootsNote' } as const, null)
@@ -2945,7 +2944,6 @@ async function readRun($: EngineInterface) {
   try {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    if ((await read($, handoffAt)) !== handoffTime) await update($, handoffAt, () => handoffTime)
     await readResumeOffer($, latest, handoffTime)
     const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dforge/sdd`
     const entries = await $.fs.list(base).catch(() => [])
