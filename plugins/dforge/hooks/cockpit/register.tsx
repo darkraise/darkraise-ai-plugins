@@ -644,13 +644,17 @@ export const register: Register = on => {
       return done
     }
     const agentId = e.agentId
+    // A notification for a finished subagent's loop may never arrive: its
+    // shells end with it, recorded spawn or not.
+    await update($, shells, list => list.filter(one => one.agentId !== agentId))
     const list = await read($, spawns)
     const spawn = list.find(one => one.agentId === agentId)
-    if (spawn === undefined) return done
+    if (spawn === undefined) {
+      await syncTicker($)
+      return done
+    }
     const outcome: 'done' | 'failed' = e.reason === 'answer' ? 'done' : 'failed'
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true, outcome } : one)))
-    // A notification for a finished subagent's loop may never arrive: its shells end with it.
-    await update($, shells, list => list.filter(one => one.agentId !== agentId))
     for (const [id, wait] of [...S.waits]) if (wait.agentId === agentId) await endWait($, id, '⏹ Agent ended')
     await syncTicker($)
     await settleBackground($)

@@ -2609,6 +2609,16 @@ describe('shells and remote', () => {
     expect(await ui.find({ key: 'shells' })).toBeUndefined()
   })
 
+  test("drops the shells of a subagent with no recorded spawn when it ends", async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true, agentId: 'agent-9' } as never)
+    await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-9' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'shells' })).toBeUndefined()
+  })
+
   test('a stop naming a background agent ends its spawn', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { TaskStop: () => ({ result: { task_id: 'agent-1' }, text: 'stopped' }) } })
     signedIn(on)
