@@ -350,7 +350,7 @@ function lockIdentity({ owner, mtimeMs }) {
 // than staleMs.
 function removeOldLeftovers(dir, staleMs) {
   for (const entry of sortedEntries(dir)) {
-    if (!entry.isDirectory() || !/^\.sync\.lock\.(stale|new)-/.test(entry.name)) continue;
+    if (!entry.isDirectory() || !/^\.sync\.lock\.(stale|new|claim)-/.test(entry.name)) continue;
     const aside = path.join(dir, entry.name);
     try {
       if (Date.now() - fs.statSync(aside).mtimeMs >= staleMs) fs.rmSync(aside, { recursive: true, force: true });
@@ -394,15 +394,18 @@ function placeLock(dir, lock, owner) {
 }
 
 // One sync per mirror at a time. Returns a release function, or null when a
-// live sync holds the lock. Taking over an abandoned lock moves it aside and
-// deletes it only if it is still the lock judged abandoned, so two processes
-// taking over at once cannot delete each other's fresh lock; a lock moved
-// aside by mistake is given back, or left aside when a third process has
-// taken the lock meanwhile, and never deleted. The release removes the lock
-// only while it still carries this holder's token. beforeTakeover and
-// beforeRestore are test seams: the first runs between judging a lock
-// abandoned and moving it aside, the second before giving back a lock that was
-// moved aside by mistake.
+// live sync holds the lock. Taking over an abandoned lock first claims it: of
+// the processes that judged one lock abandoned, only the one whose mkdir of
+// that lock's claim succeeds moves it, and only once it has checked that the
+// lock is still that one, so a slower contender never moves aside the lock the
+// winner placed since. The lock moved aside is deleted only if it is the one
+// judged abandoned; one moved by mistake (its owner, judged dead, released it
+// and another process placed a lock in the moment before the move) is given
+// back, or left aside when a third process has taken the lock meanwhile, and
+// never deleted. The release removes the lock only while it still carries
+// this holder's token. beforeTakeover and beforeRestore are test seams: the
+// first runs between judging a lock abandoned and claiming it, the second
+// before giving back a lock that was moved aside by mistake.
 export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover, beforeRestore } = {}) {
   const lock = path.join(dir, ".sync.lock");
   const owner = { pid: process.pid, host: os.hostname(), token: crypto.randomUUID() };
@@ -415,30 +418,45 @@ export function acquireLock(dir, { staleMs = 10 * 60 * 1000, beforeTakeover, bef
       const seen = lockSnapshot(lock);
       if (!lockAbandoned(seen, staleMs)) return null;
       const identity = lockIdentity(seen);
+      // Gone since it was seen: the slot is free, try again.
+      if (identity === null) continue;
       beforeTakeover?.();
-      const aside = `${lock}.stale-${owner.token}`;
+      const claim = `${lock}.claim-${sha256(identity).slice(0, 32)}`;
       try {
-        fs.renameSync(lock, aside);
-      } catch {
-        continue;
+        fs.mkdirSync(claim);
+      } catch (error) {
+        // Another process is taking this lock over; judge what it leaves.
+        if (error.code === "EEXIST") continue;
+        throw error;
       }
-      const moved = lockSnapshot(aside);
-      // Another acquire's cleanup removed the old lock once it was moved here
-      // (a rename keeps its old mtime), so the slot is empty: try again.
-      if (moved.owner === null && moved.mtimeMs === null) continue;
-      if (lockIdentity(moved) !== identity) {
-        // Another process took the lock over first; give its lock back. When a
-        // third has taken the lock since, the moved lock stays aside: it may
-        // be a live holder's, and it is not this process's to delete.
-        beforeRestore?.();
+      try {
+        if (lockIdentity(lockSnapshot(lock)) !== identity) continue;
+        const aside = `${lock}.stale-${owner.token}`;
         try {
-          fs.renameSync(aside, lock);
+          fs.renameSync(lock, aside);
         } catch {
-          // Left aside; removeOldLeftovers clears it once it is stale.
+          continue;
         }
-        return null;
+        const moved = lockSnapshot(aside);
+        // Another acquire's cleanup removed the old lock once it was moved here
+        // (a rename keeps its old mtime), so the slot is empty: try again.
+        if (moved.owner === null && moved.mtimeMs === null) continue;
+        if (lockIdentity(moved) !== identity) {
+          // A lock placed since was moved; give it back. When a third process
+          // has taken the lock since, the moved lock stays aside: it may be a
+          // live holder's, and it is not this process's to delete.
+          beforeRestore?.();
+          try {
+            fs.renameSync(aside, lock);
+          } catch {
+            // Left aside; removeOldLeftovers clears it once it is stale.
+          }
+          return null;
+        }
+        fs.rmSync(aside, { recursive: true, force: true });
+      } finally {
+        fs.rmSync(claim, { recursive: true, force: true });
       }
-      fs.rmSync(aside, { recursive: true, force: true });
       continue;
     }
     // Moved aside before it is deleted: a recursive delete in place would

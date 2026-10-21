@@ -512,7 +512,7 @@ test("uriProblem refuses names Windows cannot hold, and caseGroups finds uris th
   assert.deepEqual(caseGroups(["dforge/a.md", "dforge/b.md"]), []);
 });
 
-test("a takeover that moved a live lock aside and cannot give it back leaves it there, and a later acquire clears it once stale", () => {
+test("a takeover never moves aside the lock another takeover of the same abandoned lock placed since", () => {
   const { root } = mirror();
   const lock = path.join(root, ".sync.lock");
   fs.mkdirSync(lock);
@@ -524,16 +524,50 @@ test("a takeover that moved a live lock aside and cannot give it back leaves it 
     beforeTakeover: () => { first ??= acquireLock(root); },
     beforeRestore: () => { third ??= acquireLock(root); },
   });
-  assert.equal(typeof first, "function", "the first takeover holds a lock");
-  assert.equal(typeof third, "function", "a third process took the lock the second one moved aside");
+  assert.equal(typeof first, "function", "the first takeover holds the lock");
+  assert.equal(second, null, "the slower takeover backs off");
+  assert.equal(third, null, "the first holder's lock was never moved aside, so no third holder got in");
+  const firstToken = lockOwner(root).token;
+  assert.notEqual(firstToken, "stale");
+  assert.deepEqual(fs.readdirSync(root), [".sync.lock"]);
+  first();
+  assert.deepEqual(fs.readdirSync(root), []);
+});
+
+test("a lock placed in the moment before a takeover's move is given back, or left aside when a third process took the lock, and a later acquire clears it once stale", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  fs.mkdirSync(lock);
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "stale" }));
+  const rename = fs.renameSync;
+  let first = null;
+  let third = null;
+  // The owner judged dead releases its lock and a new holder places one just
+  // before the takeover's move, which therefore moves the new holder's lock.
+  fs.renameSync = (from, to) => {
+    if (first === null && from === lock && path.basename(String(to)).startsWith(".sync.lock.stale-")) {
+      fs.rmSync(lock, { recursive: true });
+      fs.renameSync = rename;
+      first = acquireLock(root);
+    }
+    return rename(from, to);
+  };
+  let second;
+  try {
+    second = acquireLock(root, { beforeRestore: () => { third ??= acquireLock(root); } });
+  } finally {
+    fs.renameSync = rename;
+  }
+  assert.equal(typeof first, "function");
+  assert.equal(typeof third, "function", "a third process took the slot the move emptied");
   assert.equal(second, null);
   const asides = fs.readdirSync(root).filter(name => name.startsWith(".sync.lock.stale-"));
-  assert.equal(asides.length, 1, "the first holder's lock was moved aside, not deleted");
+  assert.equal(asides.length, 1, "the moved lock was left aside, not deleted");
   const aside = path.join(root, asides[0]);
-  const firstToken = JSON.parse(fs.readFileSync(path.join(aside, "owner.json"), "utf8")).token;
-  assert.notEqual(firstToken, lockOwner(root).token);
+  assert.notEqual(JSON.parse(fs.readFileSync(path.join(aside, "owner.json"), "utf8")).token, lockOwner(root).token);
   first();
-  assert.equal(fs.existsSync(lock), true, "the displaced first holder leaves the third's lock alone");
+  assert.equal(fs.existsSync(lock), true, "the displaced holder leaves the third's lock alone");
   third();
   assert.equal(fs.existsSync(lock), false);
   const release = acquireLock(root);
@@ -543,6 +577,23 @@ test("a takeover that moved a live lock aside and cannot give it back leaves it 
   fs.utimesSync(aside, old, old);
   acquireLock(root)();
   assert.deepEqual(fs.readdirSync(root), [], "a stale aside is removed by the next acquire");
+});
+
+test("a claim a crashed takeover left keeps its lock until the claim is stale", () => {
+  const { root } = mirror();
+  const lock = path.join(root, ".sync.lock");
+  fs.mkdirSync(lock);
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: dead, host: os.hostname(), token: "stale" }));
+  const claim = path.join(root, `.sync.lock.claim-${sha256("token:stale").slice(0, 32)}`);
+  fs.mkdirSync(claim);
+  assert.equal(acquireLock(root), null, "a fresh claim means another process is taking it over");
+  const old = new Date(Date.now() - 60 * 60 * 1000);
+  fs.utimesSync(claim, old, old);
+  const release = acquireLock(root);
+  assert.equal(typeof release, "function");
+  release();
+  assert.deepEqual(fs.readdirSync(root), []);
 });
 
 test("a half-built lock a crash left is kept while fresh and cleared once stale", () => {
