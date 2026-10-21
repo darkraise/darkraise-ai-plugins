@@ -2431,6 +2431,13 @@ describe('band lines', () => {
     expect(text(bandLines({ ...input, isBackground: false }, 0)[1])).toBe('● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
   })
 
+  test('draws a bottom rule exactly as wide as asked, down to none', () => {
+    const whole = (rule: { lead: string; label: string; tail: string }) => rule.lead + rule.label + rule.tail
+    expect(whole(bottomRule('? for shortcuts', 0))).toBe('')
+    expect(whole(bottomRule('? for shortcuts', 1))).toBe('╰')
+    expect(whole(bottomRule(null, 1))).toBe('╰')
+  })
+
   test('sets a label into the bottom rule, cut to fit', () => {
     const whole = (rule: { lead: string; label: string; tail: string }) => rule.lead + rule.label + rule.tail
     expect(whole(bottomRule('? for shortcuts', 30))).toBe(`╰─ ? for shortcuts ${'─'.repeat(10)}╯`)

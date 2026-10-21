@@ -489,7 +489,8 @@ export const MODE_LABEL_RESERVE = 29
 export function bottomRule(label: string | null, width: number): { lead: string; label: string; tail: string } {
   const text = (label ?? '').trim()
   const room = width - 6
-  if (text === '' || room < 4) return { lead: `╰${'─'.repeat(Math.max(0, width - 2))}╯`, label: '', tail: '' }
+  if (width < 2) return { lead: '╰'.repeat(Math.max(0, width)), label: '', tail: '' }
+  if (text === '' || room < 4) return { lead: `╰${'─'.repeat(width - 2)}╯`, label: '', tail: '' }
   const shown = runsCut([{ text: text.split('\n')[0] ?? '' }], room)
     .map(run => run.text)
     .join('')
