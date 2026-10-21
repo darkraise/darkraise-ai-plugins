@@ -46,6 +46,29 @@ git -C "$fixture/work" reset -q --hard HEAD~1
 (dr_task_open "$fixture/work" task-2 "$fixture/scope.json") >/dev/null 2>&1
 check 'another invocation cannot steal locked worktree' "$?" 2
 dr_task_unlock
+
+# A runner killed outright leaves its lock behind; the next run on the same
+# host reclaims it once the recorded process is gone, and only then.
+lock="$DR_TASK_ROOT/run.lock"
+bash -c 'exit 0' & dead=$!; wait "$dead"
+mkdir "$lock" && printf '%s\n' "$dead" > "$lock/pid" && uname -n > "$lock/host" && : > "$lock/start"
+dr_task_open "$fixture/work" task-1 "$fixture/scope.json" 2>/dev/null
+check 'a lock whose owner exited is reclaimed' "$?" 0
+check 'the reclaimed lock names its new owner' "$(cat "$lock/pid")" "$$"
+dr_task_unlock
+mkdir "$lock" && printf '%s\n' "$dead" > "$lock/pid" && printf 'elsewhere\n' > "$lock/host"
+(dr_task_open "$fixture/work" task-1 "$fixture/scope.json") >/dev/null 2>&1
+check 'a lock from another host is not reclaimed' "$?" 2
+rm -f "$lock/host" && uname -n > "$lock/host" && rm -f "$lock/pid"
+(dr_task_open "$fixture/work" task-1 "$fixture/scope.json") >/dev/null 2>&1
+check 'a lock with no recorded owner is not reclaimed' "$?" 2
+printf '%s\n' "$$" > "$lock/pid" && printf 'not-a-start-time\n' > "$lock/start"
+dr_task_open "$fixture/work" task-1 "$fixture/scope.json" 2>/dev/null
+check 'a reused pid with another start time is reclaimed' "$?" 0
+dr_task_unlock
+# Without /proc the start time comes from ps, and none at all still locks.
+(_dr_proc_start() { return 1; }; dr_task_open "$fixture/work" task-1 "$fixture/scope.json" && dr_task_unlock) 2>/dev/null
+check 'a host without a start time source can still lock' "$?" 0
 (dr_task_open "$fixture/work" task-2 "$fixture/scope.json") >/dev/null 2>&1
 check 'persistent owner survives unlocking' "$?" 2
 dr_task_open "$fixture/work" task-1 "$fixture/scope.json"

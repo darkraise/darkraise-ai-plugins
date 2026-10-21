@@ -13,7 +13,9 @@ Reserve a linked dforge worktree for one task. Initial execution requires
 a clean index and no tracked/untracked changes. Stop only controller-owned
 competing writers; require user editing to cease in this worktree. The owner
 record and per-run lock prevent cooperating invocations from sharing it, but
-cannot attribute arbitrary concurrent writes. Do not force-clear uncertain locks.
+cannot attribute arbitrary concurrent writes. A run lock whose recorded process
+on this host has exited is reclaimed by the next invocation; do not force-clear
+any other lock.
 
 Pass `--task-id` on every initial run, retry, and resume. Pass `--write-set` with
 a JSON array of explicit create/modify/delete paths, relative to the worktree.
