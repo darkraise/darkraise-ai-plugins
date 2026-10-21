@@ -413,7 +413,7 @@ export async function progressToDarkmem(context) {
   // atomic write follows one in any directory above the file it replaces.
   const relinked = mirrorRefusal([...mirrorTop(cfg.mirror), ...mirrorLinks(workRoot)], "nothing was moved locally, and darkmem keeps what it accepted");
   if (relinked) return relinked;
-  for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer);
+  for (const item of sources) writeFileAtomic(local(workRoot, item.rel), item.buffer, path.dirname(workRoot));
   const unread = sources.filter(item => {
     try {
       return !readNoFollow(local(workRoot, item.rel)).equals(item.buffer);
@@ -505,7 +505,7 @@ function renderCheckpoint({ state, persist, report }, workRoot, newest) {
     return;
   }
   try {
-    if (current !== hash) writeFileAtomic(file, remote);
+    if (current !== hash) writeFileAtomic(file, remote, path.dirname(workRoot));
     state.checkpoint = hash;
     recordCheckpointAt(state, newest.workstream, newest.created_at);
     persist();

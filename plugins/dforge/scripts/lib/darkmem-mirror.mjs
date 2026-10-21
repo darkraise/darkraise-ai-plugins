@@ -248,12 +248,36 @@ export function loadState(file) {
   return state;
 }
 
+// Throws ELOOP when a directory from `root` (exclusive) down to `dir` is a
+// symbolic link, so a write or removal there cannot land outside the root. The
+// walk stops at the first missing directory: mkdir creates the rest as real ones.
+export function refuseLinkedDirs(root, dir) {
+  const rel = path.relative(root, dir);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error(`${dir} is not under ${root}`);
+  let at = root;
+  for (const part of rel ? rel.split(path.sep) : []) {
+    at = path.join(at, part);
+    const stat = fs.lstatSync(at, { throwIfNoEntry: false });
+    if (!stat) return;
+    if (stat.isSymbolicLink()) throw Object.assign(new Error(`${at} is a symbolic link`), { code: "ELOOP", syscall: "lstat", path: at });
+  }
+}
+
 // The temporary file is a dotfile, so a crash between write and rename never
-// leaves something the document listing would sync.
-export function writeFileAtomic(file, data) {
+// leaves something the document listing would sync. It is created exclusively,
+// so a link planted at its name is removed rather than written through; with
+// `root`, a linked directory between it and the file refuses the write.
+export function writeFileAtomic(file, data, root) {
+  if (root) refuseLinkedDirs(root, path.dirname(file));
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = path.join(path.dirname(file), `.${path.basename(file)}.tmp`);
-  fs.writeFileSync(temporary, data);
+  try {
+    fs.writeFileSync(temporary, data, { flag: "wx" });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    fs.rmSync(temporary);
+    fs.writeFileSync(temporary, data, { flag: "wx" });
+  }
   fs.renameSync(temporary, file);
 }
 

@@ -5,11 +5,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, caseGroups, familiesOf, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, sha256, uriFamily, uriProblem, uriToLocal,
-  validKey, writeFileAtomic,
+  DOC_PREFIX, caseGroups, familiesOf, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, sha256, uriFamily, uriProblem,
+  uriToLocal, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 
 const RESOLVE = "move the local file aside, pull, and re-apply your change";
+
+// The mirror, which holds both roots: nothing a pull writes or removes may be
+// reached through a symbolic link below it.
+const mirrorOf = roots => path.dirname(roots.workRoot);
 
 const localHash = file => (fs.existsSync(file) ? sha256(fs.readFileSync(file)) : null);
 
@@ -47,6 +51,7 @@ async function pullDocument({ cfg, client, roots, state, persist, report }, item
     report.notes.push(`${item.uri}: has no place in the mirror, skipped`);
     return;
   }
+  refuseLinkedDirs(mirrorOf(roots), path.dirname(file));
   const local = localHash(file);
   if (local === item.content_hash) {
     state.documents[item.uri] = local;
@@ -70,7 +75,7 @@ async function pullDocument({ cfg, client, roots, state, persist, report }, item
     report.conflicts.push(`${item.uri}: changed locally during the pull; ${RESOLVE}`);
     return;
   }
-  writeFileAtomic(file, doc.content);
+  writeFileAtomic(file, doc.content, mirrorOf(roots));
   state.documents[item.uri] = doc.content_hash;
   persist();
   report.counts.documents += 1;
@@ -102,6 +107,7 @@ function removeVanished({ roots, state, persist, report }, filed) {
       continue;
     }
     try {
+      refuseLinkedDirs(mirrorOf(roots), path.dirname(file));
       // Hashed directly before the removal, with nothing in between.
       const local = localHash(file);
       if (local !== null && local !== state.documents[uri]) {
@@ -185,7 +191,7 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
         // Equal, or ahead by lines push has not sent yet.
         state.ledgers[ws.key] = synced;
       } else if (!local || (record && !record.pending && local.length === record.offset && sha256(local) === record.prefix)) {
-        writeFileAtomic(file, remote);
+        writeFileAtomic(file, remote, mirrorOf(roots));
         state.ledgers[ws.key] = synced;
         report.counts.ledgers += 1;
       } else {
@@ -245,7 +251,7 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
   }
   try {
     if (local !== remoteHash) {
-      writeFileAtomic(file, remote);
+      writeFileAtomic(file, remote, mirrorOf(roots));
       report.counts.checkpoints += 1;
     }
     state.checkpoint = remoteHash;

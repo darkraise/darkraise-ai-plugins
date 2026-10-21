@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
-import { makeHome, makeRepo, read, run, write } from "./helpers.mjs";
+import { makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
 
 async function setup(t, stubOptions = {}) {
   const stub = await startStub(stubOptions);
@@ -614,4 +614,32 @@ test("a sync state that cannot be saved stops the pull: exit 2, one line, and th
   assert.equal(read(path.join(s.docsRoot, "a.md")), "dforge/a.md\n");
   assert.equal(fs.existsSync(path.join(s.docsRoot, "b.md")), false, "the pull stopped at the failed save");
   assert.equal(fs.existsSync(path.join(s.mirror, ".sync.lock")), false, "the lock is released");
+});
+
+test("a pull never reads, writes or removes through a linked directory or a planted temporary file", { skip: process.platform === "win32" }, async t => {
+  const s = await setup(t);
+  const outside = scratch("dms-outside-");
+  await s.seed.putDocument({ project: "proj", uri: "dforge/specs/a.md", content: "# A\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/notes/gone.md", content: "gone\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/b.md", content: "# B\n" });
+  assert.equal((await s.pull()).code, 0);
+  for (const dir of ["specs", "notes"]) {
+    fs.renameSync(path.join(s.docsRoot, dir), path.join(outside, dir));
+    fs.symlinkSync(path.join(outside, dir), path.join(s.docsRoot, dir));
+  }
+  write(path.join(outside, "victim"), "unrelated\n");
+  fs.rmSync(path.join(s.docsRoot, "b.md"));
+  fs.symlinkSync(path.join(outside, "victim"), path.join(s.docsRoot, ".b.md.tmp"));
+  await s.seed.putDocument({ project: "proj", uri: "dforge/specs/a.md", content: "# A, changed\n" });
+  await s.seed.moveDocument(s.stub.db.documents.get("proj\u0000dforge/notes/gone.md").id, { uri: "dforge/archive/20261021T000000Z/notes/gone.md" });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/b.md", content: "# B, changed\n" });
+  const result = await s.pull();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: dforge\/specs\/a\.md: the local copy could not be read or written \(ELOOP\); not pulled$/m);
+  assert.match(result.stdout, /^failed: dforge\/notes\/gone\.md: archived or deleted on darkmem, and the local copy could not be checked or removed \(ELOOP\); it stays$/m);
+  assert.equal(read(path.join(outside, "specs", "a.md")), "# A\n");
+  assert.equal(read(path.join(outside, "notes", "gone.md")), "gone\n");
+  assert.equal(read(path.join(outside, "victim")), "unrelated\n");
+  assert.equal(read(path.join(s.docsRoot, "b.md")), "# B, changed\n");
+  assert.equal(fs.existsSync(path.join(s.docsRoot, ".b.md.tmp")), false);
 });
