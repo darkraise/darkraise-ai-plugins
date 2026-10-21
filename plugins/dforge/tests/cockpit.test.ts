@@ -4228,6 +4228,21 @@ describe('settings held outside the file', () => {
     expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
   })
 
+  test('a hand edit after a save of a Claude key shows once the engine has the save', async ($, on) => {
+    const w: World = { tokens: 284_000, config: {}, settings: { autoCompactWindow: 650_000 }, userSettings: { autoCompactWindow: 650_000 } }
+    const clock = world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    w.userSettings = w.settings = { autoCompactWindow: 700_000 }
+    await clock.advance(2_000)
+    w.userSettings = w.settings = { autoCompactWindow: 800_000 }
+    await clock.advance(2_000)
+    expect(await ui.find({ type: 'Text', text: /^800k/ })).toBeDefined()
+  })
+
   test('a reset Claude key shows a project file that sets the same key once the engine sees the removal', async ($, on) => {
     const w: World = { tokens: 284_000, config: {}, settings: { autoCompactWindow: 650_000 }, userSettings: { autoCompactWindow: 650_000 } }
     world(on, w)

@@ -3279,9 +3279,9 @@ async function applySettings($: EngineInterface, file: SettingsFile) {
   // $.env.get takes only a literal name: each variable the schema names is listed.
   const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET'), DFORGE_LENS_CAP: await $.env.get('DFORGE_LENS_CAP') }
   const engineUser = ((await $.settings.read({ source: 'user' }).catch(() => ({}))) ?? {}) as Record<string, unknown>
-  // The engine's snapshot can predate a save: until it shows the saved value the merged read is overlaid too, then a project or managed override shows through.
-  const awaited = Object.fromEntries(Object.entries(S.claudeSaved).filter(([key, saved]) => engineUser[key] !== saved))
-  const merged = { ...(((await $.settings.read().catch(() => ({}))) ?? {}) as Record<string, unknown>), ...awaited }
+  // The engine's snapshot can predate a save: until it shows the saved value the reads are overlaid, then the save is dropped, so a project or managed override or a later hand edit shows through.
+  for (const [key, saved] of Object.entries(S.claudeSaved)) if (engineUser[key] === saved) delete S.claudeSaved[key]
+  const merged = { ...(((await $.settings.read().catch(() => ({}))) ?? {}) as Record<string, unknown>), ...S.claudeSaved }
   const user = { ...engineUser, ...S.claudeSaved }
   const values = resolveSettings(SCHEMA, file, env, merged)
   S.settingProblems = settingProblems(SCHEMA, file, env)
