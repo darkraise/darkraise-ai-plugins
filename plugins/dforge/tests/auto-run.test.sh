@@ -364,6 +364,35 @@ for lock in flock no-such-flock; do
   check "$lock: a start waits for the lock" "$(field session):$(field rulings)" "s-2:[]"
 done
 
+# The refusal is the caller's own status, not a generic failure, from every
+# update that follows a cap check or a read.
+for fn in ar_failure ar_stalled ar_compacted "ar_compacted --switch"; do
+  ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  ( cd "$REPO" && . "$HERE/../scripts/lib/context.sh" && . "$HERE/../scripts/lib/auto-run.sh" && AR_SESSION=s-1 $fn ) 2>/dev/null
+  status=$?
+  check "$fn for a session the run left: status 3" "$status:$(field session)" "3:s-2"
+done
+
+# A caller that passes the first binding check and then waits for the lock
+# finds the run moved to another session meanwhile: it changes nothing.
+for lock in flock no-such-flock; do
+  [ "$lock" = no-such-flock ] || command -v flock >/dev/null 2>&1 || continue
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  rm -f "$STATE.ready"
+  if [ "$lock" = flock ]; then
+    flock "$STATE.lock" bash -c 'touch "$1.ready"; sleep 2; jq ".session = \"s-2\"" "$1" > "$1.held" && mv -f "$1.held" "$1"' _ "$STATE" &
+  else
+    mkdir "$STATE.lockd"
+    touch "$STATE.ready"
+    (sleep 2; jq '.session = "s-2"' "$STATE" > "$STATE.held" && mv -f "$STATE.held" "$STATE"; rmdir "$STATE.lockd") &
+  fi
+  holder=$!
+  held "$lock: a caller that waited for the lock finds the run rebound meanwhile" || continue
+  DFORGE_FLOCK=$lock ar --session s-1 ruling add 'too late' >/dev/null 2>&1; status=$?
+  wait
+  check "$lock: a caller that waited for the lock finds the run rebound meanwhile" "$status:$(field session):$(jq -r '.rulings | length' "$STATE")" "3:s-2:0"
+done
+
 # --- a start that is not forced re-checks for a live run under the lock ---
 # s-1's run is stopped, so s-2's first look finds none. While s-2's start waits
 # for the lock, the holder makes s-1's run live again, as a start that got the
