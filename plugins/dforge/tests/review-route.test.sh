@@ -614,6 +614,7 @@ check "the Claude manifest names a release version" "$([[ "$version" =~ ^[0-9]+\
 present "the Codex manifest carries the Claude manifest's version" "$P/.codex-plugin/plugin.json" "\"version\": \"$version\""
 present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
 present "approach ranking runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'Dispatch one `dforge:judge-opus` to run the ring'
+present "a load-bearing single candidate reaches the advisor" "$P/skills/selecting-approaches/SKILL.md" 'with one plausible approach goes to `advisor`'
 present "the budget reference derives the budget" "$P/reference/session-budget.md" 'min(`autoCompactWindow`, model window) × 93% − 140,000'
 present "the budget checkpoints finish the task in flight" "$P/reference/session-budget.md" 'finish the task in flight through its'
 present "the program design records sub-project 8" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-15 (sub-project 8 spec).**'

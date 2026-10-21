@@ -62,9 +62,12 @@ cost is inconvenient, which is exactly what the gate is here to stop.
    is theatre.
 4. **Trivially reversible and confined to one file.** Being wrong costs a
    revert.
-5. **You cannot name two structurally distinct candidates.** Write each in one
-   sentence before dispatching anything. Differing in naming, ordering, or
-   wording is not structural difference.
+5. **You cannot name two structurally distinct candidates, and the decision is
+   not load-bearing** (as When best-of-3 runs defines it). Write each
+   candidate in one sentence before dispatching anything. Differing in naming,
+   ordering, or wording is not structural difference. A load-bearing decision
+   with one plausible approach goes to `advisor`: it is the case that rung
+   exists for.
 
 ### Bugs are excluded on correctness grounds, not cost
 
