@@ -53,8 +53,19 @@ test("checkRemote refuses another darkmem while hashes remain, and adopts it onc
   state.ledgers.plan = { offset: 1, prefix: sha256("x"), lastSeq: 1 };
   assert.throws(() => checkRemote("state.json", state, "http://b", "proj"), StateError);
   delete state.ledgers.plan;
+  state.checkpoint = sha256("# Latest\n");
+  assert.throws(() => checkRemote("state.json", state, "http://b", "proj"), StateError);
+  state.checkpoint = null;
+  state.pendingLinks = [{ uri: "dforge/handoff/plan/progress.md" }];
+  assert.throws(() => checkRemote("state.json", state, "http://b", "proj"), StateError);
+  state.pendingLinks = [];
+  state.prefix = "dforge";
+  state.conflicts = [{ uri: "dforge/specs/a.md" }];
   checkRemote("state.json", state, "http://b", "other");
   assert.deepEqual(state.remote, { url: "http://b", project: "other" });
+  // The new darkmem's own documents may still sit under an older prefix.
+  assert.equal(state.prefix, undefined);
+  assert.deepEqual(state.conflicts, []);
 });
 
 test("archive uris carry a UTC stamp under dforge/archive/", () => {

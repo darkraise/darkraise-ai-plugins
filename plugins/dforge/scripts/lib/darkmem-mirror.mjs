@@ -255,11 +255,19 @@ export function loadState(file) {
 // shares this mirror directory (a name differing only in case, on a
 // case-insensitive file system), is refused: its hashes would read every
 // document missing from this darkmem as deleted there. A state the moves home
-// have emptied holds no hashes to misread, so it takes the new darkmem.
+// have emptied holds nothing synced to misread, so it takes the new darkmem,
+// forgetting the old one's prefix migration and conflicts.
 export function checkRemote(file, state, url, project) {
-  const isEmpty = Object.keys(state.documents).length === 0 && Object.keys(state.ledgers).length === 0;
-  if (state.remote === undefined || isEmpty) {
+  if (state.remote === undefined) {
     state.remote = { url, project };
+    return;
+  }
+  const isEmpty = Object.keys(state.documents).length === 0 && Object.keys(state.ledgers).length === 0
+    && (state.checkpoint ?? null) === null && state.pendingLinks.length === 0;
+  if (isEmpty && (state.remote.url !== url || state.remote.project !== project)) {
+    state.remote = { url, project };
+    delete state.prefix;
+    state.conflicts = [];
     return;
   }
   if (state.remote.url !== url || state.remote.project !== project) {
