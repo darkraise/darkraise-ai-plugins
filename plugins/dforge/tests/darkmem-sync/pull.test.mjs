@@ -108,6 +108,18 @@ test("latest.md takes the newest checkpoint across open workstreams, by darkmem'
   assert.equal(s.state().checkpoint, sha("# later still\n"));
 });
 
+test("a deleted latest.md comes back on the next pull though darkmem's checkpoint is unchanged", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
+  assert.equal((await s.pull()).code, 0);
+  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  fs.rmSync(latest);
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, / 1 checkpoints;/);
+  assert.equal(read(latest), "# synced\n");
+});
+
 test("an unpushed edit to latest.md holds until darkmem has a newer checkpoint, which is then a conflict", async t => {
   const s = await setup(t);
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
@@ -272,11 +284,12 @@ test("an old state file's single checkpointAt gates a pull, which then records t
   const filed = s.stub.db.workstreams[0].entries[0].created_at;
   const old = new Date(Date.parse(filed) + 500).toISOString();
   write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
-    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dforge",
+    version: 1, documents: {}, ledgers: {}, checkpoint: sha("# synced\n"), checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dforge",
   }));
   const latest = path.join(s.workRoot, "handoff", "latest.md");
+  write(latest, "# synced\n");
   assert.equal((await s.pull()).code, 0);
-  assert.equal(fs.existsSync(latest), false, "a checkpoint older than the old value is not taken");
+  assert.equal(read(latest), "# synced\n", "a checkpoint older than the old value is not taken");
   await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# B\n");

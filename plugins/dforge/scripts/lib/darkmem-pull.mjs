@@ -232,9 +232,10 @@ async function pullCheckpoint({ cfg, client, roots, state, persist, report }, op
   }
   // Without every workstream's checkpoint the newest is unknown.
   if (!newest || unread) return;
-  const synced = newestCheckpointAt(state);
-  if (synced && isoMicros(newest.created_at) <= isoMicros(synced)) return;
   const file = path.join(roots.workRoot, "handoff", "latest.md");
+  // A mirror that lost latest.md takes darkmem's newest again, however old.
+  const synced = newestCheckpointAt(state);
+  if (synced && isoMicros(newest.created_at) <= isoMicros(synced) && fs.existsSync(file)) return;
   const remote = Buffer.from(newest.body, "utf8");
   const remoteHash = sha256(remote);
   let local;
