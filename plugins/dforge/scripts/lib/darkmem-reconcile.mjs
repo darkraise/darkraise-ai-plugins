@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
-import { dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
+import { ConfigError, dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
@@ -688,7 +688,17 @@ export async function reconcile(context) {
       }
     }
     if (result.moved) {
-      writeApplied(env, cfg.repoRoot, { [family]: target }, { project: cfg.project, mirror: cfg.mirror });
+      try {
+        writeApplied(env, cfg.repoRoot, { [family]: target }, { project: cfg.project, mirror: cfg.mirror });
+      } catch (error) {
+        if (!(error instanceof ConfigError)) throw error;
+        // The files have moved; stores.json still names the old store, so the
+        // next reconcile moves the family again and records it.
+        out(`darkmem-sync reconcile: ${family} moved to ${target}, but the record of it could not be written: ${error.message}; the next reconcile finishes it`);
+        for (const line of result.details) out(`  ${line}`);
+        report.refused += 1;
+        return;
+      }
       refreshContext(context);
       out(`darkmem-sync reconcile: ${family} moved to ${target}${offline ? ` from the mirror, without darkmem (${offline})` : ""}`);
     } else {

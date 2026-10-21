@@ -329,7 +329,7 @@ async function main(argv, {
     if (error instanceof TransportError || error instanceof HttpError) {
       err(`darkmem-sync: ${parsed.name} failed: ${error.message}`);
       code = 3;
-    } else if (error instanceof StateError || error instanceof UsageError) {
+    } else if (error instanceof StateError || error instanceof UsageError || error instanceof ConfigError) {
       err(`darkmem-sync: ${error.message}`);
       code = 2;
     } else {

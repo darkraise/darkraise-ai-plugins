@@ -1194,6 +1194,30 @@ test("a sync state that cannot be saved after the set-aside stops reconcile with
   assert.deepEqual(s.stores(), { documents: "darkmem", progress: "local" });
 });
 
+test("a stores record that cannot be written after a move is reported cleanly, and a rerun converges", async t => {
+  const s = await darkmemDocs(t);
+  assert.equal((await s.pull()).code, 0);
+  const record = path.join(s.home, ".dforge", "stores.json");
+  const kept = read(record);
+  // The third manifest read is the last request before the files move.
+  let manifests = 0;
+  s.stub.db.onRequest = (method, pathname) => {
+    if (method !== "GET" || pathname !== "/api/v1/documents/manifest" || ++manifests !== 3) return;
+    write(record, "{not json");
+  };
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error|at /);
+  assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to local, but .*stores\.json is not valid JSON.*$/m);
+  assert.equal(read(path.join(s.repo, "docs", "dforge", "specs", "a.md")), "# A\n");
+  write(record, kept);
+  // The set-aside directory is named by the second, so a rerun in the same second would collide with the first run's.
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  const again = await s.reconcile();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
 test("a mapping changed to another project moves the old mirror's families back to the checkout, then into the new project", async t => {
   const stub = await startStub();
   t.after(() => stub.close());
