@@ -2794,6 +2794,7 @@ describe('discord', () => {
     expect(redact('{"password":"hunter2","api_key": "a\\"b", "n": 1}')).toBe('{"password":[hidden],"api_key": [hidden], "n": 1}')
     expect(redact('curl -d \'{\\"token\\":\\"abc\\"}\' x')).toBe('curl -d \'{\\"token\\":[hidden] x')
     expect(redact('GITHUB_TOKEN=abc123 gh pr list')).toBe('GITHUB_TOKEN=[hidden] gh pr list')
+    expect(redact("{'api_key': 'a\\'b', 'n': 1}")).toBe("{'api_key': [hidden], 'n': 1}")
     expect(redact('max_tokens: 4096')).toBe('max_tokens: 4096')
     expect(redact(`post ${WEBHOOK}`)).toBe('post [webhook]')
     expect(excerpt('a'.repeat(20), 10)).toBe(`${'a'.repeat(9)}…`)
