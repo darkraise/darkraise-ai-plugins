@@ -4036,6 +4036,14 @@ describe('settings file', () => {
     expect(settingProblems(FAKE, { layout: 'full' }, {})).toEqual([])
   })
 
+  test('an invalid notifyOn sends nothing rather than the default set', () => {
+    expect(resolveSettings(SCHEMA, { notifyOn: 'off' }, {}).notifyOn).toBe('none')
+    expect(resolveSettings(SCHEMA, { notifyOn: 3 }, {}).notifyOn).toBe('none')
+    expect(resolveSettings(SCHEMA, {}, {}).notifyOn).toBe('')
+    expect(resolveSettings(SCHEMA, { notifyOn: 'ask,done' }, {}).notifyOn).toBe('ask,done')
+    expect(settingProblems(SCHEMA, { notifyOn: 'off' }, {})).toEqual(['notifyOn in ~/.dforge/config.json is not valid; read as none'])
+  })
+
   test('a saved value drops its default and keeps darkmem', () => {
     const darkmem = { url: 'http://d.test', repos: {} }
     expect(settingWritten(FAKE, { darkmem, warnAt: 70 }, 'warnAt', 80)).toEqual({ darkmem })

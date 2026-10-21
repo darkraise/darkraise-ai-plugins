@@ -78,9 +78,15 @@ export function resolveSettings(
     const raw = spec.env === undefined ? undefined : env[spec.env]
     const fromEnv = raw === undefined || raw === '' ? undefined : settingFromText(spec, raw)
     const stored = file[key]
-    values[key] = fromEnv ?? (isValidSetting(spec, stored) ? stored : spec.default)
+    values[key] = fromEnv ?? (isValidSetting(spec, stored) ? stored : Object.prototype.hasOwnProperty.call(file, key) ? invalidStored(key, spec) : spec.default)
   }
   return values
+}
+
+// A notifyOn the person wrote but mistyped ("off") sends nothing: the default
+// set would post to Discord what they meant to keep private.
+function invalidStored(key: string, spec: SettingSpec): SettingValue {
+  return key === 'notifyOn' ? 'none' : spec.default
 }
 
 /** One line for each environment or file value that does not fit its setting and is therefore ignored. */
@@ -96,7 +102,8 @@ export function settingProblems(
       problems.push(`${spec.env}=${raw} is not a valid ${key}; ignored`)
     }
     if (spec.target === 'dforge' && Object.prototype.hasOwnProperty.call(file, key) && !isValidSetting(spec, file[key])) {
-      problems.push(`${key} in ~/.dforge/config.json is not valid; ignored`)
+      const reading = invalidStored(key, spec)
+      problems.push(`${key} in ~/.dforge/config.json is not valid; ${reading === spec.default ? 'ignored' : `read as ${String(reading)}`}`)
     }
   }
   return problems
