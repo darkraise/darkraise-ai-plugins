@@ -2844,6 +2844,18 @@ describe('shells and remote', () => {
       expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started the review.')
     })
 
+    test('a later held turn with no answer keeps the held answer', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await $.turn.start({ text: '', turnId: 't2' })
+      await clock.advance(5_000)
+      await $.turn.complete({ answer: '', durationMs: 5_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      await clock.advance(60_000)
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started the review.')
+    })
+
     test("the watchdog's Done carries the held turn's answer", async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)

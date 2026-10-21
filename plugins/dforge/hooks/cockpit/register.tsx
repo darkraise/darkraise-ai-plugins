@@ -619,7 +619,8 @@ export const register: Register = on => {
       const isHeld = e.reason === 'answer' && (await holdsDone($))
       const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
       if (e.reason !== 'answer') S.heldDone = null
-      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer }
+      // A later turn that says nothing keeps the answer the chain last gave.
+      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer.trim() === '' ? (S.heldDone?.answer ?? e.answer) : e.answer }
       await readRemote($)
       await setActivity($, now => ({
         ...IDLE,
