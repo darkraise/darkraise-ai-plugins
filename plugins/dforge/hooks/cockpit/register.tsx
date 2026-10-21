@@ -2819,21 +2819,28 @@ async function compactFromPane($: EngineInterface) {
   S.isPaneCompacting = true
   try {
     const done = await $.session.compact()
-    if (!('skip' in done)) await bookAutoCompaction($)
+    if (!('skip' in done)) await bookAutoCompaction($, true)
   } finally {
     S.isPaneCompacting = false
   }
 }
 
 // A compaction the cockpit did not make, booked so the run's rule applies after it.
-async function bookAutoCompaction($: EngineInterface) {
+async function bookAutoCompaction($: EngineInterface, fromPane = false) {
   const auto = await readAutoRun($)
   // A pending clear or switch supersedes the compaction: booking it would drop
   // that stage. A pending handoff still needs its clear, and a pending compact
-  // is the cockpit's own stage, which books itself.
-  if (auto === null || !auto.active || ['clear', 'switch', 'switch-resume', 'handoff', 'compact'].includes(auto.pending ?? '')) return
+  // is the cockpit's own stage, which books itself unless the pane ran it first.
+  if (auto === null || !auto.active || ['clear', 'switch', 'switch-resume', 'handoff'].includes(auto.pending ?? '')) return
+  if (auto.pending === 'compact' && !fromPane) return
+  const code = await autoRunCall($, await $.session.id(), ['compacted'])
   // Exit 5: the compaction cap stopped the run.
-  if ((await autoRunCall($, await $.session.id(), ['compacted'])) === 5) await endStoppedRun($)
+  if (code === 5) await endStoppedRun($)
+  // The pane did the compact stage's work, so only its continue prompt is left.
+  else if (code === 0 && auto.pending === 'compact') {
+    await trackAutoRun($)
+    scheduleAutoAct($, 'continue', 0)
+  }
 }
 
 async function stopAutoRun($: EngineInterface) {

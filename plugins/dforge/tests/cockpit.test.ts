@@ -4814,6 +4814,21 @@ describe('auto run', () => {
     expect(w.autoRuns).toEqual(['--session sess-1 compacted'])
   })
 
+  test("satisfies a pending compact stage with the pane's Compact, once", async ($, on) => {
+    const files = autoFiles({ pending: 'compact' })
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-compact' })
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(w.autoRuns?.filter(call => call.endsWith(' compacted'))).toHaveLength(1)
+    expect(pendingOf(files)).toBe('after-compact')
+    expect(w.prompts).toHaveLength(1)
+  })
+
   test('books no engine compaction over a pending clear', async ($, on) => {
     const w: World = { ...SIGNED_IN, autoRuns: [] }
     world(on, w)
