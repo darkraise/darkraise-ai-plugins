@@ -912,13 +912,13 @@ export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { s
     case 'background': {
       const count = work.shells.length
       const newest = work.shells.reduce<{ command: string; startedAt: number } | null>((last, shell) => (last === null || shell.startedAt > last.startedAt ? shell : last), null)
-      const oldest = Math.min(...work.shells.map(shell => shell.startedAt))
+      const oldest = count === 0 ? null : Math.min(...work.shells.map(shell => shell.startedAt))
       const line = newest === null ? '' : commandExcerpt(newest.command, 40)
       return [
         { text: '◐ background', color: AMBER, bold: true },
         ...(count === 0 ? [] : [sep, { text: `${count} ${count === 1 ? 'shell' : 'shells'}` }]),
         ...(line === '' ? [] : [sep, { text: line, dim: true }]),
-        ...(count === 0 ? [] : [sep, { text: shellAge(at - oldest), color: AMBER, bold: true }]),
+        ...(oldest === null ? [] : [sep, { text: shellAge(at - oldest), color: AMBER, bold: true }]),
         ...(work.agents === 0 ? [] : [sep, { text: `${work.agents} ${work.agents === 1 ? 'agent' : 'agents'}`, color: 'cyan' }]),
         ...sent,
       ]
