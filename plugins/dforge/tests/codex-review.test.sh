@@ -240,6 +240,7 @@ for mutation in '.spec_verdict="met"' '.task_quality=18' '.cannot_verify=[42]' '
 done
 out=$(STUB_REFUSE_ONCE=1 STUB_FINAL_MESSAGE='{}' seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "malformed fallback is FAILED" "$out" 'status=FAILED'
+present "the malformed report came from the fallback seat" "$out" "codex-judge gpt-6.1-sol/high status=FAILED"
 
 # --- task and plan kinds, and the light tier ---------------------------------
 write_roster
