@@ -41,6 +41,7 @@ fail() { # fail EXIT MESSAGE
 usage() { fail 2 "usage: next-step [--host claude|codex] [--complete] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
 
 # --host is pulled out wherever it sits so the remaining arguments keep their
 # strict positional contract.
@@ -491,11 +492,14 @@ printf '%s\n' "$block"
 
 handoff=$(dforge_latest_file)
 today=$(date -u +%Y-%m-%d)
+# Read, merged and replaced under the handoff's lock, so a concurrent writer's
+# notes are never overwritten with the copy read before them.
 write_handoff() {
-  mkdir -p "$(dirname "$handoff")" || return 1
+  local tmp status=0
   case $handoff in */.dforge/handoff/latest.md) dforge_state_ignore "${handoff%/.dforge/handoff/latest.md}" ;; esac
+  tmp=$(mktemp) || return 1
   if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
-    printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$handoff.tmp" || return 1
+    printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.
     BLOCK="$block" awk '
@@ -503,11 +507,15 @@ write_handoff() {
       skip && /^## / { skip = 0; print "" }
       !skip { print }
       END { if (!found) { print ""; print ENVIRON["BLOCK"] } }
-    ' "$handoff" > "$handoff.tmp" || return 1
+    ' "$handoff" > "$tmp" || status=1
   fi
-  mv "$handoff.tmp" "$handoff"
+  [ "$status" -ne 0 ] || dr_replace "$handoff" "$tmp" || status=1
+  rm -f "$tmp"
+  return "$status"
 }
-if ! write_handoff 2>/dev/null; then
-  rm -f "$handoff.tmp" 2>/dev/null || true
+if ! { mkdir -p "$(dirname "$handoff")" && handoff_lock=$(dr_lock_base "$handoff"); } 2>/dev/null; then
+  fail 4 "could not write $handoff — copy the block above into it by hand"
+fi
+if ! dr_locked "$handoff_lock" write_handoff 2>/dev/null; then
   fail 4 "could not write $handoff — copy the block above into it by hand"
 fi

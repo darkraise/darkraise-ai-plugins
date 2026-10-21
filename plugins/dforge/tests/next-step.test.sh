@@ -455,6 +455,18 @@ lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
 lacks "blocked: no launch command" "$out" "Launch in"
 has "blocked: latest.md carries the block" "$(cat "$REPO/.dforge/handoff/latest.md")" "Task 2 is BLOCKED"
 
+# Writers share no temporary path: one another writer left behind, or holds,
+# does not stop this one, and two at once leave one well-formed block.
+mkdir -p "$REPO/.dforge/handoff/latest.md.tmp"
+run "$REPO" docs/plans/2026-01-01-blocked.md
+check "handoff: another writer's temporary path does not block the write" "$status" "0"
+rmdir "$REPO/.dforge/handoff/latest.md.tmp"
+(cd "$REPO" && bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
+(cd "$REPO" && bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
+wait
+check "handoff: concurrent writers leave one Next session block" "$(grep -c '^## Next session' "$REPO/.dforge/handoff/latest.md")" "1"
+check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dforge/handoff" | grep -cv '^latest.md$')" "0"
+
 # --- Codex host: the launch command names the Codex client, not Claude ---
 # The session knows its host (native-codex.md identifies it from callable tool
 # schemas, never from an executable), so the adhoc and draft paths take it as a
@@ -804,6 +816,7 @@ has "darkmem: the plan is named" "$out" "docs/dforge/plans/2026-02-02-mirror.md"
 has "darkmem: the mirror ledger is read" "$out" "ledger \`$M/work/sdd/2026-02-02-mirror/progress.md\`"
 check "darkmem: latest.md is written to the mirror" \
   "$(grep -c '^## Next session' "$M/work/handoff/latest.md")" "1"
+check "darkmem: only latest.md and dotfiles sit beside it" "$(ls -A "$M/work/handoff" | grep -v '^\.' | tr '\n' ' ')" "latest.md "
 check "darkmem: nothing is written in the checkout" "$([ -e "$SR/.dforge/handoff/latest.md" ] && echo yes || echo no)" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
