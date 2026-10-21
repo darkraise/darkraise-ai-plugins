@@ -3321,6 +3321,50 @@ describe('run card', () => {
     expect(ledgerReads()).toBe(before)
   })
 
+  test('reads the ledger again at a new session start, unchanged as it is', async ($, on) => {
+    const files = runFiles(LEDGER) ?? {}
+    const reads: string[] = []
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files, reads)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
+    const before = ledgerReads()
+    await $.session.start(START)
+    expect(ledgerReads()).toBe(before + 1)
+  })
+
+  test('reads the run again when only its plan changes', async ($, on) => {
+    const files = runFiles(LEDGER) ?? {}
+    files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN, mtimeMs: 1 }
+    const clock = world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN.replace('Ship it', 'Ship the card'), mtimeMs: 2 }
+    await clock.advance(2_000)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 3: Ship the card/ })).toBeDefined()
+  })
+
+  test('writes no run for a ledger saved again with the same tasks', async ($, on) => {
+    const files = runFiles(LEDGER) ?? {}
+    let writes = 0
+    on('state.set', { plugin: 'dforge', key: 'run' } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      writes += 1
+      return next(e)
+    }) as never)
+    const clock = world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    const before = writes
+    expect(before).toBeGreaterThan(0)
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.mtimeMs = 2_100_000
+    await clock.advance(2_000)
+    expect(writes).toBe(before)
+  })
+
   test('reads a finished ledger from before the session once', async ($, on) => {
     const files = runFiles(`${LEDGER}\nFinal review: clean (commits a..b)`) ?? {}
     const reads: string[] = []
