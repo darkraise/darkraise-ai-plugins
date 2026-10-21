@@ -119,8 +119,8 @@ Subagent (general-purpose):
 ```
 
 **Placeholders:**
-- `[MODEL]` — REQUIRED: reviewer model per SKILL.md Seats; scoped re-reviews
-  of small fix diffs take a cheap-to-mid tier
+- `[MODEL]` — REQUIRED: `sonnet`, or `opus` for a subtle concurrency fix, per
+  delegated-task.md §Seats
 - `[BRIEF_FILE]` — the task brief file (same file the implementer worked from)
 - `[FINDINGS]` — the Critical/Important findings and spec gaps from the
   previous review, copied verbatim, one per bullet
