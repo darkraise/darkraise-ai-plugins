@@ -80,13 +80,16 @@ agent_rank() {
 
 # task_files N — the paths every **Files:** block of task N names, backticks and
 # a :line-range or :line-list suffix (b.txt:10-20, plan-lint:143,239) removed.
+# A backticked path is taken whole, spaces included; a bare one ends at the
+# first blank.
 task_files() {
   plan_task_text "$src" "$1" | awk "$_PLAN_AWK"'
     in_fence($0) { on = 0; next }
     /^\*\*Files:\*\*/ { on = 1; next }
-    on && /^- (Create|Modify|Test):/ {
-      p = $0; sub(/^- (Create|Modify|Test):[ \t]*/, "", p); gsub(/`/, "", p)
-      sub(/[ \t].*$/, "", p); sub(/:[0-9][0-9,-]*$/, "", p)
+    on && /^- (Create|Modify|Test|Delete):/ {
+      p = $0; sub(/^- (Create|Modify|Test|Delete):[ \t]*/, "", p)
+      if (p ~ /^`[^`]+`/) { sub(/^`/, "", p); sub(/`.*$/, "", p) } else sub(/[ \t].*$/, "", p)
+      sub(/:[0-9][0-9,-]*$/, "", p)
       print p; next
     }
     { on = 0 }

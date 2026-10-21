@@ -525,6 +525,8 @@ sed 's/^|//' > "$FF/docs/plan.md" <<'EOF'
 |
 |**Files:**
 |- Modify: `h.txt:3-4,9`
+|- Modify: `dir with spaces/f.txt` (the export)
+|- Delete: `old.txt`
 |
 |**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 0 = 3
@@ -553,6 +555,10 @@ fix h.txt
 check "final-fix: a :line-list suffix in the plan is ignored" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
 fix h.txt:3,9
 check "final-fix: a finding's own line list is ignored" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
+fix 'dir with spaces/f.txt'
+check "final-fix: a path with spaces matches whole" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
+fix old.txt
+check "final-fix: a Delete entry matches" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
 fix a.txt b.txt
 check "final-fix: the highest of two matched tasks" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:1,2"
 fix c.txt
