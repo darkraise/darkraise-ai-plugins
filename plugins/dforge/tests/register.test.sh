@@ -236,6 +236,16 @@ wait
 check "concurrent sets: every row is done" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 <= 6 && $5 == "done"' | grep -c .)" "6"
 check "concurrent adds: three distinct new rows" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 > 6 { print $1 }' | sort -u | grep -c .)" "3"
 check "a rewrite keeps the file's mode" "$(ls -l "$ROOT/many.md" | cut -c1-10)" "$mode_before"
+
+# The same, without flock: the lock directory serializes the writers.
+reg "$ROOT/many-mkdir.md" '| 1 | A | - | - | open | - |' '| 2 | B | - | - | open | - |' '| 3 | C | - | - | open | - |' \
+  '| 4 | D | - | - | open | - |' '| 5 | E | - | - | open | - |' '| 6 | F | - | - | open | - |'
+for i in 1 2 3 4 5 6; do DFORGE_FLOCK=no-such-flock bash "$REG" set "$ROOT/many-mkdir.md" "$i" done >/dev/null 2>&1 & done
+for i in 1 2 3; do DFORGE_FLOCK=no-such-flock bash "$REG" add "$ROOT/many-mkdir.md" "Added $i" >/dev/null 2>&1 & done
+wait
+check "no flock: concurrent sets: every row is done" "$(register_rows "$ROOT/many-mkdir.md" | awk -F'\t' '$1 <= 6 && $5 == "done"' | grep -c .)" "6"
+check "no flock: concurrent adds: three distinct new rows" "$(register_rows "$ROOT/many-mkdir.md" | awk -F'\t' '$1 > 6 { print $1 }' | sort -u | grep -c .)" "3"
+check "no flock: the lock directory is gone" "$(find "$TMP" -name '*.lockd' | grep -c .)" "0"
 check "a rewrite leaves no temporary file" "$(ls -A "$ROOT" | grep -c '^\.many')" "0"
 
 # A register whose lock cannot be placed is not written, and no lock is left

@@ -234,6 +234,10 @@ check "close: readable evidence closes" "$RC" "0"
 for i in 1 2 3 4; do bash "$RM" add --root "$R2" "Next $i" --exit x --register docs/superpowers/registers/gone.md >/dev/null 2>&1 & done
 wait
 check "add: concurrent additions get distinct milestones" "$(roadmap_rows "$D2/roadmap.md" | cut -f1 | sort -u | tr '\n' ' ')" "M1 M2 M3 M4 M5 "
+for i in 1 2 3 4; do DFORGE_FLOCK=no-such-flock bash "$RM" add --root "$R2" "Later $i" --exit x --register docs/superpowers/registers/gone.md >/dev/null 2>&1 & done
+wait
+check "no flock: concurrent additions get distinct milestones" "$(roadmap_rows "$D2/roadmap.md" | cut -f1 | sort -u | tr '\n' ' ')" "M1 M2 M3 M4 M5 M6 M7 M8 M9 "
+check "no flock: the lock directory is gone" "$(find "$R2" -name '*.lockd' | grep -c .)" "0"
 
 run bash "$RM"
 check "usage: no verb" "$RC" "2"

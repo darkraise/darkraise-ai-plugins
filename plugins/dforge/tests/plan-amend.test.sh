@@ -201,6 +201,16 @@ check "concurrent amendments: both numbered apart" \
   "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
 check "concurrent amendments: both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race/amendments.md")" "2"
 
+# The same, without flock: the lock directory serializes them.
+cp docs/plan.md docs/race-mkdir.md
+DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-mkdir.md r1.md > "$TMP/race1" 2>&1 &
+DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-mkdir.md r2.md > "$TMP/race2" 2>&1 &
+wait
+check "no flock: concurrent amendments both numbered apart" \
+  "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
+check "no flock: concurrent amendments both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race-mkdir/amendments.md")" "2"
+check "no flock: the lock directory is gone" "$(find "$REPO" -name '*.lockd' | grep -c .)" "0"
+
 # A write that fails is reported, never "amended".
 mkdir -p "$TMP/failcp"
 printf '#!/usr/bin/env bash
