@@ -22,7 +22,8 @@
 #       close  0 written, 1 refused (rows open, an earlier milestone open, or
 #              a register below it missing or failing register check) or
 #              locked, 2 usage, unknown milestone or a missing note
-#       reopen 0 written, 2 usage, unknown milestone or a missing note
+#       reopen 0 written, 1 the roadmap is locked by another writer, 2 usage,
+#              unknown milestone or a missing note
 #       settle 0 done (whether or not a row changed), 2 usage
 set -uo pipefail
 
