@@ -3076,6 +3076,22 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: /BLOCKED · impl exhausted/ })).toBeDefined()
   })
 
+  test("says a second plan's tasks though the first had the same numbers", async ($, on) => {
+    const files = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task' }) } }
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    const next = '# SDD ledger — plan: docs/plans/q.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)'
+    files['/home/me/code/shop/.dforge/sdd/q/progress.md'] = { text: next, mtimeMs: 2_100_000 }
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
+    files['/home/me/code/shop/.dforge/sdd/q/progress.md'] = { text: `${next}\nTask 1: complete (commits a..b, review clean) — done: x`, mtimeMs: 2_200_000 }
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
+    expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.title)).toEqual(['✅ Task 1 complete, review clean'])
+  })
+
   test("masks a secret in a blocked task's reason", async ($, on) => {
     const files = runFiles(LEDGER) ?? {}
     const fetches: World['fetches'] = []

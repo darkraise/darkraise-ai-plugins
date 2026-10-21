@@ -2304,8 +2304,10 @@ const S = {
   // Whether a main-loop turn is running; a subagent's approval wait does not set it, as it does isTurnLive.
   isMainTurn: false,
   isBudgetSent: false,
-  // Ledger events already seen, so a reload or a re-read sends nothing twice.
-  ledgerSeen: null as Set<string> | null,
+  // Ledger events already seen, by the plan the ledger names; the first read
+  // of a plan's ledger only records them, so a reload, a re-read or a resumed
+  // plan sends nothing twice.
+  ledgerSeen: new Map<string, Set<string>>(),
   isUnattended: false,
   // Whether this Claude Code draws a Button's label from styled children,
   // so the hotkey's letter can be underlined in it.
@@ -2999,13 +3001,14 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
     task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`] : task.state === 'complete' ? [`complete:${task.n}`] : [],
   )
   if (summary.isFinished) keys.push('finished')
-  if (S.ledgerSeen === null) {
-    S.ledgerSeen = new Set(keys)
+  const seen = S.ledgerSeen.get(summary.plan ?? '')
+  if (seen === undefined) {
+    S.ledgerSeen.set(summary.plan ?? '', new Set(keys))
     return
   }
   for (const key of keys) {
-    if (S.ledgerSeen.has(key)) continue
-    S.ledgerSeen.add(key)
+    if (seen.has(key)) continue
+    seen.add(key)
     const [what, n] = key.split(':')
     const task = summary.tasks.find(one => String(one.n) === n)
     if (what === 'blocked' && task !== undefined) {
