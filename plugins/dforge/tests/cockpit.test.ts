@@ -3656,7 +3656,7 @@ describe('cockpit roots', () => {
 
   test("reads finish.json and a local plan from the session's worktree before the primary", async ($, on) => {
     const files: World['files'] = {
-      '/home/me/code/main/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
       '/home/me/code/main/.dforge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900}' },
       '/home/me/code/main/docs/dforge/plans/p.md': { text: '# Plan\n\n### Task 1: Old title\n' },
       '/home/me/code/shop/.dforge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900}' },
@@ -3680,7 +3680,24 @@ describe('cockpit roots', () => {
     signedIn(on, files)
     await $.session.start(START)
     expect(gitRuns).toContain('git -C /home/me/code/main rev-parse --show-toplevel')
-    expect(modeRuns).toEqual(['/home/me/code/main'])
+    // The roots are the linked worktree's, as sdd-workspace resolves them there.
+    expect(modeRuns).toEqual(['/home/me/code/shop'])
+  })
+
+  test("reads a linked worktree's own ledger, not the primary checkout's", async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/main/.dforge/sdd/q/progress.md': { text: LEDGER.replace('p.md', 'q.md'), mtimeMs: 2_500_000 },
+      '/home/me/code/main/docs/dforge/plans/q.md': { text: '# Plan\n\n### Task 1: Primary task\n' },
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
+    }
+    world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Primary task/ })).toBeUndefined()
   })
 
   test('a submodule has no primary checkout, as in the scripts', async ($, on) => {

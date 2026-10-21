@@ -2327,7 +2327,7 @@ const S = {
   stallFailedAt: null as number | null,
   // The watchdog's timer, every WATCHDOG_MS.
   watchdog: null as Timer | null,
-  // The roots --mode last named, and the primary checkout and the
+  // The roots --mode last named, and the checkout and the
   // modification times of stores.json and config.json they were read for.
   roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
   // latest.md's absolute path while progress is in darkmem; null while it is
@@ -2809,7 +2809,7 @@ async function stopAutoRun($: EngineInterface) {
   await trackAutoRun($)
 }
 
-// The roots darkmem-config.mjs --mode names for the primary checkout (store
+// The roots darkmem-config.mjs --mode names for the session's checkout (store
 // options spec §7.3). Read again when the checkout, ~/.dforge/stores.json or
 // ~/.dforge/config.json changes, so the session that ran a move or mapped the
 // repository sees the new roots. Null keeps the checkout paths: silently
@@ -2824,12 +2824,12 @@ const NO_NODE = /failed to start|\bnode: (?:command )?not found/i
 // start rejects "…failed to start: ENOENT…" instead.
 const TIMED_OUT = /still running after/i
 
-async function readRoots($: EngineInterface, primary: string): Promise<CockpitRoots | null> {
+async function readRoots($: EngineInterface, checkout: string): Promise<CockpitRoots | null> {
   const home = (await read($, place))?.home ?? null
   const mtimeOf = async (name: string) => (home === null ? null : ((await $.fs.stat(`${home}/.dforge/${name}`).catch(() => null))?.mtimeMs ?? null))
   const stores = await mtimeOf('stores.json')
   const config = await mtimeOf('config.json')
-  const key = `${primary}|${stores ?? 'none'}|${config ?? 'none'}`
+  const key = `${checkout}|${stores ?? 'none'}|${config ?? 'none'}`
   if (S.roots.key === key) return S.roots.value
   let value: CockpitRoots | null = null
   let note: string | null = null
@@ -2838,7 +2838,7 @@ async function readRoots($: EngineInterface, primary: string): Promise<CockpitRo
   // already are: there is nothing to ask node.
   if (stores !== null || config !== null) {
     try {
-      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', primary], { timeoutMs: 5000 })
+      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', checkout], { timeoutMs: 5000 })
       if (ran.exitCode === 0) value = parseModeLines(ran.stdout)
       else if (!NO_NODE.test(ran.stderr)) {
         note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
@@ -2897,14 +2897,15 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
 }
 
 // The run's ledger, its plan's tasks, and the newest handoff, read where the
-// roots put them (store options spec §7.3): the primary checkout's .dforge/
-// while progress is local, the darkmem mirror while it is not.
+// roots put them (store options spec §7.3): while progress is local, the
+// ledgers under the session worktree's .dforge/, as sdd-workspace writes them,
+// and the handoff under the primary checkout's; the darkmem mirror while it is not.
 async function readRun($: EngineInterface) {
   const session = (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
   const state = `${root}/.dforge`
-  const roots = await readRoots($, root)
+  const roots = await readRoots($, session ?? root)
   const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
   S.latestName = roots?.progress.store === 'darkmem' ? latest : null
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
@@ -2913,7 +2914,7 @@ async function readRun($: EngineInterface) {
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
     if ((await read($, handoffAt)) !== handoffTime) await update($, handoffAt, () => handoffTime)
     await readResumeOffer($, latest, handoffTime)
-    const base = roots?.progress.ledgerRoot ?? `${state}/sdd`
+    const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dforge/sdd`
     const entries = await $.fs.list(base).catch(() => [])
     let newest: { slug: string; path: string; at: number } | null = null
     for (const entry of entries) {
