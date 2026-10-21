@@ -104,7 +104,7 @@ export type NotifyPlace = {
 
 export type NotifyStyle = { mention: string | null; isBrief: boolean; now: number }
 
-/** The webhook body for one event. */
+/** The webhook body for one event, every text in it redacted. */
 export function discordBody(event: NotifyEvent, place: NotifyPlace, style: NotifyStyle): Record<string, unknown> {
   const isPing = PINGS.includes(event.kind) && style.mention !== null
   const fields = [
@@ -112,12 +112,12 @@ export function discordBody(event: NotifyEvent, place: NotifyPlace, style: Notif
     ...(event.fields ?? []),
   ]
     .slice(0, 6)
-    .map(field => ({ name: field.name.slice(0, 256), value: (field.value || '—').slice(0, 1024), inline: true }))
-  const description = event.detail === undefined || (style.isBrief && event.isPlain !== true) ? undefined : event.detail.slice(0, 1500)
+    .map(field => ({ name: field.name.slice(0, 256), value: redact(field.value || '—').slice(0, 1024), inline: true }))
+  const description = event.detail === undefined || (style.isBrief && event.isPlain !== true) ? undefined : redact(event.detail).slice(0, 1500)
   const footer = ['dforge', place.account, place.tmux === null ? null : `tmux ${place.tmux}`].filter(Boolean).join(' · ')
   const author = [place.host, place.repo].filter(Boolean).join(' · ')
   const embed: Record<string, unknown> = {
-    title: event.title.slice(0, 256),
+    title: redact(event.title).slice(0, 256),
     color: COLORS[event.kind],
     ...(author === '' ? {} : { author: { name: author.slice(0, 256) } }),
     ...(description === undefined || description === '' ? {} : { description }),

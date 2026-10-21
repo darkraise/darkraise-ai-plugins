@@ -655,7 +655,6 @@ export const register: Register = on => {
       kind: 'agent',
       title: `🤖 ${shortSeat(spawn.seat)} finished`,
       detail: spawn.description,
-      isPlain: true,
       fields: [{ name: 'Took', value: elapsed(e.durationMs) }],
     })
 
@@ -3020,7 +3019,6 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
         kind: 'task',
         title: `✅ Task ${task.n} complete${task.isClean ? ', review clean' : ''}`,
         detail: task.title || undefined,
-        isPlain: true,
         fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
       })
     } else if (what === 'finished') {

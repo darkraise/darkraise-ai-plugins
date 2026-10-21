@@ -3076,6 +3076,36 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Text', text: /BLOCKED · impl exhausted/ })).toBeDefined()
   })
 
+  test("masks a secret in a blocked task's reason", async ($, on) => {
+    const files = runFiles(LEDGER) ?? {}
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.text += '\nTask 2: BLOCKED — impl exhausted — rotate password=hunter2'
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
+    expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('impl exhausted — rotate password=[hidden]')
+  })
+
+  test('a brief message names no task title and no agent description', async ($, on) => {
+    const files = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task,agent', notifyDetail: 'brief' }) } }
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.text += '\nTask 2: complete (commits c..e, review clean) — done: x'
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Migrate the billing secrets', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
+    const embeds = fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0])
+    expect(embeds.map(embed => embed?.title)).toEqual(['✅ Task 2 complete, review clean', '🤖 impl-sonnet-low finished'])
+    expect(embeds.map(embed => embed?.description)).toEqual([undefined, undefined])
+  })
+
   test('the desktop band draws its git chips and its blocked and refused warning as rows', async ($, on) => {
     const files = runFiles(`${LEDGER}\nTask 2: BLOCKED — impl exhausted — pick a meter width rule`)
     world(on, { ...SIGNED_IN, files })
