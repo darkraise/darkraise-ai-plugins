@@ -691,7 +691,7 @@ export async function reconcile(context) {
       try {
         writeApplied(env, cfg.repoRoot, { [family]: target }, { project: cfg.project, mirror: cfg.mirror });
       } catch (error) {
-        if (!(error instanceof ConfigError)) throw error;
+        if (!(error instanceof ConfigError) && typeof error?.code !== "string") throw error;
         // The files have moved; stores.json still names the old store, so the
         // next reconcile moves the family again and records it.
         out(`darkmem-sync reconcile: ${family} moved to ${target}, but the record of it could not be written: ${error.message}; the next reconcile finishes it`);
