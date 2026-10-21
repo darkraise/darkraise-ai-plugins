@@ -53,8 +53,11 @@ need_cells() {
   done
 }
 
-lock_file() { # lock_file FILE — the lock base for FILE, or exit 2
-  dr_lock_base "$1" || { echo "cannot lock $1" >&2; exit 2; }
+locked() { # locked FILE COMMAND [ARGS…] — COMMAND under FILE's lock, or exit 2
+  local file=$1 base
+  shift
+  base=$(dr_lock_base "$file") || { echo "cannot lock $file" >&2; exit 2; }
+  dr_locked "$base" "$@"
 }
 
 cmd_check() {
@@ -162,7 +165,7 @@ cmd_set() {
   need_file "$file"
   state_known "$state" || { echo "unknown state: $state; one of $REGISTER_STATES" >&2; exit 2; }
   need_cells "$note" "$assigned" "$acceptance"
-  dr_locked "$(lock_file "$file")" set_row
+  locked "$file" set_row
 }
 
 # set_row — cmd_set's read, check and write, under the register's lock so a
@@ -216,7 +219,7 @@ cmd_add() {
   fi
 
   need_cells "$item" "$assigned" "$acceptance" "$note"
-  dr_locked "$(lock_file "$file")" add_row
+  locked "$file" add_row
 }
 
 # add_row — cmd_add's numbering and write, under the register's lock so two

@@ -238,6 +238,18 @@ check "concurrent adds: three distinct new rows" "$(register_rows "$ROOT/many.md
 check "a rewrite keeps the file's mode" "$(ls -l "$ROOT/many.md" | cut -c1-10)" "$mode_before"
 check "a rewrite leaves no temporary file" "$(ls -A "$ROOT" | grep -c '^\.many')" "0"
 
+# A register whose lock cannot be placed is not written, and no lock is left
+# in the caller's working directory instead.
+LR="$TMP/lockless-repo"; git init -q "$LR"
+reg "$LR/r.md" '| 1 | A | - | - | open | - |'
+touch "$(git -C "$LR" rev-parse --absolute-git-dir)/dforge"
+mkdir "$TMP/elsewhere"
+(cd "$TMP/elsewhere" && bash "$REG" set "$LR/r.md" 1 done >/dev/null 2>&1); set_rc=$?
+(cd "$TMP/elsewhere" && bash "$REG" add "$LR/r.md" "Unlocked" >/dev/null 2>&1); add_rc=$?
+check "an unlockable register: set and add exit 2" "$set_rc:$add_rc" "2:2"
+check "an unlockable register is left unchanged" "$(register_rows "$LR/r.md" | cut -f1,5 | tr '\t\n' ': ')" "1:open "
+check "an unlockable register leaves no lock in the working directory" "$(ls -A "$TMP/elsewhere")" ""
+
 # --- the repository's own registers ---
 # They are load-bearing for three scripts and two skills, so one that stopped
 # parsing would otherwise go unnoticed.
