@@ -3497,8 +3497,9 @@ async function refreshDetail($: EngineInterface) {
     const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
     const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
     if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
-  } catch {
-    if ((await read($, repo)) !== null) await update($, repo, () => null)
+  } catch (error) {
+    // A large repository can outrun the timeout: its last reading stands rather than a blank card.
+    if (!TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
   }
 }
 

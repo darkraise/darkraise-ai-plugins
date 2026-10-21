@@ -265,6 +265,8 @@ type World = {
   isUserSettingsUnreadable?: boolean
   /** How long each compaction takes, in the clock's milliseconds; at once unless said. */
   compactMs?: number
+  /** `git status` outruns its timeout, or cannot start. */
+  gitStatusOut?: 'timeout' | 'missing'
   /** Each git command the plugin runs, as one line. */
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
@@ -411,6 +413,8 @@ function world(on: On, w: World) {
       if (w.isNodeMissing) return { deny: 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }
       return { value: { exitCode: 0, stdout: 'v24.18.0\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
+    if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'timeout') return { deny: 'dforge: $.process.run(git) aborted: still running after 3000ms' }
+    if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'missing') return { deny: 'dforge: $.process.run(git) failed to start: ENOENT' }
     if (argv.startsWith('git ')) w.gitRuns?.push(argv)
     const common = w.commonDir ?? `${w.primary ?? '/home/me/code/shop'}/.git`
     // A directory is a work tree when the common directory is its .git: a
@@ -1519,6 +1523,25 @@ describe('minimized band', () => {
     const inline = await $.ui.mount({ ...INLINE, surface: 'terminal' })
     expect(await inline.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
     expect(await inline.find({ type: 'Button', text: '▸ Context' })).toBeUndefined()
+  })
+})
+
+describe('repo card', () => {
+  test('keeps the last reading when git status outruns its timeout, not when git is gone', async ($, on) => {
+    const w: World = { ...SIGNED_IN }
+    const clock = world(on, w)
+    signedIn(on)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const isShown = async () => JSON.stringify(await ui.drawn()).includes('feat/pane')
+    await clock.advance(12_000)
+    expect(await isShown()).toBe(true)
+    w.gitStatusOut = 'timeout'
+    await clock.advance(12_000)
+    expect(await isShown()).toBe(true)
+    w.gitStatusOut = 'missing'
+    await clock.advance(12_000)
+    expect(await isShown()).toBe(false)
   })
 })
 
