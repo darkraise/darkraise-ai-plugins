@@ -98,9 +98,14 @@ async function pushDocument(context, { uri, buffer, local, recorded }, remote) {
     }
     answer = { content_hash: current, outcome: "unchanged" };
   }
-  state.documents[uri] = answer.content_hash;
+  // darkmem stored other bytes than were sent. Recording what was sent lets
+  // the next pull bring darkmem's copy into the mirror; recording darkmem's
+  // hash would leave the local file looking edited, and every push resend it.
+  const altered = answer.content_hash !== local;
+  state.documents[uri] = altered ? local : answer.content_hash;
   persist();
   report.counts.documents += 1;
+  if (altered) report.notes.push(`${uri}: darkmem stored different bytes than were sent; the next pull brings its copy into the mirror`);
   if (recorded === undefined && answer.outcome === "updated") {
     // darkmem has no create-only put: another client filed this uri between
     // the manifest read and this put, and its content was replaced.

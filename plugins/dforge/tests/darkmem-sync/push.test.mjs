@@ -742,3 +742,18 @@ test("a file under the docs root's archive/ is a reserved note and never pushed"
   assert.match(result.stdout, /note: archive\/20261013T091502Z\/a\.md: the docs root's archive\/ directory is reserved, not pushed/);
   assert.equal([...s.stub.db.documents.keys()].some(key => key.includes("archive")), false);
 });
+
+test("a document darkmem stores with other bytes is sent once, and the next pull brings darkmem's copy back", async t => {
+  const s = await setup(t, { transformContent: content => content.replace(/\n$/, "") });
+  markMigrated(s.mirror);
+  const file = path.join(s.docsRoot, "specs", "s.md");
+  write(file, "# Spec\n");
+  const first = await s.push();
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  assert.match(first.stdout, /^note: dforge\/specs\/s\.md: darkmem stored different bytes than were sent; the next pull brings its copy into the mirror$/m);
+  assert.equal((await run(["pull"], { cwd: s.repo, env: s.env })).code, 0);
+  assert.equal(read(file), "# Spec");
+  const again = await s.push();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.equal(s.posts("/api/v1/documents").length, 1, "the document is not sent again");
+});
