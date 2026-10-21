@@ -3240,6 +3240,24 @@ describe('run card', () => {
     expect(stats()).toBe(before + 1)
   })
 
+  test('reads a plan created after its ledger within one poll tick', async ($, on) => {
+    const files: NonNullable<World['files']> = { '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 } }
+    const clock = world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    await clock.advance(4_000)
+    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Add the helpers/ })).toBeUndefined()
+    await ui.unmount()
+    files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN }
+    await clock.advance(2_000)
+    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
+  })
+
   test('picks up a ledger change within one poll tick', async ($, on) => {
     const files = runFiles(LEDGER) ?? {}
     const clock = world(on, { ...SIGNED_IN, files })

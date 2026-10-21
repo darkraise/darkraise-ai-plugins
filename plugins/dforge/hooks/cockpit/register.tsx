@@ -2363,6 +2363,7 @@ const S = {
   // The ledger, its modification time and its plan's, as the run was last read; the plan file found then.
   runKey: '',
   runPlan: null as string | null,
+  runReads: 0,
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2958,6 +2959,8 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
 // ledgers under the session worktree's .dforge/, as sdd-workspace writes them,
 // and the handoff under the primary checkout's; the darkmem mirror while it is not.
 async function readRun($: EngineInterface) {
+  // A poll tick's read and a tool call's can overlap: only the latest writes.
+  const reading = ++S.runReads
   const session = (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
@@ -2987,6 +2990,7 @@ async function readRun($: EngineInterface) {
     // A ledger counts once this session works on it, or when it is the one
     // the session started next to.
     if (newest === null || (!(await read($, isPlanSession)) && isOlder)) {
+      if (reading !== S.runReads) return
       S.runKey = ''
       return clear()
     }
@@ -3031,7 +3035,9 @@ async function readRun($: EngineInterface) {
       total: numbers.length,
       isFinished: ledger.isFinished,
     }
-    S.runKey = runKey
+    if (reading !== S.runReads) return
+    // A plan the ledger names but no checkout holds yet is looked for again at the next read.
+    S.runKey = ledger.plan !== null && planPath === null ? '' : runKey
     S.runPlan = planPath
     // A run whose every task was done before this session started is history:
     // a new session starts with no Run card.
