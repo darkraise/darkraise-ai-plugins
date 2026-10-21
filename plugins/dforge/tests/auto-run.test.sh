@@ -288,9 +288,13 @@ for lock in flock no-such-flock; do
   check "$lock: two clears at once count two self-resumes" "$(field resumes):$(field pending)" "2:clear"
 done
 check "no flock: the lock directory is gone" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
+# An ownerless lock is a claim in progress until it is a minute old.
 mkdir "$STATE.lockd"
-DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
-check "no flock: a lock its holder left behind is taken after the wait" "$status:$(field resumes)" "0:0"
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh claim' 2>/dev/null; status=$?
+check "no flock: a lock still being claimed is never taken" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
+touch -t 202001010000 "$STATE.lockd"
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
+check "no flock: a lock its holder left behind is taken" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 # A held lock is taken over only from an owner that provably exited: a live
 # but slow holder keeps it, and the waiter gives up rather than writing.
@@ -302,6 +306,19 @@ kill "$live_holder"; wait "$live_holder" 2>/dev/null
 DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a dead holder'; status=$?
 check "no flock: a dead holder's lock is taken" "$status:$(jq -r '.rulings | length' "$STATE")" "0:1"
 check "no flock: and released after" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
+mkdir "$STATE.lockd" && uname -n > "$STATE.lockd/host" && touch -t 202001010000 "$STATE.lockd"
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a claim killed before its pid'; status=$?
+check "no flock: a claim killed before its pid is taken" "$status:$(jq -r '.rulings | length' "$STATE")" "0:2"
+# A reclaimer killed inside its guard leaves the guard; once old it is no bar.
+sleep 0 & dead_holder=$!
+wait "$dead_holder"
+mkdir "$STATE.lockd" && printf '%s\n' "$dead_holder" > "$STATE.lockd/pid" && uname -n > "$STATE.lockd/host"
+mkdir "$STATE.lockd.reclaim"
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh guard' 2>/dev/null; status=$?
+check "no flock: a fresh reclaim guard holds off a reclaim" "$status:$(jq -r '.rulings | length' "$STATE")" "1:2"
+touch -t 202001010000 "$STATE.lockd.reclaim"
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a stale guard'; status=$?
+check "no flock: a stale reclaim guard is cleared" "$status:$(jq -r '.rulings | length' "$STATE"):$([ -e "$STATE.lockd" ] && echo left || echo gone):$([ -e "$STATE.lockd.reclaim" ] && echo left || echo gone)" "0:3:gone:gone"
 
 # The binding is checked again under the lock, so a caller that passed the
 # first check before the run moved to another session changes nothing.

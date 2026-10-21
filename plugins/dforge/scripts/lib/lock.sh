@@ -31,19 +31,35 @@ dr_lock_release() {
   rmdir -- "$1"
 }
 
-# dr_lock_reclaim DIR [UNOWNED] — remove DIR when its owner provably exited:
-# same host, and its PID is gone or names a process started at another time.
-# With UNOWNED 1, a lock with no owner record is taken too; only a caller that
-# waited far longer than a claim takes passes it. Reclaims are serialized so
-# one cannot remove a lock another reclaimer just took.
+# dr_lock_old DIR — DIR last changed more than a minute ago. A claim or a
+# reclaim takes milliseconds, so an ownerless lock or a guard this old was left
+# by a process killed inside it.
+dr_lock_old() {
+  [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]
+}
+
+# dr_lock_reclaim DIR — remove DIR when its owner provably exited: same host,
+# and its PID is gone or names a process started at another time. A lock with
+# no pid is taken once it is old. Reclaims are serialized so one cannot remove
+# a lock another reclaimer just took.
 dr_lock_reclaim() {
-  local lock="$1" guard="$1.reclaim" pid host start now stale=1
-  mkdir -- "$guard" 2>/dev/null || return 1
+  local lock="$1" guard="$1.reclaim" aside pid host start now stale=1
+  if ! mkdir -- "$guard" 2>/dev/null; then
+    # Set aside before it is judged, so a guard taken since is given back.
+    aside="$guard.stale-$$"
+    dr_lock_old "$guard" && mv -- "$guard" "$aside" 2>/dev/null || return 1
+    if ! dr_lock_old "$aside"; then
+      [ -e "$guard" ] || mv -- "$aside" "$guard" 2>/dev/null
+      return 1
+    fi
+    rmdir -- "$aside" 2>/dev/null
+    mkdir -- "$guard" 2>/dev/null || return 1
+  fi
   pid="$(cat "$lock/pid" 2>/dev/null)"
   host="$(cat "$lock/host" 2>/dev/null)"
   start="$(cat "$lock/start" 2>/dev/null)"
-  if [ -d "$lock" ] && [ -z "$pid" ] && [ -z "$host" ] && [ "${2:-0}" = 1 ]; then
-    stale=0
+  if [ -d "$lock" ] && [ -z "$pid" ]; then
+    dr_lock_old "$lock" && stale=0
   elif [[ "$pid" =~ ^[0-9]+$ ]] && [ -n "$host" ] && [ "$host" = "$(uname -n)" ]; then
     if ! kill -0 "$pid" 2>/dev/null; then
       stale=0
@@ -102,7 +118,7 @@ dr_locked() {
   fi
   for ((i = 0; i <= DR_LOCK_TENTHS; i++)); do
     if mkdir -- "$base.lockd" 2>/dev/null ||
-       { dr_lock_reclaim "$base.lockd" "$(( i == DR_LOCK_TENTHS ))" && mkdir -- "$base.lockd" 2>/dev/null; }; then
+       { dr_lock_reclaim "$base.lockd" && mkdir -- "$base.lockd" 2>/dev/null; }; then
       claimed=1; break
     fi
     [ "$i" -eq "$DR_LOCK_TENTHS" ] || sleep 0.1
