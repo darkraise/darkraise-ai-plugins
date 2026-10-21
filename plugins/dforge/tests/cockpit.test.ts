@@ -2462,6 +2462,17 @@ describe('now row', () => {
     expect(flat(nowLine({ ...IDLE, kind: 'background', isSent: true }, at, { shells: [], agents: 1 }))).toBe('◐ background · 1 agent · Discord ✓')
   })
 
+  test("names a command by its first line that is not blank", () => {
+    const at = 200_000
+    const blank = { shells: [{ command: '\n  \nnpm test\nmore', startedAt: 20_000 }], agents: 0 }
+    expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, blank))).toBe('◐ background · 1 shell · npm test · 3m')
+    const empty = { shells: [{ command: ' \n', startedAt: 20_000 }], agents: 0 }
+    expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, empty))).toBe('◐ background · 1 shell · 3m')
+    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, now: at }
+    expect(flat(denseLine('shells', dense) ?? [])).toBe('$    1 shell · npm test · 3m')
+    expect(flat(denseLine('shells', { ...dense, shells: empty.shells }) ?? [])).toBe('$    1 shell · 3m')
+  })
+
   test('tells a service from a job that ends', () => {
     for (const command of ['npm run dev', 'pnpm dev', 'yarn start', 'npm run dev:api', 'vite --port 3000', 'npx next dev', 'python3 -m http.server 8000', 'docker compose up', 'tail -f app.log', 'jest --watch', 'jest --watchAll', 'cargo watch -x run', 'cd web && npm run dev', 'PORT=3000 npm start'])
       expect(isServiceCommand(command)).toBe(true)
@@ -2580,6 +2591,19 @@ describe('shells and remote', () => {
     expect(await ui.find({ type: 'Text', text: /^\$ npm run dev/ })).toBeUndefined()
     // With no shell left the card goes.
     expect(await ui.find({ key: 'shells' })).toBeUndefined()
+  })
+
+  test('name a shell by its first line that is not blank', async ($, on) => {
+    world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: '\n  npm test\nmore', run_in_background: true } as never)
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({ ...PANE, surface })
+      const texts = surface === 'desktop' ? await boxTexts(ui) : (await ui.findAll({ type: 'Text' })).map(one => one.text)
+      expect(texts.some(text => /^\$ npm test( 0s)?$/.test(text))).toBe(true)
+      await ui.unmount()
+    }
   })
 
   test('drop a shell a subagent started once its notification reaches the subagent', async ($, on) => {

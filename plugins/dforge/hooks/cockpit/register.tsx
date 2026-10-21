@@ -32,6 +32,7 @@ import {
   budgetFor,
   collapsedFrom,
   collapsedToggled,
+  commandLine,
   denseLine,
   duration,
   elapsed,
@@ -1488,7 +1489,7 @@ export const register: Register = on => {
               <Text color="yellow" bold>
                 ${' '}
               </Text>
-              <Text>{clip(shell.command.split('\n')[0]!, Math.max(10, inner - 10))}</Text>
+              <Text>{clip(commandLine(shell.command), Math.max(10, inner - 10))}</Text>
               <Text color="yellow"> {elapsed(now - shell.startedAt)}</Text>
             </Text>
           )),
@@ -1779,7 +1780,7 @@ export const register: Register = on => {
             'Shells',
             'yellow',
             [{ text: `${background.length} running` }],
-            background.map(shell => ({ kind: 'text', left: [{ text: `$ ${shell.command.split('\n')[0]}`, mono: true }], right: [{ text: elapsed(now - shell.startedAt), mono: true, dim: true }] })),
+            background.map(shell => ({ kind: 'text', left: [{ text: `$ ${commandLine(shell.command)}`, mono: true }], right: [{ text: elapsed(now - shell.startedAt), mono: true, dim: true }] })),
           ),
         agents: panel(
           'agents',

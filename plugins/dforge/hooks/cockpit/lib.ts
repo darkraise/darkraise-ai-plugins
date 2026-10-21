@@ -857,9 +857,14 @@ const AMBER = '#ffaf5f'
 /** The main conversation's background work, as the Now row names it. */
 export type ActivityWork = { shells: readonly { command: string; startedAt: number }[]; agents: number }
 
+/** A command's first line that is not blank, trimmed; empty when every line is. */
+export function commandLine(command: string): string {
+  return (command.split('\n').find(line => line.trim() !== '') ?? '').trim()
+}
+
 /** A command's first line, cut to `width` characters with an ellipsis. */
 function commandExcerpt(command: string, width: number): string {
-  const chars = [...(command.split('\n')[0] ?? '')]
+  const chars = [...commandLine(command)]
   return chars.length <= width ? chars.join('') : `${chars.slice(0, width - 1).join('')}…`
 }
 
@@ -908,10 +913,11 @@ export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { s
       const count = work.shells.length
       const newest = work.shells.reduce<{ command: string; startedAt: number } | null>((last, shell) => (last === null || shell.startedAt > last.startedAt ? shell : last), null)
       const oldest = Math.min(...work.shells.map(shell => shell.startedAt))
+      const line = newest === null ? '' : commandExcerpt(newest.command, 40)
       return [
         { text: '◐ background', color: AMBER, bold: true },
         ...(count === 0 ? [] : [sep, { text: `${count} ${count === 1 ? 'shell' : 'shells'}` }]),
-        ...(newest === null ? [] : [sep, { text: commandExcerpt(newest.command, 40), dim: true }]),
+        ...(line === '' ? [] : [sep, { text: line, dim: true }]),
         ...(count === 0 ? [] : [sep, { text: shellAge(at - oldest), color: AMBER, bold: true }]),
         ...(work.agents === 0 ? [] : [sep, { text: `${work.agents} ${work.agents === 1 ? 'agent' : 'agents'}`, color: 'cyan' }]),
         ...sent,
@@ -991,7 +997,11 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
       const count = input.shells.length
       return [
         denseLabel('$', 'yellow'),
-        ...join([[{ text: `${count} ${count === 1 ? 'shell' : 'shells'}`, color: 'yellow' }], [{ text: commandExcerpt(newest.command, 40) }], [{ text: shellAge(input.now - newest.startedAt), dim: true }]]),
+        ...join([
+          [{ text: `${count} ${count === 1 ? 'shell' : 'shells'}`, color: 'yellow' }],
+          [{ text: commandExcerpt(newest.command, 40) }].filter(run => run.text !== ''),
+          [{ text: shellAge(input.now - newest.startedAt), dim: true }],
+        ]),
       ]
     }
     case 'agents':
