@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  EMPTY_SHA, MAX_ENTRY_CHARS, StateError, acquireLock, archiveUri, caseGroups, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
+  EMPTY_SHA, MAX_ENTRY_CHARS, StateError, acquireLock, archiveUri, caseGroups, checkRemote, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
   isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPieces, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges,
   pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal,
   utcStamp, utf8Fault, checkpointAtOf, newestCheckpointAt, recordCheckpointAt,
@@ -41,6 +41,20 @@ test("document files list docs and handoff notes, skip dotfiles, and reserve doc
   assert.deepEqual(listDocumentFiles(roots).map(f => f.uri), [null, null, "dforge/specs/a.md", "dforge/handoff/p1.md"]);
   assert.deepEqual(ledgerFiles(roots.workRoot).map(f => f.slug), ["p1"]);
   assert.deepEqual(unsupportedPlanDirs(roots.workRoot), [path.join(roots.workRoot, "sdd", "bad name")]);
+});
+
+test("checkRemote refuses another darkmem while hashes remain, and adopts it once the files moved home", () => {
+  const state = emptyState();
+  checkRemote("state.json", state, "http://a", "proj");
+  assert.deepEqual(state.remote, { url: "http://a", project: "proj" });
+  state.documents["dforge/specs/a.md"] = sha256("# A\n");
+  assert.throws(() => checkRemote("state.json", state, "http://b", "proj"), StateError);
+  delete state.documents["dforge/specs/a.md"];
+  state.ledgers.plan = { offset: 1, prefix: sha256("x"), lastSeq: 1 };
+  assert.throws(() => checkRemote("state.json", state, "http://b", "proj"), StateError);
+  delete state.ledgers.plan;
+  checkRemote("state.json", state, "http://b", "other");
+  assert.deepEqual(state.remote, { url: "http://b", project: "other" });
 });
 
 test("archive uris carry a UTC stamp under dforge/archive/", () => {
