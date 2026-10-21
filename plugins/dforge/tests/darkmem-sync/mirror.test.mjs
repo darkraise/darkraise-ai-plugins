@@ -8,7 +8,7 @@ import {
   EMPTY_SHA, MAX_ENTRY_CHARS, StateError, acquireLock, archiveUri, caseGroups, checkRemote, checkpointTarget, lockOwner, decodeUtf8, emptyState, familiesOf,
   isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPieces, ledgerPlanPath, lineProperties, listDocumentFiles, loadState, localChanges,
   pathToUri, propertiesFor, saveState, sha256, splitAtBlankLines, splitAtLimit, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal,
-  utcStamp, utf8Fault, checkpointAtOf, newestCheckpointAt, recordCheckpointAt,
+  utcStamp, utf8Fault, checkpointAtOf, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs,
 } from "../../scripts/lib/darkmem-mirror.mjs";
 import { git, makeRepo, scratch, write } from "./helpers.mjs";
 
@@ -677,4 +677,11 @@ test("ledgerPieces cuts at blank lines, then at the entry limit, and concatenate
   assert.deepEqual(pieces.slice(0, 2), ["# SDD ledger\n\n", "Task 1: a\n\n"]);
   assert.equal(pieces.length, 4);
   assert.ok(pieces.every(piece => piece.length <= MAX_ENTRY_CHARS));
+});
+
+test("refuseLinkedDirs accepts a directory whose name starts with two dots and refuses one outside the root", () => {
+  const root = scratch("dms-links-");
+  assert.doesNotThrow(() => refuseLinkedDirs(root, path.join(root, "..notes", "sub")));
+  assert.throws(() => refuseLinkedDirs(root, path.dirname(root)), /is not under/);
+  assert.throws(() => refuseLinkedDirs(root, path.join(root, "..", "elsewhere")), /is not under/);
 });

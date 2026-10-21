@@ -272,7 +272,7 @@ export function checkRemote(file, state, url, project) {
 // walk stops at the first missing directory: mkdir creates the rest as real ones.
 export function refuseLinkedDirs(root, dir) {
   const rel = path.relative(root, dir);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error(`${dir} is not under ${root}`);
+  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) throw new Error(`${dir} is not under ${root}`);
   let at = root;
   for (const part of rel ? rel.split(path.sep) : []) {
     at = path.join(at, part);
