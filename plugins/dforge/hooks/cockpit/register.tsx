@@ -615,7 +615,7 @@ export const register: Register = on => {
       const stamp = await $.clock.now()
       const failed = e.reason === 'error' || e.reason === 'refusal'
       const why = failed ? failureOf(e) : null
-      const isHeld = e.reason === 'answer' && (await isMainBackground($))
+      const isHeld = e.reason === 'answer' && (await holdsDone($))
       const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
       if (e.reason !== 'answer') S.heldDone = null
       else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp }
@@ -2412,10 +2412,23 @@ async function sendDone($: EngineInterface, answer: string, durationMs: number) 
   if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
 }
 
-/** Whether the main conversation still waits on work it sent to the background: its own shells short of a service, or a subagent still running. */
-async function isMainBackground($: EngineInterface): Promise<boolean> {
-  if ((await read($, spawns)).some(one => !one.isDone)) return true
-  return (await read($, shells)).some(one => (one.agentId ?? null) === null && !isServiceCommand(one.command))
+/**
+ * Whether the main conversation still waits on work it sent to the background:
+ * its own shells short of a service, or a subagent still running. Given
+ * `since`, only work started at or after it counts.
+ */
+async function isMainBackground($: EngineInterface, since = -Infinity): Promise<boolean> {
+  if ((await read($, spawns)).some(one => !one.isDone && one.startedAt >= since)) return true
+  return (await read($, shells)).some(one => (one.agentId ?? null) === null && !isServiceCommand(one.command) && one.startedAt >= since)
+}
+
+/**
+ * Whether background work holds a Done. No hold outlasts DEFER_CAP_MS, so work
+ * already running that long holds none: it also bounds a row whose end was
+ * never heard.
+ */
+async function holdsDone($: EngineInterface): Promise<boolean> {
+  return isMainBackground($, (await $.clock.now()) - DEFER_CAP_MS)
 }
 
 /**
@@ -2423,7 +2436,7 @@ async function isMainBackground($: EngineInterface): Promise<boolean> {
  * held Done waits RELEASE_GRACE_MS for the turn the work's notification wakes.
  */
 async function settleBackground($: EngineInterface) {
-  if ((await read($, activity)).kind !== 'background' || (await isMainBackground($))) return
+  if ((await read($, activity)).kind !== 'background' || (await holdsDone($))) return
   await setActivity($, now => ({ ...now, kind: 'idle' }))
   S.releaseTimer?.cancel()
   S.releaseTimer = $.clock.after(RELEASE_GRACE_MS, () => void releaseHeld($).catch(() => undefined))

@@ -2690,6 +2690,20 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
     })
 
+    test('a shell older than the cap holds nothing', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, tools: { Bash: () => SHELL } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Bash', command: 'node codex-companion.mjs review', run_in_background: true } as never)
+      await clock.advance(31 * 60_000)
+      await $.turn.start({ text: 'what next?', turnId: 't1' })
+      await $.turn.complete({ answer: 'Nothing left.', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 5s'])
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /^○ idle/ })).toBeDefined()
+    })
+
     test('a service shell holds nothing', async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, tools: { Bash: () => SHELL } })
