@@ -1361,6 +1361,20 @@ describe('minimized band', () => {
     for (const row of rows) expect([...row].length).toBe(120 - 2 - MODE_LABEL_RESERVE)
   })
 
+  test('stays above the prompt on a terminal older than the box below it', async ($, on) => {
+    world(on, { ...SIGNED_IN, version: '2.1.303' })
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const above = await $.ui.mount({ ...BAND, surface: 'terminal', viewport: { columns: 120, rows: 40, isFullscreen: false } })
+    expect(await above.find({ key: 'band-expand' })).toBeDefined()
+    await above.unmount()
+    const hint = await $.ui.mount(minimized('terminal'))
+    expect(await hint.find({ key: 'band-expand' })).toBeUndefined()
+    expect(await hint.find({ type: 'Text', text: /me@example\.com/ })).toBeUndefined()
+  })
+
   test('takes unframed lines below the prompt when no width is reported', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on, configured({ layout: 'compact' }))
