@@ -7,6 +7,9 @@ import path from "node:path";
 
 const mode = () => process.env.STUB_MODE || "ok";
 
+// A plugin whose import fails, as a broken upgrade would.
+if (process.env.STUB_LOAD_FAILS === "1") throw new Error("stub: plugin failed to load");
+
 function log(entry) {
   const file = process.env.STUB_EVENT_LOG;
   if (!file) return;

@@ -136,6 +136,14 @@ check 'an unreaped transport error blocks the task' \
 check 'an unreaped transport error is flagged on the status line' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 1
 check 'an unreaped transport error is not reported as a timeout' "$(grep -c 'note=timed-out' "$fixture/out")" 0
 
+# A plugin that fails to load never sent a turn, so nothing can still be writing.
+git -C "$fixture/primary" worktree add -qb load-fail-case "$fixture/load-fail"
+STUB_LOAD_FAILS=1 STUB_PRE_EXISTING=1 run --cwd "$fixture/load-fail"
+check 'a plugin load failure returns executed non-DONE' "$?" 1
+check 'a plugin load failure does not block the task' \
+  "$(jq -r .phase "$(git -C "$fixture/load-fail" rev-parse --absolute-git-dir)/dforge/tasks/$(printf task-one | git hash-object --stdin)/state.json")" pending
+check 'a plugin load failure is not flagged as an unconfirmed stop' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 0
+
 git -C "$fixture/primary" worktree add -qb handback-case "$fixture/handback"
 STUB_FINAL_MESSAGE="$(final_message BLOCKED)" run --cwd "$fixture/handback"
 check 'handback fixture has pending work' "$?" 1

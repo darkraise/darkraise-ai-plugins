@@ -289,10 +289,11 @@ rc=0
 # Only an acknowledged interrupt or a reaped broker proves the turn stopped. A
 # pre-existing broker is never reaped, so a failed interrupt there - or a client
 # killed by the outer bound - can leave Codex writing into this worktree. A
-# plugin-api failure without a turn status is a transport error that may have
-# come after the turn started, so it proves no more than a timeout does.
+# plugin-api failure without a turn status, once the turn request went out, is
+# a transport error that may have come after the turn started, so it proves no
+# more than a timeout does.
 writer_stopped=yes
-if [ "$timed_out" = yes ] || [ "$(jq -r '.reason == "plugin-api" and (.turnStatus | type) != "number"' <<<"$result")" = true ]; then
+if [ "$timed_out" = yes ] || [ "$(jq -r '.reason == "plugin-api" and .turnSent == true and (.turnStatus | type) != "number"' <<<"$result")" = true ]; then
   [ "$(jq -r '.interrupted == true or .reaped == true' <<<"$result")" = true ] || writer_stopped=no
 fi
 

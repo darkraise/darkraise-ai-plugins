@@ -45,6 +45,8 @@ const SHUTDOWN_GRACE_MS = 5000;
 // result now travels this path. Returning normally is not an option either -
 // nothing after an emit may run.
 let reapContext = null;
+// Set once the turn request goes out: a failure before it leaves no turn behind.
+let turnSent = false;
 
 async function emit(fields) {
   let reaped = false;
@@ -57,7 +59,7 @@ async function emit(fields) {
       reaped = false;
     }
   }
-  process.stdout.write(`${JSON.stringify({ ...EMPTY, ...fields, reaped })}\n`, () => process.exit(0));
+  process.stdout.write(`${JSON.stringify({ ...EMPTY, ...fields, reaped, turnSent })}\n`, () => process.exit(0));
   return new Promise(() => {});
 }
 
@@ -281,6 +283,7 @@ async function main() {
 
   let result;
   try {
+    turnSent = true;
     result = await Promise.race([plugin.runAppServerTurn(req.cwd, options), expiry]);
   } catch (error) {
     clearTimeout(timer);
