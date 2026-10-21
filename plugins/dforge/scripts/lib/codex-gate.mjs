@@ -34,8 +34,9 @@ async function finish(usable, reason, resetsAtEpoch = null) {
     // A client that fails to close has already lost its app-server.
   }
   clearTimeout(grace);
-  process.stdout.write(`${JSON.stringify({ usable, reason, resets_at_epoch: resetsAtEpoch })}\n`);
-  process.exit(0);
+  // A write to a pipe is asynchronous on macOS and Windows, so exiting straight
+  // after it can drop the answer.
+  process.stdout.write(`${JSON.stringify({ usable, reason, resets_at_epoch: resetsAtEpoch })}\n`, () => process.exit(0));
 }
 
 // The deadline is ours, not coreutils timeout: on Windows `timeout` kills only
