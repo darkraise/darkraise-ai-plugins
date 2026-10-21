@@ -462,7 +462,8 @@ verbatim:
   fail is a trigger in Switching to subagent mode. A delegated task's gap is
   never yours to fix: mid-task it enters that task's fix loop, and at the
   breaker it is logged `Task <N>: Ruling: <finding> — <ruling>` and carried
-  into the next dependent task's dispatch, as
+  into the next dependent task's dispatch (with none, the next task in plan
+  order; after the last task, the final review), as
   [delegated-task.md](../../reference/delegated-task.md) §5 completes it.
 - **PARK** - log `Task <N>: parked — <finding> — Ruling: <why>`; the code
   stands.

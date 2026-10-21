@@ -377,7 +377,10 @@ discard is forbidden.
 
 When the review comes back clean — or every open finding is parked, or
 confirmed and carried into a later task, with a ruling at the cap — append the
-completion line to the ledger in the same message as your other bookkeeping:
+completion line to the ledger in the same message as your other bookkeeping.
+A confirmed gap goes to the next task that depends on this one; with none, to
+the next task in plan order; after the last task, to the final review, written
+`carried to final review`, where it is a confirmed finding:
 
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked, <C> carried to Task <M>; scores …, seat <seat>) — …; remaining: <parked and carried one-liners>; …` after a tripped breaker; drop the `carried` clause when nothing was

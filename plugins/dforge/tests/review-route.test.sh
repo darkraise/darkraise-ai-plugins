@@ -388,7 +388,10 @@ present "a carried breaker gap lets the task complete" "$DT" 'confirmed and carr
 present "the dependent task's dispatch takes the carried gap" "$DT" 'carried a CONFIRMED-GAP to this task, the dispatch names the gap'
 present "the flow graph completes a task whose gap is carried" "$SDD" '"Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete"'
 present "inline mode never fixes a delegated task's gap itself" "$P/skills/executing-plans/SKILL.md" "A delegated task's gap is"
-present "inline mode carries a delegated breaker gap forward" "$P/skills/executing-plans/SKILL.md" 'into the next dependent task'"'"'s dispatch, as'
+present "inline mode carries a delegated breaker gap forward" "$P/skills/executing-plans/SKILL.md" 'into the next dependent task'"'"'s dispatch (with none, the next task in plan'
+present "a gap with no dependent task goes to the next task in plan order" "$DT" 'the next task in plan order; after the last task, to the final review'
+present "a gap past the last task goes to the final review" "$DT" '`carried to final review`, where it is a confirmed finding'
+present "the final review fixes a carried gap without triage" "$P/reference/final-review.md" 'it goes on the fix list without triage'
 # ladder.test.sh holds every implementer to one escalation-table row, so an
 # agent known to the escalation table is a real one a human may pin.
 present "a pinned escalation-only implementer is not unknown" "$DT" "A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables"

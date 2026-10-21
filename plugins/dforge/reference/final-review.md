@@ -22,7 +22,8 @@ of the work being done.
 - **Either mode:** point the reviewer at the ledger's deferred-minor and
   parked lines, the complete lines' `discovered:` fields, every borderline
   (9-13) score, and every `(unseated)` ruling, so it can triage what must be
-  fixed before merge.
+  fixed before merge. A gap a complete line carried to the final review is a
+  confirmed finding already: it goes on the fix list without triage.
 
 ## The review
 

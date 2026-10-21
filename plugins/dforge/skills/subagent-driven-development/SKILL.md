@@ -456,7 +456,8 @@ verbatim:
 - **CONFIRMED-GAP** — the finding is real. Mid-task it enters the fix loop
   with the ruling's smallest fix in the fix message. At the breaker it is
   logged `Task <N>: Ruling: <finding> — <ruling>` and carried into the next
-  dependent task's dispatch.
+  dependent task's dispatch; with no later task depending on it, into the
+  next task in plan order; after the last task, into the final review.
 - **PARK** — log `Task <N>: parked — <finding> — Ruling: <why>`; the code
   stands.
 - **AMEND** — copy the entry, from its `## A?` line through the New fence's
