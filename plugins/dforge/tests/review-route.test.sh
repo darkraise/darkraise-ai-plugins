@@ -380,6 +380,9 @@ absent "SDD no longer writes K=3" "$SDD" 'K=3'
 absent "the delegated loop does not write K=3" "$DT" 'K=3'
 present "the delegated loop writes the seat clause" "$DT" ', seat <seat>'
 present "the delegated loop keeps the runner name" "$DT" 'run-codex-review.sh'
+# ladder.test.sh holds every implementer to one escalation-table row, so an
+# agent known to the escalation table is a real one a human may pin.
+present "a pinned escalation-only implementer is not unknown" "$DT" "A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables"
 present "the delegated loop keeps the FAILED deferral" "$DT" 'TIMEOUT or FAILED'
 present "the delegated loop keeps the no-redispatch rule" "$DT" 'never re-dispatch the Codex seat'
 present "the delegated loop runs the gate before routing" "$DT" '- **The seat:** run `scripts/codex-gate` (say its line aloud when it ends'

@@ -104,7 +104,7 @@ these steps directly.
 | Problem | Ruling |
 |---|---|
 | No `**Implementer:**` line | Score the task with the rubric in [ladder.md](ladder.md), dispatch that agent, and note `scored at dispatch` on the assigned line |
-| A name in neither the assignment nor the reserve table | Score at dispatch and dispatch the scored agent |
+| A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables (`impl-haiku`, `impl-opus-low` and `impl-opus-medium` appear only in the escalation table, and a human `**Override:**` may pin them) | Score at dispatch and dispatch the scored agent |
 | The implementer's model is unavailable on this account | Same effort one model down; where none exists, the ladder successor — see [escalation.md](../skills/subagent-driven-development/references/escalation.md) |
 | Fable unavailable inside a reserve chain entered automatically | `Task <N>: BLOCKED` with the reason — the Opus rungs below it already failed |
 | An `**Executor:**` line the wrapper cannot run | `HANDBACK` to the `**Implementer:**` agent — see [executor-lane.md](executor-lane.md) §Failure rows |
