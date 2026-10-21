@@ -2678,6 +2678,18 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 31m00s'])
     })
 
+    test('a prompt with no origin keeps the held Done', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const clock = await hold($, on, fetches)
+      await clock.advance(90_000)
+      await $.session.append(notified(ENDED))
+      await $.prompt.submit({ text: 'The review finished.', wait: false } as never)
+      await $.turn.start({ text: 'The review finished.', turnId: 't2' })
+      await clock.advance(5_000)
+      await $.turn.complete({ answer: 'Review clean.', durationMs: 5_000, isAborted: false, turnId: 't2', reason: 'answer' })
+      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
+    })
+
     test('a turn starting in the grace carries the held Done', async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)

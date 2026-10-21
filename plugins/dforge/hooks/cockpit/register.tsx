@@ -537,7 +537,7 @@ export const register: Register = on => {
   // for the last one is dropped. A wake-up keeps it, and so does an origin not
   // listed, since a Done covering more work beats a lost one.
   on('prompt.submit', async ($, e, next) => {
-    if (NEW_CHAIN_ORIGINS.has(e.origin.kind)) {
+    if (e.origin !== undefined && NEW_CHAIN_ORIGINS.has(e.origin.kind)) {
       S.heldDone = null
       S.isChainSent = false
     }
