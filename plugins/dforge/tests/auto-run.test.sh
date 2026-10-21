@@ -292,7 +292,12 @@ check "no flock: the lock directory is gone" "$([ -e "$STATE.lockd" ] && echo le
 mkdir "$STATE.lockd"
 DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh claim' 2>/dev/null; status=$?
 check "no flock: a lock still being claimed is never taken" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
-touch -d "@$(( $(date +%s) - 7 ))" "$STATE.lockd"
+# ago SECONDS: that long ago as touch -t reads it, from GNU or BSD date.
+ago() { local t=$(( $(date +%s) - $1 )); date -d "@$t" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$t" +%Y%m%d%H%M.%S; }
+touch -t "$(ago 10)" "$STATE.lockd"
+DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a stalled claim' 2>/dev/null; status=$?
+check "no flock: a claim stalled ten seconds keeps its lock" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
+touch -t "$(ago 40)" "$STATE.lockd"
 DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
 check "no flock: a lock its holder left behind is taken within the wait" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"

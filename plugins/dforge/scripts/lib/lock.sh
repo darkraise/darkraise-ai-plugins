@@ -33,9 +33,11 @@ dr_lock_release() {
 
 # dr_lock_old DIR — DIR last changed more than DR_LOCK_STALE_SECONDS ago. A
 # claim or a reclaim takes milliseconds, so an ownerless lock or a guard this
-# old was left by a process killed inside it. Seconds, not find -mmin, whose
-# rounding differs between finds and can hold a writer off for two minutes.
-DR_LOCK_STALE_SECONDS=${DR_LOCK_STALE_SECONDS:-5}
+# old was left by a process killed inside it; the margin covers a claimer
+# stopped mid-claim (a suspended job, a sleeping laptop) and a file server's
+# clock skew. Seconds, not find -mmin, whose rounding differs between finds and
+# can hold a writer off for two minutes.
+DR_LOCK_STALE_SECONDS=${DR_LOCK_STALE_SECONDS:-30}
 dr_lock_old() {
   local changed
   changed="$(stat -c %Y -- "$1" 2>/dev/null || stat -f %m -- "$1" 2>/dev/null)" || return 1
