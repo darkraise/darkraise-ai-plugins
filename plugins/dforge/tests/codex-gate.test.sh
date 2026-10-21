@@ -122,7 +122,10 @@ export class CodexAppServerClient {
     }
     throw new Error(`unexpected ${method}`);
   }
-  async close() { log("close"); }
+  async close() {
+    log("close");
+    if (mode === "close-hangs") await new Promise(() => setInterval(() => {}, 1000));
+  }
 }
 STUB
 
@@ -214,6 +217,10 @@ check "a connect that throws is off" "$out" \
 fresh; GATE_MS=1500 gate hang
 check "a hung connect times out" "$out" \
   "codex-gate usable=false reason=timeout review=false lane=false resets_at=- source=probe"
+fresh; started=$SECONDS; GATE_MS=1500 gate close-hangs
+check "a close that never settles still answers, within its grace" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+check "a close that never settles is waited on for its grace only" "$([ $((SECONDS - started)) -lt 12 ] && echo yes || echo no)" "yes"
 
 # --- the settings switch either surface off ----------------------------------
 # codexReview and codexLane come from ~/.dforge/config.json. With both off

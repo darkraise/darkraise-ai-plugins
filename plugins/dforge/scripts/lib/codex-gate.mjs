@@ -15,14 +15,25 @@ const [root, cwd, timeoutArg] = process.argv.slice(2);
 let client = null;
 let settled = false;
 
+// The answer is known before the close, so a close that never settles is
+// waited on only this long: once settled, the deadline below no longer acts.
+const CLOSE_GRACE_MS = 5000;
+
 async function finish(usable, reason, resetsAtEpoch = null) {
   if (settled) return;
   settled = true;
+  let grace = null;
   try {
-    await client?.close();
+    await Promise.race([
+      Promise.resolve(client?.close()),
+      new Promise((resolve) => {
+        grace = setTimeout(resolve, CLOSE_GRACE_MS);
+      })
+    ]);
   } catch {
     // A client that fails to close has already lost its app-server.
   }
+  clearTimeout(grace);
   process.stdout.write(`${JSON.stringify({ usable, reason, resets_at_epoch: resetsAtEpoch })}\n`);
   process.exit(0);
 }
