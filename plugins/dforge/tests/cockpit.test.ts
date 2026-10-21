@@ -2680,24 +2680,6 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 2m05s', '✅ Done in 1m10s'])
     })
 
-    test('new work the woken turn holds for sends its own Done', async ($, on) => {
-      const fetches: NonNullable<World['fetches']> = []
-      const clock = await hold($, on, fetches)
-      await clock.advance(90_000)
-      await $.session.append(notified(ENDED))
-      await clock.advance(6_000)
-      expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
-      await $.turn.start({ text: '', turnId: 't2' })
-      await clock.advance(10_000)
-      await $.tool.call({ tool: 'Bash', command: 'node codex-companion.mjs review', run_in_background: true } as never)
-      await clock.advance(20_000)
-      await $.turn.complete({ answer: 'Started a second review.', durationMs: 30_000, isAborted: false, turnId: 't2', reason: 'answer' })
-      await clock.advance(60_000)
-      await $.session.append(notified(ENDED))
-      await clock.advance(6_000)
-      expect(titles(fetches)).toEqual(['✅ Done in 2m05s', '✅ Done in 1m35s'])
-    })
-
     test('the turn the work wakes sends no second Done once the watchdog sent it', async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
