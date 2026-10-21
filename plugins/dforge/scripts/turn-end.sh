@@ -57,8 +57,8 @@ sdd=$(dforge_ledger_root "$root") || sdd=""
 moved=0 now_refs=""
 if [ -f "$stamp.refs" ] && now_refs=$(turn_refs "$root"); then
   was_refs=$(cat "$stamp.refs")
-  if [ "$(head -n 1 <<<"$was_refs")" = "$(head -n 1 <<<"$now_refs")" ] && [ "$was_refs" != "$now_refs" ]; then
-    moved=1
+  if [ "$(head -n 1 <<<"$was_refs")" = "$(head -n 1 <<<"$now_refs")" ]; then
+    turn_refs_moved "$was_refs" "$now_refs" "$(sed -n 2p <<<"$was_refs")" "$(sed -n 2p <<<"$now_refs")" && moved=1
   fi
 fi
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || [ "$moved" = 1 ] || exit 0

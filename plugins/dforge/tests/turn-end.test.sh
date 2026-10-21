@@ -363,6 +363,10 @@ check "unplanned: deleting a branch with its own commit: blocks" "$(decision "$(
 sleep 1; prompt s-4
 commit_in "$TMP/wt" from-worktree
 check "unplanned: a commit in a worktree, stop there: blocks" "$(decision "$(stop_in "$TMP/wt" s-4 'Done.')")" "block"
+git -C "$REPO" worktree add -q -b elsewhere "$TMP/elsewhere"
+sleep 1; prompt s-4
+commit_in "$TMP/elsewhere" another-session
+check "unplanned: a commit on a branch another worktree holds: passes" "$(stop s-4 'Here is the answer.')" ""
 OTHER="$TMP/other"; git init -q "$OTHER"; commit_in "$OTHER" init
 sleep 1; prompt s-4
 commit_in "$OTHER" more
