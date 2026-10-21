@@ -214,7 +214,7 @@ export type CockpitAutoRun = {
   active: boolean
   phase: string
   regime: string
-  /** `compact`, `after-compact`, `clear`, `resume`, or null. */
+  /** `compact`, `after-compact`, `clear`, `resume`, `switch`, `switch-resume`, `handoff`, or null. */
   pending: string | null
   /** The plan's repository-relative path, once attached. */
   plan: string | null
