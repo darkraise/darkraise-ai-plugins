@@ -49,6 +49,9 @@ const typesGenerated = ['plugins/dforge/tsconfig.json', 'plugins/dforge/.claude-
 const [tscExecutable, tscPrefix] = process.platform === 'win32' ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'tsc']] : ['tsc', []];
 // Detected under --list too, so a listing shows the job that a run would start.
 const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
+// plan-lint runs about 240 checks of a few processes each, which take over ten
+// minutes on a Windows runner and under a minute on Linux.
+const suiteSeconds = { 'plan-lint.test.sh': 900 };
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
@@ -59,7 +62,7 @@ const jobs = [
   // in-flight scanner, so it is POSIX only too.
   ...(process.platform === 'win32' ? [] : [[process.execPath, ['--test', ...readdirSync(resolve(root, 'evals/controller/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `evals/controller/tests/${name}`)], 300]]),
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
-  ...readdirSync(resolve(root, 'plugins/dforge/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dforge/tests/${name}`], 600]),
+  ...readdirSync(resolve(root, 'plugins/dforge/tests')).filter(name => name.endsWith('.test.sh')).sort().map(name => [bash, [`plugins/dforge/tests/${name}`], suiteSeconds[name] ?? 600]),
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300]] : []),
   ...(hasTsc ? [[tscExecutable, [...tscPrefix, '--noEmit', '-p', 'plugins/dforge'], 300]] : []),
 ];

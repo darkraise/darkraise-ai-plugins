@@ -64,4 +64,7 @@ jobs:
         shell: pwsh
         env:
           DR_TEST_BASH: C:/Program Files/Git/bin/bash.exe
+          # Git Bash's ln -s copies its target unless told to make a real link,
+          # which the runner's administrator account may create.
+          MSYS: winsymlinks:nativestrict
         run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/6
