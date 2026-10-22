@@ -32,11 +32,13 @@ jobs:
 
       # One CLI version for every validate step: dforge's mod (hooks modules)
       # needs 2.1.299, and the marketplace step reads dforge too.
+      # The cockpit's 397 tests took 51 to 81 s on the runner, npx included,
+      # and once ran past 90.
       - name: Validate and test dforge
-        timeout-minutes: 3
+        timeout-minutes: 7
         run: |
           timeout 60s npx --yes @anthropic-ai/claude-code@2.1.306 plugin validate plugins/dforge
-          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.306 plugin test plugins/dforge
+          timeout 300s npx --yes @anthropic-ai/claude-code@2.1.306 plugin test plugins/dforge
 
       - name: Run maintained regression suites
         timeout-minutes: 12
