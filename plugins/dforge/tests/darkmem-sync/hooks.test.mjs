@@ -280,11 +280,25 @@ test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command",
   assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
 });
 
-test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: spawnSync("timeout", ["--version"]).status !== 0 && "GNU timeout is not on PATH" }, async () => {
+test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: !/GNU coreutils/.test(spawnSync("timeout", ["--version"], { encoding: "utf8" }).stdout ?? "") && "GNU timeout is not on PATH" }, async () => {
   const dir = scratch("dmh-tkill-");
   const pidFile = path.join(dir, "child.pid");
   const started = Date.now();
   const result = await bash(["-c", `. "$1"; _darkmem_bounded 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
+  assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
+  assert.notEqual(result.code, 0);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+});
+
+test("a timeout that is not GNU's leaves the bound to the watchdog", async () => {
+  const dir = scratch("dmh-utimeout-");
+  const pidFile = path.join(dir, "child.pid");
+  // As uutils' timeout answers; it would run the command with no bound at all.
+  // The directory joins PATH in POSIX form: a C:\ entry splits at its colon.
+  fs.writeFileSync(path.join(dir, "timeout"), '#!/usr/bin/env bash\ncase $1 in --version) echo "timeout (uutils coreutils) 0.10.0" ;; *) shift 3; exec "$@" ;; esac\n', { mode: 0o755 });
+  const started = Date.now();
+  const result = await bash(["-c", `PATH="$(cygpath -u "$3" 2>/dev/null || printf '%s' "$3"):$PATH"; . "$1"; _darkmem_bounded 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile, dir], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
   assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
   assert.notEqual(result.code, 0);
   await new Promise(resolve => setTimeout(resolve, 300));
