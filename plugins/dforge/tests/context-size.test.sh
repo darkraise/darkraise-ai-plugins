@@ -607,17 +607,18 @@ date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
 run
 has "auto, normal: an unreadable size names the task budget" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"
-# A state the run cannot write: the lock file is a directory.
+# A state the run cannot write: the flock file is a directory, and the lock
+# directory used without flock (Git for Windows) is a file.
 asst 470000 > "$AUTO_T"
-rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"
-run
+rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"; : > "$AUTO_STATE.lockd"
+DR_LOCK_TENTHS=2 run
 check "auto: a compact it cannot book is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
-rmdir "$AUTO_STATE.lock"
+rmdir "$AUTO_STATE.lock"; rm -f "$AUTO_STATE.lockd"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 compacted)
-rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"
-run
+rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"; : > "$AUTO_STATE.lockd"
+DR_LOCK_TENTHS=2 run
 check "auto: a compaction it cannot settle is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
-rmdir "$AUTO_STATE.lock"
+rmdir "$AUTO_STATE.lock"; rm -f "$AUTO_STATE.lockd"
 # --- --final after the last task's complete line starts the final phase ---
 date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)

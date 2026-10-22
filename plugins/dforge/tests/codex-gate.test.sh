@@ -221,16 +221,16 @@ check "a hung connect times out" "$out" \
 # A PATH without timeout, as on macOS: the probe still answers.
 NOTIMEOUT="$TMP/no-timeout-bin"
 mkdir -p "$NOTIMEOUT"
-IFS=':' read -r -a PATH_DIRS <<<"$PATH"
-for dir in "${PATH_DIRS[@]}"; do
-  [ -n "$dir" ] || continue
+# Only the directories of the tools the gate runs: on Windows the rest of PATH
+# holds System32 and thousands of other files, each a copy or a link to make.
+while IFS= read -r dir; do
   for tool in "$dir"/*; do
     name=${tool##*/}
     # Git Bash's timeout is timeout.exe.
     case "$name" in timeout|timeout.exe) continue ;; esac
     [ -e "$NOTIMEOUT/$name" ] || ln -s "$tool" "$NOTIMEOUT/$name" 2>/dev/null
   done
-done
+done < <(for tool in bash node jq git cat; do dirname "$(type -P "$tool")"; done | sort -u)
 fresh; PATH="$NOTIMEOUT" gate usable
 check "without timeout on PATH the probe still answers" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"

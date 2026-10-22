@@ -505,9 +505,13 @@ out=$(bash "$KIT/scripts/plan-lint" codex.md 2>&1); status=$?
 check "a corrupt routing policy: exit 2" "$status" "2"
 has "a corrupt routing policy: says it cannot be parsed" "$out" "codex-routing.json: the file cannot be parsed"
 lacks "a corrupt routing policy: does not blame jq" "$out" "jq installed"
-# No jq on PATH: links to every other tool plan-lint runs before the check.
+# No jq on PATH: wrappers for every other tool plan-lint runs before the check.
+# Not links: under Git Bash the linked tools did not run (dirname printed nothing).
 mkdir -p "$TMP/jqless"
-for tool in awk cat cut dirname git grep head mktemp rm sed tr; do ln -s "$(type -P "$tool")" "$TMP/jqless/$tool"; done
+for tool in awk cat cut dirname git grep head mktemp rm sed tr; do
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$(type -P "$tool")" > "$TMP/jqless/$tool"
+  chmod +x "$TMP/jqless/$tool"
+done
 out=$(PATH="$TMP/jqless" "$BASH" "$LINT" codex.md 2>&1); status=$?
 check "no jq: exit 2" "$status" "2"
 has "no jq: says jq is not installed" "$out" "codex-routing.json: jq is not installed"

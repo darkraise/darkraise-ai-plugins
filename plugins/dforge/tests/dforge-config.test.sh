@@ -22,7 +22,9 @@ fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dforge/conf
 
 # --- the value check lives in the schema module, shared with the cockpit ---
 SCHEMA_MJS="$HERE/../config/schema.mjs"
-vv() { node --input-type=module -e "import { isValidValue } from '$SCHEMA_MJS'; console.log(isValidValue($1, $2))" 2>&1; }
+# A module path reaches node as an argument, which Git Bash converts, and is
+# imported as a file URL: a bare C:/… specifier reads as a URL scheme.
+vv() { node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { isValidValue } = await import(pathToFileURL(process.argv[1]).href); console.log(isValidValue($1, $2))" "$SCHEMA_MJS" 2>&1; }
 check "schema exports isValidValue: boolean" "$(vv '{ type: "boolean" }' 'true')" "true"
 check "isValidValue: a fraction is not a number setting" "$(vv '{ type: "number", min: 0 }' '1.5')" "false"
 check "isValidValue: 0 under a floor means unset" "$(vv '{ type: "number", floor: 1000 }' '0')" "true"
@@ -119,17 +121,18 @@ fresh race
 mkdir -p "$HOME/.dforge"
 printf '{}\n' > "$FILE"
 slow_set() { # slow_set KEY VALUE
-  DFORGE_CONFIG_MJS="$HERE/../scripts/lib/dforge-config.mjs" node --input-type=module -e '
+  node --input-type=module -e '
     import fs from "node:fs";
-    const { main } = await import(process.env.DFORGE_CONFIG_MJS);
+    import { pathToFileURL } from "node:url";
+    const { main } = await import(pathToFileURL(process.argv[1]).href);
     const read = fs.readFileSync;
     fs.readFileSync = function (file, ...rest) {
       const data = read.call(this, file, ...rest);
       if (String(file).endsWith("config.json")) { const until = Date.now() + 300; while (Date.now() < until); }
       return data;
     };
-    process.exitCode = main(["set", process.argv[1], process.argv[2]]);
-  ' "$1" "$2" > /dev/null 2>&1
+    process.exitCode = main(["set", process.argv[2], process.argv[3]]);
+  ' "$HERE/../scripts/lib/dforge-config.mjs" "$1" "$2" > /dev/null 2>&1
 }
 slow_set notifyAfter 120 &
 p1=$!
@@ -357,11 +360,11 @@ mkdir -p "$HOME/.dforge"
 printf '{"finishAction":"merge","finishTimeout":45}\n' > "$FILE"
 check "retired finishTimeout: get --json reads the rest" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.finishAction + " " + ("finishTimeout" in v))')" "merge false"
 fc get finishTimeout > /dev/null 2>&1; check "retired finishTimeout: get exits 2" "$?" "2"
-check "finishAction: the title and description" "$(node --input-type=module -e "const { default: schema } = await import(process.argv[1]); console.log(schema.finishAction.title + ' | ' + schema.finishAction.description)" "$(cd "$HERE/../config" && pwd)/schema.mjs")" 'When the work is done | ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.'
+check "finishAction: the title and description" "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); console.log(schema.finishAction.title + ' | ' + schema.finishAction.description)" "$(cd "$HERE/../config" && pwd)/schema.mjs")" 'When the work is done | ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.'
 fc set warnAt 72.5; check "a fraction of an older key: exit 2" "$?" "2"
 
 # The settings view gives each group a tab and the tabs the hotkeys 1, 2, ….
-groups=$(node --input-type=module -e "const { default: schema } = await import(process.argv[1]); console.log(new Set(Object.values(schema).map(spec => spec.group)).size)" "$(cd "$HERE/../config" && pwd)/schema.mjs")
+groups=$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); console.log(new Set(Object.values(schema).map(spec => spec.group)).size)" "$(cd "$HERE/../config" && pwd)/schema.mjs")
 check "the README's tab hotkeys cover every settings group" "$(grep -c "press \`1\` to \`$groups\` to switch" "$HERE/../README.md")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

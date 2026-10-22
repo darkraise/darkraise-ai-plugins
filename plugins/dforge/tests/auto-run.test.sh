@@ -130,8 +130,11 @@ stamp() { # stamp <session> <seconds before NOW; negative is ahead of it>
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(( NOW - $2 ))" > "$f"
 }
-at_now() { (cd "$REPO" && PATH="$CLOCK:$PATH" bash "$AR" "$@"); }
-age_of() { (PATH="$CLOCK:$PATH"; . "$HERE/../scripts/lib/auto-run.sh"; ar_beat_age "$1") 2>/dev/null || echo fails; }
+# PATH takes the POSIX form: TMP's C:/… splits at its drive letter's colon.
+CLOCK_PATH=$CLOCK
+if command -v cygpath >/dev/null 2>&1; then CLOCK_PATH=$(cygpath -u "$CLOCK"); fi
+at_now() { (cd "$REPO" && PATH="$CLOCK_PATH:$PATH" bash "$AR" "$@"); }
+age_of() { (PATH="$CLOCK_PATH:$PATH"; . "$HERE/../scripts/lib/auto-run.sh"; ar_beat_age "$1") 2>/dev/null || echo fails; }
 stamp s-4 180
 check "a heartbeat 180 seconds old: age 180" "$(age_of s-4)" "180"
 stamp s-4 -5
