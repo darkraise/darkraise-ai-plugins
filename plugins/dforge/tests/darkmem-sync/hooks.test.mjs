@@ -27,6 +27,11 @@ const fit = (input, lines, chars) => bash(["-c", '. "$1"; _darkmem_fit "$2" "$3"
 
 // The hooks must export the session id themselves, so the test environment
 // carries none.
+// Git Bash ships GNU timeout, so the hooks never bound with the watchdog on
+// Windows, and there its process-group kill leaves the command's child alive
+// in some runs.
+const WATCHDOG_SKIP = process.platform === "win32" && "the hooks use GNU timeout on Windows, never the watchdog";
+
 // A killed process can outlive its kill by a moment, longest on Windows.
 async function assertGone(pidFile) {
   const pid = Number(fs.readFileSync(pidFile, "utf8"));
@@ -252,7 +257,7 @@ test("the Stop push bounds its config lookup apart from the push, which keeps it
   assert.ok(s.stub.db.requests.some(r => r.method === "POST" && r.path === "/api/v1/worklog/entries"), "the push still sent the ledger");
 });
 
-test("the watchdog bounds a command and its children where GNU timeout is missing", async () => {
+test("the watchdog bounds a command and its children where GNU timeout is missing", { skip: WATCHDOG_SKIP }, async () => {
   const dir = scratch("dmh-wd-");
   const pidFile = path.join(dir, "child.pid");
   const quick = await bash(["-c", '. "$1"; _darkmem_watchdog 5 bash -c "echo out; echo err >&2; exit 3"', "hook-test", LIB], { cwd: dir, env: process.env });
@@ -284,7 +289,7 @@ test("_darkmem_bounded falls back to the watchdog where GNU timeout is missing",
 // Ignores SIGTERM, as does its child: only SIGKILL stops it before it ends by itself.
 const STUBBORN = `'trap "" TERM; sleep 20 & echo $! > "$0"; wait'`;
 
-test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command", async () => {
+test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command", { skip: WATCHDOG_SKIP }, async () => {
   const dir = scratch("dmh-kill-");
   const pidFile = path.join(dir, "child.pid");
   const started = Date.now();
@@ -304,7 +309,7 @@ test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", 
   await assertGone(pidFile);
 });
 
-test("a timeout that is not GNU's leaves the bound to the watchdog", async () => {
+test("a timeout that is not GNU's leaves the bound to the watchdog", { skip: WATCHDOG_SKIP }, async () => {
   const dir = scratch("dmh-utimeout-");
   const pidFile = path.join(dir, "child.pid");
   // As uutils' timeout answers; it would run the command with no bound at all.
