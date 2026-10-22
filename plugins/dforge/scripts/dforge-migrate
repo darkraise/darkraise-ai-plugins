@@ -252,7 +252,9 @@ PREFIX_RE='(^|[^A-Za-z0-9_-])dr-(superpowers|forge):([a-z])'
 # prefixes_renamed FILE — FILE with the older plugin prefixes outside fenced
 # code blocks rewritten as dforge's own. A fence is quoted text, never rewritten.
 prefixes_renamed() {
-  awk '
+  # Git for Windows' gawk drops each carriage return unless BINMODE says
+  # binary; any other awk takes it as a plain variable.
+  awk -v BINMODE=3 '
     function rename(line,   out, prev) {
       out = ""
       while (match(line, /dr-(superpowers|forge):[a-z]/)) {
