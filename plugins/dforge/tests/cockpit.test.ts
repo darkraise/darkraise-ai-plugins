@@ -28,7 +28,10 @@ import {
   endsOnSentinel,
   finalLimitFor,
   finishLine,
+  BAND_DEFAULT_LINES,
+  bandLineToggled,
   bandLines,
+  bandLinesFrom,
   fitBand,
   folderRuns,
   handedOff,
@@ -132,6 +135,7 @@ const BREAKDOWN = {
   ],
   isAutoCompactEnabled: true,
   autoCompactThreshold: 604_000,
+  totalTokens: 218_000,
 } as never
 const INLINE = { ...PANE, props: { ...PANE.props, placement: 'inline', bodyColumns: 100 } } as const
 const MEASURE: SessionMeasureInput = {
@@ -748,7 +752,7 @@ describe('handoff reading', () => {
     w.tokens = undefined
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const cleared = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await cleared.find({ type: 'Text', text: /no reading yet/ })).toBeDefined()
+    expect(await cleared.find({ type: 'Text', text: /≈218k estimated/ })).toBeDefined()
     await cleared.unmount()
 
     w.tokens = 480_000
@@ -1323,8 +1327,8 @@ describe('minimized band', () => {
     expect(await ui.find({ type: 'Button', text: '▸ Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
     expect(await ui.find({ key: 'band-expand' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /~\/code\/shop\/web ⎇ feat\/pane\* ↑2 ↓1 ~1 \?1.*\$ 1 shell · longest 0s/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /\$ 1 shell · longest 0s.*~\/code\/shop\/web ⎇ feat\/pane\* ↑2 ↓1 ~1 \?1/ })).toBeDefined()
     // No buttons beside Expand, and no commands.
     expect(await ui.find({ key: 'pane-compact' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /npm run dev/ })).toBeUndefined()
@@ -1333,7 +1337,9 @@ describe('minimized band', () => {
     const drawn = JSON.stringify(await desk.drawn())
     // The band's head and rows are the desktop's own text, its meters one picture.
     expect((await desk.find({ key: 'band-who-0-left' }))?.text).toMatch(/^me@example\.com · subscription  Remote/)
-    expect((await desk.find({ key: 'band-rest-0-left' }))?.text).toContain('$ 1 shell · longest 0s')
+    // The readings that are words lead, the model's among them, then what runs.
+    expect((await desk.find({ key: 'band-rest-0-left' }))?.text).toBe('Opus 5.5  ·  xhigh  ·  $1.50')
+    expect((await desk.find({ key: 'band-rest-1-left' }))?.text).toContain('$ 1 shell · longest 0s')
     expect((await desk.findAll({ type: 'Svg' })).map(one => one.props.alt)).toEqual([expect.stringContaining('5h 23%')])
     expect(drawn).not.toContain('npm run dev')
     expect(await desk.find({ key: 'band-expand' })).toBeDefined()
@@ -1349,7 +1355,7 @@ describe('minimized band', () => {
     expect(await ui.find({ type: 'Text', text: /╭/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: 'me@example.com' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^ctx 61% ≈?.*· 5h 23%.*· 7d 61%/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /shop\/web ⎇ feat\/pane\*/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^shop.* ⎇ feat\/pane\*/ })).toBeDefined()
   })
 
   test('says what is blocked or refused on a line of its own', async ($, on) => {
@@ -1416,7 +1422,7 @@ describe('minimized band', () => {
     expect(await box.find({ type: 'Text', text: '? for shortcuts' })).toBeDefined()
   })
 
-  test('leads its second line with ◐ while background work runs', async ($, on) => {
+  test('leads the line with the shells with ◐ while background work runs', async ($, on) => {
     const shell = { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }
     world(on, { ...SIGNED_IN, tools: { Bash: () => shell } })
     signedIn(on, configured({ layout: 'compact' }))
@@ -1425,7 +1431,7 @@ describe('minimized band', () => {
     await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 't1', reason: 'answer' })
     const box = await $.ui.mount(minimized('terminal'))
-    expect(await box.find({ type: 'Text', text: /^│ ◐ \$ 1 shell/ })).toBeDefined()
+    expect(await box.find({ type: 'Text', text: /^│ ◐ ~\/code\/shop.*\$ 1 shell/ })).toBeDefined()
   })
 
   test('is used docked too when minimized', async ($, on) => {
@@ -1692,8 +1698,94 @@ describe('dense pane', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeDefined()
     expect(await ui.find({ key: 'dense-context' })).toBeUndefined()
-    expect((await ui.find({ key: 'pane-density' }))?.props).toMatchObject({ label: 'Dense', plain: true })
+    expect((await ui.find({ key: 'pane-density' }))?.props).toMatchObject({ label: '≡ Dense', plain: true })
     expect(await ui.find({ key: 'pane-density-box' })).toBeDefined()
+  })
+
+  for (const surface of SURFACES) {
+    test(`the pane's own buttons sit in a row below the account on ${surface}`, async ($, on) => {
+      world(on, SIGNED_IN)
+      signedIn(on)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface })
+      const drawn = JSON.stringify(await ui.drawn())
+      const at = (key: string) => drawn.indexOf(`"key":"${key}"`)
+      expect(at('pane-controls')).toBeGreaterThan(at('account'))
+      expect(at('pane-controls')).toBeLessThan(at('context'))
+      const controls = JSON.stringify(await ui.find({ key: 'pane-controls' }))
+      for (const key of ['pane-density', 'pane-settings', 'pane-minimize']) expect(controls).toContain(`"${key}"`)
+      const context = JSON.stringify(await ui.find({ key: 'context' }))
+      expect(context).toContain('"pane-compact"')
+      expect(context).not.toContain('"pane-settings"')
+      expect((await ui.find({ key: 'pane-settings' }))?.props.label).toBe('⚙ Settings')
+      expect((await ui.find({ key: 'pane-minimize' }))?.props.label).toBe('▁ Minimize')
+    })
+  }
+
+  test('the pane buttons lead with the account hidden', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ sections: 'context,usage' }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    expect(drawn.indexOf('"key":"pane-controls"')).toBeGreaterThan(-1)
+    expect(drawn.indexOf('"key":"pane-controls"')).toBeLessThan(drawn.indexOf('"key":"context"'))
+  })
+
+  test('a dense pane draws its buttons right after the account row', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ density: 'dense' }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    const at = (key: string) => drawn.indexOf(`"key":"${key}"`)
+    expect(at('pane-controls')).toBeGreaterThan(at('dense-account'))
+    expect(at('pane-controls')).toBeLessThan(at('dense-context'))
+    expect((await ui.find({ key: 'pane-density' }))?.props.label).toBe('☰ Detailed')
+  })
+
+  test('the context card shows the estimate until the first response', async ($, on) => {
+    const w: World = { tokens: undefined }
+    world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /≈218k estimated/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Messages/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /no reading yet/ })).toBeUndefined()
+    await ui.unmount()
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(JSON.stringify(await desk.find({ key: 'context' }))).toContain('≈218k estimated')
+    await desk.unmount()
+    w.tokens = 284_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const read = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await read.find({ type: 'Text', text: /estimated/ })).toBeUndefined()
+    expect(await read.find({ type: 'Text', text: /% of handoff/ })).toBeDefined()
+  })
+
+  test('reads the context as a tool starts, not only once it ends', async ($, on) => {
+    const w: World = {
+      tokens: 100_000,
+      tools: {
+        Bash: () => {
+          w.tokens = 150_000
+          return { result: 'ok', text: 'ok' }
+        },
+      },
+    }
+    world(on, w)
+    await $.tool.call({ tool: 'Bash', command: 'sleep 60' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^trend/ })).toBeDefined()
+  })
+
+  test('opens the pane before the reads that run processes', async ($, on) => {
+    const log: unknown[] = []
+    world(on, { ...SIGNED_IN, opened: log as string[], gitRuns: log as string[] })
+    signedIn(on)
+    await $.session.start(START)
+    expect(log[0]).toBe('dforge')
+    expect(log.length).toBeGreaterThan(1)
   })
 
   test('offers Hand off as a one-line button, the main one near the budget', async ($, on) => {
@@ -1707,7 +1799,7 @@ describe('dense pane', () => {
     expect(await ui.find({ key: 'pane-handoff-box' })).toBeUndefined()
     const handoff = await ui.find({ key: 'pane-handoff' })
     expect(handoff?.type).toBe('Button')
-    expect(handoff?.props).toMatchObject({ label: 'Hand off', hotkey: 'h', variant: 'primary' })
+    expect(handoff?.props).toMatchObject({ label: '↪ Hand off', hotkey: 'h', variant: 'primary' })
     await ui.press({ key: 'pane-handoff' })
     expect(prompts).toHaveLength(1)
   })
@@ -1721,7 +1813,7 @@ describe('dense pane', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     const stop = await ui.find({ key: 'pane-stop-auto' })
     expect(stop?.type).toBe('Button')
-    expect(stop?.props).toMatchObject({ label: 'Stop auto' })
+    expect(stop?.props).toMatchObject({ label: '■ Stop auto' })
     expect(await ui.find({ key: 'pane-stop-auto-box' })).toBeUndefined()
     expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
     await ui.press({ key: 'pane-stop-auto' })
@@ -1788,7 +1880,7 @@ describe('buttons', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     const compact = await ui.find({ key: 'pane-compact' })
-    expect(compact?.props).toMatchObject({ label: 'Compact', plain: true })
+    expect(compact?.props).toMatchObject({ label: '⇣ Compact', plain: true })
     expect(compact?.props.hotkey).toBeUndefined()
     expect(JSON.stringify(compact?.children)).toContain('{"type":"Text","props":{"underline":true},"children":["C"]}')
     // A section's title is drawn in its card's color.
@@ -1857,6 +1949,21 @@ describe('settings view', () => {
     await ui.press({ key: 'set-collapsed-usage' })
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'usage' })
     expect((await ui.find({ key: 'set-collapsed-usage' }))?.props.label).toBe('✓ usage')
+  })
+
+  test('the Minimized chips move a segment between the band lines', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Minimized' })
+    expect((await ui.find({ key: 'set-bandLine1-model' }))?.props.label).toBe('✓ model')
+    expect((await ui.find({ key: 'set-bandLine2-model' }))?.props).toMatchObject({ label: '○ model', dimColor: true })
+    await ui.press({ key: 'set-bandLine2-model' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ bandLine1: 'dir,git,effort,style,turn,run,agents,shells', bandLine2: 'ctx,cache,cost,5h,7d,model' })
+    expect((await ui.find({ key: 'set-bandLine1-model' }))?.props.label).toBe('○ model')
+    expect(await ui.find({ type: 'Text', text: 'ctx · cache · cost · 5h · 7d · model' })).toBeDefined()
   })
 
   test('/cockpit settings opens the settings', async ($, on) => {
@@ -1929,7 +2036,43 @@ describe('settings view', () => {
     await ui.press({ key: 'settings-tab-Context' })
     expect(await ui.find({ key: 'set-warnAt-more' })).toBeDefined()
     expect(await ui.find({ key: 'set-openAtStart-toggle' })).toBeUndefined()
-    expect((await ui.find({ key: 'settings-tab-Context' }))?.props).toMatchObject({ variant: 'primary', hotkey: '2' })
+    expect((await ui.find({ key: 'settings-tab-Context' }))?.props).toMatchObject({ variant: 'primary', hotkey: '3' })
+  })
+
+  test('the terminal card has no fill, marks the open tab and spaces its rows while help shows', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect((await ui.find({ key: 'set-group-Cockpit' }))?.props).toMatchObject({ borderStyle: 'round', gap: 1 })
+    expect((await ui.find({ key: 'set-group-Cockpit' }))?.props.backgroundColor).toBeUndefined()
+    expect((await ui.find({ key: 'set-group-head' }))?.text).toBe('Cockpit·all defaults')
+    expect((await ui.find({ key: 'settings-tab-Cockpit' }))?.props.label).toBe('▸ Cockpit')
+    expect((await ui.find({ key: 'settings-tab-Context' }))?.props.label).toBe('Context')
+    await ui.press({ key: 'settings-help' })
+    expect((await ui.find({ key: 'set-group-Cockpit' }))?.props.gap).toBeUndefined()
+    await ui.press({ key: 'settings-tab-Notifications' })
+    expect((await ui.find({ key: 'set-group-head' }))?.text).toBe('Notifications·(Discord)·all defaults')
+  })
+
+  test('the help of a chip row leaves its names to the chips', () => {
+    for (const spec of Object.values(SCHEMA).filter(one => one.type === 'string' && one.values !== undefined)) {
+      expect(spec.values?.filter(name => new RegExp(`\\b${name}\\b`).test(spec.description)).length ?? 0).toBeLessThan(3)
+    }
+  })
+
+  test('a chip row sits in the value column beside its label on the terminal', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect((await ui.find({ key: 'set-sections-label' }))?.props.width).toBe(16)
+    expect((await ui.find({ key: 'set-sections-label' }))?.text).toBe('Sections')
+    expect(JSON.stringify(await ui.find({ key: 'set-sections-controls' }))).toContain('"set-section-usage"')
+    expect((await ui.find({ key: 'set-section' }))?.props.paddingLeft).toBeUndefined()
+    await ui.press({ key: 'settings-tab-Minimized' })
+    expect((await ui.find({ key: 'set-bandLine1-label' }))?.text).toBe('Line 1')
+    expect(JSON.stringify(await ui.find({ key: 'set-bandLine1-controls' }))).toContain('dir · git · model')
   })
 
   test('describes each setting until help is hidden', async ($, on) => {
@@ -1937,9 +2080,9 @@ describe('settings view', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts\./ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts,/ })).toBeDefined()
     await ui.press({ key: 'settings-help' })
-    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts\./ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts,/ })).toBeUndefined()
     expect((await ui.find({ key: 'settings-help' }))?.props).toMatchObject({ label: 'Show help', hotkey: 'i' })
   })
 
@@ -1987,6 +2130,9 @@ describe('settings view', () => {
     expect((await desk.find({ key: 'set-openAtStart-select' }))?.props).toMatchObject({ value: 'true', options: [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }] })
     expect((await desk.find({ key: 'set-layout-select' }))?.props).toMatchObject({ value: 'auto', options: [{ value: 'auto' }, { value: 'full' }, { value: 'compact' }] })
     expect(await desk.find({ key: 'set-layout-full' })).toBeUndefined()
+    // The desktop keeps its soft fill and marks the open tab by its look alone.
+    expect((await desk.find({ key: 'set-group-Cockpit' }))?.props.backgroundColor).toBe('#8080800f')
+    expect((await desk.find({ key: 'settings-tab-Cockpit' }))?.props.label).toBe('Cockpit')
     // Wrapping rows are spaced by the desktop's own steps both ways.
     expect((await desk.find({ key: 'settings-tabs' }))?.props).toMatchObject({ columnGap: 'sm', rowGap: 'sm' })
     expect((await desk.find({ key: 'set-section' }))?.props).toMatchObject({ columnGap: 'xs', rowGap: 'xs' })
@@ -2016,10 +2162,9 @@ describe('settings view', () => {
     await $.session.start(START)
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
     await desk.press({ key: 'pane-settings' })
-    // Sections is the pane's own chips: no dropdown or field, but the mark and the default still show.
-    expect((await desk.find({ key: 'set-sections' }))?.props).toMatchObject({ flexDirection: 'row', columnGap: 'sm' })
-    expect(await desk.find({ key: 'set-section-usage' })).toBeDefined()
-    expect(await desk.find({ key: 'set-sections-controls' })).toBeUndefined()
+    // Sections is the pane's own chips under the row's label: no dropdown or field, but the mark and the default still show.
+    expect((await desk.find({ key: 'set-sections-label' }))?.text).toBe('Sections*')
+    expect(JSON.stringify(await desk.find({ key: 'set-sections-controls' }))).toContain('"set-section-usage"')
     expect(await desk.find({ key: 'set-sections-input' })).toBeUndefined()
     expect(await desk.find({ key: 'set-sections-mark' })).toBeDefined()
     expect((await desk.find({ key: 'set-sections-default' }))?.text).toBe('changed from the defaultReset')
@@ -2386,10 +2531,69 @@ describe('band lines', () => {
   }
   const text = (runs: { text: string }[]) => runs.map(run => run.text).join('')
 
-  test('draws the fullest tier with pace, agents, shells and the repo', () => {
+  test('draws the fullest tier with the repo, agents, shells and pace', () => {
     const [one, two] = bandLines(input, 0)
-    expect(text(one)).toBe('ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 2h0m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h')
-    expect(text(two)).toBe('● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
+    expect(text(one)).toBe('~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  ● 1 agent  ·  $ 2 shells · longest 12m')
+    expect(text(two)).toBe('ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 2h0m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h')
+  })
+
+  const full = {
+    ...input,
+    model: 'claude-opus-5-5[1m]',
+    effort: 'xhigh',
+    style: 'Explanatory',
+    cache: 0.93,
+    usd: 1.2,
+    turn: { kind: 'running' as const, since: -134_000, tool: 'Bash' },
+    run: { done: 3, total: 6, round: '2/5', blocked: 0 },
+  }
+
+  test('draws what dr-status drew: model, effort, style, turn, run, cache and cost', () => {
+    const [one, two] = bandLines(full, 0)
+    expect(text(one)).toBe(
+      '~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  Opus 5.5  ·  xhigh  ·  Explanatory  ·  ▸ 2m14s · Bash  ·  run 3/6 r2/5  ·  ● 1 agent  ·  $ 2 shells · longest 12m',
+    )
+    expect(text(two)).toBe('ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  cache ▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 2h0m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h')
+    // The cache ramp runs on what missed: 93% hit is green.
+    expect(two.find(run => run.text === '93%')?.color).toBe('success')
+    expect(one.find(run => run.text === 'xhigh')?.color).toBe('#af87ff')
+    const [small, smallTwo] = bandLines(full, 3)
+    expect(text(small)).toBe('shop ⎇ feat/a-rather-l…* · Opus · xhigh · Explanatory · ▸ 2m14s · run 3/6 · ● 1 · $ 2')
+    expect(text(smallTwo)).toBe('ctx 61% · cache 93% · $1.20 · 5h 23% · 7d 61%')
+    for (const width of [200, 120, 80, 50]) {
+      const [a, b] = fitBand(full, width)
+      expect(runsWidth(a)).toBeLessThanOrEqual(width)
+      expect(runsWidth(b)).toBeLessThanOrEqual(width)
+    }
+  })
+
+  test('says a turn waiting on the person, a failed turn and a blocked run', () => {
+    const line = (change: object) => text(bandLines({ ...full, lines: [['turn', 'run'], []], ...change }, 0)[0])
+    expect(line({ turn: { kind: 'waiting', since: -12_000, tool: null } })).toBe('approve? 12s  ·  run 3/6 r2/5')
+    expect(line({ turn: { kind: 'asking', since: -12_000, tool: null } })).toBe('asking 12s  ·  run 3/6 r2/5')
+    expect(line({ turn: { kind: 'failed', since: 0, tool: null }, run: { done: 3, total: 6, round: null, blocked: 1 } })).toBe('turn failed  ·  run 3/6 blocked')
+    expect(line({ turn: null, run: null })).toBe('')
+    expect(line({ turn: { kind: 'running', since: 0, tool: 'mcp__darkmem__memory_search' } })).toBe('▸ 0s · mcp__darkmem__memor…  ·  run 3/6 r2/5')
+  })
+
+  test('draws the lines the settings pick, in their order', () => {
+    const [one, two] = bandLines({ ...full, lines: [['git', 'ctx'], ['time', 'model']] }, 2)
+    expect(text(one)).toBe('⎇ feat/a-rather-l…* ↑2 ↓1 · ctx 61% ≈9t')
+    expect(text(two)).toMatch(/^\d\d:\d\d · Opus 5\.5$/)
+    expect(bandLines({ ...full, lines: [[], ['cost']] }, 0).map(text)).toEqual(['', '$1.20'])
+  })
+
+  test('reads and toggles the band line settings', () => {
+    expect(bandLinesFrom('', '')).toEqual([[...BAND_DEFAULT_LINES[0]], [...BAND_DEFAULT_LINES[1]]])
+    expect(bandLinesFrom('none', 'ctx, DIR ctx bogus')).toEqual([[], ['ctx', 'dir']])
+    // A segment both lines name stays on the first.
+    expect(bandLinesFrom('cost', '')).toEqual([['cost'], ['ctx', 'cache', '5h', '7d']])
+    const lines = bandLinesFrom('', '')
+    expect(bandLineToggled(lines, 1, 'dir')).toEqual(['git,model,effort,style,turn,run,agents,shells', 'ctx,cache,cost,5h,7d,dir'])
+    expect(bandLineToggled(lines, 1, 'ctx')).toEqual(['', 'cache,cost,5h,7d'])
+    expect(bandLineToggled(lines, 0, 'time')).toEqual(['dir,git,model,effort,style,turn,run,agents,shells,time', ''])
+    expect(bandLineToggled([['time'], []], 0, 'time')).toEqual(['none', 'none'])
+    expect(bandLineToggled(bandLinesFrom('', 'ctx,cache,cost,5h'), 1, '7d')).toEqual(['', ''])
   })
 
   test('measures and cuts a row by terminal cells', () => {
@@ -2412,23 +2616,24 @@ describe('band lines', () => {
       expect(runsWidth(one)).toBeLessThanOrEqual(width)
       expect(runsWidth(two)).toBeLessThanOrEqual(width)
     }
-    expect(text(fitBand(input, 40)[0])).toBe('ctx 61% ≈9t · 5h 23% ✓ · 7d 61% 2d4h')
-    expect(text(bandLines(input, 3)[1])).toBe('● 1 · $ 2 · shop ⎇ feat/a-rather-l…*')
+    expect(text(fitBand(input, 40)[1])).toBe('ctx 61% ≈9t · 5h 23% ✓ · 7d 61% 2d4h')
+    expect(text(bandLines(input, 3)[0])).toBe('shop ⎇ feat/a-rather-l…* · ● 1 · $ 2')
     expect(shellAge(42_000)).toBe('42s')
     expect(shellAge(12 * 60_000)).toBe('12m')
   })
 
   test('leaves out what is not running', () => {
-    const [, two] = bandLines({ ...input, agents: 0, shells: { count: 0, longest: 0 } }, 0)
-    expect(text(two)).toBe('~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
+    const [one] = bandLines({ ...input, agents: 0, shells: { count: 0, longest: 0 } }, 0)
+    expect(text(one)).toBe('~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
     const meters = bandMetersSvg([{ key: 'Context', percent: 61, share: 0.44, color: 'yellow', tick: 0.72, note: [{ text: '≈9 turns' }] }], 300)
     expect(meters).toContain('>CONTEXT</text>')
     expect(meters).toContain('61%')
   })
 
-  test('leads line 2 with ◐ while background work runs', () => {
-    expect(text(bandLines({ ...input, isBackground: true }, 0)[1])).toBe('◐ ● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
-    expect(text(bandLines({ ...input, isBackground: false }, 0)[1])).toBe('● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2')
+  test('leads the line holding agents, shells or the turn with ◐ while background work runs', () => {
+    expect(text(bandLines({ ...input, isBackground: true }, 0)[0])).toBe('◐ ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  ● 1 agent  ·  $ 2 shells · longest 12m')
+    expect(text(bandLines({ ...input, isBackground: false }, 0)[0])).toBe('~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  ● 1 agent  ·  $ 2 shells · longest 12m')
+    expect(text(bandLines({ ...input, isBackground: true, lines: [['ctx'], ['shells']] }, 0)[1])).toBe('◐ $ 2 shells · longest 12m')
   })
 
   test('draws a bottom rule exactly as wide as asked, down to none', () => {
@@ -2529,7 +2734,7 @@ describe('now row', () => {
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, blank))).toBe('◐ background · 1 shell · npm test · 3m')
     const empty = { shells: [{ command: ' \n', startedAt: 20_000 }], agents: 0 }
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, empty))).toBe('◐ background · 1 shell · 3m')
-    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, now: at }
+    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, estimate: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, now: at }
     expect(flat(denseLine('shells', dense) ?? [])).toBe('$    1 shell · npm test · 3m')
     expect(flat(denseLine('shells', { ...dense, shells: empty.shells }) ?? [])).toBe('$    1 shell · 3m')
   })
@@ -2570,6 +2775,7 @@ describe('dense rows', () => {
     billing: 'subscription',
     remote: [{ text: '○ not connected' }],
     context: { tokens: 284_000, limit: 465_000 },
+    estimate: null,
     turnsLeft: 8,
     limits: [
       { kind: 'five_hour', percent: 23 },
@@ -2663,6 +2869,7 @@ describe('dense rows', () => {
     const empty: DenseInput = { ...INPUT, email: null, context: null, limits: [], shells: [], agents: [], run: null, todos: null, repo: null }
     expect(denseLine('account', empty)).toBeNull()
     expect(flat(denseLine('context', empty) ?? [])).toBe('ctx  no reading yet')
+    expect(flat(denseLine('context', { ...empty, estimate: 218_000 }) ?? [])).toBe('ctx  ≈218k estimated')
     expect(flat(denseLine('usage', empty) ?? [])).toBe('lim  no reading yet')
     for (const section of ['shells', 'agents', 'plan', 'repo', 'guard'] as const) expect(denseLine(section, empty)).toBeNull()
     expect(flat(denseLine('plan', { ...empty, todos: { done: 1, total: 4, current: 'Write the tests' } }) ?? [])).toBe('plan ▰▱▱▱ 1/4 · Write the tests')
@@ -3653,7 +3860,7 @@ describe('run card', () => {
     await $.session.measure(MEASURE)
     const desk = await $.ui.mount({ ...INLINE, surface: 'desktop' })
     // The chips follow the facts row, each on a pill: the branch, then the changes.
-    const chips = await desk.find({ key: 'band-rest-1' })
+    const chips = await desk.find({ key: 'band-rest-2' })
     expect(chips?.props).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', gap: 'xs' })
     expect(chips?.children).toMatchObject([
       { type: 'Text', props: { color: 'planMode', size: 'caption', backgroundColor: 'subtle' }, children: ['⎇ feat/pane ↑2 ↓1'] },
@@ -3661,12 +3868,13 @@ describe('run card', () => {
       { type: 'Text', props: { size: 'caption', backgroundColor: 'subtle' }, children: ['?1 untracked'] },
     ])
     // The warning is one red line below them, its separator dim.
-    const warning = await desk.find({ key: 'band-rest-2-left' })
+    const warning = await desk.find({ key: 'band-rest-3-left' })
     expect(warning?.text).toBe('✗ Task 2 blocked  ·  ✗ 1 refused')
     expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"color":"error"},"children":["Task 2 blocked"]}')
     expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"dimColor":true},"children":["  ·  "]}')
     expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"color":"error"},"children":["1 refused"]}')
-    expect(await desk.find({ key: 'band-rest-3' })).toBeUndefined()
+    expect(await desk.find({ key: 'band-rest-4' })).toBeUndefined()
+    expect((await desk.find({ key: 'band-rest-0-left' }))?.text).toContain('run 1/3 blocked')
   })
 
   test('clears a run finished before the session started', async ($, on) => {
@@ -4595,7 +4803,7 @@ describe('settings rows', () => {
 
   test('the tabs are the groups in schema order', () => {
     expect(tabsOf(ROWS)).toEqual(['Cockpit', 'Context', 'Finish'])
-    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'])
+    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'])
   })
 
   test('a value reads through its unit and zero word', () => {

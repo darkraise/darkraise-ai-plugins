@@ -197,7 +197,7 @@ export function validateRepository(root) {
   return errors;
 }
 
-const GROUPS = ['Cockpit', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'];
+const GROUPS = ['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'];
 const UNITS = ['k', '%', 's', 'min'];
 const ZEROS = ['auto', 'off', 'any', 'hidden', 'unset'];
 

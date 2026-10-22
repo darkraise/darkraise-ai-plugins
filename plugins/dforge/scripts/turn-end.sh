@@ -13,9 +13,11 @@
 # notification starts the next turn. The reverse is held once: a next-step
 # block or finishing menu printed over running work would invite the human to
 # end a session whose work is still in flight.
-# A turn that wrote no ledger but moved a local branch (a commit, a merge, a
-# deleted branch) in a project with dforge docs is unplanned work, and owes the
-# same ending: the next-step block (`next-step --adhoc`) or finishing's menu.
+# A turn that wrote no ledger but ran a dforge skill and moved a local branch
+# (a commit, a merge, a deleted branch) in a project with dforge docs is
+# unplanned work, and owes the same ending: the next-step block
+# (`next-step --adhoc`) or finishing's menu. A turn that ran no dforge skill is
+# not dforge's to hold, whatever it committed.
 # An auto run is the exception to holding once: nobody is watching to send the
 # next prompt, so its retries are held too, up to AUTO_HOLD_CAP in a row; past
 # that the run stops and one last hold asks for the attended ending. Every hold
@@ -81,6 +83,20 @@ last_text() {
     | if type == "string" then . elif type == "array" then map(select(.type == "text") | .text) | join("\n") else "" end' \
     2>/dev/null || true
 }
+# ran_dforge TRANSCRIPT SINCE — whether the main session invoked a dforge skill,
+# by the Skill tool or a typed /dforge: command, at or after SINCE.
+ran_dforge() {
+  [ -n "$2" ] && [ -f "$1" ] || return 1
+  jq -rR --arg since "$2" 'fromjson? | objects | select(.isSidechain? != true)
+      | select((.timestamp? // "") >= $since)
+      | if .type? == "assistant" then
+          .message.content? | arrays | .[] | select(.type? == "tool_use" and .name? == "Skill") | .input.skill? | strings | select(startswith("dforge:"))
+        elif .type? == "user" then
+          .message.content? | (if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end)
+          | strings | select(contains("<command-name>/dforge:"))
+        else empty end' "$1" 2>/dev/null | grep -q .
+}
+
 last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")
 if [ -z "$last" ] && [ -f "$transcript_path" ]; then
   last=$(tail -n 400 "$transcript_path" | last_text)
@@ -177,6 +193,7 @@ if [ -z "$ledger" ]; then
   [ -n "$docs" ] && [ -d "$docs" ] || exit 0
   ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' \
             'Worktree removal refused' 'Ask me then: show the finish menu' 'No plan file — no follow-on work recorded.' && exit 0
+  ran_dforge "$transcript_path" "$(head -n 1 "$stamp.at" 2>/dev/null | tr -d '\r')" || exit 0
   reason="This turn moved a branch (a commit, a merge or a deleted branch) without a plan's ledger, but your message ends without the next step. If work remains for this session, continue it: a ruling you can make with a recommendation in hand is yours to make and record, not a reason to stop. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If the turn did only the one change you were asked for and nothing follows from it, end the turn as you were. If the branch's work is complete and not yet integrated, invoke dforge:finishing-a-development-branch with the Skill tool and end on its menu. If you are stopping, run \`bash \"${root_shown}/scripts/next-step\" --adhoc --phase <design|build> --next \"<the next action>\"\` (design when what remains is rulings, a spec or a plan) and end your message with the block it prints, verbatim."
   hold "$reason" "dforge held the stop: this turn moved a branch and the message ends without the next step"
   exit 0

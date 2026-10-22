@@ -183,7 +183,7 @@ test('the settings schema is valid, and broken schemas are caught', async () => 
   assert.match(await broken("export default { n: { type: 'number', default: Infinity, group: 'Cockpit', title: 't', description: 'd', target: 'dforge' } }\n"), /schema n: default does not fit its type/);
   const entry = extra => `export default { n: { type: 'number', default: 0, min: 0, max: 10, group: 'Cockpit', label: 'N', title: 't', description: 'd', target: 'dforge', ${extra} } }\n`;
   assert.match(await broken(real.replace("label: 'Layout'", "label: 'A label that is far too long'")), /schema layout: label is required, at most 16 characters/);
-  assert.match(await broken(real.replace("group: 'Finish'", "group: 'Elsewhere'")), /group must be one of Cockpit, Context, Workflow, Process, Finish, Notifications/);
+  assert.match(await broken(real.replace("group: 'Finish'", "group: 'Elsewhere'")), /group must be one of Cockpit, Minimized, Context, Workflow, Process, Finish, Notifications/);
   assert.match(await broken(entry("unit: 'parsecs'")), /schema n: unit must be one of k, %, s, min, on a number/);
   assert.match(await broken(entry("zero: 'nil'")), /schema n: zero must be one of auto, off, any, hidden, unset, on a number/);
   assert.match(await broken(entry('floor: 5').replace('default: 0', 'default: 3')), /schema n: default does not fit its type/);

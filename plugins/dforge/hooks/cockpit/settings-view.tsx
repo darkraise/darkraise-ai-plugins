@@ -29,7 +29,7 @@ export type SettingsModel = {
   isDesktop: boolean
   /** Saved or environment values the settings in force ignored. */
   problems: readonly string[]
-  /** Rows the caller draws itself, by key, in place of the schema's control. */
+  /** Controls the caller draws itself, by key, in place of the schema's. */
   custom: Readonly<Record<string, RenderChildren>>
   /** Drawn above the open group's rows. */
   top: RenderChildren
@@ -132,30 +132,18 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
       </Box>
     )
 
-  // A row the caller draws itself still gets the mark, the help and the default line.
-  const customBox = (row: ViewRow): RenderChildren => (
-    <Box key={`set-${row.key}`} flexDirection="row" columnGap={isNative ? 'sm' : 1}>
-      {model.custom[row.key]}
-      {mark(row)}
-    </Box>
-  )
-
   const drawRow = (row: ViewRow): RenderChildren => (
     <Box key={`set-${row.key}-block`} flexDirection="column">
-      {model.custom[row.key] !== undefined ? (
-        customBox(row)
-      ) : (
-        // Controls that overflow wrap in the value column, not under the label.
-        <Box key={`set-${row.key}`} flexDirection="row" columnGap={1}>
-          <Box key={`set-${row.key}-label`} width={LABEL_WIDTH} flexShrink={0}>
-            <Text>{row.label}</Text>
-          </Box>
-          <Box key={`set-${row.key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} flexShrink={1}>
-            {control(row)}
-            {mark(row)}
-          </Box>
+      {/* Controls that overflow wrap in the value column, not under the label. */}
+      <Box key={`set-${row.key}`} flexDirection="row" columnGap={1}>
+        <Box key={`set-${row.key}-label`} width={LABEL_WIDTH} flexShrink={0}>
+          <Text>{row.label}</Text>
         </Box>
-      )}
+        <Box key={`set-${row.key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={1} flexShrink={1}>
+          {model.custom[row.key] ?? control(row)}
+          {mark(row)}
+        </Box>
+      </Box>
       {model.editing === row.key && model.error !== null && (
         <Text key={`set-${row.key}-error`} color="red">{`${' '.repeat(INDENT)}✗ ${model.error}`}</Text>
       )}
@@ -194,20 +182,14 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
   // A desktop row: its label over its description and its control.
   const drawNativeRow = (row: ViewRow): RenderChildren => (
     <Box key={`set-${row.key}-block`} flexDirection="column" gap="xs">
-      {model.custom[row.key] !== undefined ? (
-        customBox(row)
-      ) : (
-        <Box key={`set-${row.key}-label`} flexDirection="row" columnGap="sm">
-          <Text weight="medium">{row.label}</Text>
-          {mark(row)}
-        </Box>
-      )}
+      <Box key={`set-${row.key}-label`} flexDirection="row" columnGap="sm">
+        <Text weight="medium">{row.label}</Text>
+        {mark(row)}
+      </Box>
       {help(row)}
-      {model.custom[row.key] === undefined && (
-        <Box key={`set-${row.key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap="sm">
-          {nativeControl(row)}
-        </Box>
-      )}
+      <Box key={`set-${row.key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap="sm">
+        {model.custom[row.key] ?? nativeControl(row)}
+      </Box>
       {model.editing === row.key && model.error !== null && (
         <Box key={`set-${row.key}-error`}>
           <Text color="error">{`✗ ${model.error}`}</Text>
@@ -222,8 +204,9 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
     <Box flexDirection="column" gap={isNative ? 'md' : undefined}>
       <Text bold>Settings</Text>
       <Box key="settings-tabs" flexDirection="row" flexWrap="wrap" columnGap={isNative ? 'sm' : 1} rowGap={isNative ? 'sm' : undefined}>
+        {/* The terminal marks the open tab by more than its color. */}
         {model.tabs.map((tab, index) =>
-          press(`settings-tab-${tab}`, tab, () => act.openTab(tab), { hotkey: index < 9 ? String(index + 1) : undefined, isMain: tab === model.tab, isOff: tab !== model.tab }),
+          press(`settings-tab-${tab}`, tab === model.tab && !isNative ? `▸ ${tab}` : tab, () => act.openTab(tab), { hotkey: index < 9 ? String(index + 1) : undefined, isMain: tab === model.tab, isOff: tab !== model.tab }),
         )}
       </Box>
       <Box
@@ -231,10 +214,11 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
         flexDirection="column"
         borderStyle="round"
         borderColor="subtle"
-        backgroundColor={CARD}
+        // Some terminals drop the fill's alpha and draw it solid grey, under which dim text is lost.
+        backgroundColor={isNative ? CARD : undefined}
         paddingX={isNative ? 'md' : 1}
         paddingY={isNative ? 'sm' : undefined}
-        gap={isNative ? 'md' : undefined}
+        gap={isNative ? 'md' : model.isHelpShown ? 1 : undefined}
       >
         <Box key="set-group-head" flexDirection="row" alignItems="center" columnGap={isNative ? 'sm' : 1}>
           {isNative ? (
@@ -246,11 +230,17 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
               {model.tab}
             </Text>
           )}
-          {model.hint !== null && (
+          {model.hint !== null && [
+            <Text key="set-group-hint-dot" dimColor>
+              ·
+            </Text>,
             <Text key="set-group-hint" dimColor>
               {model.hint}
-            </Text>
-          )}
+            </Text>,
+          ]}
+          <Text key="set-group-changed-dot" dimColor>
+            ·
+          </Text>
           <Text key="set-group-changed" dimColor>
             {changed === 0 ? 'all defaults' : `${changed} changed`}
           </Text>

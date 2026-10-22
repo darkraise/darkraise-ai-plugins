@@ -333,8 +333,56 @@ export function windowElapsed(kind: string, resetsAt: number | null, now: number
 /** One stretch of text in the status strip, with how it is painted. */
 export type Run = { text: string; color?: string; bold?: boolean; dim?: boolean }
 
+/** What the band can show, as the bandLine1 and bandLine2 settings name them. */
+export const BAND_SEGMENTS = ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells', 'ctx', 'cache', 'cost', '5h', '7d', 'time'] as const
+export type BandSegment = (typeof BAND_SEGMENTS)[number]
+export type BandLayout = readonly [readonly BandSegment[], readonly BandSegment[]]
+
+export const BAND_DEFAULT_LINES: BandLayout = [
+  ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells'],
+  ['ctx', 'cache', 'cost', '5h', '7d'],
+]
+
+/**
+ * The band's lines from the bandLine1 and bandLine2 settings: known names in
+ * the order given, each once. Empty is the line's default and none hides it;
+ * a segment both lines name stays on the first.
+ */
+export function bandLinesFrom(one: string, two: string): [BandSegment[], BandSegment[]] {
+  const line = (text: string, index: 0 | 1): BandSegment[] => {
+    const names = text
+      .split(/[\s,]+/)
+      .map(name => name.trim().toLowerCase())
+      .filter(name => name !== '')
+    if (names.length === 0) return [...BAND_DEFAULT_LINES[index]]
+    return [...new Set(names.filter((name): name is BandSegment => (BAND_SEGMENTS as readonly string[]).includes(name)))]
+  }
+  const first = line(one, 0)
+  return [first, line(two, 1).filter(name => !first.includes(name))]
+}
+
+/**
+ * The bandLine1 and bandLine2 settings after turning one segment on or off
+ * on a line: turned on, it goes last there and leaves the other line. A line
+ * left empty is none; a line in its default order is the empty setting.
+ */
+export function bandLineToggled(lines: BandLayout, index: 0 | 1, name: BandSegment): [string, string] {
+  const next = lines.map((line, at) =>
+    at === index && !line.includes(name) ? [...line, name] : line.filter(one => one !== name),
+  )
+  const setting = (at: 0 | 1): string => {
+    const line = next[at] ?? []
+    const fallback = BAND_DEFAULT_LINES[at]
+    if (line.length === fallback.length && line.every((one, position) => one === fallback[position])) return ''
+    return line.length === 0 ? 'none' : line.join(',')
+  }
+  return [setting(0), setting(1)]
+}
+
 /** What the minimized cockpit's band draws. */
 export type BandInput = {
+  /** The segments each line shows, in order; the defaults when absent. */
+  lines?: BandLayout
   cwd: string | null
   /** The repository's root, when the working directory is in one. */
   root: string | null
@@ -348,13 +396,28 @@ export type BandInput = {
   /** Background shells running, and how long the oldest has run. */
   shells: { count: number; longest: number }
   now: number
-  /** True while the main conversation's background work runs: line 2 leads with ◐. */
+  model?: string | null
+  effort?: string | null
+  /** The output style's name; null for the default style. */
+  style?: string | null
+  /** The share of the last main turn's input served from the cache, 0 to 1. */
+  cache?: number | null
+  usd?: number | null
+  /** The main turn while it runs, waits on the person or has failed. */
+  turn?: { kind: 'running' | 'waiting' | 'asking' | 'failed'; since: number; tool: string | null } | null
+  /** A dforge run's tasks, and the review round of the task in flight. */
+  run?: { done: number; total: number; round: string | null; blocked: number } | null
+  /** True while the main conversation's background work runs: the line holding agents, shells or the turn leads with ◐. */
   isBackground?: boolean
 }
 
 const DIR = 'blue'
 const GIT = 'magenta'
 const AMBER_RUN = '#ff8700'
+const COST = '#af87ff'
+// The effort's hue rises with it, away from the meters' green-to-red ramp, so
+// a color never means both near a limit and set to max.
+const EFFORT_COLORS: Record<string, string> = { low: 'gray', medium: 'blue', high: 'cyan', xhigh: '#af87ff', max: 'magenta' }
 // Bar widths per tier; 0 draws no bar.
 const BAND_WIDTHS = [
   { ctx: 10, limit: 8 },
@@ -392,7 +455,9 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
     ]
   }
 
-  const limits = input.limits.map((limit): Run[] => {
+  const limitOf = (kind: string): Run[] | null => {
+    const limit = input.limits.find(one => one.kind === kind)
+    if (limit === undefined) return null
     const color = rampColor(limit.percent)
     const gone = windowElapsed(limit.kind, limit.resetsAt, input.now)
     const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, input.now)
@@ -412,7 +477,7 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
       ...pace,
       ...reset,
     ]
-  })
+  }
 
   const agents: Run[] | null =
     input.agents === 0 ? null : [{ text: '● ', color: 'cyan' }, { text: tier < 2 ? `${input.agents} ${input.agents === 1 ? 'agent' : 'agents'}` : `${input.agents}`, color: 'cyan' }]
@@ -450,16 +515,93 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
       tier < 2 && r.untracked > 0 ? `?${r.untracked}` : '',
     ].filter((text, index) => text !== '' && (tier < 3 || index === 0))
     git = [
-      { text: ' ⎇ ', color: GIT },
+      { text: '⎇ ', color: GIT },
       { text: branch, color: GIT, bold: true },
       ...(r.changed > 0 || r.untracked > 0 ? [{ text: '*', color: GIT }] : []),
       ...(counters.length > 0 && tier < 3 ? [{ text: ` ${counters.join(' ')}`, color: GIT }] : []),
     ]
   }
-  const where = dir === null && git.length === 0 ? null : [...(dir ?? []), ...(dir === null ? git.map((run, index) => (index === 0 ? { ...run, text: '⎇ ' } : run)) : git)]
+  const model: Run[] | null = input.model == null ? null : [{ text: modelName(input.model, tier >= 3), color: 'cyan', bold: true }]
+  const effort: Run[] | null = input.effort == null ? null : [{ text: input.effort, color: EFFORT_COLORS[input.effort] ?? 'gray' }]
+  const style: Run[] | null = input.style == null ? null : [{ text: tier >= 2 ? clipped(input.style, 12) : input.style, dim: true }]
+  const cost: Run[] | null = input.usd == null ? null : [{ text: `$${input.usd.toFixed(2)}`, color: COST, bold: true }]
+  const clock = new Date(input.now)
+  const time: Run[] = [{ text: `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`, dim: true }]
 
-  const two = join([agents, shells, where])
-  return [join([ctx, ...limits]), input.isBackground === true ? [{ text: '◐ ', color: AMBER_RUN, bold: true }, ...two] : two]
+  let cache: Run[] | null = null
+  if (input.cache != null) {
+    const percent = input.cache * 100
+    // A high hit rate is the good reading, so the ramp runs on what missed.
+    const color = rampColor(100 - percent)
+    cache = [
+      { text: 'cache ', dim: true },
+      ...(widths.limit > 0 ? [...meter(track(input.cache, widths.limit, []), color, {}), { text: ' ' }] : []),
+      { text: `${Math.round(percent)}%`, color, bold: true },
+    ]
+  }
+
+  let turn: Run[] | null = null
+  if (input.turn != null) {
+    const { kind, since, tool } = input.turn
+    const age = elapsed(input.now - since)
+    turn =
+      kind === 'running'
+        ? [{ text: '▸ ', color: 'cyan', bold: true }, { text: age, color: 'cyan' }, ...(tier < 2 && tool !== null ? [{ text: ` · ${clipped(tool, 20)}`, dim: true }] : [])]
+        : kind === 'failed'
+          ? [{ text: 'turn failed', color: 'red', bold: true }]
+          : [{ text: kind === 'waiting' ? 'approve? ' : 'asking ', color: 'yellow', bold: true }, { text: age, color: 'yellow' }]
+  }
+
+  let run: Run[] | null = null
+  if (input.run != null && input.run.total > 0) {
+    const { done, total, round, blocked } = input.run
+    run =
+      blocked > 0
+        ? [{ text: `run ${done}/${total}`, color: 'red', bold: true }, ...(tier < 2 ? [{ text: ' blocked', color: 'red' }] : [])]
+        : [{ text: `run ${done}/${total}`, color: 'yellow' }, ...(tier < 2 && round !== null ? [{ text: ` r${round}`, color: 'yellow' }] : [])]
+  }
+
+  const pieces: Record<BandSegment, Run[] | null> = {
+    dir,
+    git,
+    model,
+    effort,
+    style,
+    turn,
+    run,
+    agents,
+    shells,
+    ctx,
+    cache,
+    cost,
+    '5h': limitOf('five_hour'),
+    '7d': limitOf('seven_day'),
+    time,
+  }
+  const lineOf = (names: readonly BandSegment[]): Run[] => {
+    const parts: Run[][] = []
+    let last: BandSegment | null = null
+    for (const name of names) {
+      const runs = pieces[name]
+      if (runs === null || runs.length === 0) continue
+      // The branch rides on the path it belongs to, without a separator.
+      if (name === 'git' && last === 'dir') parts.push([...(parts.pop() ?? []), { text: ' ' }, ...runs])
+      else parts.push(runs)
+      last = name
+    }
+    return join(parts)
+  }
+  const layout = input.lines ?? BAND_DEFAULT_LINES
+  const out: [Run[], Run[]] = [lineOf(layout[0]), lineOf(layout[1])]
+  if (input.isBackground === true) {
+    const at = Math.max(0, layout.findIndex(names => names.some(name => name === 'agents' || name === 'shells' || name === 'turn')))
+    out[at] = [{ text: '◐ ', color: AMBER_RUN, bold: true }, ...out[at]]
+  }
+  return out
+}
+
+function clipped(text: string, cells: number): string {
+  return text.length > cells ? `${text.slice(0, cells - 1)}…` : text
 }
 
 /**
@@ -940,6 +1082,8 @@ export type DenseInput = {
   remote: Run[]
   /** The context against the handoff budget. */
   context: { tokens: number; limit: number } | null
+  /** The breakdown's estimate, shown while there is no context reading. */
+  estimate: number | null
   turnsLeft: number | null
   limits: readonly { kind: string; percent: number }[]
   shells: readonly { command: string; startedAt: number }[]
@@ -966,7 +1110,7 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
       if (input.email === null) return null
       return [denseLabel('acct'), ...join([[{ text: input.email, bold: true }], input.billing === null ? [] : [{ text: input.billing, dim: true }], input.remote.length === 0 ? [] : [{ text: 'Remote ', dim: true }, ...input.remote]])]
     case 'context': {
-      if (input.context === null) return [denseLabel('ctx'), { text: 'no reading yet', dim: true }]
+      if (input.context === null) return [denseLabel('ctx'), { text: input.estimate === null ? 'no reading yet' : `≈${kTokens(input.estimate)} estimated`, dim: true }]
       const { tokens, limit } = input.context
       const percent = (tokens / limit) * 100
       const color = rampColor(percent)

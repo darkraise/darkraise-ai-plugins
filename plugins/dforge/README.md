@@ -428,7 +428,9 @@ from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
 line. Otherwise the hook holds the stop once and tells Claude to continue
 remaining work, finish a branch that is ready to integrate, or print the block. Creating
 a branch on an existing commit, or a stop in another repository than the
-prompt's, does not count.
+prompt's, does not count. Neither does a turn that ran no dforge skill (no
+Skill call and no typed `/dforge:` command since the prompt): a commit made
+without dforge is never held for dforge's ending.
 
 A run also asks one question before its first task: what finishing should do
 once the final review is clean (merge locally, push and open a pull request,
@@ -612,11 +614,16 @@ desktop window joins the session, unless you closed it.
   (a phone, the desktop app), `on · no device yet` when "Enable Remote Control
   for all sessions" is on in `/config`, and `not connected` otherwise; a session
   started with `/remote-control` reads `not connected` until a device joins. Its frame takes one of eight colors picked from the config
-  directory, so each account keeps its own.
+  directory, so each account keeps its own. Below it a row holds the pane's own
+  buttons: **≡ Dense** (`d`), **⚙ Settings** (`s`) and **▁ Minimize** (`m`);
+  with Account hidden the row leads the pane.
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated
   locally with no API calls. The title adds about how many turns are left to
-  the budget at the pace of the last few. **Hand off** appears in
+  the budget at the pace of the last few. Until a response measures the window
+  (a new session, or just after a compaction) it shows the estimate instead,
+  `≈37k estimated`, with the categories. A tool call's reading shows as the
+  tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
   `dforge` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
   color, when `.dforge/handoff/latest.md` is under three days old and its
@@ -695,20 +702,25 @@ in the terminal and the desktop app; elsewhere a minimized cockpit shows
 nothing until `/cockpit` opens it. The band is also what a pane that is not
 docked draws (`layout` `auto`, the default). Its frame takes the account's
 color, with the email, billing and Remote Control (`connected`, `on` or
-`not connected`, as on the Account card) on the top rule. The first
-line has the
-context against the handoff budget with the turns left, and the 5-hour and
-7-day limits with their pace (`on pace`, or when the window runs out before
-it resets). The second has the subagents running, the background shells with
-how long the longest has run, and the folder with the branch, ahead and behind
-counts and changes; it leads with `◐` while the background state shows. A
-blocked run task or a refused command adds a red line.
+`not connected`, as on the Account card) on the top rule. Its two lines show
+the segments the **Minimized** settings tab picks, as dr-status did. By
+default the first line has the folder with the branch, ahead and behind counts
+and changes, the model and effort, the output style when it is not the
+default, the turn (`▸ 2m14s · Bash` while it runs, `approve?` or `asking`
+while it waits on you, `turn failed`), a dforge run's tasks done and review
+round, the subagents running, and the background shells with how long the
+longest has run. The second has the context against the handoff budget with
+the turns left, the prompt-cache hit rate of the last turn, the session's cost,
+and the 5-hour and 7-day limits with their pace (`on pace`, or when the window
+runs out before it resets). The line holding the agents, shells or turn leads
+with `◐` while the background state shows. A blocked run task or a refused
+command adds a red line.
 
 ```
-╭─ you@example.com · subscription · Remote ● connected ───────────────────────────────── Expand ─╮
-│ ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h │
-│ ● 1 agent  ·  $ 2 shells · longest 12m  ·  ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1              │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ you@example.com · subscription · Remote ● connected ──────────────────────────────────────────────────── Expand ─╮
+│ ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1  ·  Opus 5.5  ·  xhigh  ·  ▸ 2m14s · Bash  ·  run 3/6 r2/5  ·  ● 1 agent │
+│ ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  cache ▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m  ·  7d 61%     │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 Each line shrinks a step at a time until it fits: the meters narrow and then
@@ -796,7 +808,7 @@ Code" or a Claude session link). Human co-authors pass.
 ### Settings
 
 Open the settings with **Settings** in the pane or `/cockpit settings`. They are
-one tab per group: press `1` to `7` to switch, `i` to hide or show each
+one tab per group: press `1` to `8` to switch, `i` to hide or show each
 setting's description, and `b` to go back. A row whose value differs from its
 default is marked `*` and shows the default with a **Reset**; `r` resets the
 whole tab after a second press. Numbers step with `−` and `+` or take a typed
@@ -820,10 +832,12 @@ The same settings can be set with
 | Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
 | Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and a box below the prompt in the terminal (the band above it in the desktop app). **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | Cockpit | `density` | `detailed` | `detailed`: cards, charts and lists. `dense`: one line per section. **Dense** and **Detailed** in the pane set it. |
-| Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band always draws its own lines. |
+| Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band draws the lines the Minimized tab picks instead. |
 | Cockpit | `collapsed` | empty | Sections drawn as their title row and headline only, comma-separated, from the same eight names. Pressing a section's title collapses or expands it and saves this setting. Empty expands all eight. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
+| Minimized | `bandLine1` | empty | The minimized band's first line, in order, comma-separated: `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Empty shows `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`; `none` hides the line. The tab's chips add a segment last on a line and take it off the other. |
+| Minimized | `bandLine2` | empty | The second line, from the same names. Empty shows `ctx`, `cache`, `cost`, `5h`, `7d`; `none` hides it. A name on both lines shows on the first. In the desktop app the picked `ctx`, `cache`, `5h` and `7d` are its meters and the rest its text rows. |
 | Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
 | Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
 | Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
@@ -851,7 +865,7 @@ The same settings can be set with
 | darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until a session start with no plan in progress moves it back. |
 | darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
-The cockpit settings (Cockpit, Context, Notifications) apply at once, whether
+The cockpit settings (Cockpit, Minimized, Context, Notifications) apply at once, whether
 you change them in the pane, with `dforge-config` or in the file, except the
 two Claude keys, which Claude reads at its next session start. A
 Workflow or Process setting reaches the skills through one line injected at

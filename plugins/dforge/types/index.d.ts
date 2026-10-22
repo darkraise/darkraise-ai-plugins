@@ -41,6 +41,8 @@ export type CockpitBreakdown = {
   rows: CockpitContextRow[]
   /** The token count at which auto-compaction runs, when it is on. */
   compactAt: number | null
+  /** The estimate's total, all the pane has before a response measures the window. */
+  total?: number | null
 }
 
 /** One subagent type's runs and tokens this session. */
@@ -138,6 +140,8 @@ export type CockpitEngine = {
   effort: string | null
   /** The share of the last main turn's input served from the cache, 0 to 1. */
   cache: number | null
+  /** The output style the main loop's requests go out with; null for the default style. */
+  style: string | null
 }
 
 /** What the session is doing now, for the Now row and the state file. */

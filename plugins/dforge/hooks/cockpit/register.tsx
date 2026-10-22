@@ -74,6 +74,10 @@ import {
   runsCut,
   runsWidth,
   SECTIONS,
+  BAND_SEGMENTS,
+  bandLines,
+  bandLinesFrom,
+  bandLineToggled,
   sectionsFrom,
   sectionsToggled,
   sparkline,
@@ -87,7 +91,7 @@ import {
   warnShare,
   writesGitText,
 } from './lib'
-import type { AgentGroupKey, BandInput, DenseInput, Run, Section, TrackPart } from './lib'
+import type { AgentGroupKey, BandInput, BandSegment, DenseInput, Run, Section, TrackPart } from './lib'
 import { SCHEMA, claudeLocks, envLocks, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
 import type { SettingValue, SettingsFile } from './config'
 import { nativeLine, nativeRun } from './native'
@@ -192,6 +196,8 @@ const TREND_LENGTH = 40
 const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] as const
 // The usage windows the desktop draws as gauges, in order.
 const GAUGED: readonly string[] = ['five_hour', 'seven_day']
+// The band segments the desktop band writes as text rather than draws as meters.
+const BAND_WORDS: readonly BandSegment[] = ['model', 'effort', 'style', 'turn', 'run', 'cost', 'time']
 // The desktop's panel fill: a faint gray that lifts a card off the pane in
 // the light theme and the dark alike.
 const CARD = '#8080800f'
@@ -217,7 +223,7 @@ const trend = atom({ plugin: 'dforge', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dforge', key: 'view' } as const, 'cockpit')
 const account = atom({ plugin: 'dforge', key: 'account' } as const, null)
 const place = atom({ plugin: 'dforge', key: 'place' } as const, null)
-const engine = atom({ plugin: 'dforge', key: 'engine' } as const, { model: null, effort: null, cache: null })
+const engine = atom({ plugin: 'dforge', key: 'engine' } as const, { model: null, effort: null, cache: null, style: null })
 const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
 const activity = atom({ plugin: 'dforge', key: 'activity' } as const, IDLE)
 const turnTokens = atom({ plugin: 'dforge', key: 'turnTokens' } as const, [])
@@ -255,6 +261,8 @@ type Options = {
   notifyAfter: number
   notifyAskAfter: number
   notifyDetail: string
+  bandLine1: string
+  bandLine2: string
 }
 
 /** What the budget reading is judged by. */
@@ -267,6 +275,7 @@ type Live = Omit<Options, 'layout' | 'density'> & {
   tuning: Tuning
   shown: Section[]
   shownCollapsed: Section[]
+  bandLayout: [BandSegment[], BandSegment[]]
   isMinimized: boolean
 }
 
@@ -288,6 +297,8 @@ function liveFrom(values: Partial<Options>): Live {
     notifyAfter = 60,
     notifyAskAfter = 20,
     notifyDetail = 'full',
+    bandLine1 = '',
+    bandLine2 = '',
   } = values
   // Anything but the three words reads as auto.
   const layout = layoutSetting === 'full' || layoutSetting === 'compact' ? layoutSetting : 'auto'
@@ -308,9 +319,12 @@ function liveFrom(values: Partial<Options>): Live {
     notifyAfter,
     notifyAskAfter,
     notifyDetail,
+    bandLine1,
+    bandLine2,
     tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt), isRelaxed: handoffMode === 'relaxed' },
     shown: sectionsFrom(sections),
     shownCollapsed: collapsedFrom(collapsed),
+    bandLayout: bandLinesFrom(bandLine1, bandLine2),
     isMinimized: layout === 'compact',
   }
 }
@@ -340,10 +354,15 @@ export const register: Register = on => {
     })
     await loadSettings($)
     const o = await live($)
+    // Open first: the reads below run processes, and each fills its section as it lands.
+    if (o.isMinimized) {
+      if ((await read($, view)) !== 'settings') await shutPane($)
+    } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
     compactWindow = await readCompactWindow($)
     await onBudget($, await refresh($, o.tuning, compactWindow))
     await readAccount($)
     await readPlace($)
+    await readBreakdown($)
     await readEngine($)
     await readWhere($)
     await readNotifier($)
@@ -358,9 +377,6 @@ export const register: Register = on => {
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
     await readVersion($)
     await readRemote($)
-    if (o.isMinimized) {
-      if ((await read($, view)) !== 'settings') await shutPane($)
-    } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
 
     return next(e)
   })
@@ -459,6 +475,8 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      // The estimate stands in until the next response; the old one is the window before.
+      await readBreakdown($)
       // The engine's or the person's compaction: the run's rule still applies after it.
       if ((e.trigger === 'auto' || e.trigger === 'manual') && !S.isPaneCompacting) await bookAutoCompaction($)
     }
@@ -603,6 +621,7 @@ export const register: Register = on => {
       S.isMainTurn = false
       await trackAutoRun($)
       compactWindow = await readCompactWindow($)
+      await readStyle($)
       await readRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       const turnUsage = e.usage as TurnUsage | undefined
@@ -696,6 +715,9 @@ export const register: Register = on => {
         fields: (await turnFields($)).slice(0, 1),
       }, null)
     }
+    // The response asking for this call already measured the window: show it while the tool
+    // runs. Only shown: the note and the alert wait for the ledger this call may write.
+    if (e.agentId === undefined) await refresh($, (await live($)).tuning, compactWindow, { isShownOnly: true })
     let ran: Awaited<ReturnType<typeof next>>
     try {
       ran = await next(e)
@@ -749,6 +771,7 @@ export const register: Register = on => {
     const head = await read($, budget)
     const spend = await read($, usage)
     const rows = await read($, breakdown)
+    const estimate = head === null ? (rows?.total ?? null) : null
     const list = await read($, seats)
     const all = await read($, spawns)
     const background = await read($, shells)
@@ -830,12 +853,17 @@ export const register: Register = on => {
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
           </Text>
         )}
-        {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
-        {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
-        {button('pane-compact', 'Compact', () => compactFromPane($), { hotkey: 'c', isCompact: isDense })}
-        {button('pane-density', isDense ? 'Detailed' : 'Dense', () => setOption($, 'density', isDense ? 'detailed' : 'dense'), { hotkey: 'd', isCompact: isDense })}
-        {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's', isCompact: isDense })}
-        {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm', isCompact: isDense })}
+        {autoNow?.active && button('pane-stop-auto', '■ Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
+        {canHandOff && !autoNow?.active && button('pane-handoff', '↪ Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
+        {button('pane-compact', '⇣ Compact', () => compactFromPane($), { hotkey: 'c', isCompact: isDense })}
+      </Box>
+    )
+    // The pane's own buttons, in a row below the account: they act on the pane, not the context.
+    const controls = (
+      <Box key="pane-controls" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {button('pane-density', isDense ? '☰ Detailed' : '≡ Dense', () => setOption($, 'density', isDense ? 'detailed' : 'dense'), { hotkey: 'd', isCompact: isDense })}
+        {button('pane-settings', '⚙ Settings', () => showSettings($), { hotkey: 's', isCompact: isDense })}
+        {canMinimize && (isDesktop || !isCompact) && button('pane-minimize', '▁ Minimize', minimize, { hotkey: 'm', isCompact: isDense })}
       </Box>
     )
 
@@ -864,7 +892,7 @@ export const register: Register = on => {
         </Box>
       )
       const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
-        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={isDesktop ? 'xs' : 1} rowGap={isDesktop ? 'xs' : undefined} paddingLeft={isDesktop ? undefined : INDENT}>
+        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={isDesktop ? 'xs' : 1} rowGap={isDesktop ? 'xs' : undefined} flexShrink={1}>
           {names.map(name => compact(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
         </Box>
       )
@@ -946,43 +974,52 @@ export const register: Register = on => {
         if (state.editing !== null || state.isConfirmingReset) await show({})
         return set(key, value)
       }
+      // A segment's chip on either line: on adds it last there and moves it off the other.
+      const bandChips = (index: 0 | 1) => {
+        const key = `set-bandLine${index + 1}`
+        const line = o.bandLayout[index]
+        return (
+          <Box key={`${key}-chips`} flexDirection="column" flexShrink={1}>
+            <Text key={`${key}-order`} dimColor wrap="truncate-end">
+              {line.length === 0 ? 'hidden' : line.join(' · ')}
+            </Text>
+            {chips(
+              key,
+              BAND_SEGMENTS,
+              name => line.includes(name as BandSegment),
+              name => name,
+              async name => {
+                const [one, two] = bandLineToggled(o.bandLayout, index, name as BandSegment)
+                if (one !== o.bandLine1) await save('bandLine1', one)
+                if (two !== o.bandLine2) await save('bandLine2', two)
+              },
+            )}
+          </Box>
+        )
+      }
       const custom: Record<string, RenderChildren> = {
-        sections: (
-          <Box key="set-sections-chips" flexDirection="column">
-            <Box key="set-sections-label"><Text>Sections</Text></Box>
-            {/* Under their label, wrapping to the pane's width. */}
-            {chips(
-              'set-section',
-              SECTIONS,
-              name => o.shown.includes(name as Section),
-              name => name,
-              name => save('sections', sectionsToggled(o.shown, name as Section)),
-            )}
-          </Box>
+        bandLine1: bandChips(0),
+        bandLine2: bandChips(1),
+        sections: chips(
+          'set-section',
+          SECTIONS,
+          name => o.shown.includes(name as Section),
+          name => name,
+          name => save('sections', sectionsToggled(o.shown, name as Section)),
         ),
-        collapsed: (
-          <Box key="set-collapsed-chips" flexDirection="column">
-            <Box key="set-collapsed-label"><Text>Collapsed</Text></Box>
-            {chips(
-              'set-collapsed',
-              SECTIONS,
-              name => o.shownCollapsed.includes(name as Section),
-              name => name,
-              name => save('collapsed', collapsedToggled(o.shownCollapsed, name as Section)),
-            )}
-          </Box>
+        collapsed: chips(
+          'set-collapsed',
+          SECTIONS,
+          name => o.shownCollapsed.includes(name as Section),
+          name => name,
+          name => save('collapsed', collapsedToggled(o.shownCollapsed, name as Section)),
         ),
-        notifyOn: (
-          <Box key="set-notifyOn-chips" flexDirection="column">
-            <Box key="set-notifyOn-label"><Text>Send on</Text></Box>
-            {chips(
-              'set-notify-kind',
-              NOTIFY_KINDS,
-              kind => S.kinds.includes(kind as NotifyKind),
-              kind => kindLabel(kind as NotifyKind),
-              kind => save('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
-            )}
-          </Box>
+        notifyOn: chips(
+          'set-notify-kind',
+          NOTIFY_KINDS,
+          kind => S.kinds.includes(kind as NotifyKind),
+          kind => kindLabel(kind as NotifyKind),
+          kind => save('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
         ),
       }
 
@@ -1088,6 +1125,7 @@ export const register: Register = on => {
         billing,
         remote: remoteRuns(remoteNow.clients, remoteNow.setting),
         context: head === null ? null : { tokens: head.tokens, limit: head.limit },
+        estimate,
         turnsLeft: head === null ? null : turnsToBudget(await read($, turnTokens), head.limit),
         limits,
         shells: background,
@@ -1111,13 +1149,14 @@ export const register: Register = on => {
                 {drawRuns('now', nowLine(actNow, now, work))}
               </Text>
             </Box>
-            {isDesktop && canMinimize && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
           </Box>
-          {rows.map(row => (
+          {!rows.some(row => row.key === 'dense-account') && controls}
+          {rows.map(row => [
             <Box key={row.key}>
               <Text wrap="truncate-end">{drawRuns(row.key, row.runs)}</Text>
-            </Box>
-          ))}
+            </Box>,
+            row.key === 'dense-account' && controls,
+          ])}
           {actions}
         </Box>
       )
@@ -1216,34 +1255,35 @@ export const register: Register = on => {
           </Text>,
         )
       }
-      if (breakdownShown.length > 0) {
-        const runs = stackedRuns(
-          breakdownShown.map(row => row.tokens),
-          inner,
-        )
-        const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]
-        const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
-        contextBody.push(
-          <Text key="ctx-stack">
-            {breakdownShown.map((row, index) => (
-              <Text key={`ctx-stack-${row.name}`} color={colorOf(index)}>
-                {'█'.repeat(runs[index] ?? 0)}
-              </Text>
-            ))}
-          </Text>,
-          details(
-            'ctx-rows',
-            breakdownShown.map((row, index) => (
-              <Text key={`ctx-row-${row.name}`} wrap="truncate-end">
-                <Text color={colorOf(index)}>■ </Text>
-                {row.name.padEnd(Math.min(20, Math.max(8, wide - 14)))}
-                <Text bold> {kTokens(row.tokens).padStart(5)}</Text>
-                <Text dimColor> {String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(3)}%</Text>
-              </Text>
-            )),
-          ),
-        )
-      }
+    }
+    // The breakdown is an estimate the session has from its start, a reading or not.
+    if (breakdownShown.length > 0) {
+      const runs = stackedRuns(
+        breakdownShown.map(row => row.tokens),
+        inner,
+      )
+      const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]
+      const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
+      contextBody.push(
+        <Text key="ctx-stack">
+          {breakdownShown.map((row, index) => (
+            <Text key={`ctx-stack-${row.name}`} color={colorOf(index)}>
+              {'█'.repeat(runs[index] ?? 0)}
+            </Text>
+          ))}
+        </Text>,
+        details(
+          'ctx-rows',
+          breakdownShown.map((row, index) => (
+            <Text key={`ctx-row-${row.name}`} wrap="truncate-end">
+              <Text color={colorOf(index)}>■ </Text>
+              {row.name.padEnd(Math.min(20, Math.max(8, wide - 14)))}
+              <Text bold> {kTokens(row.tokens).padStart(5)}</Text>
+              <Text dimColor> {String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(3)}%</Text>
+            </Text>
+          )),
+        ),
+      )
     }
 
     const engineNow = await read($, engine)
@@ -1403,7 +1443,7 @@ export const register: Register = on => {
         'cyan',
         head === null ? (
           <Text key="ctx-head" dimColor>
-            no reading yet
+            {estimate === null ? 'no reading yet' : `≈${kTokens(estimate)} estimated`}
           </Text>
         ) : (
           <Text key="ctx-head">
@@ -1711,7 +1751,22 @@ export const register: Register = on => {
           },
         ]),
         context: (() => {
-          if (head === null) return panel('context', 'Context', 'cyan', [{ text: 'no reading yet' }], [], actions)
+          const breakdownLines: PanelLine[] = []
+          if (breakdownShown.length > 0) {
+            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] ?? BREAKDOWN_COLORS[0]
+            const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
+            breakdownLines.push({ kind: 'picture', svg: stackSvg(breakdownShown.map(row => row.tokens), breakdownShown.map((_, index) => colorOf(index)), width, 8) })
+            for (const [index, row] of breakdownShown.entries()) {
+              breakdownLines.push({
+                kind: 'text',
+                left: [{ text: '■ ', color: paint(colorOf(index)) }, { text: row.name }],
+                right: [{ text: kTokens(row.tokens), bold: true }, { text: `${String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(4)}%`, dim: true, mono: true }],
+              })
+            }
+          }
+          if (head === null) {
+            return panel('context', 'Context', 'cyan', [{ text: estimate === null ? 'no reading yet' : `≈${kTokens(estimate)} estimated` }], breakdownLines, actions)
+          }
           const percent = (head.tokens / head.limit) * 100
           const compactAt = rows?.compactAt ?? null
           const lines: PanelLine[] = [
@@ -1742,18 +1797,7 @@ export const register: Register = on => {
               alt: `Context over the last ${count} readings, ${label} on the last`,
             })
           }
-          if (breakdownShown.length > 0) {
-            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] ?? BREAKDOWN_COLORS[0]
-            const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
-            lines.push({ kind: 'picture', svg: stackSvg(breakdownShown.map(row => row.tokens), breakdownShown.map((_, index) => colorOf(index)), width, 8) })
-            for (const [index, row] of breakdownShown.entries()) {
-              lines.push({
-                kind: 'text',
-                left: [{ text: '■ ', color: paint(colorOf(index)) }, { text: row.name }],
-                right: [{ text: kTokens(row.tokens), bold: true }, { text: `${String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(4)}%`, dim: true, mono: true }],
-              })
-            }
-          }
+          lines.push(...breakdownLines)
           return panel('context', 'Context', 'cyan', [{ text: `${kTokens(head.tokens)} of ${kTokens(head.window)}` }], lines, actions)
         })(),
         usage: panel(
@@ -1971,13 +2015,13 @@ export const register: Register = on => {
         <Box flexDirection="column" gap="md">
           {resumeCard}
           {o.shown.includes('account') && panels.account}
+          {controls}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="now-box" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
                 {drawRuns('now', nowLine(actNow, now, work))}
               </Text>
             </Box>
-            {button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
           </Box>
           {tiles.length > 0 && (
             <Box key="gauges" flexDirection="column" gap="md">
@@ -1996,7 +2040,8 @@ export const register: Register = on => {
         <Text key="now" wrap="truncate-end">
           {drawRuns('now', nowLine(actNow, now, work))}
         </Text>
-        {o.shown.map(name => byName[name])}
+        {!o.shown.includes('account') && controls}
+        {o.shown.map(name => (name === 'account' ? [byName[name], controls] : byName[name]))}
         {!o.shown.includes('context') && actions}
       </Box>
     )
@@ -2093,7 +2138,12 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   // its own until it fits.
   const where = await read($, place)
   const turnsNow = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
+  const layout = (await live($)).bandLayout
+  const engineNow = await read($, engine)
+  const doing = await read($, activity)
+  const inFlight = summary === null || summary.isFinished ? [] : summary.tasks.filter(task => task.state === 'assigned' && task.round !== null)
   const band: BandInput = {
+    lines: layout,
     cwd: where?.cwd ?? null,
     root: where?.root ?? null,
     home: where?.home ?? null,
@@ -2104,7 +2154,22 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
     agents: running.length,
     shells: { count: background.length, longest: background.reduce((most, shell) => Math.max(most, now - shell.startedAt), 0) },
     now,
-    isBackground: (await read($, activity)).kind === 'background',
+    model: engineNow.model,
+    effort: engineNow.effort,
+    style: engineNow.style ?? null,
+    cache: engineNow.cache,
+    usd: head?.usd ?? null,
+    turn:
+      doing.kind === 'running'
+        ? { kind: 'running', since: doing.turnStartedAt ?? doing.since, tool: doing.tool }
+        : doing.kind === 'waiting' || doing.kind === 'asking' || doing.kind === 'failed'
+          ? { kind: doing.kind, since: doing.since, tool: null }
+          : null,
+    run:
+      summary === null || summary.isFinished
+        ? null
+        : { done: summary.done, total: summary.total, round: inFlight.length === 1 ? (inFlight[0]?.round ?? null) : null, blocked: summary.tasks.filter(task => task.state === 'blocked').length },
+    isBackground: doing.kind === 'background',
   }
   const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
   const warning: Run[] = [
@@ -2123,8 +2188,9 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 
   if (isDesktop) {
     const w = svgWidth(room - 4)
+    const picked = [...layout[0], ...layout[1]]
     const meters: BandMeter[] = [
-      ...(head === null
+      ...(head === null || !picked.includes('ctx')
         ? []
         : [
             {
@@ -2136,7 +2202,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
               note: turnsNow === null ? [] : [{ text: `≈${turnsNow} ${turnsNow === 1 ? 'turn' : 'turns'}`, color: turnsNow <= 3 ? 'warning' : undefined }],
             },
           ]),
-      ...band.limits.map((limit): BandMeter => {
+      ...band.limits.filter(limit => picked.includes(limitLabel(limit.kind) as BandSegment)).map((limit): BandMeter => {
         const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
         return {
           key: limitLabel(limit.kind),
@@ -2154,16 +2220,21 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
                   : [{ text: `resets ${duration(limit.resetsAt - now) || 'now'}` }],
         }
       }),
+      ...(engineNow.cache === null || !picked.includes('cache')
+        ? []
+        : [{ key: 'Cache', percent: engineNow.cache * 100, share: engineNow.cache, color: rampColor(100 - engineNow.cache * 100), tick: null, note: [] }]),
     ]
+    // The picked readings that are words, not meters, in the order picked.
+    const said = bandLines({ ...band, lines: [picked.filter(name => BAND_WORDS.includes(name)), []] }, 0)[0]
     const facts: PanelRun[] = [
-      ...(running.length === 0 ? [] : [{ text: '● ', color: 'green' }, { text: `${running.length} ${running.length === 1 ? 'agent' : 'agents'} running` }, { text: '   ' }]),
-      ...(background.length === 0
+      ...(running.length === 0 || !picked.includes('agents') ? [] : [{ text: '● ', color: 'green' }, { text: `${running.length} ${running.length === 1 ? 'agent' : 'agents'} running` }, { text: '   ' }]),
+      ...(background.length === 0 || !picked.includes('shells')
         ? []
         : [{ text: '$ ', color: 'yellow', mono: true }, { text: `${background.length} ${background.length === 1 ? 'shell' : 'shells'}` }, { text: ` · longest ${shellAge(band.shells.longest)}`, dim: true }, { text: '   ' }]),
-      ...(where === null ? [] : [{ text: where.root === null ? (where.cwd.split(/[\\/]/).pop() ?? where.cwd) : repoName(where.remote ?? null, where.root), bold: true }]),
+      ...(where === null || !picked.includes('dir') ? [] : [{ text: where.root === null ? (where.cwd.split(/[\\/]/).pop() ?? where.cwd) : repoName(where.remote ?? null, where.root), bold: true }]),
     ]
     const chips: PanelRun[] =
-      git === null
+      git === null || !picked.includes('git')
         ? []
         : [
             pill(`⎇ ${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ''}${git.behind > 0 ? ` ↓${git.behind}` : ''}`, 'magenta'),
@@ -2182,6 +2253,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
       },
     ]
     const rest: PanelLine[] = [
+      ...(said.length > 0 ? [{ kind: 'text', left: said } as PanelLine] : []),
       ...(facts.length > 0 ? [{ kind: 'text', left: facts } as PanelLine] : []),
       ...(chips.length > 0 ? [{ kind: 'chips', chips } as PanelLine] : []),
       ...(warning.length > 0 ? [{ kind: 'text', left: warning.map(run => ({ ...run, color: run.color === undefined ? undefined : 'red' })) } as PanelLine] : []),
@@ -3234,7 +3306,12 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
 
 // Reads the status line's figures (free without a breakdown) and, past the
 // budget in a dforge session, tells the model once.
-async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number | undefined): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
+async function refresh(
+  $: EngineInterface,
+  tuning: Tuning,
+  compactWindow: number | undefined,
+  { isShownOnly = false } = {},
+): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
   const { handoffTokens, nudgeModel } = tuning
   const figures = await $.session.usage()
   const tokens = figures.context.tokens
@@ -3265,6 +3342,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
     if (before?.tokens !== tokens) await update($, trend, readings => [...readings, tokens].slice(-TREND_LENGTH))
   }
 
+  if (isShownOnly) return
   const level = levelOf(tokens, limit, tuning.warnAt)
   const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd }, isPast: level === 'handoff' }
   if (level !== 'handoff') {
@@ -3558,6 +3636,19 @@ async function reseatPane($: EngineInterface, before: Live['layout']) {
 async function refreshDetail($: EngineInterface) {
   S.detailAt = await $.clock.now()
   await readPlace($)
+  await readBreakdown($)
+  try {
+    const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
+    const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
+    if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
+  } catch (error) {
+    // A large repository can outrun the timeout: its last reading stands rather than a blank card.
+    if (!TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
+  }
+}
+
+/** The /context breakdown, estimated locally: no process, and there before any response. */
+async function readBreakdown($: EngineInterface) {
   try {
     const figures = await $.session.usage({ breakdown: 'summary' })
     const detail = figures.context.breakdown
@@ -3569,19 +3660,12 @@ async function refreshDetail($: EngineInterface) {
           .slice(0, MAX_BREAKDOWN_ROWS)
           .map(row => ({ name: row.name, tokens: row.tokens })),
         compactAt: detail.isAutoCompactEnabled ? (detail.autoCompactThreshold ?? null) : null,
+        total: detail.totalTokens,
       }
       if (JSON.stringify(await read($, breakdown)) !== JSON.stringify(next)) await update($, breakdown, () => next)
     }
   } catch {
     // No breakdown on this host: the pane shows the totals alone.
-  }
-  try {
-    const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
-    const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
-    if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
-  } catch (error) {
-    // A large repository can outrun the timeout: its last reading stands rather than a blank card.
-    if (!TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
   }
 }
 
@@ -3647,6 +3731,18 @@ async function readEngine($: EngineInterface) {
     await update($, engine, now => ({ ...now, model: now.model ?? model, effort: now.effort ?? effort }))
   } catch {
     // The first request fills them in.
+  }
+  await readStyle($)
+}
+
+// The output style from the merged settings; "default", or none set, is null.
+async function readStyle($: EngineInterface) {
+  try {
+    const setting = ((await $.settings.read()) as { outputStyle?: unknown }).outputStyle
+    const style = typeof setting === 'string' && setting !== '' && setting.toLowerCase() !== 'default' ? setting : null
+    if ((await read($, engine)).style !== style) await update($, engine, now => ({ ...now, style }))
+  } catch {
+    // The band shows no style.
   }
 }
 

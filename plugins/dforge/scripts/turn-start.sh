@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # UserPromptSubmit hook: stamp the start of this session's turn, so the Stop
 # hook (scripts/turn-end.sh) can tell whether this turn wrote a plan's ledger,
-# and record the branch heads it starts from, so it can tell whether the turn
-# moved one without a plan.
+# and record the time and the branch heads it starts from, so it can tell
+# whether the turn ran a dforge skill and moved a branch without a plan.
 # Prints nothing and always exits 0; without jq or a session id it does nothing,
 # and turn-end.sh then has no stamp and checks nothing.
 set -uo pipefail
@@ -17,6 +17,7 @@ turns_dir="${HOME:-}/.claude/dforge/sessions/turns"
 mkdir -p "$turns_dir" 2>/dev/null || exit 0
 stamp="${turns_dir}/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 touch "$stamp" 2>/dev/null || true
+date -u +%Y-%m-%dT%H:%M:%S.000Z > "$stamp.at" 2>/dev/null || true
 # The resume time session-start.sh wrote is read for the whole session; a
 # session that outlives the prune below would otherwise lose it.
 [ ! -f "$stamp.since" ] || touch "$stamp.since" 2>/dev/null || true
