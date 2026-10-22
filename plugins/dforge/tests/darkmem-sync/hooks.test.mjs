@@ -27,6 +27,21 @@ const fit = (input, lines, chars) => bash(["-c", '. "$1"; _darkmem_fit "$2" "$3"
 
 // The hooks must export the session id themselves, so the test environment
 // carries none.
+// A killed process can outlive its kill by a moment, longest on Windows.
+async function assertGone(pidFile) {
+  const pid = Number(fs.readFileSync(pidFile, "utf8"));
+  for (let i = 0; i < 50; i++) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (error.code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.fail("the command's child was killed too");
+}
+
 function hookEnv(home) {
   const env = { ...home.env };
   delete env.DFORGE_SESSION_ID;
@@ -247,8 +262,7 @@ test("the watchdog bounds a command and its children where GNU timeout is missin
   assert.ok(Date.now() - started < 10000, "the command was stopped at its bound");
   assert.notEqual(slow.code, 0);
   assert.equal(slow.stderr, "", "no job-control notice reaches stderr");
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
 test("_darkmem_bounded falls back to the watchdog where GNU timeout is missing", { skip: process.platform === "win32" && "file symbolic links need privileges on Windows" }, async () => {
@@ -264,8 +278,7 @@ test("_darkmem_bounded falls back to the watchdog where GNU timeout is missing",
   assert.notEqual(result.code, 9, "timeout must not be on the trimmed PATH");
   assert.ok(Date.now() - started < 10000, "the watchdog stopped the command at its bound");
   assert.notEqual(result.code, 0);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
 // Ignores SIGTERM, as does its child: only SIGKILL stops it before it ends by itself.
@@ -278,8 +291,7 @@ test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command",
   const result = await bash(["-c", `. "$1"; _darkmem_watchdog 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
   assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
   assert.notEqual(result.code, 0);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
 test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: !hasGnuTimeout && "GNU timeout is not on PATH" }, async () => {
@@ -289,8 +301,7 @@ test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", 
   const result = await bash(["-c", `. "$1"; _darkmem_bounded 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
   assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
   assert.notEqual(result.code, 0);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
 test("a timeout that is not GNU's leaves the bound to the watchdog", async () => {
@@ -303,8 +314,7 @@ test("a timeout that is not GNU's leaves the bound to the watchdog", async () =>
   const result = await bash(["-c", `PATH="$(cygpath -u "$3" 2>/dev/null || printf '%s' "$3"):$PATH"; . "$1"; _darkmem_bounded 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile, dir], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
   assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
   assert.notEqual(result.code, 0);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
 test("the watchdog leaves the caller's job-control setting as it found it", async () => {
