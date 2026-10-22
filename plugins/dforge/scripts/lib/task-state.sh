@@ -165,10 +165,8 @@ dr_task_update() {
 
 dr_task_lock() {
   local lock="$DR_TASK_ROOT/run.lock"
-  if ! mkdir -- "$lock" 2>/dev/null; then
-    dr_lock_reclaim "$lock" && mkdir -- "$lock" 2>/dev/null ||
-      { dr_state_error 'worktree run lock exists; confirm prior writers stopped before reconciliation'; return 2; }
-  fi
+  dr_lock_take "$lock" ||
+    { dr_state_error 'worktree run lock exists; confirm prior writers stopped before reconciliation'; return 2; }
   dr_lock_claim "$lock" || { dr_state_error 'cannot record the run lock owner'; return 2; }
   DR_TASK_LOCK="$lock"
 }

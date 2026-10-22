@@ -210,6 +210,19 @@ check "no flock: concurrent amendments both numbered apart" \
   "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
 check "no flock: concurrent amendments both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race-mkdir/amendments.md")" "2"
 check "no flock: the lock directory is gone" "$(find "$REPO" -name '*.lockd' | grep -c .)" "0"
+# A mkdir that answers 0 for a directory that exists, as uutils' mkdir does to
+# more than one of several shells racing for one: the claim still admits one.
+LYING="$TMP/lying-mkdir"
+mkdir -p "$LYING"
+printf '#!%s\n"%s" "$@" 2>/dev/null\nexit 0\n' "$BASH" "$(type -P mkdir)" > "$LYING/mkdir"
+chmod +x "$LYING/mkdir"
+cp docs/plan.md docs/race-lying.md
+PATH="$LYING:$PATH" DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-lying.md r1.md > "$TMP/race1" 2>&1 &
+PATH="$LYING:$PATH" DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-lying.md r2.md > "$TMP/race2" 2>&1 &
+wait
+check "a mkdir that is not exclusive: concurrent amendments numbered apart" \
+  "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
+check "a mkdir that is not exclusive: both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race-lying/amendments.md")" "2"
 
 # A write that fails is reported, never "amended".
 mkdir -p "$TMP/failcp"
