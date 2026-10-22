@@ -28,7 +28,6 @@ import {
   agentGroups,
   bar,
   billingLabel,
-  bottomRule,
   budgetFor,
   collapsedFrom,
   collapsedToggled,
@@ -54,7 +53,6 @@ import {
   limitForecast,
   limitLabel,
   modelName,
-  MODE_LABEL_RESERVE,
   nowLine,
   parseFinish,
   parseLedger,
@@ -120,9 +118,6 @@ const BUTTON_REST = 'inactive'
 const COMPACT_ROWS = 5
 // The first Claude Code that takes styled children in a Button.
 const UNDERLINE_SINCE = '2.1.295'
-// The first Claude Code the box below the prompt was probed on. An older one
-// keeps the minimized band above the prompt; an unknown one gets the box.
-const PROMPT_HINT_SINCE = '2.1.304'
 // The most /context categories the pane lists (breakdownRows caps it lower).
 const MAX_BREAKDOWN_ROWS = 12
 // Below this the band drops its frame.
@@ -2047,14 +2042,13 @@ export const register: Register = on => {
     )
   })
 
-  // Minimized off the terminal, or on one too old for the box below the prompt,
-  // the band sits above the prompt in place of the
-  // pane. A handoff to resume rides above it, or alone while the pane is open.
+  // Minimized, the band sits above the prompt in place of the pane. A handoff
+  // to resume rides above it, or alone while the pane is open.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const o = await live($)
     const offer = await offerNow($, await $.clock.now())
-    const band = o.isMinimized && !(await drawsBelowPrompt($, e)) ? await drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), e.props.bodyColumns) : null
+    const band = o.isMinimized ? await drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), e.props.bodyColumns) : null
     if (offer === null) return band ?? next(e)
     const { Box } = $.ui.resolve(e)
     return (
@@ -2063,15 +2057,6 @@ export const register: Register = on => {
         {band}
       </Box>
     )
-  })
-
-  // Minimized on the terminal, the band is a box below the prompt in the hint
-  // line's place, after the permission-mode label. It draws while a turn runs:
-  // the Now state is what it is there for.
-  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    if (!(await drawsBelowPrompt($, e)) || !(await live($)).isMinimized) return next(e)
-    const room = e.viewport === undefined ? FRAME_MIN_COLUMNS - 1 : Math.max(10, e.viewport.columns - 2 - MODE_LABEL_RESERVE)
-    return drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), room, e.props.hint)
   })
 }
 
@@ -2105,11 +2090,8 @@ const AGENT_MARKS: Record<AgentGroupKey, { mark: string; color: string }> = {
   done: { mark: '✓', color: 'green' },
 }
 
-/**
- * The minimized cockpit's band, `room` cells wide: drawn in the pane, above
- * the prompt, or below it with the engine's `hint` set into its bottom rule.
- */
-async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt' | 'PromptHint'>, onExpand: () => unknown, room: number, hint: string | null = null) {
+/** The minimized cockpit's band, `room` cells wide: drawn in the pane or above the prompt. */
+async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt'>, onExpand: () => unknown, room: number) {
   const table = $.ui.resolve(e)
   const { Box, Button, Text } = table
   const Svg = e.surface === 'desktop' && 'Svg' in table ? table.Svg : undefined
@@ -2316,7 +2298,6 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   const top = tops.find(runs => runsWidth(runs) <= room0 - 1) ?? []
   const dashes = Math.max(1, room0 - runsWidth(top) - (top.length > 0 ? 0 : -1))
   const lines = [one, two].filter(line => line.length > 0)
-  const bottom = bottomRule(hint, room)
 
   return (
     <Box flexDirection="column">
@@ -2345,14 +2326,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
       {warning.length > 0 && row('band-warning', warning)}
       {isFramed && (
         <Text key="frame-bottom" color={tint} wrap="truncate-end">
-          {bottom.lead}
-          <Text dimColor>{bottom.label}</Text>
-          {bottom.tail}
-        </Text>
-      )}
-      {!isFramed && hint !== null && hint.trim() !== '' && (
-        <Text key="band-hint" dimColor wrap="truncate-end">
-          {hint}
+          {'╰' + '─'.repeat(Math.max(0, room - 2)) + '╯'}
         </Text>
       )}
     </Box>
@@ -2400,7 +2374,6 @@ const S = {
   // Whether this Claude Code draws a Button's label from styled children,
   // so the hotkey's letter can be underlined in it.
   canUnderline: null as boolean | null,
-  hasPromptHint: null as boolean | null,
   // The person closed the pane this session: a desktop joining reopens nothing.
   isClosedByPerson: false,
   // The auto run's scheduled stage, at most one.
@@ -3794,17 +3767,9 @@ async function readVersion($: EngineInterface) {
   try {
     const { base } = await $.session.version()
     S.canUnderline = isAtLeast(base, UNDERLINE_SINCE)
-    S.hasPromptHint = isAtLeast(base, PROMPT_HINT_SINCE)
   } catch {
     S.canUnderline = false
-    S.hasPromptHint = true
   }
-}
-
-async function drawsBelowPrompt($: EngineInterface, e: { surface?: string }) {
-  if (e.surface !== 'terminal') return false
-  if (S.hasPromptHint === null) await readVersion($)
-  return S.hasPromptHint === true
 }
 
 function clip(text: string, width: number): string {

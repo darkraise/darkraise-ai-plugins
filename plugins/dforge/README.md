@@ -688,12 +688,9 @@ breakdown every ten seconds. Nothing is read while the cockpit is hidden. The
 account, Remote Control's `/config` row and the usage limits keep their own
 timing.
 
-**Minimize** (`m`) closes the pane. In the terminal the cockpit then draws as a
-framed box directly below the prompt, in place of the hint line and after the
-permission-mode label, with Claude Code's own hint (`esc to interrupt`, `? for
-shortcuts`) set into its bottom rule; it leaves room for the widest mode label,
-so beside a short one it ends before the right edge. In the desktop app it
-draws as a band directly above the prompt, across the transcript's width.
+**Minimize** (`m`) closes the pane. The cockpit then draws as a band directly
+above the prompt, across the transcript's width, in the terminal and the
+desktop app alike.
 **Expand** on the top rule opens the pane again, and so does `/cockpit`. Each
 saves the `layout` setting, so the next session opens the same way: a
 minimized cockpit starts with the box or band and no pane. `/cockpit settings`
@@ -830,7 +827,7 @@ The same settings can be set with
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
 | Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
-| Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and a box below the prompt in the terminal (the band above it in the desktop app). **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
+| Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | Cockpit | `density` | `detailed` | `detailed`: cards, charts and lists. `dense`: one line per section. **Dense** and **Detailed** in the pane set it. |
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band draws the lines the Minimized tab picks instead. |
 | Cockpit | `collapsed` | empty | Sections drawn as their title row and headline only, comma-separated, from the same eight names. Pressing a section's title collapses or expands it and saves this setting. Empty expands all eight. |

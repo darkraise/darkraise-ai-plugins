@@ -16,7 +16,6 @@ import {
   attributionIn,
   bar,
   billingLabel,
-  bottomRule,
   budgetFor,
   cellWidth,
   collapsedFrom,
@@ -40,7 +39,6 @@ import {
   levelOf,
   limitForecast,
   modelName,
-  MODE_LABEL_RESERVE,
   nowLine,
   parseFinish,
   parseLedger,
@@ -121,9 +119,8 @@ const PANE = {
   requestId: 'dforge',
   props: { title: 'Cockpit', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
-// Where a minimized cockpit draws: below the prompt on the terminal, above it on the desktop.
-const minimized = (surface: (typeof SURFACES)[number], viewport = { columns: 120, rows: 40, isFullscreen: false }) =>
-  surface === 'terminal' ? { ...HINT, surface, viewport } : { ...BAND, surface, viewport }
+// Where a minimized cockpit draws: above the prompt.
+const minimized = (surface: (typeof SURFACES)[number], viewport = { columns: 120, rows: 40, isFullscreen: false }) => ({ ...BAND, surface, viewport })
 const PORCELAIN = '# branch.oid abc1234def\n# branch.head feat/pane\n# branch.ab +2 -1\n1 .M N... 100644 100644 100644 a b src/a.ts\n? notes.md\n'
 
 // The /context breakdown, as a summary estimate answers it.
@@ -1365,61 +1362,34 @@ describe('minimized band', () => {
     expect(await ui.find({ type: 'Text', text: /✗ 1 refused/ })).toBeDefined()
   })
 
-  test('draws below the prompt on the terminal, the hint set into its bottom rule', async ($, on) => {
+  test('draws above the prompt on the terminal across its width, the hint line left alone', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on, configured({ layout: 'compact' }))
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     await $.session.measure(MEASURE)
-    const above = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await above.find({ key: 'band-expand' })).toBeUndefined()
-    await above.unmount()
-    const box = await $.ui.mount(minimized('terminal'))
-    expect(await box.find({ key: 'band-expand' })).toBeDefined()
-    expect(await box.find({ type: 'Text', text: /^╭─ me@example\.com/ })).toBeDefined()
-    expect(await box.find({ type: 'Text', text: /^╰─ \? for shortcuts ─+╯$/ })).toBeDefined()
-    const rows = (await box.findAll({ type: 'Text' })).map(one => one.text).filter(text => /^[│╰].*[│╯]$/.test(text))
+    const band = await $.ui.mount(minimized('terminal'))
+    expect(await band.find({ key: 'band-expand' })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: /^╭─ me@example\.com/ })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: /^╰─+╯$/ })).toBeDefined()
+    const rows = (await band.findAll({ type: 'Text' })).map(one => one.text).filter(text => /^[│╰].*[│╯]$/.test(text))
     expect(rows.length).toBeGreaterThan(2)
-    for (const row of rows) expect([...row].length).toBe(120 - 2 - MODE_LABEL_RESERVE)
-  })
-
-  test('stays above the prompt on a terminal older than the box below it', async ($, on) => {
-    world(on, { ...SIGNED_IN, version: '2.1.303' })
-    signedIn(on, configured({ layout: 'compact' }))
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    await $.session.measure(MEASURE)
-    const above = await $.ui.mount({ ...BAND, surface: 'terminal', viewport: { columns: 120, rows: 40, isFullscreen: false } })
-    expect(await above.find({ key: 'band-expand' })).toBeDefined()
-    await above.unmount()
-    const hint = await $.ui.mount(minimized('terminal'))
+    for (const row of rows) expect([...row].length).toBe(BAND.props.bodyColumns)
+    await band.unmount()
+    const hint = await $.ui.mount({ ...HINT, surface: 'terminal' })
     expect(await hint.find({ key: 'band-expand' })).toBeUndefined()
     expect(await hint.find({ type: 'Text', text: /me@example\.com/ })).toBeUndefined()
   })
 
-  for (const version of [undefined, '2.1.303']) {
-    test(`leaves the slot above the prompt to a survey on a ${version === undefined ? 'current' : version} terminal`, async ($, on) => {
-      world(on, { ...SIGNED_IN, version })
-      signedIn(on, configured({ layout: 'compact' }))
-      await $.session.start(START)
-      await $.tool.call({ tool: 'Bash', command: 'ls' })
-      await $.session.measure(MEASURE)
-      const viewport = { columns: 120, rows: 40, isFullscreen: false }
-      const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal', viewport })
-      expect(await band.find({ key: 'band-expand' })).toBeUndefined()
-      expect(await band.find({ key: 'engine' })).toBeDefined()
-    })
-  }
-
-  test('takes unframed lines below the prompt when no width is reported', async ($, on) => {
+  test('leaves the slot above the prompt to a survey', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on, configured({ layout: 'compact' }))
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const box = await $.ui.mount({ ...HINT, surface: 'terminal' })
-    expect(await box.find({ type: 'Text', text: /╭/ })).toBeUndefined()
-    expect(await box.find({ type: 'Text', text: 'me@example.com' })).toBeDefined()
-    expect(await box.find({ type: 'Text', text: '? for shortcuts' })).toBeDefined()
+    await $.session.measure(MEASURE)
+    const band = await $.ui.mount({ ...minimized('terminal'), props: { ...BAND.props, hasSurvey: true } })
+    expect(await band.find({ key: 'band-expand' })).toBeUndefined()
+    expect(await band.find({ key: 'engine' })).toBeDefined()
   })
 
   test('leads the line with the shells with ◐ while background work runs', async ($, on) => {
@@ -2634,35 +2604,6 @@ describe('band lines', () => {
     expect(text(bandLines({ ...input, isBackground: true }, 0)[0])).toBe('◐ ~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  ● 1 agent  ·  $ 2 shells · longest 12m')
     expect(text(bandLines({ ...input, isBackground: false }, 0)[0])).toBe('~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  ● 1 agent  ·  $ 2 shells · longest 12m')
     expect(text(bandLines({ ...input, isBackground: true, lines: [['ctx'], ['shells']] }, 0)[1])).toBe('◐ $ 2 shells · longest 12m')
-  })
-
-  test('draws a bottom rule exactly as wide as asked, down to none', () => {
-    const whole = (rule: { lead: string; label: string; tail: string }) => rule.lead + rule.label + rule.tail
-    expect(whole(bottomRule('? for shortcuts', 0))).toBe('')
-    expect(whole(bottomRule('? for shortcuts', 1))).toBe('╰')
-    expect(whole(bottomRule(null, 1))).toBe('╰')
-    expect(whole(bottomRule('? for shortcuts', 2))).toBe('╰╯')
-    for (let width = 0; width <= 12; width += 1) expect(cellWidth(whole(bottomRule('? for shortcuts', width)))).toBe(width)
-  })
-
-  test('sets a label into the bottom rule only from ten cells, where four are left for it', () => {
-    const whole = (rule: { lead: string; label: string; tail: string }) => rule.lead + rule.label + rule.tail
-    expect(bottomRule('? for shortcuts', 9)).toEqual({ lead: '╰───────╯', label: '', tail: '' })
-    expect(bottomRule('? for shortcuts', 10)).toEqual({ lead: '╰─ ', label: '? f…', tail: ' ─╯' })
-    expect(whole(bottomRule('?', 10))).toBe('╰─ ? ────╯')
-    expect(whole(bottomRule('? for shortcuts', 3))).toBe('╰─╯')
-  })
-
-  test('sets a label into the bottom rule, cut to fit', () => {
-    const whole = (rule: { lead: string; label: string; tail: string }) => rule.lead + rule.label + rule.tail
-    expect(whole(bottomRule('? for shortcuts', 30))).toBe(`╰─ ? for shortcuts ${'─'.repeat(10)}╯`)
-    expect(whole(bottomRule('esc to interrupt and more', 20))).toBe('╰─ esc to interr… ─╯')
-    expect(whole(bottomRule(null, 10))).toBe('╰────────╯')
-    expect(whole(bottomRule('  ', 10))).toBe('╰────────╯')
-    for (const width of [10, 20, 30]) expect([...whole(bottomRule('esc to interrupt and more', width))].length).toBe(width)
-    expect(whole(bottomRule('日本語のヒント', 14))).toBe('╰─ 日本語… ──╯')
-    for (const width of [12, 20, 30]) expect(cellWidth(whole(bottomRule('日本語のヒントです', width)))).toBe(width)
-    expect(MODE_LABEL_RESERVE).toBe(29)
   })
 })
 

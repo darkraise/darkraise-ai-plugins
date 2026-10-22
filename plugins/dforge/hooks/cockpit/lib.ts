@@ -619,26 +619,6 @@ export function fitBand(input: BandInput, width: number): [Run[], Run[]] {
   return [fit(0), fit(1)]
 }
 
-/**
- * Cells the box below the prompt leaves for Claude Code's permission-mode
- * label on its row: the widest, `⏵⏵ bypass permissions on · ` after a 2-cell
- * margin, measured on Claude Code 2.1.304. The live mode cannot be read at
- * draw time, so every mode gets the widest.
- */
-export const MODE_LABEL_RESERVE = 29
-
-/** The band's bottom rule, `width` cells wide, with `label` set into it after `╰─ ` and cut to fit; no label draws a plain rule. */
-export function bottomRule(label: string | null, width: number): { lead: string; label: string; tail: string } {
-  const text = (label ?? '').trim()
-  const room = width - 6
-  if (width < 2) return { lead: '╰'.repeat(Math.max(0, width)), label: '', tail: '' }
-  if (text === '' || room < 4) return { lead: `╰${'─'.repeat(width - 2)}╯`, label: '', tail: '' }
-  const shown = runsCut([{ text: text.split('\n')[0] ?? '' }], room)
-    .map(run => run.text)
-    .join('')
-  return { lead: '╰─ ', label: shown, tail: ` ${'─'.repeat(Math.max(1, width - 5 - cellWidth(shown)))}╯` }
-}
-
 // A terminal draws a combining mark, a joiner or a variation selector in no
 // cell of its own, and an emoji or an East Asian wide or fullwidth character in
 // two. An emoji drawn as text by default (⚠) takes two once U+FE0F asks for its
