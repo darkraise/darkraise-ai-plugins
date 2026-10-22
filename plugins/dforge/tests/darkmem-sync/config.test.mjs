@@ -9,6 +9,8 @@ import { ConfigError, resolveStores, runKey, storesPath, writeApplied } from "..
 import { KEY, git, makeHome, makeRepo, scratch, write } from "./helpers.mjs";
 
 const MODULE = fileURLToPath(new URL("../../scripts/lib/darkmem-config.mjs", import.meta.url));
+// What an import names: a C:\… path reads as a URL scheme.
+const MODULE_URL = new URL("../../scripts/lib/darkmem-config.mjs", import.meta.url).href;
 const applied = stores => [stores.documents.applied, stores.progress.applied];
 const mapped = (repo, entry = {}, global = {}) => ({ darkmemEnabled: true, ...global, darkmem: { url: "http://127.0.0.1:9", repos: { [repo]: { project: "proj", ...entry } } } });
 
@@ -156,7 +158,7 @@ test("two sessions writing stores.json at once keep both repositories' records",
   const writer = repo => new Promise((resolve, reject) => {
     const code = `
       import fs from "node:fs";
-      import { writeApplied } from ${JSON.stringify(MODULE)};
+      import { writeApplied } from ${JSON.stringify(MODULE_URL)};
       const read = fs.readFileSync;
       fs.readFileSync = function (file, ...rest) {
         const data = read.call(this, file, ...rest);

@@ -13,7 +13,8 @@ check() { # check <name> <got> <want>
 }
 
 TMP="$(mktemp -d)"
-if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# Long, as git prints it: the runner's TEMP is an 8.3 short name.
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m -l "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"

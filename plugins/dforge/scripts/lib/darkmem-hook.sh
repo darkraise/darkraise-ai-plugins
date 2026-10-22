@@ -38,9 +38,11 @@ _darkmem_watchdog() {
 }
 
 # _darkmem_bounded SECONDS CMD... — CMD under GNU timeout, else the watchdog;
-# both escalate to SIGKILL after the same grace period.
+# both escalate to SIGKILL after the same grace period. Only GNU timeout will
+# do: it signals CMD's whole process group, where uutils' timeout (0.10.0)
+# signals CMD alone and leaves its children running.
 _darkmem_bounded() {
-  if command -v timeout >/dev/null 2>&1; then
+  if timeout --version 2>/dev/null | grep -q 'GNU coreutils'; then
     timeout -k "${DARKMEM_KILL_GRACE:-5}" "$@"
   else
     _darkmem_watchdog "$@"

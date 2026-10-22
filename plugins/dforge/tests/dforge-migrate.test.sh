@@ -15,6 +15,23 @@ exists() { [ -e "$1" ] && echo yes || echo no; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# Under Git Bash, git and node name TMP in Windows forms (git's long C:/…, the
+# 8.3 short name TEMP carries, node's backslashes): migrate prints its output in
+# this suite's spelling. The forms are found here, before a test narrows PATH.
+TMP_FORMS=()
+if command -v cygpath >/dev/null 2>&1; then
+  TMP_FORMS=("$(cygpath -m -l "$TMP")" "$(cygpath -m "$TMP")" "$(cygpath -u -l "$TMP")")
+fi
+migrate() { # migrate SCRIPT [ARGS…] — run SCRIPT; its output, stderr included, in TMP's spelling
+  local text status form
+  text=$(bash "$@" 2>&1); status=$?
+  if [ "${#TMP_FORMS[@]}" -gt 0 ]; then
+    text=${text//\\//}
+    for form in "${TMP_FORMS[@]}"; do text=${text//"$form"/$TMP}; done
+  fi
+  printf '%s\n' "$text"
+  return "$status"
+}
 export HOME="$TMP/home"; mkdir -p "$HOME"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
 
@@ -42,7 +59,7 @@ echo handoff > "$W/.superpowers/handoff/latest.md"
 WG=$(git -C "$W" rev-parse --absolute-git-dir)
 mkdir -p "$WG/dr-superpowers/tasks"
 
-out=$(bash "$FM" "$W" 2>&1); code=$?
+out=$(migrate "$FM" "$W" 2>&1); code=$?
 check "migrate: exit 0" "$code" "0"
 check "primary: .dforge holds the ledger" "$(cat "$R/.dforge/sdd/p1/progress.md" 2>/dev/null)" "ledger"
 check "primary: .superpowers gone" "$(exists "$R/.superpowers")" "no"
@@ -60,7 +77,7 @@ check "worktree: dr-superpowers gone" "$(exists "$WG/dr-superpowers")" "no"
 check "prints the commit the user must make" "$(grep -c "^commit: $R: the staged rename" <<<"$out")" "1"
 check "names the tracked ignore file" "$(grep -c "^commit: $R: .gitignore" <<<"$out")" "1"
 
-out=$(bash "$FM" "$R" 2>&1); code=$?
+out=$(migrate "$FM" "$R" 2>&1); code=$?
 check "second run: exit 0" "$code" "0"
 check "second run: nothing to migrate" "$out" "dforge-migrate: nothing to migrate in $R"
 
@@ -71,7 +88,7 @@ mkdir -p "$B/.superpowers" "$B/.dforge" "$B/docs/superpowers"
 echo old > "$B/.superpowers/clash.md"
 echo new > "$B/.dforge/clash.md"
 printf '.superpowers/\n' > "$B/.gitignore"
-out=$(bash "$FM" "$B" 2>&1); code=$?
+out=$(migrate "$FM" "$B" 2>&1); code=$?
 check "both: exit 1" "$code" "1"
 check "both: refusal names the differing file" "$(grep -c "refused: $B/.superpowers/clash.md differs from $B/.dforge/clash.md" <<<"$out")" "1"
 check "both: differing file kept in .superpowers" "$(cat "$B/.superpowers/clash.md")" "old"
@@ -79,7 +96,7 @@ check "both: .dforge file untouched" "$(cat "$B/.dforge/clash.md")" "new"
 check "both: untracked docs still moved" "$(exists "$B/docs/dforge")" "yes"
 check "both: the new pattern is added beside the old" "$(cat "$B/.gitignore")" $'.superpowers/\n.dforge/'
 rm "$B/.superpowers/clash.md"
-out=$(bash "$FM" "$B" 2>&1); code=$?
+out=$(migrate "$FM" "$B" 2>&1); code=$?
 check "both resolved: exit 0" "$code" "0"
 check "both resolved: .superpowers gone" "$(exists "$B/.superpowers")" "no"
 check "both resolved: the old pattern is replaced, not duplicated" "$(cat "$B/.gitignore")" ".dforge/"
@@ -93,7 +110,7 @@ echo b > "$M/.superpowers/sub/deep.md"
 echo same > "$M/.superpowers/same.md"
 echo same > "$M/.dforge/same.md"
 echo c > "$M/.dforge/only-new.md"
-out=$(bash "$FM" "$M" 2>&1); code=$?
+out=$(migrate "$FM" "$M" 2>&1); code=$?
 check "merge: exit 0" "$code" "0"
 check "merge: old-only file moved" "$(cat "$M/.dforge/only-old.md" 2>/dev/null)" "a"
 check "merge: nested old-only file moved" "$(cat "$M/.dforge/sub/deep.md" 2>/dev/null)" "b"
@@ -108,7 +125,7 @@ echo one > "$D/docs/superpowers/a.md"
 git -C "$D" add docs
 git -C "$D" commit -q -m docs
 echo two > "$D/docs/superpowers/a.md"
-out=$(bash "$FM" "$D" 2>&1); code=$?
+out=$(migrate "$FM" "$D" 2>&1); code=$?
 check "dirty docs: exit 1" "$code" "1"
 check "dirty docs: refused" "$(grep -c 'has uncommitted changes' <<<"$out")" "1"
 check "dirty docs: left in place" "$(cat "$D/docs/superpowers/a.md")" "two"
@@ -123,16 +140,16 @@ git -C "$G" add docs .gitignore
 git -C "$G" commit -q -m docs
 echo two > "$G/docs/superpowers/a.md"
 echo 'docs/superpowers/local/' >> "$G/.git/info/exclude"
-out=$(bash "$FM" "$G" 2>&1); code=$?
+out=$(migrate "$FM" "$G" 2>&1); code=$?
 check "partial: exit 1" "$code" "1"
 check "partial: .superpowers moved" "$(exists "$G/.dforge")" "yes"
 check "partial: .gitignore ignores both names" "$(cat "$G/.gitignore")" $'.superpowers/\n.dforge/'
 check "partial: info/exclude names both" "$(tail -n 2 "$G/.git/info/exclude" | tr '\n' ' ')" "docs/superpowers/local/ docs/dforge/local/ "
-out=$(bash "$FM" "$G" 2>&1)
+out=$(migrate "$FM" "$G" 2>&1)
 check "partial again: ignore files unchanged, nothing rewritten" "$(grep -c '^rewrote' <<<"$out")" "0"
 check "partial again: .gitignore not duplicated" "$(cat "$G/.gitignore")" $'.superpowers/\n.dforge/'
 git -C "$G" checkout -q -- docs
-out=$(bash "$FM" "$G" 2>&1); code=$?
+out=$(migrate "$FM" "$G" 2>&1); code=$?
 check "partial resolved: exit 0" "$code" "0"
 check "partial resolved: .gitignore holds only the new name" "$(cat "$G/.gitignore")" ".dforge/"
 check "partial resolved: info/exclude holds only the new name" "$(tail -n 1 "$G/.git/info/exclude")" "docs/dforge/local/"
@@ -161,7 +178,7 @@ printf '.forge/\n' > "$F/.gitignore"
 printf 'docs/forge/** linguist-documentation\n' > "$F/.gitattributes"
 git -C "$F" add .gitignore .gitattributes docs
 git -C "$F" commit -q -m docs
-out=$(bash "$FM" "$F" 2>&1); code=$?
+out=$(migrate "$FM" "$F" 2>&1); code=$?
 check "dr-forge: exit 0" "$code" "0"
 check "dr-forge: .dforge holds the ledger" "$(cat "$F/.dforge/sdd/p1/progress.md" 2>/dev/null)" "ledger"
 check "dr-forge: .forge gone" "$(exists "$F/.forge")" "no"
@@ -183,7 +200,7 @@ check "dr-forge: the docs move printed" "$(grep -cxF "moved $F/docs/forge -> $F/
 check "dr-forge: the git dir move printed" "$(grep -cxF "moved $F/.git/dr-forge -> $F/.git/dforge" <<<"$out")" "1"
 check "dr-forge: the plan rewrite printed" "$(grep -cxF "rewrote the plugin prefixes in $F/docs/dforge/plans/active.md" <<<"$out")" "1"
 check "dr-forge: the handoff rewrite printed" "$(grep -cxF "rewrote the plugin prefixes in $F/.dforge/handoff/latest.md" <<<"$out")" "1"
-out=$(bash "$FM" "$F" 2>&1); code=$?
+out=$(migrate "$FM" "$F" 2>&1); code=$?
 check "dr-forge again: exit 0" "$code" "0"
 check "dr-forge again: nothing to migrate" "$out" "dforge-migrate: nothing to migrate in $F"
 
@@ -193,11 +210,11 @@ repo "$FC"
 mkdir -p "$FC/docs/dforge/plans"
 printf '**Implementer:** dr-forge:impl-sonnet-low\n```bash\necho dr-forge:brainstorming\n```\nthen dr-forge:executing-plans\n' > "$FC/docs/dforge/plans/mixed.md"
 printf '```\ndr-forge:impl-sonnet-low\n```\n' > "$FC/docs/dforge/plans/fenced-only.md"
-out=$(bash "$FM" --dry-run "$FC" 2>&1); code=$?
+out=$(migrate "$FM" --dry-run "$FC" 2>&1); code=$?
 check "fenced, dry: exit 0" "$code" "0"
 check "fenced, dry: the mixed plan listed" "$(grep -cxF "would rewrite the plugin prefixes in $FC/docs/dforge/plans/mixed.md" <<<"$out")" "1"
 check "fenced, dry: a plan with prefixes only in a fence not listed" "$(grep -c "fenced-only.md" <<<"$out")" "0"
-out=$(bash "$FM" "$FC" 2>&1); code=$?
+out=$(migrate "$FM" "$FC" 2>&1); code=$?
 check "fenced: exit 0" "$code" "0"
 check "fenced: prefixes outside the fence rewritten, inside kept" "$(cat "$FC/docs/dforge/plans/mixed.md")" \
   $'**Implementer:** dforge:impl-sonnet-low\n```bash\necho dr-forge:brainstorming\n```\nthen dforge:executing-plans'
@@ -207,7 +224,7 @@ check "fenced: no rewrite reported for it" "$(grep -c "fenced-only.md" <<<"$out"
 # --- a fence closes only on its own character and length ---
 printf '````md\n```\ndr-forge:inner\n```\n````\nafter dr-forge:outer\n' > "$FC/docs/dforge/plans/long-fence.md"
 printf '~~~\ndr-forge:tilde\n~~~\nthen dr-forge:plain\n' > "$FC/docs/dforge/plans/tilde.md"
-out=$(bash "$FM" "$FC" 2>&1); code=$?
+out=$(migrate "$FM" "$FC" 2>&1); code=$?
 check "fence kinds: exit 0" "$code" "0"
 check "fence kinds: an inner three-backtick line does not close a four-backtick fence" "$(cat "$FC/docs/dforge/plans/long-fence.md")" \
   $'````md\n```\ndr-forge:inner\n```\n````\nafter dforge:outer'
@@ -215,15 +232,18 @@ check "fence kinds: a tilde fence keeps its prefixes" "$(cat "$FC/docs/dforge/pl
 
 # --- a CRLF fence closes ---
 printf '```\r\ndr-forge:inner\r\n```\r\nthen dr-forge:outer\r\n' > "$FC/docs/dforge/plans/crlf.md"
-out=$(bash "$FM" --dry-run "$FC" 2>&1)
+out=$(migrate "$FM" --dry-run "$FC" 2>&1)
 check "crlf fence, dry: listed" "$(grep -cxF "would rewrite the plugin prefixes in $FC/docs/dforge/plans/crlf.md" <<<"$out")" "1"
-out=$(bash "$FM" "$FC" 2>&1); code=$?
+out=$(migrate "$FM" "$FC" 2>&1); code=$?
 check "crlf fence: exit 0" "$code" "0"
-check "crlf fence: closes, the line after it rewritten" "$(cat "$FC/docs/dforge/plans/crlf.md")" $'```\r\ndr-forge:inner\r\n```\r\nthen dforge:outer\r'
+# Byte for byte: a command substitution need not keep every carriage return.
+printf '```\r\ndr-forge:inner\r\n```\r\nthen dforge:outer\r\n' > "$TMP/crlf.want"
+check "crlf fence: closes, the line after it rewritten" \
+  "$(cmp -s "$TMP/crlf.want" "$FC/docs/dforge/plans/crlf.md" && echo same || od -c "$FC/docs/dforge/plans/crlf.md")" "same"
 
 # --- a line opening with an inline code span is no fence ---
 printf '```x``` then dr-forge:one\ndr-forge:two\n```\ndr-forge:inner\n```\nafter dr-forge:three\n' > "$FC/docs/dforge/plans/span.md"
-out=$(bash "$FM" "$FC" 2>&1); code=$?
+out=$(migrate "$FM" "$FC" 2>&1); code=$?
 check "inline span: exit 0" "$code" "0"
 check "inline span: text around it rewritten, the real fence kept" "$(cat "$FC/docs/dforge/plans/span.md")" \
   $'```x``` then dforge:one\ndforge:two\n```\ndr-forge:inner\n```\nafter dforge:three'
@@ -234,7 +254,7 @@ repo "$T"
 mkdir -p "$T/.superpowers" "$T/.forge"
 echo a > "$T/.superpowers/a.md"
 echo b > "$T/.forge/b.md"
-out=$(bash "$FM" "$T" 2>&1); code=$?
+out=$(migrate "$FM" "$T" 2>&1); code=$?
 check "two states: exit 0" "$code" "0"
 check "two states: both merged" "$(cat "$T/.dforge/a.md" "$T/.dforge/b.md" 2>/dev/null | tr '\n' ' ')" "a b "
 check "two states: both gone" "$(exists "$T/.superpowers")$(exists "$T/.forge")" "nono"
@@ -247,11 +267,11 @@ echo old > "$TS/.forge/clash.md"
 git -C "$TS" add .forge
 git -C "$TS" commit -q -m state
 echo new > "$TS/.dforge/clash.md"
-out=$(bash "$FM" "$TS" 2>&1); code=$?
+out=$(migrate "$FM" "$TS" 2>&1); code=$?
 check "tracked state refused: exit 1" "$code" "1"
 check "tracked state refused: no commit line for it" "$(grep -c "^commit: $TS: the rename .forge/" <<<"$out")" "0"
 rm "$TS/.forge/clash.md"
-out=$(bash "$FM" "$TS" 2>&1); code=$?
+out=$(migrate "$FM" "$TS" 2>&1); code=$?
 check "tracked state resolved: exit 0" "$code" "0"
 check "tracked state resolved: .forge gone" "$(exists "$TS/.forge")" "no"
 check "tracked state resolved: the commit line names it" "$(grep -c "^commit: $TS: the rename .forge/ -> .dforge/ (git add -A .forge .dforge)$" <<<"$out")" "1"
@@ -261,10 +281,10 @@ ED="$TMP/empty-dirs"
 repo "$ED"
 mkdir -p "$ED/.forge/a/b" "$ED/.dforge" "$ED/.git/dr-forge/run.lock" "$ED/.git/dforge/tasks"
 echo x > "$ED/.forge/a/x.md"
-out=$(bash "$FM" --dry-run "$ED" 2>&1); code=$?
+out=$(migrate "$FM" --dry-run "$ED" 2>&1); code=$?
 check "empty dirs, dry: exit 0" "$code" "0"
 check "empty dirs, dry: the empty directory listed" "$(grep -cxF "would move $ED/.git/dr-forge/run.lock -> $ED/.git/dforge/run.lock" <<<"$out")" "1"
-out=$(bash "$FM" "$ED" 2>&1); code=$?
+out=$(migrate "$FM" "$ED" 2>&1); code=$?
 check "empty dirs: exit 0" "$code" "0"
 check "empty dirs: the nested empty directory kept" "$([ -d "$ED/.dforge/a/b" ] && echo yes || echo no)" "yes"
 check "empty dirs: the file beside it moved" "$(cat "$ED/.dforge/a/x.md" 2>/dev/null)" "x"
@@ -274,10 +294,10 @@ EF="$TMP/empty-dir-clash"
 repo "$EF"
 mkdir -p "$EF/.forge/d" "$EF/.dforge"
 echo file > "$EF/.dforge/d"
-out=$(bash "$FM" --dry-run "$EF" 2>&1); code=$?
+out=$(migrate "$FM" --dry-run "$EF" 2>&1); code=$?
 check "empty dir over a file, dry: exit 1" "$code" "1"
 check "empty dir over a file, dry: the refusal foretold" "$(grep -c "refused: $EF/.forge/d is a directory and $EF/.dforge/d is not" <<<"$out")" "1"
-out=$(bash "$FM" "$EF" 2>&1); code=$?
+out=$(migrate "$FM" "$EF" 2>&1); code=$?
 check "empty dir over a file: exit 1" "$code" "1"
 check "empty dir over a file: refused once" "$(grep -c "refused: " <<<"$out")" "1"
 check "empty dir over a file: both kept" "$([ -d "$EF/.forge/d" ] && cat "$EF/.dforge/d")" "file"
@@ -287,12 +307,12 @@ EM="$TMP/empty-old"
 repo "$EM"
 mkdir -p "$EM/.superpowers/sub" "$EM/.forge" "$EM/.dforge/sub"
 echo kept > "$EM/.dforge/kept.md"
-out=$(bash "$FM" --dry-run "$EM" 2>&1); code=$?
+out=$(migrate "$FM" --dry-run "$EM" 2>&1); code=$?
 check "empty old dirs, dry: exit 0" "$code" "0"
 check "empty old dirs, dry: the empty one listed" "$(grep -cxF "would move $EM/.forge -> $EM/.dforge" <<<"$out")" "1"
 check "empty old dirs, dry: the one holding a shared directory listed" "$(grep -cxF "would move $EM/.superpowers -> $EM/.dforge" <<<"$out")" "1"
 check "empty old dirs, dry: not nothing to migrate" "$(grep -c 'nothing to migrate' <<<"$out")" "0"
-out=$(bash "$FM" "$EM" 2>&1); code=$?
+out=$(migrate "$FM" "$EM" 2>&1); code=$?
 check "empty old dirs: exit 0" "$code" "0"
 check "empty old dirs: the real run moves the empty one" "$(grep -cxF "moved $EM/.forge -> $EM/.dforge" <<<"$out")" "1"
 check "empty old dirs: both gone" "$(exists "$EM/.superpowers")$(exists "$EM/.forge")" "nono"
@@ -303,11 +323,11 @@ repo "$HN"
 mkdir -p "$HN/.forge/handoff" "$HN/.dforge/handoff"
 printf 'old dr-forge:resume-execution\n' > "$HN/.forge/handoff/latest.md"
 printf 'new dr-forge:resume-execution\n' > "$HN/.dforge/handoff/latest.md"
-out=$(bash "$FM" --dry-run "$HN" 2>&1); code=$?
+out=$(migrate "$FM" --dry-run "$HN" 2>&1); code=$?
 check "refused note, dry: exit 1" "$code" "1"
 check "refused note, dry: the note left behind not listed" "$(grep -c "would rewrite the plugin prefixes in $HN/.forge/" <<<"$out")" "0"
 check "refused note, dry: the .dforge note listed" "$(grep -cxF "would rewrite the plugin prefixes in $HN/.dforge/handoff/latest.md" <<<"$out")" "1"
-out=$(bash "$FM" "$HN" 2>&1); code=$?
+out=$(migrate "$FM" "$HN" 2>&1); code=$?
 check "refused note: exit 1" "$code" "1"
 check "refused note: the note left behind keeps its text" "$(cat "$HN/.forge/handoff/latest.md")" "old dr-forge:resume-execution"
 check "refused note: the .dforge note rewritten" "$(cat "$HN/.dforge/handoff/latest.md")" "new dforge:resume-execution"
@@ -315,7 +335,7 @@ HM="$TMP/handoff-moves"
 repo "$HM"
 mkdir -p "$HM/.forge/handoff" "$HM/.dforge"
 printf 'dr-forge:resume-execution\n' > "$HM/.forge/handoff/latest.md"
-out=$(bash "$FM" --dry-run "$HM" 2>&1)
+out=$(migrate "$FM" --dry-run "$HM" 2>&1)
 check "moving note, dry: listed" "$(grep -cxF "would rewrite the plugin prefixes in $HM/.forge/handoff/latest.md" <<<"$out")" "1"
 bash "$FM" "$HM" > /dev/null 2>&1
 check "moving note: rewritten once moved" "$(cat "$HM/.dforge/handoff/latest.md")" "dforge:resume-execution"
@@ -325,7 +345,7 @@ K="$TMP/forge-both-docs"
 repo "$K"
 mkdir -p "$K/docs/forge/plans" "$K/docs/dforge"
 printf 'dr-forge:impl-sonnet-low\n' > "$K/docs/forge/plans/p.md"
-out=$(bash "$FM" "$K" 2>&1); code=$?
+out=$(migrate "$FM" "$K" 2>&1); code=$?
 check "forge and dforge docs: exit 1" "$code" "1"
 check "forge and dforge docs: refusal names both" "$(grep -c "refused: $K/docs/forge and $K/docs/dforge all exist" <<<"$out")" "1"
 check "forge and dforge docs: the plan is untouched" "$(cat "$K/docs/forge/plans/p.md")" "dr-forge:impl-sonnet-low"
@@ -336,7 +356,7 @@ repo "$LM"
 mkdir -p "$TMP/outside-merge" "$LM/.forge"
 echo planted > "$LM/.forge/planted.md"
 ln -s "$TMP/outside-merge" "$LM/.dforge"
-out=$(bash "$FM" "$LM" 2>&1); code=$?
+out=$(migrate "$FM" "$LM" 2>&1); code=$?
 check "linked .dforge: exit 1" "$code" "1"
 check "linked .dforge: nothing lands outside" "$(exists "$TMP/outside-merge/planted.md")" "no"
 check "linked .dforge: .forge kept" "$(cat "$LM/.forge/planted.md")" "planted"
@@ -345,7 +365,7 @@ repo "$LS"
 mkdir -p "$TMP/outside-source" "$LS/.dforge"
 echo kept > "$TMP/outside-source/kept.md"
 ln -s "$TMP/outside-source" "$LS/.forge"
-out=$(bash "$FM" "$LS" 2>&1); code=$?
+out=$(migrate "$FM" "$LS" 2>&1); code=$?
 check "linked .forge beside .dforge: exit 1" "$code" "1"
 check "linked .forge beside .dforge: the outside file stays" "$(cat "$TMP/outside-source/kept.md")" "kept"
 LI="$TMP/linked-inner"
@@ -353,7 +373,7 @@ repo "$LI"
 mkdir -p "$TMP/outside-inner" "$LI/.forge/sub" "$LI/.dforge"
 echo planted > "$LI/.forge/sub/planted.md"
 ln -s "$TMP/outside-inner" "$LI/.dforge/sub"
-out=$(bash "$FM" "$LI" 2>&1); code=$?
+out=$(migrate "$FM" "$LI" 2>&1); code=$?
 check "a link inside .dforge: exit 1" "$code" "1"
 check "a link inside .dforge: nothing lands outside" "$(exists "$TMP/outside-inner/planted.md")" "no"
 LG="$TMP/linked-dangling"
@@ -361,15 +381,20 @@ repo "$LG"
 mkdir -p "$LG/.forge/x" "$LG/.forge/sub" "$LG/.dforge"
 echo a > "$LG/.forge/x/a.md"
 echo planted > "$LG/.forge/sub/planted.md"
-ln -s x/../../.. "$LG/.dforge/sub"
-out=$(bash "$FM" "$LG" 2>&1); code=$?
-check "a dangling link inside .dforge: refused by the link guard" "$(grep -c "holds a symbolic link; merge them by hand" <<<"$out")" "1"
-check "a dangling link inside .dforge: nothing lands outside" "$(exists "$TMP/planted.md")" "no"
+ln -s x/../../.. "$LG/.dforge/sub" 2>/dev/null
+# A native Windows link needs its target to exist, so Git Bash makes none.
+if [ -L "$LG/.dforge/sub" ]; then
+  out=$(migrate "$FM" "$LG" 2>&1); code=$?
+  check "a dangling link inside .dforge: refused by the link guard" "$(grep -c "holds a symbolic link; merge them by hand" <<<"$out")" "1"
+  check "a dangling link inside .dforge: nothing lands outside" "$(exists "$TMP/planted.md")" "no"
+else
+  printf 'skip - a dangling link inside .dforge: this system makes no dangling links\n'
+fi
 LD="$TMP/linked-docs"
 repo "$LD"
 mkdir -p "$TMP/outside-docs/forge"
 ln -s "$TMP/outside-docs" "$LD/docs"
-out=$(bash "$FM" "$LD" 2>&1); code=$?
+out=$(migrate "$FM" "$LD" 2>&1); code=$?
 check "linked docs: exit 1" "$code" "1"
 check "linked docs: the outside tree is not renamed" "$(exists "$TMP/outside-docs/forge")$(exists "$TMP/outside-docs/dforge")" "yesno"
 
@@ -378,11 +403,11 @@ repo "$LR"
 mkdir -p "$LR/real-docs/forge/plans"
 printf 'dr-forge:impl-sonnet-low\n' > "$LR/real-docs/forge/plans/p.md"
 ln -s real-docs "$LR/docs"
-out=$(bash "$FM" --dry-run "$LR" 2>&1); code=$?
+out=$(migrate "$FM" --dry-run "$LR" 2>&1); code=$?
 check "docs linked inside, dry: exit 1" "$code" "1"
 check "docs linked inside, dry: the refusal foretold" "$(grep -c "refused: $LR/docs/forge or $LR/docs/dforge lies in a linked directory" <<<"$out")" "1"
 check "docs linked inside, dry: no plan rewrite listed" "$(grep -c 'would rewrite the plugin prefixes' <<<"$out")" "0"
-out=$(bash "$FM" "$LR" 2>&1); code=$?
+out=$(migrate "$FM" "$LR" 2>&1); code=$?
 check "docs linked inside: exit 1" "$code" "1"
 check "docs linked inside: the plan keeps its text" "$(cat "$LR/real-docs/forge/plans/p.md")" "dr-forge:impl-sonnet-low"
 
@@ -400,7 +425,7 @@ UF="$TMP/unsearchable"
 repo "$UF"
 mkdir -p "$UF/.forge" "$UF/.dforge"
 echo a > "$UF/.forge/a.md"
-out=$(PATH="$FF:$PATH" bash "$FM" "$UF" 2>&1); code=$?
+out=$(PATH="$FF:$PATH" migrate "$FM" "$UF" 2>&1); code=$?
 check "unsearchable .dforge: exit 1" "$code" "1"
 check "unsearchable .dforge: refused by the link guard" "$(grep -c "holds a symbolic link; merge them by hand" <<<"$out")" "1"
 check "unsearchable .dforge: find's error not shown" "$(grep -c 'Permission denied' <<<"$out")" "0"
@@ -448,7 +473,7 @@ mkdir -p "$NM"
 printf '#!/bin/sh\necho "$*" >> "%s/mktemp-calls"\nexit 1\n' "$TMP" > "$NM/mktemp"
 chmod +x "$NM/mktemp"
 before=$(snapshot "$DR" "$DH")
-out=$(HOME="$DH" PATH="$NM:$PATH" bash "$FM" --dry-run "$DR" 2>&1); code=$?
+out=$(HOME="$DH" PATH="$NM:$PATH" migrate "$FM" --dry-run "$DR" 2>&1); code=$?
 check "dry: exit 0" "$code" "0"
 check "dry: nothing written" "$(snapshot "$DR" "$DH")" "$before"
 check "dry: the state move listed" "$(grep -cxF "would move $DR/.forge -> $DR/.dforge" <<<"$out")" "1"
@@ -459,7 +484,7 @@ check "dry: the plan rewrite listed" "$(grep -cxF "would rewrite the plugin pref
 check "dry: the home move listed" "$(grep -cxF "dforge-home-migrate: would move $DH/.dr-forge to $DH/.dforge" <<<"$out")" "1"
 check "dry: no commit lines" "$(grep -c '^commit:' <<<"$out")" "0"
 check "dry: no temporary file made" "$(cat "$TMP/mktemp-calls" 2>/dev/null)" ""
-out=$(HOME="$DH" bash "$FM" "$DR" 2>&1); code=$?
+out=$(HOME="$DH" migrate "$FM" "$DR" 2>&1); code=$?
 check "after the dry run, the real run: exit 0" "$code" "0"
 check "after the dry run, the real run: the plan rewritten" "$(cat "$DR/docs/dforge/plans/active.md")" "**Implementer:** dforge:impl-sonnet-low"
 
@@ -467,7 +492,7 @@ DB="$TMP/dry-both-docs"
 repo "$DB"
 mkdir -p "$DB/docs/forge" "$DB/docs/dforge"
 before=$(snapshot "$DB")
-out=$(bash "$FM" --dry-run "$DB" 2>&1); code=$?
+out=$(migrate "$FM" --dry-run "$DB" 2>&1); code=$?
 check "dry, two docs trees: exit 1" "$code" "1"
 check "dry, two docs trees: the refusal foretold" "$(grep -c "refused: $DB/docs/forge and $DB/docs/dforge all exist" <<<"$out")" "1"
 check "dry, two docs trees: nothing written" "$(snapshot "$DB")" "$before"
@@ -483,10 +508,10 @@ chmod +x "$AW/awk"
 RN="$TMP/rewrite-fails"
 repo "$RN"
 printf '.forge/\n' > "$RN/.gitignore"
-out=$(PATH="$AW:$PATH" bash "$FM" --dry-run "$RN" 2>&1); code=$?
+out=$(PATH="$AW:$PATH" migrate "$FM" --dry-run "$RN" 2>&1); code=$?
 check "a failing rewrite, dry: exit 0" "$code" "0"
 check "a failing rewrite, dry: not listed" "$(grep -c 'would rewrite the older names' <<<"$out")" "0"
-out=$(PATH="$AW:$PATH" bash "$FM" "$RN" 2>&1)
+out=$(PATH="$AW:$PATH" migrate "$FM" "$RN" 2>&1)
 check "a failing rewrite: not reported" "$(grep -c 'rewrote the older names' <<<"$out")" "0"
 check "a failing rewrite: the file kept" "$(cat "$RN/.gitignore")" ".forge/"
 
@@ -495,11 +520,11 @@ PA="$TMP/prefix-awk-fails"
 repo "$PA"
 mkdir -p "$PA/docs/dforge/plans"
 printf 'dr-forge:impl-sonnet-low\n' > "$PA/docs/dforge/plans/p.md"
-out=$(PATH="$AW:$PATH" bash "$FM" --dry-run "$PA" 2>&1); code=$?
+out=$(PATH="$AW:$PATH" migrate "$FM" --dry-run "$PA" 2>&1); code=$?
 check "a failing prefix rewrite, dry: exit 1" "$code" "1"
 check "a failing prefix rewrite, dry: the refusal foretold" "$(grep -cxF "dforge-migrate: refused: could not rewrite the plugin prefixes in $PA/docs/dforge/plans/p.md" <<<"$out")" "1"
 check "a failing prefix rewrite, dry: no rewrite listed" "$(grep -c 'would rewrite the plugin prefixes' <<<"$out")" "0"
-out=$(PATH="$AW:$PATH" bash "$FM" "$PA" 2>&1); code=$?
+out=$(PATH="$AW:$PATH" migrate "$FM" "$PA" 2>&1); code=$?
 check "a failing prefix rewrite: exit 1" "$code" "1"
 check "a failing prefix rewrite: the plan keeps its text" "$(cat "$PA/docs/dforge/plans/p.md")" "dr-forge:impl-sonnet-low"
 
@@ -511,7 +536,7 @@ printf '{"darkmem":{"repos":{}}}\n' > "$SH/.dforge/config.json"
 SR="$TMP/settled-repo"
 repo "$SR"
 for mode in --dry-run ""; do
-  out=$(HOME="$SH" bash "$FM" $mode "$SR" 2>&1); code=$?
+  out=$(HOME="$SH" migrate "$FM" $mode "$SR" 2>&1); code=$?
   check "settled home ${mode:-real}: exit 0" "$code" "0"
   check "settled home ${mode:-real}: the darkmem note shown" "$(grep -c "already has a darkmem section" <<<"$out")" "1"
   check "settled home ${mode:-real}: nothing to migrate" "$(grep -cxF "dforge-migrate: nothing to migrate in $SR" <<<"$out")" "1"
@@ -522,7 +547,7 @@ RH="$TMP/refusing-home"
 mkdir -p "$RH/.dr-forge" "$RH/.dforge"
 printf '{"handoffTokens":1}\n' > "$RH/.dr-forge/config.json"
 printf '{"handoffTokens":2}\n' > "$RH/.dforge/config.json"
-out=$(HOME="$RH" bash "$FM" --dry-run "$SR" 2>&1); code=$?
+out=$(HOME="$RH" migrate "$FM" --dry-run "$SR" 2>&1); code=$?
 check "refusing home, dry: exit 1" "$code" "1"
 check "refusing home, dry: the home's refusal shown" "$(grep -c '^dforge-home-migrate: refused: ' <<<"$out")" "1"
 check "refusing home, dry: summed up as foretold" "$(grep -cxF 'dforge-migrate: refused: foretold refusals in the home; see above' <<<"$out")" "1"
@@ -535,39 +560,42 @@ cp "$FM" "$P/dforge-migrate"
 cp "$HERE/../scripts/lib/native-path.sh" "$P/lib/"
 H="$TMP/home-step"
 repo "$H"
-check "no dforge-home-migrate: nothing to do" "$(bash "$P/dforge-migrate" "$H" 2>&1)" "dforge-migrate: nothing to migrate in $H"
+check "no dforge-home-migrate: nothing to do" "$(migrate "$P/dforge-migrate" "$H")" "dforge-migrate: nothing to migrate in $H"
 printf 'console.log("home migrated");\n' > "$P/lib/dforge-home-migrate.mjs"
-out=$(bash "$P/dforge-migrate" "$H" 2>&1); code=$?
+out=$(migrate "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "dforge-home-migrate: exit 0" "$code" "0"
 check "dforge-home-migrate: its output shown" "$(grep -c 'home migrated' <<<"$out")" "1"
 check "dforge-home-migrate moved the home: not reported as nothing to migrate" "$(grep -c 'nothing to migrate' <<<"$out")" "0"
 printf 'process.exit(3);\n' > "$P/lib/dforge-home-migrate.mjs"
-out=$(bash "$P/dforge-migrate" "$H" 2>&1); code=$?
+out=$(migrate "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "dforge-home-migrate fails: exit 1" "$code" "1"
 check "dforge-home-migrate fails: refused" "$(grep -c 'refused: scripts/lib/dforge-home-migrate.mjs' <<<"$out")" "1"
-out=$(bash "$P/dforge-migrate" --dry-run "$H" 2>&1); code=$?
+out=$(migrate "$P/dforge-migrate" --dry-run "$H" 2>&1); code=$?
 check "dforge-home-migrate fails, dry: exit 1" "$code" "1"
 check "dforge-home-migrate fails, dry: still did not finish" "$(grep -c 'refused: scripts/lib/dforge-home-migrate.mjs did not finish' <<<"$out")" "1"
 
 # --- no Node: refused only when there is a home to migrate ---
 NB="$TMP/nonode-bin"
 mkdir -p "$NB"
+# Wrappers, not links: under Git Bash the linked tools did not run.
 for c in git timeout dirname tr sed head grep mv rm cat find cmp mkdir awk readlink sort mktemp cp bash; do
-  src=$(type -P "$c") && ln -s "$src" "$NB/$c"
+  src=$(type -P "$c") || continue
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$src" > "$NB/$c"
+  chmod +x "$NB/$c"
 done
 printf 'console.log("x");\n' > "$P/lib/dforge-home-migrate.mjs"
 NH="$TMP/no-home"
 mkdir -p "$NH"
-out=$(HOME="$NH" PATH="$NB" bash "$P/dforge-migrate" "$H" 2>&1); code=$?
+out=$(HOME="$NH" PATH="$NB" migrate "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "no node, no old home: exit 0" "$code" "0"
 check "no node, no old home: nothing to migrate" "$out" "dforge-migrate: nothing to migrate in $H"
 mkdir -p "$NH/.dr-superpowers"
-out=$(HOME="$NH" PATH="$NB" bash "$P/dforge-migrate" "$H" 2>&1); code=$?
+out=$(HOME="$NH" PATH="$NB" migrate "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "no node, old home present: exit 1" "$code" "1"
 check "no node, old home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
 rm -rf "$NH/.dr-superpowers"
 mkdir -p "$NH/.dr-forge"
-out=$(HOME="$NH" PATH="$NB" bash "$P/dforge-migrate" "$H" 2>&1); code=$?
+out=$(HOME="$NH" PATH="$NB" migrate "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "no node, dr-forge home present: exit 1" "$code" "1"
 check "no node, dr-forge home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
 

@@ -17,7 +17,9 @@ AR_STALL_CAP=3
 AR_COMPACTION_CAP=3
 AR_BEAT_SECONDS=180
 
-ar_jq() { "${DFORGE_JQ:-jq}" "$@"; }
+# A native jq.exe ends its lines CRLF; every script sourcing this sets
+# pipefail, so jq's own status, which -e relies on, still decides.
+ar_jq() { "${DFORGE_JQ:-jq}" "$@" | tr -d '\r'; }
 
 ar_primary_root() {
   local common

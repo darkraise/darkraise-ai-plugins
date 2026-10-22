@@ -65,7 +65,7 @@ client's native agent tools; see
 ### Requirements
 
 dforge needs Bash, Git and `jq` (on Windows, Git for Windows provides Bash).
-The cockpit is built against Claude Code 2.1.295 to 2.1.296; the mod API it
+The cockpit is built against Claude Code 2.1.299 to 2.1.306; the mod API it
 uses is early access and may change between releases.
 
 ## dforge in brief

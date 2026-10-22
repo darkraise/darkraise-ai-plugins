@@ -5,4 +5,6 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v node >/dev/null 2>&1 || { echo "darkmem-sync tests: node is required but not on PATH" >&2; exit 2; }
-exec node --test --test-reporter=spec --test-timeout=60000 "$HERE"/darkmem-sync/*.test.mjs
+# The timeout bounds each file as well as each test, and hooks.test.mjs and
+# push.test.mjs, all process spawns, run past a minute on a Windows runner.
+exec node --test --test-reporter=spec --test-timeout=300000 "$HERE"/darkmem-sync/*.test.mjs

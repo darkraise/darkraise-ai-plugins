@@ -114,7 +114,7 @@ export function leftoverLines(cfg) {
 function worktreeTops(cfg) {
   const listing = runGit(cfg.repoRoot, ["worktree", "list", "--porcelain"]);
   return listing.status === 0
-    ? listing.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree ")).map(line => line.slice("worktree ".length))
+    ? listing.stdout.split(/\r?\n/).filter(line => line.startsWith("worktree ")).map(line => path.resolve(line.slice("worktree ".length)))
     : [cfg.repoRoot];
 }
 

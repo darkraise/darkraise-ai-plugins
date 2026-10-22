@@ -1179,7 +1179,9 @@ test("a mirror ledger whose directory turns into a file before its read is a pro
   const result = await progressToLocal(m.context, { offline: "test" });
   assert.equal(result.moved, false);
   assert.equal(result.reason, "the primary checkout cannot take the mirror's progress");
-  assert.deepEqual(result.details, [`${path.join(dir, "progress.md")}: could not be read (ENOTDIR)`]);
+  // Windows answers a path under a file with ENOENT.
+  const code = process.platform === "win32" ? "ENOENT" : "ENOTDIR";
+  assert.deepEqual(result.details, [`${path.join(dir, "progress.md")}: could not be read (${code})`]);
 });
 
 test("a mirror ledger that cannot be opened is a problem line, whoever runs the test", async t => {

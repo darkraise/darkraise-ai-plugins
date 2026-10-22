@@ -221,15 +221,23 @@ check "a hung connect times out" "$out" \
 # A PATH without timeout, as on macOS: the probe still answers.
 NOTIMEOUT="$TMP/no-timeout-bin"
 mkdir -p "$NOTIMEOUT"
-IFS=':' read -r -a PATH_DIRS <<<"$PATH"
-for dir in "${PATH_DIRS[@]}"; do
-  [ -n "$dir" ] || continue
+# Only the directories of the tools the gate runs: on Windows the rest of PATH
+# holds System32 and thousands of other files, each a copy or a link to make.
+while IFS= read -r dir; do
   for tool in "$dir"/*; do
     name=${tool##*/}
     # Git Bash's timeout is timeout.exe.
     case "$name" in timeout|timeout.exe) continue ;; esac
     [ -e "$NOTIMEOUT/$name" ] || ln -s "$tool" "$NOTIMEOUT/$name" 2>/dev/null
   done
+done < <(for tool in bash node jq git cat; do dirname "$(type -P "$tool")"; done | sort -u)
+# A Chocolatey shim such as jq.exe finds its program from its own directory,
+# so the tools the gate calls by name run from where they are. The link goes
+# first: writing to it would overwrite the program it names.
+for tool in jq node git; do
+  rm -f "$NOTIMEOUT/$tool"
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$(type -P "$tool")" > "$NOTIMEOUT/$tool"
+  chmod +x "$NOTIMEOUT/$tool"
 done
 fresh; PATH="$NOTIMEOUT" gate usable
 check "without timeout on PATH the probe still answers" "$out" \

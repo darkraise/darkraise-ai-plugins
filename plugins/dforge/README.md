@@ -507,7 +507,7 @@ with a reason, which the cockpit sends to Discord. See
 
 ## Cockpit
 
-Claude Code only. Built and tested against Claude Code 2.1.295 to 2.1.296; the
+Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.306; the
 mod API is early access and may change between releases.
 
 ### What it does

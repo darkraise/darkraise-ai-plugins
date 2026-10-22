@@ -19,7 +19,7 @@ dr_proc_start() {
 dr_lock_claim() {
   dr_proc_start "$$" > "$1/start" || true
   if ! { uname -n > "$1/host" && printf '%s\n' "$$" > "$1/pid"; }; then
-    rm -f -- "$1/start" "$1/host" "$1/pid"; rmdir -- "$1" 2>/dev/null
+    rm -f -- "$1/start" "$1/host" "$1/pid" "$1/claim"; rmdir -- "$1" 2>/dev/null
     return 1
   fi
 }
@@ -27,7 +27,7 @@ dr_lock_claim() {
 # dr_lock_release DIR — remove DIR when this shell owns it.
 dr_lock_release() {
   [ "$(cat "$1/pid" 2>/dev/null)" = "$$" ] || return 1
-  rm -f -- "$1/pid" "$1/start" "$1/host"
+  rm -f -- "$1/pid" "$1/start" "$1/host" "$1/claim"
   rmdir -- "$1"
 }
 
@@ -74,12 +74,26 @@ dr_lock_reclaim() {
       [ -n "$start" ] && [ -n "$now" ] && [ "$now" != "$start" ] && stale=0
     fi
   fi
+  # The owner judged may have released before it exited and another shell
+  # taken DIR since; only the instance judged is removed. Its owner is gone,
+  # and no shell takes DIR while it exists, so it cannot change after this.
+  [ "$stale" -eq 0 ] && [ "$(cat "$lock/pid" 2>/dev/null)" != "$pid" ] && stale=1
   if [ "$stale" -eq 0 ]; then
-    rm -f -- "$lock/pid" "$lock/start" "$lock/host"
+    rm -f -- "$lock/pid" "$lock/start" "$lock/host" "$lock/claim"
     rmdir -- "$lock" 2>/dev/null || stale=1
   fi
   rmdir -- "$guard"
   return "$stale"
+}
+
+# dr_lock_take DIR — create the lock directory DIR, reclaimed from an owner that
+# provably exited, and take it: only the shell that creates DIR/claim holds it,
+# since mkdir is not exclusive everywhere (uutils' mkdir 0.10.0 answers 0 to
+# more than one of several shells racing for a directory) and bash's noclobber
+# create is. A shell that loses the claim leaves DIR to its holder.
+dr_lock_take() {
+  { mkdir -- "$1" 2>/dev/null || { dr_lock_reclaim "$1" && mkdir -- "$1" 2>/dev/null; }; } &&
+    ( set -o noclobber; : > "$1/claim" ) 2>/dev/null
 }
 
 # dr_link_target FILE — FILE with its symbolic links followed to the file they
@@ -147,10 +161,7 @@ dr_locked() {
     return
   fi
   for ((i = 0; i <= DR_LOCK_TENTHS; i++)); do
-    if mkdir -- "$base.lockd" 2>/dev/null ||
-       { dr_lock_reclaim "$base.lockd" && mkdir -- "$base.lockd" 2>/dev/null; }; then
-      claimed=1; break
-    fi
+    if dr_lock_take "$base.lockd"; then claimed=1; break; fi
     [ "$i" -eq "$DR_LOCK_TENTHS" ] || sleep 0.1
   done
   [ "$claimed" -eq 1 ] && dr_lock_claim "$base.lockd" || { echo "dforge: $base is locked by another process" >&2; return 1; }

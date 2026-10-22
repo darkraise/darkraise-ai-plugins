@@ -27,6 +27,26 @@ const fit = (input, lines, chars) => bash(["-c", '. "$1"; _darkmem_fit "$2" "$3"
 
 // The hooks must export the session id themselves, so the test environment
 // carries none.
+// Git Bash ships GNU timeout, so the hooks never bound with the watchdog on
+// Windows, and there its process-group kill leaves the command's child alive
+// in some runs.
+const WATCHDOG_SKIP = process.platform === "win32" && "the hooks use GNU timeout on Windows, never the watchdog";
+
+// A killed process can outlive its kill by a moment, longest on Windows.
+async function assertGone(pidFile) {
+  const pid = Number(fs.readFileSync(pidFile, "utf8"));
+  for (let i = 0; i < 50; i++) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (error.code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.fail("the command's child was killed too");
+}
+
 function hookEnv(home) {
   const env = { ...home.env };
   delete env.DFORGE_SESSION_ID;
@@ -151,6 +171,8 @@ test("the quiet push prints nothing and declares the session it was given", asyn
 const SCRIPTS = fileURLToPath(new URL("../../scripts/", import.meta.url));
 const HOOKS_JSON = fileURLToPath(new URL("../../hooks/hooks.json", import.meta.url));
 const hasJq = spawnSync("jq", ["--version"]).status === 0;
+// The hooks bound their commands with timeout only when it is GNU coreutils.
+const hasGnuTimeout = /GNU coreutils/.test(spawnSync("timeout", ["--version"], { encoding: "utf8" }).stdout ?? "");
 const runHook = (name, payload, options) => bash([path.join(SCRIPTS, name)], { ...options, input: JSON.stringify(payload) });
 
 test("the hooks are bounded: SessionStart 300 seconds, Stop 120, and the darkmem push runs in the background", () => {
@@ -214,7 +236,7 @@ test("the Stop push sends under its session id, a retried stop too, and prints n
 
 test("the Stop push bounds its config lookup apart from the push, which keeps its own bound", {
   skip: (!hasJq && "jq is not on PATH")
-    || (spawnSync("timeout", ["--version"]).status !== 0 && "GNU timeout is not on PATH")
+    || (!hasGnuTimeout && "GNU timeout is not on PATH")
     || (process.platform === "win32" && "the PATH shim is a POSIX shell script"),
 }, async t => {
   const s = await setup(t);
@@ -235,7 +257,7 @@ test("the Stop push bounds its config lookup apart from the push, which keeps it
   assert.ok(s.stub.db.requests.some(r => r.method === "POST" && r.path === "/api/v1/worklog/entries"), "the push still sent the ledger");
 });
 
-test("the watchdog bounds a command and its children where GNU timeout is missing", async () => {
+test("the watchdog bounds a command and its children where GNU timeout is missing", { skip: WATCHDOG_SKIP }, async () => {
   const dir = scratch("dmh-wd-");
   const pidFile = path.join(dir, "child.pid");
   const quick = await bash(["-c", '. "$1"; _darkmem_watchdog 5 bash -c "echo out; echo err >&2; exit 3"', "hook-test", LIB], { cwd: dir, env: process.env });
@@ -245,8 +267,7 @@ test("the watchdog bounds a command and its children where GNU timeout is missin
   assert.ok(Date.now() - started < 10000, "the command was stopped at its bound");
   assert.notEqual(slow.code, 0);
   assert.equal(slow.stderr, "", "no job-control notice reaches stderr");
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
 test("_darkmem_bounded falls back to the watchdog where GNU timeout is missing", { skip: process.platform === "win32" && "file symbolic links need privileges on Windows" }, async () => {
@@ -262,33 +283,43 @@ test("_darkmem_bounded falls back to the watchdog where GNU timeout is missing",
   assert.notEqual(result.code, 9, "timeout must not be on the trimmed PATH");
   assert.ok(Date.now() - started < 10000, "the watchdog stopped the command at its bound");
   assert.notEqual(result.code, 0);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
 // Ignores SIGTERM, as does its child: only SIGKILL stops it before it ends by itself.
 const STUBBORN = `'trap "" TERM; sleep 20 & echo $! > "$0"; wait'`;
 
-test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command", async () => {
+test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command", { skip: WATCHDOG_SKIP }, async () => {
   const dir = scratch("dmh-kill-");
   const pidFile = path.join(dir, "child.pid");
   const started = Date.now();
   const result = await bash(["-c", `. "$1"; _darkmem_watchdog 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
   assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
   assert.notEqual(result.code, 0);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
 });
 
-test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: spawnSync("timeout", ["--version"]).status !== 0 && "GNU timeout is not on PATH" }, async () => {
+test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: !hasGnuTimeout && "GNU timeout is not on PATH" }, async () => {
   const dir = scratch("dmh-tkill-");
   const pidFile = path.join(dir, "child.pid");
   const started = Date.now();
   const result = await bash(["-c", `. "$1"; _darkmem_bounded 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
   assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
   assert.notEqual(result.code, 0);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
+  await assertGone(pidFile);
+});
+
+test("a timeout that is not GNU's leaves the bound to the watchdog", { skip: WATCHDOG_SKIP }, async () => {
+  const dir = scratch("dmh-utimeout-");
+  const pidFile = path.join(dir, "child.pid");
+  // As uutils' timeout answers; it would run the command with no bound at all.
+  // The directory joins PATH in POSIX form: a C:\ entry splits at its colon.
+  fs.writeFileSync(path.join(dir, "timeout"), '#!/usr/bin/env bash\ncase $1 in --version) echo "timeout (uutils coreutils) 0.10.0" ;; *) shift 3; exec "$@" ;; esac\n', { mode: 0o755 });
+  const started = Date.now();
+  const result = await bash(["-c", `PATH="$(cygpath -u "$3" 2>/dev/null || printf '%s' "$3"):$PATH"; . "$1"; _darkmem_bounded 1 bash -c ${STUBBORN} "$2"`, "hook-test", LIB, pidFile, dir], { cwd: dir, env: { ...process.env, DARKMEM_KILL_GRACE: "1" } });
+  assert.ok(Date.now() - started < 10000, "the command was killed after the grace period");
+  assert.notEqual(result.code, 0);
+  await assertGone(pidFile);
 });
 
 test("the watchdog leaves the caller's job-control setting as it found it", async () => {

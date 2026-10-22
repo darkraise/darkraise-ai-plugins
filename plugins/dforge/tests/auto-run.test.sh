@@ -130,8 +130,11 @@ stamp() { # stamp <session> <seconds before NOW; negative is ahead of it>
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(( NOW - $2 ))" > "$f"
 }
-at_now() { (cd "$REPO" && PATH="$CLOCK:$PATH" bash "$AR" "$@"); }
-age_of() { (PATH="$CLOCK:$PATH"; . "$HERE/../scripts/lib/auto-run.sh"; ar_beat_age "$1") 2>/dev/null || echo fails; }
+# PATH takes the POSIX form: TMP's C:/… splits at its drive letter's colon.
+CLOCK_PATH=$CLOCK
+if command -v cygpath >/dev/null 2>&1; then CLOCK_PATH=$(cygpath -u "$CLOCK"); fi
+at_now() { (cd "$REPO" && PATH="$CLOCK_PATH:$PATH" bash "$AR" "$@"); }
+age_of() { (PATH="$CLOCK_PATH:$PATH"; . "$HERE/../scripts/lib/auto-run.sh"; ar_beat_age "$1") 2>/dev/null || echo fails; }
 stamp s-4 180
 check "a heartbeat 180 seconds old: age 180" "$(age_of s-4)" "180"
 stamp s-4 -5
@@ -186,12 +189,12 @@ check "an unknown phase: exit 2" "$status:$(field phase)" "2:execute"
 # --- decisions and rulings ---
 ar --session s-1 decision add --id d1 --question "Which store?" --options "sqlite | files" --opus-reason "the spec is silent" --task 3
 ar --session s-1 decision add --id d2 --question "Retry count?"
-check "decision list" "$(ar --session s-1 decision list | jq -r '.id' | paste -sd, -)" "d1,d2"
+check "decision list" "$(ar --session s-1 decision list | jq -r '.id' | tr -d '\r' | paste -sd, -)" "d1,d2"
 check "a decision keeps its fields" "$(ar --session s-1 decision list | jq -r 'select(.id == "d1") | "\(.options)|\(.opusReason)|\(.task)"')" "sqlite | files|the spec is silent|3"
 ar --session s-1 decision add --id d1 --question "Which store, again?"
 check "adding an id again replaces it" "$(ar --session s-1 decision list | jq -r 'select(.id == "d1") | .question')" "Which store, again?"
 ar --session s-1 decision clear --id d1
-check "clear one" "$(ar --session s-1 decision list | jq -r '.id' | paste -sd, -)" "d2"
+check "clear one" "$(ar --session s-1 decision list | jq -r '.id' | tr -d '\r' | paste -sd, -)" "d2"
 ar --session s-1 decision clear
 check "clear all" "$(ar --session s-1 decision list | grep -c .)" "0"
 ar --session s-1 ruling add "Fable: keep the sqlite store — cost if wrong: one migration"

@@ -507,8 +507,9 @@ test("a case-only rename on darkmem keeps the file a case-insensitive file syste
   await s.pull();
   const id = s.stub.db.documents.get("proj\u0000dforge/a.md").id;
   await s.seed.moveDocument(id, { uri: "dforge/A.md" });
-  // A hard link stands in for a case-insensitive file system: both names reach one file.
-  fs.linkSync(path.join(s.docsRoot, "a.md"), path.join(s.docsRoot, "A.md"));
+  // A hard link stands in for a case-insensitive file system, which already
+  // reaches the file under both names.
+  if (!fs.existsSync(path.join(s.docsRoot, "A.md"))) fs.linkSync(path.join(s.docsRoot, "a.md"), path.join(s.docsRoot, "A.md"));
   const result = await s.pull();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /removed/);
@@ -544,8 +545,9 @@ test("a case-only rename on darkmem that also edits it keeps the file a case-ins
   const id = s.stub.db.documents.get("proj\u0000dforge/a.md").id;
   await s.seed.moveDocument(id, { uri: "dforge/A.md" });
   await s.seed.putDocument({ project: "proj", uri: "dforge/A.md", content: "A edited\n", expectedHash: sha("a\n") });
-  // A hard link stands in for a case-insensitive file system: both names reach one file.
-  fs.linkSync(path.join(s.docsRoot, "a.md"), path.join(s.docsRoot, "A.md"));
+  // A hard link stands in for a case-insensitive file system, which already
+  // reaches the file under both names.
+  if (!fs.existsSync(path.join(s.docsRoot, "A.md"))) fs.linkSync(path.join(s.docsRoot, "a.md"), path.join(s.docsRoot, "A.md"));
   const result = await s.pull();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^conflict: dforge\/A\.md: changed locally and on darkmem; move the local file aside/m);

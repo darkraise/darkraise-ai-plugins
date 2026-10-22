@@ -16,9 +16,22 @@ _ROOTS_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _DFORGE_KEY="" _DFORGE_TOP="" _DFORGE_DOCS_STORE="" _DFORGE_DOCS_ROOT=""
 _DFORGE_PROGRESS_STORE="" _DFORGE_LEDGER_ROOT="" _DFORGE_LATEST="" _DFORGE_PROJECT=""
 
-# Node prints native paths; Git Bash compares them in git's C:/… form.
+# Node prints native paths; Git Bash compares them in git's C:/… form, which
+# is always long: git expands an 8.3 short name such as RUNNER~1 in a TEMP
+# directory that cygpath keeps.
 _dforge_path() {
-  if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1" 2>/dev/null || printf '%s\n' "$1"
+  if command -v cygpath >/dev/null 2>&1; then _dforge_long "$(cygpath -m "$1" 2>/dev/null || printf '%s' "$1")"
+  else printf '%s\n' "$1"; fi
+}
+
+# The long form of a C:/… path. GetLongPathName, behind cygpath -l, needs the
+# path to exist, so the deepest existing ancestor is expanded and the rest kept.
+_dforge_long() {
+  local head=$1 tail=""
+  while [ -n "$head" ] && [ ! -e "$head" ]; do
+    case $head in */*) tail="/${head##*/}$tail" head=${head%/*} ;; *) head="" ;; esac
+  done
+  if [ -n "$head" ]; then printf '%s%s\n' "$(cygpath -m -l "$head" 2>/dev/null || printf '%s' "$head")" "$tail"
   else printf '%s\n' "$1"; fi
 }
 
@@ -180,9 +193,10 @@ _dforge_name_of() { # ABSOLUTE — its name when it lies under a root; status 1 
 # it, even when DIR names another directory: one that exists from a
 # subdirectory of the checkout is made absolute first. A path spelled through a
 # symbolic link is retried in its physical form, and a Git Bash /c/… path in
-# git's C:/… form.
+# git's C:/… form. A path under no root keeps its spelling when it names
+# nothing: cygpath would place a POSIX one under the Git installation.
 dforge_name() {
-  local file=${1//\\//} physical
+  local file=${1//\\//} given physical
   dforge_stores_init "${2:-}"
   case $file in
     /*|[A-Za-z]:/*) ;;
@@ -193,9 +207,15 @@ dforge_name() {
         printf '%s\n' "${file#./}"; return 0
       fi ;;
   esac
-  if command -v cygpath >/dev/null 2>&1; then file=$(cygpath -m "$file" 2>/dev/null || printf '%s' "$file"); fi
+  given=$file
+  if command -v cygpath >/dev/null 2>&1; then
+    file=$(cygpath -m "$file" 2>/dev/null || printf '%s' "$file")
+    _dforge_name_of "$file" && return 0
+    file=$(_dforge_long "$file")
+  fi
   _dforge_name_of "$file" && return 0
   physical="$(cd "$(dirname "$file")" 2>/dev/null && pwd -P)/$(basename "$file")"
+  [ "$physical" != "/$(basename "$file")" ] && physical=$(_dforge_path "$physical")
   [ "$physical" != "/$(basename "$file")" ] && [ "$physical" != "$file" ] && _dforge_name_of "$physical" && return 0
-  printf '%s\n' "$file"
+  if [ -e "$file" ]; then printf '%s\n' "$file"; else printf '%s\n' "$given"; fi
 }
