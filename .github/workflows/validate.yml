@@ -4,11 +4,53 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "homelab: ghr's runner, falling back to GitHub's; hosted: GitHub's"
+        type: choice
+        options: [homelab, hosted]
+        default: homelab
+
+permissions:
+  contents: read
 
 jobs:
+  # validate runs on ghr's homelab runner, except in a dispatched fallback run
+  # and a fork's pull request: ghr refuses fork jobs, which would run their
+  # code on the homelab host. The two conditions below must stay the same.
+  # ghr starts a runner only once it sees a queued job, and GitHub cannot
+  # withdraw a queued job. If ghr has not started validate after five minutes,
+  # this dispatches the workflow again on GitHub's runners and cancels the run.
+  homelab:
+    name: Wait for the homelab runner
+    if: ${{ inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          jobs="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs"
+          deadline=$((SECONDS + 300))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            status=$(timeout 30s gh api "$jobs" --jq '.jobs[] | select(.name == "validate") | .status' || true)
+            if [ -n "$status" ] && [ "$status" != queued ] && [ "$status" != waiting ] && [ "$status" != pending ]; then
+              echo "The homelab runner took validate ($status)."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::No homelab runner took validate in five minutes; running again on GitHub's runners."
+          timeout 30s gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f runner=hosted
+          timeout 30s gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
   validate:
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","homelab"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v5
 
@@ -16,11 +58,18 @@ jobs:
         with:
           node-version: "22"
 
+      # A self-hosted runner may hold the tools already and have no sudo.
       - name: Install validation prerequisites
         timeout-minutes: 3
         run: |
-          timeout 120s sudo apt-get update
-          timeout 60s sudo apt-get install -y jq ripgrep coreutils
+          missing=()
+          command -v jq > /dev/null || missing+=(jq)
+          command -v rg > /dev/null || missing+=(ripgrep)
+          command -v timeout > /dev/null || missing+=(coreutils)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            timeout 120s sudo apt-get update
+            timeout 60s sudo apt-get install -y "${missing[@]}"
+          fi
 
       # One CLI version for every validate step: dforge's mod (hooks modules)
       # needs 2.1.299, and the marketplace step reads dforge too. Installed
