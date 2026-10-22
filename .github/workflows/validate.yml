@@ -43,13 +43,13 @@ jobs:
         run: timeout --kill-after=10s 690s node scripts/test-all.mjs
 
   windows:
-    name: Windows (${{ matrix.shard }}/6)
+    name: Windows (${{ matrix.shard }}/8)
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -60,11 +60,11 @@ jobs:
         shell: pwsh
         run: choco install jq ripgrep --yes --no-progress
       - name: Run Windows regression suites
-        timeout-minutes: 16
+        timeout-minutes: 20
         shell: pwsh
         env:
           DR_TEST_BASH: C:/Program Files/Git/bin/bash.exe
           # Git Bash's ln -s copies its target unless told to make a real link,
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
-        run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/6
+        run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/8
