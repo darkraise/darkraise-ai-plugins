@@ -240,10 +240,13 @@ check "a rewrite keeps the file's mode" "$(ls -l "$ROOT/many.md" | cut -c1-10)" 
 # The same, without flock: the lock directory serializes the writers.
 reg "$ROOT/many-mkdir.md" '| 1 | A | - | - | open | - |' '| 2 | B | - | - | open | - |' '| 3 | C | - | - | open | - |' \
   '| 4 | D | - | - | open | - |' '| 5 | E | - | - | open | - |' '| 6 | F | - | - | open | - |'
-for i in 1 2 3 4 5 6; do DFORGE_FLOCK=no-such-flock bash "$REG" set "$ROOT/many-mkdir.md" "$i" done >/dev/null 2>&1 & done
-for i in 1 2 3; do DFORGE_FLOCK=no-such-flock bash "$REG" add "$ROOT/many-mkdir.md" "Added $i" >/dev/null 2>&1 & done
+# Nine writers queue for one lock, which on a Windows runner can outlast the
+# default ten-second wait: a writer that gives up says so in its .err file.
+for i in 1 2 3 4 5 6; do DR_LOCK_TENTHS=600 DFORGE_FLOCK=no-such-flock bash "$REG" set "$ROOT/many-mkdir.md" "$i" done >/dev/null 2>"$TMP/set-$i.err" & done
+for i in 1 2 3; do DR_LOCK_TENTHS=600 DFORGE_FLOCK=no-such-flock bash "$REG" add "$ROOT/many-mkdir.md" "Added $i" >/dev/null 2>"$TMP/add-$i.err" & done
 wait
 check "no flock: concurrent sets: every row is done" "$(register_rows "$ROOT/many-mkdir.md" | awk -F'\t' '$1 <= 6 && $5 == "done"' | grep -c .)" "6"
+check "no flock: no writer gave up" "$(cat "$TMP"/set-*.err "$TMP"/add-*.err)" ""
 check "no flock: concurrent adds: three distinct new rows" "$(register_rows "$ROOT/many-mkdir.md" | awk -F'\t' '$1 > 6 { print $1 }' | sort -u | grep -c .)" "3"
 check "no flock: the lock directory is gone" "$(find "$TMP" -name '*.lockd' | grep -c .)" "0"
 check "a rewrite leaves no temporary file" "$(ls -A "$ROOT" | grep -c '^\.many')" "0"
