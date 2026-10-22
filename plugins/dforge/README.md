@@ -428,7 +428,9 @@ from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
 line. Otherwise the hook holds the stop once and tells Claude to continue
 remaining work, finish a branch that is ready to integrate, or print the block. Creating
 a branch on an existing commit, or a stop in another repository than the
-prompt's, does not count.
+prompt's, does not count. Neither does a turn that ran no dforge skill (no
+Skill call and no typed `/dforge:` command since the prompt): a commit made
+without dforge is never held for dforge's ending.
 
 A run also asks one question before its first task: what finishing should do
 once the final review is clean (merge locally, push and open a pull request,

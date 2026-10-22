@@ -259,9 +259,9 @@ date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-1"
 (cd "$REPO" && bash "$AR" --session s-1 start --spec docs/s.md --register docs/r.md >/dev/null)
 STATE="$REPO/.dforge/sdd/auto-run.json"
 pend() { jq --arg p "$1" '.pending = $p' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
-stop_in() { # stop_in <cwd> <session> <last message>
-  jq -n --arg cwd "$1" --arg sid "$2" --arg msg "$3" \
-    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:"",stop_hook_active:false,last_assistant_message:$msg}' | bash "$END"
+stop_in() { # stop_in <cwd> <session> <last message> [transcript]
+  jq -n --arg cwd "$1" --arg sid "$2" --arg msg "$3" --arg tp "${4:-}" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:false,last_assistant_message:$msg}' | bash "$END"
 }
 sleep 1; prompt s-1
 out=$(stop s-1 'Task 2 is done. Everything looks good.')
@@ -347,8 +347,13 @@ printf '# SDD ledger — plan: docs/dforge/plans/2026-10-11-other.md\nTask 1: co
 check "darkmem progress: another worktree's ledger does not block" "$(stop s-3 'Task 1 is done.')" ""
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
-# --- unplanned work: a turn that moved a branch without writing a ledger ---
+# --- unplanned work: a turn that ran a dforge skill and moved a branch without writing a ledger ---
 commit_in() { git -C "$1" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "$2"; }
+used() { # used <transcript> <skill>: a Skill call, stamped now
+  jq -nc --arg s "$2" --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.999Z)" \
+    '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"toolu_s",name:"Skill",input:{skill:$s}}]}}' >> "$1"
+}
+UT="$TMP/unplanned.jsonl"; : > "$UT"
 mkdir -p "$REPO/docs/dforge"
 sleep 1; prompt s-4
 check "unplanned: turn-start records the branch heads" \
@@ -357,7 +362,12 @@ check "unplanned: no branch moved: passes" "$(stop s-4 'Here is the answer.')" "
 git -C "$REPO" branch -q fresh
 check "unplanned: a new branch on an existing commit: passes" "$(stop s-4 'Here is the answer.')" ""
 commit_in "$REPO" adhoc
-out=$(stop s-4 'Fixed and committed. Tell me whether to merge.')
+check "unplanned: a commit in a turn that ran no dforge skill: passes" "$(stop s-4 'Fixed and committed.' false "$UT")" ""
+used "$UT" simplify
+check "unplanned: another plugin's skill: passes" "$(stop s-4 'Fixed and committed.' false "$UT")" ""
+used "$UT" dforge:test-driven-development
+check "unplanned: no transcript: passes" "$(stop s-4 'Fixed and committed.')" ""
+out=$(stop s-4 'Fixed and committed. Tell me whether to merge.' false "$UT")
 check "unplanned: a commit and a summary: blocks" "$(decision "$out")" "block"
 check "unplanned: the hold says to continue" "$(jq -r .reason <<<"$out" | grep -c 'If work remains for this session, continue it')" "1"
 check "unplanned: the hold names next-step --adhoc" "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" --adhoc --phase')" "1"
@@ -372,10 +382,14 @@ check "unplanned: deleting a branch whose commit another keeps: passes" "$(stop 
 git -C "$REPO" checkout -q -b gone && commit_in "$REPO" side && git -C "$REPO" checkout -q -
 sleep 1; prompt s-4
 git -C "$REPO" branch -q -D gone
-check "unplanned: deleting a branch with its own commit: blocks" "$(decision "$(stop s-4 'Done.')")" "block"
+check "unplanned: a dforge skill in an earlier turn only: passes" "$(stop s-4 'Done.' false "$UT")" ""
+used "$UT" dforge:brainstorming
+check "unplanned: deleting a branch with its own commit: blocks" "$(decision "$(stop s-4 'Done.' false "$UT")")" "block"
 sleep 1; prompt s-4
 commit_in "$TMP/wt" from-worktree
-check "unplanned: a commit in a worktree, stop there: blocks" "$(decision "$(stop_in "$TMP/wt" s-4 'Done.')")" "block"
+jq -nc --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.999Z)" \
+  '{type:"user",timestamp:$t,message:{content:"<command-name>/dforge:brainstorming</command-name>"}}' >> "$UT"
+check "unplanned: a typed dforge command, a commit in a worktree, stop there: blocks" "$(decision "$(stop_in "$TMP/wt" s-4 'Done.' "$UT")")" "block"
 git -C "$REPO" worktree add -q -b elsewhere "$TMP/elsewhere"
 sleep 1; prompt s-4
 commit_in "$TMP/elsewhere" another-session
