@@ -138,6 +138,8 @@ export type CockpitEngine = {
   effort: string | null
   /** The share of the last main turn's input served from the cache, 0 to 1. */
   cache: number | null
+  /** The output style the main loop's requests go out with; null for the default style. */
+  style: string | null
 }
 
 /** What the session is doing now, for the Now row and the state file. */

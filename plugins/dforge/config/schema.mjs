@@ -67,6 +67,16 @@ export default {
     label: 'AI attribution', title: 'Keep AI attribution out of git',
     description: 'Drop the commit trailer and pull request footer Claude Code asks for, and refuse commits and pull requests that still carry AI attribution.',
   },
+  bandLine1: {
+    type: 'string', values: ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells', 'ctx', 'cache', 'cost', '5h', '7d', 'time', 'none'], default: '', group: 'Minimized', target: 'dforge',
+    label: 'Line 1', title: 'Minimized band: line 1',
+    description: 'What the minimized band\'s first line shows, in order, comma-separated: dir, git, model, effort, style, turn, run, agents, shells, ctx, cache, cost, 5h, 7d, time. Empty shows dir, git, model, effort, style, turn, run, agents and shells; none hides the line.',
+  },
+  bandLine2: {
+    type: 'string', values: ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells', 'ctx', 'cache', 'cost', '5h', '7d', 'time', 'none'], default: '', group: 'Minimized', target: 'dforge',
+    label: 'Line 2', title: 'Minimized band: line 2',
+    description: 'What the minimized band\'s second line shows, in order, comma-separated, from the same names as line 1. Empty shows ctx, cache, cost, 5h and 7d; none hides the line. A name on both lines shows on line 1.',
+  },
   handoffTokens: {
     type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge',
     label: 'Handoff budget', title: 'Handoff budget (tokens)',

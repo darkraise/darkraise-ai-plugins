@@ -74,6 +74,10 @@ import {
   runsCut,
   runsWidth,
   SECTIONS,
+  BAND_SEGMENTS,
+  bandLines,
+  bandLinesFrom,
+  bandLineToggled,
   sectionsFrom,
   sectionsToggled,
   sparkline,
@@ -87,7 +91,7 @@ import {
   warnShare,
   writesGitText,
 } from './lib'
-import type { AgentGroupKey, BandInput, DenseInput, Run, Section, TrackPart } from './lib'
+import type { AgentGroupKey, BandInput, BandSegment, DenseInput, Run, Section, TrackPart } from './lib'
 import { SCHEMA, claudeLocks, envLocks, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
 import type { SettingValue, SettingsFile } from './config'
 import { nativeLine, nativeRun } from './native'
@@ -192,6 +196,8 @@ const TREND_LENGTH = 40
 const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] as const
 // The usage windows the desktop draws as gauges, in order.
 const GAUGED: readonly string[] = ['five_hour', 'seven_day']
+// The band segments the desktop band writes as text rather than draws as meters.
+const BAND_WORDS: readonly BandSegment[] = ['model', 'effort', 'style', 'turn', 'run', 'cost', 'time']
 // The desktop's panel fill: a faint gray that lifts a card off the pane in
 // the light theme and the dark alike.
 const CARD = '#8080800f'
@@ -217,7 +223,7 @@ const trend = atom({ plugin: 'dforge', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dforge', key: 'view' } as const, 'cockpit')
 const account = atom({ plugin: 'dforge', key: 'account' } as const, null)
 const place = atom({ plugin: 'dforge', key: 'place' } as const, null)
-const engine = atom({ plugin: 'dforge', key: 'engine' } as const, { model: null, effort: null, cache: null })
+const engine = atom({ plugin: 'dforge', key: 'engine' } as const, { model: null, effort: null, cache: null, style: null })
 const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
 const activity = atom({ plugin: 'dforge', key: 'activity' } as const, IDLE)
 const turnTokens = atom({ plugin: 'dforge', key: 'turnTokens' } as const, [])
@@ -255,6 +261,8 @@ type Options = {
   notifyAfter: number
   notifyAskAfter: number
   notifyDetail: string
+  bandLine1: string
+  bandLine2: string
 }
 
 /** What the budget reading is judged by. */
@@ -267,6 +275,7 @@ type Live = Omit<Options, 'layout' | 'density'> & {
   tuning: Tuning
   shown: Section[]
   shownCollapsed: Section[]
+  bandLayout: [BandSegment[], BandSegment[]]
   isMinimized: boolean
 }
 
@@ -288,6 +297,8 @@ function liveFrom(values: Partial<Options>): Live {
     notifyAfter = 60,
     notifyAskAfter = 20,
     notifyDetail = 'full',
+    bandLine1 = '',
+    bandLine2 = '',
   } = values
   // Anything but the three words reads as auto.
   const layout = layoutSetting === 'full' || layoutSetting === 'compact' ? layoutSetting : 'auto'
@@ -308,9 +319,12 @@ function liveFrom(values: Partial<Options>): Live {
     notifyAfter,
     notifyAskAfter,
     notifyDetail,
+    bandLine1,
+    bandLine2,
     tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt), isRelaxed: handoffMode === 'relaxed' },
     shown: sectionsFrom(sections),
     shownCollapsed: collapsedFrom(collapsed),
+    bandLayout: bandLinesFrom(bandLine1, bandLine2),
     isMinimized: layout === 'compact',
   }
 }
@@ -603,6 +617,7 @@ export const register: Register = on => {
       S.isMainTurn = false
       await trackAutoRun($)
       compactWindow = await readCompactWindow($)
+      await readStyle($)
       await readRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
       const turnUsage = e.usage as TurnUsage | undefined
@@ -946,7 +961,37 @@ export const register: Register = on => {
         if (state.editing !== null || state.isConfirmingReset) await show({})
         return set(key, value)
       }
+      // A segment's chip on either line: on adds it last there and moves it off the other.
+      const bandChips = (index: 0 | 1) => {
+        const key = `set-bandLine${index + 1}`
+        const line = o.bandLayout[index]
+        return (
+          <Box key={`${key}-chips`} flexDirection="column">
+            <Box key={`${key}-label`} flexDirection="row" columnGap={1}>
+              <Box key={`${key}-name`} flexShrink={0}>
+                <Text>{`Line ${index + 1}`}</Text>
+              </Box>
+              <Text key={`${key}-order`} dimColor wrap="truncate-end">
+                {line.length === 0 ? 'hidden' : line.join(' · ')}
+              </Text>
+            </Box>
+            {chips(
+              key,
+              BAND_SEGMENTS,
+              name => line.includes(name as BandSegment),
+              name => name,
+              async name => {
+                const [one, two] = bandLineToggled(o.bandLayout, index, name as BandSegment)
+                if (one !== o.bandLine1) await save('bandLine1', one)
+                if (two !== o.bandLine2) await save('bandLine2', two)
+              },
+            )}
+          </Box>
+        )
+      }
       const custom: Record<string, RenderChildren> = {
+        bandLine1: bandChips(0),
+        bandLine2: bandChips(1),
         sections: (
           <Box key="set-sections-chips" flexDirection="column">
             <Box key="set-sections-label"><Text>Sections</Text></Box>
@@ -2093,7 +2138,12 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   // its own until it fits.
   const where = await read($, place)
   const turnsNow = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
+  const layout = (await live($)).bandLayout
+  const engineNow = await read($, engine)
+  const doing = await read($, activity)
+  const inFlight = summary === null || summary.isFinished ? [] : summary.tasks.filter(task => task.state === 'assigned' && task.round !== null)
   const band: BandInput = {
+    lines: layout,
     cwd: where?.cwd ?? null,
     root: where?.root ?? null,
     home: where?.home ?? null,
@@ -2104,7 +2154,22 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
     agents: running.length,
     shells: { count: background.length, longest: background.reduce((most, shell) => Math.max(most, now - shell.startedAt), 0) },
     now,
-    isBackground: (await read($, activity)).kind === 'background',
+    model: engineNow.model,
+    effort: engineNow.effort,
+    style: engineNow.style ?? null,
+    cache: engineNow.cache,
+    usd: head?.usd ?? null,
+    turn:
+      doing.kind === 'running'
+        ? { kind: 'running', since: doing.turnStartedAt ?? doing.since, tool: doing.tool }
+        : doing.kind === 'waiting' || doing.kind === 'asking' || doing.kind === 'failed'
+          ? { kind: doing.kind, since: doing.since, tool: null }
+          : null,
+    run:
+      summary === null || summary.isFinished
+        ? null
+        : { done: summary.done, total: summary.total, round: inFlight.length === 1 ? (inFlight[0]?.round ?? null) : null, blocked: summary.tasks.filter(task => task.state === 'blocked').length },
+    isBackground: doing.kind === 'background',
   }
   const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
   const warning: Run[] = [
@@ -2123,8 +2188,9 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 
   if (isDesktop) {
     const w = svgWidth(room - 4)
+    const picked = [...layout[0], ...layout[1]]
     const meters: BandMeter[] = [
-      ...(head === null
+      ...(head === null || !picked.includes('ctx')
         ? []
         : [
             {
@@ -2136,7 +2202,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
               note: turnsNow === null ? [] : [{ text: `≈${turnsNow} ${turnsNow === 1 ? 'turn' : 'turns'}`, color: turnsNow <= 3 ? 'warning' : undefined }],
             },
           ]),
-      ...band.limits.map((limit): BandMeter => {
+      ...band.limits.filter(limit => picked.includes(limitLabel(limit.kind) as BandSegment)).map((limit): BandMeter => {
         const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now)
         return {
           key: limitLabel(limit.kind),
@@ -2154,16 +2220,21 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
                   : [{ text: `resets ${duration(limit.resetsAt - now) || 'now'}` }],
         }
       }),
+      ...(engineNow.cache === null || !picked.includes('cache')
+        ? []
+        : [{ key: 'Cache', percent: engineNow.cache * 100, share: engineNow.cache, color: rampColor(100 - engineNow.cache * 100), tick: null, note: [] }]),
     ]
+    // The picked readings that are words, not meters, in the order picked.
+    const said = bandLines({ ...band, lines: [picked.filter(name => BAND_WORDS.includes(name)), []] }, 0)[0]
     const facts: PanelRun[] = [
-      ...(running.length === 0 ? [] : [{ text: '● ', color: 'green' }, { text: `${running.length} ${running.length === 1 ? 'agent' : 'agents'} running` }, { text: '   ' }]),
-      ...(background.length === 0
+      ...(running.length === 0 || !picked.includes('agents') ? [] : [{ text: '● ', color: 'green' }, { text: `${running.length} ${running.length === 1 ? 'agent' : 'agents'} running` }, { text: '   ' }]),
+      ...(background.length === 0 || !picked.includes('shells')
         ? []
         : [{ text: '$ ', color: 'yellow', mono: true }, { text: `${background.length} ${background.length === 1 ? 'shell' : 'shells'}` }, { text: ` · longest ${shellAge(band.shells.longest)}`, dim: true }, { text: '   ' }]),
-      ...(where === null ? [] : [{ text: where.root === null ? (where.cwd.split(/[\\/]/).pop() ?? where.cwd) : repoName(where.remote ?? null, where.root), bold: true }]),
+      ...(where === null || !picked.includes('dir') ? [] : [{ text: where.root === null ? (where.cwd.split(/[\\/]/).pop() ?? where.cwd) : repoName(where.remote ?? null, where.root), bold: true }]),
     ]
     const chips: PanelRun[] =
-      git === null
+      git === null || !picked.includes('git')
         ? []
         : [
             pill(`⎇ ${git.branch}${git.ahead > 0 ? ` ↑${git.ahead}` : ''}${git.behind > 0 ? ` ↓${git.behind}` : ''}`, 'magenta'),
@@ -2182,6 +2253,7 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
       },
     ]
     const rest: PanelLine[] = [
+      ...(said.length > 0 ? [{ kind: 'text', left: said } as PanelLine] : []),
       ...(facts.length > 0 ? [{ kind: 'text', left: facts } as PanelLine] : []),
       ...(chips.length > 0 ? [{ kind: 'chips', chips } as PanelLine] : []),
       ...(warning.length > 0 ? [{ kind: 'text', left: warning.map(run => ({ ...run, color: run.color === undefined ? undefined : 'red' })) } as PanelLine] : []),
@@ -3647,6 +3719,18 @@ async function readEngine($: EngineInterface) {
     await update($, engine, now => ({ ...now, model: now.model ?? model, effort: now.effort ?? effort }))
   } catch {
     // The first request fills them in.
+  }
+  await readStyle($)
+}
+
+// The output style from the merged settings; "default", or none set, is null.
+async function readStyle($: EngineInterface) {
+  try {
+    const setting = ((await $.settings.read()) as { outputStyle?: unknown }).outputStyle
+    const style = typeof setting === 'string' && setting !== '' && setting.toLowerCase() !== 'default' ? setting : null
+    if ((await read($, engine)).style !== style) await update($, engine, now => ({ ...now, style }))
+  } catch {
+    // The band shows no style.
   }
 }
 
