@@ -25,18 +25,18 @@ jobs:
       - name: Validate marketplace and plugins
         timeout-minutes: 3
         run: |
-          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate .
+          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.306 plugin validate .
           for plugin in dr-status darkraise-ui darkraise-win32ui; do
-            timeout 30s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate "plugins/$plugin"
+            timeout 30s npx --yes @anthropic-ai/claude-code@2.1.306 plugin validate "plugins/$plugin"
           done
 
       # One CLI version for every validate step: dforge's mod (hooks modules)
-      # needs 2.1.295, and the marketplace step reads dforge too.
+      # needs 2.1.299, and the marketplace step reads dforge too.
       - name: Validate and test dforge
         timeout-minutes: 3
         run: |
-          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.295 plugin validate plugins/dforge
-          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.295 plugin test plugins/dforge
+          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.306 plugin validate plugins/dforge
+          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.306 plugin test plugins/dforge
 
       - name: Run maintained regression suites
         timeout-minutes: 12
