@@ -44,7 +44,13 @@ function git(cwd, args) {
 export function primaryRoot(cwd) {
   const common = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
   const primary = common && path.isAbsolute(common) ? git(path.dirname(common), ["rev-parse", "--show-toplevel"]) : null;
-  return primary ?? git(cwd, ["rev-parse", "--show-toplevel"]);
+  return native(primary ?? git(cwd, ["rev-parse", "--show-toplevel"]));
+}
+
+// Git prints C:/… on Windows. A root keys stores.json beside the mirror path
+// node writes, so both take node's own form.
+function native(top) {
+  return top === null ? null : path.resolve(top);
 }
 
 // A configured key may name the checkout through a symbolic link, and may name
@@ -122,7 +128,7 @@ export function writeApplied(env, repoRoot, applied, where = {}) {
 
 export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
   const repoRoot = primaryRoot(cwd);
-  const worktreeRoot = git(cwd, ["rev-parse", "--show-toplevel"]);
+  const worktreeRoot = native(git(cwd, ["rev-parse", "--show-toplevel"]));
   const result = (reason, configured, applied, sync) => ({
     repoRoot,
     worktreeRoot,
