@@ -354,10 +354,15 @@ export const register: Register = on => {
     })
     await loadSettings($)
     const o = await live($)
+    // Open first: the reads below run processes, and each fills its section as it lands.
+    if (o.isMinimized) {
+      if ((await read($, view)) !== 'settings') await shutPane($)
+    } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
     compactWindow = await readCompactWindow($)
     await onBudget($, await refresh($, o.tuning, compactWindow))
     await readAccount($)
     await readPlace($)
+    await readBreakdown($)
     await readEngine($)
     await readWhere($)
     await readNotifier($)
@@ -372,9 +377,6 @@ export const register: Register = on => {
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
     await readVersion($)
     await readRemote($)
-    if (o.isMinimized) {
-      if ((await read($, view)) !== 'settings') await shutPane($)
-    } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
 
     return next(e)
   })
@@ -473,6 +475,8 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      // The estimate stands in until the next response; the old one is the window before.
+      await readBreakdown($)
       // The engine's or the person's compaction: the run's rule still applies after it.
       if ((e.trigger === 'auto' || e.trigger === 'manual') && !S.isPaneCompacting) await bookAutoCompaction($)
     }
@@ -711,6 +715,9 @@ export const register: Register = on => {
         fields: (await turnFields($)).slice(0, 1),
       }, null)
     }
+    // The response asking for this call already measured the window: show it while the tool
+    // runs. Only shown: the note and the alert wait for the ledger this call may write.
+    if (e.agentId === undefined) await refresh($, (await live($)).tuning, compactWindow, { isShownOnly: true })
     let ran: Awaited<ReturnType<typeof next>>
     try {
       ran = await next(e)
@@ -764,6 +771,7 @@ export const register: Register = on => {
     const head = await read($, budget)
     const spend = await read($, usage)
     const rows = await read($, breakdown)
+    const estimate = head === null ? (rows?.total ?? null) : null
     const list = await read($, seats)
     const all = await read($, spawns)
     const background = await read($, shells)
@@ -845,12 +853,17 @@ export const register: Register = on => {
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
           </Text>
         )}
-        {autoNow?.active && button('pane-stop-auto', 'Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
-        {canHandOff && !autoNow?.active && button('pane-handoff', 'Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
-        {button('pane-compact', 'Compact', () => compactFromPane($), { hotkey: 'c', isCompact: isDense })}
-        {button('pane-density', isDense ? 'Detailed' : 'Dense', () => setOption($, 'density', isDense ? 'detailed' : 'dense'), { hotkey: 'd', isCompact: isDense })}
-        {button('pane-settings', 'Settings', () => showSettings($), { hotkey: 's', isCompact: isDense })}
-        {canMinimize && !isDesktop && !isCompact && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm', isCompact: isDense })}
+        {autoNow?.active && button('pane-stop-auto', '■ Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
+        {canHandOff && !autoNow?.active && button('pane-handoff', '↪ Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
+        {button('pane-compact', '⇣ Compact', () => compactFromPane($), { hotkey: 'c', isCompact: isDense })}
+      </Box>
+    )
+    // The pane's own buttons, in a row below the account: they act on the pane, not the context.
+    const controls = (
+      <Box key="pane-controls" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {button('pane-density', isDense ? '☰ Detailed' : '≡ Dense', () => setOption($, 'density', isDense ? 'detailed' : 'dense'), { hotkey: 'd', isCompact: isDense })}
+        {button('pane-settings', '⚙ Settings', () => showSettings($), { hotkey: 's', isCompact: isDense })}
+        {canMinimize && (isDesktop || !isCompact) && button('pane-minimize', '▁ Minimize', minimize, { hotkey: 'm', isCompact: isDense })}
       </Box>
     )
 
@@ -1112,6 +1125,7 @@ export const register: Register = on => {
         billing,
         remote: remoteRuns(remoteNow.clients, remoteNow.setting),
         context: head === null ? null : { tokens: head.tokens, limit: head.limit },
+        estimate,
         turnsLeft: head === null ? null : turnsToBudget(await read($, turnTokens), head.limit),
         limits,
         shells: background,
@@ -1135,13 +1149,14 @@ export const register: Register = on => {
                 {drawRuns('now', nowLine(actNow, now, work))}
               </Text>
             </Box>
-            {isDesktop && canMinimize && button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
           </Box>
-          {rows.map(row => (
+          {!rows.some(row => row.key === 'dense-account') && controls}
+          {rows.map(row => [
             <Box key={row.key}>
               <Text wrap="truncate-end">{drawRuns(row.key, row.runs)}</Text>
-            </Box>
-          ))}
+            </Box>,
+            row.key === 'dense-account' && controls,
+          ])}
           {actions}
         </Box>
       )
@@ -1240,34 +1255,35 @@ export const register: Register = on => {
           </Text>,
         )
       }
-      if (breakdownShown.length > 0) {
-        const runs = stackedRuns(
-          breakdownShown.map(row => row.tokens),
-          inner,
-        )
-        const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]
-        const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
-        contextBody.push(
-          <Text key="ctx-stack">
-            {breakdownShown.map((row, index) => (
-              <Text key={`ctx-stack-${row.name}`} color={colorOf(index)}>
-                {'█'.repeat(runs[index] ?? 0)}
-              </Text>
-            ))}
-          </Text>,
-          details(
-            'ctx-rows',
-            breakdownShown.map((row, index) => (
-              <Text key={`ctx-row-${row.name}`} wrap="truncate-end">
-                <Text color={colorOf(index)}>■ </Text>
-                {row.name.padEnd(Math.min(20, Math.max(8, wide - 14)))}
-                <Text bold> {kTokens(row.tokens).padStart(5)}</Text>
-                <Text dimColor> {String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(3)}%</Text>
-              </Text>
-            )),
-          ),
-        )
-      }
+    }
+    // The breakdown is an estimate the session has from its start, a reading or not.
+    if (breakdownShown.length > 0) {
+      const runs = stackedRuns(
+        breakdownShown.map(row => row.tokens),
+        inner,
+      )
+      const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]
+      const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
+      contextBody.push(
+        <Text key="ctx-stack">
+          {breakdownShown.map((row, index) => (
+            <Text key={`ctx-stack-${row.name}`} color={colorOf(index)}>
+              {'█'.repeat(runs[index] ?? 0)}
+            </Text>
+          ))}
+        </Text>,
+        details(
+          'ctx-rows',
+          breakdownShown.map((row, index) => (
+            <Text key={`ctx-row-${row.name}`} wrap="truncate-end">
+              <Text color={colorOf(index)}>■ </Text>
+              {row.name.padEnd(Math.min(20, Math.max(8, wide - 14)))}
+              <Text bold> {kTokens(row.tokens).padStart(5)}</Text>
+              <Text dimColor> {String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(3)}%</Text>
+            </Text>
+          )),
+        ),
+      )
     }
 
     const engineNow = await read($, engine)
@@ -1427,7 +1443,7 @@ export const register: Register = on => {
         'cyan',
         head === null ? (
           <Text key="ctx-head" dimColor>
-            no reading yet
+            {estimate === null ? 'no reading yet' : `≈${kTokens(estimate)} estimated`}
           </Text>
         ) : (
           <Text key="ctx-head">
@@ -1735,7 +1751,22 @@ export const register: Register = on => {
           },
         ]),
         context: (() => {
-          if (head === null) return panel('context', 'Context', 'cyan', [{ text: 'no reading yet' }], [], actions)
+          const breakdownLines: PanelLine[] = []
+          if (breakdownShown.length > 0) {
+            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] ?? BREAKDOWN_COLORS[0]
+            const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
+            breakdownLines.push({ kind: 'picture', svg: stackSvg(breakdownShown.map(row => row.tokens), breakdownShown.map((_, index) => colorOf(index)), width, 8) })
+            for (const [index, row] of breakdownShown.entries()) {
+              breakdownLines.push({
+                kind: 'text',
+                left: [{ text: '■ ', color: paint(colorOf(index)) }, { text: row.name }],
+                right: [{ text: kTokens(row.tokens), bold: true }, { text: `${String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(4)}%`, dim: true, mono: true }],
+              })
+            }
+          }
+          if (head === null) {
+            return panel('context', 'Context', 'cyan', [{ text: estimate === null ? 'no reading yet' : `≈${kTokens(estimate)} estimated` }], breakdownLines, actions)
+          }
           const percent = (head.tokens / head.limit) * 100
           const compactAt = rows?.compactAt ?? null
           const lines: PanelLine[] = [
@@ -1766,18 +1797,7 @@ export const register: Register = on => {
               alt: `Context over the last ${count} readings, ${label} on the last`,
             })
           }
-          if (breakdownShown.length > 0) {
-            const colorOf = (index: number) => BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] ?? BREAKDOWN_COLORS[0]
-            const used = breakdownShown.reduce((sum, row) => sum + row.tokens, 0)
-            lines.push({ kind: 'picture', svg: stackSvg(breakdownShown.map(row => row.tokens), breakdownShown.map((_, index) => colorOf(index)), width, 8) })
-            for (const [index, row] of breakdownShown.entries()) {
-              lines.push({
-                kind: 'text',
-                left: [{ text: '■ ', color: paint(colorOf(index)) }, { text: row.name }],
-                right: [{ text: kTokens(row.tokens), bold: true }, { text: `${String(Math.round((row.tokens / Math.max(1, used)) * 100)).padStart(4)}%`, dim: true, mono: true }],
-              })
-            }
-          }
+          lines.push(...breakdownLines)
           return panel('context', 'Context', 'cyan', [{ text: `${kTokens(head.tokens)} of ${kTokens(head.window)}` }], lines, actions)
         })(),
         usage: panel(
@@ -1995,13 +2015,13 @@ export const register: Register = on => {
         <Box flexDirection="column" gap="md">
           {resumeCard}
           {o.shown.includes('account') && panels.account}
+          {controls}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="now-box" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
                 {drawRuns('now', nowLine(actNow, now, work))}
               </Text>
             </Box>
-            {button('pane-minimize', 'Minimize', minimize, { hotkey: 'm' })}
           </Box>
           {tiles.length > 0 && (
             <Box key="gauges" flexDirection="column" gap="md">
@@ -2020,7 +2040,8 @@ export const register: Register = on => {
         <Text key="now" wrap="truncate-end">
           {drawRuns('now', nowLine(actNow, now, work))}
         </Text>
-        {o.shown.map(name => byName[name])}
+        {!o.shown.includes('account') && controls}
+        {o.shown.map(name => (name === 'account' ? [byName[name], controls] : byName[name]))}
         {!o.shown.includes('context') && actions}
       </Box>
     )
@@ -3285,7 +3306,12 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
 
 // Reads the status line's figures (free without a breakdown) and, past the
 // budget in a dforge session, tells the model once.
-async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number | undefined): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
+async function refresh(
+  $: EngineInterface,
+  tuning: Tuning,
+  compactWindow: number | undefined,
+  { isShownOnly = false } = {},
+): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
   const { handoffTokens, nudgeModel } = tuning
   const figures = await $.session.usage()
   const tokens = figures.context.tokens
@@ -3316,6 +3342,7 @@ async function refresh($: EngineInterface, tuning: Tuning, compactWindow: number
     if (before?.tokens !== tokens) await update($, trend, readings => [...readings, tokens].slice(-TREND_LENGTH))
   }
 
+  if (isShownOnly) return
   const level = levelOf(tokens, limit, tuning.warnAt)
   const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd }, isPast: level === 'handoff' }
   if (level !== 'handoff') {
@@ -3609,6 +3636,19 @@ async function reseatPane($: EngineInterface, before: Live['layout']) {
 async function refreshDetail($: EngineInterface) {
   S.detailAt = await $.clock.now()
   await readPlace($)
+  await readBreakdown($)
+  try {
+    const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
+    const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
+    if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
+  } catch (error) {
+    // A large repository can outrun the timeout: its last reading stands rather than a blank card.
+    if (!TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
+  }
+}
+
+/** The /context breakdown, estimated locally: no process, and there before any response. */
+async function readBreakdown($: EngineInterface) {
   try {
     const figures = await $.session.usage({ breakdown: 'summary' })
     const detail = figures.context.breakdown
@@ -3620,19 +3660,12 @@ async function refreshDetail($: EngineInterface) {
           .slice(0, MAX_BREAKDOWN_ROWS)
           .map(row => ({ name: row.name, tokens: row.tokens })),
         compactAt: detail.isAutoCompactEnabled ? (detail.autoCompactThreshold ?? null) : null,
+        total: detail.totalTokens,
       }
       if (JSON.stringify(await read($, breakdown)) !== JSON.stringify(next)) await update($, breakdown, () => next)
     }
   } catch {
     // No breakdown on this host: the pane shows the totals alone.
-  }
-  try {
-    const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
-    const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
-    if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
-  } catch (error) {
-    // A large repository can outrun the timeout: its last reading stands rather than a blank card.
-    if (!TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
   }
 }
 

@@ -1082,6 +1082,8 @@ export type DenseInput = {
   remote: Run[]
   /** The context against the handoff budget. */
   context: { tokens: number; limit: number } | null
+  /** The breakdown's estimate, shown while there is no context reading. */
+  estimate: number | null
   turnsLeft: number | null
   limits: readonly { kind: string; percent: number }[]
   shells: readonly { command: string; startedAt: number }[]
@@ -1108,7 +1110,7 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
       if (input.email === null) return null
       return [denseLabel('acct'), ...join([[{ text: input.email, bold: true }], input.billing === null ? [] : [{ text: input.billing, dim: true }], input.remote.length === 0 ? [] : [{ text: 'Remote ', dim: true }, ...input.remote]])]
     case 'context': {
-      if (input.context === null) return [denseLabel('ctx'), { text: 'no reading yet', dim: true }]
+      if (input.context === null) return [denseLabel('ctx'), { text: input.estimate === null ? 'no reading yet' : `≈${kTokens(input.estimate)} estimated`, dim: true }]
       const { tokens, limit } = input.context
       const percent = (tokens / limit) * 100
       const color = rampColor(percent)

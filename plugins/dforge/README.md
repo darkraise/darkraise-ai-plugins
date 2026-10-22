@@ -614,11 +614,16 @@ desktop window joins the session, unless you closed it.
   (a phone, the desktop app), `on · no device yet` when "Enable Remote Control
   for all sessions" is on in `/config`, and `not connected` otherwise; a session
   started with `/remote-control` reads `not connected` until a device joins. Its frame takes one of eight colors picked from the config
-  directory, so each account keeps its own.
+  directory, so each account keeps its own. Below it a row holds the pane's own
+  buttons: **≡ Dense** (`d`), **⚙ Settings** (`s`) and **▁ Minimize** (`m`);
+  with Account hidden the row leads the pane.
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated
   locally with no API calls. The title adds about how many turns are left to
-  the budget at the pace of the last few. **Hand off** appears in
+  the budget at the pace of the last few. Until a response measures the window
+  (a new session, or just after a compaction) it shows the estimate instead,
+  `≈37k estimated`, with the categories. A tool call's reading shows as the
+  tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
   `dforge` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
   color, when `.dforge/handoff/latest.md` is under three days old and its

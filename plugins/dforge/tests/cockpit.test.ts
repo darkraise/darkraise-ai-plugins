@@ -135,6 +135,7 @@ const BREAKDOWN = {
   ],
   isAutoCompactEnabled: true,
   autoCompactThreshold: 604_000,
+  totalTokens: 218_000,
 } as never
 const INLINE = { ...PANE, props: { ...PANE.props, placement: 'inline', bodyColumns: 100 } } as const
 const MEASURE: SessionMeasureInput = {
@@ -751,7 +752,7 @@ describe('handoff reading', () => {
     w.tokens = undefined
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const cleared = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await cleared.find({ type: 'Text', text: /no reading yet/ })).toBeDefined()
+    expect(await cleared.find({ type: 'Text', text: /≈218k estimated/ })).toBeDefined()
     await cleared.unmount()
 
     w.tokens = 480_000
@@ -1697,8 +1698,94 @@ describe('dense pane', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeDefined()
     expect(await ui.find({ key: 'dense-context' })).toBeUndefined()
-    expect((await ui.find({ key: 'pane-density' }))?.props).toMatchObject({ label: 'Dense', plain: true })
+    expect((await ui.find({ key: 'pane-density' }))?.props).toMatchObject({ label: '≡ Dense', plain: true })
     expect(await ui.find({ key: 'pane-density-box' })).toBeDefined()
+  })
+
+  for (const surface of SURFACES) {
+    test(`the pane's own buttons sit in a row below the account on ${surface}`, async ($, on) => {
+      world(on, SIGNED_IN)
+      signedIn(on)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface })
+      const drawn = JSON.stringify(await ui.drawn())
+      const at = (key: string) => drawn.indexOf(`"key":"${key}"`)
+      expect(at('pane-controls')).toBeGreaterThan(at('account'))
+      expect(at('pane-controls')).toBeLessThan(at('context'))
+      const controls = JSON.stringify(await ui.find({ key: 'pane-controls' }))
+      for (const key of ['pane-density', 'pane-settings', 'pane-minimize']) expect(controls).toContain(`"${key}"`)
+      const context = JSON.stringify(await ui.find({ key: 'context' }))
+      expect(context).toContain('"pane-compact"')
+      expect(context).not.toContain('"pane-settings"')
+      expect((await ui.find({ key: 'pane-settings' }))?.props.label).toBe('⚙ Settings')
+      expect((await ui.find({ key: 'pane-minimize' }))?.props.label).toBe('▁ Minimize')
+    })
+  }
+
+  test('the pane buttons lead with the account hidden', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ sections: 'context,usage' }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    expect(drawn.indexOf('"key":"pane-controls"')).toBeGreaterThan(-1)
+    expect(drawn.indexOf('"key":"pane-controls"')).toBeLessThan(drawn.indexOf('"key":"context"'))
+  })
+
+  test('a dense pane draws its buttons right after the account row', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ density: 'dense' }))
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    const at = (key: string) => drawn.indexOf(`"key":"${key}"`)
+    expect(at('pane-controls')).toBeGreaterThan(at('dense-account'))
+    expect(at('pane-controls')).toBeLessThan(at('dense-context'))
+    expect((await ui.find({ key: 'pane-density' }))?.props.label).toBe('☰ Detailed')
+  })
+
+  test('the context card shows the estimate until the first response', async ($, on) => {
+    const w: World = { tokens: undefined }
+    world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /≈218k estimated/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Messages/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /no reading yet/ })).toBeUndefined()
+    await ui.unmount()
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(JSON.stringify(await desk.find({ key: 'context' }))).toContain('≈218k estimated')
+    await desk.unmount()
+    w.tokens = 284_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const read = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await read.find({ type: 'Text', text: /estimated/ })).toBeUndefined()
+    expect(await read.find({ type: 'Text', text: /% of handoff/ })).toBeDefined()
+  })
+
+  test('reads the context as a tool starts, not only once it ends', async ($, on) => {
+    const w: World = {
+      tokens: 100_000,
+      tools: {
+        Bash: () => {
+          w.tokens = 150_000
+          return { result: 'ok', text: 'ok' }
+        },
+      },
+    }
+    world(on, w)
+    await $.tool.call({ tool: 'Bash', command: 'sleep 60' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^trend/ })).toBeDefined()
+  })
+
+  test('opens the pane before the reads that run processes', async ($, on) => {
+    const log: unknown[] = []
+    world(on, { ...SIGNED_IN, opened: log as string[], gitRuns: log as string[] })
+    signedIn(on)
+    await $.session.start(START)
+    expect(log[0]).toBe('dforge')
+    expect(log.length).toBeGreaterThan(1)
   })
 
   test('offers Hand off as a one-line button, the main one near the budget', async ($, on) => {
@@ -1712,7 +1799,7 @@ describe('dense pane', () => {
     expect(await ui.find({ key: 'pane-handoff-box' })).toBeUndefined()
     const handoff = await ui.find({ key: 'pane-handoff' })
     expect(handoff?.type).toBe('Button')
-    expect(handoff?.props).toMatchObject({ label: 'Hand off', hotkey: 'h', variant: 'primary' })
+    expect(handoff?.props).toMatchObject({ label: '↪ Hand off', hotkey: 'h', variant: 'primary' })
     await ui.press({ key: 'pane-handoff' })
     expect(prompts).toHaveLength(1)
   })
@@ -1726,7 +1813,7 @@ describe('dense pane', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     const stop = await ui.find({ key: 'pane-stop-auto' })
     expect(stop?.type).toBe('Button')
-    expect(stop?.props).toMatchObject({ label: 'Stop auto' })
+    expect(stop?.props).toMatchObject({ label: '■ Stop auto' })
     expect(await ui.find({ key: 'pane-stop-auto-box' })).toBeUndefined()
     expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
     await ui.press({ key: 'pane-stop-auto' })
@@ -1793,7 +1880,7 @@ describe('buttons', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     const compact = await ui.find({ key: 'pane-compact' })
-    expect(compact?.props).toMatchObject({ label: 'Compact', plain: true })
+    expect(compact?.props).toMatchObject({ label: '⇣ Compact', plain: true })
     expect(compact?.props.hotkey).toBeUndefined()
     expect(JSON.stringify(compact?.children)).toContain('{"type":"Text","props":{"underline":true},"children":["C"]}')
     // A section's title is drawn in its card's color.
@@ -2647,7 +2734,7 @@ describe('now row', () => {
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, blank))).toBe('◐ background · 1 shell · npm test · 3m')
     const empty = { shells: [{ command: ' \n', startedAt: 20_000 }], agents: 0 }
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, empty))).toBe('◐ background · 1 shell · 3m')
-    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, now: at }
+    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, estimate: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, now: at }
     expect(flat(denseLine('shells', dense) ?? [])).toBe('$    1 shell · npm test · 3m')
     expect(flat(denseLine('shells', { ...dense, shells: empty.shells }) ?? [])).toBe('$    1 shell · 3m')
   })
@@ -2688,6 +2775,7 @@ describe('dense rows', () => {
     billing: 'subscription',
     remote: [{ text: '○ not connected' }],
     context: { tokens: 284_000, limit: 465_000 },
+    estimate: null,
     turnsLeft: 8,
     limits: [
       { kind: 'five_hour', percent: 23 },
@@ -2781,6 +2869,7 @@ describe('dense rows', () => {
     const empty: DenseInput = { ...INPUT, email: null, context: null, limits: [], shells: [], agents: [], run: null, todos: null, repo: null }
     expect(denseLine('account', empty)).toBeNull()
     expect(flat(denseLine('context', empty) ?? [])).toBe('ctx  no reading yet')
+    expect(flat(denseLine('context', { ...empty, estimate: 218_000 }) ?? [])).toBe('ctx  ≈218k estimated')
     expect(flat(denseLine('usage', empty) ?? [])).toBe('lim  no reading yet')
     for (const section of ['shells', 'agents', 'plan', 'repo', 'guard'] as const) expect(denseLine(section, empty)).toBeNull()
     expect(flat(denseLine('plan', { ...empty, todos: { done: 1, total: 4, current: 'Write the tests' } }) ?? [])).toBe('plan ▰▱▱▱ 1/4 · Write the tests')
