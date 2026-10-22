@@ -1952,14 +1952,50 @@ describe('settings view', () => {
     expect((await ui.find({ key: 'settings-tab-Context' }))?.props).toMatchObject({ variant: 'primary', hotkey: '3' })
   })
 
+  test('the terminal card has no fill, marks the open tab and spaces its rows while help shows', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect((await ui.find({ key: 'set-group-Cockpit' }))?.props).toMatchObject({ borderStyle: 'round', gap: 1 })
+    expect((await ui.find({ key: 'set-group-Cockpit' }))?.props.backgroundColor).toBeUndefined()
+    expect((await ui.find({ key: 'set-group-head' }))?.text).toBe('Cockpit·all defaults')
+    expect((await ui.find({ key: 'settings-tab-Cockpit' }))?.props.label).toBe('▸ Cockpit')
+    expect((await ui.find({ key: 'settings-tab-Context' }))?.props.label).toBe('Context')
+    await ui.press({ key: 'settings-help' })
+    expect((await ui.find({ key: 'set-group-Cockpit' }))?.props.gap).toBeUndefined()
+    await ui.press({ key: 'settings-tab-Notifications' })
+    expect((await ui.find({ key: 'set-group-head' }))?.text).toBe('Notifications·(Discord)·all defaults')
+  })
+
+  test('the help of a chip row leaves its names to the chips', () => {
+    for (const spec of Object.values(SCHEMA).filter(one => one.type === 'string' && one.values !== undefined)) {
+      expect(spec.values?.filter(name => new RegExp(`\\b${name}\\b`).test(spec.description)).length ?? 0).toBeLessThan(3)
+    }
+  })
+
+  test('a chip row sits in the value column beside its label on the terminal', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect((await ui.find({ key: 'set-sections-label' }))?.props.width).toBe(16)
+    expect((await ui.find({ key: 'set-sections-label' }))?.text).toBe('Sections')
+    expect(JSON.stringify(await ui.find({ key: 'set-sections-controls' }))).toContain('"set-section-usage"')
+    expect((await ui.find({ key: 'set-section' }))?.props.paddingLeft).toBeUndefined()
+    await ui.press({ key: 'settings-tab-Minimized' })
+    expect((await ui.find({ key: 'set-bandLine1-label' }))?.text).toBe('Line 1')
+    expect(JSON.stringify(await ui.find({ key: 'set-bandLine1-controls' }))).toContain('dir · git · model')
+  })
+
   test('describes each setting until help is hidden', async ($, on) => {
     world(on, { tokens: 284_000, config: {} })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts\./ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts,/ })).toBeDefined()
     await ui.press({ key: 'settings-help' })
-    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts\./ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^Open the cockpit when a session starts,/ })).toBeUndefined()
     expect((await ui.find({ key: 'settings-help' }))?.props).toMatchObject({ label: 'Show help', hotkey: 'i' })
   })
 
@@ -2007,6 +2043,9 @@ describe('settings view', () => {
     expect((await desk.find({ key: 'set-openAtStart-select' }))?.props).toMatchObject({ value: 'true', options: [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }] })
     expect((await desk.find({ key: 'set-layout-select' }))?.props).toMatchObject({ value: 'auto', options: [{ value: 'auto' }, { value: 'full' }, { value: 'compact' }] })
     expect(await desk.find({ key: 'set-layout-full' })).toBeUndefined()
+    // The desktop keeps its soft fill and marks the open tab by its look alone.
+    expect((await desk.find({ key: 'set-group-Cockpit' }))?.props.backgroundColor).toBe('#8080800f')
+    expect((await desk.find({ key: 'settings-tab-Cockpit' }))?.props.label).toBe('Cockpit')
     // Wrapping rows are spaced by the desktop's own steps both ways.
     expect((await desk.find({ key: 'settings-tabs' }))?.props).toMatchObject({ columnGap: 'sm', rowGap: 'sm' })
     expect((await desk.find({ key: 'set-section' }))?.props).toMatchObject({ columnGap: 'xs', rowGap: 'xs' })
@@ -2036,10 +2075,9 @@ describe('settings view', () => {
     await $.session.start(START)
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
     await desk.press({ key: 'pane-settings' })
-    // Sections is the pane's own chips: no dropdown or field, but the mark and the default still show.
-    expect((await desk.find({ key: 'set-sections' }))?.props).toMatchObject({ flexDirection: 'row', columnGap: 'sm' })
-    expect(await desk.find({ key: 'set-section-usage' })).toBeDefined()
-    expect(await desk.find({ key: 'set-sections-controls' })).toBeUndefined()
+    // Sections is the pane's own chips under the row's label: no dropdown or field, but the mark and the default still show.
+    expect((await desk.find({ key: 'set-sections-label' }))?.text).toBe('Sections*')
+    expect(JSON.stringify(await desk.find({ key: 'set-sections-controls' }))).toContain('"set-section-usage"')
     expect(await desk.find({ key: 'set-sections-input' })).toBeUndefined()
     expect(await desk.find({ key: 'set-sections-mark' })).toBeDefined()
     expect((await desk.find({ key: 'set-sections-default' }))?.text).toBe('changed from the defaultReset')

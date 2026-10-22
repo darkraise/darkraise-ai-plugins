@@ -35,12 +35,12 @@ export default {
   openAtStart: {
     type: 'boolean', default: true, group: 'Cockpit', target: 'dforge',
     label: 'Show at start', title: 'Open the pane at session start',
-    description: 'Open the cockpit when a session starts. Claude Code shows it once the terminal is 144 columns wide, 110 once you have opened it before; /cockpit opens it at any width.',
+    description: 'Open the cockpit when a session starts, once the terminal is 144 columns wide (110 after the first time). /cockpit opens it at any width.',
   },
   layout: {
     type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', target: 'dforge',
     label: 'Layout', title: 'Pane layout',
-    description: 'auto: the full layout docked beside the transcript, the band when the pane sits above the prompt. full: always the full layout. compact: minimized, a box below the prompt on the terminal (above it on the desktop); Minimize sets it and Expand sets auto, or full where the pane does not dock.',
+    description: 'auto: the full pane beside the transcript, the band above the prompt. full: always the full pane. compact: the minimized box by the prompt; Minimize sets it, Expand leaves it.',
   },
   density: {
     type: 'enum', values: ['detailed', 'dense'], default: 'detailed', group: 'Cockpit', target: 'dforge',
@@ -50,12 +50,12 @@ export default {
   sections: {
     type: 'string', values: ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'], default: '', group: 'Cockpit', target: 'dforge',
     label: 'Sections', title: 'Pane sections',
-    description: 'Which sections the full pane shows, in order, comma-separated: account, context, usage, shells, agents, plan, repo, guard. Empty shows all eight.',
+    description: 'Which sections the full pane shows, in the order turned on. The last one left stays on.',
   },
   collapsed: {
     type: 'string', values: ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'], default: '', group: 'Cockpit', target: 'dforge',
     label: 'Collapsed', title: 'Collapsed sections',
-    description: 'Sections drawn as their title row only, comma-separated: account, context, usage, shells, agents, plan, repo, guard. Empty expands all eight.',
+    description: 'Sections drawn as their title row only.',
   },
   breakdownRows: {
     type: 'number', default: 6, min: 0, max: 12, step: 1, zero: 'hidden', group: 'Cockpit', target: 'dforge',
@@ -70,12 +70,12 @@ export default {
   bandLine1: {
     type: 'string', values: ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells', 'ctx', 'cache', 'cost', '5h', '7d', 'time', 'none'], default: '', group: 'Minimized', target: 'dforge',
     label: 'Line 1', title: 'Minimized band: line 1',
-    description: 'What the minimized band\'s first line shows, in order, comma-separated: dir, git, model, effort, style, turn, run, agents, shells, ctx, cache, cost, 5h, 7d, time. Empty shows dir, git, model, effort, style, turn, run, agents and shells; none hides the line.',
+    description: 'What the minimized band\'s first line shows, in the order turned on. A segment turned on here leaves line 2; none on hides the line.',
   },
   bandLine2: {
     type: 'string', values: ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells', 'ctx', 'cache', 'cost', '5h', '7d', 'time', 'none'], default: '', group: 'Minimized', target: 'dforge',
     label: 'Line 2', title: 'Minimized band: line 2',
-    description: 'What the minimized band\'s second line shows, in order, comma-separated, from the same names as line 1. Empty shows ctx, cache, cost, 5h and 7d; none hides the line. A name on both lines shows on line 1.',
+    description: 'What the minimized band\'s second line shows, in the order turned on. A segment turned on here leaves line 1; none on hides the line.',
   },
   handoffTokens: {
     type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge',
@@ -175,7 +175,7 @@ export default {
   notifyOn: {
     type: 'string', values: ['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit', 'task', 'session', 'agent', 'none'], default: '', group: 'Notifications', target: 'dforge',
     label: 'Send on', title: 'Discord: events to send',
-    description: 'Comma-separated: ask, question, done, error, blocked, budget, limit, task, session, agent. Empty sends ask, question, done, error, blocked, budget and limit; none sends nothing.',
+    description: 'Which events go to Discord. None on sends nothing.',
   },
   notifyAfter: {
     type: 'number', default: 60, min: 0, max: 3600, step: 15, unit: 's', zero: 'any', group: 'Notifications', target: 'dforge',

@@ -879,7 +879,7 @@ export const register: Register = on => {
         </Box>
       )
       const chips = (key: string, names: readonly string[], isOn: (name: string) => boolean, label: (name: string) => string, onPress: (name: string) => unknown) => (
-        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={isDesktop ? 'xs' : 1} rowGap={isDesktop ? 'xs' : undefined} paddingLeft={isDesktop ? undefined : INDENT}>
+        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={isDesktop ? 'xs' : 1} rowGap={isDesktop ? 'xs' : undefined} flexShrink={1}>
           {names.map(name => compact(`${key}-${name}`, `${isOn(name) ? '✓' : '○'} ${label(name)}`, () => onPress(name), { isOff: !isOn(name) }))}
         </Box>
       )
@@ -966,15 +966,10 @@ export const register: Register = on => {
         const key = `set-bandLine${index + 1}`
         const line = o.bandLayout[index]
         return (
-          <Box key={`${key}-chips`} flexDirection="column">
-            <Box key={`${key}-label`} flexDirection="row" columnGap={1}>
-              <Box key={`${key}-name`} flexShrink={0}>
-                <Text>{`Line ${index + 1}`}</Text>
-              </Box>
-              <Text key={`${key}-order`} dimColor wrap="truncate-end">
-                {line.length === 0 ? 'hidden' : line.join(' · ')}
-              </Text>
-            </Box>
+          <Box key={`${key}-chips`} flexDirection="column" flexShrink={1}>
+            <Text key={`${key}-order`} dimColor wrap="truncate-end">
+              {line.length === 0 ? 'hidden' : line.join(' · ')}
+            </Text>
             {chips(
               key,
               BAND_SEGMENTS,
@@ -992,42 +987,26 @@ export const register: Register = on => {
       const custom: Record<string, RenderChildren> = {
         bandLine1: bandChips(0),
         bandLine2: bandChips(1),
-        sections: (
-          <Box key="set-sections-chips" flexDirection="column">
-            <Box key="set-sections-label"><Text>Sections</Text></Box>
-            {/* Under their label, wrapping to the pane's width. */}
-            {chips(
-              'set-section',
-              SECTIONS,
-              name => o.shown.includes(name as Section),
-              name => name,
-              name => save('sections', sectionsToggled(o.shown, name as Section)),
-            )}
-          </Box>
+        sections: chips(
+          'set-section',
+          SECTIONS,
+          name => o.shown.includes(name as Section),
+          name => name,
+          name => save('sections', sectionsToggled(o.shown, name as Section)),
         ),
-        collapsed: (
-          <Box key="set-collapsed-chips" flexDirection="column">
-            <Box key="set-collapsed-label"><Text>Collapsed</Text></Box>
-            {chips(
-              'set-collapsed',
-              SECTIONS,
-              name => o.shownCollapsed.includes(name as Section),
-              name => name,
-              name => save('collapsed', collapsedToggled(o.shownCollapsed, name as Section)),
-            )}
-          </Box>
+        collapsed: chips(
+          'set-collapsed',
+          SECTIONS,
+          name => o.shownCollapsed.includes(name as Section),
+          name => name,
+          name => save('collapsed', collapsedToggled(o.shownCollapsed, name as Section)),
         ),
-        notifyOn: (
-          <Box key="set-notifyOn-chips" flexDirection="column">
-            <Box key="set-notifyOn-label"><Text>Send on</Text></Box>
-            {chips(
-              'set-notify-kind',
-              NOTIFY_KINDS,
-              kind => S.kinds.includes(kind as NotifyKind),
-              kind => kindLabel(kind as NotifyKind),
-              kind => save('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
-            )}
-          </Box>
+        notifyOn: chips(
+          'set-notify-kind',
+          NOTIFY_KINDS,
+          kind => S.kinds.includes(kind as NotifyKind),
+          kind => kindLabel(kind as NotifyKind),
+          kind => save('notifyOn', notifyKindsToggled(S.kinds, kind as NotifyKind)),
         ),
       }
 
