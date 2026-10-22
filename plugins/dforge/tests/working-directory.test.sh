@@ -156,9 +156,9 @@ M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
 mkdir -p "$M/dforge/plans"
 printf '# Mirror plan\n\n### Task 1: One\n' > "$M/dforge/plans/mp.md"
 check "sdd-workspace: a mirror plan by name gets a local workspace" \
-  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/dforge/plans/mp.md)" "$STOP/.dforge/sdd/mp"
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/dforge/plans/mp.md)" "$(cd "$STOP/.dforge/sdd/mp" && pwd)"
 check "sdd-workspace: a mirror plan by path" \
-  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/dforge/plans/mp.md")" "$STOP/.dforge/sdd/mp"
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/dforge/plans/mp.md")" "$(cd "$STOP/.dforge/sdd/mp" && pwd)"
 
 # --- a ConfigError stops a plan reader instead of dropping its amendments ---
 BH="$TMP/bad-home"; mkdir -p "$BH/.dforge"
