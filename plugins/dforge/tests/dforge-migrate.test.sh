@@ -236,7 +236,10 @@ out=$(migrate "$FM" --dry-run "$FC" 2>&1)
 check "crlf fence, dry: listed" "$(grep -cxF "would rewrite the plugin prefixes in $FC/docs/dforge/plans/crlf.md" <<<"$out")" "1"
 out=$(migrate "$FM" "$FC" 2>&1); code=$?
 check "crlf fence: exit 0" "$code" "0"
-check "crlf fence: closes, the line after it rewritten" "$(cat "$FC/docs/dforge/plans/crlf.md")" $'```\r\ndr-forge:inner\r\n```\r\nthen dforge:outer\r'
+# Byte for byte: a command substitution need not keep every carriage return.
+printf '```\r\ndr-forge:inner\r\n```\r\nthen dforge:outer\r\n' > "$TMP/crlf.want"
+check "crlf fence: closes, the line after it rewritten" \
+  "$(cmp -s "$TMP/crlf.want" "$FC/docs/dforge/plans/crlf.md" && echo same || od -c "$FC/docs/dforge/plans/crlf.md")" "same"
 
 # --- a line opening with an inline code span is no fence ---
 printf '```x``` then dr-forge:one\ndr-forge:two\n```\ndr-forge:inner\n```\nafter dr-forge:three\n' > "$FC/docs/dforge/plans/span.md"
