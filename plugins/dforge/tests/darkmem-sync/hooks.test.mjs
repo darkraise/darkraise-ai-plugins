@@ -151,6 +151,8 @@ test("the quiet push prints nothing and declares the session it was given", asyn
 const SCRIPTS = fileURLToPath(new URL("../../scripts/", import.meta.url));
 const HOOKS_JSON = fileURLToPath(new URL("../../hooks/hooks.json", import.meta.url));
 const hasJq = spawnSync("jq", ["--version"]).status === 0;
+// The hooks bound their commands with timeout only when it is GNU coreutils.
+const hasGnuTimeout = /GNU coreutils/.test(spawnSync("timeout", ["--version"], { encoding: "utf8" }).stdout ?? "");
 const runHook = (name, payload, options) => bash([path.join(SCRIPTS, name)], { ...options, input: JSON.stringify(payload) });
 
 test("the hooks are bounded: SessionStart 300 seconds, Stop 120, and the darkmem push runs in the background", () => {
@@ -214,7 +216,7 @@ test("the Stop push sends under its session id, a retried stop too, and prints n
 
 test("the Stop push bounds its config lookup apart from the push, which keeps its own bound", {
   skip: (!hasJq && "jq is not on PATH")
-    || (spawnSync("timeout", ["--version"]).status !== 0 && "GNU timeout is not on PATH")
+    || (!hasGnuTimeout && "GNU timeout is not on PATH")
     || (process.platform === "win32" && "the PATH shim is a POSIX shell script"),
 }, async t => {
   const s = await setup(t);
@@ -280,7 +282,7 @@ test("the watchdog escalates to SIGKILL when SIGTERM does not stop the command",
   assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0), { code: "ESRCH" }, "the command's child was killed too");
 });
 
-test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: !/GNU coreutils/.test(spawnSync("timeout", ["--version"], { encoding: "utf8" }).stdout ?? "") && "GNU timeout is not on PATH" }, async () => {
+test("GNU timeout escalates to SIGKILL when SIGTERM does not stop the command", { skip: !hasGnuTimeout && "GNU timeout is not on PATH" }, async () => {
   const dir = scratch("dmh-tkill-");
   const pidFile = path.join(dir, "child.pid");
   const started = Date.now();
