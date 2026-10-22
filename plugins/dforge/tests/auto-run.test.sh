@@ -189,12 +189,12 @@ check "an unknown phase: exit 2" "$status:$(field phase)" "2:execute"
 # --- decisions and rulings ---
 ar --session s-1 decision add --id d1 --question "Which store?" --options "sqlite | files" --opus-reason "the spec is silent" --task 3
 ar --session s-1 decision add --id d2 --question "Retry count?"
-check "decision list" "$(ar --session s-1 decision list | jq -r '.id' | paste -sd, -)" "d1,d2"
+check "decision list" "$(ar --session s-1 decision list | jq -r '.id' | tr -d '\r' | paste -sd, -)" "d1,d2"
 check "a decision keeps its fields" "$(ar --session s-1 decision list | jq -r 'select(.id == "d1") | "\(.options)|\(.opusReason)|\(.task)"')" "sqlite | files|the spec is silent|3"
 ar --session s-1 decision add --id d1 --question "Which store, again?"
 check "adding an id again replaces it" "$(ar --session s-1 decision list | jq -r 'select(.id == "d1") | .question')" "Which store, again?"
 ar --session s-1 decision clear --id d1
-check "clear one" "$(ar --session s-1 decision list | jq -r '.id' | paste -sd, -)" "d2"
+check "clear one" "$(ar --session s-1 decision list | jq -r '.id' | tr -d '\r' | paste -sd, -)" "d2"
 ar --session s-1 decision clear
 check "clear all" "$(ar --session s-1 decision list | grep -c .)" "0"
 ar --session s-1 ruling add "Fable: keep the sqlite store — cost if wrong: one migration"

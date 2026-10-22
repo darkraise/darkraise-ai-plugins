@@ -381,10 +381,15 @@ repo "$LG"
 mkdir -p "$LG/.forge/x" "$LG/.forge/sub" "$LG/.dforge"
 echo a > "$LG/.forge/x/a.md"
 echo planted > "$LG/.forge/sub/planted.md"
-ln -s x/../../.. "$LG/.dforge/sub"
-out=$(migrate "$FM" "$LG" 2>&1); code=$?
-check "a dangling link inside .dforge: refused by the link guard" "$(grep -c "holds a symbolic link; merge them by hand" <<<"$out")" "1"
-check "a dangling link inside .dforge: nothing lands outside" "$(exists "$TMP/planted.md")" "no"
+ln -s x/../../.. "$LG/.dforge/sub" 2>/dev/null
+# A native Windows link needs its target to exist, so Git Bash makes none.
+if [ -L "$LG/.dforge/sub" ]; then
+  out=$(migrate "$FM" "$LG" 2>&1); code=$?
+  check "a dangling link inside .dforge: refused by the link guard" "$(grep -c "holds a symbolic link; merge them by hand" <<<"$out")" "1"
+  check "a dangling link inside .dforge: nothing lands outside" "$(exists "$TMP/planted.md")" "no"
+else
+  printf 'skip - a dangling link inside .dforge: this system makes no dangling links\n'
+fi
 LD="$TMP/linked-docs"
 repo "$LD"
 mkdir -p "$TMP/outside-docs/forge"
@@ -555,7 +560,7 @@ cp "$FM" "$P/dforge-migrate"
 cp "$HERE/../scripts/lib/native-path.sh" "$P/lib/"
 H="$TMP/home-step"
 repo "$H"
-check "no dforge-home-migrate: nothing to do" "$(bash "$P/dforge-migrate" "$H" 2>&1)" "dforge-migrate: nothing to migrate in $H"
+check "no dforge-home-migrate: nothing to do" "$(migrate "$P/dforge-migrate" "$H")" "dforge-migrate: nothing to migrate in $H"
 printf 'console.log("home migrated");\n' > "$P/lib/dforge-home-migrate.mjs"
 out=$(migrate "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "dforge-home-migrate: exit 0" "$code" "0"

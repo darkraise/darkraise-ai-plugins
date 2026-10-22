@@ -231,6 +231,14 @@ while IFS= read -r dir; do
     [ -e "$NOTIMEOUT/$name" ] || ln -s "$tool" "$NOTIMEOUT/$name" 2>/dev/null
   done
 done < <(for tool in bash node jq git cat; do dirname "$(type -P "$tool")"; done | sort -u)
+# A Chocolatey shim such as jq.exe finds its program from its own directory,
+# so the tools the gate calls by name run from where they are. The link goes
+# first: writing to it would overwrite the program it names.
+for tool in jq node git; do
+  rm -f "$NOTIMEOUT/$tool"
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$(type -P "$tool")" > "$NOTIMEOUT/$tool"
+  chmod +x "$NOTIMEOUT/$tool"
+done
 fresh; PATH="$NOTIMEOUT" gate usable
 check "without timeout on PATH the probe still answers" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
