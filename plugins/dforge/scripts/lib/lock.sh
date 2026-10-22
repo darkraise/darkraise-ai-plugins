@@ -74,6 +74,10 @@ dr_lock_reclaim() {
       [ -n "$start" ] && [ -n "$now" ] && [ "$now" != "$start" ] && stale=0
     fi
   fi
+  # The owner judged may have released before it exited and another shell
+  # taken DIR since; only the instance judged is removed. Its owner is gone,
+  # and no shell takes DIR while it exists, so it cannot change after this.
+  [ "$stale" -eq 0 ] && [ "$(cat "$lock/pid" 2>/dev/null)" != "$pid" ] && stale=1
   if [ "$stale" -eq 0 ]; then
     rm -f -- "$lock/pid" "$lock/start" "$lock/host" "$lock/claim"
     rmdir -- "$lock" 2>/dev/null || stale=1
