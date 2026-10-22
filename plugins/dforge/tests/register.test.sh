@@ -230,18 +230,21 @@ reg "$ROOT/many.md" '| 1 | A | - | - | open | - |' '| 2 | B | - | - | open | - |
   '| 4 | D | - | - | open | - |' '| 5 | E | - | - | open | - |' '| 6 | F | - | - | open | - |'
 chmod 664 "$ROOT/many.md"
 mode_before=$(ls -l "$ROOT/many.md" | cut -c1-10)
-for i in 1 2 3 4 5 6; do bash "$REG" set "$ROOT/many.md" "$i" done >/dev/null 2>&1 & done
-for i in 1 2 3; do bash "$REG" add "$ROOT/many.md" "Added $i" >/dev/null 2>&1 & done
+# Nine writers queue for one lock, which on a Windows runner (no flock, so the
+# lock directory) can outlast the default ten-second wait: a writer that gives
+# up says so in its .err file.
+for i in 1 2 3 4 5 6; do DR_LOCK_TENTHS=600 bash "$REG" set "$ROOT/many.md" "$i" done >/dev/null 2>"$TMP/fset-$i.err" & done
+for i in 1 2 3; do DR_LOCK_TENTHS=600 bash "$REG" add "$ROOT/many.md" "Added $i" >/dev/null 2>"$TMP/fadd-$i.err" & done
 wait
 check "concurrent sets: every row is done" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 <= 6 && $5 == "done"' | grep -c .)" "6"
 check "concurrent adds: three distinct new rows" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 > 6 { print $1 }' | sort -u | grep -c .)" "3"
+check "concurrent writers: none gave up" "$(cat "$TMP"/fset-*.err "$TMP"/fadd-*.err)" ""
 check "a rewrite keeps the file's mode" "$(ls -l "$ROOT/many.md" | cut -c1-10)" "$mode_before"
 
 # The same, without flock: the lock directory serializes the writers.
 reg "$ROOT/many-mkdir.md" '| 1 | A | - | - | open | - |' '| 2 | B | - | - | open | - |' '| 3 | C | - | - | open | - |' \
   '| 4 | D | - | - | open | - |' '| 5 | E | - | - | open | - |' '| 6 | F | - | - | open | - |'
-# Nine writers queue for one lock, which on a Windows runner can outlast the
-# default ten-second wait: a writer that gives up says so in its .err file.
+# As above, with the lock directory everywhere.
 for i in 1 2 3 4 5 6; do DR_LOCK_TENTHS=600 DFORGE_FLOCK=no-such-flock bash "$REG" set "$ROOT/many-mkdir.md" "$i" done >/dev/null 2>"$TMP/set-$i.err" & done
 for i in 1 2 3; do DR_LOCK_TENTHS=600 DFORGE_FLOCK=no-such-flock bash "$REG" add "$ROOT/many-mkdir.md" "Added $i" >/dev/null 2>"$TMP/add-$i.err" & done
 wait
