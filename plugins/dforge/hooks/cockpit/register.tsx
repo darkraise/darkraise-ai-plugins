@@ -480,13 +480,18 @@ export const register: Register = on => {
     }
     S.ticker?.cancel()
     S.ticker = null
-    S.watchdog?.cancel()
-    S.watchdog = null
+    // The process goes on after /clear and no session.start re-arms the timers:
+    // keep them, and start the cleared session's stall grace now.
+    if (e.reason === 'clear') S.watchedSince = await $.clock.now()
+    else {
+      S.watchdog?.cancel()
+      S.watchdog = null
+      S.poll?.cancel()
+      S.poll = null
+    }
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     S.heldDone = null
-    S.poll?.cancel()
-    S.poll = null
     S.isMainTurn = false
     await setActivity($, () => IDLE)
     return next(e)

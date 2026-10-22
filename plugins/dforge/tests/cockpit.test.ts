@@ -6432,6 +6432,27 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
+  test('keeps the heartbeat and the watchdog across a /clear', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const written: Record<string, string> = {}
+    const w: World = { ...SIGNED_IN, written, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    on('session.end', (_$, e) => e as never)
+    signedIn(on, files)
+    await $.session.start(START)
+    await clock.advance(120_000)
+    await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+    w.sessionId = 'sess-2'
+    files[AUTO].text = files[AUTO].text.replace('"session":"sess-1"', '"session":"sess-2"')
+    await clock.advance(60_000)
+    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-2']).toBe('1180\n')
+    // The stall grace starts again at the clear, not at the process's start.
+    await clock.advance(120_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    await clock.advance(60_000)
+    expect(w.autoRuns?.filter(call => call === '--session sess-2 stalled')).toHaveLength(1)
+  })
+
   test('nudges a run whose turn failed', async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
