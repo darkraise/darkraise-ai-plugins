@@ -300,6 +300,8 @@ declare module 'claude-code' {
       notifier: CockpitNotifier
       isNudged: boolean
       isPlanSession: boolean
+      /** This session runs a plan: an execution skill ran, an implementer was spawned, or the ledger moved. */
+      isRunSession: boolean
       /** The auto run bound to this session, as last read; null without one. */
       autoRun: CockpitAutoRun | null
     }

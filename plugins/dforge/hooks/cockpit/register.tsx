@@ -180,6 +180,8 @@ function stallPrompt(root: string): string {
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
+// The skills that run a plan's tasks in this session.
+const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -212,6 +214,7 @@ const repo = atom({ plugin: 'dforge', key: 'repo' } as const, null)
 const refusals = atom({ plugin: 'dforge', key: 'refusals' } as const, [])
 const isNudged = atom({ plugin: 'dforge', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dforge', key: 'isPlanSession' } as const, false)
+const isRunSession = atom({ plugin: 'dforge', key: 'isRunSession' } as const, false)
 const autoRun = atom({ plugin: 'dforge', key: 'autoRun' } as const, null)
 const alerted = atom({ plugin: 'dforge', key: 'alerted' } as const, [])
 const trend = atom({ plugin: 'dforge', key: 'trend' } as const, [])
@@ -485,6 +488,7 @@ export const register: Register = on => {
     if (isDforge(e.subagentType)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
+      if (e.subagentType.split(':')[1]?.startsWith('impl-')) await markRunSession($)
     }
     const spawn: CockpitSpawn = {
       agentId: started.agentId,
@@ -519,6 +523,7 @@ export const register: Register = on => {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
+    if (RUN_SKILLS.includes(e.skill)) await markRunSession($)
     return expanded
   }).catch(($, e, next) => next(e))
 
@@ -724,10 +729,12 @@ export const register: Register = on => {
       await endWait($, id, ran.deny !== undefined ? '✗ Denied' : ASKING_TOOLS.includes(tool) ? '✓ Answered' : '✓ Approved')
     }
     if ((await read($, activity)).tool === tool) await setActivity($, now => (now.kind === 'running' ? { ...now, tool: null, agent: null } : now))
-    if (tool === 'Skill' && isDforge(String((e as { skill?: unknown }).skill ?? ''))) {
+    const skill = tool === 'Skill' ? String((e as { skill?: unknown }).skill ?? '') : ''
+    if (isDforge(skill)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
+    if (RUN_SKILLS.includes(skill)) await markRunSession($)
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
@@ -3127,6 +3134,7 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
   for (const key of keys) {
     if (seen.has(key)) continue
     seen.add(key)
+    await markRunSession($)
     const [what, n] = key.split(':')
     const task = summary.tasks.find(one => String(one.n) === n)
     if (what === 'blocked' && task !== undefined) {
@@ -3295,7 +3303,9 @@ async function refresh(
   // A plan's last tasks and its final phase share the final-phase limit, as
   // the budget line measures them; the handoff note follows the same limit.
   const summary = await read($, run)
-  const isTail = summary !== null && isPlanTail(summary)
+  // Only a session running the plan: a darkmem pull at the start writes the
+  // ledgers of a finished plan anew, and the newest one then reads as this session's.
+  const isTail = summary !== null && isPlanTail(summary) && (await read($, isRunSession))
   const limit = isAuto
     ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
     : tuning.isRelaxed || isTail
@@ -3519,6 +3529,10 @@ async function openField($: EngineInterface, key: string, open: () => Promise<un
   const focusing = $.ui.focus({ requestId: PANE, key }).catch(() => undefined)
   await open()
   await focusing
+}
+
+async function markRunSession($: EngineInterface) {
+  if (!(await read($, isRunSession))) await update($, isRunSession, () => true)
 }
 
 /** Tells the model, once, which skill-enforced settings changed; outside a dforge session the change waits for one. */

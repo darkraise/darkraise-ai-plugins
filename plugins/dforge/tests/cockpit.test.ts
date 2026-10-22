@@ -3901,6 +3901,49 @@ describe('run card', () => {
     expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
   })
 
+  const handoffShown = async ($: Parameters<Parameters<typeof test>[1]>[0]) => {
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const legend = (await ui.findAll({ type: 'Text' })).map(one => one.text).find(text => /^\d+k of /.test(text))
+    await ui.unmount()
+    return /handoff (\d+k)/.exec(legend ?? '')?.[1]
+  }
+
+  test('a plan at its tail keeps the handoff budget in a session that does not run it', async ($, on) => {
+    // Written as the session started, as a darkmem pull on a new machine writes it.
+    const files: World['files'] = {
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(5, true), mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
+      [CONFIG]: { text: JSON.stringify({ handoffTokens: 350_000 }) },
+    }
+    world(on, { ...SIGNED_IN, tokens: 300_000, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+    const spawn = (subagentType: string) =>
+      $.agent.spawn({ tool_use_id: `toolu_${subagentType}`, prompt: 'Go', description: 'Go', subagentType, provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    await spawn('dforge:judge-opus')
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(await handoffShown($)).toBe('350k')
+    await spawn('dforge:impl-sonnet-low')
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(await handoffShown($)).toBe('553k')
+  })
+
+  test('a ledger that moves during the session puts it at its tail', async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(2, false), mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
+    }
+    world(on, { ...SIGNED_IN, tokens: 300_000, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(await handoffShown($)).toBe('465k')
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
+    await $.tool.call({ tool: 'Bash', command: 'echo "Task 3: complete" >> .dforge/sdd/p/progress.md' })
+    expect(await handoffShown($)).toBe('553k')
+  })
+
   test('a recorded finish choice starts no once-a-second redraw', async ($, on) => {
     const files = {
       ...runFiles(LEDGER),
