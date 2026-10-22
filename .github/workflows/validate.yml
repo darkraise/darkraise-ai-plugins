@@ -22,23 +22,38 @@ jobs:
           timeout 120s sudo apt-get update
           timeout 60s sudo apt-get install -y jq ripgrep coreutils
 
+      # One CLI version for every validate step: dforge's mod (hooks modules)
+      # needs 2.1.299, and the marketplace step reads dforge too. Installed
+      # once, retried, since an npx download per call ran past its bound;
+      # kept off PATH, where test-all would run the cockpit tests again.
+      - name: Install Claude Code
+        timeout-minutes: 6
+        run: |
+          for attempt in 1 2 3; do
+            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.306 && break
+            [ "$attempt" -lt 3 ] || exit 1
+          done
+          # The package's postinstall links its native binary; an npm that
+          # holds install scripts back for approval would skip it.
+          (cd "$RUNNER_TEMP/claude-code" && timeout 60s node node_modules/@anthropic-ai/claude-code/install.cjs)
+          timeout 30s "$RUNNER_TEMP/claude-code/node_modules/.bin/claude" --version
+          echo "CLAUDE=$RUNNER_TEMP/claude-code/node_modules/.bin/claude" >> "$GITHUB_ENV"
+
       - name: Validate marketplace and plugins
         timeout-minutes: 3
         run: |
-          timeout 90s npx --yes @anthropic-ai/claude-code@2.1.306 plugin validate .
+          timeout 60s "$CLAUDE" plugin validate .
           for plugin in dr-status darkraise-ui darkraise-win32ui; do
-            timeout 30s npx --yes @anthropic-ai/claude-code@2.1.306 plugin validate "plugins/$plugin"
+            timeout 30s "$CLAUDE" plugin validate "plugins/$plugin"
           done
 
-      # One CLI version for every validate step: dforge's mod (hooks modules)
-      # needs 2.1.299, and the marketplace step reads dforge too.
-      # The cockpit's 397 tests took 51 to 81 s on the runner, npx included,
-      # and once ran past 90.
+      # The cockpit's 397 tests took 51 to 81 s on the runner, an npx
+      # download included.
       - name: Validate and test dforge
-        timeout-minutes: 7
+        timeout-minutes: 6
         run: |
-          timeout 60s npx --yes @anthropic-ai/claude-code@2.1.306 plugin validate plugins/dforge
-          timeout 300s npx --yes @anthropic-ai/claude-code@2.1.306 plugin test plugins/dforge
+          timeout 60s "$CLAUDE" plugin validate plugins/dforge
+          timeout 240s "$CLAUDE" plugin test plugins/dforge
 
       - name: Run maintained regression suites
         timeout-minutes: 12
