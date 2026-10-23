@@ -142,7 +142,7 @@ and 12-13 run as Auto by default says)
 8. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the acceptance statements are settled (see After the Design)
 9. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
 10. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
-11. **Architecture critic** — one `dforge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic)
+11. **Architecture critic** — one `dforge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic, which folds it into Fable's first round when Fable reviews a spec with no risk or new-subsystem trigger)
 12. **User reviews written spec** — ask user to review the spec file before proceeding; under `autoRun=on` Fable reviews it first and this is Auto by default's spec review message (an auto run started from the offer has Fable review it instead)
 13. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
@@ -204,6 +204,7 @@ digraph brainstorming {
     "Write spec directly\n(autoRun=on, with ## Decisions)" -> "Draft acceptance in the spec\n(ask nothing yet)";
     "Draft acceptance in the spec\n(ask nothing yet)" -> "Spec self-review\n(one round, shown)";
     "Architecture critic\n(one judge-opus round)" -> "Fable spec review\n(at most two rounds)" [label="autoRun=on"];
+    "Spec self-review\n(one round, shown)" -> "Fable spec review\n(at most two rounds)" [label="Fable reviews; no risk or\nnew-subsystem trigger"];
     "Fable spec review\n(at most two rounds)" -> "Spec review\n(the one stop)";
     "Spec review\n(the one stop)" -> "Revise spec\n+ one new self-review round" [label="changes needed"];
     "Revise spec\n+ one new self-review round" -> "Spec review\n(the one stop)";
@@ -379,7 +380,9 @@ when the setting is `ask`. Then:
    its `Q:` until the spec review.
 4. **Reviews before the stop.** Run the spec self-review round, then the
    architecture critic, then `dforge:judge-fable` on the spec against its
-   `## Decisions`, at most two rounds (review, revise, re-review). Apply what
+   `## Decisions`, at most two rounds (review, revise, re-review); without a
+   risk or new-subsystem trigger, Fable's first round takes the critic's place
+   (Architecture critic). Apply what
    Fable rules and list each ruling as one line in a `## Review rulings`
    section of the spec.
 5. **The spec review**, the one stop: one message, its questions asked with the
@@ -534,12 +537,25 @@ spec's `## Decisions` section) and the repository root. It
 runs in an auto run too, before the Fable review. A revision of the spec does
 not earn a second critic round.
 
+**Folded into Fable.** When Fable will review this spec (under `autoRun=on`, or
+in an auto run) and your Process line names neither irreducible risk nor a new
+project or subsystem as a trigger, dispatch no critic. Give Fable's first round
+the critic's job as well: the criteria path
+`[PLUGIN_ROOT]/criteria/architecture-critique.md`, read as lenses and not
+scored, and the critic prompt's Output section, so its reply carries the
+critic's ranked findings under their own heading beside its rulings. Handle
+those findings exactly as the critic's below, before Fable's second round,
+which checks each Blocker and High answer. Two seats find more than one on a
+risky or new design, so a risk or new-subsystem trigger keeps the separate
+critic round.
+
 - Fix each Blocker and High finding in the spec, or keep the design with the
   finding answered in a `## Critic findings` section at the end of the spec:
   one bullet per finding, with the reason the design stands.
 - List every Medium and Nit finding in that section too; they need no answer.
 - Commit the spec, then state the counts in the review request below:
-  `Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium`.
+  `Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium`,
+  followed by ` (in Fable's review)` when the critic was folded into it.
 
 **User Review Gate:**
 Under `autoRun=on`, this gate is the spec review message in Auto by default.

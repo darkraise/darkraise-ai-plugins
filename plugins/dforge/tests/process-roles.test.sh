@@ -64,6 +64,10 @@ names "critic: counts in the review request" "$BS" 'Critic: <b> Blocker, <h> Hig
 names "critic: live Fable review checks answers" "$P/reference/auto-run.md" \
   'each answer to a Blocker or High finding'
 names "critic: the process graph" "$BS" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
+names "critic: folded into Fable without a risk trigger" "$BS" 'and your Process line names neither irreducible risk nor a new'
+names "critic: a risk trigger keeps the separate round" "$BS" 'a risk or new-subsystem trigger keeps the separate'
+names "critic: the folded counts say so" "$BS" 'followed by ` (in Fable'"'"'s review)` when the critic was folded into it.'
+names "auto-run.md: the critic may fold into Fable" "$P/reference/auto-run.md" 'which folds the critic into'
 
 FR="$P/reference/final-review.md"
 at() { grep -nF -- "$2" "$1" | head -n 1 | cut -d: -f1; }
