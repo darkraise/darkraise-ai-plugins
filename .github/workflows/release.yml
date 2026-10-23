@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [Validate marketplace]
+    types: [completed]
+    branches: [main]
+  # Runs scripts/release.mjs on main as it is: completes the releases of a run
+  # that pushed its tags and then failed.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # A validated push to main, or the hosted run validate.yml dispatches when
+    # the homelab runner never took the job (the cancelled run releases nothing).
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && contains(fromJSON('["push","workflow_dispatch"]'), github.event.workflow_run.event)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      # The push uses GITHUB_TOKEN, so the release commit starts no workflow.
+      - name: Release changed plugins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATED: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -n "$VALIDATED" ] && [ "$(git rev-parse HEAD)" != "$VALIDATED" ]; then
+            echo "main moved past the validated commit $VALIDATED; the run for the newer commit releases it."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          timeout 300s node scripts/release.mjs

@@ -143,7 +143,10 @@ See the [cockpit section](plugins/dforge/README.md#cockpit) and
 
 ## Upgrading
 
-Releases are versioned per plugin. Renamed plugins, retired plugins and
+Releases are versioned per plugin. Once a push to `main` passes validation,
+CI bumps each changed plugin (a breaking commit major, a `feat` minor,
+anything else patch), commits the bump to `main`, and tags and publishes it
+as `<plugin>-v<version>`. Renamed plugins, retired plugins and
 re-registering the marketplace are covered in [docs/migration.md](docs/migration.md);
 dforge's own steps are in its README under
 [Migrating to 4.0](plugins/dforge/README.md#migrating-to-40).
