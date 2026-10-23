@@ -79,6 +79,7 @@ names "final review: lens replies as files" "$FR" 'save each reply to `<workspac
 names "final review: residual acceptance failure" "$FR" 'is the one edit allowed on an acceptance test'
 names "final review: a spent re-dispatch writes the report" "$FR" 'is spent: write `<workspace>/acceptance-report.md` yourself, with'
 names "final review: the QA timer outlives the background default" "$FR" 'call'"'"'s `timeout` set to 2820000 ms'
+names "final review: a small plan's lenses skip Minor" "$FR" '[Report Critical and Important findings only; leave Minor ones'
 names "final review: V2 waits for QA to stop before cleanup" "$FR" 'Clean up only once it has stopped'
 names "final review: the wait for a stopped QA agent is bounded" "$FR" 'finished, for 10 minutes at most in all.'
 names "final review: a QA agent that cannot be stopped keeps its files" "$FR" 'If it cannot be stopped, leave its files in place'

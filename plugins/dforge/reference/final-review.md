@@ -150,7 +150,11 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    and the dedupe judge and the fixer receive the lens file paths.
    `lens-skipped` lines and `lenses off` dispatch nothing; step 4 names them
    and writes each `lens-skipped` line to the ledger. Lens seats are
-   read-only, so a recovery may dispatch them again.
+   read-only, so a recovery may dispatch them again. A
+   `lens-floor important` line means the plan is below the `lensMinorFrom`
+   setting: add the bracketed sentence to every lens prompt. With one list,
+   every lens finding enters the fix wave, and on a short plan the Minor tail
+   costs the fixer more triage than it yields fixes.
 
    ```
    You are a specialist reviewer. Read the lens at <criteria path>: its
@@ -159,7 +163,8 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    plan <plan path>, and report each hit, most severe first, as
    `### <Critical|Important|Minor>: [lens:<id>] <one-line claim>` followed by
    at most three lines: file:line, what fails, and the fix. Report at most ten
-   findings. With none, write `No findings.` and stop.
+   findings. [Report Critical and Important findings only; leave Minor ones
+   out.] With none, write `No findings.` and stop.
    ```
 
    Then run `scripts/review-route PLAN_FILE --final` and dispatch
@@ -207,7 +212,8 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    enters the fix wave unverified, and the fixer triages it (Fixing what it
    finds).
 4. **Report.** Name the lenses that ran, each `lens-skipped` lens (or
-   `lenses off`), and the `Acceptance QA: complete` counts. Append each
+   `lenses off`), whether a `lens-floor` line held them to Critical and
+   Important, and the `Acceptance QA: complete` counts. Append each
    `lens-skipped <id> reason=cap` line step 1 printed to the ledger as
    `final review lens-skipped <id> reason=cap`, one line per lens, unless the
    ledger already holds it: finishing lists them from there, because after a

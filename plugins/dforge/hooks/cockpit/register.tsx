@@ -3397,7 +3397,7 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
  */
 async function applySettings($: EngineInterface, file: SettingsFile, mtime?: number | null) {
   // $.env.get takes only a literal name: each variable the schema names is listed.
-  const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET'), DFORGE_LENS_CAP: await $.env.get('DFORGE_LENS_CAP') }
+  const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET'), DFORGE_LENS_CAP: await $.env.get('DFORGE_LENS_CAP'), DFORGE_LENS_MINOR_FROM: await $.env.get('DFORGE_LENS_MINOR_FROM') }
   const userRead = await $.settings.read({ source: 'user' }).catch(() => null)
   const mergedRead = await $.settings.read().catch(() => null)
   const engineUser = (userRead ?? {}) as Record<string, unknown>

@@ -7,6 +7,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROUTE="$HERE/../scripts/lens-route"
 export DFORGE_NO_SETTINGS=1
 unset DFORGE_LENS_CAP CLAUDE_CONFIG_DIR
+# The floor cases set their own threshold; 0 keeps the other cases' output
+# free of the lens-floor line.
+export DFORGE_LENS_MINOR_FROM=0
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -75,6 +78,17 @@ check "default cap 4" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 out=$(DFORGE_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "cap 0: lenses off" "$out" "lenses off"
+
+# The Minor floor: the fixture plan has three tasks.
+out=$(DFORGE_LENS_MINOR_FROM=4 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+check "floor: a plan under the threshold gets the floor after the lenses" "$(short <<<"$out")" \
+  "lens security;lens lang-bash;lens-floor important tasks=3 from=4;"
+out=$(DFORGE_LENS_MINOR_FROM=3 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+check "floor: a plan at the threshold gets none" "$(grep -c '^lens-floor' <<<"$out")" "0"
+out=$(DFORGE_LENS_MINOR_FROM=4 DFORGE_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+check "floor: lenses off print no floor" "$out" "lenses off"
+out=$(unset DFORGE_LENS_MINOR_FROM; bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+check "floor: the default threshold is 20" "$(grep -c '^lens-floor important tasks=3 from=20$' <<<"$out")" "1"
 
 # A4: per-task lenses.
 out=$(bash "$ROUTE" plan.md --task 1); status=$?

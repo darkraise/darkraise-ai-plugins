@@ -163,6 +163,7 @@ handoffMode strict relaxed loose
 codexLane true false maybe
 codexReview false true 0
 lensCap 4 2 10
+lensMinorFrom 20 10 501
 executionStrategy parallel sequential fast
 autoRun on ask maybe
 executionMode auto subagent agent
@@ -181,6 +182,7 @@ check "autoRun: off is read back" "$(fc get autoRun)" "off"
 
 fresh lens-env
 check "lensCap: the environment wins" "$(DFORGE_LENS_CAP=1 fc get lensCap)" "1"
+check "lensMinorFrom: the environment wins" "$(DFORGE_LENS_MINOR_FROM=0 fc get lensMinorFrom)" "0"
 
 # --- Claude's own settings file: one key changed, everything else kept ---
 fresh k
