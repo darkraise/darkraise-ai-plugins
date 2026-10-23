@@ -74,10 +74,20 @@ if (!isDryRun) {
   }
   if (bumps.length > 0) run(process.execPath, ['scripts/validate-repository.mjs']);
   for (const tag of tags) git('tag', '-a', tagOf(tag.name, tag.version), tag.commit, '-m', tag.notes);
+  const isBackfill = tag => !bumps.some(bump => bump.name === tag.name && bump.to === tag.version);
   // One atomic push: main never carries a release commit without its tag.
-  const refs = tags.map(tag => `refs/tags/${tagOf(tag.name, tag.version)}`);
-  if (bumps.length > 0) refs.unshift('HEAD:refs/heads/main');
-  if (refs.length > 0) git('push', '--atomic', 'origin', ...refs);
+  if (bumps.length > 0) git('push', '--atomic', 'origin', 'HEAD:refs/heads/main', ...tags.filter(tag => !isBackfill(tag)).map(tag => `refs/tags/${tagOf(tag.name, tag.version)}`));
+  // GitHub refuses GITHUB_TOKEN a ref to a commit whose workflow files differ
+  // from main's, which an older commit's often do: such a tag needs a push
+  // from a token with the workflows scope.
+  for (const tag of tags.filter(isBackfill)) {
+    const name = tagOf(tag.name, tag.version);
+    try { git('push', 'origin', `refs/tags/${name}`); }
+    catch {
+      git('tag', '-d', name);
+      console.log(`::warning::${name} was refused; push it with a token that has the workflows scope: git push origin ${name}`);
+    }
+  }
 
   // Every plugin tag gets a release, so a run that pushed tags but failed
   // before its releases is completed by the next one.
