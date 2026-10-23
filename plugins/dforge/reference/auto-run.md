@@ -263,8 +263,11 @@ says setup is due until `phase execute` runs from the execution worktree. A
 switch is a phase transition:
 it never counts as a self-resume. Its compaction is measured in the `execute`
 phase, so one that leaves 85% of the window or more hands off as Clears says.
-A failure in either stage is retried once in that stage; the second stops the
-run.
+When the engine refuses the compaction, the cockpit clears the session
+instead, as a phase clear (§Clears), and binds the new one: it gets the
+launch model and effort and the first prompt, with no `after-compact` lead,
+so the launch model never runs over the design conversation. A failure in either stage is retried once in that stage; the
+second stops the run.
 
 ## Clears
 

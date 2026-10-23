@@ -4,16 +4,8 @@ A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise
 
 ## Conventions
 
-- Claude's `.claude-plugin/marketplace.json` lists `dforge`, `dr-status`,
-  `darkraise-ui`, and `darkraise-win32ui`.
-- `dr-status` is Claude-only: no `.codex-plugin` manifest.
-- `dforge` carries a mod (`hooks/cockpit/`); test it with
-  `claude plugin test plugins/dforge`.
-- Codex's `.agents/plugins/marketplace.json` lists only `dforge` and the
-  two UI plugins. Register the repository root to select this catalog.
-- Directory names, catalog entries, and client manifest names must agree.
-- Keep Claude and Codex manifest versions equal. Statusline's `scripts/VERSION`
-  must also agree with its manifest.
+- For Codex, register the repository root to select the
+  `.agents/plugins/marketplace.json` catalog.
 - Preserve existing `DCC_*` variables and statusline user storage paths.
 - Do not enroll unrelated plugin directories or edit historical plans/specs
   during public-name migrations.
