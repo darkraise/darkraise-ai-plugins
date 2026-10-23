@@ -373,6 +373,7 @@ function world(on: On, w: World) {
       if (w.autoFile !== undefined) {
         const state = JSON.parse(w.autoFile.text) as Record<string, unknown>
         if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: words[3] === '--switch' ? 'switch-resume' : 'after-compact', compactions: Number(state.compactions) + 1 })
+        if (exitCode === 0 && word === 'clear') Object.assign(state, { pending: 'clear', rebind: true })
         if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume', regime: 'normal' })
         if (exitCode === 0 && word === 'resumed' && state.pending === 'resume') state.pending = null
         else if (exitCode === 0 && word === 'resumed' && state.pending === 'switch-resume') state.pending = 'after-compact'
@@ -5572,19 +5573,21 @@ describe('auto run', () => {
     expect(pendingOf(files)).toBe('after-compact')
   })
 
-  test('switches over a refused compaction: books it and submits the first prompt', async ($, on) => {
-    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], isCompactVetoed: true }
+  test('clears over a refused switch compaction before it sets the model', async ($, on) => {
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], isCompactVetoed: true }
     const clock = world(on, w)
     signedIn(on, files)
     await $.session.start(START)
     await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
     expect(w.compacts).toHaveLength(1)
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
-    expect(w.autoRuns).toContain('--session sess-1 compacted --switch')
-    expect(w.prompts).toEqual([expect.stringMatching(/after-compact` first\. Continue `docs\/plan\.md`\.$/)])
-    expect(pendingOf(files)).toBe('after-compact')
+    expect(w.autoRuns?.filter(call => call.includes(' failure ') || call.includes(' compacted'))).toEqual([])
+    expect(w.autoRuns).toContain('--session sess-1 clear --phase')
+    expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
+    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.prompts).toEqual(['Continue `docs/plan.md`.'])
+    expect(pendingOf(files)).toBeNull()
   })
 
   test('stops the run when the switch cannot book its resume', async ($, on) => {

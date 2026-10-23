@@ -2715,19 +2715,24 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       return
     }
     if (at === 'switch') {
-      // A refused compaction leaves the switch only its model change. It is
-      // booked as compacted all the same, so the run's status counts one
-      // compaction that did not run.
-      await $.session.compact({ instructions: AUTO_SWITCH_INSTRUCTIONS })
-      await update($, budget, () => null)
-      await update($, isNudged, () => false)
-      // As for compact: the compaction was attempted, so it is never repeated.
-      if ((await autoRunCall($, bound, ['compacted', '--switch'])) !== 0) {
-        await endUnboundRun($, bound, "the cockpit could not book the switch's compaction")
-        return
+      const done = await $.session.compact({ instructions: AUTO_SWITCH_INSTRUCTIONS })
+      if ('skip' in done && typeof done.skip === 'string') {
+        // A refused compaction must not leave the launch model on the whole
+        // design conversation: a phase clear drops it instead.
+        const cleared = await autoRunCall($, bound, ['clear', '--phase'])
+        if (cleared !== 0) throw new Error(`${done.skip}, and the phase clear exited ${cleared}`)
+        at = 'clear'
+      } else {
+        await update($, budget, () => null)
+        await update($, isNudged, () => false)
+        // As for compact: the compaction happened, so it is never repeated.
+        if ((await autoRunCall($, bound, ['compacted', '--switch'])) !== 0) {
+          await endUnboundRun($, bound, "the cockpit could not book the switch's compaction")
+          return
+        }
+        await trackAutoRun($)
+        at = 'switch-resume'
       }
-      await trackAutoRun($)
-      at = 'switch-resume'
     }
     if (at === 'clear') {
       await $.command.run({ command: 'clear' })
