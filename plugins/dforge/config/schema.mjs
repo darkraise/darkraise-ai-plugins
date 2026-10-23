@@ -122,6 +122,11 @@ export default {
     label: 'Review lenses', title: 'Final-review lens cap',
     description: 'How many specialist review lenses the final review runs at most, highest priority first. 0 turns them off. DFORGE_LENS_CAP overrides it.',
   },
+  lensMinorFrom: {
+    type: 'number', default: 20, min: 0, max: 500, step: 5, zero: 'off', env: 'DFORGE_LENS_MINOR_FROM', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'Lens minors', title: 'Lens Minor findings from',
+    description: 'The plan size, in tasks, from which final-review lenses also report Minor findings. A smaller plan gets Critical and Important lens findings only. 0 always asks for Minor findings. DFORGE_LENS_MINOR_FROM overrides it.',
+  },
   executionStrategy: {
     type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'parallel', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Strategy', title: 'Execution strategy',

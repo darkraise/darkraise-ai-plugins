@@ -178,6 +178,10 @@ Subagent ([JUDGE]):
     For each issue: file:line, what's wrong, why it matters, how to fix
     (if not obvious).
 
+    List at most three Minor issues, the ones most worth fixing, and end
+    the section with `(<k> more Minor left out)` when you dropped any. Each
+    Minor is carried to the final review's triage, which reads them all.
+
     ### Assessment
 
     **Task quality:** [Approved | Needs fixes]

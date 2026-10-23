@@ -22,14 +22,25 @@ of the work being done.
 - **Either mode:** point the reviewer at the ledger's deferred-minor and
   parked lines, the complete lines' `discovered:` fields, every borderline
   (9-13) score, and every `(unseated)` ruling, so it can triage what must be
-  fixed before merge. A gap a complete line carried to the final review is a
-  confirmed finding already: it goes on the fix list without triage.
+  fixed before merge. Give it the ledger's path and name those line kinds;
+  never paste the lines into the prompt, which on a long plan runs to hundreds
+  of lines the reviewer reads before the diff. A gap a complete line carried
+  to the final review is a confirmed finding already:
+  it goes on the fix list without triage.
 
 ## The review
 
 MERGE_BASE is the commit the branch started from, for example
-`git merge-base main HEAD`. Steps 0 and 0.5 run first; step 1 builds the
-review package, so the package includes the acceptance tests step 0.5 commits.
+`git merge-base main HEAD`. Step 0 runs first. Step 0.5 dispatches QA in the
+background and goes straight on to step 1: QA runs alongside the Claude review,
+the lenses and the Codex round, and the fix wave waits for it (step 3).
+Serializing them added QA's whole run, often a quarter of an hour, to every
+final review. Because QA commits while the reviewers read, HEAD in steps 1 and
+2 is the SHA recorded in the `Acceptance QA: dispatched (base <sha7>)` line,
+passed as that SHA, never as the word `HEAD`; with no such line (QA skipped),
+it is the branch head. QA's own tests reach an independent reader in the scoped
+re-review instead (Fixing what it finds). While QA runs, make no commit of
+your own: QA commits on this branch.
 
 0. **Gates.** When the project declares `<docs>/gates.md`, run
    dforge:running-gates before dispatching any reviewer. A red gate stops
@@ -73,10 +84,13 @@ review package, so the package includes the acceptance tests step 0.5 commits.
       too, for its mutation worktree. Before dispatching, save the output of
       `git status --porcelain` to `<workspace>/qa-status-before.txt`.
       Dispatch it in the background and, in the same message, start a
-      background timer, `sleep 2700` (45 minutes), as
-      [executor-lane.md](executor-lane.md) arms its timers, with the Bash
-      call's `timeout` set to 2820000 ms: a background call's limit defaults
-      to 30 minutes, and a timer killed there fires 15 minutes early. When the
+      background timer, `sleep <s>` with `<s>` = 600 + 180 × the number of
+      `test` statements, at least 1200 and at most 3600 (20 to 60 minutes),
+      as [executor-lane.md](executor-lane.md) arms its timers, with the Bash
+      call's `timeout` set to (`<s>` + 120) × 1000 ms: a background call's
+      limit defaults to 30 minutes, and a timer killed there fires early.
+      Then go on to step 1 without waiting; (c) to (e) run when QA returns
+      or its timer finishes, before step 3's fix wave. When the
       timer finishes first, stop the QA agent: TaskStop on Claude Code; on
       Codex, `close_agent` where your tools offer it. V2 has none: send the
       child a `followup_task` telling it to stop and return now, then wait for
@@ -150,7 +164,11 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    and the dedupe judge and the fixer receive the lens file paths.
    `lens-skipped` lines and `lenses off` dispatch nothing; step 4 names them
    and writes each `lens-skipped` line to the ledger. Lens seats are
-   read-only, so a recovery may dispatch them again.
+   read-only, so a recovery may dispatch them again. A
+   `lens-floor important` line means the plan is below the `lensMinorFrom`
+   setting: add the bracketed sentence to every lens prompt. With one list,
+   every lens finding enters the fix wave, and on a short plan the Minor tail
+   costs the fixer more triage than it yields fixes.
 
    ```
    You are a specialist reviewer. Read the lens at <criteria path>: its
@@ -159,7 +177,8 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    plan <plan path>, and report each hit, most severe first, as
    `### <Critical|Important|Minor>: [lens:<id>] <one-line claim>` followed by
    at most three lines: file:line, what fails, and the fix. Report at most ten
-   findings. With none, write `No findings.` and stop.
+   findings. [Report Critical and Important findings only; leave Minor ones
+   out.] With none, write `No findings.` and stop.
    ```
 
    Then run `scripts/review-route PLAN_FILE --final` and dispatch
@@ -183,7 +202,10 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say
    which, and go to step 3 with the Claude review alone. An absent or empty
    report is never a clean round.
-3. **Wait for the round's status line first.** When step 2 launched the
+3. **Wait for QA.** When step 0.5 dispatched QA, nothing below runs until its
+   (c) to (e) are done and its `[qa]` findings have joined the Claude list.
+
+   **Wait for the round's status line first.** When step 2 launched the
    runner, there is no step 3 until it has printed `OK`, `FALLBACK`,
    `TIMEOUT` or `FAILED`: end the turn and resume on its notification. An
    absent report from a launched runner is a round still running, never a
@@ -207,7 +229,8 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    enters the fix wave unverified, and the fixer triages it (Fixing what it
    finds).
 4. **Report.** Name the lenses that ran, each `lens-skipped` lens (or
-   `lenses off`), and the `Acceptance QA: complete` counts. Append each
+   `lenses off`), whether a `lens-floor` line held them to Critical and
+   Important, and the `Acceptance QA: complete` counts. Append each
    `lens-skipped <id> reason=cap` line step 1 printed to the ledger as
    `final review lens-skipped <id> reason=cap`, one line per lens, unless the
    ledger already holds it: finishing lists them from there, because after a
@@ -255,7 +278,12 @@ fix subagent writes it as its report file; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
-its `[REPORT_FILE]` being that file).
+its `[REPORT_FILE]` being that file). When QA committed tests, FIX_BASE is the
+review's HEAD (the `Acceptance QA: dispatched` SHA), so the range holds QA's
+commits too: the final reviewers never saw them. When no confirmed finding
+needs a fix wave but QA committed tests, still run that one scoped re-review
+over the same range, with `<workspace>/acceptance-report.md` as
+`[REPORT_FILE]`.
 Send any residual findings — `NOT ADDRESSED`, and `REJECTION DISPUTED` in the
 one-list case — to the ruling seat as `final-residual` items and carry out its
 verdicts. The scoped re-review is a Claude seat that wrote none of the code, so

@@ -10,6 +10,10 @@
 #        lens-route PLAN_FILE --task ID
 # Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added>
 #         lens-skipped <id> reason=cap      (--final, past the lensCap setting)
+#         lens-floor important tasks=<n> from=<m>
+#                                           (--final, after the lens lines, when
+#                                           the plan has fewer tasks than the
+#                                           lensMinorFrom setting)
 #         lenses off                        (--final, lensCap 0)
 #         lens <id> criteria=<path>         (--task, one per id on the task's **Lenses:** line)
 # Exit: 0 routed, also when no lens applies; 2 usage error, a missing plan or
@@ -104,6 +108,14 @@ case $1 in
         printf 'lens-skipped %s reason=cap\n' "$id"
       fi
     done <<<"$(lens_order)"
+    # Task count, not diff size: generated files make a short plan's diff as
+    # large as a long one's.
+    from=${DFORGE_LENS_MINOR_FROM:-$(dforge_setting lensMinorFrom 20)}
+    [[ "$from" =~ ^[0-9]+$ ]] || from=20
+    tasks=$(( $(plan_tasks "$src" | grep -c .) + $(plan_lettered "$src" | grep -c .) ))
+    if [ "$n" -gt 0 ] && [ "$tasks" -lt "$from" ]; then
+      printf 'lens-floor important tasks=%s from=%s\n' "$tasks" "$from"
+    fi
     exit 0 ;;
   --task)
     [ $# -eq 2 ] || usage

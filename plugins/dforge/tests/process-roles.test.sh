@@ -22,7 +22,8 @@ names "qa: expectations first" "$QA" 'the spec text alone, as literal values in 
 names "qa: test names" "$QA" 'Each test name starts with `A<n>:`'
 names "qa: never fixes the code" "$QA" 'An assertion failure is a finding, which you never fix'
 names "qa: detached mutation worktree" "$QA" 'git worktree add --detach [WORKSPACE]/qa-mutation HEAD'
-names "qa: the uncommitted tests reach the mutation worktree" "$QA" 'copy the acceptance file and its fixtures into the same paths there'
+names "qa: the committed tests reach the mutation worktree" "$QA" 'committed the acceptance file, so `HEAD` has it'
+names "qa: tests are committed as they run" "$QA" 'Commit as you go: once a statement'"'"'s test has run'
 names "qa: the mutation baseline passes first" "$QA" 'run that statement'"'"'s test there before changing anything'
 names "qa: a setup error is not red" "$QA" 'A missing file, an import or a'
 names "qa: report path" "$QA" '`[WORKSPACE]/acceptance-report.md`'
@@ -63,6 +64,10 @@ names "critic: counts in the review request" "$BS" 'Critic: <b> Blocker, <h> Hig
 names "critic: live Fable review checks answers" "$P/reference/auto-run.md" \
   'each answer to a Blocker or High finding'
 names "critic: the process graph" "$BS" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
+names "critic: folded into Fable without a risk trigger" "$BS" 'and your Process line names neither irreducible risk nor a new'
+names "critic: a risk trigger keeps the separate round" "$BS" 'a risk or new-subsystem trigger keeps the separate'
+names "critic: the folded counts say so" "$BS" 'followed by ` (in Fable'"'"'s review)` when the critic was folded into it.'
+names "auto-run.md: the critic may fold into Fable" "$P/reference/auto-run.md" 'which folds the critic into'
 
 FR="$P/reference/final-review.md"
 at() { grep -nF -- "$2" "$1" | head -n 1 | cut -d: -f1; }
@@ -78,7 +83,15 @@ names "final review: ambiguous goes to the ruling seat" "$FR" '`scripts/review-r
 names "final review: lens replies as files" "$FR" 'save each reply to `<workspace>/lens-<id>.md`'
 names "final review: residual acceptance failure" "$FR" 'is the one edit allowed on an acceptance test'
 names "final review: a spent re-dispatch writes the report" "$FR" 'is spent: write `<workspace>/acceptance-report.md` yourself, with'
-names "final review: the QA timer outlives the background default" "$FR" 'call'"'"'s `timeout` set to 2820000 ms'
+names "final review: the QA timer outlives the background default" "$FR" 'call'"'"'s `timeout` set to (`<s>` + 120) × 1000 ms'
+names "final review: the QA timer scales with the statements" "$FR" '`<s>` = 600 + 180 × the number of'
+names "final review: QA runs alongside the review" "$FR" 'Then go on to step 1 without waiting'
+names "final review: the fix wave waits for QA" "$FR" '3. **Wait for QA.**'
+names "final review: the review reads the QA dispatch SHA" "$FR" 'passed as that SHA, never as the word `HEAD`'
+names "final review: the re-review covers QA's commits" "$FR" 'so the range holds QA'"'"'s'
+names "final review: a small plan's lenses skip Minor" "$FR" '[Report Critical and Important findings only; leave Minor ones'
+names "final review: the ledger goes by path" "$FR" 'never paste the lines into the prompt'
+names "re-review: added acceptance tests are checked" "$P/skills/subagent-driven-development/references/re-review-prompt.md" 'When the fix diff adds or touches a test'
 names "final review: V2 waits for QA to stop before cleanup" "$FR" 'Clean up only once it has stopped'
 names "final review: the wait for a stopped QA agent is bounded" "$FR" 'finished, for 10 minutes at most in all.'
 names "final review: a QA agent that cannot be stopped keeps its files" "$FR" 'If it cannot be stopped, leave its files in place'
@@ -104,6 +117,7 @@ TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
 names "task reviewer: lens section" "$TRP" '## Lens Criteria'
 names "task reviewer: lenses are not scored" "$TRP" 'do not score them, and do not add them to Verification Scores'
 names "task reviewer: the placeholder" "$TRP" '`[LENS_FILES]` — OPTIONAL'
+names "task reviewer: Minor issues are capped" "$TRP" 'List at most three Minor issues, the ones most worth fixing'
 names "re-review: the A<n> question" "$P/skills/subagent-driven-development/references/re-review-prompt.md" \
   'still fail if the code violated statement A<n> of the spec?'
 names "code reviewer: the A<n> question" "$P/skills/requesting-code-review/references/code-reviewer.md" \

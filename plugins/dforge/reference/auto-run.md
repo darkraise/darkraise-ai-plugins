@@ -63,7 +63,9 @@ after `start` with `scripts/auto-run ruling add`. The rest of this section is
 the spec phase of a run started under `autoRun=ask`.
 
 After your own self-review round and the architecture critic
-(dforge:brainstorming §Architecture critic), dispatch `dforge:judge-fable` on
+(dforge:brainstorming §Architecture critic, which folds the critic into
+Fable's first round when no risk or new-subsystem trigger holds), dispatch
+`dforge:judge-fable` on
 the spec against the approved design: the design sections as approved,
 verbatim, and the spec's path. Apply what it rules, and record each ruling
 with
