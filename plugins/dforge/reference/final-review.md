@@ -84,10 +84,11 @@ your own: QA commits on this branch.
       too, for its mutation worktree. Before dispatching, save the output of
       `git status --porcelain` to `<workspace>/qa-status-before.txt`.
       Dispatch it in the background and, in the same message, start a
-      background timer, `sleep 2700` (45 minutes), as
-      [executor-lane.md](executor-lane.md) arms its timers, with the Bash
-      call's `timeout` set to 2820000 ms: a background call's limit defaults
-      to 30 minutes, and a timer killed there fires 15 minutes early.
+      background timer, `sleep <s>` with `<s>` = 600 + 180 × the number of
+      `test` statements, at least 1200 and at most 3600 (20 to 60 minutes),
+      as [executor-lane.md](executor-lane.md) arms its timers, with the Bash
+      call's `timeout` set to (`<s>` + 120) × 1000 ms: a background call's
+      limit defaults to 30 minutes, and a timer killed there fires early.
       Then go on to step 1 without waiting; (c) to (e) run when QA returns
       or its timer finishes, before step 3's fix wave. When the
       timer finishes first, stop the QA agent: TaskStop on Claude Code; on

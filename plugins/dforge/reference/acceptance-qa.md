@@ -51,11 +51,16 @@ seat: the plan's tests were written by the same author as its code.
    error is your own bug: fix the test. An assertion failure is a finding, which you never fix: you do not
    edit the code under test. Re-run a failing test once; when the two runs
    disagree, record `flaky`.
+   Commit as you go: once a statement's test has run, whatever its result,
+   commit the acceptance file and the fixtures it needs, and nothing else, as
+   `test(<scope>): add acceptance test A<n> for <spec-slug>` (several
+   statements written together may share one commit). The session removes
+   your uncommitted files when its timer stops you, so a test that is not
+   committed is lost, and a `rerun` can only build on what was committed.
 4. **Mutation check on every `neg` statement.** For each statement tagged
    `neg` whose test passed:
-   - `git worktree add --detach [WORKSPACE]/qa-mutation HEAD`;
-   - copy the acceptance file and its fixtures into the same paths there:
-     they are not committed yet, so `HEAD` does not have them;
+   - `git worktree add --detach [WORKSPACE]/qa-mutation HEAD`: step 3
+     committed the acceptance file, so `HEAD` has it;
    - in that worktree, link the dependency directories the tests need from the
      main worktree (for example `node_modules` or a virtualenv), or run the
      plan's `**Worktree setup:**` command when the session gave you one;
@@ -68,9 +73,8 @@ seat: the plan's tests were written by the same author as its code.
      setup error is not `red`: fix the setup and run it again;
    - `git worktree remove --force [WORKSPACE]/qa-mutation`, then confirm with
      `git worktree list` and `git status` that the main worktree is unchanged.
-5. **Commit and report.** Commit the acceptance file and any fixtures it needs,
-   and nothing else, as `test(<scope>): add acceptance tests for <spec-slug>`.
-   Write the report below.
+5. **Report.** Commit anything step 3's commits left out, as step 3 says, and
+   write the report below.
 
 ## The report
 
