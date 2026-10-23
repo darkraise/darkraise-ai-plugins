@@ -31,8 +31,16 @@ of the work being done.
 ## The review
 
 MERGE_BASE is the commit the branch started from, for example
-`git merge-base main HEAD`. Steps 0 and 0.5 run first; step 1 builds the
-review package, so the package includes the acceptance tests step 0.5 commits.
+`git merge-base main HEAD`. Step 0 runs first. Step 0.5 dispatches QA in the
+background and goes straight on to step 1: QA runs alongside the Claude review,
+the lenses and the Codex round, and the fix wave waits for it (step 3).
+Serializing them added QA's whole run, often a quarter of an hour, to every
+final review. Because QA commits while the reviewers read, HEAD in steps 1 and
+2 is the SHA recorded in the `Acceptance QA: dispatched (base <sha7>)` line,
+passed as that SHA, never as the word `HEAD`; with no such line (QA skipped),
+it is the branch head. QA's own tests reach an independent reader in the scoped
+re-review instead (Fixing what it finds). While QA runs, make no commit of
+your own: QA commits on this branch.
 
 0. **Gates.** When the project declares `<docs>/gates.md`, run
    dforge:running-gates before dispatching any reviewer. A red gate stops
@@ -79,7 +87,9 @@ review package, so the package includes the acceptance tests step 0.5 commits.
       background timer, `sleep 2700` (45 minutes), as
       [executor-lane.md](executor-lane.md) arms its timers, with the Bash
       call's `timeout` set to 2820000 ms: a background call's limit defaults
-      to 30 minutes, and a timer killed there fires 15 minutes early. When the
+      to 30 minutes, and a timer killed there fires 15 minutes early.
+      Then go on to step 1 without waiting; (c) to (e) run when QA returns
+      or its timer finishes, before step 3's fix wave. When the
       timer finishes first, stop the QA agent: TaskStop on Claude Code; on
       Codex, `close_agent` where your tools offer it. V2 has none: send the
       child a `followup_task` telling it to stop and return now, then wait for
@@ -191,7 +201,10 @@ review package, so the package includes the acceptance tests step 0.5 commits.
    run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say
    which, and go to step 3 with the Claude review alone. An absent or empty
    report is never a clean round.
-3. **Wait for the round's status line first.** When step 2 launched the
+3. **Wait for QA.** When step 0.5 dispatched QA, nothing below runs until its
+   (c) to (e) are done and its `[qa]` findings have joined the Claude list.
+
+   **Wait for the round's status line first.** When step 2 launched the
    runner, there is no step 3 until it has printed `OK`, `FALLBACK`,
    `TIMEOUT` or `FAILED`: end the turn and resume on its notification. An
    absent report from a launched runner is a round still running, never a
@@ -264,7 +277,12 @@ fix subagent writes it as its report file; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
-its `[REPORT_FILE]` being that file).
+its `[REPORT_FILE]` being that file). When QA committed tests, FIX_BASE is the
+review's HEAD (the `Acceptance QA: dispatched` SHA), so the range holds QA's
+commits too: the final reviewers never saw them. When no confirmed finding
+needs a fix wave but QA committed tests, still run that one scoped re-review
+over the same range, with `<workspace>/acceptance-report.md` as
+`[REPORT_FILE]`.
 Send any residual findings — `NOT ADDRESSED`, and `REJECTION DISPUTED` in the
 one-list case — to the ruling seat as `final-residual` items and carry out its
 verdicts. The scoped re-review is a Claude seat that wrote none of the code, so

@@ -72,7 +72,7 @@ Subagent (general-purpose):
     specific doubt that no existing run answers — and then a focused test,
     never a package-wide suite.
 
-    When the fix diff touches a test whose name starts with `A<n>:` or
+    When the fix diff adds or touches a test whose name starts with `A<n>:` or
     `a<n>_`, or which the QA report identifies as an acceptance test (an
     acceptance test the final review's QA seat wrote), ask: would this test
     still fail if the code violated statement A<n> of the spec? A change that
