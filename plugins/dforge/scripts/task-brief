@@ -80,6 +80,21 @@ else
   if [ -n "$excerpt" ]; then
     printf '\n## Plan header excerpt\n\n%s\n' "$excerpt" >> "$out"
   fi
+  # dforge:ui-ux — a UI task's brief carries the contract items it delivers,
+  # verbatim from the spec, so the implementer builds the states and
+  # behaviour, not only the layout.
+  ui_line=$(plan_task_text "$src" "$n" | plan_lines 'UI/UX' | head -n 1)
+  if [ -n "$ui_line" ]; then
+    . "$HERE/lib/ui-ux.sh"
+    ui_spec=$(plan_header_line "$src" Spec | sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/')
+    ui_file=$(dforge_resolve "$ui_spec" "$(_plan_ctx "$plan")")
+    ui_ids=$( { grep -oE '(UI|UX|OP)-[0-9]+' <<<"$ui_line" || true; } | tr '\n' ' ')
+    ui_items=""
+    # shellcheck disable=SC2086
+    [ ! -f "$ui_file" ] || ui_items=$(uiux_items "$ui_file" "UI/UX contract" $ui_ids)
+    printf '\n## UI/UX contract items\n\nFrom `%s`, verbatim. Build every state, behaviour and promise below, render the result through the project UI profile'"'"'s harness before you report, and map each ID to its evidence (a screenshot path or a test name) in your report.\n\n%s\n' \
+      "$ui_spec" "${ui_items:-(the spec defines none of: $ui_ids)}" >> "$out"
+  fi
 fi
 
 echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"

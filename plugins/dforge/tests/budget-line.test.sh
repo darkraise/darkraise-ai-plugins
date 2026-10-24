@@ -210,5 +210,57 @@ check "task-brief: names the amendment" "$err" "amendment A1 does not apply"
 bash "$P/scripts/task-brief" --header >/dev/null 2>&1; status=$?
 check "task-brief --header without a plan: exit 2" "$status" "2"
 
+# --- UI/UX contract items (dforge:ui-ux) ---
+cat > docs/ui-spec.md <<'EOF'
+# Spec
+
+## UI/UX contract
+
+**UI/UX depth:** feature — a dialog
+
+- **UX-1** — Escape closes the dialog.
+  Focus returns to the trigger.
+- **UX-2** — The dialog traps focus.
+EOF
+cat > docs/ui-plan.md <<'EOF'
+# Plan
+
+**Spec:** `docs/ui-spec.md`
+
+**Execution:** subagent — `claude --model sonnet --effort high` — x
+
+## Global Constraints
+
+- Bash only.
+
+## Contracts
+
+- None.
+
+## Task index
+
+1. Dialog
+2. Docs
+
+### Task 1: Dialog
+
+**UI/UX:** UX-1
+
+Build the dialog.
+
+### Task 2: Docs
+
+Write the docs.
+EOF
+bash "$P/scripts/task-brief" docs/ui-plan.md 1 "$TMP/ui1.md" >/dev/null 2>&1
+check "task-brief: a UI task's brief carries the items heading" "$(grep -c '^## UI/UX contract items$' "$TMP/ui1.md")" "1"
+check "task-brief: the cited item, verbatim with its continuation" \
+  "$(grep -c -e '^- \*\*UX-1\*\* — Escape closes the dialog\.$' -e '^  Focus returns to the trigger\.$' "$TMP/ui1.md")" "2"
+check "task-brief: an uncited item is left out" "$(grep -c 'UX-2' "$TMP/ui1.md")" "0"
+check "task-brief: the items come after the excerpt" \
+  "$([ "$(grep -n '^## UI/UX contract items$' "$TMP/ui1.md" | cut -d: -f1)" -gt "$(grep -n '^## Plan header excerpt$' "$TMP/ui1.md" | cut -d: -f1)" ] && echo yes || echo no)" "yes"
+bash "$P/scripts/task-brief" docs/ui-plan.md 2 "$TMP/ui2.md" >/dev/null 2>&1
+check "task-brief: a task without a UI/UX line gets no items" "$(grep -c 'UI/UX contract items' "$TMP/ui2.md")" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
