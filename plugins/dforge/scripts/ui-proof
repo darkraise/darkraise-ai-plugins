@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# The ui-ux skill's proof tool: which files are UI files, their fingerprint, a
+# spec's contract items, stamping a proof report, and the gate that blocks the
+# final review, finishing and a "done" claim until the UI is proven.
+#
+# Usage: ui-proof paths | fingerprint | changed --base REF
+#        ui-proof contract SPEC [ID...]
+#        ui-proof stamp REPORT
+#        ui-proof check --base REF [--spec SPEC] [--active]
+# Run inside the checkout; paths print repository-relative.
+# check: exit 0 when the gate is off (no profile, no contract, no --active), no
+# UI file differs from REF, or a proof report passes every step; otherwise one
+# "ui-proof: FAIL <step>: <what>" line per failure and exit 1. Usage: exit 2.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/ui-ux.sh"
+
+die() { printf 'ui-proof: %s\n' "$1" >&2; exit 2; }
+usage() { die "usage: ui-proof paths | fingerprint | changed --base REF | contract SPEC [ID...] | stamp REPORT | check --base REF [--spec SPEC] [--active]"; }
+
+[ $# -ge 1 ] || usage
+root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git checkout"
+dforge_stores_init "$root"
+cmd=$1; shift
+
+base="" spec="" active=0
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --base) [ $# -ge 2 ] || usage; base=$2; shift 2 ;;
+      --spec) [ $# -ge 2 ] || usage; spec=$2; shift 2 ;;
+      --active) active=1; shift ;;
+      *) usage ;;
+    esac
+  done
+  [ -n "$base" ] || usage
+  git -C "$root" rev-parse --verify --quiet "$base^{commit}" >/dev/null || die "bad --base: $base"
+}
+
+case $cmd in
+  paths) [ $# -eq 0 ] || usage; uiux_globs "$root" ;;
+  fingerprint) [ $# -eq 0 ] || usage; uiux_fingerprint "$root" ;;
+  changed) parse_args "$@"; uiux_changed "$root" "$base" ;;
+  contract)
+    [ $# -ge 1 ] || usage
+    f=$(dforge_resolve "$1" "$root"); shift
+    [ -f "$f" ] || die "no such spec: $f"
+    if [ $# -eq 0 ]; then uiux_contract_ids "$f"; else uiux_items "$f" "UI/UX contract" "$@"; fi ;;
+  stamp|check) die "$cmd: not implemented yet" ;;
+  *) usage ;;
+esac
