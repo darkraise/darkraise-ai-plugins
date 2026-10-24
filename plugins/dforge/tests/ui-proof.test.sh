@@ -188,6 +188,17 @@ check "check: no judge line fails" "$st" "1"
 check "check: names the judge step" "$(grep -c '^ui-proof: FAIL judge:' <<<"$out")" "1"
 judge 2026-10-24-t ship
 check "check: judged again, it passes" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+report 2026-10-24-u touch '| UX-1 | fail | .dforge/ui-ux/t/a.png | abandoned |'
+up stamp "$PROOFS/2026-10-24-u.md" >/dev/null
+out=$(up check --base "$BASE"); st=$?
+check "check: a failing report sorting last does not hide a passing one" "$st" "0"
+check "check: names the report that passes" "$(grep -c '^ui-proof: ok — .*2026-10-24-t.md' <<<"$out")" "1"
+mv "$PROOFS/2026-10-24-t.md" "$TMP/t.md"
+out=$(up check --base "$BASE"); st=$?
+check "check: with no passing report at the fingerprint it fails" "$st" "1"
+check "check: names the last report it checked" "$(grep -c '^ui-proof: report .*2026-10-24-u.md' <<<"$out")" "1"
+mv "$TMP/t.md" "$PROOFS/2026-10-24-t.md"
+rm "$PROOFS/2026-10-24-u.md"
 
 try() { # try <rows> [extra header line] [judge verdict] — a fresh touch report; prints check's status
   rm -f "$PROOFS"/2026-10-24-t.*

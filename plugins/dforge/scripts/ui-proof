@@ -91,7 +91,7 @@ case $cmd in
     fails=()
     failed() { fails+=("$1: $2"); }
     dir=$(uiux_proofs_dir "$root")
-    report="" newest=""
+    reports=() newest=""
     while IFS= read -r r; do
       [ -n "$r" ] || continue
       if [ -n "$spec_bound" ]; then
@@ -99,16 +99,22 @@ case $cmd in
         [ -n "$rc" ] && [ "$(dforge_resolve "$rc" "$root")" = "$spec_bound" ] || continue
       fi
       newest=$r
-      if [ "$(uiux_field "$r" Fingerprint)" = "$fp" ]; then report=$r; fi
+      if [ "$(uiux_field "$r" Fingerprint)" = "$fp" ]; then reports+=("$r"); fi
     done < <(ls "$dir"/*.md 2>/dev/null | grep -v '\.judge\.md$' | LC_ALL=C sort)
-    if [ -z "$report" ]; then
+    report=""
+    if [ ${#reports[@]} -eq 0 ]; then
       if [ -n "$newest" ]; then
         failed freshness "$(dforge_name "$newest" "$root") was stamped at $(uiux_field "$newest" Fingerprint); the UI files are now at $fp"
       else
         failed report "no proof report under $(dforge_name "$dir" "$root")${spec_bound:+ names $spec}"
       fi
       failed scope "UI files changed since $base: $(head -n 10 <<<"$changed" | tr '\n' ' ')"
-    else
+    fi
+    # Several reports can carry the fingerprint, and names sort by slug, not
+    # age: any one that passes proves the UI; otherwise the last one's
+    # failures are printed.
+    for report in ${reports[@]+"${reports[@]}"}; do
+      fails=()
       rc=$(uiux_field "$report" Contract)
       if [ "$rc" = touch ]; then
         want=$(uiux_section "$report" Delta | uiux_ids)
@@ -178,11 +184,11 @@ case $cmd in
           fi
         fi
       fi
-    fi
-    if [ ${#fails[@]} -eq 0 ]; then
-      printf 'ui-proof: ok — %s proves the UI at %s\n' "$(dforge_name "$report" "$root")" "$fp"
-      exit 0
-    fi
+      if [ ${#fails[@]} -eq 0 ]; then
+        printf 'ui-proof: ok — %s proves the UI at %s\n' "$(dforge_name "$report" "$root")" "$fp"
+        exit 0
+      fi
+    done
     for f in "${fails[@]}"; do printf 'ui-proof: FAIL %s\n' "$f"; done
     [ -z "$report" ] || printf 'ui-proof: report %s\n' "$(dforge_name "$report" "$root")"
     exit 1 ;;
