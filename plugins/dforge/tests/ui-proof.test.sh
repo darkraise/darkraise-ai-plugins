@@ -54,6 +54,10 @@ rm src/new.css
 printf 'x\n' > src/a.test.tsx
 check "fingerprint: a test file is not a UI file" "$(up fingerprint)" "$fp1"
 rm src/a.test.tsx
+printf 'a {}\n' > "src/caf$(printf '\303\251').css"
+check "fingerprint: a non-ASCII file name counts" "$([ "$(up fingerprint)" != "$fp1" ] && echo yes || echo no)" "yes"
+check "changed: a non-ASCII file name is listed" "$(up changed --base HEAD | grep -c "caf$(printf '\303\251').css")" "1"
+rm src/caf*.css
 mkdir -p "$TMP/empty" && (cd "$TMP/empty" && git init -q && bash "$UP" fingerprint) > "$TMP/fp-empty"
 check "fingerprint: none without UI files" "$(cat "$TMP/fp-empty")" "none"
 
