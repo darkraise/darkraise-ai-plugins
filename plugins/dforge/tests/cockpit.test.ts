@@ -277,6 +277,8 @@ type World = {
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
   commonDir?: string
+  /** What `git rev-parse --show-toplevel` answers in the session's directory: the work tree it is in; the session repository's unless said. */
+  checkout?: string
   /** Runs inside each scripts/auto-run call, given its command word, before the call answers. */
   onAutoRun?: (word: string) => unknown
   /** How many `$.session.id()` calls fail before one answers. */
@@ -459,6 +461,9 @@ function world(on: On, w: World) {
         },
       }
     }
+    if (argv === 'git rev-parse --show-toplevel') {
+      return { value: { exitCode: 0, stdout: `${w.checkout ?? '/home/me/code/shop'}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${common}\n` : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -521,9 +526,10 @@ function world(on: On, w: World) {
   return clock
 }
 
-// A signed-in account working in a repository under home.
+// A signed-in account working in a repository under home. In a linked
+// worktree the engine names the main working tree as the repository's root.
 const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
-function signedIn(on: On, files: World['files'] = {}, reads?: string[]) {
+function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot = '/home/me/code/shop') {
   on('fs.read', (_$, e) => {
     reads?.push(e.path)
     const file = files[e.path]
@@ -544,7 +550,7 @@ function signedIn(on: On, files: World['files'] = {}, reads?: string[]) {
     throw new Error('ENOENT')
   })
   on('session.cwd', () => ({ value: '/home/me/code/shop/web' }))
-  on('session.repo', () => ({ value: { root: '/home/me/code/shop', remote: null, internal: false, name: null } }))
+  on('session.repo', () => ({ value: { root: repoRoot, remote: null, internal: false, name: null } }))
   on('session.model', () => ({ value: 'claude-opus-5-5[1m]' }))
 }
 
@@ -4398,7 +4404,7 @@ describe('cockpit roots', () => {
       '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
     }
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
-    signedIn(on, files)
+    signedIn(on, files, undefined, '/home/me/code/main')
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -4412,7 +4418,7 @@ describe('cockpit roots', () => {
     const gitRuns: string[] = []
     const modeRuns: string[] = []
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main', gitRuns, modeRuns })
-    signedIn(on, files)
+    signedIn(on, files, undefined, '/home/me/code/main')
     await $.session.start(START)
     expect(gitRuns).toContain('git -C /home/me/code/main rev-parse --show-toplevel')
     // The roots are the linked worktree's, as sdd-workspace resolves them there.
@@ -4427,12 +4433,29 @@ describe('cockpit roots', () => {
       '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
     }
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
-    signedIn(on, files)
+    signedIn(on, files, undefined, '/home/me/code/main')
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Primary task/ })).toBeUndefined()
+  })
+
+  test('follows the session into a worktree it enters mid-session, as an auto run does', async ($, on) => {
+    const tree = '/home/me/code/main/.claude/worktrees/w'
+    const files: World['files'] = {
+      [`${tree}/.dforge/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
+      [`${tree}/docs/dforge/plans/p.md`]: { text: PLAN },
+    }
+    const w: World = { ...SIGNED_IN, files, primary: '/home/me/code/main', checkout: '/home/me/code/main' }
+    world(on, w)
+    signedIn(on, files, undefined, '/home/me/code/main')
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    w.checkout = tree
+    await $.tool.call({ tool: 'EnterWorktree', path: tree } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
   })
 
   test('a submodule has no primary checkout, as in the scripts', async ($, on) => {

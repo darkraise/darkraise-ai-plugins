@@ -182,6 +182,8 @@ const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 // The skills that run a plan's tasks in this session.
 const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
+// The tools that move the session into or out of a worktree.
+const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -740,9 +742,12 @@ export const register: Register = on => {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
       // A run starts, stops and changes regime through the model's own calls.
       await trackAutoRun($)
+      // A worktree move takes the session's ledger with it.
+      const isMove = WORKTREE_TOOLS.includes(tool) && ran.deny === undefined && !ran.isError
+      if (isMove) await readPlace($)
       // The controller writes its ledger with its own tool calls; read it
       // before the budget, which measures a plan's tail by it.
-      if (touchesRun(e)) await readRun($)
+      if (isMove || touchesRun(e)) await readRun($)
       await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
     }
 
@@ -2354,10 +2359,13 @@ const S = {
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,
-  where: { host: null, tmux: null, primary: null } as {
+  where: { host: null, tmux: null, primary: null, checkout: null } as {
     host: string | null
     tmux: string | null
     primary: string | null
+    // The work tree the session is in: a linked worktree's own, where
+    // $.session.repo() names the main working tree.
+    checkout: string | null
   },
   // An approval or question the person has not answered yet, by tool call: its
   // timer, the Discord message sent for it (edited once it is answered), and
@@ -3027,7 +3035,7 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
 async function readRun($: EngineInterface) {
   // A poll tick's read and a tool call's can overlap: only the latest writes.
   const reading = ++S.runReads
-  const session = (await read($, place))?.root ?? null
+  const session = S.where.checkout ?? (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
   const state = `${root}/.dforge`
@@ -3712,6 +3720,8 @@ async function readPlace($: EngineInterface) {
   } catch {
     // No working directory on this host: the strip starts at the branch.
   }
+  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { timeoutMs: 2000 }).catch(() => null)
+  S.where.checkout = top?.exitCode === 0 ? (top.stdout.split('\n')[0] ?? '').trim() || null : null
 }
 
 // Until the first request goes out: the session's model and the effort setting.
