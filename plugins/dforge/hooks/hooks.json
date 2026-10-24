@@ -1,5 +1,5 @@
 {
-  "description": "Loads the cockpit mod, injects the dforge entry point at session start, persists the session's transcript path for budget tooling, appends a compaction snapshot after compaction, runs darkmem's reconcile and pull at session start and pushes at each stop for a repository mapped to darkmem, and holds a stop once when a turn that advanced a plan, or ran a dforge skill and moved a branch without one, ends without the finishing menu or the next step, or up to three times in a row when an auto run's turn ends without its sentinel line.",
+  "description": "Loads the cockpit mod, injects the dforge entry point at session start, persists the session's transcript path for budget tooling, appends a compaction snapshot after compaction, runs darkmem's reconcile and pull at session start and pushes at each stop for a repository mapped to darkmem, and holds a stop once when a turn that advanced a plan, or ran a dforge skill and moved a branch without one, ends without the finishing menu or the next step, or up to three times in a row when an auto run's turn ends without its sentinel line; after an edit to a UI file it returns UI lint findings and names the ui-ux skill once per session, and it holds a stop once when a turn leaves UI changes without a passing UI proof.",
   "modules": ["./cockpit/register.tsx"],
   "hooks": {
     "SessionStart": [
@@ -57,6 +57,13 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/darkmem-stop-push.sh\"",
             "shell": "bash",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ui-turn-end.sh\"",
+            "shell": "bash",
+            "async": false,
+            "timeout": 60
           }
         ]
       }

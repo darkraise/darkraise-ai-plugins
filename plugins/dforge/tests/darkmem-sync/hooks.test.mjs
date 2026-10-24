@@ -185,7 +185,11 @@ test("the hooks are bounded: SessionStart 300 seconds, Stop 120, and the darkmem
   assert.match(stopPush.command, /scripts\/darkmem-stop-push\.sh/);
   assert.equal(stopPush.async, true);
   assert.equal(stopPush.timeout, undefined, "Claude Code does not enforce an async hook's timeout; the push bounds itself");
-  assert.deepEqual(more, []);
+  const [uiTurnEnd, ...rest] = more;
+  assert.match(uiTurnEnd.command, /scripts\/ui-turn-end\.sh/);
+  assert.equal(uiTurnEnd.async, false);
+  assert.equal(uiTurnEnd.timeout, 60);
+  assert.deepEqual(rest, []);
 });
 
 test("session start adds the darkmem lines on every source, compaction included", { skip: !hasJq && "jq is not on PATH" }, async t => {

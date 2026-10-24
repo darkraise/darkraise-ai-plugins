@@ -58,5 +58,61 @@ check "hooks.json runs ui-edit-hook.sh" "$(jq -r '.hooks.PostToolUse[0].hooks[0]
 check "hooks.json: the edit hook is synchronous, bash, 30 s" \
   "$(jq -r '.hooks.PostToolUse[0].hooks[0] | [.async, .shell, .timeout] | map(tostring) | join(",")' "$HOOKS")" "false,bash,30"
 
+# --- Stop ---
+END="$HERE/../scripts/ui-turn-end.sh"
+START="$HERE/../scripts/turn-start.sh"
+AR="$HERE/../scripts/auto-run"
+prompt() { # prompt <session>
+  jq -n --arg sid "$1" --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$START"
+}
+stop() { # stop <session> <last message> [stop_hook_active] [transcript]
+  jq -n --arg sid "$1" --arg cwd "$REPO" --arg msg "$2" --argjson active "${3:-false}" --arg tp "${4:-}" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:$active,last_assistant_message:$msg}' | bash "$END"
+}
+decision() { jq -r '.decision // "none"' <<<"${1:-{\}}" 2>/dev/null || echo none; }
+
+prompt s-1
+printf '// change\n' >> src/App.tsx
+git commit -q -am 'ui change'
+check "stop: no profile and no skill run: passes" "$(stop s-1 'Done.')" ""
+
+mkdir -p docs/dforge/ui-ux
+printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+prompt s-2
+printf '// change 2\n' >> src/App.tsx
+git commit -q -am 'ui change 2'
+out=$(stop s-2 'Done.')
+check "stop: a committed UI change without proof is held" "$(decision "$out")" "block"
+check "stop: the reason names the changed file" "$(jq -r .reason <<<"$out" | grep -c 'src/App.tsx')" "1"
+check "stop: the reason names the pending line" "$(jq -r .reason <<<"$out" | grep -c 'UI proof: pending')" "1"
+check "stop: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dforge held the stop')" "1"
+check "stop: the retry passes" "$(stop s-2 'Done.' true)" ""
+check "stop: the pending line passes" "$(stop s-2 $'Done.\n\nUI proof: pending — no browser on this host')" ""
+prompt s-3
+check "stop: a turn that changed no UI file passes" "$(stop s-3 'Done.')" ""
+
+mv docs/dforge/ui-ux/profile.md "$TMP/profile.md"
+prompt s-4
+printf '// change 3\n' >> src/App.tsx
+check "stop: no profile but the skill ran: held" "$(decision "$(stop s-4 'Done.' false "$TR")")" "block"
+check "stop: no profile and no skill: passes" "$(stop s-4 'Done.')" ""
+mv "$TMP/profile.md" docs/dforge/ui-ux/profile.md
+
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-5"
+(cd "$REPO" && bash "$AR" --session s-5 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1)
+prompt s-5
+check "stop: an auto run bound to the session: passes" "$(stop s-5 'Done.')" ""
+check "stop: another session in the checkout is still held" "$(decision "$(stop s-2 'Done.')")" "block"
+check "stop: no stamp for the session: passes" "$(stop s-unknown 'Done.')" ""
+
+check "hooks.json registers the UI Stop check once" \
+  "$(jq -r '[.hooks.Stop[0].hooks[].command | select(contains("ui-turn-end.sh"))] | length' "$HOOKS")" "1"
+check "hooks.json: the Stop check is synchronous, bash, 60 s" \
+  "$(jq -r '.hooks.Stop[0].hooks[] | select(.command | contains("ui-turn-end.sh")) | [.async, .shell, .timeout] | map(tostring) | join(",")' "$HOOKS")" "false,bash,60"
+check "hooks.json: turn-end.sh stays the first Stop hook" \
+  "$(jq -r '.hooks.Stop[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/turn-end.sh"'
+check "hooks.json: the description names the UI hooks" "$(jq -r .description "$HOOKS" | grep -c 'UI proof')" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
