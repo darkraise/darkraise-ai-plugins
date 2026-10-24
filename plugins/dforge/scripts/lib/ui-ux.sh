@@ -55,15 +55,42 @@ uiux_is_ui() {
   return 1
 }
 
-# uiux_filter ROOT — the UI paths among the repository-relative paths on stdin.
+# uiux_filter ROOT — the UI paths among the repository-relative paths on stdin,
+# matched as uiux_is_ui matches one. One awk pass: a bash loop over every
+# tracked file ran past the Stop hook's timeout in a large repository.
 uiux_filter() {
-  local globs path
-  globs=$(uiux_globs "$1")
-  while IFS= read -r path; do
-    [ -n "$path" ] || continue
-    if uiux_is_ui "$path" "$globs"; then printf '%s\n' "$path"; fi
-  done
-  return 0
+  UIUX_INC=$(uiux_globs "$1") UIUX_EXC=$UIUX_EXCLUDE_GLOBS LC_ALL=C awk '
+    # A bash case pattern as an anchored regex: * and ? cross /, [!...] negates.
+    function re(g,   out, i, n, c, j) {
+      out = "^"; n = length(g)
+      for (i = 1; i <= n; i++) {
+        c = substr(g, i, 1)
+        if (c == "*") out = out ".*"
+        else if (c == "?") out = out "."
+        else if (c == "\\" && i < n) { i++; out = out lit(substr(g, i, 1)) }
+        else if (c == "[") {
+          j = i + 1
+          if (substr(g, j, 1) == "!" || substr(g, j, 1) == "^") j++
+          if (substr(g, j, 1) == "]") j++
+          while (j <= n && substr(g, j, 1) != "]") j++
+          if (j > n) { out = out lit(c); continue }
+          c = substr(g, i + 1, j - i - 1); sub(/^!/, "^", c)
+          out = out "[" c "]"; i = j
+        } else out = out lit(c)
+      }
+      return out "$"
+    }
+    function lit(c) { return c ~ /[A-Za-z0-9_\/ -]/ ? c : (c == "\\" ? "\\\\" : c == "^" ? "\\^" : "[" c "]") }
+    BEGIN {
+      ni = split(ENVIRON["UIUX_INC"], g, "\n"); for (k = 1; k <= ni; k++) if (g[k] != "") inc[k] = re(g[k])
+      ne = split(ENVIRON["UIUX_EXC"], g, " "); for (k = 1; k <= ne; k++) if (g[k] != "") exc[k] = re(g[k])
+    }
+    $0 == "" { next }
+    {
+      for (k in exc) if ($0 ~ exc[k]) next
+      for (k in inc) if ($0 ~ inc[k]) { print; next }
+    }
+  '
 }
 
 # uiux_files ROOT — every UI file in ROOT's working tree, tracked or

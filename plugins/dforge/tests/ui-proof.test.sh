@@ -38,6 +38,31 @@ printf '# UI profile\n\n**Platform:** web\n**UI paths:** `src/ui/*` `*.tsx`\n' >
 check "paths: the profile's globs replace the defaults" "$(up paths | tr '\n' ' ')" "src/ui/* *.tsx "
 rm docs/dforge/ui-ux/profile.md
 
+# --- filter: one awk pass that must agree with uiux_is_ui ---
+SAMPLE="$TMP/sample"
+printf '%s\n' a.tsx src/x.test.tsx src/x.spec.vue b.stories.tsx c.acceptance.html res/layout/main.xml \
+  app/src/main/res/values/s.xml layout/a.xml F.Designer.cs F.cs 'a+b.css' 'p(1).html' 'w [x].scss' x.tsx.bak \
+  'name with space.vue' 'caf.é.css' 'dot.in.dir/x.qml' src/ui/k ab.c bx/q.c zy.go yy.go app/a.ts app/ab.ts \
+  'odd$.less' 'q^.sass' 'h|i.html' > "$SAMPLE"
+agree() { # agree <label>: uiux_filter and uiux_is_ui pick the same lines of $SAMPLE
+  ( . "$HERE/../scripts/lib/ui-ux.sh"
+    globs=$(uiux_globs "$REPO")
+    want=$(while IFS= read -r p; do if uiux_is_ui "$p" "$globs"; then printf '%s\n' "$p"; fi; done < "$SAMPLE")
+    got=$(uiux_filter "$REPO" < "$SAMPLE")
+    check "filter: $1" "$got" "$want"
+    check "filter: $1 selects some" "$([ -n "$got" ] && echo yes || echo no)" "yes"
+    printf '%s %s\n' "$pass" "$fail" > "$TMP/counts" )
+  read -r pass fail < "$TMP/counts"
+}
+agree "the default globs match as uiux_is_ui does"
+printf '# UI profile\n\n**UI paths:** `src/ui/*` `app/?.ts` `[ab]x/*.c` `[!z]y.go` `*\\(1\\).html` `w [[]x].scss`\n' > docs/dforge/ui-ux/profile.md
+agree "?, [..], [!..] and escapes match as uiux_is_ui does"
+rm docs/dforge/ui-ux/profile.md
+big=$(awk 'BEGIN { for (i = 0; i < 50000; i++) printf "src/m%d/f%d.%s\n", i % 500, i, (i % 10 ? "ts" : "tsx") }')
+start=$SECONDS
+n=$( (. "$HERE/../scripts/lib/ui-ux.sh"; uiux_filter "$REPO" <<<"$big") | grep -c .)
+check "filter: 50000 paths in under 10 s" "$n $(( SECONDS - start < 10 ))" "5000 1"
+
 # --- fingerprint ---
 fp1=$(up fingerprint)
 check "fingerprint: 16 hex digits" "$(grep -cE '^[0-9a-f]{16}$' <<<"$fp1")" "1"
