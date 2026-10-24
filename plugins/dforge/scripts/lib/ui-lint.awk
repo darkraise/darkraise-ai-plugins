@@ -2,8 +2,10 @@ function hit(rule, msg) { printf "%s:%d: %s %s\n", f, FNR, rule, msg }
 kind == "web" {
   line = $0
   if (line ~ /focus-visible/) focusvis = 1
-  if (!token && line !~ /^[ \t]*--[A-Za-z0-9_-]+[ \t]*:/ &&
-      (line ~ /(color|background|fill|stroke|border|shadow|outline)[A-Za-z-]*["']?[ \t]*[:=][^;]*(#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]*([^0-9a-zA-Z_-]|$)|rgba?\(|hsla?\()/ ||
+  # The boundary before the property name skips a custom property such as
+  # --brand-color, which defines a token wherever it sits on the line.
+  if (!token &&
+      (line ~ /(^|[^A-Za-z0-9_-])(color|background|fill|stroke|border|shadow|outline)[A-Za-z-]*["']?[ \t]*[:=][^;]*(#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]*([^0-9a-zA-Z_-]|$)|rgba?\(|hsla?\()/ ||
        line ~ /-\[(#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]|rgba?\(|hsla?\()/))
     hit("raw-color", "raw colour value; use the design system token")
   if (line ~ /outline[ \t]*:[ \t]*(none|0)([ \t;!]|$)/ || line ~ /(^|[ "'`])outline-none([ "'`]|$)/) outl[FNR] = 1
