@@ -109,8 +109,8 @@ exit 1 counts, and when it comes only from `unverifiable` rows, run
 `scripts/auto-run stop --reason "ui proof needs the user"` first. Remember the
 exit 1 for Step 4: it turns a recorded `merge` or `pr` into `keep`. Run
 `scripts/finish-choice get [--plan PLAN_FILE]` now: when it prints `merge`,
-`pr` or `keep`, or an auto run is bound, continue to Step 2 (Step 4 keeps the
-branch). Otherwise present only these two options:
+`pr` or `keep` with no `answer` or `firedAt` field, or an auto run is bound,
+continue to Step 2 (Step 4 keeps the branch). Otherwise present only these two options:
 
 ```
 The UI is unproven (ui-proof check):
