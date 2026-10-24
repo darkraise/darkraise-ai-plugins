@@ -8,7 +8,7 @@
 #
 # Usage: lens-route PLAN_FILE --final BASE HEAD
 #        lens-route PLAN_FILE --task ID
-# Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added>
+# Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added|ui-paths>
 #         lens-skipped <id> reason=cap      (--final, past the lensCap setting)
 #         lens-floor important tasks=<n> from=<m>
 #                                           (--final, after the lens lines, when
@@ -44,20 +44,21 @@ if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 
-# lens_order — every lens id, highest priority first: three fixed leaders, the
-# language lenses alphabetically, two fixed trailers, then any other lens.
+# lens_order — every lens id, highest priority first: four fixed leaders (security, then ui-ux, so the cap keeps the UI lens on a UI branch), the language lenses alphabetically, two fixed trailers, then any other lens.
 lens_order() {
   local all id
   all=$(for f in "$LENSES"/*.md; do [ -e "$f" ] && basename "$f" .md; done | LC_ALL=C sort)
-  for id in security silent-failures test-quality; do grep -qxF "$id" <<<"$all" && echo "$id"; done
+  for id in security ui-ux silent-failures test-quality; do grep -qxF "$id" <<<"$all" && echo "$id"; done
   grep -E '^lang-' <<<"$all"
   for id in type-design docs-comments; do grep -qxF "$id" <<<"$all" && echo "$id"; done
-  grep -vxE 'security|silent-failures|test-quality|type-design|docs-comments|lang-.*' <<<"$all"
+  grep -vxE 'security|ui-ux|silent-failures|test-quality|type-design|docs-comments|lang-.*' <<<"$all"
 }
 
 # lens_match ID — print the first Applies clause that matches the change set
 # ($changed: file names; $added: added lines without their +); status 1 when
-# none does. Globs are bash case patterns, so * crosses /.
+# none does. Globs are bash case patterns, so * crosses /. A ui-paths clause
+# matches a changed UI file (scripts/ui-proof paths) only when the project has
+# a UI profile or the plan's spec has a UI/UX contract.
 lens_match() {
   local value clause kind arg glob f
   value=$(sed -n 's/^Applies: //p' "$LENSES/$1.md" | head -n 1 | tr -d '\r')
@@ -79,6 +80,12 @@ lens_match() {
           done <<<"$changed"
         done
         set +f ;;
+      ui-paths)
+        [ "${ui_active:-0}" = 1 ] || continue
+        while IFS= read -r f; do
+          [ -n "$f" ] || continue
+          if uiux_is_ui "$f" "$ui_globs"; then echo ui-paths; return 0; fi
+        done <<<"$changed" ;;
       added)
         if grep -qE -- "$arg" <<<"$added"; then echo added; return 0; fi ;;
     esac
@@ -97,6 +104,17 @@ case $1 in
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
     changed=$(git diff --name-only "$base..$head")
     added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}')
+    # dforge:ui-ux — the UI lens applies where the UI gate does.
+    . "$HERE/lib/ui-ux.sh"
+    ui_top=$(git rev-parse --show-toplevel)
+    ui_globs=$(uiux_globs "$ui_top") ui_active=0
+    [ ! -f "$(uiux_profile "$ui_top")" ] || ui_active=1
+    ui_spec_line=$(plan_header_line "$src" Spec)
+    if [ "$ui_active" = 0 ] && [ -n "$ui_spec_line" ]; then
+      ui_spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$ui_spec_line")
+      ui_spec=$(dforge_resolve "$ui_spec" "$ui_top")
+      [ ! -f "$ui_spec" ] || [ -z "$(uiux_contract_ids "$ui_spec")" ] || ui_active=1
+    fi
     n=0
     while IFS= read -r id; do
       [ -n "$id" ] || continue

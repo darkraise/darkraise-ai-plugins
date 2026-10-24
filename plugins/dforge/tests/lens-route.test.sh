@@ -16,7 +16,7 @@ check() { # check <name> <got> <want>
   if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-short() { sed -E 's/ criteria=[^ ]*//; s/ seat=[^ ]*//; s/ reason=(always|added|paths:[^ ]*)$//' | tr '\n' ';'; }
+short() { sed -E 's/ criteria=[^ ]*//; s/ seat=[^ ]*//; s/ reason=(always|added|ui-paths|paths:[^ ]*)$//' | tr '\n' ';'; }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -102,6 +102,49 @@ bash "$ROUTE" plan.md --task 9 >/dev/null 2>&1; check "task: a missing task exit
 bash "$ROUTE" plan.md >/dev/null 2>&1; check "usage: exit 2" "$?" "2"
 { printf 'Host: codex\n\n'; cat plan.md; } > codex.md
 bash "$ROUTE" codex.md --task 1 >/dev/null 2>&1; check "a Codex-host plan exits 2" "$?" "2"
+
+# --- the ui-ux lens (dforge:ui-ux) ---
+UIR="$TMP/uirepo"
+git init -q "$UIR" && cd "$UIR" || exit 1
+git config user.email t@example.com && git config user.name t
+git commit -q --allow-empty -m base
+UBASE=$(git rev-parse HEAD)
+sed 's/^|//' > plan.md <<'EOF'
+|# UI Fixture Plan
+|
+|## Task index
+|
+|1. ui
+|
+|### Task 1: ui
+|
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+EOF
+mkdir -p src tests
+printf 'const v = a ?? b;\n' > src/App.tsx
+printf 'test("x", () => {});\n' > tests/app.test.ts
+git add src tests && git commit -q -m ui
+UHEAD=$(git rev-parse HEAD)
+uroute() { HOME="$TMP/uihome" bash "$ROUTE" "$@"; }
+out=$(uroute plan.md --final "$UBASE" "$UHEAD")
+check "ui-ux: no profile and no contract: not routed" "$(short <<<"$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens lang-typescript;"
+mkdir -p docs/dforge/ui-ux && printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+out=$(uroute plan.md --final "$UBASE" "$UHEAD")
+check "ui-ux: with a profile it is second and survives the default cap" "$(short <<<"$out")" \
+  "lens security;lens ui-ux;lens silent-failures;lens test-quality;lens-skipped lang-typescript reason=cap;"
+check "ui-ux: the reason" "$(grep -c '^lens ui-ux .* reason=ui-paths$' <<<"$out")" "1"
+rm docs/dforge/ui-ux/profile.md
+printf '# Spec\n\n## UI/UX contract\n\n**UI/UX depth:** feature — x\n\n- **UX-1** — Escape closes the dialog.\n' > docs/s.md
+{ printf '**Spec:** `docs/s.md`\n\n'; cat plan.md; } > plan-spec.md
+out=$(uroute plan-spec.md --final "$UBASE" "$UHEAD")
+check "ui-ux: a plan whose spec has a contract routes it" "$(grep -c '^lens ui-ux ' <<<"$out")" "1"
+printf 'echo hi\n' > run.sh && git add run.sh && git commit -q -m sh
+U2=$(git rev-parse HEAD)
+out=$(uroute plan-spec.md --final "$UHEAD" "$U2")
+check "ui-ux: no UI file changed: not routed" "$(grep -c '^lens ui-ux ' <<<"$out")" "0"
+printf '# T\n\n## Task index\n\n1. r\n\n### Task 1: r\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 3 = 3\n**Lenses:** ui-ux\n' > plan-task.md
+check "ui-ux: a risk-3 task may name the lens" "$(uroute plan-task.md --task 1 | sed -E 's/ criteria=[^ ]*//')" "lens ui-ux"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

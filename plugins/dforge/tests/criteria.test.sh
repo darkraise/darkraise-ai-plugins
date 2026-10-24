@@ -58,14 +58,14 @@ for f in "$CRITERIA"/*.md "$CRITERIA"/lenses/*.md; do
   case $f in
     */lenses/*)
       check "$base: one Applies line" "$(grep -c '^Applies: ' "$f")" "1"
-      bad=$(sed -n 's/^Applies: //p' "$f" | awk '{ gsub(/ ; /, "\n"); print }' | grep -cvE '^(always|paths [^ ].*|added .+)$')
+      bad=$(sed -n 's/^Applies: //p' "$f" | awk '{ gsub(/ ; /, "\n"); print }' | grep -cvE '^(always|ui-paths|paths [^ ].*|added .+)$')
       check "$base: every Applies clause parses" "$bad" "0" ;;
   esac
 done
 
 got=$(for f in "$CRITERIA"/lenses/*.md; do [ -e "$f" ] && basename "$f" .md; done | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-check "the nine initial lenses exist" "$got" \
-  "docs-comments lang-bash lang-csharp lang-python lang-typescript security silent-failures test-quality type-design"
+check "the lenses exist" "$got" \
+  "docs-comments lang-bash lang-csharp lang-python lang-typescript security silent-failures test-quality type-design ui-ux"
 
 # The final round's prompt. run-codex-review.sh cats it into every --kind final
 # request, so its presence, its encoding and its two load-bearing instructions

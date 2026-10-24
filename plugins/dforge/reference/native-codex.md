@@ -311,10 +311,10 @@ file writes. Acceptance QA is a native implementer at `gpt-6.1-sol / high`
 a risk-3 task review they are the ids on the task's `**Lenses:**` line,
 uncapped. For the final review, read each `criteria/lenses/*.md` `Applies:`
 line against the branch diff and run the matching lenses in priority order
-(security, silent-failures, test-quality, the `lang-*` lenses
+(security, ui-ux, silent-failures, test-quality, the `lang-*` lenses
 alphabetically, type-design, docs-comments), at most `lensCap` of them
 (`scripts/dforge-config get lensCap`; `0` runs none), and name the rest as
-skipped in the report.
+skipped in the report. An `Applies: ui-paths` clause matches a changed file that `scripts/ui-proof paths` lists, and only when the project has a UI profile (`<docs>/ui-ux/profile.md`) or the plan's spec has a `## UI/UX contract`.
 
 ## Claude plans
 
