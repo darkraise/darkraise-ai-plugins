@@ -283,9 +283,14 @@ rm src/Other.tsx
 printf 'x\n' > src/Page.acceptance.tsx
 check "acceptance: a *.acceptance.* file is not a UI file" "$(up changed --base "$BASE" | grep -c 'acceptance')" "0"
 rm src/Page.acceptance.tsx
-printf 'a {}\n' > 'src/we"ird.css'
-check "quoting: a file name with a double quote is a changed UI file" "$(up changed --base "$BASE" | grep -cF 'src/we"ird.css')" "1"
-rm 'src/we"ird.css'
+# Windows forbids " in a file name; Git Bash stores a substitute character.
+case "${OSTYPE:-}" in
+  msys*|cygwin*) echo 'skip - quoting: a file name with a double quote (Windows forbids the character)' ;;
+  *)
+    printf 'a {}\n' > 'src/we"ird.css'
+    check "quoting: a file name with a double quote is a changed UI file" "$(up changed --base "$BASE" | grep -cF 'src/we"ird.css')" "1"
+    rm 'src/we"ird.css' ;;
+esac
 printf 'a {}\n' > '"q.css'
 check "quoting: a top-level file name starting with a double quote fingerprints" "$(up fingerprint >/dev/null 2>&1; echo $?)" "0"
 rm '"q.css'
