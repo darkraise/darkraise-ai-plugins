@@ -117,7 +117,8 @@ Exit 1 names each failed step; fix the UI or the proof, never the check.
 
 An `unverifiable` row (no harness for the platform on this host; macOS and
 iOS are not supported) passes only with an `**Accepted by:**` line quoting the
-user. Never write `**Accepted by:**` unless the user said, in this
+user; with several unverifiable rows, each ID needs its own line
+(`**Accepted by:** OP-2: "<their words>"`). Never write `**Accepted by:**` unless the user said, in this
 conversation, that they accept the item unproven, and quote their words.
 
 When the proof cannot happen in this turn, end the message with the line

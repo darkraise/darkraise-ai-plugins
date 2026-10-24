@@ -45,5 +45,23 @@ printf '<div>ok</div>\n' > "$WORK/plain.md"
 check "a file of no UI kind is skipped" "$(cd "$WORK" && bash "$LINT" plain.md; echo "exit $?")" "exit 0"
 bash "$LINT" >/dev/null 2>&1; check "usage: no file exits 2" "$?" "2"
 
+lint_out() { (cd "$WORK" && bash "$LINT" "$1"); }
+printf '.btn { color: #1a56db; }\n:root { --ring: #1a56db; }\n' > "$WORK/theme.css"
+check "a token file may hold raw colours" "$(lint_out theme.css)" ""
+printf ':root { --ring: #1a56db; }\n' > "$WORK/main.css"
+check "a custom property definition is not a raw colour" "$(lint_out main.css)" ""
+printf '.btn { color: #1a56db; }\n' > "$WORK/main.css"
+check "the same colour in an ordinary file is reported" "$(lint_out main.css | grep -c 'raw-color')" "1"
+printf '<meta name="viewport" content="width=device-width, maximum-scale=1.5">\n' > "$WORK/zoom.html"
+check "zoom: maximum-scale above 1 is allowed" "$(lint_out zoom.html)" ""
+printf '<meta name="viewport" content="width=device-width, user-scalable=no">\n' > "$WORK/zoom.html"
+check "zoom: user-scalable=no is reported" "$(lint_out zoom.html | grep -c 'zoom-disabled')" "1"
+printf '<div tabIndex={0} />\n<div tabIndex={-1} />\n' > "$WORK/tab.tsx"
+check "tabindex: 0 and -1 are allowed" "$(lint_out tab.tsx)" ""
+
+mkdir -p "$WORK/badawk"
+printf '#!/bin/sh\nexit 2\n' > "$WORK/badawk/awk"; chmod +x "$WORK/badawk/awk"
+check "a crashed awk is exit 2, never a clean pass" "$(cd "$WORK" && PATH="$WORK/badawk:$PATH" bash "$LINT" main.css 2>/dev/null; echo "exit $?")" "exit 2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

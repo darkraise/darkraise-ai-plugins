@@ -175,7 +175,7 @@ const hasJq = spawnSync("jq", ["--version"]).status === 0;
 const hasGnuTimeout = /GNU coreutils/.test(spawnSync("timeout", ["--version"], { encoding: "utf8" }).stdout ?? "");
 const runHook = (name, payload, options) => bash([path.join(SCRIPTS, name)], { ...options, input: JSON.stringify(payload) });
 
-test("the hooks are bounded: SessionStart 300 seconds, Stop 120, and the darkmem push runs in the background", () => {
+test("the hooks are bounded: SessionStart 300 seconds, Stop 120 then the UI proof hold at 60, and the darkmem push runs in the background", () => {
   const hooks = JSON.parse(fs.readFileSync(HOOKS_JSON, "utf8")).hooks;
   assert.equal(hooks.SessionStart[0].hooks[0].timeout, 300);
   const [turnEnd, stopPush, ...more] = hooks.Stop[0].hooks;

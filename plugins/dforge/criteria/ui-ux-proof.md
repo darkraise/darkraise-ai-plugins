@@ -20,7 +20,10 @@ Look at the contract's items (for a touch report, its Delta items) and the
 report's Results rows. Score HIGH when every item has a row whose evidence you
 opened and which shows that item. Score LOW when an item has no row, its
 evidence is missing or unreadable, or the evidence shows a different item or
-state.
+state. A row marked unverifiable has no evidence by design: do not score it
+LOW for that. It counts as covered when the report quotes the user accepting
+that item (an `**Accepted by:**` line), and you judge only whether the stated
+reason is a real limit of this host and whether the quote names that item.
 
 ### Built Matches Promised {#fidelity}
 

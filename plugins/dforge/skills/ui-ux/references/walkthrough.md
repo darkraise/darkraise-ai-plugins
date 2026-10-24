@@ -99,7 +99,8 @@ stamp drops a judge line for another fingerprint, judge again.
   decision or the accessibility need that forced it. An uncited difference is
   a `fail`.
 - `unverifiable` passes the gate only with an `**Accepted by:**` line quoting
-  the user. Never write that line unless the user said, in this
+  the user; with several unverifiable rows, one line per ID, as
+  `**Accepted by:** OP-2: "<their words>"`. Never write that line unless the user said, in this
   conversation, that they accept the item unproven.
 - `**Evidence:** local` while screenshots live under `.dforge/`; they go when
   the worktree is removed, and the verdict rows are what remains. With the
@@ -132,7 +133,7 @@ Subagent (judge seat):
 ```
 
 Save the reply verbatim beside the report as `<report name>.judge.md`, then
-add `**Judge:** <ship|fix> <fingerprint> — <that file's repository path>` to
-the report's header. On `fix`, correct what the judge disputes, then rerun
+set the report header's `**Judge:** <ship|fix> <fingerprint> — <that file's repository path>`
+line, replacing any earlier one. On `fix`, correct what the judge disputes, then rerun
 from step 8. A judge reply that does not end with the verdict line is
 re-dispatched once with that instruction repeated.

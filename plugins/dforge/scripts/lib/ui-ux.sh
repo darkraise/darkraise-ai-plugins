@@ -5,7 +5,7 @@
 declare -F plan_header >/dev/null 2>&1 || . "$(dirname "${BASH_SOURCE[0]}")/plan.sh"
 
 UIUX_DEFAULT_GLOBS='*.tsx *.jsx *.vue *.svelte *.astro *.html *.css *.scss *.sass *.less *.xaml *.axaml *.rc *.Designer.cs *.razor *.cshtml *res/layout/*.xml *res/values/*.xml *res/drawable/*.xml *.ui *.qml *.glade *.blp'
-UIUX_EXCLUDE_GLOBS='*.test.* *.spec.* *.stories.*'
+UIUX_EXCLUDE_GLOBS='*.test.* *.spec.* *.stories.* *.acceptance.*'
 
 # uiux_profile ROOT — ROOT's UI profile path, whether or not it exists.
 uiux_profile() { printf '%s/ui-ux/profile.md\n' "$(dforge_docs_root "$1")"; }
@@ -71,7 +71,7 @@ uiux_filter() {
 # left out.
 uiux_files() {
   local path
-  git -C "$1" -c core.quotePath=false ls-files -co --exclude-standard 2>/dev/null | LC_ALL=C sort -u | uiux_filter "$1" |
+  git -C "$1" ls-files -z -co --exclude-standard 2>/dev/null | tr '\0' '\n' | LC_ALL=C sort -u | uiux_filter "$1" |
     while IFS= read -r path; do
       if [ -f "$1/$path" ]; then printf '%s\n' "$path"; fi
     done
@@ -81,8 +81,8 @@ uiux_files() {
 # uiux_changed ROOT BASE — the UI files that differ between BASE and the
 # working tree, committed or not, deleted ones included, plus untracked ones.
 uiux_changed() {
-  { git -C "$1" -c core.quotePath=false diff --name-only "$2" -- 2>/dev/null
-    git -C "$1" -c core.quotePath=false ls-files -o --exclude-standard 2>/dev/null; } | LC_ALL=C sort -u | uiux_filter "$1"
+  { git -C "$1" diff -z --no-renames --name-only "$2" -- 2>/dev/null
+    git -C "$1" ls-files -z -o --exclude-standard 2>/dev/null; } | tr '\0' '\n' | LC_ALL=C sort -u | uiux_filter "$1"
 }
 
 # uiux_fingerprint ROOT — 16 hex digits naming the paths and contents of every

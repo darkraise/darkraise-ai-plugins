@@ -24,6 +24,7 @@ rel=${file#"$root"/}
 uiux_is_ui "$rel" "$(uiux_globs "$root")" || exit 0
 
 lint=$(cd "$root" && bash "$SCRIPT_DIR/ui-lint" "$rel" 2>/dev/null)
+lint_status=$?
 remind=""
 if [ -n "$session_id" ]; then
   marker="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').ui-ux"
@@ -39,6 +40,7 @@ if [ -n "$lint" ]; then
   text="dforge ui-lint, $(grep -c . <<<"$lint") finding(s) in ${rel}:
 $(sed 's/^/- /' <<<"$lint")"
 fi
+if [ "$lint_status" -eq 2 ]; then text="dforge ui-lint could not run on ${rel}; its findings are unknown, so lint it by hand."; fi
 if [ -n "$remind" ]; then text="${text:+$text
 
 }$remind"; fi

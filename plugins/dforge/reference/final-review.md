@@ -59,7 +59,8 @@ your own: QA commits on this branch.
   `bash <plugin-root>/scripts/ui-proof check --base MERGE_BASE --spec <the plan's Spec>`
   under `timeout 120`. Exit 0 goes on (it also prints `ok` when the project
   has no UI profile and the spec no UI/UX contract, or when no UI file
-  changed). Exit 1 stops the review like a red gate: the UI is unproven, and
+  changed). Any other status (2 for a bad base or spec, 124 for the timeout)
+  means the check never ran: treat it as exit 1. Exit 1 stops the review like a red gate: the UI is unproven, and
   reviewing it spends the seats on what the proof would have found. Attended,
   report the failed steps and stop. In an auto run, run the dforge:ui-ux Prove
   phase, then check again, and go on when it passes; when the second exit 1

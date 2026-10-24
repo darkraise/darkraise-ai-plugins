@@ -54,7 +54,7 @@ case $cmd in
     grep -q '^\*\*Contract:\*\*' "$report" || die "the report has no **Contract:** line to stamp beside"
     fp=$(uiux_fingerprint "$root") || die "cannot fingerprint the UI files"
     has=0
-    if grep -q '^\*\*Fingerprint:\*\*' "$report"; then has=1; fi
+    if [ -n "$(uiux_field "$report" Fingerprint)" ]; then has=1; fi
     tmp=$(mktemp) || die "mktemp failed"
     # A judge line for another fingerprint judged other code: drop it, so an
     # edit after the verdict needs a new verdict.
@@ -127,7 +127,8 @@ case $cmd in
       for id in $want; do
         grep -q "^$id"$'\037' <<<"$rows" || failed coverage "$id has no row in ## Results"
       done
-      accepted=$(uiux_field "$report" "Accepted by")
+      accepted=$(tr -d '\r' < "$report" | awk "$_PLAN_AWK"'in_fence($0) { next } index($0, "**Accepted by:**") == 1 { print }')
+      unv=$(awk -F"$(printf '\037')" '$2 == "unverifiable" { n++ } END { print n + 0 }' <<<"$rows")
       while IFS=$'\037' read -r id verdict ev note; do
         [ -n "$id" ] || continue
         case $verdict in
@@ -145,7 +146,14 @@ case $cmd in
               esac
             done ;;
           fail) failed verdicts "$id failed: ${note:-no note}" ;;
-          unverifiable) [ -n "$accepted" ] || failed verdicts "$id is unverifiable and the report has no **Accepted by:** line quoting the user" ;;
+          unverifiable)
+            # An acceptance covers the IDs it names; one that names none covers
+            # a report with a single unverifiable row, never several.
+            if [ -z "$accepted" ]; then
+              failed verdicts "$id is unverifiable and the report has no **Accepted by:** line quoting the user"
+            elif ! grep -qE "(^|[^A-Za-z0-9-])$id([^A-Za-z0-9-]|$)" <<<"$accepted" && [ "$unv" -gt 1 ]; then
+              failed verdicts "$id is unverifiable and no **Accepted by:** line names it; with several unverifiable rows each needs its own, for example **Accepted by:** $id: \"<the user's words>\""
+            fi ;;
           *) failed verdicts "$id has the unknown verdict \"$verdict\" (pass, deviation, fail or unverifiable)" ;;
         esac
       done <<<"$rows"

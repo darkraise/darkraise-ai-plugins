@@ -139,6 +139,13 @@ printf '# Spec\n\n## UI/UX contract\n\n**UI/UX depth:** feature — x\n\n- **UX-
 { printf '**Spec:** `docs/s.md`\n\n'; cat plan.md; } > plan-spec.md
 out=$(uroute plan-spec.md --final "$UBASE" "$UHEAD")
 check "ui-ux: a plan whose spec has a contract routes it" "$(grep -c '^lens ui-ux ' <<<"$out")" "1"
+printf '# Plain\n\n## Notes\n\nnothing\n' > docs/plain.md
+{ printf '**Spec:** `docs/plain.md`\n\n'; cat plan.md; } > plan-plain.md
+out=$(uroute plan-plain.md --final "$UBASE" "$UHEAD")
+check "ui-ux: a spec with no contract and no profile: not routed" "$(grep -c '^lens ui-ux ' <<<"$out")" "0"
+{ printf '**Spec:** `docs/missing.md`\n\n'; cat plan.md; } > plan-missing.md
+out=$(uroute plan-missing.md --final "$UBASE" "$UHEAD")
+check "ui-ux: a spec path that does not exist: not routed" "$(grep -c '^lens ui-ux ' <<<"$out")" "0"
 printf 'echo hi\n' > run.sh && git add run.sh && git commit -q -m sh
 U2=$(git rev-parse HEAD)
 out=$(uroute plan-spec.md --final "$UHEAD" "$U2")

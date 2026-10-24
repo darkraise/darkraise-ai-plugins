@@ -86,6 +86,7 @@ check "stop: a committed UI change without proof is held" "$(decision "$out")" "
 check "stop: the reason names the changed file" "$(jq -r .reason <<<"$out" | grep -c 'src/App.tsx')" "1"
 check "stop: the reason names the pending line" "$(jq -r .reason <<<"$out" | grep -c 'UI proof: pending')" "1"
 check "stop: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dforge held the stop')" "1"
+check "stop: the user's message names the changed file" "$(jq -r .systemMessage <<<"$out" | grep -c 'src/App.tsx')" "1"
 check "stop: the retry passes" "$(stop s-2 'Done.' true)" ""
 check "stop: the pending line passes" "$(stop s-2 $'Done.\n\nUI proof: pending — no browser on this host')" ""
 prompt s-3
@@ -105,6 +106,30 @@ prompt s-5
 check "stop: an auto run bound to the session: passes" "$(stop s-5 'Done.')" ""
 check "stop: another session in the checkout is still held" "$(decision "$(stop s-2 'Done.')")" "block"
 check "stop: no stamp for the session: passes" "$(stop s-unknown 'Done.')" ""
+
+UP="$HERE/../scripts/ui-proof"
+prompt s-7
+printf '// change 7\n' >> src/App.tsx
+git commit -q -am 'ui change 7'
+refs="$HOME/.claude/dforge/sessions/turns/s-7.refs"
+sed 's/^[0-9a-f]\{40\}/0000000000000000000000000000000000000000/' "$refs" > "$refs.tmp" && mv "$refs.tmp" "$refs"
+out=$(stop s-7 'Done.')
+check "stop: a check that cannot run holds instead of passing" "$(decision "$out")" "block"
+check "stop: the hold carries the check's own error" "$(jq -r .reason <<<"$out" | grep -c 'bad --base')" "1"
+
+prompt s-6
+printf '// change 6\n' >> src/App.tsx
+git commit -q -am 'ui change 6'
+PR=docs/dforge/ui-ux/proofs
+mkdir -p "$PR" .dforge/ui-ux/t
+printf '*\n' > .dforge/.gitignore
+printf 'png' > .dforge/ui-ux/t/a.png
+printf '# UI proof: t\n\n**Contract:** touch\n**Platform:** web\n**Evidence:** local\n\n## Delta\n\n**UI/UX depth:** touch — a fix\n\n- **UX-1** — the fix\n\n## Results\n\n| ID | Verdict | Evidence | Note |\n|---|---|---|---|\n| UX-1 | pass | .dforge/ui-ux/t/a.png | |\n' > "$PR/t.md"
+bash "$UP" stamp "$PR/t.md" >/dev/null
+fp=$(bash "$UP" fingerprint)
+printf 'The proof holds.\n\nVerdict: ship %s\n' "$fp" > "$PR/t.judge.md"
+printf '\n**Judge:** ship %s — %s/t.judge.md\n' "$fp" "$PR" >> "$PR/t.md"
+check "stop: a passing proof releases the hold" "$(stop s-6 'Done.')" ""
 
 check "hooks.json registers the UI Stop check once" \
   "$(jq -r '[.hooks.Stop[0].hooks[].command | select(contains("ui-turn-end.sh"))] | length' "$HOOKS")" "1"

@@ -101,7 +101,9 @@ bash <plugin-root>/scripts/ui-proof check --base "$(git merge-base HEAD <base br
 ```
 
 Drop `--spec` when there is no plan. **Exit 0** (it also prints `ok` when the
-gate is off or no UI file changed): continue to Step 2.
+gate is off or no UI file changed): continue to Step 2. Any other status (2
+for a bad base or spec, 124 for the timeout) means the check never ran: treat
+it as exit 1, with its output as the FAIL lines.
 
 **Exit 1:** the UI is unproven, and integrating it is blocked. In an auto
 run, first run the dforge:ui-ux Prove phase and check again; only that second

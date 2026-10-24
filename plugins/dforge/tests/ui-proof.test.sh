@@ -210,12 +210,46 @@ check "spec: names the missing ID" "$(grep -c 'FAIL coverage: OP-1' <<<"$out")" 
 check "spec: coverage applies without --spec too" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
 report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
 check "spec: a full report bound to the spec passes" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
+TWO='| UI-1 | pass | .dforge/ui-ux/t/a.png | |
+| UI-2 | pass | .dforge/ui-ux/t/a.png | |
+| UX-1 | unverifiable | - | no emulator here |
+| OP-1 | unverifiable | - | no tablet here |'
+accept() { # accept <header lines> — the two-unverifiable report, stamped and judged; prints check's status
+  report 2026-10-24-s docs/dforge/specs/s.md "$TWO" "$1"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+  up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?
+}
+check "accepted: one nameless line does not cover two unverifiable rows" "$(accept '**Accepted by:** "fine without the emulator"')" "1"
+check "accepted: a line naming only one of two rows fails" "$(accept '**Accepted by:** UX-1: "fine without the emulator"')" "1"
+check "accepted: a line per row passes" "$(accept '**Accepted by:** UX-1: "fine without the emulator"
+**Accepted by:** OP-1: "fine without the tablet"')" "0"
+report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null
+printf 'The proof holds.\n\nVerdict: ship 0000000000000000\n' > "$PROOFS/2026-10-24-s.judge.md"
+printf '\n**Judge:** ship %s — %s/2026-10-24-s.judge.md\n' "$(up fingerprint)" "$PROOFS" >> "$PROOFS/2026-10-24-s.md"
+out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
+check "judge: a judge file for another fingerprint fails" "$st" "1"
+check "judge: names the judge file's missing verdict" "$(grep -c 'FAIL judge:.*does not end with' <<<"$out")" "1"
+report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
 rm docs/dforge/ui-ux/profile.md
 check "active: a spec with a contract turns the gate on" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
 rm -f "$PROOFS"/*.md
 check "active: a spec with a contract and no report fails" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "1"
 check "active: --active turns the gate on without a profile" "$(up check --base "$BASE" --active >/dev/null; echo $?)" "1"
 check "active: without it, no profile and no spec, the gate is off" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+
+# --- file listing edge cases ---
+printf 'export const Other = () => null;\n' > src/Other.tsx
+rm src/App.tsx
+check "deleted: the fingerprint is still 16 hex digits" "$(up fingerprint | grep -cE '^[0-9a-f]{16}$')" "1"
+check "deleted: the changed list names the deleted file" "$(up changed --base "$BASE" | grep -cx 'src/App.tsx')" "1"
+check "deleted: a deletion with no report fails" "$(up check --base "$BASE" --active >/dev/null; echo $?)" "1"
+git checkout -q -- src/App.tsx
+rm src/Other.tsx
+printf 'x\n' > src/Page.acceptance.tsx
+check "acceptance: a *.acceptance.* file is not a UI file" "$(up changed --base "$BASE" | grep -c 'acceptance')" "0"
+rm src/Page.acceptance.tsx
+printf 'a {}\n' > 'src/we"ird.css'
+check "quoting: a file name with a double quote is a changed UI file" "$(up changed --base "$BASE" | grep -cF 'src/we"ird.css')" "1"
+rm 'src/we"ird.css'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
