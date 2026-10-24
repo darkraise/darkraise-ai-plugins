@@ -20,3 +20,9 @@ Run `node scripts/validate-repository.mjs`, the maintained test suites, and
 `claude plugin validate` on the marketplace and every Claude plugin, and
 `claude plugin test plugins/dforge`. Bound test
 and CLI execution and clean up all processes started by the validation run.
+
+A task that ends in a push is done only when the CI run for the pushed
+commit is green: every job of `Validate marketplace`, the Windows shards
+included (`gh run list --commit <sha>`, then `gh run view <id>`). Local
+passes do not stand in for it; a failed or still-running run means the task
+is not done.
