@@ -1107,5 +1107,77 @@ has "an unknown lens id is an error" "$out" "ERROR Task 2: **Lenses:** names no 
 lacks "a known lens id is not flagged" "$out" "names no lens file: security"
 lacks "risk 3 takes a Lenses line" "$out" "a **Lenses:** line needs risk 3"
 
+# --- UI/UX contract (dforge:ui-ux) ---
+cat > docs/ui-spec.md <<'EOF'
+# Spec
+
+## UI/UX contract
+
+**UI/UX depth:** feature — a dialog
+
+- **UI-1** — Dialog layout.
+- **UX-1** — Escape closes the dialog.
+- **UX-2** — Focus returns to the trigger.
+- **OP-1** — Proven at 375 and 1440.
+EOF
+ui_plan() { # ui_plan <Task 1 UI/UX line or empty> <Task 2 UI/UX line or empty>
+  cat <<EOF
+# UI Plan
+
+**Goal:** Demo.
+
+**Spec:** \`docs/ui-spec.md\`
+
+**Execution:** inline — \`claude --model sonnet --effort low\` — small
+
+## Global Constraints
+
+None.
+
+## Contracts
+
+None.
+
+## Assumptions (evidence)
+
+None.
+
+## Task index
+
+1. Dialog
+2. Docs
+
+### Task 1: Dialog
+
+**Files:**
+- Modify: \`src/Dialog.tsx\`
+
+$1
+
+### Task 2: Docs
+
+**Files:**
+- Modify: \`README.md\`
+
+$2
+EOF
+}
+ui_plan '' '' > ui-bad.md
+out=$(bash "$LINT" ui-bad.md --no-probe 2>&1)
+has "ui: a UI task without a UI/UX line" "$out" "ERROR Task 1: touches the UI file src/Dialog.tsx but has no **UI/UX:** line"
+has "ui: an uncited UI item" "$out" "ERROR header: UI/UX contract item UI-1 is named by no task's **UI/UX:** line"
+lacks "ui: an OP item needs no task" "$out" "item OP-1 is named by no task"
+lacks "ui: a non-UI task needs no line" "$out" "ERROR Task 2: touches the UI file"
+ui_plan '**UI/UX:** UI-1, UX-1, UX-9' '' > ui-undef.md
+out=$(bash "$LINT" ui-undef.md --no-probe 2>&1)
+has "ui: an undefined ID" "$out" "ERROR Task 1: **UI/UX:** cites UX-9, which the spec's UI/UX contract does not define"
+has "ui: an item no task names" "$out" "item UX-2 is named by no task"
+ui_plan '**UI/UX:** UI-1, UX-1' '**UI/UX:** UX-2' > ui-good.md
+out=$(bash "$LINT" ui-good.md --no-probe 2>&1)
+lacks "ui: a covered plan has no UI/UX finding" "$out" "UI/UX"
+sed 's#docs/ui-spec.md#docs/spec.md#' ui-bad.md > ui-nocontract.md
+out=$(bash "$LINT" ui-nocontract.md --no-probe 2>&1)
+lacks "ui: a spec without a contract asks for no line" "$out" "UI/UX"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -608,6 +608,44 @@ elif [ "$parallelism" = waves ]; then
   fi
 fi
 
+# --- UI/UX contract (dforge:ui-ux) ---
+# A spec with a "## UI/UX contract" makes every task that touches a UI file
+# name the contract items it delivers, and every UI- and UX- item reach some
+# task. OP- items describe the whole result: they are proven, not built.
+if [ -n "${spec_path:-}" ]; then
+  . "$HERE/lib/ui-ux.sh"
+  ui_spec=$(dforge_resolve "$spec_path" "$root")
+  ui_ids=""
+  [ ! -f "$ui_spec" ] || ui_ids=$(uiux_contract_ids "$ui_spec")
+  if [ -n "$ui_ids" ]; then
+    ui_globs=$(uiux_globs "$root")
+    ui_cited=""
+    for n in $nums; do
+      ui_text=$(plan_task_text "$src" "$n")
+      ui_line=$(plan_lines 'UI/UX' <<<"$ui_text" | head -n 1)
+      ui_task_ids=$(grep -oE '(UI|UX|OP)-[0-9]+' <<<"$ui_line" || true)
+      ui_cited="$ui_cited$ui_task_ids"$'\n'
+      for id in $ui_task_ids; do
+        grep -qxF "$id" <<<"$ui_ids" \
+          || say ERROR "Task $n" "**UI/UX:** cites $id, which the spec's UI/UX contract does not define"
+      done
+      [ -z "$ui_line" ] || continue
+      while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        if uiux_is_ui "$path" "$ui_globs"; then
+          say ERROR "Task $n" "touches the UI file $path but has no **UI/UX:** line naming the contract items it delivers"
+          break
+        fi
+      done < <(plan_task_paths <<<"$ui_text")
+    done
+    while IFS= read -r id; do
+      case $id in UI-*|UX-*) ;; *) continue ;; esac
+      grep -qxF "$id" <<<"$ui_cited" \
+        || say ERROR header "UI/UX contract item $id is named by no task's **UI/UX:** line"
+    done <<<"$ui_ids"
+  fi
+fi
+
 cat "$findings"
 errors=$(grep -c '^ERROR' "$findings" || true)
 warnings=$(grep -c '^WARN' "$findings" || true)
