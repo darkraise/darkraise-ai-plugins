@@ -44,6 +44,7 @@ absent() { # absent <name> <haystack> <ERE>
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+REAL_HOME="$HOME"
 export HOME="$TMP/home"; mkdir -p "$HOME"
 unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
@@ -303,7 +304,9 @@ t_A1() {
   check "A1: its frontmatter says name: ui-ux" \
     "$(awk 'NR==1 && $0=="---" {f=1; next} f && $0=="---" {exit} f && $0=="name: ui-ux" {print "yes"}' "$PLUGIN/skills/ui-ux/SKILL.md")" "yes"
   local vout vstatus
-  vout=$(cd "$PLUGIN" && timeout 180 /root/.local/bin/claude plugin validate "$PLUGIN" 2>&1); vstatus=$?
+  local claude_bin; claude_bin=$(type -P claude || true)
+  [ -n "$claude_bin" ] || claude_bin="$REAL_HOME/.local/bin/claude"
+  vout=$(cd "$PLUGIN" && timeout 180 "$claude_bin" plugin validate "$PLUGIN" 2>&1); vstatus=$?
   check "A1: claude plugin validate passes on dforge" "$vstatus" "0"
   has "A1: the validator reports success" "$vout" "Validation passed"
 }
