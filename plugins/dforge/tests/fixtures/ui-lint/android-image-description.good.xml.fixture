@@ -1,0 +1,3 @@
+<ImageView
+    android:src="@drawable/logo"
+    android:contentDescription="@string/logo" />

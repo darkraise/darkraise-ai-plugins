@@ -1,0 +1,1 @@
+.card { transition: transform 200ms ease, opacity 200ms ease; }

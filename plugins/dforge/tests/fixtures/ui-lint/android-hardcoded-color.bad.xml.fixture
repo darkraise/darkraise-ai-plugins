@@ -1,0 +1,1 @@
+<TextView android:textColor="#FF0000" android:text="@string/error" />
