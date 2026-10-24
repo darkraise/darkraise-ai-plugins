@@ -46,6 +46,10 @@ seat: the plan's tests were written by the same author as its code.
    without its date and `-design.md`), or the nearest name the test framework
    accepts. Each test name starts with `A<n>:`; where a test name cannot hold a
    colon, use `a<n>_<words>`. Test only through the public surface.
+   A statement whose text starts with a contract ID (`UI-<n>`, `UX-<n>`,
+   `OP-<n>`) is written for the UI test runner the project's UI profile names
+   (`<docs>/ui-ux/profile.md`, its `**UI test runner:**` line), driving the
+   running UI through it.
 3. **Run, with a timeout.** Run the file with `[TEST_COMMAND]` scoped to it,
    or the framework's own runner, always under `timeout`. A setup or import
    error is your own bug: fix the test. An assertion failure is a finding, which you never fix: you do not

@@ -65,5 +65,10 @@ check "the entry point stays within 5100 bytes" "$([ "$(wc -c < "$ENTRY")" -le 5
 names "brainstorming runs Shape before acceptance" "$P/skills/brainstorming/SKILL.md" 'invoke dforge:ui-ux before drafting acceptance'
 names "debugging runs touch depth for UI fixes" "$P/skills/systematic-debugging/SKILL.md" 'Run `dforge:ui-ux` at touch depth'
 
+# --- plans, dispatch and QA ---
+names "writing-plans documents the UI/UX line" "$P/skills/writing-plans/SKILL.md" '**UI/UX:** [only when the spec has a `## UI/UX contract`'
+names "dispatch names render-before-report for UI tasks" "$P/reference/delegated-task.md" 'a brief that carries `## UI/UX contract items` is a UI task'
+names "QA writes contract-ID statements for the UI test runner" "$P/reference/acceptance-qa.md" 'is written for the UI test runner the project'"'"'s UI profile names'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

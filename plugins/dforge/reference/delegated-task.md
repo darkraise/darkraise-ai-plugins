@@ -77,6 +77,11 @@ these steps directly.
   (brief `…/task-N-brief.md` → report `…/task-N-report.md`) and put it in
   the dispatch prompt. The implementer writes the full report there and
   returns only status, commits, a one-line test summary, and concerns.
+- **UI tasks:** a brief that carries `## UI/UX contract items` is a UI task
+  (dforge:ui-ux). Say in the dispatch that the implementer renders the result
+  through the project UI profile's harness before reporting, and that the
+  report maps each cited ID to a screenshot path or a test name; a cited ID
+  with no evidence is a spec ❌ at review.
 - A dispatch prompt describes one task, not the session's history. Do not
   paste accumulated prior-task summaries ("state after Tasks 1-3") into
   later dispatches — a real session's dispatch hit 42k chars of which 99%

@@ -315,6 +315,12 @@ identifiers this task discharges, comma-separated, for example `4, 16`. When
 more than one register covers it, name each row's register by its file's
 basename, for example `core#4, review#16`. Omit the line otherwise.]
 
+**UI/UX:** [only when the spec has a `## UI/UX contract` and the task's Files
+match `scripts/ui-proof paths`: the contract IDs this task delivers, for
+example `UI-2, UX-4`. Every `UI-` and `UX-` ID must reach some task; `OP-` IDs
+are proven, not built. `plan-lint` checks both, and `task-brief` appends the
+cited items to the brief (dforge:ui-ux).]
+
 **Depends on:** [waves plans only: `none`, or the tasks whose output this one
 consumes, for example `Task 1, Task 3`. Omit the line in a sequential plan.]
 
