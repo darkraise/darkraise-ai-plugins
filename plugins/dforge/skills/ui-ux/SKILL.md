@@ -36,6 +36,11 @@ State one line before anything else:
 
 `**UI/UX depth:** <touch|feature|product> — <why>`
 
+Write it literally, in that form, in every answer that plans UI work: an
+estimate, a plan, a list of what you will build. In that answer, list the
+contract items by ID (`UI-1`, `UX-2`, `OP-1`), one line each, not as prose,
+and name `ui-proof check` as the done condition.
+
 | Depth | When | What it takes |
 |---|---|---|
 | touch | a bug fix, a copy or styling change, one surface | a `## Delta` of 5 to 15 items in the proof report, a proof of that surface, the judge-sonnet-high seat |
