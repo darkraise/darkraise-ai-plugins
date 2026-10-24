@@ -18,9 +18,13 @@ cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 file=${file//\\//}
 case $file in /*|[A-Za-z]:/*) ;; *) file="${cwd:-$PWD}/$file" ;; esac
 [ -f "$file" ] || exit 0
-root=$(git -C "$(dirname "$file")" rev-parse --show-toplevel 2>/dev/null) || exit 0
+dir=$(dirname "$file")
+root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || exit 0
+# Not ${file#"$root"/}: git prints its top level resolved (C:/ on Windows,
+# symlinks followed), so it need not spell the start of $file.
+prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || exit 0
 . "$SCRIPT_DIR/lib/ui-ux.sh"
-rel=${file#"$root"/}
+rel="$prefix$(basename "$file")"
 uiux_is_ui "$rel" "$(uiux_globs "$root")" || exit 0
 
 lint=$(cd "$root" && bash "$SCRIPT_DIR/ui-lint" "$rel" 2>/dev/null)

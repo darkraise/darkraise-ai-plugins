@@ -600,6 +600,11 @@ t_A11() {
   check "A11: the hook stays silent for a .tsx file the profile does not name" "$o" ""
   o=$(hook_edit "$hh" s-a11 "$REPO" "$REPO/app/x.py")
   check "A11: the hook reacts to the profile's glob" "$([ -n "$o" ] && echo yes || echo no)" "yes"
+  # git prints its top level resolved, as Windows prints it as C:/ against a /c/ path.
+  ln -s "$REPO" "$TMP/a11p-link"
+  o=$(hook_edit "$TMP/home-a11-link" s-a11 "$REPO" "$TMP/a11p-link/app/x.py")
+  check "A11: the hook reacts to the profile's glob through another spelling of the path" \
+    "$([ -n "$o" ] && echo yes || echo no)" "yes"
 
   # consumers: plan-lint
   write_plan "$REPO" prof.md "$SPEC_REL" app/x.py '**UI/UX:** UI-1, UX-1, UX-2' src/Dialog.tsx ''
