@@ -42,7 +42,9 @@ When `scripts/auto-run status` exits 0
   row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
   A row deferred at the spec review, before the run started, counts as one
   the run added. `merge` also keeps when the run added a deferred row whose
-  Note is `final review residual`. `merge` and `pr` also keep when Step 1b's `ui-proof check` exited 1 after the Prove re-run.
+  Note is `final review residual`.
+  `merge` and `pr` also keep when Step 1b's `ui-proof check` exited 1
+  after the Prove re-run.
   The line's `fail` and `flaky` counts are not read: they are taken before the
   fix wave, a failure that survives it is a deferred `A<n>:` row or a red test
   at Step 1, and one the fix wave fixed does not keep the branch. The mapping
@@ -185,7 +187,9 @@ exit 3 after checking by hand.
 ([finish-preference.md](../../reference/finish-preference.md)):
 
 - It prints `merge`, `pr` or `keep` with no `answer` or `firedAt` field: show
-  no menu. When Step 1b's `ui-proof check` exited 1, `merge` and `pr` become `keep`: say so, and that the UI is unproven.
+  no menu.
+  When Step 1b's `ui-proof check` exited 1, `merge` and `pr` become `keep`:
+  say so, and that the UI is unproven.
   Run `scripts/finish-choice answer <action> [--plan PLAN_FILE]`, then carry
   the option out from Step 5 by name, exactly as if your human partner had
   chosen it; never discard. The base is the recorded `base`. When that is

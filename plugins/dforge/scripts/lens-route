@@ -44,7 +44,9 @@ if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 
-# lens_order — every lens id, highest priority first: four fixed leaders (security, then ui-ux, so the cap keeps the UI lens on a UI branch), the language lenses alphabetically, two fixed trailers, then any other lens.
+# lens_order — every lens id, highest priority first: four fixed leaders
+# (security, then ui-ux, so the cap keeps the UI lens on a UI branch), the
+# language lenses alphabetically, two fixed trailers, then any other lens.
 lens_order() {
   local all id
   all=$(for f in "$LENSES"/*.md; do [ -e "$f" ] && basename "$f" .md; done | LC_ALL=C sort)
