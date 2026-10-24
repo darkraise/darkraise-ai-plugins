@@ -1,6 +1,6 @@
 # Terminal UI
 
-**Status:** unverified — Task 18 of the ui-ux plan runs this guide; the run replaces this line with the date and what ran.
+**Status:** verified 2026-10-24 on Linux with tmux 3.5a: launch, send-keys, capture at 80 and 120 columns, kill.
 
 - **Launch:** `tmux new-session -d -s uiux -x 80 -y 24 '<command>'`. The
   profile's UI paths must name the TUI's source files: there are no defaults

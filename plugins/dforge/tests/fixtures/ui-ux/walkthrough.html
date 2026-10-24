@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Walkthrough fixture</title>
+<style>
+  :root { --surface: #ffffff; --text: #1a1a1a; --ring: #1a56db; }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; background: var(--surface); color: var(--text); }
+  button:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+  dialog { max-width: 28rem; }
+</style>
+</head>
+<body>
+<h1>Rename project</h1>
+<button id="open" type="button">Rename</button>
+<dialog id="dlg" aria-labelledby="dlg-title">
+  <h2 id="dlg-title">Rename project</h2>
+  <label for="name">Project name</label>
+  <input id="name" autocomplete="off">
+  <p id="err" role="alert" hidden>Enter a name of 1 to 64 characters.</p>
+  <button id="save" type="button">Save name</button>
+  <button id="cancel" type="button">Cancel</button>
+</dialog>
+<script>
+  const dlg = document.getElementById('dlg'), open = document.getElementById('open');
+  open.addEventListener('click', () => { dlg.showModal(); document.getElementById('name').focus(); });
+  document.getElementById('cancel').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => open.focus());
+  document.getElementById('save').addEventListener('click', () => {
+    const v = document.getElementById('name').value.trim();
+    document.getElementById('err').hidden = v.length > 0 && v.length <= 64;
+    if (!document.getElementById('err').hidden) { document.getElementById('name').focus(); return; }
+    dlg.close();
+  });
+</script>
+</body>
+</html>
