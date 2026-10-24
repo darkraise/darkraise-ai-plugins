@@ -104,5 +104,114 @@ check "contract: an unknown id prints nothing" "$(up contract docs/dforge/specs/
 up contract docs/dforge/specs/missing.md >/dev/null 2>&1; check "contract: a missing spec exits 2" "$?" "2"
 up nope >/dev/null 2>&1; check "usage: an unknown verb exits 2" "$?" "2"
 
+# --- check: the gate ---
+up check >/dev/null 2>&1; check "check: --base is required" "$?" "2"
+out=$(up check --base HEAD); st=$?
+check "check: gate off without a profile or a contract" "$st" "0"
+check "check: says the gate is off" "$(grep -c 'gate off' <<<"$out")" "1"
+printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+git add docs && git commit -q -m docs
+check "check: no UI change since the base passes" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+printf '// v2\n' >> src/App.tsx
+out=$(up check --base HEAD); st=$?
+check "check: an uncommitted UI change with no report fails" "$st" "1"
+check "check: names the missing report" "$(grep -c '^ui-proof: FAIL report:' <<<"$out")" "1"
+check "check: names the changed file" "$(grep -c 'src/App.tsx' <<<"$out")" "1"
+git commit -q -am 'ui v2'
+check "check: a committed UI change with no report fails" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
+
+PROOFS=docs/dforge/ui-ux/proofs
+mkdir -p "$PROOFS" .dforge/ui-ux/t
+printf '*\n' > .dforge/.gitignore
+printf 'png' > .dforge/ui-ux/t/a.png
+report() { # report <name> <contract> <rows> [extra header line]
+  { printf '# UI proof: t\n\n**Contract:** %s\n**Platform:** web\n**Evidence:** local\n%s\n' "$2" "${4:-}"
+    if [ "$2" = touch ]; then printf '\n## Delta\n\n**UI/UX depth:** touch — a fix\n\n- **UX-1** — the fix\n'; fi
+    printf '\n## Results\n\n| ID | Verdict | Evidence | Note |\n|---|---|---|---|\n%s\n' "$3"
+  } > "$PROOFS/$1.md"
+}
+judge() { # judge <name> <verdict> — the judge file and the report's Judge line
+  local fp; fp=$(up fingerprint)
+  printf 'The proof holds.\n\nVerdict: %s %s\n' "$2" "$fp" > "$PROOFS/$1.judge.md"
+  printf '\n**Judge:** %s %s — %s/%s.judge.md\n' "$2" "$fp" "$PROOFS" "$1" >> "$PROOFS/$1.md"
+}
+PASSROW='| UX-1 | pass | .dforge/ui-ux/t/a.png | |'
+report 2026-10-24-t touch "$PASSROW"
+out=$(up stamp "$PROOFS/2026-10-24-t.md")
+check "stamp: reports the fingerprint" "$(grep -c "^ui-proof: stamped $(up fingerprint)" <<<"$out")" "1"
+check "stamp: writes one fingerprint line under Contract" "$(grep -A1 '^\*\*Contract:\*\*' "$PROOFS/2026-10-24-t.md" | grep -c '^\*\*Fingerprint:\*\*')" "1"
+judge 2026-10-24-t ship
+out=$(up check --base "$BASE"); st=$?
+check "check: a stamped, judged touch report passes" "$st" "0"
+check "check: says ok" "$(grep -c '^ui-proof: ok' <<<"$out")" "1"
+up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
+check "stamp: keeps a judge line for the current fingerprint" "$(grep -c '^\*\*Judge:\*\*' "$PROOFS/2026-10-24-t.md")" "1"
+check "stamp: never duplicates the fingerprint line" "$(grep -c '^\*\*Fingerprint:\*\*' "$PROOFS/2026-10-24-t.md")" "1"
+
+printf '// v3\n' >> src/App.tsx
+out=$(up check --base "$BASE"); st=$?
+check "check: a UI edit after the stamp fails" "$st" "1"
+check "check: names the stale report" "$(grep -c '^ui-proof: FAIL freshness:' <<<"$out")" "1"
+up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
+check "stamp: a judge line for another fingerprint is removed" "$(grep -c '^\*\*Judge:\*\*' "$PROOFS/2026-10-24-t.md")" "0"
+out=$(up check --base "$BASE"); st=$?
+check "check: no judge line fails" "$st" "1"
+check "check: names the judge step" "$(grep -c '^ui-proof: FAIL judge:' <<<"$out")" "1"
+judge 2026-10-24-t ship
+check "check: judged again, it passes" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+
+try() { # try <rows> [extra header line] [judge verdict] — a fresh touch report; prints check's status
+  rm -f "$PROOFS"/2026-10-24-t.*
+  report 2026-10-24-t touch "$1" "${2:-}"
+  up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
+  judge 2026-10-24-t "${3:-ship}"
+  up check --base "$BASE" >/dev/null; echo "$?"
+}
+check "verdicts: a fail row fails" "$(try '| UX-1 | fail | .dforge/ui-ux/t/a.png | the dialog stays open |')" "1"
+check "verdicts: an uncited deviation fails" "$(try '| UX-1 | deviation | .dforge/ui-ux/t/a.png | looks better |')" "1"
+check "verdicts: a cited deviation passes" "$(try '| UX-1 | deviation | .dforge/ui-ux/t/a.png | cites: user answer 2026-10-24 |')" "0"
+check "verdicts: a pass row without evidence fails" "$(try '| UX-1 | pass | - | |')" "1"
+check "verdicts: a missing screenshot fails" "$(try '| UX-1 | pass | .dforge/ui-ux/t/missing.png | |')" "1"
+check "verdicts: a test name is evidence" "$(try '| UX-1 | pass | A12: escape closes the dialog | |')" "0"
+check "verdicts: unverifiable without acceptance fails" "$(try '| UX-1 | unverifiable | - | no emulator here |')" "1"
+check "verdicts: unverifiable with the user's acceptance passes" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** "ship it without the Android run"')" "0"
+check "verdicts: an unknown verdict fails" "$(try '| UX-1 | ok | .dforge/ui-ux/t/a.png | |')" "1"
+check "coverage: a delta item with no row fails" "$(try '| UX-2 | pass | .dforge/ui-ux/t/a.png | |')" "1"
+check "judge: a fix verdict fails" "$(try "$PASSROW" '' fix)" "1"
+try "$PASSROW" >/dev/null
+rm "$PROOFS/2026-10-24-t.judge.md"
+check "judge: a missing judge file fails" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
+try "$PASSROW" >/dev/null
+printf 'Verdict: fix %s\n' "$(up fingerprint)" > "$PROOFS/2026-10-24-t.judge.md"
+check "judge: a judge file whose verdict differs fails" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
+
+# --- a spec with a contract binds the report ---
+try "$PASSROW" >/dev/null
+out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
+check "spec: a touch report does not prove a spec with a contract" "$st" "1"
+check "spec: says no report names the spec" "$(grep -c '^ui-proof: FAIL report:' <<<"$out")" "1"
+rm -f "$PROOFS"/2026-10-24-t.*
+cp docs/dforge/specs/s.md docs/dforge/specs/other.md
+ROWS='| UI-1 | pass | .dforge/ui-ux/t/a.png | |
+| UI-2 | pass | .dforge/ui-ux/t/a.png | |
+| UX-1 | pass | .dforge/ui-ux/t/a.png | |
+| OP-1 | pass | .dforge/ui-ux/t/a.png | |'
+report 2026-10-24-o docs/dforge/specs/other.md "$ROWS"; up stamp "$PROOFS/2026-10-24-o.md" >/dev/null; judge 2026-10-24-o ship
+check "spec: a report bound to another spec does not count" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "1"
+rm -f "$PROOFS"/2026-10-24-o.*
+report 2026-10-24-s docs/dforge/specs/s.md "$(head -n 3 <<<"$ROWS")"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
+check "spec: a contract ID with no row fails" "$st" "1"
+check "spec: names the missing ID" "$(grep -c 'FAIL coverage: OP-1' <<<"$out")" "1"
+check "spec: coverage applies without --spec too" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
+report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+check "spec: a full report bound to the spec passes" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
+rm docs/dforge/ui-ux/profile.md
+check "active: a spec with a contract turns the gate on" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
+rm -f "$PROOFS"/*.md
+check "active: a spec with a contract and no report fails" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "1"
+check "active: --active turns the gate on without a profile" "$(up check --base "$BASE" --active >/dev/null; echo $?)" "1"
+check "active: without it, no profile and no spec, the gate is off" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

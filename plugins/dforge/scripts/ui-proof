@@ -47,6 +47,136 @@ case $cmd in
     f=$(dforge_resolve "$1" "$root"); shift
     [ -f "$f" ] || die "no such spec: $f"
     if [ $# -eq 0 ]; then uiux_contract_ids "$f"; else uiux_items "$f" "UI/UX contract" "$@"; fi ;;
-  stamp|check) die "$cmd: not implemented yet" ;;
+  stamp)
+    [ $# -eq 1 ] || usage
+    report=$1
+    [ -f "$report" ] || die "no such report: $report"
+    grep -q '^\*\*Contract:\*\*' "$report" || die "the report has no **Contract:** line to stamp beside"
+    fp=$(uiux_fingerprint "$root") || die "cannot fingerprint the UI files"
+    has=0
+    if grep -q '^\*\*Fingerprint:\*\*' "$report"; then has=1; fi
+    tmp=$(mktemp) || die "mktemp failed"
+    # A judge line for another fingerprint judged other code: drop it, so an
+    # edit after the verdict needs a new verdict.
+    tr -d '\r' < "$report" | awk -v fp="$fp" -v has="$has" "$_PLAN_AWK"'
+      in_fence($0) { print; next }
+      index($0, "**Fingerprint:**") == 1 { print "**Fingerprint:** " fp; next }
+      index($0, "**Judge:**") == 1 {
+        v = substr($0, 11); sub(/^[ \t]+/, "", v); split(v, w, /[ \t]+/)
+        if (w[2] != fp) next
+      }
+      { print }
+      !has && !put && index($0, "**Contract:**") == 1 { print "**Fingerprint:** " fp; put = 1 }
+    ' > "$tmp" && cat "$tmp" > "$report"
+    rm -f "$tmp"
+    printf 'ui-proof: stamped %s in %s\n' "$fp" "$report" ;;
+  check)
+    parse_args "$@"
+    spec_bound=""
+    if [ -n "$spec" ]; then
+      spec_file=$(dforge_resolve "$spec" "$root")
+      [ -f "$spec_file" ] || die "no such spec: $spec"
+      [ -z "$(uiux_contract_ids "$spec_file")" ] || spec_bound=$spec_file
+    fi
+    if [ "$active" = 0 ] && [ ! -f "$(uiux_profile "$root")" ] && [ -z "$spec_bound" ]; then
+      echo "ui-proof: ok — gate off (no UI profile, no UI/UX contract)"
+      exit 0
+    fi
+    changed=$(uiux_changed "$root" "$base")
+    if [ -z "$changed" ]; then
+      echo "ui-proof: ok — no UI file differs from $base"
+      exit 0
+    fi
+    fp=$(uiux_fingerprint "$root") || die "cannot fingerprint the UI files"
+    fails=()
+    failed() { fails+=("$1: $2"); }
+    dir=$(uiux_proofs_dir "$root")
+    report="" newest=""
+    while IFS= read -r r; do
+      [ -n "$r" ] || continue
+      if [ -n "$spec_bound" ]; then
+        rc=$(uiux_field "$r" Contract)
+        [ -n "$rc" ] && [ "$(dforge_resolve "$rc" "$root")" = "$spec_bound" ] || continue
+      fi
+      newest=$r
+      if [ "$(uiux_field "$r" Fingerprint)" = "$fp" ]; then report=$r; fi
+    done < <(ls "$dir"/*.md 2>/dev/null | grep -v '\.judge\.md$' | LC_ALL=C sort)
+    if [ -z "$report" ]; then
+      if [ -n "$newest" ]; then
+        failed freshness "$(dforge_name "$newest" "$root") was stamped at $(uiux_field "$newest" Fingerprint); the UI files are now at $fp"
+      else
+        failed report "no proof report under $(dforge_name "$dir" "$root")${spec_bound:+ names $spec}"
+      fi
+      failed scope "UI files changed since $base: $(head -n 10 <<<"$changed" | tr '\n' ' ')"
+    else
+      rc=$(uiux_field "$report" Contract)
+      if [ "$rc" = touch ]; then
+        want=$(uiux_section "$report" Delta | uiux_ids)
+        [ -n "$want" ] || failed coverage "the touch report has no ## Delta items"
+      else
+        cf=$(dforge_resolve "$rc" "$root")
+        want=""
+        if [ -f "$cf" ]; then
+          want=$(uiux_contract_ids "$cf")
+          [ -n "$want" ] || failed coverage "$rc has no ## UI/UX contract items"
+        else
+          failed coverage "the report's contract $rc does not exist"
+        fi
+      fi
+      rows=$(uiux_rows "$report")
+      for id in $want; do
+        grep -q "^$id"$'\037' <<<"$rows" || failed coverage "$id has no row in ## Results"
+      done
+      accepted=$(uiux_field "$report" "Accepted by")
+      while IFS=$'\037' read -r id verdict ev note; do
+        [ -n "$id" ] || continue
+        case $verdict in
+          pass|deviation)
+            if [ -z "$ev" ] || [ "$ev" = - ]; then failed evidence "$id is $verdict with no evidence"; fi
+            if [ "$verdict" = deviation ] && ! [[ "$note" =~ ^[Cc]ites:[[:space:]]*[^[:space:]] ]]; then
+              failed verdicts "$id is a deviation whose note does not start with \"cites:\" and its reason"
+            fi
+            IFS=',' read -r -a items <<<"$ev"
+            for item in ${items[@]+"${items[@]}"}; do
+              item=$(sed -e 's/^[[:space:]`]*//' -e 's/[[:space:]`]*$//' <<<"$item")
+              case $item in
+                *.png|*.jpg|*.jpeg|*.webp|*.gif)
+                  [ -f "$root/$item" ] || [ -f "$item" ] || failed evidence "$id cites $item, which does not exist" ;;
+              esac
+            done ;;
+          fail) failed verdicts "$id failed: ${note:-no note}" ;;
+          unverifiable) [ -n "$accepted" ] || failed verdicts "$id is unverifiable and the report has no **Accepted by:** line quoting the user" ;;
+          *) failed verdicts "$id has the unknown verdict \"$verdict\" (pass, deviation, fail or unverifiable)" ;;
+        esac
+      done <<<"$rows"
+      judge=$(uiux_field "$report" Judge)
+      if [ -z "$judge" ]; then
+        failed judge "no **Judge:** line; dispatch the judge seat (references/walkthrough.md)"
+      else
+        jv=$(awk '{ print $1 }' <<<"$judge")
+        jfp=$(awk '{ print $2 }' <<<"$judge")
+        jfile=$(sed -E 's/^[^ ]+ +[^ ]+ +(—|-) +//' <<<"$judge")
+        if [ "$jv" != ship ]; then
+          failed judge "the judge said $jv"
+        elif [ "$jfp" != "$fp" ]; then
+          failed judge "the verdict is for $jfp; the UI files are at $fp; judge again"
+        else
+          jpath=$(dforge_resolve "$jfile" "$root")
+          if [ ! -f "$jpath" ]; then
+            failed judge "the judge file $jfile does not exist"
+          else
+            last=$(tr -d '\r' < "$jpath" | sed '/^[[:space:]]*$/d' | tail -n 1 | sed 's/[[:space:]]*$//')
+            [ "$last" = "Verdict: ship $fp" ] || failed judge "$jfile does not end with \"Verdict: ship $fp\""
+          fi
+        fi
+      fi
+    fi
+    if [ ${#fails[@]} -eq 0 ]; then
+      printf 'ui-proof: ok — %s proves the UI at %s\n' "$(dforge_name "$report" "$root")" "$fp"
+      exit 0
+    fi
+    for f in "${fails[@]}"; do printf 'ui-proof: FAIL %s\n' "$f"; done
+    [ -z "$report" ] || printf 'ui-proof: report %s\n' "$(dforge_name "$report" "$root")"
+    exit 1 ;;
   *) usage ;;
 esac
