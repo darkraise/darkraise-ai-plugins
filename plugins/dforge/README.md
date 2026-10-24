@@ -349,6 +349,15 @@ opens the review seats, and the executor-lane smoke test opens the lane.
   A conflict is reported, never merged. Without a mapping every command but
   `import` prints one line and does nothing.
 
+**UI/UX work proven in the running UI.** `dforge:ui-ux` turns a design into a
+numbered UI/UX contract (UI, UX and an Output promise) in the spec,
+`plan-lint` makes every UI task name the items it delivers, `task-brief`
+hands them to the implementer verbatim, and a walkthrough proves each one on
+the running UI — web, Windows, Linux desktop, Android or terminal — with a
+judge seat reading the screenshots. `scripts/ui-proof check` blocks the final
+review, finishing and every "done" claim until the proof covers the current
+UI files.
+
 ## Requirements
 
 **The upstream workflow ships in-plugin.** The fork carries the full skill
@@ -451,6 +460,15 @@ See [reference/finish-preference.md](reference/finish-preference.md).
 Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
 catches a summarize-and-stop there. On Codex you must run `next-step` yourself
 on every early stop.
+
+A `PostToolUse` hook on `Edit`, `Write` and `MultiEdit` runs
+`scripts/ui-edit-hook.sh`: for a UI file (`scripts/ui-proof paths`) it
+returns `scripts/ui-lint` findings as additional context and, once per
+session, names `dforge:ui-ux`; it never blocks. A third `Stop` hook,
+`scripts/ui-turn-end.sh`, holds a turn once when it leaves UI changes without
+a passing `ui-proof check` in a project with a UI profile (or a session that
+ran the skill); the line `UI proof: pending — <why>` releases it, and it
+stands down while an auto run is bound.
 
 ## Session budget
 
@@ -1133,6 +1151,7 @@ report — is exercised without a model call.
 `darkmem-sync.test.sh` runs the `node:test` suites under
 `tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
 darkmem instance is needed.
+The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
 
 ## Reference
 
