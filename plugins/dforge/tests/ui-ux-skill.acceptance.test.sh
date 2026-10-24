@@ -304,8 +304,12 @@ t_A1() {
   check "A1: its frontmatter says name: ui-ux" \
     "$(awk 'NR==1 && $0=="---" {f=1; next} f && $0=="---" {exit} f && $0=="name: ui-ux" {print "yes"}' "$PLUGIN/skills/ui-ux/SKILL.md")" "yes"
   local vout vstatus
-  local claude_bin; claude_bin=$(type -P claude || true)
+  local claude_bin=${CLAUDE:-$(type -P claude || true)}
   [ -n "$claude_bin" ] || claude_bin="$REAL_HOME/.local/bin/claude"
+  if [ ! -f "$claude_bin" ] || [ ! -x "$claude_bin" ]; then
+    echo "skip - A1: claude plugin validate: no claude CLI here (\$CLAUDE, PATH, ~/.local/bin)"
+    return
+  fi
   vout=$(cd "$PLUGIN" && timeout 180 "$claude_bin" plugin validate "$PLUGIN" 2>&1); vstatus=$?
   check "A1: claude plugin validate passes on dforge" "$vstatus" "0"
   has "A1: the validator reports success" "$vout" "Validation passed"
