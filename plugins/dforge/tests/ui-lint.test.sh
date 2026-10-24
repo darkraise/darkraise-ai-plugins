@@ -48,7 +48,7 @@ bash "$LINT" >/dev/null 2>&1; check "usage: no file exits 2" "$?" "2"
 lint_out() { (cd "$WORK" && bash "$LINT" "$1"); }
 printf '.btn { color: #1a56db; }\n:root { --ring: #1a56db; }\n' > "$WORK/theme.css"
 check "a token file may hold raw colours" "$(lint_out theme.css)" ""
-printf ':root { --ring: #1a56db; }\n' > "$WORK/main.css"
+printf ':root {\n  --brand-color: #1a56db;\n}\n' > "$WORK/main.css"
 check "a custom property definition is not a raw colour" "$(lint_out main.css)" ""
 printf '.btn { color: #1a56db; }\n' > "$WORK/main.css"
 check "the same colour in an ordinary file is reported" "$(lint_out main.css | grep -c 'raw-color')" "1"

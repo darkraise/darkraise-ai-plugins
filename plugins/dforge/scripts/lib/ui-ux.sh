@@ -91,7 +91,7 @@ uiux_fingerprint() {
   local files hashes
   files=$(uiux_files "$1")
   if [ -z "$files" ]; then echo none; return 0; fi
-  hashes=$(cd "$1" && printf '%s\n' "$files" | git hash-object --stdin-paths) || return 1
+  hashes=$(cd "$1" && printf '%s\n' "$files" | sed 's|^|./|' | git hash-object --stdin-paths) || return 1
   paste <(printf '%s\n' "$files") <(printf '%s\n' "$hashes") | git -C "$1" hash-object --stdin | cut -c1-16
 }
 

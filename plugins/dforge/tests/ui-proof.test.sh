@@ -250,6 +250,9 @@ rm src/Page.acceptance.tsx
 printf 'a {}\n' > 'src/we"ird.css'
 check "quoting: a file name with a double quote is a changed UI file" "$(up changed --base "$BASE" | grep -cF 'src/we"ird.css')" "1"
 rm 'src/we"ird.css'
+printf 'a {}\n' > '"q.css'
+check "quoting: a top-level file name starting with a double quote fingerprints" "$(up fingerprint >/dev/null 2>&1; echo $?)" "0"
+rm '"q.css'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

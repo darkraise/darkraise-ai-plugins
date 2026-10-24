@@ -10,7 +10,11 @@ Trust only what you can see: a screenshot you opened, a state board, or a
 named test whose file you read. Do NOT trust the report's verdict column, its
 notes or the session's claims of success. An item whose evidence you cannot
 open is unproven. A screenshot of a whole page proves nothing about a control
-or a state it does not show at a readable size.
+or a state it does not show at a readable size. A row marked unverifiable
+that carries an `**Accepted by:**` line naming that item is judged only under
+Every Item Has Evidence: do not count it as unproven, and do not score Built
+Matches Promised or Every State Is Shown LOW because it has no screenshot or
+test.
 
 ## Criteria
 
