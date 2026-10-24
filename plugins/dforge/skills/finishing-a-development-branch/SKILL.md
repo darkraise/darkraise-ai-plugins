@@ -42,7 +42,7 @@ When `scripts/auto-run status` exits 0
   row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.
   A row deferred at the spec review, before the run started, counts as one
   the run added. `merge` also keeps when the run added a deferred row whose
-  Note is `final review residual`.
+  Note is `final review residual`. `merge` and `pr` also keep when Step 1b's `ui-proof check` exited 1 after the Prove re-run.
   The line's `fail` and `flaky` counts are not read: they are taken before the
   fix wave, a failure that survives it is a deferred `A<n>:` row or a red test
   at Step 1, and one the fix wave fixed does not keep the branch. The mapping
@@ -87,7 +87,40 @@ Next: fix these failures, then re-run dforge:finishing-a-development-branch.
 Do not run `scripts/next-step` here: the branch is not ready to integrate, and
 it would send the next session straight back into this skill.
 
-**If tests pass:** continue to Step 2.
+**If tests pass:** continue to Step 1b.
+
+## Step 1b: Prove the UI
+
+Run `ui-proof check --base MERGE_BASE --spec <the plan's Spec>` under
+`timeout 120`, where MERGE_BASE is `git merge-base HEAD <base branch>` and
+`<base branch>` is the branch this one was created from (Step 3 explains how
+to find it; determine it now):
+
+```bash
+bash <plugin-root>/scripts/ui-proof check --base "$(git merge-base HEAD <base branch>)" --spec <the plan's Spec>
+```
+
+Drop `--spec` when there is no plan. **Exit 0** (it also prints `ok` when the
+gate is off or no UI file changed): continue to Step 2.
+
+**Exit 1:** the UI is unproven, and integrating it is blocked. In an auto
+run, first run the dforge:ui-ux Prove phase and check again; only that second
+exit 1 counts, and when it comes only from `unverifiable` rows, run
+`scripts/auto-run stop --reason "ui proof needs the user"` first. Remember the
+exit 1 for Step 4: it turns a recorded `merge` or `pr` into `keep`. Run
+`scripts/finish-choice get [--plan PLAN_FILE]` now: when it prints `merge`,
+`pr` or `keep`, or an auto run is bound, continue to Step 2 (Step 4 keeps the
+branch). Otherwise present only these two options:
+
+```
+The UI is unproven (ui-proof check):
+<its FAIL lines>
+
+1. Prove it first — run the dforge:ui-ux Prove phase, then return to Step 1b
+2. Keep the branch as-is (I'll handle it later)
+
+Which option?
+```
 
 ## Step 2: Detect Environment
 
@@ -146,7 +179,7 @@ exit 3 after checking by hand.
 ([finish-preference.md](../../reference/finish-preference.md)):
 
 - It prints `merge`, `pr` or `keep` with no `answer` or `firedAt` field: show
-  no menu.
+  no menu. When Step 1b's `ui-proof check` exited 1, `merge` and `pr` become `keep`: say so, and that the UI is unproven.
   Run `scripts/finish-choice answer <action> [--plan PLAN_FILE]`, then carry
   the option out from Step 5 by name, exactly as if your human partner had
   chosen it; never discard. The base is the recorded `base`. When that is

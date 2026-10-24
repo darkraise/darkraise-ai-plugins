@@ -39,5 +39,23 @@ for f in windows linux-desktop android; do
 done
 check "no macOS or iOS guide" "$(ls "$R/platforms" | grep -ciE 'mac|ios')" "0"
 
+# --- the gate sites ---
+FR="$P/reference/final-review.md"
+FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+VBC="$P/skills/verification-before-completion/SKILL.md"
+names "final review runs the gate" "$FR" 'scripts/ui-proof check --base MERGE_BASE --spec <the plan'"'"'s Spec>'
+names "final review: exit 1 stops it like a red gate" "$FR" 'Exit 1 stops the review like a red gate'
+names "final review: the auto-run path proves, then checks again" "$FR" 'phase, then check again, and go on when it passes'
+names "final review: only an unverifiable row stops an auto run" "$FR" 'auto-run stop --reason "ui proof needs the user"'
+names "final review: the check runs again after the fix wave" "$FR" 'step 0.2'"'"'s `ui-proof check` again'
+names "finishing runs the gate" "$FIN" 'scripts/ui-proof check --base'
+names "finishing: exit 1 keeps a recorded merge or pr" "$FIN" 'turns a recorded `merge` or `pr` into `keep`'
+names "finishing: the two-option prompt ends on the menu line" "$FIN" '1. Prove it first'
+names "finishing: Step 4 keeps a recorded merge after an unproven UI" "$FIN" 'When Step 1b'"'"'s `ui-proof check` exited 1, `merge` and `pr` become `keep`'
+names "finishing: the auto-run mapping keeps too" "$FIN" '`merge` and `pr` also keep when Step 1b'"'"'s `ui-proof check` exited 1'
+names "finishing: an auto run stops for unverifiable rows" "$FIN" 'auto-run stop --reason "ui proof needs the user"'
+names "final review: step 0 goes on to step 0.2" "$FR" 'say so in one line and go to step 0.2'
+names "verification: the UI claim row" "$VBC" '| The UI works |'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

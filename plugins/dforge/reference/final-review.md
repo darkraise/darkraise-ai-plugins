@@ -31,7 +31,7 @@ of the work being done.
 ## The review
 
 MERGE_BASE is the commit the branch started from, for example
-`git merge-base main HEAD`. Step 0 runs first. Step 0.5 dispatches QA in the
+`git merge-base main HEAD`. Step 0 runs first, then step 0.2. Step 0.5 dispatches QA in the
 background and goes straight on to step 1: QA runs alongside the Claude review,
 the lenses and the Codex round, and the fix wave waits for it (step 3).
 Serializing them added QA's whole run, often a quarter of an hour, to every
@@ -47,13 +47,26 @@ your own: QA commits on this branch.
    the review, and so does a manifest defect: reviewing a branch that does not
    build, or whose suites fail, spends both reviewer seats on findings the gate
    already made. When the
-   project has no manifest, say so in one line and go to step 0.5. In an auto
+   project has no manifest, say so in one line and go to step 0.2. In an auto
    run ([auto-run.md](auto-run.md)), a red gate does not stop the review: the
    review runs, the red gate is the first finding on the one fix wave's
    list, and the gates run again after that wave; a gate still red then runs
    `scripts/auto-run stop --reason "gate <name> red"` and ends as auto-run.md
    §Stopping says; a manifest defect does the same with the reason
    `"gates manifest defect"`.
+
+- 0.2 **UI proof.** Run
+  `bash <plugin-root>/scripts/ui-proof check --base MERGE_BASE --spec <the plan's Spec>`
+  under `timeout 120`. Exit 0 goes on (it also prints `ok` when the project
+  has no UI profile and the spec no UI/UX contract, or when no UI file
+  changed). Exit 1 stops the review like a red gate: the UI is unproven, and
+  reviewing it spends the seats on what the proof would have found. Attended,
+  report the failed steps and stop. In an auto run, run the dforge:ui-ux Prove
+  phase, then check again, and go on when it passes; when the second exit 1
+  comes only from `unverifiable` rows, which need the user's words, run
+  `scripts/auto-run stop --reason "ui proof needs the user"` and end as
+  auto-run.md §Stopping says; any other second exit 1 is the first finding on
+  the fix wave's list.
 
 - 0.5 **Acceptance QA.** Skip this step, saying so in one line, when the
   plan's spec has no `A<n>` statement tagged `test`, or when
@@ -256,6 +269,11 @@ fixer per finding: per-finding fixers each rebuild context and re-run suites,
 and a real session's final-review fix wave cost more than all its tasks
 combined. In an auto run a deferred task's acceptance failures are not on that
 list (step 0.5 (d)).
+
+The fix wave edits UI files and so stales the UI proof: after the wave, run
+step 0.2's `ui-proof check` again. Exit 1 then means the dforge:ui-ux Prove
+phase again in an auto run, and attended, a stop that reports the failed
+steps.
 
 **The fix subagent** (subagent mode). Run
 `scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]` with every

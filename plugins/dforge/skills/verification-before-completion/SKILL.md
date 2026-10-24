@@ -46,6 +46,7 @@ Skip any step = lying, not verifying
 | Regression test works | Red-green cycle verified | Test passes once |
 | Agent completed | VCS diff shows changes | Agent reports "success" |
 | Requirements met | Line-by-line checklist | Tests passing |
+| The UI works | `scripts/ui-proof check --base <branch base>` (plus `--spec`): exit 0 | Screenshots in chat, tests passing, "looks right" |
 
 ## Red Flags - STOP
 
