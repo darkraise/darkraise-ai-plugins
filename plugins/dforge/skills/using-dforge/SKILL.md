@@ -9,7 +9,7 @@ If you were dispatched as a subagent to execute a specific task, ignore this ski
 
 ## The Rule
 
-If a skill might apply to what you are doing, invoke it before any response or action, clarifying questions and exploration included. Announce "Using [skill] to [purpose]" and follow it; if it has a checklist, create a todo per item. Before entering plan mode, brainstorm.
+If a skill might apply to what you are doing, invoke it before any response or action, clarifying questions and exploration included. Announce "Using [skill] to [purpose]" and follow it; a checklist gets a todo per item. Before entering plan mode, brainstorm.
 
 | Thought | Reality |
 |---|---|
@@ -23,6 +23,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 |---|---|
 | A new product from scratch | dforge:planning-a-product |
 | Building or changing behaviour | dforge:brainstorming |
+| Anything a user sees or does | dforge:ui-ux |
 | A bug, failing test or surprise | dforge:systematic-debugging |
 | An approach decision is open | dforge:selecting-approaches |
 | A spec is approved | dforge:writing-plans |
@@ -53,7 +54,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 
 Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>` (the plan's Execution line decides the mode), and still get approval (under `autoRun=on`, the spec review). That is on Claude Code; Codex runs `on` as `off`. Execute inline by default when the plan allows it (at most half the tasks heavy: total 5+ or risk 3; an inline plan delegates those and every task carrying an `**Executor:**` line).
 
-When the darkmem MCP is configured, prefer its `code_search` over Explore subagents.
+With the darkmem MCP, prefer its `code_search` over Explore subagents.
 
 ## Session Budget
 
@@ -66,5 +67,5 @@ When the darkmem MCP is configured, prefer its `code_search` over Explore subage
 ## Platform and Precedence
 
 - Codex: read `references/codex-tools.md`. It has no Stop hook: run `scripts/next-step` on every early stop.
-- No todo tool? Use the ledger or a checklist.
+- No todo tool? Use the ledger.
 - User instructions (CLAUDE.md, AGENTS.md, direct requests) outrank skills, which outrank default behaviour.

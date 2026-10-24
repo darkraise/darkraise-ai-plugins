@@ -188,6 +188,7 @@ You MUST complete each phase before proceeding to the next.
    - No other tests broken?
    - Issue actually resolved?
    - Use the `dforge:verification-before-completion` skill before claiming success
+   - Fix changes anything a user sees or does? Run `dforge:ui-ux` at touch depth: its delta and proof come before you claim the bug fixed
 
 4. **If Fix Doesn't Work**
    - STOP

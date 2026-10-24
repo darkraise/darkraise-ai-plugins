@@ -235,6 +235,11 @@ and its self-review is the whole process.
   constraint outranks the spec you are about to write, and a rejected approach
   is the one a fresh design most reliably re-proposes. Neither is an error when
   absent.
+- When the design has a user-facing part — anything a user sees or does —
+  invoke dforge:ui-ux before drafting acceptance: its Shape phase writes the
+  spec's `## UI/UX contract`, the source of every UI acceptance statement.
+  Under `autoRun=on`, ask its profile and state-board questions among your
+  clarifying questions.
 - Run `scripts/register open --spec <any spec this work touches>`, then list
   `<docs>/registers/` and run `scripts/register open <file>` on every
   register whose `**Covers:**` is `-`: a list captured before anything was
