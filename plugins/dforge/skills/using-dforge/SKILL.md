@@ -59,7 +59,7 @@ With the darkmem MCP, prefer its `code_search` over Explore subagents.
 ## Session Budget
 
 - Call every `scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working directory inside the project's worktree; a relative `PLAN_FILE` resolves against it. The plugin root is printed below this entry point (on Codex: the parent of the `skills/` directory).
-- The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok` means continue at any percentage; `handoff` means finish the task in flight, then use dforge:handoff. See [session-budget.md](../../reference/session-budget.md).
+- The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok`: continue at any percentage; `handoff`: finish the task in flight, then use dforge:handoff. See [session-budget.md](../../reference/session-budget.md).
 - Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dforge:resume-execution.
 - After compaction, trust the snapshot, ledger and `git log` over the summary.
 - `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/dforge-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` or `progressSource` keeps it ([project-state.md](../../reference/project-state.md)).
@@ -67,5 +67,5 @@ With the darkmem MCP, prefer its `code_search` over Explore subagents.
 ## Platform and Precedence
 
 - Codex: read `references/codex-tools.md`. It has no Stop hook: run `scripts/next-step` on every early stop.
-- No todo tool? Use the ledger.
-- User instructions (CLAUDE.md, AGENTS.md, direct requests) outrank skills, which outrank default behaviour.
+- No todo tool? Use the ledger or a checklist.
+- User instructions (CLAUDE.md, AGENTS.md, direct requests) outrank skills, which outrank defaults.
