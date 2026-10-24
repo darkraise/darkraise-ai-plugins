@@ -89,6 +89,11 @@ check "stop: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'df
 check "stop: the user's message names the changed file" "$(jq -r .systemMessage <<<"$out" | grep -c 'src/App.tsx')" "1"
 check "stop: the retry passes" "$(stop s-2 'Done.' true)" ""
 check "stop: the pending line passes" "$(stop s-2 $'Done.\n\nUI proof: pending — no browser on this host')" ""
+check "stop: a hyphen, backticks and trailing blank lines pass" "$(stop s-2 $'Done.\n`UI proof: pending - no browser`\n\n')" ""
+check "stop: the pending line not at the end is held" \
+  "$(decision "$(stop s-2 $'The hook asks for UI proof: pending — <why>.\n\nDone.')")" "block"
+check "stop: the pending line with no reason is held" "$(decision "$(stop s-2 $'Done.\n\nUI proof: pending')")" "block"
+check "stop: the pending line with an empty reason is held" "$(decision "$(stop s-2 $'Done.\n\nUI proof: pending —  ')")" "block"
 prompt s-3
 check "stop: a turn that changed no UI file passes" "$(stop s-3 'Done.')" ""
 

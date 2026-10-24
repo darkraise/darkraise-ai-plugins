@@ -6,7 +6,7 @@
 # It applies only where the gate is on: the project has a UI profile, or the
 # session ran dforge:ui-ux. It stands down while an auto run is bound to the
 # session (turn-end.sh owns those stops), on the retry (stop_hook_active), and
-# when the last message carries "UI proof: pending" with its reason. Anything
+# when the last message ends with "UI proof: pending — <why>". Anything
 # missing (jq, the turn stamp, a branch head for this checkout) passes.
 set -uo pipefail
 
@@ -35,8 +35,11 @@ if [ ! -f "$(uiux_profile "$root")" ]; then
   uiux_ran_skill "$transcript_path" || exit 0
   active=(--active) act=" --active"
 fi
-last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")
-case $last in *'UI proof: pending'*) exit 0 ;; esac
+last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json" | tr -d '\r' | awk 'NF { l = $0 } END { print l }')
+last=$(sed -E 's/^[[:space:]`]+//; s/[[:space:]`]+$//' <<<"$last")
+# Only the closing line counts, so quoting the hook's own wording mid-message
+# does not release it.
+if grep -qE '^UI proof: pending[[:space:]]+(—|–|-)[[:space:]]*[^[:space:]]' <<<"$last"; then exit 0; fi
 
 out=$(cd "$root" && bash "$SCRIPT_DIR/ui-proof" check --base "$base" ${active[@]+"${active[@]}"} 2>&1)
 status=$?
