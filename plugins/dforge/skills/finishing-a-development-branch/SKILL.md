@@ -124,6 +124,10 @@ The UI is unproven (ui-proof check):
 Which option?
 ```
 
+On option 2, run `scripts/finish-choice answer keep [--plan PLAN_FILE]`, skip
+Steps 2 to 4, and carry out Step 5's Option 3 (Keep As-Is) and the steps after
+it.
+
 ## Step 2: Detect Environment
 
 ```bash

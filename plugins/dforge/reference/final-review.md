@@ -272,9 +272,10 @@ combined. In an auto run a deferred task's acceptance failures are not on that
 list (step 0.5 (d)).
 
 The fix wave edits UI files and so stales the UI proof: after the wave, run
-step 0.2's `ui-proof check` again. Exit 1 then means the dforge:ui-ux Prove
-phase again in an auto run, and attended, a stop that reports the failed
-steps.
+step 0.2's `ui-proof check` again. Exit 1 then means, attended, a stop that
+reports the failed steps. In an auto run it means going on to finishing,
+whose Step 1b runs the dforge:ui-ux Prove phase once and keeps the branch
+when the check still fails; do not run the Prove phase here.
 
 **The fix subagent** (subagent mode). Run
 `scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]` with every
