@@ -150,6 +150,12 @@ printf 'echo hi\n' > run.sh && git add run.sh && git commit -q -m sh
 U2=$(git rev-parse HEAD)
 out=$(uroute plan-spec.md --final "$UHEAD" "$U2")
 check "ui-ux: no UI file changed: not routed" "$(grep -c '^lens ui-ux ' <<<"$out")" "0"
+printf 'test("x", () => <App />);\n' > tests/app.test.tsx && git add tests && git commit -q -m tsx-test
+U3=$(git rev-parse HEAD)
+mkdir -p docs/dforge/ui-ux && printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+out=$(uroute plan.md --final "$U2" "$U3")
+check "ui-ux: only a .test.tsx changed: not routed" "$(grep -c '^lens ui-ux ' <<<"$out")" "0"
+rm docs/dforge/ui-ux/profile.md
 printf '# T\n\n## Task index\n\n1. r\n\n### Task 1: r\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 3 = 3\n**Lenses:** ui-ux\n' > plan-task.md
 check "ui-ux: a risk-3 task may name the lens" "$(uroute plan-task.md --task 1 | sed -E 's/ criteria=[^ ]*//')" "lens ui-ux"
 
