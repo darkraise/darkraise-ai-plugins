@@ -3175,7 +3175,10 @@ describe('shells and remote', () => {
 
     test("a subagent's approval after the turn does not stall the release", async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
-      on('tool.check', () => ({ decision: 'ask' }))
+      // Only the subagent asks: since CLI 2.1.310 $.tool.call runs the check
+      // first and an unanswered ask denies the call, which would stop hold()'s
+      // background shell from starting.
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
       const clock = await hold($, on, fetches)
       await clock.advance(90_000)
       await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
@@ -3187,7 +3190,10 @@ describe('shells and remote', () => {
 
     test('the shell ending under a subagent approval still releases once it is answered', async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
-      on('tool.check', () => ({ decision: 'ask' }))
+      // Only the subagent asks: since CLI 2.1.310 $.tool.call runs the check
+      // first and an unanswered ask denies the call, which would stop hold()'s
+      // background shell from starting.
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
       const clock = await hold($, on, fetches)
       await clock.advance(90_000)
       await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
