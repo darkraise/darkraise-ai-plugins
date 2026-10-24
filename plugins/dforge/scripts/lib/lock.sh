@@ -28,7 +28,9 @@ dr_lock_claim() {
 dr_lock_release() {
   [ "$(cat "$1/pid" 2>/dev/null)" = "$$" ] || return 1
   rm -f -- "$1/pid" "$1/start" "$1/host" "$1/claim"
-  rmdir -- "$1"
+  # Where mkdir is not exclusive, a waiting shell can claim DIR between the rm
+  # and the rmdir; DIR is then its lock, and the rmdir must fail quietly.
+  rmdir -- "$1" 2>/dev/null
 }
 
 # dr_lock_old DIR — DIR last changed more than DR_LOCK_STALE_SECONDS ago. A
