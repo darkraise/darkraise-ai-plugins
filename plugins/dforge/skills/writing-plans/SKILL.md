@@ -294,6 +294,27 @@ is always correct; see [parallel-waves.md](../../reference/parallel-waves.md).
 If a plan ends up with no wave of two or more tasks, say so and write
 `**Parallelism:** sequential — no independent tasks`.
 
+## Drafting the tasks
+
+A plan of 1-3 tasks is drafted in the session. For 4 or more, write the
+header yourself, through the Task index, and save it as the plan file. Then
+split the index into slices of 2-3 consecutive tasks and dispatch one `dforge:drafter-sonnet`
+per slice, every slice in one message, with
+[drafter-prompt.md](references/drafter-prompt.md). Each dispatch names the
+spec path, the plan path, the slice range and the slice path,
+`<state>/drafts/<plan basename>/tasks-A-B.md`, as the template's placeholders; paste nothing else.
+
+- **Contracts settle what slices share.** A drafter that reports
+  `NEEDS_CONTEXT` needs a contract: add it to the header and re-dispatch that
+  slice. An amendment that changes an existing Contract, rather than adding
+  one, re-dispatches every slice: a slice drafted against the old Contract is
+  stale, and nothing downstream can tell.
+- **Join without reading.** Once every slice reports `DONE`, run
+  `scripts/draft-pack --join PLAN_FILE`. It appends the slices in task order
+  and deletes them; on exit 3 it names the gap or overlap and leaves the plan
+  unchanged. Then continue at Assign an implementer.
+- **On a Codex host, draft every task in the session.**
+
 ## Task Structure
 
 ````markdown

@@ -132,5 +132,15 @@ NC="$P/reference/native-codex.md"
 names "codex: critic and lens seats" "$NC" 'The architecture critic and every review lens are native judges at rank 8'
 names "codex: QA seat" "$NC" 'Acceptance QA is a native implementer at `gpt-6.1-sol / high`'
 
+WP="$P/skills/writing-plans/SKILL.md"
+DPR="$P/skills/writing-plans/references/drafter-prompt.md"
+names "drafting: small plans stay in the session" "$WP" 'A plan of 1-3 tasks is drafted in the session.'
+names "drafting: slices of 2-3, all at once" "$WP" 'split the index into slices of 2-3 consecutive tasks'
+names "drafting: joined without reading" "$WP" 'scripts/draft-pack --join PLAN_FILE'
+names "drafting: a changed Contract re-dispatches every slice" "$WP" 're-dispatches every slice: a slice drafted against the old Contract'
+names "drafting: Codex drafts in the session" "$WP" 'On a Codex host, draft every task in the session'
+names "drafter prompt: the slice path" "$DPR" '**Write to:** [SLICE_PATH]'
+names "drafter prompt: the scratch worktree" "$DPR" 'Write nothing in this checkout except [SLICE_PATH].'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

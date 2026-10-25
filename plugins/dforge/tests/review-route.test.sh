@@ -706,7 +706,7 @@ check "native final-fix: the highest of the matched tasks" "$out" "$NATIVE:gpt-6
 
 # --- README, version and program amendment -------------------------------------
 RD="$P/README.md"
-present "README counts twenty agents" "$RD" '**Twenty agents in three classes.**'
+present "README counts twenty-one agents" "$RD" '**Twenty-one agents in four classes.**'
 absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
 present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
 present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'

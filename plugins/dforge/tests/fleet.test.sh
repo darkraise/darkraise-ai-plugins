@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The fleet is twenty agents in three classes. Seven execution implementers
+# The fleet is twenty-one agents in four classes. Seven execution implementers
 # pin one model/effort pairing each and are everything the assignment table and
 # the escalation ladder can reach. Nine reserve implementers - the xhigh and max
 # efforts, and every Fable tier - are never an output of scoring: they are
@@ -8,6 +8,8 @@
 # read-only by registry: their tools list omits Edit, Write, NotebookEdit, and
 # Agent, so "reviewers do not mutate the tree" and "reviewers do not spawn
 # subagents" are enforced rather than requested.
+# One drafter writes plan slices and may prototype, so it carries Bash, Write
+# and Edit, but never Agent: drafters do not spawn subagents.
 #
 # Haiku 4.5 does not support reasoning effort at all, so impl-haiku must NOT
 # carry an effort field. xhigh, max, and the Fable model are legal for reserve
@@ -33,13 +35,14 @@ fm() {
 }
 
 RESERVE="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-opus-max impl-opus-xhigh impl-sonnet-max impl-sonnet-xhigh"
-EXPECTED="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-haiku impl-opus-high impl-opus-low impl-opus-max impl-opus-medium impl-opus-xhigh impl-sonnet-high impl-sonnet-low impl-sonnet-max impl-sonnet-medium impl-sonnet-xhigh judge-fable judge-opus judge-sonnet-high scout-sonnet"
+EXPECTED="drafter-sonnet impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-haiku impl-opus-high impl-opus-low impl-opus-max impl-opus-medium impl-opus-xhigh impl-sonnet-high impl-sonnet-low impl-sonnet-max impl-sonnet-medium impl-sonnet-xhigh judge-fable judge-opus judge-sonnet-high scout-sonnet"
 ROLE_TOOLS="Read, Grep, Glob, WebFetch"
+DRAFTER_TOOLS="Read, Grep, Glob, Bash, Write, Edit"
 
 is_reserve() { case " $RESERVE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 actual=$(cd "$AGENTS" 2>/dev/null && ls *.md 2>/dev/null | sed 's/\.md$//' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-check "fleet contains exactly the 20 expected agents" "$actual" "$EXPECTED"
+check "fleet contains exactly the 21 expected agents" "$actual" "$EXPECTED"
 
 for f in "$AGENTS"/*.md; do
   [ -e "$f" ] || continue
@@ -91,8 +94,14 @@ for f in "$AGENTS"/*.md; do
         "$(case "$effort" in high|medium) echo ok ;; *) echo "invalid:$effort" ;; esac)" "ok"
       check "$base: preloads no skills" "$(grep -c '^skills:' "$f")" "0"
       ;;
+    drafter-*)
+      check "$base: carries the drafter toolset" "$(fm "$f" tools)" "$DRAFTER_TOOLS"
+      check "$base: runs on sonnet" "$model" "sonnet"
+      check "$base: effort is high" "$effort" "high"
+      check "$base: preloads no skills" "$(grep -c '^skills:' "$f")" "0"
+      ;;
     *)
-      check "$base: name matches a known agent class" "unknown-class" "impl|judge|scout"
+      check "$base: name matches a known agent class" "unknown-class" "impl|judge|scout|drafter"
       ;;
   esac
 

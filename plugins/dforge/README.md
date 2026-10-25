@@ -51,7 +51,7 @@ before offloading.
 
 ## What you get
 
-**Twenty agents in three classes.** Seven execution implementers - Sonnet 5.5
+**Twenty-one agents in four classes.** Seven execution implementers - Sonnet 5.5
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything the assignment table and the escalation ladder can reach; no score
 assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
@@ -65,6 +65,10 @@ read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
 frontmatter omits `Edit`, `Write`, and `Agent`, so a reviewer that cannot
 modify the tree or spawn subagents is a fact about the registry rather than a
 request in a prompt.
+One drafter, `drafter-sonnet`, writes a slice of 2-3 tasks of a plan whose
+header is written (writing-plans' Drafting the tasks); it may run code in a
+scratch worktree of its own, so it carries `Bash`, `Write` and `Edit`, but
+never `Agent`.
 
 The reserve exists so that a human ruling, and a task that genuinely cannot be
 split any further, both have somewhere to go. It is not a way around the gate:
