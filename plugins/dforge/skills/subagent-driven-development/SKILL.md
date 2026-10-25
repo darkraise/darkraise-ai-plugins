@@ -443,12 +443,26 @@ point never overwrites an earlier file — listing each item: an id, its
 kind, its task (or `plan`), and the paths it needs — brief, report, review
 packages — with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` for the point's
-kind and the tasks its items concern, and dispatch the `primary` it prints
+kinds and the tasks its items concern, and dispatch the `primary` it prints
 with [ruling-prompt.md](references/ruling-prompt.md), expanding its
-placeholders. Items of different kinds at one point share one dispatch. On any
-exit 2, dispatch `dforge:judge-opus` and say why,
+placeholders. Items of different kinds at one point share one dispatch, and
+`<kind>` is then one comma-separated list, such as
+`cannot-verify,executor-empty-diff`. The route prints
+`dforge:judge-sonnet-high` (`reason=simple-kind`) when every kind in the list
+is `cannot-verify` or `executor-empty-diff` and no task it names is risk 3,
+and `dforge:judge-opus` otherwise; `preflight`, `plan-conflict`, `breaker`,
+`blocked-plan`, `final-residual` and `acceptance-ambiguous` always go to
+`dforge:judge-opus`. On any exit 2, dispatch `dforge:judge-opus` and say why,
 quoting its message. Codex hosts, where `review-route` exits 2, use a native
 judge at Astra high or above ([native-codex.md](../../reference/native-codex.md)).
+
+**Settled by a mechanical check.** `scripts/task-step review` prints
+`check identity:` and `check attribution:` lines for the task's commits. A
+reviewer's cannot-verify item that one of those lines answers `clean` (commit
+author and committer, or an attribution trailer) goes to no seat; log it as
+`Task <N>: Ruling: cannot-verify — settled by task-step check <name> — none`,
+with `<name>` `identity` or `attribution`. A check that found something is a
+finding for the fix loop, not a cannot-verify item.
 
 **Carry out each verdict**, and copy its `Ruling:` line into the ledger
 verbatim:

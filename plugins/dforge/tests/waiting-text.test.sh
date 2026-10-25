@@ -10,6 +10,7 @@ P="$HERE/.."
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 DT="$P/reference/delegated-task.md"
 CODEX="$P/skills/using-dforge/references/codex-tools.md"
+INLINE="$P/skills/executing-plans/SKILL.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -58,6 +59,14 @@ names "the delegated loop points at the waiting rule" "$DT" \
 
 names "codex-tools keeps the bounded wait_agent stretch" "$CODEX" 'bounded stretches: `wait_agent` with `timeout_ms` 300000-600000'
 names "codex-tools keeps the five-minute floor" "$CODEX" 'Never stack polls shorter than five minutes'
+
+names "the ruling route takes a comma-separated kind list" "$SDD" '`<kind>` is then one comma-separated list, such as'
+names "simple kinds route to judge-sonnet-high" "$SDD" '`dforge:judge-sonnet-high` (`reason=simple-kind`) when every kind in the list'
+names "the other kinds stay on judge-opus" "$SDD" '`blocked-plan`, `final-residual` and `acceptance-ambiguous` always go to'
+names "a mechanical check settles a cannot-verify item" "$SDD" '`Task <N>: Ruling: cannot-verify — settled by task-step check <name> — none`,'
+names "a failed check is a fix-loop finding" "$SDD" 'finding for the fix loop, not a cannot-verify item.'
+names "inline mode routes the simple kinds" "$INLINE" '`dforge:judge-sonnet-high` when every kind is `cannot-verify` or'
+names "inline mode settles by mechanical check" "$INLINE" '`Task <N>: Ruling: cannot-verify — settled by task-step check <name> — none`.'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

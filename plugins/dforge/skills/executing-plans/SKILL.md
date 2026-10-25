@@ -450,7 +450,15 @@ its task, and the paths it needs, with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` and dispatch the
 `primary` it prints with
 [ruling-prompt.md](../subagent-driven-development/references/ruling-prompt.md),
-expanding its placeholders. On any exit 2, dispatch
+expanding its placeholders. Items of several kinds at one point share one
+dispatch, and `<kind>` is then one comma-separated list; the route prints
+`dforge:judge-sonnet-high` when every kind is `cannot-verify` or
+`executor-empty-diff` and no task it names is risk 3, and `dforge:judge-opus`
+otherwise. A delegated task's cannot-verify item that a `check identity:` or
+`check attribution:` line of `scripts/task-step review` answers `clean` goes to
+no seat: log
+`Task <N>: Ruling: cannot-verify — settled by task-step check <name> — none`.
+On any exit 2, dispatch
 `dforge:judge-opus` and say why, quoting its message - except on a
 Codex host, where `review-route --ruling` exits 2 on every `Host: codex` plan and the
 seat is the native judge named in Select the host first.
