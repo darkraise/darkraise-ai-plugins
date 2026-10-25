@@ -6,7 +6,7 @@
 #
 # Capped because hook output over 10,000 characters is replaced by a file
 # reference, and the injected entry point already takes about 5,000
-# (tests/hook.test.sh caps it at 5,100 bytes); session-start.sh subtracts its
+# (tests/hook.test.sh caps it at 5,500 bytes); session-start.sh subtracts its
 # measured length, so this is only the ceiling.
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plan.sh"
