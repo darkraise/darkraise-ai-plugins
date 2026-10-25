@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# One command per mechanical phase of the delegated task loop
+# (reference/delegated-task.md): each wraps today's scripts, writes the filled
+# prompt to a file in the plan workspace and prints a digest of at most 15
+# lines. State for a task, or a batch named after its first task, lives in
+# <workspace>/task-<N>-step.json.
+#
+# Usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset]
+# A start that finds the task's state file keeps it (and writes no second
+# assigned line) unless --reset is given.
+# Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
+# 4 an amendment does not apply; 6 a required earlier step has not run.
+# 5 is context-size's handoff code and is never used here.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset]"; }
+
+[ $# -ge 3 ] || usage
+sub=$1; plan_arg=$2; shift 2
+case $sub in start) ;; *) usage ;; esac
+
+ids=() wave="" reset=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
+    --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
+    -*) usage ;;
+    *) [[ $1 =~ ^[0-9]+$ ]] || usage; ids+=("$((10#$1))"); shift ;;
+  esac
+done
+[ ${#ids[@]} -ge 1 ] || usage
+first=${ids[0]}
+idlist=$(IFS=,; echo "${ids[*]}")
+
+plan=$(plan_locate "$plan_arg")
+[ -f "$plan" ] || die "no such plan file: $plan"
+plan_require_same_project "$plan"
+ctx=$(_plan_ctx "$plan")
+dforge_stores_init "$ctx"
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+src="$TMP/plan.md"
+plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
+  || die "an amendment does not apply; run plan-lint" 4
+if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")"; then
+  die "a Host: codex plan runs the Codex loop (reference/native-codex.md); task-step is for Claude Code"
+fi
+for n in "${ids[@]}"; do
+  plan_task_text "$src" "$n" >/dev/null || die "no Task $n in $plan" 3
+done
+
+slug=$(basename "$plan" .md)
+ws=$(dforge_workspace "$slug" "$ctx")
+ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
+state="$ws/task-$first-step.json"
+plugin_root=$(cd "$HERE/.." && pwd)
+brief="$ws/task-$first-brief.md"
+report="$ws/task-$first-report.md"
+
+budget_of() { grep -E '^budget' | tail -n 1; }
+
+# The fenced `prompt: |` body of a template, de-indented, without the
+# "[Include this section only ...]" instruction lines.
+prompt_text() {
+  tr -d '\r' < "$1" | awk '
+    /^  prompt: \|[ \t]*$/ && !done { on = 1; next }
+    on && /^```/ { on = 0; done = 1; next }
+    on { sub(/^    /, "") }
+    on && !/^\[Include this section only/ { print }'
+}
+
+# fill TOKEN VALUE [TOKEN VALUE ...]: stdin to stdout, each literal TOKEN
+# replaced by its VALUE. The pairs travel in the environment so that a path
+# with a backslash or an ampersand is never read as an escape.
+fill() {
+  local i=0
+  while [ $# -ge 2 ]; do export "TS_T$i=$1" "TS_V$i=$2"; i=$((i + 1)); shift 2; done
+  TS_N=$i awk '
+    BEGIN { n = ENVIRON["TS_N"] + 0 }
+    {
+      line = $0
+      for (k = 0; k < n; k++) {
+        t = ENVIRON["TS_T" k]; v = ENVIRON["TS_V" k]; out = ""
+        while ((p = index(line, t)) > 0) { out = out substr(line, 1, p - 1) v; line = substr(line, p + length(t)) }
+        line = out line
+      }
+      print line
+    }'
+}
+
+title_of() { plan_tasks "$src" | awk -F'\t' -v n="$1" '$1 == n && !d { print $2; d = 1 }' | tr -d '\r'; }
+
+agent_rank() {
+  local m e
+  if [ "$1" = impl-haiku ]; then echo 0; return; fi
+  [[ "$1" =~ ^impl-(sonnet|opus|fable)-(low|medium|high|xhigh|max)$ ]] || return 0
+  case ${BASH_REMATCH[1]} in sonnet) m=1 ;; opus) m=2 ;; *) m=3 ;; esac
+  case ${BASH_REMATCH[2]} in low) e=0 ;; medium) e=1 ;; high) e=2 ;; xhigh) e=3 ;; *) e=4 ;; esac
+  echo $((m * 10 + e))
+}
+
+implementer_of() {
+  plan_task_text "$src" "$1" | plan_lines Implementer | head -n 1 \
+    | sed -nE 's/^\*\*Implementer:\*\*[ \t]*`?([^` \t]+)`?.*/\1/p' | sed 's/^.*://' | tr -d '\r'
+}
+
+strip_excerpt() { awk '/^## Plan header excerpt$/ { skip = 1 } /^## UI\/UX contract items$/ { skip = 0 } !skip { print }' "$1"; }
+only_excerpt() { awk '/^## Plan header excerpt$/ { on = 1 } /^## UI\/UX contract items$/ { on = 0 } on { print }' "$1"; }
+
+state_line() {
+  jq -r '"state: base \(.base[0:7]) review-head \(if .reviewHead then .reviewHead[0:7] else "-" end) round \(.round) t0 \(.t0 // "-")"' "$state" | tr -d '\r'
+}
+
+do_start() {
+  local base base7 out rc n a agent="" best=-1 rank unknown=0 exec_id="" suffix=")" label titles kept=0
+  local template="$plugin_root/skills/subagent-driven-development/references/implementer-prompt.md"
+  local dispatch="$ws/task-$first-dispatch.md" budget="" workfrom scene
+
+  if [ -f "$state" ] && [ "$reset" -eq 0 ]; then
+    kept=1
+    base=$(jq -r '.base' "$state" | tr -d '\r')
+  else
+    base=$(git rev-parse HEAD) || die "not inside a git checkout"
+  fi
+  base7=${base:0:7}
+  bash "$HERE/sdd-workspace" "$plan" >/dev/null || exit 2
+
+  for n in "${ids[@]}"; do
+    out=$(bash "$HERE/task-brief" "$plan" "$n"); rc=$?
+    [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; exit "$rc"; }
+    if [ "$n" = "$first" ]; then budget=$(budget_of <<<"$out"); fi
+  done
+  if [ ${#ids[@]} -gt 1 ]; then
+    {
+      strip_excerpt "$brief"
+      for n in "${ids[@]}"; do
+        [ "$n" = "$first" ] && continue
+        printf '\n---\n\n'
+        strip_excerpt "$ws/task-$n-brief.md"
+      done
+      only_excerpt "$brief"
+    } > "$brief.tmp" && mv "$brief.tmp" "$brief"
+  fi
+
+  for n in "${ids[@]}"; do
+    a=$(implementer_of "$n")
+    if [[ "$a" == impl-* ]] && [ -f "$plugin_root/agents/$a.md" ]; then
+      rank=$(agent_rank "$a")
+      if [ "${rank:--1}" -gt "$best" ]; then best=$rank agent=$a; fi
+    else
+      unknown=1
+    fi
+  done
+  [ "$unknown" -eq 0 ] || agent=""
+  if [ ${#ids[@]} -eq 1 ]; then
+    exec_id=$(plan_executors "$src" | awk -F'\t' -v n="$first" '$1 == n { print $2 }' | tr -d '\r')
+  fi
+
+  [ -z "$wave" ] || suffix="; wave $wave)"
+  if [ -n "$agent" ] && [ -z "$exec_id" ] && [ "$kept" -eq 0 ]; then
+    if [ ! -f "$ledger" ]; then
+      mkdir -p "$(dirname "$ledger")"
+      printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
+    fi
+    for n in "${ids[@]}"; do
+      printf 'Task %s: implementer %s (assigned; base %s%s\n' "$n" "$agent" "$base7" "$suffix" >> "$ledger"
+    done
+  fi
+
+  if [ "$kept" -eq 0 ]; then
+    jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$base" --argjson wave "${wave:-null}" \
+      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null, wave: $wave}' > "$state.tmp" \
+      && mv "$state.tmp" "$state"
+  fi
+
+  if [ -z "$exec_id" ]; then
+    if [ ${#ids[@]} -eq 1 ]; then
+      label="Task $first: $(title_of "$first")"
+    else
+      titles=$(for n in "${ids[@]}"; do title_of "$n"; done | awk 'NR > 1 { printf "; " } { printf "%s", $0 } END { print "" }')
+      label="Tasks $(IFS=,; echo "${ids[*]}" | sed 's/,/, /g'): $titles"
+    fi
+    workfrom="Work from: $(git rev-parse --show-toplevel)"
+    [ -z "$wave" ] || workfrom="Work from: your worktree (see the Parallel workspace section)"
+    scene="The message that sent you to this file says where the task fits, and carries the interfaces from earlier tasks and the verdicts that bear on it."
+    prompt_text "$template" | fill \
+      '[BRIEF_FILE]' "$brief" '[REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" \
+      '[IMPLEMENTER]' "${agent:-the scored implementer}" 'Task N: [task name]' "$label" \
+      'Work from: [directory]' "$workfrom" \
+      '[Scene-setting: where this fits, dependencies, architectural context]' "$scene" > "$dispatch"
+  fi
+
+  printf 'task %s: briefed %s, base %s' "$idlist" "$brief" "$base7"
+  if [ "$kept" -eq 1 ]; then printf '; state kept, no assigned line written (--reset discards the state)\n'
+  elif [ -n "$exec_id" ]; then printf '; executor task, no dispatch file written\n'
+  elif [ -n "$agent" ]; then printf '; assigned %s\n' "$agent"
+  else printf '; no assigned line written\n'; fi
+  if [ -n "$exec_id" ]; then
+    printf 'executor %s: follow executor-lane.md §Dispatch\n' "$exec_id"
+  elif [ -n "$agent" ]; then
+    printf 'seat: dforge:%s prompt: %s\n' "$agent" "$dispatch"
+  else
+    printf 'seat: unscored (no known **Implementer:** line; score it per ladder.md, dispatch that agent, end its assigned line with "; scored at dispatch") prompt: %s\n' "$dispatch"
+  fi
+  state_line
+  printf '%s\n' "${budget:-budget: unknown}"
+}
+
+case $sub in
+  start) do_start ;;
+esac
