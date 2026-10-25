@@ -63,8 +63,8 @@ describe('typed seats and drafting: acceptance', () => {
     for (const subagentType of ['general-purpose', 'claude']) {
       const out = await $.agent.spawn(spawn({ subagentType }))
       expect(out.deny).toMatch(REASON)
-      expect(out.deny).toMatch(/dforge:judge-/)
-      expect(out.deny).toMatch(/dforge:impl-/)
+      expect(out.deny).toMatch(/dforge:judge-sonnet-high/)
+      expect(out.deny).toMatch(/dforge:impl-sonnet-medium/)
       expect(out.deny).toContain('model: "sonnet"')
     }
   })
