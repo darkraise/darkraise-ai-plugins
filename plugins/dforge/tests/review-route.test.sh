@@ -198,8 +198,10 @@ rround "$TMP/plan.md" 1
 check "an unparseable Evaluation line fails a plan round" "$rc" "2"
 
 # --- the ruling seat -------------------------------------------------------------
-# Every ruling goes to Opus; the reason still marks where a wrong verdict is
-# expensive: the merge gate, a risk-3 task, and an intricate plan's preflight.
+# Rulings go to Opus, except a list made only of cannot-verify and
+# executor-empty-diff kinds on no risk-3 task, which goes to Sonnet. The reason
+# marks where a wrong verdict is expensive: the merge gate, a risk-3 task, and
+# an intricate plan's preflight.
 rule() { out=$(bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; }
 rule "$TMP/light.md" --ruling final-residual
 check "final-residual is the merge gate on Opus" "$out" "review-seat ruling=final-residual tasks=plan primary=dforge:judge-opus fallback=- reason=merge-gate"
@@ -208,7 +210,27 @@ check "an item on a risk-3 task goes to Opus" "$out" "review-seat ruling=plan-co
 rule "$TMP/round.md" --ruling breaker 3 8
 check "a batch routes on its heaviest item" "$out" "review-seat ruling=breaker tasks=3,8 primary=dforge:judge-opus fallback=- reason=risk"
 rule "$TMP/round.md" --ruling cannot-verify 4
-check "a routine item goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=4 primary=dforge:judge-opus fallback=- reason=routine"
+check "a cannot-verify item goes to Sonnet" "$out" "review-seat ruling=cannot-verify tasks=4 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
+rule "$TMP/round.md" --ruling cannot-verify
+check "a plan-wide cannot-verify goes to Sonnet" "$out" "review-seat ruling=cannot-verify tasks=plan primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
+rule "$TMP/round.md" --ruling cannot-verify 8
+check "a cannot-verify item on a risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=8 primary=dforge:judge-opus fallback=- reason=risk"
+rule "$TMP/round.md" --ruling cannot-verify,executor-empty-diff 1 4
+check "a list of Sonnet kinds goes to Sonnet" "$out" "review-seat ruling=cannot-verify,executor-empty-diff tasks=1,4 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
+rule "$TMP/round.md" --ruling cannot-verify,codex-empty-diff 1
+check "the legacy kind joins a Sonnet list as given" "$out" "review-seat ruling=cannot-verify,codex-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
+rule "$TMP/round.md" --ruling cannot-verify,breaker 1
+check "a mixed list goes to Opus" "$out" "review-seat ruling=cannot-verify,breaker tasks=1 primary=dforge:judge-opus fallback=- reason=routine"
+rule "$TMP/round.md" --ruling cannot-verify,executor-empty-diff 1 8
+check "a Sonnet list with one risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify,executor-empty-diff tasks=1,8 primary=dforge:judge-opus fallback=- reason=risk"
+rule "$TMP/light.md" --ruling cannot-verify,final-residual
+check "a list naming final-residual is the merge gate" "$out" "review-seat ruling=cannot-verify,final-residual tasks=plan primary=dforge:judge-opus fallback=- reason=merge-gate"
+rule "$TMP/round.md" --ruling cannot-verify,preflight
+check "a list with preflight on an intricate plan is intricate" "$out" "review-seat ruling=cannot-verify,preflight tasks=plan primary=dforge:judge-opus fallback=- reason=intricate"
+for bad in cannot-verify, ,cannot-verify cannot-verify,,breaker cannot-verify,guess ""; do
+  rule "$TMP/round.md" --ruling "$bad" 1
+  check "a malformed kind list [$bad] exits 2" "$rc" "2"
+done
 rule "$TMP/round.md" --ruling preflight
 check "preflight on an intricate plan goes to Opus" "$out" "review-seat ruling=preflight tasks=plan primary=dforge:judge-opus fallback=- reason=intricate"
 rule "$TMP/light.md" --ruling preflight
@@ -732,13 +754,13 @@ present "the program design names sub-project 9" "$P/../../docs/superpowers/spec
 # as the plan-round checks.
 out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 1 2>/dev/null); rc=$?
 check "the neutral ruling kind is accepted" "$rc" "0"
-check "the neutral kind prints itself" \
-  "$out" "review-seat ruling=executor-empty-diff tasks=1 primary=dforge:judge-opus fallback=- reason=routine"
+check "the neutral kind prints itself and goes to Sonnet" \
+  "$out" "review-seat ruling=executor-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
 
 out=$(bash "$ROUTE" "$TMP/round.md" --ruling codex-empty-diff 1 2>/dev/null); rc=$?
 check "the legacy ruling kind is still accepted" "$rc" "0"
 check "the legacy kind prints its own spelling, not the new one" \
-  "$out" "review-seat ruling=codex-empty-diff tasks=1 primary=dforge:judge-opus fallback=- reason=routine"
+  "$out" "review-seat ruling=codex-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
 
 out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 8 2>/dev/null)
 check "a risk-3 task still routes the neutral kind to Opus" \

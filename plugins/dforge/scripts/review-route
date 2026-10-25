@@ -12,7 +12,7 @@
 #
 # Usage: review-route PLAN_FILE --task ID [ID ...]
 #        review-route PLAN_FILE --plan-round R
-#        review-route PLAN_FILE --ruling KIND [ID ...]
+#        review-route PLAN_FILE --ruling KIND[,KIND...] [ID ...]
 #        review-route PLAN_FILE --final
 #        review-route PLAN_FILE --final-fix FILE [FILE ...]
 # ID is a task number, or a task number and part letter for a split task (7B).
@@ -35,7 +35,7 @@ ROUTING="$HERE/../reference/codex-routing.json"
 SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
-usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND [ID ...] | --final | --final-fix FILE [FILE ...]"; }
+usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND[,KIND...] [ID ...] | --final | --final-fix FILE [FILE ...]"; }
 
 [ $# -ge 2 ] || usage
 plan=$(plan_locate "$1"); shift
@@ -284,17 +284,22 @@ case "$1" in
   --ruling)
     shift
     [ $# -ge 1 ] || usage
-    kind=$1; shift
-    case $kind in
-      # executor-empty-diff is the neutral kind. codex-empty-diff is its
-      # earlier name and stays accepted, but it is not canonicalised: the
-      # printf below echoes $kind, so rewriting it here would change an
-      # existing caller's output.
-      preflight|plan-conflict|cannot-verify|breaker|blocked-plan) ;;
-      executor-empty-diff|codex-empty-diff) ;;
-      final-residual|acceptance-ambiguous) ;;
-      *) die "not a ruling kind: $kind" ;;
-    esac
+    kinds=$1; shift
+    [[ "$kinds" =~ ^[a-z-]+(,[a-z-]+)*$ ]] || die "not a ruling kind: $kinds"
+    simple=1 residual=0 preflight=0
+    for kind in ${kinds//,/ }; do
+      case $kind in
+        # executor-empty-diff is the neutral kind. codex-empty-diff is its
+        # earlier name and stays accepted, but it is not canonicalised: the
+        # printf below echoes $kinds, so rewriting it here would change an
+        # existing caller's output.
+        cannot-verify|executor-empty-diff|codex-empty-diff) ;;
+        preflight) simple=0 preflight=1 ;;
+        final-residual) simple=0 residual=1 ;;
+        plan-conflict|breaker|blocked-plan|acceptance-ambiguous) simple=0 ;;
+        *) die "not a ruling kind: $kind" ;;
+      esac
+    done
     plan_shape
     scores=$(plan_scores "$src")
     ids="" risky=0
@@ -305,13 +310,16 @@ case "$1" in
       [ "$(cut -f3 <<<"$row")" != 3 ] || risky=1
       ids="${ids:+$ids,}$id"
     done
-    # Every ruling sits on Opus; the reason only records why, for the ledger.
-    if [ "$kind" = final-residual ]; then reason=merge-gate
+    # Only a list made wholly of the simple kinds, on no risk-3 task, leaves
+    # Opus; the reason records why, for the ledger.
+    seat=$OPUS
+    if [ "$residual" -eq 1 ]; then reason=merge-gate
     elif [ "$risky" -eq 1 ]; then reason=risk
-    elif [ "$kind" = preflight ] && [ "$intricate" -eq 1 ]; then reason=intricate
+    elif [ "$simple" -eq 1 ]; then seat=$SONNET reason=simple-kind
+    elif [ "$preflight" -eq 1 ] && [ "$intricate" -eq 1 ]; then reason=intricate
     else reason=routine
     fi
-    printf 'review-seat ruling=%s tasks=%s primary=%s fallback=- reason=%s\n' "$kind" "${ids:-plan}" "$OPUS" "$reason"
+    printf 'review-seat ruling=%s tasks=%s primary=%s fallback=- reason=%s\n' "$kinds" "${ids:-plan}" "$seat" "$reason"
     exit 0 ;;
   --final)
     [ $# -eq 1 ] || usage
