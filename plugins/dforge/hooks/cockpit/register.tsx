@@ -63,6 +63,7 @@ import {
   planWithUpdate,
   positive,
   rampColor,
+  reconcileStep,
   remoteRuns,
   repoFromPorcelain,
   repoName,
@@ -167,6 +168,12 @@ function autoContinuePrompt(root: string, plan: string | null): string {
 const WATCHDOG_MS = 60_000
 const DEFER_CAP_MS = 1_800_000
 const STALL_MS = 180_000
+// How long a bound run may go with no live turn while only background work
+// holds it before the watchdog asks the session to look at that work, and how
+// many such prompts in a row may find the same launches running before the
+// pending stage's failure is booked in place of a further prompt.
+const RECONCILE_MS = 1_200_000
+const RECONCILE_CAP = 3
 // How long a Done held for background work waits, once the work ends, for the turn its notification wakes.
 const RELEASE_GRACE_MS = 5_000
 // The prompt.submit origins that are the person's own request, or auto run's.
@@ -179,6 +186,9 @@ const DETAIL_EVERY = 5
 const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch', 'switch-resume': 'switch-resume' }
 function stallPrompt(root: string): string {
   return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
+}
+function reconcilePrompt(root: string): string {
+  return `Background work has run 20 minutes since the last turn with no notification. Run \`bash "${root}/scripts/in-flight"\`. Stop with TaskStop each launch idle 30 minutes or more, and record a \`Ruling:\` line naming the task it served and that its result is void; leave the others running. Then continue the run, and end the turn again if only waiting remains.`
 }
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
@@ -374,6 +384,8 @@ export const register: Register = on => {
     await readRun($)
     await trackAutoRun($)
     S.watchedSince = await $.clock.now()
+    S.reconciledAt = null
+    S.reconcileSeen = { key: '', count: 0 }
     await beat($)
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
@@ -2415,6 +2427,10 @@ const S = {
   autoDeferredSince: null as number | null,
   // When the last stalled call failed: the watchdog waits STALL_MS before the next.
   stallFailedAt: null as number | null,
+  // When the watchdog last submitted a reconcile prompt, and how many in a row
+  // found the same launches running under the same pending action.
+  reconciledAt: null as number | null,
+  reconcileSeen: { key: '', count: 0 },
   // The watchdog's timer, every WATCHDOG_MS.
   watchdog: null as Timer | null,
   // The roots --mode last named, and the checkout and the
@@ -2679,6 +2695,17 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
   }
 }
 
+// A launch that never reports would hold the stage forever: book it as a
+// failure, so the second one stops the run with a reason.
+async function bookStageFailure($: EngineInterface, stage: AutoStage, why: string) {
+  S.autoDeferredSince = null
+  const owner = await $.session.id()
+  const code = await autoRunCall($, owner, ['failure', '--reason', why])
+  if (code === 0) scheduleAutoAct($, stage, AUTO_RETRY_MS)
+  else if (code === 5) await endStoppedRun($)
+  else await endUnboundRun($, owner, `${why}, and the failure could not be booked (exit ${code})`)
+}
+
 async function autoStage($: EngineInterface, stage: AutoStage) {
   const auto = await readAutoRun($)
   if (auto === null || !auto.active || auto.pending !== AUTO_STAGE_PENDING[stage]) {
@@ -2696,15 +2723,7 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       scheduleAutoAct($, stage, AUTO_RETRY_MS)
       return
     }
-    // A launch that never reports would hold the stage forever: book it as a
-    // failure, so the second one stops the run with a reason.
-    S.autoDeferredSince = null
-    const owner = await $.session.id()
-    const why = `a background launch kept the ${stage} waiting 30 minutes`
-    const code = await autoRunCall($, owner, ['failure', '--reason', why])
-    if (code === 0) scheduleAutoAct($, stage, AUTO_RETRY_MS)
-    else if (code === 5) await endStoppedRun($)
-    else await endUnboundRun($, owner, `${why}, and the failure could not be booked (exit ${code})`)
+    await bookStageFailure($, stage, `a background launch kept the ${stage} waiting 30 minutes`)
     return
   }
   S.autoDeferredSince = null
@@ -2881,7 +2900,10 @@ async function watchdogTick($: EngineInterface) {
   if (S.isTurnLive || S.autoBusy) return
   const auto = await readAutoRun($)
   if (auto === null || !auto.active) return
-  if (await isMainBackground($)) return
+  if (await isMainBackground($)) {
+    await reconcileBackground($, auto)
+    return
+  }
   const now = await read($, activity)
   if (now.kind !== 'idle' && now.kind !== 'failed') return
   const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.autoActedAt ?? 0, (auto.stalledAt ?? 0) * 1000)
@@ -2900,6 +2922,34 @@ async function watchdogTick($: EngineInterface) {
   S.stallFailedAt = code === 0 || code === 5 ? null : stamp
   if (code === 5) await endStoppedRun($)
   else if (code === 0 && !S.isTurnLive) await $.prompt.submit({ text: stallPrompt($.plugin.root), asUser: true }).catch(() => undefined)
+}
+
+async function backgroundKey($: EngineInterface): Promise<string> {
+  const agents = (await read($, spawns)).filter(one => !one.isDone).map(one => `a:${one.agentId}`)
+  const commands = (await read($, shells)).filter(one => (one.agentId ?? null) === null && !isServiceCommand(one.command)).map(one => `s:${one.id}`)
+  return [...agents, ...commands].sort().join(',')
+}
+
+// A bound run with no live turn that only background work holds: a launch that
+// hangs never notifies, so each RECONCILE_MS the session is asked to look at
+// its launches. That prompt's turn restarts autoStage's deferral clock, so a
+// stage held by work that never changes is failed here instead, once
+// RECONCILE_CAP prompts in a row found the same launches running.
+async function reconcileBackground($: EngineInterface, auto: CockpitAutoRun) {
+  const now = await read($, activity)
+  if (now.kind !== 'idle' && now.kind !== 'background' && now.kind !== 'failed') return
+  const stamp = await $.clock.now()
+  const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.reconciledAt ?? 0)
+  if (stamp - last <= RECONCILE_MS) return
+  const stage = WATCHED_STAGES[auto.pending ?? '']
+  const step = reconcileStep(S.reconcileSeen, `${auto.pending ?? ''}|${await backgroundKey($)}`, stage !== undefined, RECONCILE_CAP)
+  S.reconciledAt = stamp
+  S.reconcileSeen = step.seen
+  if (step.action === 'fail' && stage !== undefined) {
+    await bookStageFailure($, stage, `${RECONCILE_CAP} reconcile prompts left the ${stage} waiting on background work`)
+    return
+  }
+  if (!S.isTurnLive) await $.prompt.submit({ text: reconcilePrompt($.plugin.root), asUser: true }).catch(() => undefined)
 }
 
 // The run stopped while the session was idle: record it, and give the model a

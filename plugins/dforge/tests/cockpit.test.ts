@@ -39,6 +39,7 @@ import {
   hasUnresolvedRows,
   isAtLeast,
   isServiceCommand,
+  reconcileStep,
   levelOf,
   limitForecast,
   modelName,
@@ -620,6 +621,28 @@ describe('budget rule', () => {
 })
 
 describe('pane helpers', () => {
+  test('reconcileStep prompts three times for the same launches, then fails the stage in place of a fourth prompt', () => {
+    let seen = { key: '', count: 0 }
+    const actions: string[] = []
+    for (let i = 0; i < 4; i++) {
+      const step = reconcileStep(seen, 'compact|a:agent-1', true, 3)
+      actions.push(step.action)
+      seen = step.seen
+    }
+    expect(actions).toEqual(['prompt', 'prompt', 'prompt', 'fail'])
+    expect(seen).toEqual({ key: '', count: 0 })
+  })
+
+  test('reconcileStep restarts its count when a launch ends or the pending action changes, and never fails without a stage', () => {
+    let seen = reconcileStep({ key: '', count: 0 }, 'compact|a:agent-1,a:agent-2', true, 3).seen
+    seen = reconcileStep(seen, 'compact|a:agent-1,a:agent-2', true, 3).seen
+    seen = reconcileStep(seen, 'compact|a:agent-1,a:agent-2', true, 3).seen
+    expect(seen.count).toBe(3)
+    expect(reconcileStep(seen, 'compact|a:agent-1', true, 3)).toEqual({ action: 'prompt', seen: { key: 'compact|a:agent-1', count: 1 } })
+    expect(reconcileStep(seen, 'clear|a:agent-1,a:agent-2', true, 3).action).toBe('prompt')
+    expect(reconcileStep({ key: '|a:agent-1', count: 9 }, '|a:agent-1', false, 3)).toEqual({ action: 'prompt', seen: { key: '|a:agent-1', count: 10 } })
+  })
+
   test('draw meters, durations and git state', () => {
     expect(bar(0.5, 10)).toBe('▰▰▰▰▰▱▱▱▱▱')
     expect(bar(0.99, 10)).toBe('▰▰▰▰▰▰▰▰▰▱')
@@ -5387,6 +5410,21 @@ async function settle(clock: ReturnType<typeof world>) {
 const pendingOf = (files: NonNullable<World['files']>) => (JSON.parse(files[AUTO]!.text) as { pending: unknown }).pending
 
 describe('auto run', () => {
+  const spawnTask4 = ($: Parameters<TestBody>[0]) =>
+    $.agent.spawn({
+      tool_use_id: 'toolu_1',
+      prompt: 'Implement task 4',
+      description: 'Task 4',
+      subagentType: 'dforge:impl-sonnet-low',
+      provider: { plugin: 'dforge', tier: 'user' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+      fork: false,
+    })
+
+  const RECONCILE_PROMPT =
+    /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Then continue the run, and end the turn again if only waiting remains\.$/
+
   test('compacts on the sentinel, books it and submits the continue prompt', async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
@@ -6020,7 +6058,7 @@ describe('auto run', () => {
       await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
       await settle(clock)
       await clock.advance(1_805_000)
-      expect(w.prompts).toEqual([prompt])
+      expect(w.prompts).toEqual([expect.stringMatching(RECONCILE_PROMPT), prompt])
       expect(w.compacts).toEqual([])
       if (code === 1) {
         expect(w.autoRuns).toContain('--session sess-1 stop --reason a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1)')
@@ -6277,6 +6315,87 @@ describe('auto run', () => {
     await $.turn.complete({ answer: 'The server is up.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await clock.advance(600_000)
     expect(w.autoRuns).toContain('--session sess-1 stalled')
+  })
+
+  test('a background agent alone holds a bound run, and its ending frees the run', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await spawnTask4($)
+    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(1_100_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    expect(w.prompts).toEqual([])
+    await $.turn.complete({ answer: 'Done.', durationMs: 1, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
+    await clock.advance(60_000)
+    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
+  })
+
+  for (const holder of ['agent', 'shell'] as const) {
+    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, async ($, on) => {
+      const files = autoFiles({ pending: null })
+      const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) }
+      const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      if (holder === 'agent') await spawnTask4($)
+      else await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
+      await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await clock.advance(1_200_000)
+      expect(w.prompts).toEqual([])
+      await clock.advance(60_000)
+      expect(w.prompts).toEqual([expect.stringMatching(RECONCILE_PROMPT)])
+      await clock.advance(1_200_000)
+      expect(w.prompts).toHaveLength(1)
+      await clock.advance(60_000)
+      expect(w.prompts).toHaveLength(2)
+      expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
+    })
+  }
+
+  test('submits no reconcile prompt outside an auto run', async ($, on) => {
+    const files = autoFiles({ active: false, pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await spawnTask4($)
+    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(1_500_000)
+    expect(w.prompts).toEqual([])
+  })
+
+  test('submits no reconcile prompt while a turn is live', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await spawnTask4($)
+    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.start({ text: 'How is Task 4 going?', turnId: 't2' })
+    await clock.advance(1_500_000)
+    expect(w.prompts).toEqual([])
+  })
+
+  test("a pending stage's reconcile prompt comes before its 30-minute failure", async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await spawnTask4($)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    await clock.advance(1_265_000)
+    expect(w.prompts).toEqual([expect.stringMatching(RECONCILE_PROMPT)])
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+    await clock.advance(545_000)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toHaveLength(1)
+    expect(w.compacts).toEqual([])
   })
 
   test('leaves the run alone while a turn runs', async ($, on) => {

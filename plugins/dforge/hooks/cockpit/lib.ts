@@ -1385,6 +1385,23 @@ export function endsOnSentinel(answer: string, pending: string | null): boolean 
 }
 
 /**
+ * The next step for a bound run held only by background work, taken every
+ * RECONCILE_MS: another prompt, or, once `cap` prompts in a row found the same
+ * launches under the same pending action, the failure of the stage that action
+ * names (`isStaged`) in place of a further prompt.
+ */
+export function reconcileStep(
+  seen: { key: string; count: number },
+  key: string,
+  isStaged: boolean,
+  cap: number,
+): { action: 'prompt' | 'fail'; seen: { key: string; count: number } } {
+  const count = seen.key === key ? seen.count : 0
+  if (isStaged && count >= cap) return { action: 'fail', seen: { key: '', count: 0 } }
+  return { action: 'prompt', seen: { key, count: count + 1 } }
+}
+
+/**
  * An auto run's compaction point (reference/auto-run.md): the task budget, or
  * 90% of min(autoCompactWindow, window) in the high regime.
  */
