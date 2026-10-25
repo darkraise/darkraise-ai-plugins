@@ -32,14 +32,22 @@ BASE_SHA=$(git merge-base origin/main HEAD)  # the commit the work started from;
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
-**2. Dispatch code reviewer subagent:**
+**2. Write the diff file and dispatch the reviewer:**
 
-Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md](references/code-reviewer.md)
+`scripts/review-package` needs a plan, so outside one write the diff file yourself:
+
+```bash
+DIFF_FILE="$(bash <plugin-root>/scripts/dforge-path state)/review-$(git rev-parse --short "$HEAD_SHA").diff"
+mkdir -p "$(dirname "$DIFF_FILE")"
+{ git log --oneline "$BASE_SHA..$HEAD_SHA"; echo; git diff --stat "$BASE_SHA..$HEAD_SHA"; echo; git diff -U10 "$BASE_SHA..$HEAD_SHA"; } > "$DIFF_FILE"
+```
+
+Dispatch `dforge:judge-opus` as `subagent_type`, with no `model` or `effort` argument, filling the template at [code-reviewer.md](references/code-reviewer.md). The judge is read-only and has no shell: the diff file is its view of the change.
 
 **Placeholders:**
 - `[DESCRIPTION]` - Brief summary of what you built
 - `[PLAN_OR_REQUIREMENTS]` - What it should do
-- `[DIFF_FILE]` - `none`, or a diff file you wrote for the reviewer
+- `[DIFF_FILE]` - REQUIRED: the diff file you wrote above
 - `[BASE_SHA]` - Starting commit
 - `[HEAD_SHA]` - Ending commit
 
@@ -66,8 +74,9 @@ You: Let me request code review before proceeding.
 BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
 HEAD_SHA=$(git rev-parse HEAD)
 
-[Dispatch code reviewer subagent]
+[Write the diff file, then dispatch dforge:judge-opus]
   DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
+  DIFF_FILE: .dforge/review-3df7661.diff
   PLAN_OR_REQUIREMENTS: Task 2 from <docs>/plans/deployment-plan.md
   BASE_SHA: a7981ec
   HEAD_SHA: 3df7661

@@ -203,11 +203,7 @@ your own: QA commits on this branch.
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
    with `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
    spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`. Dispatch the
-   `primary` as `subagent_type`; the template's own
-   "Subagent (general-purpose)" line is not the seat here. The judge
-   agents are read-only and carry no shell: the package file means the
-   template's git fallback never applies, and neither do its Read-Only
-   Review section's `git show`/`git diff`/`git worktree` instructions. A
+   `primary` as `subagent_type`, in place of the template's seat line. A
    Codex-host plan takes its final-review seat from
    [native-codex.md](native-codex.md) instead.
 2. **Codex round.** Run the round in
