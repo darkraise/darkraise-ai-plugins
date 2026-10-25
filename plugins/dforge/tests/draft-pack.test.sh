@@ -77,5 +77,50 @@ run --join docs/plan.md
 check "slices with nothing missing: exit 3" "$code" "3"
 check "slices with nothing missing: plan unchanged" "$(unchanged)" "yes"
 
+reset 11; printf '\n### Task 1: Step 1\n\nBody 1.\n' >> docs/plan.md; cp docs/plan.md "$TMP/before.md"
+slice 10 11; slice 4 5; slice 6 9; slice 2 3
+run --join docs/plan.md
+check "numeric order: exit 0" "$code" "0"
+check "numeric order: tasks 1-11 in order" "$(grep -o '^### Task [0-9]*' docs/plan.md | tr -d '\n')" "### Task 1### Task 2### Task 3### Task 4### Task 5### Task 6### Task 7### Task 8### Task 9### Task 10### Task 11"
+
+reset 3
+run --join docs/plan.md
+check "tasks missing and no slices: exit 3" "$code" "3"
+check "tasks missing and no slices: plan unchanged" "$(unchanged)" "yes"
+
+reset 4; slice 1 2; printf '### Task 4: Step 4\n\nBody 4.\n\n### Task 3: Step 3\n\nBody 3.\n' > "$D/tasks-4-3.md"
+run --join docs/plan.md
+check "backwards slice name: exit 3" "$code" "3"
+check "backwards slice name: the message" "$(grep -c 'tasks-4-3.md runs backwards' <<<"$out")" "1"
+check "backwards slice name: plan unchanged" "$(unchanged)" "yes"
+
+reset 2; printf '# Demo Implementation Plan\n\n## Task index\n\n- Step 1\n- Step 2\n\n---\n' > docs/plan.md; cp docs/plan.md "$TMP/before.md"; slice 1 2
+run --join docs/plan.md
+check "no numbered Task index: exit 3" "$code" "3"
+check "no numbered Task index: plan unchanged" "$(unchanged)" "yes"
+check "no numbered Task index: slices kept" "$(ls "$D")" "tasks-1-2.md"
+
+rm -rf "$REPO/.dforge"; printf '# Demo Implementation Plan\n\n---\n' > docs/plan.md; cp docs/plan.md "$TMP/before.md"
+run --join docs/plan.md
+check "no Task index heading: exit 3" "$code" "3"
+check "no Task index heading: plan unchanged" "$(unchanged)" "yes"
+
+for line in '**Implementer:** dforge:impl-opus-high' '**Executor:** codex' '**Evaluation:** spec 0' '**Override:** because' '**Approach:** inline' '**Lenses:** security'; do
+  reset 2; slice 1 2; printf '\n%s\n' "$line" >> "$D/tasks-1-2.md"
+  run --join docs/plan.md
+  check "assignment line ${line%%:*}: exit 3" "$code" "3"
+  check "assignment line ${line%%:*}: plan unchanged" "$(unchanged)" "yes"
+  check "assignment line ${line%%:*}: slices kept" "$(ls "$D")" "tasks-1-2.md"
+done
+check "assignment line: the message names it" "$(grep -c 'tasks-1-2.md carries a \*\*Lenses:\*\* line' <<<"$out")" "1"
+
+reset 2; slice 1 2; printf '\n```\n**Implementer:** dforge:impl-opus-high\n```\n' >> "$D/tasks-1-2.md"
+run --join docs/plan.md
+check "assignment line inside a code fence: exit 0" "$code" "0"
+
+reset 2; slice 1 2
+run --join docs/plan.md
+check "the state directory ignores itself" "$(cat "$REPO/.dforge/.gitignore" 2>/dev/null)" "*"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -7,7 +7,8 @@
 #
 # Usage: draft-pack --join PLAN_FILE
 # Exit: 0 joined, or nothing to join; 2 usage or no such plan; 3 the slices do
-# not cover the missing tasks.
+# not cover the missing tasks, a slice carries an assignment line, or the plan
+# has no readable Task index.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -22,6 +23,7 @@ plan=$(plan_locate "$2")
 ctx=$(_plan_ctx "$plan")
 root=$(git -C "$ctx" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$ctx")
 dir="$(dforge_dir state "$root")/drafts/$(basename "$plan" .md)"
+dforge_state_ignore "$root"
 
 refuse() { echo "draft-pack: $1" >&2; exit 3; }
 span() { awk -v a="$1" -v b="$2" 'BEGIN { for (i = a; i <= b; i++) printf "%d ", i }'; }
@@ -35,6 +37,7 @@ index=$(tr -d '\r' < "$plan" | awk '
   on && (/^## / || /^### / || /^---/) { on = 0; stop = 1; next }
   on && /^[0-9]+\. / { sub(/\..*/, ""); print }
 ')
+[ -n "$index" ] || refuse "no numbered Task index found in $plan"
 held=$(plan_tasks "$plan" | cut -f1)
 missing=$(awk 'NR == FNR { if ($0 != "") held[$0] = 1; next } $0 != "" && !($0 in held) { printf "%d ", $0 }' \
   <(printf '%s\n' "$held") <(printf '%s\n' "$index"))
@@ -60,6 +63,11 @@ while IFS=$'\037' read -r a b f; do
   [ "$a" -le "$b" ] || refuse "$(basename "$f") runs backwards"
   got=$(plan_tasks "$f" | cut -f1 | awk '{ printf "%d ", $0 }')
   [ "$got" = "$(span "$a" "$b")" ] || refuse "$(basename "$f") holds tasks [${got% }], not $a-$b"
+  planted=$(tr -d '\r' < "$f" | awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    !found && /^\*\*(Implementer|Executor|Evaluation|Override|Approach|Lenses):\*\*/ { found = 1; h = $0; sub(/:\*\*.*/, "", h); print substr(h, 3) }
+  ')
+  [ -z "$planted" ] || refuse "$(basename "$f") carries a **$planted:** line; the session assigns after the join"
   covered="$covered$(span "$a" "$b")"
 done <<<"$rows"
 [ "$covered" = "$missing" ] || refuse "the slices cover [${covered% }], the plan is missing [${missing% }]"
