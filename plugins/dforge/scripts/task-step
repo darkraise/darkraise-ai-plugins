@@ -7,6 +7,7 @@
 #
 # Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset]
 #        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR]
+#        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]
 # A start that finds the task's state file keeps it (and writes no second
 # assigned line) unless --reset is given.
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
@@ -18,8 +19,184 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]"; }
 
+rr_usage() {
+  echo "usage: task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]" >&2
+  exit 2
+}
+
+rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-indented, placeholders filled from RR_*
+  awk -v findings="$2" '
+    function rep(s, key, val,   out, i) {
+      out = ""
+      while ((i = index(s, key)) > 0) { out = out substr(s, 1, i - 1) val; s = substr(s, i + length(key)) }
+      return out s
+    }
+    BEGIN { while ((getline line < findings) > 0) fl = fl (fl == "" ? "" : "\n") line }
+    { sub(/\r$/, "") }
+    !fenced { if ($0 == "```") fenced = 1; next }
+    !body { if ($0 ~ /^[ ]+prompt: \|$/) body = 1; next }
+    $0 == "```" { exit }
+    {
+      sub(/^    /, "")
+      if ($0 == "[FINDINGS]") { print fl; next }
+      $0 = rep($0, "[BRIEF_FILE]", ENVIRON["RR_BRIEF"])
+      $0 = rep($0, "[REPORT_FILE]", ENVIRON["RR_REPORT"])
+      $0 = rep($0, "[FIX_BASE_SHA]", ENVIRON["RR_FIX_BASE"])
+      $0 = rep($0, "[HEAD_SHA]", ENVIRON["RR_HEAD"])
+      $0 = rep($0, "[DIFF_FILE]", ENVIRON["RR_DIFF"])
+      print
+    }
+  ' "$1"
+}
+
+# A subshell body: every exit below leaves only the subshell, so the
+# dispatch branch passes the status on.
+cmd_rereview() (
+  local here plan_arg plan tmp src header ws state first t scores row risk
+  local fix bullets nopen file review_head round new_round head_ref head_sha fix_base fix_base_sha
+  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids
+  local tasks=() base_arg="" head_arg="" covered=0
+  here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  . "$here/lib/plan.sh"
+  [ $# -ge 2 ] || rr_usage
+  plan_arg=$1; shift
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --base) [ $# -ge 2 ] && [ -n "$2" ] || rr_usage; base_arg=$2; shift 2 ;;
+      --head) [ $# -ge 2 ] && [ -n "$2" ] || rr_usage; head_arg=$2; shift 2 ;;
+      --covered) covered=1; shift ;;
+      *) [[ $1 =~ ^[0-9]+$ ]] || rr_usage; tasks+=("$((10#$1))"); shift ;;
+    esac
+  done
+  [ "${#tasks[@]}" -ge 1 ] || rr_usage
+
+  plan=$(plan_locate "$plan_arg")
+  [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+  dforge_stores_init "$(_plan_ctx "$plan")"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  src=$tmp/plan.md
+  if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2> "$tmp/err"; then
+    cat "$tmp/err" >&2
+    exit 4
+  fi
+  header=$(plan_header "$src")
+  if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
+    echo "task-step: a Host: codex plan runs the Codex loop; task-step does not apply" >&2
+    exit 2
+  fi
+  plan_require_same_project "$plan"
+  for t in "${tasks[@]}"; do
+    plan_task_text "$src" "$t" >/dev/null || { echo "task $t not found in $plan" >&2; exit 3; }
+  done
+
+  first=${tasks[0]}
+  ids=$(IFS=,; echo "${tasks[*]}")
+  ws=$(bash "$here/sdd-workspace" "$plan")
+  state=$ws/task-$first-step.json
+  review_head=""
+  [ ! -f "$state" ] || review_head=$(jq -r '.reviewHead // empty' "$state" | tr -d '\r')
+  if [ -z "$review_head" ]; then
+    echo "task-step: rereview before review: run task-step review for task $first first" >&2
+    exit 6
+  fi
+  round=$(jq -r '.round // 0' "$state" | tr -d '\r')
+  new_round=$((round + 1))
+
+  fix=$ws/task-$first-fix-$new_round.md
+  if [ ! -f "$fix" ]; then
+    echo "task-step: no fix message $fix; write it before rereview" >&2
+    exit 6
+  fi
+  bullets=$(awk '{ sub(/\r$/, "") } /^- / { print; next } { exit }' "$fix")
+  nopen=$(printf '%s\n' "$bullets" | awk 'NF { n++ } END { print n + 0 }')
+  if [ "$nopen" -lt 1 ]; then
+    echo "task-step: $fix must start with one '- <file>: <finding>' bullet per open finding" >&2
+    exit 2
+  fi
+  file=${bullets%%$'\n'*}
+  file=${file#- }
+  file=${file%%: *}
+  file=$(printf '%s' "$file" | tr -d '`' | sed -E 's/:[0-9][0-9,-]*$//; s#^\./##')
+
+  head_ref=$head_arg
+  [ -n "$head_ref" ] || head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
+  [ -n "$head_ref" ] || head_ref=HEAD
+  head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; exit 2; }
+  fix_base=$base_arg
+  [ -n "$fix_base" ] || fix_base=$review_head
+  fix_base_sha=$(git rev-parse --verify --quiet "$fix_base^{commit}") || { echo "bad BASE: $fix_base" >&2; exit 2; }
+
+  scores=$(plan_scores "$src")
+  risk3=0
+  for t in "${tasks[@]}"; do
+    row=$(awk -F'\t' -v n="$t" '$1 == n' <<<"$scores")
+    risk=$(cut -f3 <<<"$row")
+    case $risk in 0|1|2) ;; *) risk3=1 ;; esac
+  done
+
+  lines=0 over=0 touched=0
+  numstat=$(git -c core.quotepath=off diff --numstat --no-renames "$fix_base_sha..$head_sha")
+  while IFS=$'\t' read -r a d f; do
+    [ -n "$f" ] || continue
+    f=${f%$'\r'}
+    if [ "$a" = "-" ] || [ "$d" = "-" ]; then over=1; else lines=$((lines + a + d)); fi
+    [ "$f" != "$file" ] || touched=1
+  done <<<"$numstat"
+
+  skip=0 why=""
+  if [ "$nopen" -ne 1 ]; then why="$nopen findings open"
+  elif [ "$risk3" -eq 1 ]; then why="risk 3 or unscored"
+  elif [ "$covered" -ne 1 ]; then why="--covered not given"
+  elif [ "$over" -eq 1 ]; then why="binary file in the fix"
+  elif [ "$lines" -gt 3 ]; then why="$lines changed lines"
+  elif [ "$touched" -ne 1 ]; then why="the fix does not touch $file"
+  else skip=1
+  fi
+
+  pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; exit 2; }
+  diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
+
+  prompt=$ws/task-$first-rereview-$new_round-prompt.md
+  if [ "$skip" -eq 0 ]; then
+    tpl=$here/../skills/subagent-driven-development/references/re-review-prompt.md
+    [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
+    printf '%s\n' "$bullets" > "$tmp/findings"
+    RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_FIX_BASE=$fix_base_sha \
+      RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
+    if grep -qE '\[(BRIEF_FILE|FINDINGS|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
+      echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
+      exit 2
+    fi
+    cp "$tmp/prompt" "$prompt"
+  fi
+
+  now=$(date +%s)
+  jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
+    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" \
+    '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)' \
+    "$state" > "$state.tmp"
+  mv "$state.tmp" "$state"
+
+  if [ "$skip" -eq 1 ]; then
+    printf 'task %s: re-review round %s: packaged %s..%s, skipped\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
+    printf 're-review: skipped (%s changed lines, 1 finding, %s)\n' "$lines" "$file"
+  else
+    printf 'task %s: re-review round %s: packaged %s..%s, prompt written (not skipped: %s)\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}" "$why"
+    printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
+  fi
+  printf 'state: base %s review-head %s round %s t0 %s\n' \
+    "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
+  DFORGE_BUDGET_CALLER="task-step:rereview" bash "$here/context-size" 2>/dev/null || true
+)
+
+if [ "${1:-}" = rereview ]; then
+  shift
+  cmd_rereview "$@"
+  exit $?
+fi
 [ $# -ge 3 ] || usage
 sub=$1; plan_arg=$2; shift 2
 case $sub in start|review) ;; *) usage ;; esac

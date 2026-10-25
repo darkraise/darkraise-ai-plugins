@@ -413,5 +413,255 @@ step review docs/plan.md 8
 check "review: a failed route falls back to judge-opus and says why" \
   "$(grep -c "^seat: dforge:judge-opus prompt: $WS/task-8-review-prompt.md (review-route exited 2: review-route: Task 8: the Evaluation line does not parse" <<<"$out")" "1"
 
+# --- rereview: the skip rule, the package and the state ---
+# The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
+RR_S="$HERE/../scripts"
+RR_TMP=$TMP/rr
+mkdir -p "$RR_TMP"
+RR_REPO=$RR_TMP/repo
+rr_run() { # rr_run <args...> — task-step in the fixture repo; sets rr_out, rr_err, rr_rc
+  rr_out=$(cd "$RR_REPO" && env HOME="$RR_TMP/home" DR_CODEX_SESSION_DIR="$RR_TMP/sessions" CLAUDE_CODE_SESSION_ID=rr-test \
+    GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-step" "$@" 2>"$RR_TMP/err"); rr_rc=$?
+  rr_err=$(cat "$RR_TMP/err")
+}
+rr_git() { git -C "$RR_REPO" "$@"; }
+rr_state() { # rr_state <task> <jq filter>
+  jq -r "$2" "$RR_WS/task-$1-step.json" | tr -d '\r'
+}
+rr_edit() { # rr_edit <file> <mod|add1|add3|add4|bin> — change a fixture file
+  local f=$RR_REPO/$1
+  RR_N=$((RR_N + 1))
+  case $2 in
+    mod) awk -v n="$RR_N" 'NR == 2 { print "changed " n; next } { print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f" ;;
+    add1) printf 'a%s\n' "$RR_N" >> "$f" ;;
+    add3) printf 'a%s\nb\nc\n' "$RR_N" >> "$f" ;;
+    add4) printf 'a%s\nb\nc\nd\n' "$RR_N" >> "$f" ;;
+    bin) printf 'x\000y%s' "$RR_N" >> "$f" ;;
+  esac
+}
+rr_fix() { # rr_fix <task> <round> <bullets separated by |>
+  { printf '%s\n' "$3" | tr '|' '\n'; printf '\nFixed.\n'; } > "$RR_WS/task-$1-fix-$2.md"
+}
+rr_reset() { # back to the reviewed head with the recorded states
+  rr_git reset -q --hard "$RR_R0"
+  rm -f "$RR_WS"/task-*-fix-*.md "$RR_WS"/task-*-rereview-*-prompt.md
+  cp "$RR_TMP/state1.0" "$RR_WS/task-1-step.json"
+  cp "$RR_TMP/state2.0" "$RR_WS/task-2-step.json"
+}
+rr_verdict() { # rr_verdict <task> <round> — the skip line, or "prompt", or "none"
+  if grep -q '^re-review: ' <<<"$rr_out"; then grep '^re-review: ' <<<"$rr_out"
+  elif [ -f "$RR_WS/task-$1-rereview-$2-prompt.md" ]; then echo prompt
+  else echo none; fi
+}
+rr_case() { # rr_case <name> <task> <flags> <bullets> <edits> <want> — one fix, one rereview
+  local e
+  rr_reset
+  for e in $5; do rr_edit "${e%%:*}" "${e#*:}"; done
+  rr_git add -A && rr_git commit -qm fix
+  rr_fix "$2" 1 "$4"
+  # shellcheck disable=SC2086
+  rr_run rereview docs/plan.md "$2" $3
+  check "rereview $1" "$rr_rc $(rr_verdict "$2" 1)" "$6"
+}
+
+mkdir -p "$RR_TMP/home" "$RR_REPO/docs"
+git init -q "$RR_REPO"
+rr_git config user.name t
+rr_git config user.email t@example.invalid
+sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
+|# Rereview Fixture Plan
+|
+|**Goal:** Fixture.
+|
+|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|
+|## Task index
+|
+|1. Small
+|2. Risky
+|3. Unreviewed
+|
+|### Task 1: Small
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 2: Risky
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-opus-high
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
+|
+|### Task 3: Unreviewed
+|
+|**Files:**
+|- Modify: `other.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+PLAN
+awk '{ print } /^\*\*Goal:\*\*/ { print ""; print "**Host:** codex" }' "$RR_REPO/docs/plan.md" > "$RR_REPO/docs/codex-plan.md"
+seq 1 10 | sed 's/^/line /' > "$RR_REPO/app.txt"
+cp "$RR_REPO/app.txt" "$RR_REPO/other.txt"
+cp "$RR_REPO/app.txt" "$RR_REPO/test.txt"
+printf 'a\000b' > "$RR_REPO/bin.dat"
+rr_git add -A && rr_git commit -qm base
+RR_N=0
+
+rr_run start docs/plan.md 1
+check "rereview fixture: start 1" "$rr_rc" "0"
+rr_run start docs/plan.md 2
+check "rereview fixture: start 2" "$rr_rc" "0"
+rr_run start docs/plan.md 3
+check "rereview fixture: start 3" "$rr_rc" "0"
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm work
+rr_run review docs/plan.md 1
+check "rereview fixture: review 1" "$rr_rc" "0"
+rr_run review docs/plan.md 2
+check "rereview fixture: review 2" "$rr_rc" "0"
+RR_WS=$(cd "$RR_REPO" && env HOME="$RR_TMP/home" bash "$RR_S/sdd-workspace" docs/plan.md)
+RR_R0=$(rr_git rev-parse HEAD)
+cp "$RR_WS/task-1-step.json" "$RR_TMP/state1.0"
+cp "$RR_WS/task-2-step.json" "$RR_TMP/state2.0"
+
+# The skip rule: one open finding, at most 3 changed lines (test files
+# included) touching the finding's file, a task below risk 3, and --covered.
+rr_case "skips a one-line fix" 1 --covered "- app.txt: wrong value" "app.txt:mod" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
+rr_case "skips exactly 3 changed lines" 1 --covered "- app.txt: wrong value" "app.txt:add3" "0 re-review: skipped (3 changed lines, 1 finding, app.txt)"
+rr_case "counts a test file edit toward the limit" 1 --covered "- app.txt: wrong value" "app.txt:mod test.txt:mod" "0 prompt"
+rr_case "skips a small fix that also adds a test line" 1 --covered "- app.txt: wrong value" "app.txt:add1 test.txt:add1" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
+rr_case "does not skip 4 changed lines" 1 --covered "- app.txt: wrong value" "app.txt:add4" "0 prompt"
+rr_case "does not skip without --covered" 1 "" "- app.txt: wrong value" "app.txt:mod" "0 prompt"
+rr_case "does not skip with two open findings" 1 --covered "- app.txt: wrong value|- other.txt: stale" "app.txt:mod" "0 prompt"
+rr_case "does not skip a fix that edits only another test file" 1 --covered "- app.txt: wrong value" "test.txt:mod" "0 prompt"
+rr_case "does not skip a fix to another file than the finding's" 1 --covered "- app.txt: wrong value" "other.txt:mod" "0 prompt"
+rr_case "does not skip a binary fix" 1 --covered "- bin.dat: wrong blob" "bin.dat:bin" "0 prompt"
+rr_case "does not skip a risk 3 task" 2 --covered "- app.txt: wrong value" "app.txt:mod" "0 prompt"
+rr_case "reads a backticked finding path with a line suffix" 1 --covered '- `app.txt:12`: wrong value' "app.txt:mod" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
+
+# A skipped round still packages the fix and advances the state.
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1 --covered
+check "rereview skip: records the head as the review head" "$(rr_state 1 .reviewHead)" "$(rr_git rev-parse HEAD)"
+check "rereview skip: increments the round" "$(rr_state 1 .round)" "1"
+check "rereview skip: records t0" "$([ "$(rr_state 1 .t0)" != null ] && echo yes || echo no)" "yes"
+check "rereview skip: the digest fits 15 lines" "$([ "$(wc -l <<<"$rr_out")" -le 15 ] && echo yes || echo no)" "yes"
+check "rereview skip: the digest names the state" "$(grep -c "^state: base .* review-head $(rr_git rev-parse --short HEAD) round 1 t0 " <<<"$rr_out")" "1"
+check "rereview skip: the digest ends with the budget line" "$(tail -n 1 <<<"$rr_out" | cut -c1-7)" "budget:"
+check "rereview skip: no prompt is written" "$(ls "$RR_WS"/task-1-rereview-*-prompt.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+
+# A written prompt: the judge seat, no unexpanded placeholder, the open
+# findings, the fix base and the diff file.
+rr_reset
+rr_edit app.txt add4
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value|- other.txt: stale"
+rr_run rereview docs/plan.md 1 --covered
+RR_P=$RR_WS/task-1-rereview-1-prompt.md
+check "rereview prompt: the digest names the seat and the file" "$(grep -c "^seat: dforge:judge-sonnet-high prompt: $RR_P\$" <<<"$rr_out")" "1"
+check "rereview prompt: no placeholder is left" "$(grep -cE '\[(BRIEF_FILE|FINDINGS|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$RR_P")" "0"
+check "rereview prompt: the open findings are listed" "$(grep -c '^- app.txt: wrong value$\|^- other.txt: stale$' "$RR_P")" "2"
+check "rereview prompt: the fix base is the recorded review head" "$(grep -c "Fix base:\*\* $RR_R0 " "$RR_P")" "1"
+check "rereview prompt: the head is HEAD" "$(grep -c "Head:\*\* $(rr_git rev-parse HEAD)\$" "$RR_P")" "1"
+RR_DIFF=$(sed -n 's/^\*\*Diff file:\*\* //p' "$RR_P")
+check "rereview prompt: the diff file exists" "$([ -s "$RR_DIFF" ] && echo yes || echo no)" "yes"
+check "rereview prompt: the report and brief paths" "$(grep -c "$RR_WS/task-1-report.md\|$RR_WS/task-1-brief.md" "$RR_P")" "2"
+check "rereview prompt: the fence and indent are removed" "$(grep -c '^```\|^    You are re-reviewing' "$RR_P")" "0"
+
+# Rounds chain: the next round's base is the last round's head.
+RR_H1=$(rr_git rev-parse HEAD)
+rr_edit app.txt add4
+rr_git add -A && rr_git commit -qm fix2
+rr_fix 1 2 "- app.txt: still wrong"
+rr_run rereview docs/plan.md 1 --covered
+check "rereview round 2: writes the round 2 prompt" "$([ -f "$RR_WS/task-1-rereview-2-prompt.md" ] && echo yes || echo no)" "yes"
+check "rereview round 2: the fix base is round 1's head" "$(grep -c "Fix base:\*\* $RR_H1 " "$RR_WS/task-1-rereview-2-prompt.md")" "1"
+check "rereview round 2: the state round is 2" "$(rr_state 1 .round)" "2"
+
+# --base moves the package start, and the skip rule counts from it.
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix-a
+rr_edit app.txt add3
+rr_git add -A && rr_git commit -qm fix-b
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1 --covered
+check "rereview without --base counts from the recorded review head" "$(rr_verdict 1 1)" "prompt"
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix-a
+RR_A=$(rr_git rev-parse HEAD)
+rr_edit app.txt add3
+rr_git add -A && rr_git commit -qm fix-b
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1 --covered --base "$RR_A"
+check "rereview --base counts from the given base" "$(rr_verdict 1 1)" "re-review: skipped (3 changed lines, 1 finding, app.txt)"
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix-a
+RR_A=$(rr_git rev-parse HEAD)
+rr_edit app.txt add3
+rr_git add -A && rr_git commit -qm fix-b
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1 --base "$RR_A"
+check "rereview --base: the prompt's fix base is the given base" "$(grep -c "Fix base:\*\* $RR_A " "$RR_WS/task-1-rereview-1-prompt.md")" "1"
+check "rereview --base: the diff file starts at the given base" "$(sed -n 's/^\*\*Diff file:\*\* //p' "$RR_WS/task-1-rereview-1-prompt.md" | xargs basename | grep -c "^review-$(rr_git rev-parse --short "$RR_A")\.\.")" "1"
+check "rereview --base: the state records it as the base" "$(rr_state 1 .base)" "$RR_A"
+check "rereview --base: the state line shows it" "$(grep -c "^state: base $(rr_git rev-parse --short "$RR_A") " <<<"$rr_out")" "1"
+
+# --head packages up to the task ref and leaves later commits out.
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix-a
+rr_git branch -f rr-task-ref
+rr_edit app.txt add4
+rr_git add -A && rr_git commit -qm later
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1 --covered --head rr-task-ref
+check "rereview --head: skips on the ref's diff alone" "$(rr_verdict 1 1)" "re-review: skipped (2 changed lines, 1 finding, app.txt)"
+check "rereview --head: records the ref's commit as the review head" "$(rr_state 1 .reviewHead)" "$(rr_git rev-parse rr-task-ref)"
+check "rereview --head: records the ref" "$(rr_state 1 .head)" "rr-task-ref"
+
+# A zero-padded task number names the same task.
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 01 --covered
+check "rereview names Task 1 as 01" "$rr_rc $(rr_verdict 1 1)" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
+
+# Refusals write nothing.
+rr_reset
+rr_run rereview docs/plan.md 3
+check "rereview before review exits 6" "$rr_rc" "6"
+rr_reset
+rr_run rereview docs/plan.md 1 --covered
+check "rereview with no fix message exits 6" "$rr_rc" "6"
+check "rereview with no fix message leaves the state alone" "$(cmp -s "$RR_WS/task-1-step.json" "$RR_TMP/state1.0" && echo same || echo changed)" "same"
+printf 'No bullets here.\n' > "$RR_WS/task-1-fix-1.md"
+rr_run rereview docs/plan.md 1
+check "rereview with a fix message that has no bullets exits 2" "$rr_rc" "2"
+rr_reset
+rr_run rereview docs/plan.md 9
+check "rereview of a task not in the plan exits 3" "$rr_rc" "3"
+rr_run rereview docs/codex-plan.md 1
+check "rereview on a Host: codex plan exits 2" "$rr_rc" "2"
+check "rereview on a Host: codex plan writes nothing" "$(ls -A "$(dirname "$RR_WS")/codex-plan" 2>/dev/null | wc -l | tr -d ' ')" "0"
+rr_run rereview docs/plan.md 1 --bogus
+check "rereview with an unknown flag exits 2" "$rr_rc" "2"
+rr_run rereview docs/plan.md 1 --base ""
+check "rereview with an empty --base exits 2" "$rr_rc" "2"
+rr_run rereview docs/plan.md 1 --head ""
+check "rereview with an empty --head exits 2" "$rr_rc" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
