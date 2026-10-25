@@ -67,6 +67,8 @@ import {
   repoFromPorcelain,
   repoName,
   resumeOfferOf,
+  promptRegisters,
+  hasUnresolvedRows,
   runList,
   shellAge,
   runsCut,
@@ -2423,6 +2425,10 @@ const S = {
   latestName: null as string | null,
   // The latest.md path and modification time the resume offer was read for.
   offerRead: '',
+  // What that note offers, and the modification times of the registers its
+  // prompt names when the offer was last decided.
+  offerFound: null as { next: string; prompt: string | null } | null,
+  offerRegisters: null as string | null,
   // A Done held while the main conversation's background work runs: when its
   // chain of turns began, when a turn last ended with the work pending, and
   // that turn's answer, which a Done released with no turn carries.
@@ -3013,14 +3019,33 @@ async function finishPath($: EngineInterface, checkouts: readonly string[], slug
   return paths[paths.length - 1] ?? ''
 }
 
-// The note is read again only when it changes: readRun runs at every turn.
-async function readResumeOffer($: EngineInterface, latest: string, at: number | null) {
+// The note is read again only when it changes, and the registers its prompt
+// names only when theirs do: readRun runs at every turn. A ruling handoff is
+// withdrawn once every register it names is readable and fully resolved, since
+// nothing rewrites the note when the last row closes.
+async function readResumeOffer($: EngineInterface, latest: string, at: number | null, root: string) {
   const key = `${latest}\t${at}`
-  if (S.offerRead === key) return
-  S.offerRead = key
-  const text = at === null ? null : await $.fs.read(latest).catch(() => null)
-  const found = typeof text === 'string' ? resumeOfferOf(text) : null
-  const offer: CockpitResumeOffer | null = found === null || at === null ? null : { at, next: found.next, prompt: found.prompt }
+  if (S.offerRead !== key) {
+    S.offerRead = key
+    const text = at === null ? null : await $.fs.read(latest).catch(() => null)
+    S.offerFound = typeof text === 'string' ? resumeOfferOf(text) : null
+    S.offerRegisters = null
+  }
+  const found = S.offerFound
+  const registers = (found?.prompt == null ? [] : promptRegisters(found.prompt)).map(path => (/^(?:[A-Za-z]:)?[\\/]/.test(path) ? path : `${root}/${path}`))
+  const stats = await Promise.all(registers.map(path => $.fs.stat(path).catch(() => null)))
+  const registerKey = stats.map(info => (info?.kind === 'file' ? info.mtimeMs : '-')).join('\t')
+  if (S.offerRegisters === registerKey) return
+  S.offerRegisters = registerKey
+  let isSettled = registers.length > 0
+  for (const path of registers) {
+    const text = await $.fs.read(path).catch(() => null)
+    if (typeof text !== 'string' || hasUnresolvedRows(text)) {
+      isSettled = false
+      break
+    }
+  }
+  const offer: CockpitResumeOffer | null = found === null || at === null || isSettled ? null : { at, next: found.next, prompt: found.prompt }
   if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
 }
 
@@ -3055,7 +3080,7 @@ async function readRun($: EngineInterface) {
   try {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    await readResumeOffer($, latest, handoffTime)
+    await readResumeOffer($, latest, handoffTime, root)
     const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dforge/sdd`
     const entries = await $.fs.list(base).catch(() => [])
     let newest: { slug: string; path: string; at: number } | null = null

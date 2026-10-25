@@ -36,6 +36,7 @@ import {
   fitBand,
   folderRuns,
   handedOff,
+  hasUnresolvedRows,
   isAtLeast,
   isServiceCommand,
   levelOf,
@@ -48,6 +49,7 @@ import {
   planCandidates,
   planTasks,
   planWithUpdate,
+  promptRegisters,
   remoteRuns,
   repoFromPorcelain,
   repoName,
@@ -189,6 +191,33 @@ const BLOCKED =
   '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/x.md`: 2 of 5 tasks complete; Task 3 is BLOCKED (needs a key).\n**Next:** Your human partner decides: needs a key.\n'
 
 const UNFENCED = RESUMABLE.replace('```\nExecute docs/dforge/plans/2026-10-14-band.md.\n```\n', 'Execute the plan.\n')
+const REGISTER = '/home/me/code/shop/docs/dforge/registers/r.md'
+function registerPrompt(names: string): string {
+  return `Continue the work recorded in ${names}: 1 rows are open (#2 item 2). Rule on the open rows with dforge:brainstorming.`
+}
+/** A next-step handoff for a finished plan whose register still had rows to rule on. */
+function rulingHandoff(): string {
+  return [
+    '# Handoff',
+    '',
+    '## Next session',
+    '',
+    '**Status:** Plan `docs/dforge/plans/x.md` is complete.',
+    '**Next:** Register rows still open (1) in `docs/dforge/registers/r.md`: #2 item 2.',
+    '',
+    'Paste as the first prompt:',
+    '',
+    '```',
+    registerPrompt('`docs/dforge/registers/r.md`'),
+    '```',
+    '',
+  ].join('\n')
+}
+/** A register whose rows carry these states, in order. */
+function register(states: string[]): string {
+  const rows = states.map((state, i) => `| ${i + 1} | item ${i + 1} | - | - | ${state} | - |`)
+  return ['# Register', '', '**Source:** test', '**Covers:** -', '', '| # | Item | Assigned | Acceptance | State | Note |', '|---|---|---|---|---|---|', ...rows, ''].join('\n')
+}
 
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
@@ -4125,6 +4154,22 @@ describe('resume offer', () => {
     expect(resumeOfferOf(UNFENCED)).toEqual({ next: 'Task 4 — wire the band into the pane.', prompt: null })
   })
 
+  test('reads the registers a ruling prompt names', () => {
+    expect(promptRegisters(registerPrompt('`docs/dforge/registers/a.md`, `docs/dforge/registers/b.md`'))).toEqual([
+      'docs/dforge/registers/a.md',
+      'docs/dforge/registers/b.md',
+    ])
+    expect(promptRegisters('Execute `docs/dforge/plans/x.md`.')).toEqual([])
+  })
+
+  test('counts a row as unresolved while it is open, planned, doing or awaiting a check', () => {
+    for (const state of ['open', 'planned', 'doing', 'verify']) expect(hasUnresolvedRows(register(['done', state]))).toBe(true)
+    expect(hasUnresolvedRows(register(['done', 'deferred', 'n/a']))).toBe(false)
+    // An escaped pipe stays inside its cell.
+    expect(hasUnresolvedRows(register(['done']).replace('item 1', 'a \\| b'))).toBe(false)
+    expect(hasUnresolvedRows('# Not a register\n')).toBe(false)
+  })
+
   test('says a handoff under a minute old was just handed off', () => {
     expect(handedOff(59_999)).toBe('handed off just now')
     expect(handedOff(100_000)).toBe('handed off 1m ago')
@@ -4224,6 +4269,36 @@ describe('resume offer', () => {
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'band-resume' })
     expect(prompts).toEqual([expect.stringContaining('resume-execution')])
+  })
+
+  test('offers a ruling handoff while its register has an unresolved row', async ($, on) => {
+    await start($, on, rulingHandoff(), { [REGISTER]: { text: register(['done', 'open']), mtimeMs: 1 } })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeDefined()
+  })
+
+  test('offers nothing for a ruling handoff whose register rows are all resolved', async ($, on) => {
+    await start($, on, rulingHandoff(), { [REGISTER]: { text: register(['done', 'deferred', 'n/a']), mtimeMs: 1 } })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test('withdraws a ruling handoff at the next turn once its last row closes', async ($, on) => {
+    const files: NonNullable<World['files']> = { [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 }, [REGISTER]: { text: register(['done', 'open']), mtimeMs: 1 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeDefined()
+    files[REGISTER] = { text: register(['done', 'done']), mtimeMs: 2 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test('keeps a ruling handoff whose register cannot be read', async ($, on) => {
+    await start($, on, rulingHandoff())
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeDefined()
   })
 
   test('Dismiss removes the offer without a prompt', async ($, on) => {

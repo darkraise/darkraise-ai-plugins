@@ -1248,6 +1248,23 @@ export function resumeOfferOf(text: string): { next: string; prompt: string | nu
   return { next, prompt: prompt === '' ? null : prompt }
 }
 
+/** The registers a next-step ruling prompt names: "Continue the work recorded in `a.md`, `b.md`: …". */
+export function promptRegisters(prompt: string): string[] {
+  const names = /^Continue the work recorded in (.*?): /.exec(prompt)?.[1] ?? ''
+  return [...names.matchAll(/`([^`]+\.md)`/g)].map(match => match[1] ?? '')
+}
+
+// The states scripts/lib/register.sh counts as unresolved (REGISTER_UNRESOLVED).
+const UNRESOLVED_STATES = ['open', 'planned', 'doing', 'verify']
+
+/** Whether a register's table holds a row whose state is still unresolved. */
+export function hasUnresolvedRows(text: string): boolean {
+  return text.split(/\r?\n/).some(line => {
+    const cells = line.split(/(?<!\\)\|/)
+    return cells.length === 8 && /^\d+$/.test(cells[1]?.trim() ?? '') && UNRESOLVED_STATES.includes(cells[5]?.trim() ?? '')
+  })
+}
+
 /** finish.json as dforge's finish-choice writes it; null when unreadable. */
 export function parseFinish(text: string): CockpitFinish | null {
   try {
