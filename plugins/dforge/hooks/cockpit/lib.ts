@@ -177,6 +177,47 @@ export function isDforge(name: string): boolean {
   return name.startsWith('dforge:')
 }
 
+/** The agent.spawn fields the seat check reads. */
+export type SeatSpawn = {
+  subagentType: string
+  description: string
+  fork: boolean
+  model?: string
+  parentAgentId?: string
+  workflow?: unknown
+  isTeammate?: true
+  resume?: unknown
+}
+
+/**
+ * Whether a fork described `Draft plan tasks …` may run in a dforge session:
+ * docs/dforge/notes/2026-10-25-drafter-measurement.md picked the drafter.
+ * Changing it takes a plugin release.
+ */
+export const FORK_DRAFTING = false
+
+/** The engine's catch-all agent types: what a dispatch naming no type resolves to. */
+const CATCH_ALL = ['general-purpose', 'claude']
+
+/**
+ * Why a dforge session's main loop may not start this agent, or null. A fork
+ * inherits the session's context and model, and an untyped agent given no
+ * model inherits the model: the costs typed seats exist to avoid. Workflow
+ * agents, teammates, resumes and spawns inside a subagent are not the main
+ * loop's dispatch, and nothing is checked before a dforge skill or agent ran.
+ */
+export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDrafting: boolean): string | null {
+  if (!isPlanSession || spawn.parentAgentId !== undefined || spawn.workflow !== undefined || spawn.isTeammate === true || spawn.resume !== undefined) return null
+  if (spawn.fork) {
+    if (forkDrafting && spawn.description.startsWith('Draft plan tasks')) return null
+    return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check and writing-plans' drafting seat for plan drafting; see using-dforge §Seats."
+  }
+  if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
+    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, the task\'s **Implementer:** agent (such as dforge:impl-sonnet-medium) for implementation, or pass an explicit model (model: "sonnet") to general-purpose; see using-dforge §Seats.'
+  }
+  return null
+}
+
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
 export function bar(share: number, width: number): string {
   const clamped = Math.min(Math.max(share, 0), 1)

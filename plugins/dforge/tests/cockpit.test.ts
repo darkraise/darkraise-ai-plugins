@@ -14,6 +14,8 @@ import {
   isPlanTail,
   kTokens,
   attributionIn,
+  FORK_DRAFTING,
+  seatDenial,
   bar,
   billingLabel,
   budgetFor,
@@ -693,6 +695,53 @@ describe('attribution guard', () => {
     await $.session.start(START)
     const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Claude-Session: y"' })
     expect(ran.deny).toBeUndefined()
+  })
+})
+
+describe('seat check', () => {
+  const base = { subagentType: 'general-purpose', description: 'Look around', fork: false }
+
+  test('denies an untyped dispatch and a fork in a dforge session, and passes typed ones', () => {
+    const untyped = seatDenial(base, true, false)
+    expect(untyped).toMatch(/dforge:judge-sonnet-high/)
+    expect(untyped).toMatch(/\*\*Implementer:\*\*/)
+    expect(untyped).toMatch(/dforge:impl-sonnet-medium/)
+    expect(untyped).toMatch(/model: "sonnet"/)
+    expect(untyped).toMatch(/using-dforge §Seats/)
+    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true, false)).toBe(untyped)
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true, false)).toMatch(/^dforge: forks are kept out of dforge sessions\./)
+    expect(seatDenial({ ...base, model: 'sonnet' }, true, false)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'dforge:judge-opus' }, true, false)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'Explore' }, true, false)).toBeNull()
+  })
+
+  test('passes everything before a dforge skill runs, and spawns the main loop does not make', () => {
+    expect(seatDenial(base, false, false)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false, false)).toBeNull()
+    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true, false)).toBeNull()
+    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true, false)).toBeNull()
+    expect(seatDenial({ ...base, isTeammate: true }, true, false)).toBeNull()
+    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true, false)).toBeNull()
+  })
+
+  test('admits a drafting fork only when forks draft', () => {
+    const fork = { ...base, subagentType: 'fork', fork: true, description: 'Draft plan tasks 1-2' }
+    expect(seatDenial(fork, true, true)).toBeNull()
+    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true, true)).toMatch(/^dforge: forks are kept out/)
+    expect(seatDenial(fork, true, false)).toMatch(/^dforge: forks are kept out/)
+    expect(typeof FORK_DRAFTING).toBe('boolean')
+  })
+
+  test('refuses an untyped spawn once a dforge skill ran, and lists the refusal', async ($, on) => {
+    world(on, { tokens: 10_000 })
+    await $.session.start(START)
+    const spawn = { tool_use_id: 'toolu_1', prompt: 'Check the rows', description: 'Check rows', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false } as never
+    expect((await $.agent.spawn(spawn)).deny).toBeUndefined()
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_2' } as never)).deny).toMatch(/^dforge: name a seat/)
+    expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_3', model: 'sonnet' } as never)).deny).toBeUndefined()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /✗ Agent: dforge: name a seat/ })).toBeDefined()
   })
 })
 
