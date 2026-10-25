@@ -73,6 +73,8 @@ import {
   runsWidth,
   SECTIONS,
   BAND_SEGMENTS,
+  FORK_DRAFTING,
+  seatDenial,
   bandLines,
   bandLinesFrom,
   bandLineToggled,
@@ -485,6 +487,12 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
+    const denial = seatDenial(e, await read($, isPlanSession), FORK_DRAFTING)
+    if (denial !== null) {
+      const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: denial }
+      await update($, refusals, list => [...list, refusal].slice(-20))
+      return { deny: denial }
+    }
     const started = await next(e)
     if (started.deny !== undefined || started.agentId === undefined) return started
     if (isDforge(e.subagentType)) {
