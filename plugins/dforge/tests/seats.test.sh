@@ -23,9 +23,10 @@ names() { # names <label> <file> <text>
 unmodelled() {
   awk '
     FNR == 1 { if (open) print where; open = 0 }
-    open && /^[ \t]+model:/ { open = 0 }
+    open && /^[ \t]+prompt:/ { inprompt = 1 }
+    open && !inprompt && /^[ \t]+model:/ { open = 0 }
     open && /^```/ { print where; open = 0 }
-    /Subagent \(general-purpose\):/ { open = 1; where = FILENAME ":" FNR; next }
+    /Subagent \(general-purpose\):/ { open = 1; inprompt = 0; where = FILENAME ":" FNR; next }
     /^\|/ {
       n = split($0, cell, "|")
       agent = cell[3]; gsub(/^[ \t]+/, "", agent); gsub(/[ \t]+$/, "", agent)
@@ -38,9 +39,15 @@ unmodelled() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-files=$(find "$P/skills" "$P/reference" -name '*.md' | LC_ALL=C sort)
-# shellcheck disable=SC2086
-check "no dforge prescription leaves a general-purpose seat unmodelled" "$(unmodelled $files)" ""
+# collect_md DIR... - fill the files array with the markdown files under each DIR
+collect_md() {
+  files=()
+  local f
+  while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$@" -name '*.md' -print0 | LC_ALL=C sort -z)
+}
+collect_md "$P/skills" "$P/reference"
+check "the prescription scan reads some files" "$([ "${#files[@]}" -gt 0 ] && echo yes || echo no)" "yes"
+check "no dforge prescription leaves a general-purpose seat unmodelled" "$(unmodelled ${files[@]+"${files[@]}"})" ""
 
 cat > "$TMP/bad-block.md" <<'EOF'
 ```
@@ -73,6 +80,22 @@ Subagent (general-purpose):
 | Scoped re-review | general-purpose | `sonnet` |
 EOF
 check "a modelled block and row pass" "$(unmodelled "$TMP/good.md")" ""
+
+cat > "$TMP/prompt-model.md" <<'EOF'
+```
+Subagent (general-purpose):
+  description: "Review"
+  prompt: |
+    Reply with
+      model: sonnet
+```
+EOF
+check "a model: line inside the prompt body does not model the block" "$(unmodelled "$TMP/prompt-model.md")" "$TMP/prompt-model.md:2"
+
+mkdir -p "$TMP/with space"
+cp "$TMP/bad-block.md" "$TMP/with space/bad.md"
+collect_md "$TMP/with space"
+check "a checkout path with a space is still scanned" "$(unmodelled ${files[@]+"${files[@]}"})" "$TMP/with space/bad.md:2"
 
 RCR="$P/skills/requesting-code-review/SKILL.md"
 CR="$P/skills/requesting-code-review/references/code-reviewer.md"
