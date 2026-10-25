@@ -211,6 +211,8 @@ export type CockpitResumeOffer = {
   at: number
   /** The note's `**Next:**` line. */
   next: string
+  /** The note's fenced first prompt; null when it has none, and Resume falls back to resume-execution. */
+  prompt: string | null
 }
 
 /** An auto run as its state file says (reference/auto-run.md), for the session it is bound to. */

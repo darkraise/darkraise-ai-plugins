@@ -3020,7 +3020,7 @@ async function readResumeOffer($: EngineInterface, latest: string, at: number | 
   S.offerRead = key
   const text = at === null ? null : await $.fs.read(latest).catch(() => null)
   const found = typeof text === 'string' ? resumeOfferOf(text) : null
-  const offer: CockpitResumeOffer | null = found === null || at === null ? null : { at, next: found.next }
+  const offer: CockpitResumeOffer | null = found === null || at === null ? null : { at, next: found.next, prompt: found.prompt }
   if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
 }
 
@@ -3034,7 +3034,7 @@ async function offerNow($: EngineInterface, now: number): Promise<CockpitResumeO
 
 async function resume($: EngineInterface, offer: CockpitResumeOffer) {
   await update($, resumeDismissed, () => offer.at)
-  await $.prompt.submit({ text: resumePrompt(), asUser: true })
+  await $.prompt.submit({ text: offer.prompt ?? resumePrompt(), asUser: true })
 }
 
 // The run's ledger, its plan's tasks, and the newest handoff, read where the

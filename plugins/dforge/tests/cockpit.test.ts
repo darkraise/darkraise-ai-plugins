@@ -188,6 +188,8 @@ const FINISHED = '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/dforge/
 const BLOCKED =
   '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/x.md`: 2 of 5 tasks complete; Task 3 is BLOCKED (needs a key).\n**Next:** Your human partner decides: needs a key.\n'
 
+const UNFENCED = RESUMABLE.replace('```\nExecute docs/dforge/plans/2026-10-14-band.md.\n```\n', 'Execute the plan.\n')
+
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
 
@@ -4099,7 +4101,7 @@ describe('run card', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
     await ui.press({ key: 'pane-resume' })
-    expect(prompts).toEqual([expect.stringContaining('.dforge/handoff/latest.md')])
+    expect(prompts).toEqual(['Execute docs/dforge/plans/2026-10-14-band.md.'])
   })
 })
 
@@ -4115,8 +4117,12 @@ describe('resume offer', () => {
     return prompts
   }
 
-  test('reads the next action of a handoff that has a first prompt', () => {
-    expect(resumeOfferOf(RESUMABLE)).toEqual({ next: 'Task 4 — wire the band into the pane.' })
+  test('reads the next action and the first prompt of a handoff', () => {
+    expect(resumeOfferOf(RESUMABLE)).toEqual({ next: 'Task 4 — wire the band into the pane.', prompt: 'Execute docs/dforge/plans/2026-10-14-band.md.' })
+  })
+
+  test('reads no first prompt when its block has no fence', () => {
+    expect(resumeOfferOf(UNFENCED)).toEqual({ next: 'Task 4 — wire the band into the pane.', prompt: null })
   })
 
   test('says a handoff under a minute old was just handed off', () => {
@@ -4193,12 +4199,12 @@ describe('resume offer', () => {
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
 
-  test("the band's Resume submits the resume prompt and removes the offer", async ($, on) => {
+  test("the band's Resume submits the handoff's first prompt and removes the offer", async ($, on) => {
     const prompts = await start($, on, RESUMABLE)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'band-resume' })
-    expect(prompts).toEqual([expect.stringContaining('resume-execution')])
+    expect(prompts).toEqual(['Execute docs/dforge/plans/2026-10-14-band.md.'])
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
     expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
   })
@@ -4211,6 +4217,13 @@ describe('resume offer', () => {
     expect(prompts).toHaveLength(1)
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
     expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
+  })
+
+  test('Resume falls back to resume-execution for a handoff with no fenced first prompt', async ($, on) => {
+    const prompts = await start($, on, UNFENCED)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'band-resume' })
+    expect(prompts).toEqual([expect.stringContaining('resume-execution')])
   })
 
   test('Dismiss removes the offer without a prompt', async ($, on) => {
@@ -4442,8 +4455,8 @@ describe('cockpit roots', () => {
     expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
   })
 
-  test('offers Resume for latest.md in the mirror, naming it', async ($, on) => {
-    const files: World['files'] = { ...storesFile(), [`${MIRROR}/work/handoff/latest.md`]: { text: RESUMABLE, mtimeMs: 900_000 } }
+  test('offers Resume for latest.md in the mirror, naming it when the note has no first prompt', async ($, on) => {
+    const files: World['files'] = { ...storesFile(), [`${MIRROR}/work/handoff/latest.md`]: { text: UNFENCED, mtimeMs: 900_000 } }
     const prompts: string[] = []
     world(on, { ...SIGNED_IN, files, prompts, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
     signedIn(on, files)

@@ -1232,15 +1232,20 @@ export function isAtLeast(base: string | undefined, least: string): boolean {
  * block only when a next session has work to start, so without one (a finished
  * plan, or a blocked task its human partner must rule on) there is no offer.
  */
-export function resumeOfferOf(text: string): { next: string } | null {
+export function resumeOfferOf(text: string): { next: string; prompt: string | null } | null {
   const lines = text.split(/\r?\n/)
   const start = lines.findIndex(line => /^## Next session\s*$/.test(line))
   if (start < 0) return null
   const end = lines.findIndex((line, index) => index > start && line.startsWith('## '))
   const block = lines.slice(start + 1, end < 0 ? undefined : end)
-  if (!block.some(line => line.trim() === 'Paste as the first prompt:')) return null
+  const paste = block.findIndex(line => line.trim() === 'Paste as the first prompt:')
+  if (paste < 0) return null
   const next = block.find(line => line.startsWith('**Next:**'))?.slice('**Next:**'.length).trim() ?? ''
-  return next === '' ? null : { next }
+  if (next === '') return null
+  const open = block.findIndex((line, index) => index > paste && line.trim() !== '')
+  const close = open < 0 || !block[open]?.startsWith('```') ? -1 : block.findIndex((line, index) => index > open && line.startsWith('```'))
+  const prompt = close < 0 ? '' : block.slice(open + 1, close).join('\n').trim()
+  return { next, prompt: prompt === '' ? null : prompt }
 }
 
 /** finish.json as dforge's finish-choice writes it; null when unreadable. */
