@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Join the task slices drafters wrote into a plan that holds its header and
+# Task index, so the session never reads them. Slices live at
+# <state>/drafts/<plan basename>/tasks-A-B.md and must cover, in order and
+# with no gap or overlap, every Task index task the plan has no heading for;
+# anything else leaves the plan byte-identical and the slices in place.
+#
+# Usage: draft-pack --join PLAN_FILE
+# Exit: 0 joined, or nothing to join; 2 usage or no such plan; 3 the slices do
+# not cover the missing tasks.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+if [ $# -ne 2 ] || [ "$1" != --join ]; then
+  echo "usage: draft-pack --join PLAN_FILE" >&2
+  exit 2
+fi
+plan=$(plan_locate "$2")
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+ctx=$(_plan_ctx "$plan")
+root=$(git -C "$ctx" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$ctx")
+dir="$(dforge_dir state "$root")/drafts/$(basename "$plan" .md)"
+
+refuse() { echo "draft-pack: $1" >&2; exit 3; }
+span() { awk -v a="$1" -v b="$2" 'BEGIN { for (i = a; i <= b; i++) printf "%d ", i }'; }
+
+# awk stops at a flag rather than exit: exiting leaves tr writing into a closed
+# pipe, and under pipefail that SIGPIPE aborts this script on a large plan.
+index=$(tr -d '\r' < "$plan" | awk '
+  stop { next }
+  { h = $0; sub(/[ \t]+$/, "", h) }
+  h == "## Task index" { on = 1; next }
+  on && (/^## / || /^### / || /^---/) { on = 0; stop = 1; next }
+  on && /^[0-9]+\. / { sub(/\..*/, ""); print }
+')
+held=$(plan_tasks "$plan" | cut -f1)
+missing=$(awk 'NR == FNR { if ($0 != "") held[$0] = 1; next } $0 != "" && !($0 in held) { printf "%d ", $0 }' \
+  <(printf '%s\n' "$held") <(printf '%s\n' "$index"))
+
+rows=""
+count=0
+if [ -d "$dir" ]; then
+  for f in "$dir"/tasks-*.md; do
+    [ -e "$f" ] || continue
+    b=$(basename "$f")
+    [[ $b =~ ^tasks-([0-9]+)-([0-9]+)\.md$ ]] || refuse "malformed slice name: $b"
+    rows="$rows${BASH_REMATCH[1]}"$'\037'"${BASH_REMATCH[2]}"$'\037'"$f"$'\n'
+    count=$((count + 1))
+  done
+fi
+
+if [ -z "$missing" ] && [ "$count" -eq 0 ]; then echo "draft-pack: nothing to join"; exit 0; fi
+[ "$count" -gt 0 ] || refuse "no slices in $dir for tasks ${missing% }"
+
+rows=$(printf '%s' "$rows" | sort -t $'\037' -k1,1n)
+covered=""
+while IFS=$'\037' read -r a b f; do
+  [ "$a" -le "$b" ] || refuse "$(basename "$f") runs backwards"
+  got=$(plan_tasks "$f" | cut -f1 | awk '{ printf "%d ", $0 }')
+  [ "$got" = "$(span "$a" "$b")" ] || refuse "$(basename "$f") holds tasks [${got% }], not $a-$b"
+  covered="$covered$(span "$a" "$b")"
+done <<<"$rows"
+[ "$covered" = "$missing" ] || refuse "the slices cover [${covered% }], the plan is missing [${missing% }]"
+
+tmp="$plan.join.$$"
+trap 'rm -f "$tmp"' EXIT
+cp "$plan" "$tmp"
+[ -z "$(tail -c 1 "$tmp")" ] || printf '\n' >> "$tmp"
+while IFS=$'\037' read -r a b f; do
+  printf '\n' >> "$tmp"
+  cat "$f" >> "$tmp"
+  [ -z "$(tail -c 1 "$tmp")" ] || printf '\n' >> "$tmp"
+done <<<"$rows"
+mv "$tmp" "$plan"
+while IFS=$'\037' read -r a b f; do rm -f "$f"; done <<<"$rows"
+rmdir "$dir" 2>/dev/null || true
+echo "draft-pack: joined tasks ${covered% } from $count slices into $2"
