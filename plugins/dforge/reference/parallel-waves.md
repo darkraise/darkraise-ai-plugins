@@ -90,7 +90,7 @@ differences:
   The worktree is not created from it, so the dispatch tells the implementer
   to detach there first.
 - **The dispatch carries the parallel section below**, filled in, after the
-  brief line. Everything else in [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
+  line naming the dispatch file. Everything else in [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
   is unchanged.
 
 ```
@@ -223,7 +223,9 @@ When every task of the wave has a complete line:
    runs now), every task brief and report of the wave as its context, and
    this framing: "Each of these tasks passed its own review; merged together,
    the integration check fails. Find the interaction and make the smallest
-   fix." Each round's scoped re-review covers the fix diff; you re-run the
+   fix." Each round's scoped re-review is the by-hand one (*The steps by
+   hand* in delegated-task.md): no task's `task-step` state fits a fix to the
+   merged wave, so `task-step rereview` is not used here. It covers the fix diff; you re-run the
    check through `suite-run` after it, and the round passes only when the
    check does. Log rounds
    as `Wave <k>: fix round R/5 (…)`. At the cap, the open failure goes to the

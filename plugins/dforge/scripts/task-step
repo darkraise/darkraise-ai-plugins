@@ -163,7 +163,7 @@ cmd_rereview() (
   if [ "$skip" -eq 0 ]; then
     tpl=$here/../skills/subagent-driven-development/references/re-review-prompt.md
     [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
-    printf '%s\n' "$bullets" > "$tmp/findings"
+    printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
     RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_FIX_BASE=$fix_base_sha \
       RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
     if grep -qE '\[(BRIEF_FILE|FINDINGS|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
@@ -177,8 +177,7 @@ cmd_rereview() (
   jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
     --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" \
     '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)' \
-    "$state" > "$state.tmp"
-  mv "$state.tmp" "$state"
+    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
 
   if [ "$skip" -eq 1 ]; then
     printf 'task %s: re-review round %s: packaged %s..%s, skipped\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
@@ -329,7 +328,7 @@ check_identity() {
 # attribution. Prints the digest line.
 check_attribution() {
   local sha hit bad="" count=0
-  for sha in $(git rev-list --reverse "$1..$2"); do
+  for sha in $(git rev-list --reverse "$1..$2" | tr -d '\r'); do
     hit=$(git log -1 --format=%B "$sha" | tr -d '\r' | grep -iE '^[[:space:]]*(co-authored-by|claude-session):|^[^[:alnum:]]*generated with' | head -n 1)
     [ -n "$hit" ] || continue
     count=$((count + 1))
@@ -414,12 +413,16 @@ do_start() {
     fi
     workfrom="Work from: $(git rev-parse --show-toplevel)"
     [ -z "$wave" ] || workfrom="Work from: your worktree (see the Parallel workspace section)"
+    reportat="$report"
+    [ -z "$wave" ] || reportat="task-$first-report.md in the directory sdd-workspace prints in your worktree (see the Parallel workspace section)"
     scene="The message that sent you to this file says where the task fits, and carries the interfaces from earlier tasks and the verdicts that bear on it."
     prompt_text "$template" | fill \
-      '[BRIEF_FILE]' "$brief" '[REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" \
+      '[BRIEF_FILE]' "$brief" '[REPORT_FILE]' "$reportat" '[PLUGIN_ROOT]' "$plugin_root" \
       '[IMPLEMENTER]' "${agent:-the scored implementer}" 'Task N: [task name]' "$label" \
       'Work from: [directory]' "$workfrom" \
       '[Scene-setting: where this fits, dependencies, architectural context]' "$scene" > "$dispatch"
+    unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$dispatch" | head -n 1)
+    [ -s "$dispatch" ] && [ -z "$unexpanded" ] || die "dispatch file $dispatch is empty or holds an unexpanded placeholder ${unexpanded:-}"
   fi
 
   printf 'task %s: briefed %s, base %s' "$idlist" "$brief" "$base7"

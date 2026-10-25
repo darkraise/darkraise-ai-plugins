@@ -66,6 +66,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |6. batch high
 |7. risky
 |8. unparseable
+|9. bad lens
 |
 |### Task 1: plain
 |
@@ -109,6 +110,12 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |**Implementer:** dforge:impl-sonnet-low
 |**Evaluation:** one plus one
+|
+|### Task 9: bad lens
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|**Lenses:** no-such-lens
 PLAN
 sed 's/^|//' > docs/codex-plan.md <<'PLAN'
 |# Codex Fixture
@@ -143,6 +150,7 @@ D="$WS/task-1-dispatch.md"
 check "start: the brief path is expanded" "$(grep -c "Read your task brief first: $WS/task-1-brief.md" "$D")" "1"
 check "start: the report path is expanded" "$(grep -c "Write your full report to $WS/task-1-report.md:" "$D")" "1"
 check "start: no placeholder is left" "$(grep -cE '\[(BRIEF_FILE|REPORT_FILE|PLUGIN_ROOT|IMPLEMENTER)\]' "$D")" "0"
+check "start: the plugin root is expanded to this plugin" "$(grep -c "bash $(cd "$P" && pwd)/scripts/suite-run -- " "$D")" "1"
 check "start: the task name is filled" "$(grep -c 'You are implementing Task 1: plain' "$D")" "1"
 check "start: the working directory is filled" "$(grep -c "^Work from: $(git rev-parse --show-toplevel)\$" "$D")" "1"
 check "start: the dispatch file is a bare prompt" "$(grep -c '^Subagent (' "$D")" "0"
@@ -154,6 +162,9 @@ step start docs/plan.md 2 --wave 3
 check "start: a wave ends the assigned line" "$(tail -n 1 "$LEDGER")" "Task 2: implementer impl-sonnet-high (assigned; base ${BASE:0:7}; wave 3)"
 check "start: the wave is recorded" "$(jq -r .wave "$WS/task-2-step.json" | tr -d '\r')" "3"
 check "start: a wave names its worktree" "$(grep -c '^Work from: your worktree' "$WS/task-2-dispatch.md")" "1"
+check "start: a wave reports inside its worktree" \
+  "$(grep -c 'Write your full report to task-2-report.md in the directory sdd-workspace prints in your worktree (see the Parallel workspace section):' "$WS/task-2-dispatch.md")" "1"
+check "start: a wave dispatch names no session workspace report path" "$(grep -c "$WS/task-2-report.md" "$WS/task-2-dispatch.md")" "0"
 
 # start: an executor task writes no dispatch file and no assigned line.
 before=$(wc -l < "$LEDGER")
@@ -200,7 +211,7 @@ check "start --reset: a new assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: imp
 check "start --reset: the digest does not say kept" "$(head -n 1 <<<"$out" | grep -c 'state kept')" "0"
 
 # Negative: usage, a missing task, a Codex host, an amendment that does not apply.
-step start docs/plan.md 9
+step start docs/plan.md 99
 check "start: no such task exits 3" "$rc" "3"
 step start docs/plan.md
 check "start: no task number exits 2" "$rc" "2"
@@ -393,6 +404,14 @@ git commit -q --allow-empty -m "feat: tool line" -m "Generated with a tool"
 step review docs/plan.md 2 --base "$PREV"
 check "check attribution: a generated-with line" "$(grep '^check attribution' <<<"$out")" "check attribution: $(short HEAD) Generated with a tool"
 PREV=$(git rev-parse HEAD)
+git commit -q --allow-empty -m "feat: emoji line" -m "🤖 Generated with a tool"
+step review docs/plan.md 2 --base "$PREV"
+check "check attribution: a symbol before generated-with still counts" "$(grep '^check attribution' <<<"$out")" "check attribution: $(short HEAD) 🤖 Generated with a tool"
+PREV=$(git rev-parse HEAD)
+git commit -q --allow-empty -m "feat: lowercase trailer" -m "co-authored-by: X <x@example.invalid>"
+step review docs/plan.md 2 --base "$PREV"
+check "check attribution: the trailer name is case-insensitive" "$(grep '^check attribution' <<<"$out")" "check attribution: $(short HEAD) co-authored-by: X <x@example.invalid>"
+PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: mentions the words" -m "The table is generated with a script, and a co-authored-by: note is prose here."
 step review docs/plan.md 2 --base "$PREV"
 check "check attribution: the words inside a sentence are not a trailer" "$(grep '^check attribution' <<<"$out")" "check attribution: clean"
@@ -400,8 +419,8 @@ PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: clean one"
 step review docs/plan.md 2 --base "$PREV"
 check "checks: a clean commit passes both" "$(grep '^check' <<<"$out" | tr '\n' ';')" "check identity: clean;check attribution: clean;"
-step review docs/plan.md 2 --base "$(git rev-parse HEAD~7)"
-check "checks: several offenders name the first and count the rest" "$(grep '^check attribution' <<<"$out" | grep -c '; 2 more commit(s)$')" "1"
+step review docs/plan.md 2 --base "$(git rev-parse HEAD~9)"
+check "checks: several offenders name the first and count the rest" "$(grep '^check attribution' <<<"$out" | grep -c '; 4 more commit(s)$')" "1"
 
 # review: a batch, and a route that fails.
 step review docs/plan.md 5 6
@@ -412,6 +431,15 @@ step start docs/plan.md 8
 step review docs/plan.md 8
 check "review: a failed route falls back to judge-opus and says why" \
   "$(grep -c "^seat: dforge:judge-opus prompt: $WS/task-8-review-prompt.md (review-route exited 2: review-route: Task 8: the Evaluation line does not parse" <<<"$out")" "1"
+
+# review: a lens-route failure stops the step before it writes anything.
+step start docs/plan.md 9
+state9=$(cat "$WS/task-9-step.json")
+step review docs/plan.md 9
+check "review: a lens-route failure exits 2" "$rc" "2"
+check "review: a lens-route failure says which lens" "$(grep -c 'unknown lens id: no-such-lens' "$TMP/err")" "1"
+check "review: a lens-route failure writes no prompt file" "$([ -e "$WS/task-9-review-prompt.md" ] && echo yes || echo no)" "no"
+check "review: a lens-route failure leaves the state file alone" "$(cat "$WS/task-9-step.json")" "$state9"
 
 # --- rereview: the skip rule, the package and the state ---
 # The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
@@ -550,10 +578,12 @@ rr_reset
 rr_edit app.txt mod
 rr_git add -A && rr_git commit -qm fix
 rr_fix 1 1 "- app.txt: wrong value"
+jq '.t0 = 1' "$RR_WS/task-1-step.json" > "$RR_TMP/t0.tmp" && cp "$RR_TMP/t0.tmp" "$RR_WS/task-1-step.json"
 rr_run rereview docs/plan.md 1 --covered
 check "rereview skip: records the head as the review head" "$(rr_state 1 .reviewHead)" "$(rr_git rev-parse HEAD)"
 check "rereview skip: increments the round" "$(rr_state 1 .round)" "1"
-check "rereview skip: records t0" "$([ "$(rr_state 1 .t0)" != null ] && echo yes || echo no)" "yes"
+check "rereview skip: replaces t0 with the time of the re-review" "$([ "$(rr_state 1 .t0)" -gt 1000000000 ] && echo yes || echo no)" "yes"
+check "rereview skip: the digest shows the recorded t0" "$(sed -n 's/^state: .* t0 //p' <<<"$rr_out")" "$(rr_state 1 .t0)"
 check "rereview skip: the digest fits 15 lines" "$([ "$(wc -l <<<"$rr_out")" -le 15 ] && echo yes || echo no)" "yes"
 check "rereview skip: the digest names the state" "$(grep -c "^state: base .* review-head $(rr_git rev-parse --short HEAD) round 1 t0 " <<<"$rr_out")" "1"
 check "rereview skip: the digest ends with the budget line" "$(tail -n 1 <<<"$rr_out" | cut -c1-7)" "budget:"
@@ -651,7 +681,7 @@ printf 'No bullets here.\n' > "$RR_WS/task-1-fix-1.md"
 rr_run rereview docs/plan.md 1
 check "rereview with a fix message that has no bullets exits 2" "$rr_rc" "2"
 rr_reset
-rr_run rereview docs/plan.md 9
+rr_run rereview docs/plan.md 99
 check "rereview of a task not in the plan exits 3" "$rr_rc" "3"
 rr_run rereview docs/codex-plan.md 1
 check "rereview on a Host: codex plan exits 2" "$rr_rc" "2"

@@ -339,7 +339,7 @@ This skill owns every line in `<ledger dir>/progress.md`. The grammar:
 ```
 # SDD ledger — plan: <path>
 Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; wave <k>][; executor <id> <model>/<effort>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
-Task <N>: fix round R/5 (X addressed, Y open — <one-liners>; commits a..b[; progress p -> q]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
+Task <N>: fix round R/5 (X addressed, Y open — <one-liners>; commits a..b[; progress p -> q | re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
 Group <a>-<b>: review round R/5 (<same fields as a fix round>)
 Wave <k>: started (base <sha7>; Tasks <a>-<b>; at most <c> at once)
 Wave <k>: serialized — <reason>

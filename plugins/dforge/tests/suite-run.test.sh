@@ -173,8 +173,9 @@ check "at most 20 failing lines are printed" "$(printf '%s\n' "$out" | grep -c '
 has "the 20th failing line is printed" "$out" "not ok 20 - case 20"
 lacks "the 21st failing line is not" "$out" "not ok 21 - case 21"
 
-run -- bash -c 'printf "not ok 1 - crlf\r\n"; exit 1'
+run -- bash -c 'printf "not ok 1 - crlf\r\n# pass 3\r\n# fail 1\r\n"; exit 1'
 has "a CR does not hide a failing line" "$out" "not ok 1 - crlf"
+has "a CR does not hide the counts" "$out" "counts: 3 pass, 1 fail"
 
 run -- no-such-command-here
 check "a command that does not start fails" "$rc" "127"
@@ -208,6 +209,18 @@ mkdir "$TMP/plain"
 out=$(cd "$TMP/plain" && bash "$SUITE" -- true 2>&1); rc=$?
 check "outside a git checkout exits 2" "$rc" "2"
 has "outside a git checkout says so" "$out" "not in a git checkout"
+
+# --- the same command in another directory is another command ------------------
+commit three
+probe 0 "$TMP/out-tap-pass"
+before=$(runs)
+mkdir -p "$REPO/sub"
+out=$(cd "$REPO/sub" && bash "$SUITE" -- bash "$TMP/probe.sh" 0 "$TMP/out-tap-pass" 2>&1); rc=$?
+check "the same command from a subdirectory runs again" "$(runs)" "$((before + 1))"
+check "a subdirectory run records its directory" "$(field 3)" "(sub) bash $TMP/probe.sh 0 $TMP/out-tap-pass"
+out=$(cd "$REPO/sub" && bash "$SUITE" -- bash "$TMP/probe.sh" 0 "$TMP/out-tap-pass" 2>&1); rc=$?
+has "a repeat in the subdirectory is reused" "$out" "suite: reused pass at"
+check "the subdirectory reuse does not run the command" "$(runs)" "$((before + 1))"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -10,7 +10,9 @@
 # and after the run; ignored files, such as a local .env, are outside the
 # guarantee. A pass is reused only from a row with the same HEAD, the same
 # command and exit 0, clean when it ran and clean now. A dirty tree never
-# reuses and never records a reusable row.
+# reuses and never records a reusable row. Run from a subdirectory of the
+# checkout, the command is recorded as "(<subdir>) <command>", so the same
+# command run in two directories is two commands.
 #
 # Usage: suite-run [--timeout SECONDS] -- COMMAND [ARG ...]
 # Output: "suite-run: running <m>m" every 300 seconds while the command runs
@@ -56,6 +58,8 @@ dforge_self_ignore "$state"
 
 record="$state/suites.tsv"
 command_text=$(printf '%s' "$*" | tr '\t\r\n' '   ')
+subdir=$(git rev-parse --show-prefix 2>/dev/null | tr -d '\r')
+[ -z "$subdir" ] || command_text="(${subdir%/}) $command_text"
 short=${head:0:7}
 
 is_clean() { [ -z "$(git status --porcelain --untracked-files=all 2>/dev/null | tr -d '\r')" ]; }

@@ -91,7 +91,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
   the full report there and returns only status, commits, a one-line test
   summary, and concerns.
 - **UI tasks:** a brief that carries `## UI/UX contract items` is a UI task
-  (dforge:ui-ux). Say in the dispatch that the implementer renders the result
+  (dforge:ui-ux). Say in the Agent prompt that the implementer renders the result
   through the project UI profile's harness before reporting, and that the
   report maps each cited ID to a screenshot path or a test name; a cited ID
   with no evidence is a spec ❌ at review.
@@ -232,8 +232,10 @@ needed.
   ends `(review-route exited <N>: …)`, `review-route` failed but
   `task-step review` still wrote the complete judge prompt: dispatch the
   `dforge:judge-opus` seat it names as printed, and say why, quoting that
-  note. If `task-step review` itself exits 2 (a `lens-route` failure) it
-  wrote nothing: take *The steps by hand*.
+  note. If `task-step review` itself exits 2 (a `lens-route` failure, a bad
+  `--base`, `--head` or `--cwd`, or an unexpanded placeholder), it printed
+  no digest and left its state file unchanged; any prompt file it left is
+  stale: take *The steps by hand*.
   Codex hosts are the exception: `review-route --task` exits 2 on every `Host: codex`
   plan, and the seat is a native judge at Astra high or above
   ([native-codex.md](native-codex.md)).
@@ -474,7 +476,7 @@ the next task in plan order; after the last task, to the final review, written
 - end the scores clause with `, seat <seat>`: `codex gpt-6.1-sol/xhigh`,
   `codex gpt-6-astra/xhigh+judge-opus`, or the judge's short name, followed by
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
-  ` (codex off — <reason>)` when `review-route` printed `reason=codex-off`
+  ` (codex off — <reason>)` when §3's `gate:` and `seat:` lines say Codex is off
 
 In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when
 `scripts/auto-run decision list` prints anything.
