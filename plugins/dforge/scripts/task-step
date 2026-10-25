@@ -5,7 +5,8 @@
 # lines. State for a task, or a batch named after its first task, lives in
 # <workspace>/task-<N>-step.json.
 #
-# Usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset]
+# Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset]
+#        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR]
 # A start that finds the task's state file keeps it (and writes no second
 # assigned line) unless --reset is given.
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
@@ -17,17 +18,20 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR]"; }
 
 [ $# -ge 3 ] || usage
 sub=$1; plan_arg=$2; shift 2
-case $sub in start) ;; *) usage ;; esac
+case $sub in start|review) ;; *) usage ;; esac
 
-ids=() wave="" reset=0
+ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
     --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
+    --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
+    --head) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
+    --cwd) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
     -*) usage ;;
     *) [[ $1 =~ ^[0-9]+$ ]] || usage; ids+=("$((10#$1))"); shift ;;
   esac
@@ -111,6 +115,52 @@ implementer_of() {
 
 strip_excerpt() { awk '/^## Plan header excerpt$/ { skip = 1 } /^## UI\/UX contract items$/ { skip = 0 } !skip { print }' "$1"; }
 only_excerpt() { awk '/^## Plan header excerpt$/ { on = 1 } /^## UI\/UX contract items$/ { on = 0 } on { print }' "$1"; }
+
+# drop_sections HEADING ...: stdin to stdout without the `## ` sections whose
+# heading begins with one of the given words.
+drop_sections() {
+  local list="" h
+  for h in "$@"; do list="$list${list:+|}$h"; done
+  TS_DROP=$list awk '
+    BEGIN { n = split(ENVIRON["TS_DROP"], d, "|") }
+    /^## / { skip = 0; for (i = 1; i <= n; i++) if (index($0, "## " d[i]) == 1) skip = 1 }
+    !skip { print }'
+}
+
+# Every commit from $1 to $2 is authored and committed by the configured
+# user. Prints the digest line.
+check_identity() {
+  local un ue sha an ae cn ce who bad="" count=0
+  un=$(git config user.name | tr -d '\r') ue=$(git config user.email | tr -d '\r')
+  if [ -z "$un" ] || [ -z "$ue" ]; then echo "check identity: no git user.name and user.email configured"; return; fi
+  while IFS=$'\x1f' read -r sha an ae cn ce; do
+    [ -n "$sha" ] || continue
+    who=""
+    if [ "$an" != "$un" ] || [ "$ae" != "$ue" ]; then who="author $an <$ae>"; fi
+    if [ "$cn" != "$un" ] || [ "$ce" != "$ue" ]; then who="${who:+$who, }committer $cn <$ce>"; fi
+    [ -n "$who" ] || continue
+    count=$((count + 1))
+    [ -n "$bad" ] || bad="$sha $who"
+  done < <(git log --reverse --format='%h%x1f%an%x1f%ae%x1f%cn%x1f%ce' "$1..$2" | tr -d '\r')
+  if [ "$count" -eq 0 ]; then echo "check identity: clean"; return; fi
+  echo "check identity: $bad (expected $un <$ue>)$([ "$count" -le 1 ] || echo "; $((count - 1)) more commit(s)")"
+}
+
+# No commit from $1 to $2 carries an attribution trailer (a co-author or a
+# session line) or a line that begins "Generated with", after any leading
+# symbols such as a bullet or an emoji. A mention inside a sentence is not
+# attribution. Prints the digest line.
+check_attribution() {
+  local sha hit bad="" count=0
+  for sha in $(git rev-list --reverse "$1..$2"); do
+    hit=$(git log -1 --format=%B "$sha" | tr -d '\r' | grep -iE '^[[:space:]]*(co-authored-by|claude-session):|^[^[:alnum:]]*generated with' | head -n 1)
+    [ -n "$hit" ] || continue
+    count=$((count + 1))
+    [ -n "$bad" ] || bad="$(git rev-parse --short=7 "$sha") $(cut -c1-70 <<<"$hit")"
+  done
+  if [ "$count" -eq 0 ]; then echo "check attribution: clean"; return; fi
+  echo "check attribution: $bad$([ "$count" -le 1 ] || echo "; $((count - 1)) more commit(s)")"
+}
 
 state_line() {
   jq -r '"state: base \(.base[0:7]) review-head \(if .reviewHead then .reviewHead[0:7] else "-" end) round \(.round) t0 \(.t0 // "-")"' "$state" | tr -d '\r'
@@ -211,6 +261,109 @@ do_start() {
   printf '%s\n' "${budget:-budget: unknown}"
 }
 
+route_field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<"$route" | tr -d '\r'; }
+
+do_review() {
+  local base head basesha headsha diff pkgout rc t0 gate route rrc primary fallback reason note="" tier="" judge
+  local lens_files="" lout lrc n line secs timeout_ms cmd top drops=() unexpanded
+  local template="$plugin_root/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+  local judge_prompt="$ws/task-$first-review-prompt.md" codex_prompt="$ws/task-$first-review-codex-prompt.md"
+  local codex_out="$ws/task-$first-review-codex.json"
+
+  [ -f "$state" ] || die "Task $first has no step state; run task-step start first" 6
+  top=$(git rev-parse --show-toplevel)
+  if [ -n "$cwd_arg" ]; then
+    [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
+    top=$cwd_arg
+  fi
+  base=$base_arg
+  [ -n "$base" ] || base=$(jq -r '.base' "$state" | tr -d '\r')
+  head=$head_arg
+  [ -n "$head" ] || head=$(jq -r '.head // empty' "$state" | tr -d '\r')
+  [ -n "$head" ] || head=HEAD
+  basesha=$(git rev-parse --verify --quiet "$base^{commit}") || die "bad BASE: $base"
+  headsha=$(git rev-parse --verify --quiet "$head^{commit}") || die "bad head: $head"
+
+  gate=$(bash "${TASK_STEP_CODEX_GATE:-$HERE/codex-gate}" 2>/dev/null | tail -n 1 | tr -d '\r')
+  route=$(bash "$HERE/review-route" "$plan" --task "${ids[@]}" 2>"$TMP/route.err"); rrc=$?
+  if [ "$rrc" -eq 0 ]; then
+    primary=$(route_field primary) fallback=$(route_field fallback) reason=$(route_field reason)
+  else
+    primary=dforge:judge-opus fallback=- reason=route-failed
+    note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
+  fi
+  case $primary in
+    codex:light) tier=light judge=$fallback ;;
+    codex:heavy+judge-opus) tier=heavy judge=dforge:judge-opus ;;
+    *) judge=$primary ;;
+  esac
+  case $judge in dforge:*) ;; *) judge=dforge:judge-opus ;; esac
+
+  for n in "${ids[@]}"; do
+    lout=$(bash "$HERE/lens-route" "$plan" --task "$n" 2>&1); lrc=$?
+    [ "$lrc" -eq 0 ] || die "lens-route: $(tr -d '\r' <<<"$lout" | head -n 1)"
+    while IFS= read -r line; do
+      line=$(sed -n 's/^lens [^ ]* criteria=\(.*\)$/\1/p' <<<"$line" | tr -d '\r')
+      [ -n "$line" ] || continue
+      case ", $lens_files, " in *", $line, "*) continue ;; esac
+      lens_files="${lens_files:+$lens_files, }$line"
+    done <<<"$lout"
+  done
+
+  pkgout=$(bash "$HERE/review-package" "$plan" "$basesha" "$headsha"); rc=$?
+  [ "$rc" -eq 0 ] || { printf '%s\n' "$pkgout" >&2; exit "$rc"; }
+  t0=$(date +%s)
+  diff=$(sed -n 's/^wrote \(.*\): [0-9]* commit(s), [0-9]* bytes$/\1/p' <<<"$pkgout" | head -n 1 | tr -d '\r')
+
+  [ -n "$lens_files" ] || drops+=("Lens Criteria")
+  [ "$tier" = heavy ] || drops+=("Second Pass")
+  prompt_text "$template" | drop_sections ${drops[@]+"${drops[@]}"} | fill \
+    '[BASE_SHA]' "$basesha" '[HEAD_SHA]' "$headsha" '[DIFF_FILE]' "$diff" '[BRIEF_FILE]' "$brief" \
+    '[REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" '[JUDGE]' "$judge" \
+    '[LENS_FILES]' "$lens_files" '[CODEX_REVIEW_FILE]' "$codex_out" > "$judge_prompt"
+
+  if [ -n "$tier" ]; then
+    {
+      prompt_text "$template" | drop_sections "Output Format" "Criteria" "Lens Criteria" "Second Pass" | fill \
+        '[BASE_SHA]' "$basesha" '[HEAD_SHA]' "$headsha" '[DIFF_FILE]' "$diff" '[BRIEF_FILE]' "$brief" \
+        '[REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" '[JUDGE]' "$judge"
+      printf '\n## Criteria\n\nScore each criterion independently on a 1 to 20 scale, where 1 is a clear failure, 10 is genuinely uncertain, and 20 is clearly met.\n\n'
+      tr -d '\r' < "$plugin_root/criteria/task-review.md" | sed 's/^#/##/'
+      printf '\nScore against those criteria and nothing else. Where a criterion tells you to ignore something, ignoring it is part of scoring correctly.\n\n'
+      printf '## Output\n\nYour final message is one JSON object that satisfies the output schema, and nothing else: no markdown and no preamble. It carries the four scores (spec, scope, verification, quality), spec_verdict (compliant or issues), task_quality (approved or needs_fixes), findings (severity, file, line and summary for each; line is 0 when a finding has no single line) and cannot_verify (the requirements you could not verify from the diff alone; an empty array when there are none). This overrides any instruction above about the shape of your final message.\n'
+    } > "$codex_prompt"
+    case $tier in
+      light) secs=$(ladder_block codex-judge | awk 'END { print $3 }') ;;
+      *) secs=$(ladder_block codex-judge | awk 'NR == 1 { print $3 }') ;;
+    esac
+    timeout_ms=$(( (${secs:-0} + 120) * 1000 ))
+    cmd="bash \"$plugin_root/scripts/run-codex-review.sh\" --kind task --tier $tier --cwd \"$top\" --out \"$codex_out\" --prompt \"$codex_prompt\""
+  fi
+  for line in "$judge_prompt" ${tier:+"$codex_prompt"}; do
+    unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$line" | head -n 1)
+    [ -z "$unexpanded" ] || die "unexpanded placeholder $unexpanded in $line"
+  done
+
+  jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" \
+    '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)' \
+    "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+
+  printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
+    "$(git rev-list --count "$basesha..$headsha")" "$diff"
+  if [ "$reason" = codex-off ] || [[ "$gate" == *source=probe ]]; then printf 'gate: %s\n' "$gate"; fi
+  case $tier in
+    light) printf 'seat: codex:light prompt: %s fallback: %s prompt: %s\n' "$codex_prompt" "$judge" "$judge_prompt" ;;
+    heavy) printf 'seat: codex:heavy+judge-opus prompt: %s then: %s prompt: %s\n' "$codex_prompt" "$judge" "$judge_prompt" ;;
+    *) printf 'seat: %s prompt: %s%s\n' "$judge" "$judge_prompt" "$note" ;;
+  esac
+  if [ -n "$tier" ]; then printf 'codex: %s\ntimeout: %s\n' "$cmd" "$timeout_ms"; fi
+  check_identity "$basesha" "$headsha"
+  check_attribution "$basesha" "$headsha"
+  state_line
+  printf '%s\n' "$(budget_of <<<"$pkgout")"
+}
+
 case $sub in
   start) do_start ;;
+  review) do_review ;;
 esac
