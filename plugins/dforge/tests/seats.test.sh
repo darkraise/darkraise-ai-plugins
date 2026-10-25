@@ -102,6 +102,9 @@ CR="$P/skills/requesting-code-review/references/code-reviewer.md"
 UD="$P/skills/using-dforge/SKILL.md"
 names "requesting review: the judge seat" "$RCR" 'Dispatch `dforge:judge-opus` as `subagent_type`'
 names "requesting review: the diff file comes first" "$RCR" 'git diff -U10 "$BASE_SHA..$HEAD_SHA"'
+names "requesting review: the diff file is checked before dispatch" "$RCR" '[ -s "$DIFF_FILE" ] && ! git diff --quiet "$BASE_SHA..$HEAD_SHA"'
+names "requesting review: the diff file needs a base" "$RCR" '[ -n "$BASE_SHA" ]'
+names "requesting review: the state directory ignores itself" "$RCR" 'dforge_self_ignore "$STATE_DIR"'
 check "requesting review: no general-purpose seat" "$(grep -c 'general-purpose' "$RCR")" "0"
 names "code reviewer: the judge seat" "$CR" 'Subagent (dforge:judge-opus):'
 check "code reviewer: no git fallback" "$(grep -c 'derive it yourself' "$CR")" "0"

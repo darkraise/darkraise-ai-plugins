@@ -37,9 +37,11 @@ HEAD_SHA=$(git rev-parse HEAD)
 `scripts/review-package` needs a plan, so outside one write the diff file yourself:
 
 ```bash
-DIFF_FILE="$(bash <plugin-root>/scripts/dforge-path state)/review-$(git rev-parse --short "$HEAD_SHA").diff"
-mkdir -p "$(dirname "$DIFF_FILE")"
-{ git log --oneline "$BASE_SHA..$HEAD_SHA"; echo; git diff --stat "$BASE_SHA..$HEAD_SHA"; echo; git diff -U10 "$BASE_SHA..$HEAD_SHA"; } > "$DIFF_FILE"
+STATE_DIR=$(bash <plugin-root>/scripts/dforge-path state) && [ -n "$STATE_DIR" ] && [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ] &&
+  mkdir -p "$STATE_DIR" && . <plugin-root>/scripts/lib/dforge-dir.sh && dforge_self_ignore "$STATE_DIR" &&
+  DIFF_FILE="$STATE_DIR/review-$(git rev-parse --short "$HEAD_SHA").diff" &&
+  { git log --oneline "$BASE_SHA..$HEAD_SHA" && echo && git diff --stat "$BASE_SHA..$HEAD_SHA" && echo && git diff -U10 "$BASE_SHA..$HEAD_SHA"; } > "$DIFF_FILE" &&
+  [ -s "$DIFF_FILE" ] && ! git diff --quiet "$BASE_SHA..$HEAD_SHA" || { echo "no diff file written: do not dispatch" >&2; false; }
 ```
 
 Dispatch `dforge:judge-opus` as `subagent_type`, with no `model` or `effort` argument, filling the template at [code-reviewer.md](references/code-reviewer.md). The judge is read-only and has no shell: the diff file is its view of the change.
