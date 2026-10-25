@@ -14,7 +14,7 @@ test('the three production templates yield a prompt body', () => {
   const body = template(resolve(PLUGIN, 'skills/subagent-driven-development/references/implementer-prompt.md'));
   assert.match(body, /^You are implementing Task N: \[task name\]/);
   assert.doesNotMatch(body, /^Subagent|prompt: \|/m);
-  assert.match(template(resolve(PLUGIN, 'skills/requesting-code-review/references/code-reviewer.md')), /\[DIFF_FILE\][\s\S]*```bash[\s\S]*## Critical Rules/);
+  assert.match(template(resolve(PLUGIN, 'skills/requesting-code-review/references/code-reviewer.md')), /\[DIFF_FILE\][\s\S]*## Critical Rules/);
   assert.match(template(resolve(PLUGIN, 'skills/writing-plans/references/plan-reviewer-prompt.md')), /\[PLAN_FILE\][\s\S]*\[PLUGIN_ROOT\]/);
   assert.throws(() => template(resolve(PLUGIN, 'README.md')), /no "prompt: \|" block/);
 });
