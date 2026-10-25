@@ -46,7 +46,7 @@ use toolu_impl 'Implement task 3'
 result toolu_impl $'Async agent launched successfully.\nagentId: a3 (internal ID)'
 out=$(bash "$INFLIGHT"); code=$?
 check "an agent with no notification: exit 1" "$code" "1"
-check "it is named with its id and description" "$(grep -c '^- agent a3 Implement task 3$' <<<"$out")" "1"
+check "it is named with its id and description" "$(grep -c '^- agent a3 - idle - Implement task 3$' <<<"$out")" "1"
 
 notify toolu_impl completed "$LINGER"
 out=$(bash "$INFLIGHT"); code=$?
@@ -66,7 +66,7 @@ use toolu_sh 'Run the suite'
 result toolu_sh 'Command running in background with ID: b9. Output is being written to: /tmp/b9.output.'
 out=$(bash "$INFLIGHT"); code=$?
 check "a running shell: exit 1" "$code" "1"
-check "the shell is named" "$(grep -c '^- shell b9 Run the suite$' <<<"$out")" "1"
+check "the shell is named" "$(grep -c '^- shell b9 - idle - Run the suite$' <<<"$out")" "1"
 
 # --- next-step prints no block over running work ---
 REPO="$TMP/repo"
@@ -91,8 +91,54 @@ use toolu_late 'Watch the build'
 result toolu_late 'Command running in background with ID: b10. Output is being written to: /tmp/b10.output.'
 out=$(bash "$INFLIGHT"); code=$?
 check "a long transcript: still exit 1" "$code" "1"
-check "a long transcript: the launch is named" "$(grep -c '^- shell b10 Watch the build$' <<<"$out")" "1"
+check "a long transcript: the launch is named" "$(grep -c '^- shell b10 - idle - Watch the build$' <<<"$out")" "1"
 result toolu_stop2 '{"message":"Successfully stopped task: b10 (Watch the build)","task_id":"b10"}'
+
+# --- start time and idle age ---
+result_at() { # result_at <tool_use_id> <iso timestamp> <text>
+  fjq -nc --arg id "$1" --arg ts "$2" --arg t "$3" '{type:"user",timestamp:$ts,message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t}]}}' >> "$TP"
+}
+ago() { touch -d "$1 minutes ago" "$2"; } # ago <minutes> <file>
+: > "$TP"
+mkdir -p "$TMP/$SID/subagents"
+
+use toolu_s11 'Run the suite'
+result_at toolu_s11 2026-10-26T08:05:00.000Z "Command running in background with ID: b11. Output is being written to: $TMP/b11.output. You will be notified when it completes."
+: > "$TMP/b11.output"; ago 47 "$TMP/b11.output"
+out=$(TZ=UTC0 bash "$INFLIGHT")
+check "a shell: its start time and the idle age of the file its result names" \
+  "$(grep -c '^- shell b11 08:05 idle 47m Run the suite$' <<<"$out")" "1"
+
+use toolu_a11 'Implement task 4'
+result toolu_a11 "$(printf 'Async agent launched successfully.\nagentId: a11 (internal ID)\noutput_file: %s/a11.output\nDo NOT Read or tail this file.' "$TMP")"
+: > "$TMP/a11.output"; ago 12 "$TMP/a11.output"
+out=$(bash "$INFLIGHT")
+check "an agent: the idle age of its output_file" "$(grep -c '^- agent a11 - idle 12m Implement task 4$' <<<"$out")" "1"
+
+use toolu_a12 'Review task 4'
+result toolu_a12 $'Async agent launched successfully.\nagentId: a12 (internal ID)'
+: > "$TMP/$SID/subagents/agent-a12.jsonl"; ago 9 "$TMP/$SID/subagents/agent-a12.jsonl"
+out=$(bash "$INFLIGHT")
+check "an agent with no output_file: the idle age of its own transcript" "$(grep -c '^- agent a12 - idle 9m Review task 4$' <<<"$out")" "1"
+
+use toolu_a13 'Review task 5'
+result toolu_a13 "$(printf 'Async agent launched successfully.\nagentId: a13 (internal ID)\noutput_file: %s/gone.output' "$TMP")"
+: > "$TMP/$SID/subagents/agent-a13.jsonl"; ago 5 "$TMP/$SID/subagents/agent-a13.jsonl"
+out=$(bash "$INFLIGHT")
+check "an agent whose named file is gone: its transcript instead" "$(grep -c '^- agent a13 - idle 5m Review task 5$' <<<"$out")" "1"
+
+use toolu_a14 'Review task 6'
+result toolu_a14 $'Async agent launched successfully.\nagentId: a14 (internal ID)'
+out=$(bash "$INFLIGHT")
+check "an agent with neither file: idle -" "$(grep -c '^- agent a14 - idle - Review task 6$' <<<"$out")" "1"
+
+use toolu_a15 'Review task 7'
+: > "$TMP/a15-transcript.jsonl"; ago 33 "$TMP/a15-transcript.jsonl"
+if ln -s "$TMP/a15-transcript.jsonl" "$TMP/a15.output" 2>/dev/null && [ -L "$TMP/a15.output" ]; then
+  result toolu_a15 "$(printf 'Async agent launched successfully.\nagentId: a15 (internal ID)\noutput_file: %s/a15.output' "$TMP")"
+  out=$(bash "$INFLIGHT")
+  check "an output file that is a link: the age of what it points at" "$(grep -c '^- agent a15 - idle 33m Review task 7$' <<<"$out")" "1"
+fi
 
 # --- no transcript for this session ---
 rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"

@@ -172,6 +172,7 @@ MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -nc '{type:"attachment",attachment
 out=$(stop s-1 "$NEXT" false "$BG")
 check "a reported agent with work still running: holds" "$(decision "$out")" "block"
 check "the hold names it" "$(jq -r .reason <<<"$out" | grep -c '^- agent a8 ')" "1"
+check "the hold shows its start and idle age fields" "$(jq -r .reason <<<"$out" | grep -c '^- agent a8 - idle - ')" "1"
 notify toolu_agent3 completed
 check "its final notification: passes" "$(stop s-1 "$NEXT" false "$BG")" ""
 

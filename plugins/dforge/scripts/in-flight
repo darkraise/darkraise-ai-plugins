@@ -5,6 +5,11 @@
 # before a handoff, the finishing menu, or a claim that the work is done;
 # scripts/next-step runs it before printing a block.
 #
+# Each launch prints as "<agent|shell> <task id> <started HH:MM> <idle Nm|idle -> <what>":
+# the start is the launch result's local time, and the idle age is the minutes
+# since the launch's output file (an agent's own transcript when its result
+# names none) last changed; "-" where there is no such time or file.
+#
 # Usage: in-flight
 # Exit: 0 nothing running; 1 something still running (listed on stdout);
 #       3 no transcript for this session (Codex, or no session record), or
@@ -32,7 +37,7 @@ if [ -z "$running" ]; then
   exit 0
 fi
 printf 'in-flight: %s background launch(es) still running:\n' "$(grep -c . <<<"$running")"
-sed 's/^/- /' <<<"$running"
+inflight_text <<<"$running" | sed 's/^/- /'
 cat <<'EOF'
 For each one: wait for it (end the turn; its notification starts the next one),
 or stop it with TaskStop <id>. An agent that already sent its report is still

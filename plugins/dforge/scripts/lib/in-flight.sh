@@ -15,24 +15,58 @@
 # one made before the session last started or resumed (SINCE), whose process
 # died with the old one. A line that is not JSON is skipped.
 
+# inflight_mtime FILE: the modification time of the file FILE names, in epoch
+# seconds, links followed (an agent's output file is a link to its transcript).
+# Returns 1 when there is no such file.
+inflight_mtime() {
+  local t
+  [ -n "$1" ] || return 1
+  t=$(stat -L -c %Y -- "$1" 2>/dev/null | tr -d '\r') || t=""
+  case $t in ''|*[!0-9]*) t=$(stat -L -f %m -- "$1" 2>/dev/null | tr -d '\r') || t="" ;; esac
+  case $t in ''|*[!0-9]*) t=$(date -r "$1" +%s 2>/dev/null | tr -d '\r') || t="" ;; esac
+  case $t in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s' "$t"
+}
+
+# inflight_idle KIND ID OUTPUT_FILE TRANSCRIPT: "idle <N>m", the minutes since
+# the launch's activity file last changed, or "idle -" when there is none. The
+# file is the one the launch result names (OUTPUT_FILE, or "-"); an agent whose
+# result names none, or whose named file is gone, is read from its own
+# transcript, <session>/subagents/agent-<id>.jsonl beside the main one.
+inflight_idle() {
+  local kind=$1 id=$2 out=$3 tp=$4 t="" now
+  [ "$out" = "-" ] || t=$(inflight_mtime "$out") || t=""
+  if [ -z "$t" ] && [ "$kind" = agent ] && [ -n "$tp" ]; then
+    t=$(inflight_mtime "${tp%.jsonl}/subagents/agent-$id.jsonl") || t=""
+  fi
+  if [ -z "$t" ]; then printf 'idle -'; return 0; fi
+  now=$(date +%s)
+  if [ "$now" -gt "$t" ]; then printf 'idle %sm' $(( (now - t) / 60 )); else printf 'idle 0m'; fi
+}
+
 # inflight_scan TRANSCRIPT [SINCE]
-# stdout: one line per launch still running: <agent|shell> <task id> <what>
+# stdout: one line per launch still running, five tab-separated fields:
+#   <agent|shell> <task id> <started HH:MM> <idle Nm|idle -> <what>
+# The start is the launch result's own timestamp in local time ("-" when it
+# has none); the idle age is inflight_idle's; <what> is cut at 80 characters.
 # Returns 1 when the transcript could not be scanned, which is not "nothing".
 inflight_scan() {
-  local tp=$1 since=${2:-} events launched stopped latest running
+  local tp=$1 since=${2:-} events launched stopped latest running kind id start out what
   [ -n "$tp" ] && [ -f "$tp" ] || return 0
-  events=$(set -o pipefail; jq -rR --arg since "$since" 'fromjson? | select(.isSidechain? != true)
+  events=$(set -o pipefail; jq -rR --arg since "$since" 'def hm($t): try ($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 | localtime | strftime("%H:%M")) catch "-";
+      fromjson? | select(.isSidechain? != true)
       | select($since == "" or ((.timestamp? // $since) >= $since))
       | if .type? == "assistant" then
           .message.content? | arrays | .[] | select(.type? == "tool_use")
           | "U\t\(.id // "-")\t\((.input.description? // .input.command? // "") | tostring | gsub("[\t\r\n]+"; " ") | .[0:80])"
         elif .type? == "user" then
-          .message.content? | arrays | .[] | select(.type? == "tool_result")
+          (.timestamp? // "") as $ts
+          | .message.content? | arrays | .[] | select(.type? == "tool_result")
           | (.content | if type == "array" then (.[0].text? // "") else tostring end) as $text
           | if ($text | test("^Command running in background with ID")) then
-              "L\t\(.tool_use_id // "-")\t\(($text | capture("with ID: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tshell"
+              "L\t\(.tool_use_id // "-")\t\(($text | capture("with ID: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tshell\t\(hm($ts))\t\(([$text | capture("Output is being written to: (?<p>[^\\s]+)").p | sub("\\.$"; "")] | first) // "-")"
             elif ($text | test("^Async agent launched")) then
-              "L\t\(.tool_use_id // "-")\t\(($text | capture("agentId: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tagent"
+              "L\t\(.tool_use_id // "-")\t\(($text | capture("agentId: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tagent\t\(hm($ts))\t\(([$text | capture("output_file: (?<p>[^\\s]+)").p] | first) // "-")"
             elif ($text | test("^(\\{\"message\":\")?Successfully (stopped task|killed shell): ")) then
               "S\t\(($text | capture("Successfully (stopped task|killed shell): (?<id>[A-Za-z0-9_-]+)").id) // "-")"
             else empty end
@@ -74,10 +108,17 @@ inflight_scan() {
         if ((t in seq) && (k == "" || seq[t] > seq[k])) k = t
         if (k != "" && state[k] == "done") next }
       ($3 in gone) || seen[$2]++ { next }
-      { w = what[$2]; if (w == "") w = "(no description)"; print $4 " " $3 " " w }' \
+      { w = what[$2]; if (w == "") w = "(no description)"; print $4 "\t" $3 "\t" $5 "\t" $6 "\t" w }' \
       <(printf '%s\n' "$stopped") <(printf '%s\n' "$latest") <(printf '%s\n' "$events") - <<<"$launched") || return 1
-  [ -z "$running" ] || printf '%s\n' "$running"
+  [ -z "$running" ] && return 0
+  while IFS=$'\t' read -r kind id start out what; do
+    printf '%s\t%s\t%s\t%s\t%s\n' "$kind" "$id" "$start" "$(inflight_idle "$kind" "$id" "$out" "$tp")" "$what"
+  done <<<"$running"
 }
+
+# inflight_text: inflight_scan's lines on stdin with single spaces between the
+# fields, for a person to read.
+inflight_text() { tr '\t' ' '; }
 
 # inflight_since SESSION_ID: the time scripts/session-start.sh recorded when
 # the session last started or resumed, or nothing.

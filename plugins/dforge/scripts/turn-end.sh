@@ -112,7 +112,7 @@ if has_pending_background; then
   case "$last" in
     *'## Next session'* | *'Which option?'*)
       reason="Your message ends the session (the next-step block or the finishing menu), but ${pending} background launch(es) you started this session are still running:
-$(sed 's/^/- /' <<<"$running")
+$(inflight_text <<<"$running" | sed 's/^/- /')
 An agent that already sent its report is still running when work it started is alive. Do not hand off or finish over running work. Either wait for each (end the turn without the block; its notification starts the next turn), or stop it with TaskStop <id> and, if its result is not in hand, record a Ruling line in the ledger for the task it served. Then run next-step again and end with the fresh block."
       hold "$reason" "dforge held the stop: this message ends the session while ${pending} background launch(es) still run"
       ;;
