@@ -729,7 +729,16 @@ describe('seat check', () => {
     expect(seatDenial(fork, true, true)).toBeNull()
     expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true, true)).toMatch(/^dforge: forks are kept out/)
     expect(seatDenial(fork, true, false)).toMatch(/^dforge: forks are kept out/)
-    expect(typeof FORK_DRAFTING).toBe('boolean')
+    expect(FORK_DRAFTING).toBe(false)
+  })
+
+  test('denies a drafting fork through the hook once a dforge skill ran', async ($, on) => {
+    world(on, { tokens: 10_000 })
+    await $.session.start(START)
+    const fork = { tool_use_id: 'toolu_1', prompt: 'Draft the tasks', description: 'Draft plan tasks 1-2', subagentType: 'fork', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: true } as never
+    expect((await $.agent.spawn(fork)).deny).toBeUndefined()
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:writing-plans' })
+    expect((await $.agent.spawn({ ...(fork as object), tool_use_id: 'toolu_2' } as never)).deny).toMatch(/^dforge: forks are kept out of dforge sessions\./)
   })
 
   test('refuses an untyped spawn once a dforge skill ran, and lists the refusal', async ($, on) => {
