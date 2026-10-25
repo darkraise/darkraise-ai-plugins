@@ -19,6 +19,10 @@ and 9.
 - **Approach.** Offered skill text only (the do-less option), rules plus a
   spawn hook plus a drafter, or that plus a Workflow drafting loop. Answer:
   "Rules + spawn hook + drafter". The Workflow loop stays with row 8.
+- **Spec review.** Answer: "Approve and run unattended"; finish: "Merge into
+  main".
+
+Finish: merge
 
 ## Problem
 
