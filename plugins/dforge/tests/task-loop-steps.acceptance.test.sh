@@ -241,9 +241,10 @@ a3() {
   check "A3: and writes nothing" "$(ws_files)" "$before"
 
   ts start docs/plan.md 1
+  printf '%s\n\nFixed.\n' '- app.txt: a finding' > "$WS/task-1-fix-1.md"
   before=$(ws_files)
-  ts rereview docs/plan.md 1
-  check "A3: rereview before review exits 6" "$rc" "6"
+  ts rereview docs/plan.md 1 --covered
+  check "A3: rereview before review exits 6, with its fix message in place" "$rc" "6"
   check "A3: and writes nothing" "$(ws_files)" "$before"
 
   local CWS sub
