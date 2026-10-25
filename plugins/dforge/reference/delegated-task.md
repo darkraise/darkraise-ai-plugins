@@ -25,7 +25,7 @@ executor's wrapper instead of an implementer subagent.
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
 | External implementer | The task's `**Executor:**` line, via [executor-lane.md](executor-lane.md) | Set by the wrapper |
 | Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
-| Scoped re-review | general-purpose | `sonnet`; `opus` for a subtle concurrency fix |
+| Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |
 
 **Fleet agents take no `model` or `effort` argument.** The Agent tool's `model`
 argument overrides the agent file's pinned model while `effort` keeps its

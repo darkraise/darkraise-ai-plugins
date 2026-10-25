@@ -403,7 +403,7 @@ absent "SDD no longer writes K=3" "$SDD" 'K=3'
 absent "the delegated loop does not write K=3" "$DT" 'K=3'
 present "the delegated loop writes the seat clause" "$DT" ', seat <seat>'
 present "the delegated loop keeps the runner name" "$DT" 'run-codex-review.sh'
-present "the scoped re-review names its model" "$DT" '| Scoped re-review | general-purpose | `sonnet`; `opus` for a subtle concurrency fix |'
+present "the scoped re-review names its judge seats" "$DT" '| Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |'
 # A breaker CONFIRMED-GAP is carried into the next dependent task; completion
 # has to accept it, or the loop has no legal next step.
 present "a carried breaker gap lets the task complete" "$DT" 'confirmed and carried into a later task, with a ruling at the cap'

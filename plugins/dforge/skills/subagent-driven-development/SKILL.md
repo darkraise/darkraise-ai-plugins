@@ -330,8 +330,7 @@ and the rule that fleet agents take no `model` or `effort` argument, are in
 
 **General-purpose seats always take an explicit model.** An omitted model
 inherits your session's model — often the most capable and most expensive —
-which silently defeats the choice. Scoped re-reviews of small fix diffs take
-`sonnet`; a subtle concurrency fix takes `opus`.
+which silently defeats the choice.
 
 ## The Ledger
 

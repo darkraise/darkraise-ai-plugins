@@ -69,15 +69,15 @@ check "a Seats row with no model is caught" "$(unmodelled "$TMP/bad-row.md")" "$
 cat > "$TMP/good.md" <<'EOF'
 ```
 Subagent (general-purpose):
-  description: "Re-review"
-  model: [MODEL]
+  description: "Probe"
+  model: sonnet
   prompt: |
-    Re-review it.
+    Probe it.
 ```
 
 | Seat | Agent | Model argument |
 |---|---|---|
-| Scoped re-review | general-purpose | `sonnet` |
+| Verifier | general-purpose | `sonnet` |
 EOF
 check "a modelled block and row pass" "$(unmodelled "$TMP/good.md")" ""
 
@@ -109,6 +109,17 @@ check "requesting review: no general-purpose seat" "$(grep -c 'general-purpose' 
 names "code reviewer: the judge seat" "$CR" 'Subagent (dforge:judge-opus):'
 check "code reviewer: no git fallback" "$(grep -c 'derive it yourself' "$CR")" "0"
 names "code reviewer: the diff file is required" "$CR" '`[DIFF_FILE]` — REQUIRED'
+RRP="$P/skills/subagent-driven-development/references/re-review-prompt.md"
+DT="$P/reference/delegated-task.md"
+names "re-review: the judge seat" "$RRP" 'Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency fix):'
+check "re-review: no general-purpose seat" "$(grep -c 'general-purpose' "$RRP")" "0"
+check "re-review: no model line" "$(grep -c '^  model:' "$RRP")" "0"
+check "re-review: no model placeholder" "$(grep -c '\[MODEL\]' "$RRP")" "0"
+check "re-review: no git fallback" "$(grep -c 'git diff' "$RRP")" "0"
+names "re-review: the diff file is required" "$RRP" '`[DIFF_FILE]` — REQUIRED'
+names "re-review: the read-only clause stays" "$RRP" 'Your review is read-only on this checkout.'
+check "delegated loop: no general-purpose re-review row" "$(grep -c '^| Scoped re-review | general-purpose' "$DT")" "0"
+names "delegated loop: the re-review row names the judge seats" "$DT" '| Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |'
 names "entry point: the Seats section" "$UD" '## Seats'
 names "entry point: general-purpose takes a model" "$UD" '`general-purpose` takes an explicit `model`'
 names "entry point: read-only checks on a judge" "$UD" 'Read-only checks (register rows, findings, a claim) go to `dforge:judge-sonnet-high`'
