@@ -136,6 +136,9 @@ WP="$P/skills/writing-plans/SKILL.md"
 DPR="$P/skills/writing-plans/references/drafter-prompt.md"
 names "drafting: small plans stay in the session" "$WP" 'A plan of 1-3 tasks is drafted in the session.'
 names "drafting: slices of 2-3, all at once" "$WP" 'split the index into slices of 2-3 consecutive tasks'
+wp_flat=$(tr '\n' ' ' < "$WP" | tr -s ' ')
+check "drafting: one drafter per slice, every slice in one message" "$(grep -cF 'dispatch one `dforge:drafter-sonnet` per slice, every slice in one message' <<<"$wp_flat")" "1"
+check "drafting: the dispatch names the plugin root" "$(grep -cF 'the slice path (`<state>/drafts/<plan basename without .md>/tasks-A-B.md`) and the plugin root, as the template' <<<"$wp_flat")" "1"
 names "drafting: joined without reading" "$WP" 'scripts/draft-pack --join PLAN_FILE'
 names "drafting: a changed Contract re-dispatches every slice" "$WP" 're-dispatches every slice: a slice drafted against the old Contract'
 names "drafting: Codex drafts in the session" "$WP" 'On a Codex host, draft every task in the session'

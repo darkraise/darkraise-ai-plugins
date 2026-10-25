@@ -298,11 +298,12 @@ If a plan ends up with no wave of two or more tasks, say so and write
 
 A plan of 1-3 tasks is drafted in the session. For 4 or more, write the
 header yourself, through the Task index, and save it as the plan file. Then
-split the index into slices of 2-3 consecutive tasks and dispatch one `dforge:drafter-sonnet`
-per slice, every slice in one message, with
+split the index into slices of 2-3 consecutive tasks and dispatch one
+`dforge:drafter-sonnet` per slice, every slice in one message, with
 [drafter-prompt.md](references/drafter-prompt.md). Each dispatch names the
-spec path, the plan path, the slice range and the slice path,
-`<state>/drafts/<plan basename>/tasks-A-B.md`, as the template's placeholders; paste nothing else.
+spec path, the plan path, the slice range, the slice path
+(`<state>/drafts/<plan basename without .md>/tasks-A-B.md`) and the plugin
+root, as the template's placeholders; paste nothing else.
 
 - **Contracts settle what slices share.** A drafter that reports
   `NEEDS_CONTEXT` needs a contract: add it to the header and re-dispatch that
@@ -393,7 +394,7 @@ git commit -m "feat: add specific feature"
 
 Every task records which implementer runs it, so the choice is a property of
 the plan rather than a judgment made from memory at dispatch time. Do this
-after the tasks are drafted and before the plan is saved. Retrofitting an
+after the tasks are drafted and before the plan is committed. Retrofitting an
 existing plan is the same process: read it, rename any skill or agent written
 under an older plugin prefix to its `dforge:` name, score each task, and add
 the lines.
