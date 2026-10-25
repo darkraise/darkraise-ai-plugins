@@ -533,20 +533,24 @@ Everything you paste into a dispatch prompt — and everything a subagent
 prints back — stays resident in your context for the rest of the session
 and is re-read on every later turn. Hand artifacts over as files.
 
-**Waiting on dispatched subagents:** never poll a wait interface with
-short timeouts, and never sit in one silent, open-ended wait either.
-While you have local work — ledger updates, packaging the next review,
-reading reports — keep working; child results arrive on their own.
-When you are genuinely idle, wait in bounded stretches (five to ten
-minutes, where your platform allows), and between stretches post one
-line of status and reconcile your live children: list them, and chase
-any that finished without reporting. A bounded stretch keeps nearly
-all of a long wait's efficiency while guaranteeing a stuck or lost
-child is noticed within minutes, not at the end of the session.
-On Claude Code a bounded stretch is a `Monitor` with an until-loop, never a
-background `sleep`: a sleep is one more launch that has not reported back.
-Stop the monitor with `TaskStop` once the stretch has served, and always
-before dforge:handoff.
+**Waiting on dispatched subagents (Claude Code):** Agent dispatches run in
+the background, and so do a Codex review seat and a suite that outruns Bash's
+ten-minute foreground cap. While local work remains — ledger updates,
+packaging the next review, reading reports — keep working; child results
+arrive on their own. When only waiting remains, end the turn: each completion
+notification starts the next turn.
+Never wait with `Monitor`, `sleep` or a polling loop.
+
+On a turn that a notification started, run `scripts/in-flight` before
+anything else and handle every launch that finished, including one whose
+notification you missed. Its lines show each launch's start time and idle
+minutes. In an auto run, a launch that never notifies is caught by the
+cockpit, which after 20 minutes without a turn tells you to stop each launch
+idle for 30 minutes or more.
+
+On Codex, `wait_agent` covers the idle window instead, in bounded stretches,
+because completion mail does not wake an idle session: see Waiting on
+children in `skills/using-dforge/references/codex-tools.md`.
 
 For each task, or batch, run [delegated-task.md](../../reference/delegated-task.md):
 dispatch the implementer, handle the report, review the task, the fix loop and
