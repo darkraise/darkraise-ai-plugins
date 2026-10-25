@@ -59,10 +59,11 @@ At a wave boundary — every earlier task complete, every earlier wave
    the next one.
 2. **Prove the base.** Unless the last `Wave <j>: integrated` line names the
    current `HEAD`, run the plan's `**Worktree setup:**` (when it is not `none`)
-   and `**Integration check:**` in the checkout, bounded like any long command.
-   A failure here is not this wave's: serialize the wave and record the
-   output's summary in the Ruling, so the next wave's check is not blamed on
-   it.
+   in the checkout, then its `**Integration check:**` through
+   `bash <plugin-root>/scripts/suite-run -- bash -c '<the check>'`, in the
+   background when it can outrun Bash's ten-minute cap. A failure here is not
+   this wave's: serialize the wave and record the digest's summary in the
+   Ruling, so the next wave's check is not blamed on it.
 3. **Size it.** `c` starts at the smaller of the wave's width and 3. Run
    `scripts/context-size --wave <c>` and lower `c` while it exits 5 (or 6, an
    auto run's `compact`); it reserves one task's worst growth for every task
@@ -77,7 +78,9 @@ At a wave boundary — every earlier task complete, every earlier wave
 ## 2. Dispatch in parallel
 
 Dispatch up to `c` tasks of the wave in one message. Each is
-[delegated-task.md](delegated-task.md) §1 with three differences:
+[delegated-task.md](delegated-task.md) §1, opened with
+`bash <plugin-root>/scripts/task-step start PLAN_FILE N --wave <k>`, with three
+differences:
 
 - **The Agent call passes `isolation: "worktree"`** and, as always, no `model`
   or `effort`. The worktree Claude Code creates is the task's: its Bash runs
@@ -123,8 +126,11 @@ Add two lines to your short report: `**Worktree:**` with the output of
   `First copy <workspace>/task-<N>-report.md there and append to it.`
 - `[WORKTREE_SETUP]` — the plan's `**Worktree setup:**` command, or `none`.
 
-Write each assigned line, ending `; wave <k>`, in the message that dispatches
-it. While tasks run, keep working as subagent-driven-development's Waiting on
+`task-step start --wave <k>` writes each assigned line, ending `; wave <k>`, and
+its dispatch file; call it for every task in the message that dispatches them.
+The dispatch file does not hold the section above: add the filled Parallel
+workspace section to each Agent prompt, after the line naming the dispatch
+file. While tasks run, keep working as subagent-driven-development's Waiting on
 dispatched subagents says; every report that arrives is handled at once.
 
 ## 3. Review each task on its own
@@ -135,10 +141,14 @@ reviewers and any later dispatch read, because the worktree is removed in §5.
 Then run delegated-task.md §2-§4 for that task, unchanged, with two
 substitutions:
 
-- **HEAD is the task ref.** The review package is
-  `scripts/review-package PLAN_FILE <base> <TASK_REF>`; a scoped re-review's
-  FIX_BASE is the task ref's commit the previous review saw. Both run from
-  your checkout: the worktrees share its objects.
+- **HEAD is the task ref.** Pass `--head <TASK_REF>` to
+  `task-step review PLAN_FILE N` and to `task-step rereview PLAN_FILE N`: the
+  review package then runs from the recorded base to the task ref, and a
+  scoped re-review's FIX_BASE is the task ref's commit the previous review saw,
+  which `task-step` recorded. Both run from your checkout: the worktrees share
+  its objects. Give `review` also `--cwd <worktree>`, so that a Codex seat's
+  printed runner command runs in the task's worktree and not in your
+  checkout.
 - **A resumed implementer is still in its worktree.** A fresh dispatch — the
   cache rule, an escalation, a split part — is a new parallel dispatch (§2)
   with `[START]` set to the task ref, and its report is copied back the same
@@ -146,7 +156,11 @@ substitutions:
 
 Every finding, ruling and verdict is the task's own, exactly as in sequential
 mode. Rulings for several tasks that arise together share one ruling-seat
-dispatch, as they always do at one decision point.
+dispatch, as they always do at one decision point. The `cannot-verify` items
+of every task whose review is in hand when one task reaches its cannot-verify
+point go to one dispatch, written with `<kind>` `cannot-verify` and every
+such task number. A task not yet reviewed, or not yet dispatched, never holds
+that dispatch back: its items wait for its own decision point.
 
 ## 4. Merge each task as it passes
 
@@ -175,7 +189,10 @@ bash scripts/wave merge PLAN_FILE <N> <task base>
   rounds. The rebased task's base is now that `HEAD`: the re-review's
   FIX_BASE, the `wave merge` argument and the complete line's range all start
   there, because the task ref no longer descends from what the last review
-  saw.
+  saw. Pass that `HEAD` to the scoped re-review as
+  `task-step rereview PLAN_FILE N --head <TASK_REF> --base <that HEAD>`; the
+  state line it prints then shows it as the task's base, which is the
+  `wave merge` argument.
 - **Exit 3, the checkout is not clean.** Something wrote into your checkout.
   Run `git status`, keep the change recoverable with
   `git stash push -m "wave <k> stray changes"`, log a Ruling naming it, and
@@ -192,20 +209,23 @@ When every task of the wave has a complete line:
    the wave's tasks entered and committed in, and deletes their merged refs.
    It never forces: a `kept` line is a worktree with uncommitted changes or a
    lock, left for your human partner; log each as a `Ruling:` line.
-2. Run the plan's `**Worktree setup:**` (when it is not `none`) and its
-   `**Integration check:**` in the checkout, bounded like any long command,
-   with the output written to `<workspace>/wave-<k>-check.txt`.
+2. Run the plan's `**Worktree setup:**` (when it is not `none`) in the
+   checkout, then its `**Integration check:**` through
+   `bash <plugin-root>/scripts/suite-run -- bash -c '<the check>'`, in the
+   background when it can outrun Bash's ten-minute cap. The digest and the log
+   path it prints replace a hand-made output file.
 3. **Pass:** log `Wave <k>: integrated (head <sha7>; <command> → pass)` and
    go to the next wave.
 4. **Fail:** log `Wave <k>: check failed — <command> → <summary>` and run the
-   wave's fix loop: delegated-task.md §4 with the check output as its one
+   wave's fix loop: delegated-task.md §4 with the digest and its log as its one
    finding, the wave's highest-ranked `**Implementer:**` agent as the
    implementer, dispatched in your checkout without isolation (nothing else
    runs now), every task brief and report of the wave as its context, and
    this framing: "Each of these tasks passed its own review; merged together,
    the integration check fails. Find the interaction and make the smallest
    fix." Each round's scoped re-review covers the fix diff; you re-run the
-   check after it, and the round passes only when the check does. Log rounds
+   check through `suite-run` after it, and the round passes only when the
+   check does. Log rounds
    as `Wave <k>: fix round R/5 (…)`. At the cap, the open failure goes to the
    ruling seat as a `breaker` item against the wave's last task.
 

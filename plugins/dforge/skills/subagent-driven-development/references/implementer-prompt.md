@@ -48,8 +48,13 @@ Subagent ([IMPLEMENTER]):
     fixed)` and continue if your task can proceed; report BLOCKED if it
     cannot.
 
-    While iterating, run the focused test for what you're changing; run the
-    full suite once before committing, not after every edit.
+    While iterating, run the focused test for what you're changing before
+    each commit, not the full suite after every edit. After your final
+    commit, on a clean tree, run the project's full suite once through
+    `bash [PLUGIN_ROOT]/scripts/suite-run -- <the suite command>` and report
+    its digest in your report's test results: it records the HEAD it ran at,
+    so the controller does not run the suite again on a HEAD you already
+    covered.
 
     ## You Do Not Dispatch Subagents
 
@@ -182,3 +187,5 @@ Subagent ([IMPLEMENTER]):
 - `[IMPLEMENTER]` — the task's `**Implementer:**` agent (for example
   `dforge:impl-sonnet-medium`), passed as `subagent_type` with no
   `model` argument: the agent file pins both model and effort
+- `[PLUGIN_ROOT]` — the resolved dforge plugin directory; expand it before
+  sending, so the `suite-run` call above names a real path

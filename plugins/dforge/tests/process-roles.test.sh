@@ -112,7 +112,7 @@ for f in "$P/skills/subagent-driven-development/SKILL.md" "$P/skills/executing-p
   names "$s: recovery re-dispatches once without a report" "$f" 'with no report, re-dispatch QA once with `[MODE]`'
 done
 
-names "task review: lens-route per task" "$P/reference/delegated-task.md" 'run `scripts/lens-route PLAN_FILE --task <N>`'
+names "task review: lens-route per task" "$P/reference/delegated-task.md" '`scripts/lens-route PLAN_FILE --task <N>`, and writes'
 TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
 names "task reviewer: lens section" "$TRP" '## Lens Criteria'
 names "task reviewer: lenses are not scored" "$TRP" 'do not score them, and do not add them to Verification Scores'

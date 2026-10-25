@@ -319,6 +319,15 @@ skipped with a reason naming its register row, commit it, and run
 `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
 so finishing's test run is green and the statement is not lost.
 
+**Suites.** Any test or validation suite you run in the final review — the
+check after the fix wave, or the project's full suite in inline mode — goes
+through `bash <plugin-root>/scripts/suite-run -- <command>`, which records the
+HEAD it ran at and prints a digest in place of the output. Tell the fix
+subagent to run the project's full suite the same way after its last commit,
+on a clean tree: finishing's verification then reuses that pass at the
+unchanged HEAD instead of running the suite again. A fix wave whose commits
+moved HEAD past that run is not reused.
+
 There is no second fix wave. Residual load-bearing findings surface to your
 human partner when dforge:finishing-a-development-branch presents the options.
 Only the four stop classes stop you here.

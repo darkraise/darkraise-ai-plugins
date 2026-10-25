@@ -73,7 +73,13 @@ When `scripts/auto-run status` exits 0
 When the project declares `<docs>/gates.md`, run
 dforge:running-gates — it determines its own base, so it works here even
 though Step 3 has not established one yet. Otherwise run the project's full test
-suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
+suite (`npm test` / `cargo test` / `pytest` / `go test ./...`) through
+`bash <plugin-root>/scripts/suite-run -- <test command>`, in the background
+when it can outrun Bash's ten-minute cap. It prints a digest, never the whole
+output, and reuses a recorded pass (`suite: reused pass at <sha7>`) only at
+the same HEAD, with a clean tree then and now, for the same command: a fix
+wave's passing run at this HEAD stands, and any other tree runs the suite.
+Its exit code is the verdict.
 
 **If tests fail**, report the failures and stop — the menu comes after a
 green suite:
@@ -81,7 +87,7 @@ green suite:
 ```
 Tests failing (<N> failures). Must fix before completing:
 
-[Show failures]
+[Show the digest's failing lines]
 
 Next: fix these failures, then re-run dforge:finishing-a-development-branch.
 ```
@@ -289,9 +295,9 @@ echo "$PRE_MERGE"
 
 # Verify the merged result: gates when the project declares a manifest
 # (dforge:running-gates, with the sha printed above as its base), otherwise
-# the full test suite. Gates that passed on the branch say nothing about the
-# merged tree.
-<test command>
+# the full test suite through suite-run. Gates that passed on the branch say
+# nothing about the merged tree, and the merged HEAD is new, so suite-run runs.
+bash <plugin-root>/scripts/suite-run -- <test command>
 ```
 
 Shell variables do not survive between Bash calls, so `$PRE_MERGE` is gone by

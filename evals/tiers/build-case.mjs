@@ -46,6 +46,7 @@ export function buildCase(c, dir) {
     '[Scene-setting: where this fits, dependencies, architectural context]': context,
     '[directory]': work,
     '[REPORT_FILE]': join(work, SCRATCH, `task-${c.task}-report.md`),
+    '[PLUGIN_ROOT]': PLUGIN,
   });
   const info = { id: c.id, kind: 'impl', work, initial, result: c.result, allowed, tests };
   writeFileSync(join(dir, 'case.json'), JSON.stringify(info, null, 2) + '\n');

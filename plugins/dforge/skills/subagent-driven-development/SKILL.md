@@ -501,8 +501,8 @@ partner sees it.
 
 ## Session Budget
 
-`scripts/task-brief` and `scripts/review-package` end their output with the
-budget line ([session-budget.md](../../reference/session-budget.md)), so you
+`scripts/task-brief`, `scripts/review-package` and every `scripts/task-step`
+digest end their output with the budget line ([session-budget.md](../../reference/session-budget.md)), so you
 check the session budget before every task and every review at no extra
 request:
 
@@ -625,7 +625,7 @@ lasting record of how the plan changed once the workspace is deleted.
 | "The reviewer will just find something new anyway" | Scoped re-reviews verify fixes; they cannot wander. New findings on untouched code go to the ledger, not the loop. |
 | "This finding is obviously wrong, I'll drop it" | The ruling seat adjudicates, only at the cap, and every verdict is a ledger entry. Silent discards are forbidden. |
 | "I can see the plan is wrong, I'll rule on it myself" | You read the header and one brief; the seat reads the plan and the spec. Send it a plan-conflict item. |
-| "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. Every round ends with a scoped re-review. |
+| "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. Only `task-step rereview --covered` skips one, and only for exactly one open finding, a fix of at most 3 changed lines touching that finding's file, a task below risk 3 and a fix report that names a passing covering test. Every other round ends with a scoped re-review. |
 | "Reviews slow the loop down" | The loop without reviews is just unverified churn. Reviews are the loop's brakes and steering. |
 | "The budget is at 89%, I'll hand off before the next task" | `ok` means continue. Only a `handoff` verdict stops the loop, and even then the task in flight finishes first. |
 | "The final review is clean — I'll summarize the run and stop" | A summary is not a finish. Call the Skill tool for finishing in this turn; its menu and next step are what your human partner acts on. |
@@ -648,12 +648,12 @@ You: I'm using Subagent-Driven Development to execute this plan.
 
 Task 1: Hook installation script  (**Implementer:** dforge:impl-sonnet-low)
 
-[BASE=a1b2c3d; run task-brief for Task 1; dispatch impl-sonnet-low, no model or effort argument]
-[Ledger: Task 1: implementer impl-sonnet-low (assigned; base a1b2c3d)]
+[task-step start PLAN_FILE 1: brief written, assigned line Task 1: implementer impl-sonnet-low (assigned; base a1b2c3d), dispatch file task-1-dispatch.md; dispatch impl-sonnet-low with that path, no model or effort argument]
+[Only waiting remains: end the turn; the implementer's completion starts the next one]
 
 Implementer: DONE — 5/5 passing; report file written; assumptions: user-level install (brief silent)
 
-[date +%s; review-package PLAN_FILE a1b2c3d HEAD; review-route --task 1 prints judge-sonnet-high; dispatch it with the printed path]
+[task-step review PLAN_FILE 1: seat judge-sonnet-high, prompt task-1-review-prompt.md, check identity: clean, check attribution: clean; dispatch the seat with the prompt path]
 Judge: Spec ✅. Task quality: Approved.
   Verification Scores: spec 17 / scope 18 / verification 16 / quality 16
 
@@ -661,17 +661,17 @@ Judge: Spec ✅. Task quality: Approved.
 
 Task 2: Recovery modes  (**Implementer:** dforge:impl-sonnet-medium)
 
-[BASE=d4e5f6a; dispatch impl-sonnet-medium]
+[task-step start PLAN_FILE 2; dispatch impl-sonnet-medium with the dispatch file's path]
 Implementer: DONE — 8/8 passing
 
-[date +%s → t0; review-package; review-route --task 2; dispatch judge-sonnet-high]
+[task-step review PLAN_FILE 2: state line shows t0; dispatch judge-sonnet-high with the prompt path]
 Judge: Spec ❌ — missing progress reporting. Important: magic number (100).
   Verification Scores: spec 7 / scope 17 / verification 15 / quality 12
 
-[date +%s → t1; t1 − t0 = 140s, so resume the implementer with both findings]
+[date +%s → t1; t1 − t0 = 140s, so resume the implementer with the path of task-2-fix-1.md, whose two bullets name both findings]
 Implementer: Added progress reporting, extracted PROGRESS_INTERVAL. 10/10 passing.
 
-[date +%s; review-package PLAN_FILE FIX_BASE HEAD; dispatch scoped re-review]
+[task-step rereview PLAN_FILE 2: two findings are open, so no skip; dispatch the printed seat with task-2-rereview-1-prompt.md]
 Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 
 [Ledger: Task 2: fix round 1/5 (2 addressed, 0 open; commits d4e5f6a..b7c8d9e; progress - -> 18; resumed)]
@@ -682,8 +682,8 @@ Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
 [After the last task's complete line: context-size --final says ok — continue to Final Review]
 [final-review.md: package the branch; review-route --final prints judge-opus for this plain plan; Codex round in the background]
 [a fresh judge-opus dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
-[ONE fix dispatch; one scoped re-review; clean]
+[ONE fix dispatch, told to run the full suite through suite-run after its last commit; one scoped re-review; clean]
 
 [Ledger: Final review: clean (commits a1b2c3d..f0e1d2c) — finishing is never budget-checked]
-[Skill tool: dforge:finishing-a-development-branch, in this turn — gates, Rulings I made, the three-option menu last]
+[Skill tool: dforge:finishing-a-development-branch, in this turn — suite-run reuses the fix wave's pass at the unchanged HEAD; gates, Rulings I made, the three-option menu last]
 ```
