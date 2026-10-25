@@ -5,7 +5,7 @@ Use this template when dispatching a code reviewer subagent.
 **Purpose:** Review completed work against requirements and code quality standards before it cascades into more work.
 
 ```
-Subagent (general-purpose):
+Subagent (dforge:judge-opus):
   description: "Review code changes"
   prompt: |
     You are a Senior Code Reviewer with expertise in software architecture,
@@ -24,17 +24,12 @@ Subagent (general-purpose):
 
     Read this file first: [DIFF_FILE]
     It holds the commit list, a stat summary and the full diff with context
-    for [BASE_SHA]..[HEAD_SHA], and it is your view of the change. Only if
-    the line above says "none" derive it yourself:
-
-    ```bash
-    git diff --stat [BASE_SHA]..[HEAD_SHA]
-    git diff [BASE_SHA]..[HEAD_SHA]
-    ```
+    for [BASE_SHA]..[HEAD_SHA], and it is your view of the change.
 
     ## Read-Only Review
 
-    Your review is read-only on this checkout. Do not mutate the working tree, the index, HEAD, or branch state in any way. Use tools like `git show`, `git diff`, and `git log` to inspect history. If you need a working copy of a different revision, check it out into a separate temporary directory (e.g. `git worktree add /tmp/review-[SHA] [SHA]`) — never move HEAD on this checkout.
+    Your review is read-only and you have no shell: read the diff file and
+    the repository files it touches, and change nothing.
 
     ## You Do Not Dispatch Subagents
 
@@ -140,8 +135,9 @@ Subagent (general-purpose):
 **Placeholders:**
 - `[DESCRIPTION]` — brief summary of what was built
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (plan file path, task text, or requirements)
-- `[DIFF_FILE]` — the path `scripts/review-package` printed, or `none` for an
-  ad-hoc review outside a plan
+- `[DIFF_FILE]` — REQUIRED: the path `scripts/review-package` printed under a
+  plan, or the diff file the session wrote outside one
+  (requesting-code-review step 2)
 - `[BASE_SHA]` — starting commit
 - `[HEAD_SHA]` — ending commit
 

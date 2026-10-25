@@ -210,9 +210,10 @@ check "session-start.sh parses" \
   "$(bash -n "$SCRIPT" 2>/dev/null && echo yes || echo no)" "yes"
 
 # The entry point rides in every session's baseline and shares the hook's
-# 10,000-character cap with the compaction snapshot.
-check "entry point is at most 5,100 bytes" \
-  "$([ "$(wc -c < "$HERE/../skills/using-dforge/SKILL.md")" -le 5100 ] && echo yes || echo no)" "yes"
+# 10,000-character cap with the compaction snapshot; 5,500 bytes leaves the
+# snapshot about 4,500.
+check "entry point is at most 5,500 bytes" \
+  "$([ "$(wc -c < "$HERE/../skills/using-dforge/SKILL.md")" -le 5500 ] && echo yes || echo no)" "yes"
 
 # The project-state skills and test-simplifier must be reachable from the entry point, which
 # is the only skill list a cold session sees.
