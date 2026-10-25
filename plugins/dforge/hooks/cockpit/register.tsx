@@ -751,7 +751,8 @@ export const register: Register = on => {
       // A run starts, stops and changes regime through the model's own calls.
       await trackAutoRun($)
       // A worktree move takes the session's ledger with it.
-      const isMove = WORKTREE_TOOLS.includes(tool) && ran.deny === undefined && !ran.isError
+      // A shell cd moves it too, as using-git-worktrees' fallback does.
+      const isMove = ran.deny === undefined && !ran.isError && (WORKTREE_TOOLS.includes(tool) || (tool === 'Bash' && (await hasMoved($))))
       if (isMove) await readPlace($)
       // The controller writes its ledger with its own tool calls; read it
       // before the budget, which measures a plan's tail by it.
@@ -3713,6 +3714,12 @@ async function readJson($: EngineInterface, path: string): Promise<Record<string
   } catch {
     return null
   }
+}
+
+/** Whether the session's directory differs from the one the place was read in. */
+async function hasMoved($: EngineInterface): Promise<boolean> {
+  const cwd = await $.session.cwd().catch(() => null)
+  return cwd !== null && cwd !== (await read($, place))?.cwd
 }
 
 async function readPlace($: EngineInterface) {

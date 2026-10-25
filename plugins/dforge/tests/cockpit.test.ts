@@ -531,7 +531,7 @@ function world(on: On, w: World) {
 // A signed-in account working in a repository under home. In a linked
 // worktree the engine names the main working tree as the repository's root.
 const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
-function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot = '/home/me/code/shop') {
+function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot = '/home/me/code/shop', cwd = () => '/home/me/code/shop/web') {
   on('fs.read', (_$, e) => {
     reads?.push(e.path)
     const file = files[e.path]
@@ -551,7 +551,7 @@ function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot
     }
     throw new Error('ENOENT')
   })
-  on('session.cwd', () => ({ value: '/home/me/code/shop/web' }))
+  on('session.cwd', () => ({ value: cwd() }))
   on('session.repo', () => ({ value: { root: repoRoot, remote: null, internal: false, name: null } }))
   on('session.model', () => ({ value: 'claude-opus-5-5[1m]' }))
 }
@@ -4514,6 +4514,35 @@ describe('cockpit roots', () => {
     await $.tool.call({ tool: 'EnterWorktree', path: tree } as never)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+  })
+
+  test('follows the session into a worktree it cds into, as the worktree fallback does', async ($, on) => {
+    const tree = '/home/me/code/main/.worktrees/w'
+    const files: World['files'] = {
+      [`${tree}/.dforge/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
+      [`${tree}/docs/dforge/plans/p.md`]: { text: PLAN },
+    }
+    const w: World = { ...SIGNED_IN, files, primary: '/home/me/code/main', checkout: '/home/me/code/main' }
+    let cwd = '/home/me/code/main'
+    world(on, w)
+    signedIn(on, files, undefined, '/home/me/code/main', () => cwd)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    w.checkout = tree
+    cwd = tree
+    await $.tool.call({ tool: 'Bash', command: `cd ${tree}` } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
+  })
+
+  test('a shell call that stays in the same directory runs no git', async ($, on) => {
+    const gitRuns: string[] = []
+    world(on, { ...SIGNED_IN, gitRuns })
+    signedIn(on)
+    await $.session.start(START)
+    const before = gitRuns.length
+    await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+    expect(gitRuns.slice(before)).toEqual([])
   })
 
   test('a submodule has no primary checkout, as in the scripts', async ($, on) => {
