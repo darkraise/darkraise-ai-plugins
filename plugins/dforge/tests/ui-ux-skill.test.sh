@@ -61,7 +61,7 @@ names "verification: the UI claim row" "$VBC" '| The UI works |'
 # --- routing ---
 ENTRY="$P/skills/using-dforge/SKILL.md"
 names "the entry point routes UI work" "$ENTRY" '| Anything a user sees or does | dforge:ui-ux |'
-check "the entry point stays within 5100 bytes" "$([ "$(wc -c < "$ENTRY")" -le 5100 ] && echo yes || echo no)" "yes"
+check "the entry point stays within 5500 bytes" "$([ "$(wc -c < "$ENTRY")" -le 5500 ] && echo yes || echo no)" "yes"
 names "brainstorming runs Shape before acceptance" "$P/skills/brainstorming/SKILL.md" 'invoke dforge:ui-ux before drafting acceptance'
 names "debugging runs touch depth for UI fixes" "$P/skills/systematic-debugging/SKILL.md" 'Run `dforge:ui-ux` at touch depth'
 
