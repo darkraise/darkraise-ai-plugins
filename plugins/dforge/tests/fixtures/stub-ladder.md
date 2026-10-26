@@ -2,6 +2,7 @@
 
 ```stub-gate
 min_score 2
+max_score 4
 max_risk 1
 require_rule_s_clean true
 require_external_enabled true

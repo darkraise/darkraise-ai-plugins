@@ -44,6 +44,7 @@ check "ladder.md exists" "$([ -f "$LADDER" ] && echo yes || echo no)" "yes"
 gate=$(block gate)
 check "gate min_score is 2" "$(printf '%s\n' "$gate" | awk '$1=="min_score"{print $2}')" "2"
 check "gate max_risk is 1" "$(printf '%s\n' "$gate" | awk '$1=="max_risk"{print $2}')" "1"
+check "gate max_score is 4" "$(printf '%s\n' "$gate" | awk '$1=="max_score"{print $2}')" "4"
 check "gate requires a clean Rule S pass" \
   "$(printf '%s\n' "$gate" | awk '$1=="require_rule_s_clean"{print $2}')" "true"
 check "gate requires an enabled executor" \
@@ -67,9 +68,16 @@ missing=NONE
 for s in 2 3 4; do in_list "$s" "$seen" || missing="$s"; done
 check "codex-assignment covers scores 2, 3 and 4" "$missing" "NONE"
 
-# Rule S caps reducible at 3, so under max_risk 1 no eligible total exceeds 4.
+# max_score 4 bounds the eligible totals, so no row may sit outside 2..4, and
+# the highest row is the gate's ceiling.
 outside=$(printf '%s\n' "$assignment" | awk 'NF && ($1 < 2 || $1 > 4) {print $1}' | tr '\n' ' ' | sed 's/ $//')
 check "codex-assignment has no row outside 2..4" "${outside:-NONE}" "NONE"
+check "the highest codex-assignment row is the gate's max_score" \
+  "$(printf '%s\n' "$assignment" | awk 'NF && $1 > m { m = $1 } END { print m }')" \
+  "$(printf '%s\n' "$gate" | awk '$1=="max_score"{print $2}')"
+EL="$HERE/../reference/executor-lane.md"
+check "executor-lane lists the max_score condition" "$(grep -cF -- '- `total <= max_score`,' "$EL")" "1"
+check "the README no longer derives the lane from reducible 3" "$(grep -cF 'Rule S caps `reducible` at 3' "$HERE/../README.md")" "0"
 
 retired=$(printf '%s\n' "$assignment" "$(block codex-successor)" "$(block codex-timeout)" "$(block codex-judge)" | grep -c 'gpt-5\.5')
 check "no lane block names gpt-5.5, which leaves Codex on 2026-10-14" "$retired" "0"

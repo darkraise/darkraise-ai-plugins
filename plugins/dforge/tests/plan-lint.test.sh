@@ -392,9 +392,25 @@ has "missing plan review warns" "$out" "WARN header: no **Plan review:** line ye
 variant t1.md 's/risk 2 = 4/risk 2 = 5/'
 lint t1.md
 has "sum mismatch" "$out" "ERROR Task 2: scores sum to 4, not 5"
-variant t2.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 1 - coupling 1 - risk 0 = 4/'
+variant t2.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 2 - coupling 2 - risk 0 = 6/; s/impl-sonnet-medium$/impl-opus-high/'
 lint t2.md
-has "Rule S" "$out" "ERROR Task 2: Rule S: files+spec+coupling must be below 4 and spec below 3"
+has "Rule S on a Claude plan rejects reducible 6" "$out" "ERROR Task 2: Rule S: files+spec+coupling must be below 6 and spec below 3"
+variant t2b.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 2 - coupling 1 - risk 2 = 7/; s/impl-sonnet-medium$/impl-opus-high/'
+lint t2b.md
+lacks "Rule S on a Claude plan accepts reducible 5" "$out" "Rule S"
+lacks "total 7 is assigned impl-opus-high" "$out" "ERROR Task 2"
+variant t2c.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 2 - coupling 1 - risk 3 = 8/; s/impl-sonnet-medium$/impl-opus-high/'
+lint t2c.md
+lacks "total 8 is assigned impl-opus-high" "$out" "ERROR Task 2"
+variant t2d.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 2 - coupling 1 - risk 2 = 7/'
+lint t2d.md
+has "total 7 names impl-opus-high" "$out" "ERROR Task 2: Implementer impl-sonnet-medium does not match the assignment table's impl-opus-high for total 7"
+variant t2e.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 3 - coupling 0 - risk 0 = 3/'
+lint t2e.md
+has "spec 3 fails Rule S without an override" "$out" "ERROR Task 2: Rule S: files+spec+coupling must be below 6 and spec below 3"
+variant t2f.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 3 - coupling 0 - risk 0 = 3/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** the owner keeps the approach open/'
+lint t2f.md
+has "an Override keeps a spec-3 task as a warning" "$out" "WARN Task 2: Rule S: files+spec+coupling must be below 6 and spec below 3"
 variant t3.md 's/impl-sonnet-medium$/impl-sonnet-high/'
 lint t3.md
 has "wrong agent" "$out" "ERROR Task 2: Implementer impl-sonnet-high does not match the assignment table's impl-sonnet-medium for total 4"
@@ -427,8 +443,11 @@ lint t9.md
 has "Approach grammar" "$out" "ERROR Task 2: Approach does not match"
 variant t10.md 's/^(\*\*Evaluation:\*\* files 0 - spec 0 - coupling 1 - risk 0 = 1)$/\1\n**Executor:** codex gpt-6.1-sol \/ low/'
 lint t10.md
-has "Executor below the gate" "$out" "ERROR Task 1: total 1 / risk 0 fails the lane gate (min_score 2, max_risk 1)"
+has "Executor below the gate" "$out" "ERROR Task 1: total 1 / risk 0 fails the lane gate (min_score 2, max_score 4, max_risk 1)"
 has "Executor without header line" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name codex"
+variant t10b.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 2 - coupling 2 - risk 0 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/^(\*\*Evaluation:\*\* files 1 - spec 2 - coupling 2 - risk 0 = 5)$/\1\n**Executor:** codex gpt-6.1-sol \/ high/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
+lint t10b.md
+has "Executor above max_score fails the gate" "$out" "ERROR Task 1: total 5 / risk 0 fails the lane gate (min_score 2, max_score 4, max_risk 1)"
 variant t11.md 's/^(\*\*Approach:\*\* .*)$/\1\n**Override:** kept\n**Executor:** codex gpt-6.1-sol \/ high/'
 lint t11.md
 has "Executor on an overridden task" "$out" "ERROR Task 2: an Executor line on an overridden task fails the lane gate"
@@ -440,6 +459,9 @@ lint t12.md
 has "missing Files" "$out" "ERROR Task 2: missing **Files:** block"
 
 # --- per task, Codex ---
+codex_plan | sed 's/files=1, spec=1, coupling=1, risk=0; weighted routing score=3/files=2, spec=1, coupling=1, risk=0; weighted routing score=4/; s#gpt-6.1-sol / low#gpt-6.1-sol / medium#' > c0.md
+lint c0.md
+has "Rule S on a Codex plan still rejects reducible 4" "$out" "ERROR Task 1: Rule S: files+spec+coupling must be below 4 and spec below 3"
 codex_plan | sed 's/weighted routing score=3/weighted routing score=4/' > c1.md
 lint c1.md
 has "weighted score mismatch" "$out" "ERROR Task 1: weighted routing score 4 is not files+spec+coupling+2*risk = 3"
@@ -791,6 +813,12 @@ cat "$HERE/../reference/ladder.md" > "$DR_LADDER"
 sed 's/^```stub-gate$/```stub-gate-unused/' "$HERE/fixtures/stub-ladder.md" >> "$DR_LADDER"
 lint s1.md
 has "a missing gate block is an error, not an open gate" "$out" \
+  "ERROR Task 1: stub's gate block 'stub-gate' is missing from the ladder"
+DR_LADDER="$TMP/stub-ladder-noscore.md"
+cat "$HERE/../reference/ladder.md" > "$DR_LADDER"
+sed '/^max_score /d' "$HERE/fixtures/stub-ladder.md" >> "$DR_LADDER"
+lint s1.md
+has "a gate block without max_score cannot certify a task" "$out" \
   "ERROR Task 1: stub's gate block 'stub-gate' is missing from the ladder"
 DR_LADDER="$TMP/stub-ladder.md"
 

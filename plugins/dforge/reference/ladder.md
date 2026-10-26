@@ -1,8 +1,9 @@
 # Assignment, escalation, and reserve tables
 
-The raw axis definitions and Rule S are shared across hosts. The unweighted
-totals, agent tables, and external CLI lane here apply to Claude. Native Codex
-uses [native-codex.md](native-codex.md) and its weighted `codex-v4` score.
+The raw axis definitions are shared across hosts; Rule S's threshold is set by
+host below. The unweighted totals, agent tables, and external CLI lane here
+apply to Claude. Native Codex uses [native-codex.md](native-codex.md) and its
+weighted `codex-v4` score.
 The fenced blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
 
 ## Scoring rubric
@@ -36,8 +37,15 @@ capable model pays to keep a decomposition defect.
 
 Let `reducible = files + spec + coupling`.
 
-**If `reducible >= 4`, or if `spec = 3`, the task must be split or re-designed.
-Do not assign a larger model.**
+**If `reducible >= 6`, or if `spec = 3`, the task must be split or re-designed.
+Do not assign a larger model.** That is the gate on a Claude plan, whose code
+tasks carry their tests and interfaces but not their implementation and so
+score 2 on spec completeness.
+
+A `Host: codex` plan keeps `reducible >= 4` as its gate:
+[native-codex.md](native-codex.md) derives its weighted 0-9 score from
+`reducible <= 3`, and `codex-routing.json` ranks stop at 9. `scripts/plan-lint`
+applies the gate by host.
 
 `spec = 3` means prose only with the approach undecided. That is not a
 model-selection problem; it is a design decision nobody made. Route it to
@@ -45,10 +53,11 @@ dforge:selecting-approaches, settle the approach, rewrite the
 task with the decision in it, and re-score. The task will then score 0, 1, or 2
 on that axis like every other compliant task.
 
-Rule S caps a compliant total: `reducible <= 3` and `spec <= 2`, so
-`total <= 3 + risk(3) = 6`. **The assignment table's ceiling is a consequence of
-Rule S, not a separate choice.** A computed total of 7 or more means the gate was
-skipped, not that a higher tier is needed.
+Rule S caps a compliant Claude total: `reducible <= 5` and `spec <= 2`, so
+`total <= 5 + risk(3) = 8`. **The assignment table's ceiling is a consequence
+of Rule S, not a separate choice.**
+A computed total of 9 or more means the gate was skipped, not that a higher
+tier is needed.
 
 ### The one legacy floor
 
@@ -69,6 +78,11 @@ the finding into a warning. An inline Execution line must still meet the effort
 check, which reads the current table: an `opus low` line with a self-implemented
 total 4 task must rise to `--effort medium`.
 
+The relaxed gate is one-way. A Claude plan with a task at `reducible` 4 or 5,
+or a total of 7 or 8, fails `plan-lint` on a plugin older than the relaxed gate:
+that checker splits at `reducible >= 4` and has no row above 6. A plan written
+before the relaxed gate lints unchanged on this one, since rows 0-6 did not move.
+
 ## Assignment table
 
 The total indexes this table directly. Two planners scoring a task identically
@@ -82,6 +96,8 @@ always reach the same agent.
 4 impl-sonnet-medium
 5 impl-sonnet-high
 6 impl-opus-high
+7 impl-opus-high
+8 impl-opus-high
 ```
 
 ## Escalation table
@@ -184,13 +200,12 @@ ledger beyond the reserve tier itself.
 
 ## What the range actually reaches
 
-A plan written to dforge:writing-plans bans placeholders and requires the
-real code in every code step, so a compliant task scores 0 or 1 on spec
-completeness almost by construction. Combined with Rule S, initial assignments
-cluster in the 0 to 3 band. Scores of 4 to 6 are reached almost entirely
-through the Risk axis, which is the one axis splitting cannot reduce. Sonnet
-takes totals 0 to 5; Opus is assigned only at 6, and otherwise reached by
-escalation. Total 0 moved from `impl-haiku` to `impl-sonnet-low` in 1.27.0: on
+A Claude plan written to dforge:writing-plans gives each code task its tests
+and interfaces but not its implementation, so a code task scores 2 on spec
+completeness and is drawn as a feature slice up to `reducible <= 5`.
+Sonnet takes totals 0 to 5; Opus takes 6 to 8, and is otherwise reached by escalation.
+A Codex plan still carries the code, so its tasks score 0 or 1 there.
+Total 0 moved from `impl-haiku` to `impl-sonnet-low` in 1.27.0: on
 the tier evaluation's row 1 cases both passed 7 of 7, and Haiku 4.5 cost $0.18
 per pass against $0.12, and it is the only fleet model with a 200,000-token
 window and no effort control. `impl-haiku` stays in the fleet for a human
@@ -218,22 +233,25 @@ its termination proof is unchanged by anything in this section.
 
 ```gate
 min_score 2
+max_score 4
 max_risk 1
 require_rule_s_clean true
 require_external_enabled true
 ```
 
-All four conditions must hold. `require_rule_s_clean` excludes a task whose
+All five conditions must hold. `require_rule_s_clean` excludes a task whose
 `spec = 3` was kept by a human override under the legacy floor: such a task can
 score `0 + 3 + 0 + 0 = 3` and would otherwise pass, sending a task whose approach
 nobody decided to a one-shot external agent.
 
-`min_score 2` is not arbitrary. Rule S caps `reducible` at 3, so under
-`max_risk 1` the eligible totals are exactly 2, 3, and 4 - totals 5 and 6 need
-`risk >= 2` and the risk clause already excludes them. Without the floor the gate
-would reduce to `risk <= 1` and capture nearly every task by count. It would also
-offload where offload is worthless: a score-0 task displaces `impl-sonnet-low`,
-which costs less to run than the wrapper costs to orchestrate.
+`min_score 2` and `max_score 4` bound the eligible totals to 2, 3 and 4, the
+rows `codex-assignment` has. On a Claude plan Rule S admits `reducible` up to
+5, so `max_risk 1` alone would admit a total of 5 or 6 at risk 0 or 1;
+`max_score 4` keeps them on the Claude ladder. Without the floor the gate
+would reduce to a risk test and capture nearly every task by count. It would
+also offload where offload is worthless: a score-0 task displaces
+`impl-sonnet-low`, which costs less to run than the wrapper costs to
+orchestrate.
 
 ### Codex assignment
 
@@ -308,7 +326,7 @@ Seconds. One constant cannot serve both a `medium` and an `xhigh` run.
 Every Claude-hosted Codex review seat — the task seats, plan-review round 1,
 and the final-review round — takes its model from this block, not from
 `codex-assignment`. The first row is preferred; the last row is the fallback.
-`--tier light` runs the last row directly, for tasks totalling 0 to 6 below
+`--tier light` runs the last row directly, for tasks totalling 0 to 8 below
 risk 3; every other seat (risk 3, plan review, the final round) uses the first
 row with its fallback. Totals 4 to 6 moved from Astra to the light row on
 2026-10-07, when `gpt-6.1-sol` replaced `gpt-6-sol` there, at about a fifth of

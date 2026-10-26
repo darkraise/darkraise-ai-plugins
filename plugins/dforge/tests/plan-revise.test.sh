@@ -71,7 +71,7 @@ check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 
 mktask() { # mktask <files> <spec> <coupling> <risk> <total> — the Implementer the ladder gives the total
   local agent=impl-sonnet-low
-  case $5 in 3|4) agent=impl-sonnet-medium ;; 5) agent=impl-sonnet-high ;; 6) agent=impl-opus-high ;; esac
+  case $5 in 3|4) agent=impl-sonnet-medium ;; 5) agent=impl-sonnet-high ;; 6|7|8) agent=impl-opus-high ;; esac
   printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:%s\n**Evaluation:** files %s - spec %s - coupling %s - risk %s = %s\n' "$agent" "$@"
 }
 
@@ -90,7 +90,16 @@ check "risk 2 fails the ceiling" "$(field gate "$(unit1)")" "fail:risk"
 plan "$(mktask 0 3 0 0 3)"
 check "spec 3 fails Rule S on its own" "$(field gate "$(unit1)")" "fail:rule_s"
 plan "$(mktask 1 1 2 0 4)"
-check "reducible 4 fails Rule S below total 5" "$(field gate "$(unit1)")" "fail:rule_s"
+out=$(unit1)
+check "reducible 4 passes Rule S on a Claude plan" "$(field rule_s "$out")" "ok"
+check "reducible 4 at total 4 takes the high rung" "$(field rungs "$out")" "codex:gpt-6.1-sol/high"
+plan "$(mktask 2 2 1 0 5)"
+out=$(unit1)
+check "reducible 5 passes Rule S" "$(field rule_s "$out")" "ok"
+check "total 5 fails the max_score ceiling" "$(field gate "$out")" "fail:total"
+check "a unit above max_score lists no rung" "$(field rungs "$out")" ""
+plan "$(mktask 2 2 2 0 6)"
+check "reducible 6 fails Rule S" "$(field gate "$(unit1)")" "fail:rule_s"
 # An Override keeps a Rule S violation in the plan; it must still not be offloaded.
 OVERRIDE='**Override:** kept by the owner'
 plan "$(mktask 0 3 0 0 3)
@@ -263,6 +272,11 @@ printf '# P\n\n### Task A1: One\n\n**Files:**\n- Create: `x`\n' > "$SUR/docs/let
 check "the survey names a plan with lettered headings" "$(row lettered)" "plan  lettered.md  headings=lettered  skipped"
 check "the survey counts it as surveyed" "$(survey | tail -n 1)" "surveyed  plans=4"
 rm -f "$SUR/docs/lettered.md"
+splan relaxed '**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4'
+splan wide '**Evaluation:** files 2 - spec 2 - coupling 1 - risk 0 = 5'
+check "the survey counts a reducible-4 unit as eligible" "$(field eligible "$(row relaxed)")" "1"
+check "the survey does not count a unit above max_score" "$(field eligible "$(row wide)")" "0"
+rm -f "$SUR/docs/relaxed.md" "$SUR/docs/wide.md"
 
 # --- liveness precedence ---
 check "no ledger and no completed entry is unknown" "$(field live "$(row scored)")" "unknown"

@@ -81,11 +81,12 @@ line in the plan header:
 ```
 
 Then apply the lane gate from the `gate` block of [ladder.md](ladder.md) to each
-task. All four conditions must hold:
+task. All five conditions must hold:
 
 - the executor named on the line was ticked,
 - the task cleared Rule S without a human override,
 - `total >= min_score`,
+- `total <= max_score`,
 - `risk <= max_risk`.
 
 A task that passes the gate takes its model and effort from that executor's
@@ -597,7 +598,7 @@ and its `id` equals its filename stem; an invalid entry is skipped by
 | `wrapper` | yes | The task wrapper the dispatch step runs |
 | `session_dir` | yes | The per-session state directory under `$HOME/.claude/dforge/` |
 | `surfaces` | yes | The surfaces this executor staffs, for example `lane` and `review` |
-| `blocks.gate` | yes | The [ladder.md](ladder.md) block holding `min_score` and `max_risk` |
+| `blocks.gate` | yes | The [ladder.md](ladder.md) block holding `min_score`, `max_score` and `max_risk` |
 | `gate` | no | The executor's own gate script |
 | `reference` | no | A reference file for this executor |
 | `session_dir_env` | no | An environment variable that replaces `session_dir` |

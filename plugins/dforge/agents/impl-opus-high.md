@@ -1,6 +1,6 @@
 ---
 name: impl-opus-high
-description: "Task implementer running Opus 5.5 at high effort. Dispatched by dforge for score 6: the top execution rung, above which a task is split rather than escalated."
+description: "Task implementer running Opus 5.5 at high effort. Dispatched by dforge for scores 6 to 8: the top execution rung, above which a task is split rather than escalated."
 model: opus
 effort: high
 skills:

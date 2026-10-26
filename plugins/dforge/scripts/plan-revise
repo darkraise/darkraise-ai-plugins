@@ -60,13 +60,15 @@ exec_rung() { # exec_rung <id> <total>
   block "$b" | awk -v t="$2" '$1 == t { print $2 "/" $3; exit }'
 }
 
-# EXEC_TABLE — "<id> <min_score> <max_risk>" per registered executor, read once.
-# Every exec_gate call is three subprocesses, and the survey would otherwise pay
-# them once per executor per unit across a whole directory of plans.
+# EXEC_TABLE — "<id> <min_score> <max_risk> <max_score>" per registered
+# executor, read once. Every exec_gate call is three subprocesses, and the
+# survey would otherwise pay them once per executor per unit across a whole
+# directory of plans.
 EXEC_TABLE=$(for _eid in $EXEC_IDS; do
   _mn=$(exec_gate "$_eid" min_score) || true
   _mx=$(exec_gate "$_eid" max_risk) || true
-  [ -n "$_mn" ] && [ -n "$_mx" ] && printf '%s %s %s\n' "$_eid" "$_mn" "$_mx"
+  _top=$(exec_gate "$_eid" max_score) || true
+  [ -n "$_mn" ] && [ -n "$_mx" ] && [ -n "$_top" ] && printf '%s %s %s %s\n' "$_eid" "$_mn" "$_mx" "$_top"
 done)
 
 # effort_of TOTAL — the assignment table's effort for a total, which is the
@@ -225,11 +227,11 @@ survey() {
       scored=$((scored + 1))
       set -- $a
       fl=$1 sp=$2 cp=$3 risk=$4 score=$5
-      [ $((fl + sp + cp)) -ge 4 ] && continue
+      [ $((fl + sp + cp)) -ge 6 ] && continue
       [ "$sp" -eq 3 ] && continue
       # Potential eligibility: any registered executor, ticked or not, because
       # the survey answers how much COULD be delegated.
-      ok=$(awk -v t="$score" -v r="$risk" 'NF && $2 <= t && r <= $3 { print 1; exit }' <<<"$EXEC_TABLE")
+      ok=$(awk -v t="$score" -v r="$risk" 'NF && $2 <= t && t <= $4 && r <= $3 { print 1; exit }' <<<"$EXEC_TABLE")
       [ -n "$ok" ] && eligible=$((eligible + 1))
     done <<<"$(plan_units "$f")"
 
@@ -315,7 +317,7 @@ while IFS=$'\t' read -r id text; do
     *)
       set -- $a
       f=$1 s=$2 c=$3 risk=$4 score=$5
-      if [ $((f + s + c)) -ge 4 ] || [ "$s" -eq 3 ]; then rules=violated; else rules=ok; fi
+      if [ $((f + s + c)) -ge 6 ] || [ "$s" -eq 3 ]; then rules=violated; else rules=ok; fi
       if [ "$rules" = violated ]; then gate=fail:rule_s
       elif [ -n "$(plan_lines Override <<<"$body")" ]; then
         # plan-lint makes any Executor line on an overridden task a hard error,
@@ -328,14 +330,16 @@ while IFS=$'\t' read -r id text; do
         for eid in $ticked; do
           mn=$(exec_gate "$eid" min_score) || true
           mx=$(exec_gate "$eid" max_risk) || true
+          top=$(exec_gate "$eid" max_score) || true
           # A ticked id this installation does not register, or whose registry
           # entry names an absent ladder block, yields no thresholds. Saying
           # "fail:total" there would contradict the scores on screen.
-          if [ -z "$mn" ] || [ -z "$mx" ]; then
+          if [ -z "$mn" ] || [ -z "$mx" ] || [ -z "$top" ]; then
             printf 'plan-revise: %s: no gate thresholds for ticked executor %s\n' "$id" "$eid" >&2
             continue
           fi
           if [ "$score" -lt "$mn" ]; then asked=1 gate=${gate:-fail:total}; continue; fi
+          if [ "$score" -gt "$top" ]; then asked=1 gate=${gate:-fail:total}; continue; fi
           if [ "$risk" -gt "$mx" ]; then asked=1 gate=fail:risk; continue; fi
           r=$(exec_rung "$eid" "$score") || true
           # A missing rung is an incomplete table, not a judgment about the

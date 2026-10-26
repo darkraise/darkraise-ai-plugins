@@ -69,6 +69,10 @@ header_line() { first_label "$1" "$header_labels"; }
 unfenced_header=$(awk "$_PLAN_AWK"'in_fence($0) { next } { print }' <<<"$header")
 codex=0
 grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$unfenced_header" && codex=1
+# A Codex plan keeps the old split: its weighted 0-9 routing score assumes
+# reducible <= 3.
+rule_s_limit=6
+[ "$codex" -eq 0 ] || rule_s_limit=4
 
 # A plan written under another routing policy names pairs this policy does not
 # rank, so one conversion finding replaces a pair or rank finding per task.
@@ -281,7 +285,7 @@ executor_field() {
   [ -n "$value" ] || return 1
   printf '%s\n' "$value"
 }
-executor_gate() { # executor_gate <id> <min_score|max_risk>
+executor_gate() { # executor_gate <id> <min_score|max_score|max_risk>
   local block; block=$(executor_field "$1" blocks.gate)
   [ -n "$block" ] || return 1
   awk -v k="$2" '$1 == k { print $2 }' <<<"$(ladder_block "$block")"
@@ -291,22 +295,23 @@ executor_rung() { # executor_rung <id> <total>
   [ -n "$block" ] || return 1
   awk -v t="$2" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block "$block")"
 }
-# `<id>\t<min_score>\t<max_risk>` per registered executor, read once: the loop
-# below tests every task against every executor's gate, and each `executors`
-# call is a subprocess.
+# `<id>\t<min_score>\t<max_risk>\t<max_score>` per registered executor, read
+# once: the loop below tests every task against every executor's gate, and each
+# `executors` call is a subprocess.
 lane_gates=""
 while read -r eid; do
   [ -n "$eid" ] || continue
   gmin=$(executor_gate "$eid" min_score) gmax=$(executor_gate "$eid" max_risk)
+  gtop=$(executor_gate "$eid" max_score)
   # An entry whose `blocks.gate` names no ladder block cannot be gated, so it
   # is never offered as a lane candidate. One diagnostic per entry, and the
   # run continues, exactly as `executors list` treats an invalid entry.
-  if [ -z "$gmin" ] || [ -z "$gmax" ]; then
+  if [ -z "$gmin" ] || [ -z "$gmax" ] || [ -z "$gtop" ]; then
     printf 'plan-lint: %s gate block %s is missing from the ladder\n' \
       "$eid" "$(executor_field "$eid" blocks.gate)" >&2
     continue
   fi
-  lane_gates="$lane_gates$eid"$'\t'"$gmin"$'\t'"$gmax"$'\n'
+  lane_gates="$lane_gates$eid"$'\t'"$gmin"$'\t'"$gmax"$'\t'"$gtop"$'\n'
 done < <(bash "$HERE/executors" list 2>/dev/null)
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
 r5_bad="" max_total=0 max_score=0 lane=""
@@ -405,25 +410,26 @@ for n in $nums; do
         say ERROR "$where" "Executor names no registered executor: $eid (run 'executors list')"
       else
         emin=$(executor_gate "$eid" min_score) emax=$(executor_gate "$eid" max_risk)
+        etop=$(executor_gate "$eid" max_score)
         # A gate that cannot be read cannot certify the task, so an absent
         # block is an error rather than an open gate.
-        if [ -z "$emin" ] || [ -z "$emax" ]; then
+        if [ -z "$emin" ] || [ -z "$emax" ] || [ -z "$etop" ]; then
           say ERROR "$where" "$eid's gate block '$(executor_field "$eid" blocks.gate)' is missing from the ladder"
         else
-          { [ "$t" -ge "$emin" ] && [ "$d" -le "$emax" ]; } \
-            || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $emin, max_risk $emax)"
+          { [ "$t" -ge "$emin" ] && [ "$t" -le "$etop" ] && [ "$d" -le "$emax" ]; } \
+            || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $emin, max_score $etop, max_risk $emax)"
         fi
         rung=$(executor_rung "$eid" "$t")
         { [ -n "$rung" ] && [[ "$executor" == *"$eid $rung"* ]]; } || say ERROR "$where" "Executor does not name the $(executor_field "$eid" blocks.assignment) rung for total $t ($eid ${rung:-none})"
         [[ "$externals" == *"$eid"* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name $eid"
       fi
-    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ]; then
+    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt "$rule_s_limit" ] && [ "$b" -lt 3 ]; then
       # One candidate row per executor whose own gate admits the task. The
       # header tick is deliberately not read: p1.md carries none and still
       # expects the warning.
-      while IFS=$'\t' read -r lid lmin lmax; do
+      while IFS=$'\t' read -r lid lmin lmax ltop; do
         [ -n "$lid" ] || continue
-        { [ "$t" -ge "$lmin" ] && [ "$d" -le "$lmax" ]; } || continue
+        { [ "$t" -ge "$lmin" ] && [ "$t" -le "$ltop" ] && [ "$d" -le "$lmax" ]; } || continue
         rung=$(executor_rung "$lid" "$t")
         [ -z "$rung" ] || lane="$lane$where"$'\t'"$lid"$'\t'"$rung"$'\n'
       done <<<"$lane_gates"
@@ -441,7 +447,7 @@ for n in $nums; do
       [ -f "$HERE/../criteria/lenses/$lid.md" ] || say ERROR "$where" "**Lenses:** names no lens file: $lid"
     done
   fi
-  [ $((a + b + c)) -lt 4 ] && [ "$b" -lt 3 ] || say "$sev" "$where" "Rule S: files+spec+coupling must be below 4 and spec below 3"
+  [ $((a + b + c)) -lt "$rule_s_limit" ] && [ "$b" -lt 3 ] || say "$sev" "$where" "Rule S: files+spec+coupling must be below $rule_s_limit and spec below 3"
   { [ $((a + b + c + d)) -le 4 ] && [ "$d" -lt 3 ]; } || r5_bad="$r5_bad $n"
   [ $((a + b + c + d)) -le "$max_total" ] || max_total=$((a + b + c + d))
   done

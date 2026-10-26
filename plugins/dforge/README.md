@@ -77,9 +77,10 @@ the reserve is only entered when that split has already been spent.
 
 **A four-axis rubric that gates the plan.** Files, spec completeness, coupling,
 and risk, each scored 0 to 3. Three of those four measure how the task was
-drawn, not how hard the change is, so Rule S sends a task scoring 4 or more
-across them back to be split rather than to a larger model. That cap is what
-makes the assignment table stop at 6.
+drawn, not how hard the change is, so Rule S sends a task scoring 6 or more
+across them on a Claude plan, or 4 or more on a Codex plan, back to be split
+rather than to a larger model. That cap is what makes the assignment table stop
+at 8.
 
 **An escalation ladder.** Every execution implementer has exactly one successor,
 changing model before effort except at the two Opus effort rows, where Opus is
@@ -151,11 +152,13 @@ offload selects downward at the cheap end while the ladder only moves upward, an
 one total order cannot express both. The Claude ladder stays the sole backstop,
 so its termination proof is untouched.
 
-The gate floors at score 2 on purpose. Rule S caps `reducible` at 3, so under
-`risk <= 1` the eligible totals are exactly 2, 3, and 4; without the floor the
-gate would reduce to `risk <= 1` and capture nearly every task by count, and it
-would offload score-0 work where the displaced agent is `impl-sonnet-low` and
-the wrapper costs more to orchestrate than it saves.
+The gate floors at score 2 and stops at 4 on purpose: `codex-assignment` has
+rows for totals 2 to 4 only, and Rule S admits a Claude task up to `reducible`
+5, so `max_score 4` keeps a total-5 or total-6 task at risk 1 or below on the
+Claude ladder. Without the floor the gate would reduce to `risk <= 1` and
+capture nearly every task by count, and it would offload score-0 work where the
+displaced agent is `impl-sonnet-low` and the wrapper costs more to orchestrate
+than it saves.
 
 `**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
 an override on a second line, which is what makes a machine without Codex, a cold
