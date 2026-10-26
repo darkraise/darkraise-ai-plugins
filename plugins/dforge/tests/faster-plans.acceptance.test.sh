@@ -235,8 +235,8 @@ gen_plan() { # gen_plan <extra header line or empty> <"F S C R impl[~label line.
   for spec in "$@"; do
     i=$((i + 1))
     read -r f s c r impl more <<<"${spec//\~/ ~ }"
-    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Implementer:** dforge:impl-%s\n**Evaluation:** files %d - spec %d - coupling %d - risk %d = %d\n' \
-      "$i" "$i" "$i" "$impl" "$f" "$s" "$c" "$r" $((f + s + c + r))
+    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Implementer:** dforge:%s\n**Evaluation:** files %d - spec %d - coupling %d - risk %d = %d\n' \
+      "$i" "$i" "$i" "impl-$impl" "$f" "$s" "$c" "$r" $((f + s + c + r))
     if [ -n "${more:-}" ]; then
       tr '~' '\n' <<<"${more#~}" | sed 's/^ *//' | grep . || true
     fi
