@@ -91,5 +91,32 @@ lacks "the group template takes no single diff placeholder" "$GRP" '[DIFF_FILE]'
 check "the group prompt holds no placeholder task-step does not fill" \
   "$(awk '/^  prompt: \|/ { on = 1; next } on && /^```/ { exit } on' "$GRP" 2>/dev/null | grep -oE '\[[A-Z][A-Z_]*\]' | sort -u | grep -cvxE '\[(GROUP_LIST|PACKAGE_FILE|REPORT_FILE|PLUGIN_ROOT)\]')" "0"
 
+# --- group reviews in the loop, the ledger and the waves ---
+names "DONE holds a grouped task" "$DT" '`bash <plugin-root>/scripts/task-step hold PLAN_FILE N`'
+names "exit 4 from hold means reviewed alone" "$DT" 'exit 4 means the task is reviewed alone'
+names "the group review call" "$DT" '`bash <plugin-root>/scripts/task-step review --group PLAN_FILE N M …`'
+names "the group trigger" "$DT" 'when 4 tasks are held, before you dispatch a task `review-route` reviews alone, and after the plan'"'"'s last task'
+names "nothing is dispatched while a group is open" "$DT" 'no new task is dispatched until the group is clean'
+names "group fixes run one task at a time" "$DT" 'fixes inside a group run one task at a time'
+names "a concerned or blocked member leaves the group" "$DT" 'leaves the group and is reviewed alone'
+names "a member re-reviews on the moving group head" "$DT" "each member's re-review moves that head on"
+names "a group runs two fix rounds" "$DT" 'A group runs at most two fix rounds'
+names "each member gets its own complete line" "$DT" 'each member gets its own `complete` line once the group is clean'
+names "the loop's recovery reads a held task" "$DT" '| `awaiting group review (commits …)` |'
+names "the ledger grammar holds the awaiting line" "$SDD" 'Task <N>: awaiting group review (commits <a7>..<b7>)'
+names "the ledger grammar holds the group review line" "$SDD" 'Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])'
+names "a group list is a comma list or a range" "$SDD" 'joined by commas (`Group 4,6,7`), or a contiguous range (`Group <a>-<b>`)'
+names "a comma list covers the tasks it names" "$SDD" 'a comma list covers the tasks it names'
+names "the recovery table reads a held task" "$SDD" '| `awaiting group review` | Reviewed by the next group dispatch'
+names "the recovery table resumes a group's round 2" "$SDD" '| `review round 1/2` on a group review'"'"'s `Group` line |'
+names "the recovery table sends a group's round 2 to the breaker" "$SDD" '| `review round 2/2` on a group review'"'"'s `Group` line |'
+names "after compaction a held task waits for its group" "$SDD" '`awaiting group review` is reviewed by the next group dispatch'
+names "the process graph names the group template" "$SDD" './references/group-reviewer-prompt.md'
+lacks "the overview no longer reviews every task alone" "$SDD" 'a judge-scored task review after each task;'
+names "waves hold a grouped task at its ref" "$PW" '`task-step hold PLAN_FILE N --head <TASK_REF>`'
+names "waves review grouped tasks before any merges" "$PW" 'once every grouped task in the wave is held, before any of them merges'
+names "a wave member's fix round stays in its worktree" "$PW" "a member's fix round goes to that task's implementer in its worktree"
+names "a grouped wave task merges once its group is clean" "$PW" 'or, for a grouped task, its group is clean'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

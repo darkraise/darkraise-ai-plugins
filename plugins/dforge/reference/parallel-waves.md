@@ -43,6 +43,7 @@ Wave <k>: serialized — <reason>
 Wave <k>: check failed — <command> → <one-line summary>
 Wave <k>: fix round R/5 (<the fields of a task's fix round>)
 Wave <k>: integrated (head <sha7>; <command> → pass)
+Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])
 ```
 
 A wave task's assigned line ends `; wave <k>`, and its complete line carries
@@ -154,6 +155,15 @@ substitutions:
   with `[START]` set to the task ref, and its report is copied back the same
   way.
 
+**Grouped tasks.** A wave task graded `review=group` is not reviewed on its
+own. When it reports DONE, run `task-step hold PLAN_FILE N --head <TASK_REF>`;
+once every grouped task in the wave is held, before any of them merges, run
+one `task-step review --group PLAN_FILE <their numbers>` and dispatch its seat
+([delegated-task.md](delegated-task.md) §3a). Each member keeps its held head
+as its review head, so
+a member's fix round goes to that task's implementer in its worktree,
+re-reviewed with `task-step rereview PLAN_FILE N --head <TASK_REF>`.
+
 Every finding, ruling and verdict is the task's own, exactly as in sequential
 mode. Rulings for several tasks that arise together share one ruling-seat
 dispatch, as they always do at one decision point. The `cannot-verify` items
@@ -164,8 +174,9 @@ that dispatch back: its items wait for its own decision point.
 
 ## 4. Merge each task as it passes
 
-When a task's review is clean, or every open finding is parked at the breaker,
-merge it before writing its complete line:
+When a task's review is clean (or, for a grouped task, its group is clean), or
+every open finding is parked at the breaker, merge it before writing its
+complete line:
 
 ```bash
 bash scripts/wave merge PLAN_FILE <N> <task base>

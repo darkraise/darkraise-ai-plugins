@@ -140,8 +140,12 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 
 Implementer subagents report one of four statuses, or none. Handle each appropriately:
 
-**DONE:** Review the task (step 3). `task-step review` packages the diff and
-records `t0`, the time the cache rule in step 4 needs.
+**DONE:** In subagent mode, hold the task first:
+`bash <plugin-root>/scripts/task-step hold PLAN_FILE N` (a wave task adds
+`--head <task ref>`). Exit 0 holds the task for its group review (§3a) and
+writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3). Inline mode delegates only tasks `review-route`
+reviews alone, so it goes straight to step 3, as a batch does. `task-step review` packages the
+diff and records `t0`, the time the cache rule in step 4 needs.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
 
@@ -158,6 +162,11 @@ You never answer a requirements question from your own reading of one brief.
 2. If the task requires more reasoning, re-dispatch on the successor rung and write a new assigned line — see [escalation.md](../skills/subagent-driven-development/references/escalation.md)
 3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
 4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
+
+**A grouped task that does not report a plain DONE:** a task `review-route`
+grades `review=group` that reports BLOCKED, NEEDS_CONTEXT, or
+DONE_WITH_CONCERNS with a correctness or scope concern leaves the group and is reviewed alone (step 3), even when it later reports DONE. The group reviews
+once its remaining members are held.
 
 **Still listed after its report:** on Claude Code, an implementer that left a
 shell or agent of its own running stays listed after it reports, whatever its
@@ -328,6 +337,45 @@ the task completes, unless a mechanical check settles it: the seat holds
 the plan and cross-task context the reviewer lacks. A CONFIRMED-GAP is a
 failed spec review — it enters the fix loop with the other findings.
 
+## 3a. Review a group
+
+A task held in §2 is reviewed with other held tasks in one judge dispatch. In
+sequential mode held tasks accumulate, and the group review runs
+when 4 tasks are held, before you dispatch a task `review-route` reviews alone, and after the plan's last task.
+Run `review-route PLAN_FILE --task <next>` to read the next task's tier before
+dispatching it. A parallel wave reviews its grouped tasks as
+[parallel-waves.md](parallel-waves.md) §3 says. Once the group review is
+triggered, no new task is dispatched until the group is clean, and
+fixes inside a group run one task at a time.
+
+- **One call does the plumbing:**
+  `bash <plugin-root>/scripts/task-step review --group PLAN_FILE N M …`,
+  naming every held task. It packages each member's diff from its base to its
+  held head, one section per task, writes the prompt from
+  [group-reviewer-prompt.md](../skills/subagent-driven-development/references/group-reviewer-prompt.md),
+  runs the mechanical checks for every member, and prints the `seat:` line,
+  the check lines, the state it recorded and the budget line. Dispatch the
+  `seat:` line's judge as §3 says for a judge, with the prompt "your complete
+  instructions are in `<prompt file>`: read it first and follow it". A group
+  never gets a Codex seat.
+- **The report** holds one block per task. Apply §3's verdicts, score bands,
+  ⚠️ route and plan-conflict route to each task on its own, and §4's Minor
+  rule (`Task <N>: minor (deferred): …`).
+- **Fix rounds.** A member with findings enters §4's fix loop with the fix
+  message `<workspace>/task-<N>-fix-<R>.md`, and is re-reviewed with
+  `bash <plugin-root>/scripts/task-step rereview PLAN_FILE N` and no `--base`:
+  `review --group` recorded the group head as its review head, and
+  each member's re-review moves that head on, so a fix diff holds only that
+  member's fix. A group runs at most two fix rounds. After each round append
+  the group line (subagent-driven-development §The Ledger): one clause per
+  member, and in its `commits` clause one `<a7>..<b7> (Task <N>)` range per
+  member fixed in that round, in sequential and wave mode alike. Findings
+  still open after round 2 go to the breaker as §4 says. Members write no
+  `Task <N>: fix round` lines: the `Group` line is their round record. A group
+  with a round line is never reviewed again: `review --group` refuses its
+  members (exit 4), and its later rounds are member re-reviews.
+- **Completion:** each member gets its own `complete` line once the group is clean, or once the breaker has ruled on its open findings (§5).
+
 ## 4. The fix loop
 
 The loop triggers when the review reports spec ❌, any Critical or Important
@@ -477,6 +525,9 @@ the next task in plan order; after the last task, to the final review, written
   `codex gpt-6-astra/xhigh+judge-opus`, or the judge's short name, followed by
   ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
   ` (codex off — <reason>)` when §3's `gate:` and `seat:` lines say Codex is off
+- a group member's complete line (§3a) takes its `commits` range from its
+  `awaiting group review` line and ends its scores clause
+  `, seat <judge> (group <list>)`
 
 In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when
 `scripts/auto-run decision list` prints anything.
@@ -548,3 +599,6 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 | `implementer <agent> (assigned …)`, the agent not `inline` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it (§3); otherwise dispatch the same agent fresh (§1) |
 | `fix round R/5`, R < 5 | Resume the loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
 | `fix round 5/5` | Go to the breaker (§4) |
+| `awaiting group review (commits …)` | Held: never re-dispatch its implementer. It is reviewed by the next group dispatch (§3a), which the trigger above starts |
+| `review round 1/2` on a group review's `Group` line | Run round 2 (§3a) for each member whose clause is open, one member at a time — after compaction the agent ids are gone, so each is a fresh dispatch |
+| `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker (§4) |

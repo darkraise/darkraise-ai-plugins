@@ -20,7 +20,9 @@ back. Before anything else:
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides: `complete` is done; `fix round R/5` resumes at round
    R+1 with a fresh dispatch; an assigned line with commits after its base
-   goes to review. An assigned line ending `thread pending` is an executor
+   goes to review;
+   `awaiting group review` is reviewed by the next group dispatch, never re-dispatched.
+   An assigned line ending `thread pending` is an executor
    wrapper that may still be running: find it in the snapshot's background
    list and wait for its notification, or stop it and record a Ruling.
    A `Wave <k>: started` line with no later `integrated` or `serialized` line
@@ -99,7 +101,7 @@ conversion, retry and reserve rules. On Claude, use the seats and loop below.
 ## Overview
 
 Execute a plan by dispatching, per task, the implementer its
-`**Implementer:**` line names; a judge-scored task review after each task; and
+`**Implementer:**` line names; a judge-scored review of each task, alone or, for a low-risk task, in a group with others; and
 a broad whole-branch review at the end.
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
@@ -173,6 +175,8 @@ digraph process {
         "Implementer reports NEEDS_CONTEXT?" [shape=diamond];
         "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [shape=box];
         "Implementer implements, tests, commits, self-reviews" [shape=box];
+        "review-route: review=group?" [shape=diamond];
+        "task-step hold; review the group at 4 held, before a review=task dispatch, and after the last task (./references/group-reviewer-prompt.md)" [shape=box];
         "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)" [shape=box];
         "Verdicts clean and no score 1-8?" [shape=diamond];
         "Finding conflicts with plan text?" [shape=diamond];
@@ -200,7 +204,10 @@ digraph process {
     "Implementer reports NEEDS_CONTEXT?" -> "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [label="yes"];
     "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" -> "Implementer implements, tests, commits, self-reviews";
     "Implementer reports NEEDS_CONTEXT?" -> "Implementer implements, tests, commits, self-reviews" [label="no"];
-    "Implementer implements, tests, commits, self-reviews" -> "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)";
+    "Implementer implements, tests, commits, self-reviews" -> "review-route: review=group?";
+    "review-route: review=group?" -> "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)" [label="no"];
+    "review-route: review=group?" -> "task-step hold; review the group at 4 held, before a review=task dispatch, and after the last task (./references/group-reviewer-prompt.md)" [label="yes"];
+    "task-step hold; review the group at 4 held, before a review=task dispatch, and after the last task (./references/group-reviewer-prompt.md)" -> "Verdicts clean and no score 1-8?";
     "Generate review package, dispatch judge (./references/task-reviewer-prompt.md)" -> "Verdicts clean and no score 1-8?";
     "Verdicts clean and no score 1-8?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "Verdicts clean and no score 1-8?" -> "Finding conflicts with plan text?" [label="no"];
@@ -341,6 +348,8 @@ This skill owns every line in `<ledger dir>/progress.md`. The grammar:
 Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; wave <k>][; executor <id> <model>/<effort>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
 Task <N>: fix round R/5 (X addressed, Y open — <one-liners>; commits a..b[; progress p -> q | re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
 Group <a>-<b>: review round R/5 (<same fields as a fix round>)
+Task <N>: awaiting group review (commits <a7>..<b7>)
+Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])
 Wave <k>: started (base <sha7>; Tasks <a>-<b>; at most <c> at once)
 Wave <k>: serialized — <reason>
 Wave <k>: check failed — <command> → <one-line summary>
@@ -372,9 +381,13 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   at `complete`, also promote the task's durable facts
   ([project-state.md](../../reference/project-state.md) §darkmem sync points).
 - Every task gets its own assigned line and its own complete line, including
-  tasks reviewed as a batch. Batches are contiguous task ranges so
-  `Group <a>-<b>` names them; only a batch's review rounds log on its Group
-  line.
+  tasks reviewed as a batch or in a group review. Batches are contiguous task
+  ranges named `Group <a>-<b>`; only a batch's review rounds log on its Group
+  line. A group review's `<list>` is
+  the task numbers in ascending order joined by commas (`Group 4,6,7`), or a contiguous range (`Group <a>-<b>`).
+  Its clause attributes every finding to its member, and its commits clause
+  holds one `<a7>..<b7> (Task <N>)` range per member fixed in the round, in
+  sequential and wave mode alike.
 - `Wave` lines and the `wave` and `merged` fields belong to parallel waves
   ([parallel-waves.md](../../reference/parallel-waves.md)); a sequential plan
   never writes them.
@@ -391,14 +404,19 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   complete line, so recovery reads it as that task's terminal line.
 
 **Recovery.** For task N, take the last line in file order among its
-`Task <N>:` lines and any `Group` line covering N, stepping over
-`minor (deferred)`, `parked`, `Task <N>: Ruling:`, and bare `Ruling:` lines.
-Then:
+`Task <N>:` lines and any `Group` line covering N
+(a range covers the tasks inside it; a comma list covers the tasks it names),
+stepping over `minor (deferred)`, `parked`, `Task <N>: Ruling:`, and bare
+`Ruling:` lines. A group review's `Group` line is the one whose clause starts
+`Task <N>:`. Then:
 
 | Last line | Action |
 |---|---|
 | `complete` | Done; never re-dispatch |
 | `BLOCKED` | Terminal; never re-dispatch. It is a stop of the fourth class for any task that depends on it; name it in your final message |
+| `awaiting group review` | Reviewed by the next group dispatch ([delegated-task.md](../../reference/delegated-task.md) §3a); never re-dispatch its implementer |
+| `review round 1/2` on a group review's `Group` line | Run round 2 for each member whose clause is open, one member at a time, a fresh dispatch after compaction |
+| `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker |
 | `review round R/5` on a `Group` line, R < 5 | Resume the batch's loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
 | `review round 5/5` on a `Group` line | Go to the breaker |
 | `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the first rung on the escalation table ranked strictly above both the task's `**Implementer:**` agent and the inline session's rung, the successor of whichever ranks higher ([escalation.md](references/escalation.md) §Escalating out of inline mode) fresh at round 1 of 5, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
@@ -569,6 +587,10 @@ children in `skills/using-dforge/references/codex-tools.md`.
 For each task, or batch, run [delegated-task.md](../../reference/delegated-task.md):
 dispatch the implementer, handle the report, review the task, the fix loop and
 the complete line. Its contract names what the loop needs from you.
+
+**Group reviews.** A task `review-route` grades `review=group` is held after
+DONE and reviewed with other held tasks in one judge dispatch, per
+[delegated-task.md](../../reference/delegated-task.md) §3a.
 
 **Parallel waves.** When the header says `**Parallelism:** waves — …`, run
 every wave of more than one task through
