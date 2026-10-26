@@ -876,7 +876,7 @@ export function limitForecast(kind: string, percent: number, resetsAt: number | 
 export type LedgerTask = {
   n: number
   state: 'assigned' | 'complete' | 'blocked'
-  /** The fix or review round in flight, "2/5". */
+  /** The fix or review round in flight, "2/5" or "1/2". */
   round: string | null
   /** The seat the task was assigned to. */
   seat: string | null
@@ -908,11 +908,16 @@ export function parseLedger(text: string): Ledger {
       isFinished = true
       continue
     }
-    const group = /^Group (\d+)-(\d+): review round (\d+\/\d+)/.exec(line)
+    const group = /^Group (\d+-\d+|\d+(?:,\d+)*): review round (\d+\/\d+)/.exec(line)
     if (group) {
-      for (let n = Number(group[1]); n <= Number(group[2]); n++) {
+      const list = group[1] ?? ''
+      const range = /^(\d+)-(\d+)$/.exec(list)
+      const named: number[] = []
+      if (range) for (let n = Number(range[1]); n <= Number(range[2]); n++) named.push(n)
+      else named.push(...list.split(',').map(Number))
+      for (const n of named) {
         const one = task(n)
-        if (one.state === 'assigned') one.round = group[3] ?? null
+        if (one.state === 'assigned') one.round = group[2] ?? null
       }
       continue
     }

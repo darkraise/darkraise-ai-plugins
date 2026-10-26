@@ -93,6 +93,55 @@ lacks "mid-plan: handoff drops the stale block" "$hand" "Old stale block."
 check "mid-plan: handoff has one Next session section" "$(grep -c '^## Next session' "$HANDOFF")" "1"
 has "mid-plan: handoff carries the new next step" "$hand" "Resume at Task 3 (Third thing)."
 
+# --- held tasks: a task awaiting its group review is not the next to start ---
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: implementer dforge:impl-sonnet-low (assigned; base bbbbbbb)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
+       'Task 2: minor (deferred): rename'
+run "$REPO" "$PLAN_REL"
+check "held: exits 0" "$status" "0"
+has "held: a held task is not complete" "$out" "1 of 3 tasks complete"
+has "held: resumes at the first task neither complete nor held" "$out" "**Next:** Resume at Task 3 (Third thing). Task 2 is held for group review."
+has "held: the prompt carries the held task" "$out" "Resume \`$PLAN_REL\` with dforge:resume-execution. Resume at Task 3 (Third thing). Task 2 is held for group review."
+ledger 'Task 1: implementer dforge:impl-sonnet-low (assigned; base aaaaaaa)' \
+       'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)'
+run "$REPO" "$PLAN_REL"
+has "held: with nothing complete, starts at the first task not held" "$out" "**Next:** Start at Task 2 (Second thing). Task 1 is held for group review."
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
+       'Task 3: awaiting group review (commits ccccccc..ddddddd)'
+run "$REPO" "$PLAN_REL"
+has "held: every open task held means the group review is next" "$out" "**Next:** Review the held Tasks 2,3 as one group (\`task-step review --group\`), then write their complete lines."
+lacks "held: no task is named to start" "$out" "Resume at Task"
+
+# --- a group in its fix rounds blocks every new dispatch ---
+ledger 'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
+       'Group 1,2: review round 1/2 (Task 1: 1 open — x; Task 2: clean; commits ccccccc..ddddddd (Task 1))'
+run "$REPO" "$PLAN_REL"
+has "group round 1: round 2 for the open members is next" "$out" "**Next:** Run fix round 2 of Group 1,2 for Task 1, then write the members' complete lines."
+lacks "group round 1: the next task is not started" "$out" "Start at Task 3"
+lacks "group round 1: the group is not reviewed again" "$out" "Review the held Tasks"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
+       'Task 3: awaiting group review (commits ccccccc..ddddddd)' \
+       'Group 2,3: review round 1/2 (Task 2: 1 open — x; Task 3: 2 open — y, z; commits ddddddd..eeeeeee (Task 2), eeeeeee..fffffff (Task 3))' \
+       'Group 2-3: review round 2/2 (Task 2: clean; Task 3: 1 open — z; commits fffffff..aaaaaaa (Task 3))'
+run "$REPO" "$PLAN_REL"
+has "group round 2: the open findings go to the breaker" "$out" "**Next:** Send the open findings of Group 2-3 (Task 3) to the breaker, then write the members' complete lines."
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
+       'Task 3: awaiting group review (commits ccccccc..ddddddd)' \
+       'Group 2,3: review round 1/2 (Task 2: clean; Task 3: clean; commits ddddddd..eeeeeee (Task 2))'
+run "$REPO" "$PLAN_REL"
+has "group clean: the complete lines are next" "$out" "**Next:** Write the complete lines of Group 2,3's members: the group is clean."
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
+       'Task 2: complete (commits bbbbbbb..ccccccc, review clean)'
+run "$REPO" "$PLAN_REL"
+has "held: a held task that completed is not held" "$out" "**Next:** Resume at Task 3 (Third thing)."
+lacks "held: and is not named as held" "$out" "held for group review"
+
 # --- a ledger ending on an assigned line warns, and still prints the block ---
 lacks "mid-plan: no assigned-line warning" "$(cat "$TMP/stderr")" "warning"
 ledger 'Task 1: complete (commits a..b, review clean)' \

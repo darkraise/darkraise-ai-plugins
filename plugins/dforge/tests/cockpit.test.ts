@@ -3687,6 +3687,47 @@ describe('run card', () => {
     ])
   })
 
+  const GROUPED = [
+    '# SDD ledger — plan: docs/plans/p.md',
+    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)',
+    'Task 1: awaiting group review (commits abc1234..bcd2345)',
+    'Task 2: implementer dforge:impl-sonnet-low (assigned; base bcd2345)',
+    'Task 3: implementer dforge:impl-sonnet-low (assigned; base bcd2345)',
+    'Task 3: awaiting group review (commits bcd2345..cde3456)',
+    'Group 1,3: review round 1/2 (Task 1: 1 open — meter width; Task 3: clean; commits cde3456..def4567 (Task 1))',
+  ].join('\n')
+
+  test('reads a group review line with a comma list beside a range', () => {
+    const ledger = parseLedger(`${GROUPED}\nTask 8: implementer dforge:impl-sonnet-low (assigned; base def4567)\nGroup 8-9: review round 2/5 (1 addressed, 0 open; commits def4567..efa5678; fresh)`)
+    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
+      [1, 'assigned', '1/2'],
+      [2, 'assigned', null],
+      [3, 'assigned', '1/2'],
+      [8, 'assigned', '2/5'],
+      [9, 'assigned', '2/5'],
+    ])
+  })
+
+  test('clears a group round when each member completes', () => {
+    const ledger = parseLedger(`${GROUPED}\nTask 1: complete (commits abc1234..bcd2345, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none\nGroup 1,3: review round 2/2 (Task 1: clean; Task 3: clean; commits def4567..efa5678 (Task 1))`)
+    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
+      [1, 'complete', null],
+      [2, 'assigned', null],
+      [3, 'assigned', '2/2'],
+    ])
+  })
+
+  test('shows a group review round on the run card', async ($, on) => {
+    const files = runFiles(GROUPED)
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /round 1\/2 · impl-sonnet-low/ })).toBeDefined()
+    expect(JSON.stringify(await ui.drawn())).not.toContain('round 2/5')
+  })
+
   test('lists running, blocked and pending tasks before done ones', () => {
     const states = ['complete', 'assigned', 'pending', 'blocked', 'pending', 'complete', 'assigned', 'pending'] as const
     const tasks = states.map((state, i) => ({ n: i + 1, state }))
