@@ -427,6 +427,7 @@ stepping over `minor (deferred)`, `parked`, `Task <N>: Ruling:`, and bare
 | none | Not started |
 
 A `Task`, `Group` or `Wave` round line written before the two-round cap reads `R/5`: R = 1 resumes at round 2, and R >= 2 goes to the breaker.
+On a `Host: codex` plan a `Task` or `Wave` round line reading `R/5` is live, not older: apply the Codex row of [delegated-task.md](../../reference/delegated-task.md) §Recovery.
 A `Wave` fix-round line resumes the wave's fix loop
 ([parallel-waves.md](../../reference/parallel-waves.md) §5) by the same rule.
 

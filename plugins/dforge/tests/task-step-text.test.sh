@@ -125,7 +125,7 @@ RUL="$P/skills/subagent-driven-development/references/ruling-prompt.md"
 EL="$P/reference/executor-lane.md"
 LAD="$P/reference/ladder.md"
 # only_older <label> <file> — every line naming an R/5 round is about an older run's ledger
-only_older() { check "$1" "$(grep -E 'round (<R>|[0-9R])/5([^0-9]|$)' "$2" | grep -vc 'older')" "0"; }
+only_older() { check "$1" "$(grep -E 'round (<R>|[0-9R])/5([^0-9]|$)' "$2" | grep -vcE 'older|Codex')" "0"; }
 
 names "the loop holds two rounds" "$DT" 'Two rounds at most per task:'
 names "round 1 resumes or re-dispatches by cache state" "$DT" '**Round 1 — resume or re-dispatch by cache state.**'
@@ -137,6 +137,8 @@ names "the fix-round line counts to 2" "$DT" 'Task <N>: fix round <R>/2 ('
 names "recovery: round 1 resumes at round 2" "$DT" '| `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2'
 names "recovery: round 2 goes to the breaker" "$DT" '| `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |'
 names "a Codex host keeps five rounds" "$DT" 'A Codex host keeps its five-round cap (`review_cap: 5`)'
+names "a Codex host's five-round schedule" "$DT" 'On a `Host: codex` plan the loop keeps five rounds:'
+names "a Codex host's recovery row" "$DT" '| `fix round R/5` on a `Host: codex` plan | Codex: R < 5 resumes the loop at round R+1 by the five-round schedule (§4); `fix round 5/5` goes to the breaker (§4) |'
 for gone in '**Progress.**' 'progress <p> -> <q>' 'Rounds 4-5' 'Five rounds maximum' 'rounds 1-3 may resume it' \
             'The five-round cap is the same.' 'skip never triggers escalation' 'returns the progress reading'; do
   lacks "the delegated loop drops: $gone" "$DT" "$gone"
@@ -172,6 +174,7 @@ names "subagent mode: a group's round 1 resumes at round 2" "$SDD" "| \`review r
 names "subagent mode: a group's round 2 goes to the breaker" "$SDD" '| `review round 2/2` on a `Group` line, or `review round R/5` with R >= 2 from an older run | Go to the breaker |'
 names "subagent mode: the wave round grammar" "$SDD" 'Wave <k>: fix round R/2 (<same fields as a fix round>)'
 names "subagent mode: older ledgers map R/5" "$SDD" 'A `Task`, `Group` or `Wave` round line written before the two-round cap reads `R/5`: R = 1 resumes at round 2, and R >= 2 goes to the breaker.'
+names "subagent mode: a Codex R/5 line is live" "$SDD" 'On a `Host: codex` plan a `Task` or `Wave` round line reading `R/5` is live, not older: apply the Codex row of [delegated-task.md](../../reference/delegated-task.md) §Recovery.'
 names "subagent mode: compaction resumes round 1 at round 2" "$SDD" '`fix round 1/2` resumes at round 2 with a fresh dispatch'
 names "subagent mode: the breaker row" "$SDD" '| `breaker` | Every finding still open after round 2/2 |'
 names "subagent mode: the flowchart caps at 2" "$SDD" '"R = 2?"'

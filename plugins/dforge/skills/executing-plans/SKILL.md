@@ -326,7 +326,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
 | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
 | `fix round 3/3 (…; still failing)` | Go to Switching to subagent mode |
 | `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
-| An agent-named `implementer <agent> (assigned …)` line, or `fix round R/2` | A delegated task: apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
+| An agent-named `implementer <agent> (assigned …)` line, or `fix round R/2` (a Codex plan's `fix round R/5`) | A delegated task: apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 
 **Plan state.** First, whatever the per-task lines say: if the ledger holds a

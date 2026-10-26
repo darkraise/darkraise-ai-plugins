@@ -447,6 +447,8 @@ reserve chain all come from the `codex-v4` selector
 ([native-codex.md](native-codex.md) §Selector contract), which the caller runs
 through `scripts/select-native-tier.sh`. A Codex host keeps its five-round cap (`review_cap: 5`) from [codex-routing.json](codex-routing.json).
 
+On a `Host: codex` plan the loop keeps five rounds: rounds 1-3 resume the recorded implementer by Round 1's cache rule, rounds 4 and 5 are fresh dispatches of the pair the selector returns for an `escalate` request, the Codex ledger line is `Task <N>: fix round <R>/5 (…)` with the fields above, and the breaker trips when round 5's re-review still leaves findings open; neither host reads a progress reading.
+
 **Every round, either way:** the implementer fixes, re-runs the tests
 covering the amended code, appends its fix report to the same report file,
 and returns the short contract. Before re-dispatching the reviewer, confirm
@@ -597,8 +599,11 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 | Last line | Action |
 |---|---|
 | `implementer <agent> (assigned …)`, the agent not `inline` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it (§3); otherwise dispatch the same agent fresh (§1) |
+| `fix round R/5` on a `Host: codex` plan | Codex: R < 5 resumes the loop at round R+1 by the five-round schedule (§4); `fix round 5/5` goes to the breaker (§4) |
 | `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2 — a fresh dispatch on the successor rung (§4) |
 | `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |
 | `awaiting group review (commits …)` | Held: never re-dispatch its implementer. It is reviewed by the next group dispatch (§3a), which the trigger above starts |
 | `review round 1/2` on a group review's `Group` line | Run round 2 (§3a) for each member whose clause is open, one member at a time — after compaction the agent ids are gone, so each is a fresh dispatch |
 | `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker (§4) |
+
+On a Codex plan the Codex row wins; the `older run` mappings apply to a Claude plan only.
