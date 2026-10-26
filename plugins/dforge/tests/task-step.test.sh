@@ -132,7 +132,8 @@ PLAN
 git add -A && git commit -qm "docs: add fixture plans"
 BASE=$(git rev-parse HEAD)
 
-WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan.md)")
+WS_RAW=$(bash "$P/scripts/sdd-workspace" docs/plan.md)
+WS=$(winpath "$WS_RAW")
 LEDGER="$WS/progress.md"
 rm -f "$WS"/*
 step() { out=$(bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; }
@@ -294,7 +295,7 @@ check "review: no runner lines for a judge seat" "$(grep -cE '^(codex|timeout):'
 check "review: no Codex prompt for a judge seat" "$([ -e "$WS/task-1-review-codex-prompt.md" ] && echo yes || echo no)" "no"
 check "review: the judge prompt has no unexpanded placeholder" "$(placeholders "$JP")" "0"
 check "review: base, head and diff file" "$(grep -E '^\*\*(Base|Head|Diff file):\*\*' "$JP" | tr '\n' ' ' | sed 's/ $//')" \
-  "**Base:** $BASE1 **Head:** $C1 **Diff file:** $WS/review-$(short "$BASE1")..$(short "$C1").diff"
+  "**Base:** $BASE1 **Head:** $C1 **Diff file:** $WS_RAW/review-$(short "$BASE1")..$(short "$C1").diff"
 check "review: the diff file exists" "$([ -f "$WS/review-$(short "$BASE1")..$(short "$C1").diff" ] && echo yes || echo no)" "yes"
 check "review: brief and report paths" "$(grep -cE "^(Read the task brief: $WS/task-1-brief.md|Read the implementer's report: $WS/task-1-report.md)\$" "$JP")" "2"
 check "review: the criteria path is expanded" "$(grep -c "Read the criteria file at $PR/criteria/task-review.md and score" "$JP")" "1"
