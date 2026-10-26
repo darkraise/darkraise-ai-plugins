@@ -31,6 +31,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 SONNET=dforge:judge-sonnet-high
 OPUS=dforge:judge-opus
+# jq reads it on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
+# form pwd gives on Git Bash.
 ROUTING="$HERE/../reference/codex-routing.json"
 SEP='( — | – | - | -- )'
 
@@ -101,11 +103,11 @@ native_shape() {
 native_rank() {
   jq -r --arg m "$1" --arg e "$2" '
     [.execution[] | select(.model == $m and .effort == $e) | .rank][0]
-    // (if any(.reserve[]; .model == $m and .effort == $e) then 10 else empty end)' "$ROUTING" | tr -d '\r'
+    // (if any(.reserve[]; .model == $m and .effort == $e) then 10 else empty end)' < "$ROUTING" | tr -d '\r'
 }
 
 native_pair() { # native_pair RANK — model/effort of an execution rank
-  jq -r --argjson r "$1" '.execution[] | select(.rank == $r) | "\(.model)/\(.effort)"' "$ROUTING" | tr -d '\r'
+  jq -r --argjson r "$1" '.execution[] | select(.rank == $r) | "\(.model)/\(.effort)"' < "$ROUTING" | tr -d '\r'
 }
 
 pairs_in() { # pairs_in TEXT — "model effort" for every native pair TEXT names
@@ -240,7 +242,7 @@ native_task_pairs() {
 final_fix_native() {
   local tasks n m e rank best=-1 floor=5 top
   ledger=$(plan_ledger "$plan")
-  top=$(jq '[.execution[].rank] | max' "$ROUTING" | tr -d '\r')
+  top=$(jq '[.execution[].rank] | max' < "$ROUTING" | tr -d '\r')
   tasks=$(matched_tasks "$@")
   if [ -z "$tasks" ]; then
     printf 'review-seat final-fix primary=native:%s fallback=- reason=floor\n' "$(native_pair "$floor")"
@@ -267,7 +269,7 @@ case "$1" in
       die "plan round $r is past the cap ($cap) and its one cap-critical round"
     elif [ "$native" -eq 1 ]; then
       # Every round takes the judge floor's pair; there is no external Codex round.
-      judge=native:$(native_pair "$(jq '.role_floors.judge' "$ROUTING" | tr -d '\r')")
+      judge=native:$(native_pair "$(jq '.role_floors.judge' < "$ROUTING" | tr -d '\r')")
       reason=round
       [ "$r" -le "$cap" ] || reason=cap-critical
       printf 'review-seat plan-round=%s primary=%s fallback=- reason=%s cap=%s\n' "$r" "$judge" "$reason" "$cap"

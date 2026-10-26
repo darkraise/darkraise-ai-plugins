@@ -15,6 +15,8 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+# Entries go to jq on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the
+# /d/... form pwd gives on Git Bash.
 DIR="${DR_EXECUTORS_DIR:-$ROOT/reference/executors}"
 
 die() { printf 'executors: %s\n' "$1" >&2; exit 2; }
@@ -39,7 +41,7 @@ valid_entry() { # valid_entry <file> <stem>; prints the id when valid
     elif (.session_dir | type) != "string" then empty
     elif (.surfaces | type) != "array" then empty
     elif (.blocks.gate | type) != "string" then empty
-    else .id end' "$file" 2>/dev/null | tr -d '\r')
+    else .id end' < "$file" 2>/dev/null | tr -d '\r')
   rc=$?
   { [ "$rc" -eq 0 ] && [ -n "$id" ]; } || { printf 'executors: %s: missing or malformed required fields\n' "$stem" >&2; return 1; }
   [[ "$id" =~ ^[a-z][a-z0-9-]*$ ]] || { printf 'executors: %s: id is not [a-z][a-z0-9-]*\n' "$id" >&2; return 1; }
@@ -79,7 +81,7 @@ case "$1" in
     # plain key still works. `values` drops null, which is how an absent key
     # becomes exit 1 rather than the string "null".
     value=$(jq -r --arg k "$3" 'getpath($k | split(".")) | values
-      | if type == "array" then .[] else . end' "$file" 2>/dev/null | tr -d '\r')
+      | if type == "array" then .[] else . end' < "$file" 2>/dev/null | tr -d '\r')
     [ -n "$value" ] || exit 1
     if [ "$1" = path ]; then
       case "$value" in /*|[A-Za-z]:*) printf '%s\n' "$value" ;; *) printf '%s/%s\n' "$ROOT" "$value" ;; esac
