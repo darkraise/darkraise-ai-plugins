@@ -13,9 +13,10 @@
 #     its own still running": the agent sent its report, but a shell or agent it
 #     started is alive, so Claude Code still lists it and will notify again.
 # Two kinds of launch never get a notification and are not running: one
-# stopped by TaskStop (its result opens "Successfully stopped task: <id>"), and
-# one made before the session last started or resumed (SINCE), whose process
-# died with the old one. A line that is not JSON is skipped.
+# stopped by TaskStop (its result opens "Successfully stopped task: <id>", or
+# "No task found with ID: <id>" when Claude Code no longer tracks it, so no
+# notification can follow), and one made before the session last started or
+# resumed (SINCE), whose process died with the old one. A line that is not JSON is skipped.
 
 # inflight_mtime FILE: the modification time of the file FILE names, in epoch
 # seconds, links followed (an agent's output file is a link to its transcript).
@@ -71,6 +72,8 @@ inflight_scan() {
               "L\t\(.tool_use_id // "-")\t\(($text | capture("agentId: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tagent\t\(hm($ts))\t\(([$text | capture("output_file: (?<p>[^\\s]+)").p] | first) // "-")"
             elif ($text | test("^(\\{\"message\":\")?Successfully (stopped task|killed shell): ")) then
               "S\t\(($text | capture("Successfully (stopped task|killed shell): (?<id>[A-Za-z0-9_-]+)").id) // "-")"
+            elif ($text | test("^(<tool_use_error>)?No task found with ID: ")) then
+              "S\t\(($text | capture("No task found with ID: (?<id>[A-Za-z0-9_-]+)").id) // "-")"
             else empty end
         else empty end' "$tp" 2>/dev/null | tr -d '\r') || return 1
   launched=$(awk -F '\t' '$1 == "L" && $2 != "-"' <<<"$events")

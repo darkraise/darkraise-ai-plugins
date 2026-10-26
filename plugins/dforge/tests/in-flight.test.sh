@@ -151,6 +151,14 @@ notify toolu_t16 completed
 out=$(bash "$INFLIGHT")
 check "its notification ends it" "$(grep -c '^- shell b16 ' <<<"$out")" "0"
 
+# --- TaskStop on a task Claude Code no longer tracks ---
+result toolu_stop13 '<tool_use_error>No task found with ID: a13. Running background agents: a11 (Implement task 4)</tool_use_error>'
+result toolu_stop14 '<tool_use_error>No task found with ID: a14</tool_use_error>'
+out=$(bash "$INFLIGHT")
+check "a task TaskStop cannot find is no longer listed" "$(grep -c '^- agent a13 ' <<<"$out")" "0"
+check "without the running-agents suffix too" "$(grep -c '^- agent a14 ' <<<"$out")" "0"
+check "an agent the answer names as running stays listed" "$(grep -c '^- agent a11 ' <<<"$out")" "1"
+
 # --- no transcript for this session ---
 rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"
 check "no session record: exit 3" "$(cd "$REPO" && bash "$INFLIGHT" >/dev/null; echo $?)" "3"
