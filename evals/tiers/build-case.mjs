@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATA, PLUGIN, git } from './lib/sh.mjs';
-import { MANIFEST, brief, readManifest } from './lib/cases.mjs';
+import { MANIFEST, SLICES, brief, readManifest, sliceBrief } from './lib/cases.mjs';
 import { filesBlock, tasks, taskText } from './lib/plan.mjs';
 import { fill, template } from './lib/prompt.mjs';
 import { snapshot } from './lib/snapshot.mjs';
@@ -26,22 +26,28 @@ export function reviewCases() {
 // snapshot, holding the brief where production puts it. A stripped case loses
 // docs/superpowers, so the plan's code cannot be read from disk.
 export function buildCase(c, dir) {
-  const stripped = c.pool === 'stripped';
+  const slice = c.pool === 'slice';
+  const stripped = c.pool === 'stripped' || slice;
   const work = join(dir, 'work');
   const initial = snapshot(c.base, work, stripped ? ['docs/superpowers'] : []);
   const planDir = join(dir, 'plan');
-  let text = brief(c, planDir);
+  let text = slice ? sliceBrief(c, planDir) : brief(c, planDir);
   if (stripped) text = strip(text, addedLines(c.base, c.result)).text;
   const planFile = join(planDir, 'plan.md');
-  const { allowed, tests } = filesBlock(taskText(planFile, c.task));
-  const title = tasks(planFile).find(t => t.n === c.task).title;
+  const members = (slice ? c.tasks : [c.task]).map(n => ({ n, files: filesBlock(taskText(planFile, n)), title: tasks(planFile).find(t => t.n === n).title }));
+  const allowed = [...new Set(members.flatMap(m => m.files.allowed))];
+  const tests = [...new Set(members.flatMap(m => m.files.tests))];
+  const title = members.map(m => m.title).join('; ');
+  const label = slice ? `Tasks ${c.tasks[0]}-${c.tasks.at(-1)}` : `Task ${c.task}`;
   mkdirSync(join(work, SCRATCH), { recursive: true });
   const briefFile = join(work, SCRATCH, `task-${c.task}-brief.md`);
   writeFileSync(briefFile, text);
-  let context = `This is Task ${c.task} of the plan ${basename(c.plan)}. The tasks before it are already in this repository; the tasks after it are not your concern.`;
+  let context = slice
+    ? `These are Tasks ${c.tasks.slice(0, -1).join(', ')} and ${c.tasks.at(-1)} of the plan ${basename(c.plan)}, merged into one task: implement every part of the brief. The tasks before them are already in this repository; the tasks after them are not your concern.`
+    : `This is Task ${c.task} of the plan ${basename(c.plan)}. The tasks before it are already in this repository; the tasks after it are not your concern.`;
   if (stripped) context += ` This brief gives the prose, the signatures and the tests, but not the implementation code: wherever it shows "${MARKER}", write that code yourself. The plan file is not available.`;
   const prompt = fill(template(IMPLEMENTER), {
-    'Task N: [task name]': `Task ${c.task}: ${title}`,
+    'Task N: [task name]': `${label}: ${title}`,
     '[BRIEF_FILE]': briefFile,
     '[Scene-setting: where this fits, dependencies, architectural context]': context,
     '[directory]': work,
@@ -101,10 +107,12 @@ export function buildReview(c, dir) {
   return { info, prompt };
 }
 
-// findCase ID — the manifest row or the review case with that id.
+// findCase ID — the manifest row, the slice manifest row or the review case
+// with that id.
 export function findCase(id) {
   const cases = existsSync(MANIFEST) ? readManifest().cases : [];
-  return cases.find(c => c.id === id) ?? reviewCases().find(c => c.id === id) ?? null;
+  const sliceCases = existsSync(SLICES) ? readManifest(SLICES).cases : [];
+  return cases.find(c => c.id === id) ?? sliceCases.find(c => c.id === id) ?? reviewCases().find(c => c.id === id) ?? null;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

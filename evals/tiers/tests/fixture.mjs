@@ -62,11 +62,13 @@ export function fixture() {
   commit(repo, { 'notes.md': ['notes'] }, 'docs: add notes');
   commit(repo, { 'src/idle.sh': ['# idle'], 'tests/idle.test.sh': ['true'] }, 'feat: add idle');
   writeFileSync(join(stub, 'greet.patch'), spawnSync('git', ['diff', planned, greet], { cwd: repo, encoding: 'utf8' }).stdout);
+  writeFileSync(join(stub, 'slice.patch'), spawnSync('git', ['diff', planned, shout], { cwd: repo, encoding: 'utf8' }).stdout);
   writeFileSync(join(stub, 'claude'), `#!/bin/sh\nexec "${process.execPath}" "${fileURLToPath(new URL('./stub-claude.mjs', import.meta.url))}" "$@"\n`);
   chmodSync(join(stub, 'claude'), 0o755);
   writeFileSync(join(data, 'arms.json'), JSON.stringify({
     rows: { 1: ['impl-sonnet-low', 'impl-haiku'], 5: ['impl-opus-medium', 'impl-sonnet-high'] },
     review: ['judge-opus@high', 'judge-sonnet-high'],
+    slice: ['impl-sonnet-high', 'impl-opus-medium', 'impl-opus-high'],
     grader: { model: 'opus', effort: 'low' },
   }));
   writeFileSync(join(data, 'cases/reviews/cases.json'), JSON.stringify([

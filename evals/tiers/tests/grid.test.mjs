@@ -111,3 +111,24 @@ test('an excluded case leaves the grid and the report', () => {
   assert.match(node('run-grid.mjs', ['--stage', 'stripped']).stdout, /ran=0 remaining=0/);
   assert.match(node('report.mjs').stdout, /### Row 5: NOT MEASURED\n\n- no case on this row\n- excluded s-fixture-t2: its snapshot cannot be built/);
 });
+
+test('the slice stage needs its manifest', () => {
+  const none = node('run-grid.mjs', ['--stage', 'slice']);
+  assert.equal(none.status, 2);
+  assert.match(none.stderr, /no slice manifest; run build-manifest\.mjs --slices/);
+});
+
+test('the slice stage runs every slice arm and the report states the slice verdict', () => {
+  assert.equal(node('build-manifest.mjs', ['--slices']).status, 0);
+  modes(fx.stub, 'slice', 'slice', 'blocked');
+  const ran = node('run-grid.mjs', ['--stage', 'slice']);
+  assert.equal(ran.status, 0, ran.stderr);
+  assert.match(ran.stdout, /run-grid stage=slice rep=1 ran=3 remaining=0/);
+  assert.deepEqual(rows('results.tsv').filter(r => r[1] === 'slice').map(r => r.slice(2, 7)), [
+    ['l-fixture-t1-2', 'slice', '6', 'impl-sonnet-high', 'PASS'],
+    ['l-fixture-t1-2', 'slice', '6', 'impl-opus-medium', 'PASS'],
+    ['l-fixture-t1-2', 'slice', '6', 'impl-opus-high', 'BLOCKED'],
+  ]);
+  assert.match(node('report.mjs').stdout, /## Slice cases\n\n\| Case \| Total \| Assigned \| `impl-sonnet-high` \| `impl-opus-medium` \| `impl-opus-high` \|\n\|---\|---\|---\|---\|---\|---\|\n\| `l-fixture-t1-2` \| 6 \| `impl-opus-high` \| PASS \| PASS \| BLOCKED \|\n\nSlice verdict: RULING - the assigned arm passed 0 of 1; §1 needs 4 of 5\n/);
+  assert.match(node('run-grid.mjs', ['--stage', 'slice']).stdout, /ran=0 remaining=0/);
+});

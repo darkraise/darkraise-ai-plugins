@@ -48,3 +48,19 @@ test('every arm of the real arms table names an agent the plugin ships', () => {
   }
   assert.deepEqual(arms.grader, { model: 'opus', effort: 'low' });
 });
+
+test('build-manifest --slices writes the slice cases and their exclusions', () => {
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../build-manifest.mjs', import.meta.url)), '--slices'], { cwd: fx.repo, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /build-manifest: 1 slices, 0 exclusions, start [0-9a-f]{40}/);
+  const { cases } = readManifest(join(fx.data, 'cases/slices.tsv'));
+  assert.deepEqual(cases.map(c => [c.id, c.pool, c.row, c.task, c.tasks, c.base, c.result]), [['l-fixture-t1-2', 'slice', 6, 1, [1, 2], fx.planned, fx.shout]]);
+  assert.equal(readFileSync(join(fx.data, 'cases/slices-excluded.tsv'), 'utf8'), 'plan\ttasks\treason\n');
+  assert.equal(spawnSync(process.execPath, [fileURLToPath(new URL('../build-manifest.mjs', import.meta.url)), '--bogus'], { cwd: fx.repo }).status, 2);
+});
+
+test('the real arms table holds the three slice arms', () => {
+  const arms = JSON.parse(readFileSync(new URL('../arms.json', import.meta.url), 'utf8'));
+  assert.deepEqual(arms.slice, ['impl-sonnet-high', 'impl-opus-medium', 'impl-opus-high']);
+  for (const arm of arms.slice) assert.equal(existsSync(resolve(PLUGIN, 'agents', `${arm}.md`)), true, arm);
+});

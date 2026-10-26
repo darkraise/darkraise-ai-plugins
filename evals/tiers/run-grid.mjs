@@ -1,20 +1,23 @@
 #!/usr/bin/env node
 // Run every cell of one stage that has no scored result yet, two at a time.
-// Usage: node evals/tiers/run-grid.mjs --stage smoke|written|stripped|review [--rep N] [--minutes M] [--pass P]
+// Usage: node evals/tiers/run-grid.mjs --stage smoke|written|stripped|review|slice [--rep N] [--minutes M] [--pass P]
+// The slice stage reads cases/slices.tsv, built by build-manifest.mjs --slices,
+// and runs each slice case on every arm of arms.json's slice list.
 // --minutes stops starting cells after M minutes, so a long stage can run in
 // slices; cells already running finish. --pass numbers the grading passes P
 // and P + 1 (default 1 and 2), so every review can be graded again after a
 // grader fix without touching the earlier grades.
 // Exit: 0 the stage is complete; 1 cells remain after harness errors; 2 usage,
-// or the plugin differs from the manifest's start commit; 3 stopped at the
-// spend cap, at a rate limit or at --minutes.
-import { readFileSync } from 'node:fs';
+// no slice manifest for the slice stage, or the plugin differs from the
+// manifest's start commit; 3 stopped at the spend cap, at a rate limit or at
+// --minutes.
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { reviewCases } from './build-case.mjs';
 import { gradeReview } from './grade-review.mjs';
 import { runCell } from './run-case.mjs';
-import { readManifest } from './lib/cases.mjs';
+import { SLICES, readManifest } from './lib/cases.mjs';
 import { RESULTS, RESULT_COLUMNS, appendTsv, readTsv, scored } from './lib/results.mjs';
 import { DATA, sh } from './lib/sh.mjs';
 
@@ -22,14 +25,15 @@ import { DATA, sh } from './lib/sh.mjs';
 const JOBS = Number(process.env.TIER_EVAL_JOBS ?? 2);
 const CAP_USD = Number(process.env.TIER_EVAL_CAP_USD ?? 250);
 const REPEAT_GRADINGS = 6;
-const STAGES = ['smoke', 'written', 'stripped', 'review'];
+const STAGES = ['smoke', 'written', 'stripped', 'review', 'slice'];
 
 const { values } = parseArgs({ options: { stage: { type: 'string' }, rep: { type: 'string', default: '1' }, minutes: { type: 'string' }, pass: { type: 'string', default: '1' } } });
 const { stage, rep } = values;
 const deadline = values.minutes === undefined ? Infinity : Date.now() + Number(values.minutes) * 60000;
 const pass = Number(values.pass);
 if (!STAGES.includes(stage) || Number.isNaN(deadline) || !Number.isInteger(pass) || pass < 1) { console.error(`usage: run-grid.mjs --stage ${STAGES.join('|')} [--rep N] [--minutes M] [--pass P]`); process.exit(2); }
-const { start, cases } = readManifest();
+if (stage === 'slice' && !existsSync(SLICES)) { console.error('run-grid: no slice manifest; run build-manifest.mjs --slices'); process.exit(2); }
+const { start, cases } = readManifest(stage === 'slice' ? SLICES : undefined);
 if (sh('git', ['diff', '--quiet', start, '--', 'plugins/dforge']).code !== 0) {
   console.error(`run-grid: plugins/dforge differs from the manifest's start commit ${start}`);
   process.exit(2);
@@ -39,6 +43,7 @@ const reviews = reviewCases();
 
 function cells() {
   if (stage === 'review') return reviews.flatMap(c => arms.review.map(arm => ({ c, arm })));
+  if (stage === 'slice') return cases.flatMap(c => arms.slice.map(arm => ({ c, arm })));
   if (stage !== 'smoke') return cases.filter(c => c.pool === stage).flatMap(c => arms.rows[c.row].map(arm => ({ c, arm })));
   const first = row => cases.find(c => c.pool === 'written' && c.row === row);
   return [

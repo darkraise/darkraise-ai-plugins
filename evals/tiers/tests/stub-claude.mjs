@@ -17,6 +17,7 @@ const apply = () => spawnSync('git', ['apply', join(dir, 'greet.patch')], { stdi
 const file = name => existsSync(join(dir, name)) ? readFileSync(join(dir, name), 'utf8') : '';
 
 if (mode === 'pass') { apply(); reply('**Status:** DONE'); }
+else if (mode === 'slice') { spawnSync('git', ['apply', join(dir, 'slice.patch')], { stdio: 'ignore' }); reply('**Status:** DONE'); }
 else if (mode === 'concerns') { apply(); reply('**Status:** DONE_WITH_CONCERNS'); }
 else if (mode === 'failtest') { apply(); writeFileSync('src/greet.sh', 'echo nope\n'); reply('**Status:** DONE'); }
 else if (mode === 'cheat') { apply(); writeFileSync('src/greet.sh', 'echo nope\n'); writeFileSync('tests/greet.test.sh', 'true\n'); reply('**Status:** DONE'); }

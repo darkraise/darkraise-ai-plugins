@@ -108,3 +108,19 @@ test('the two command lines build a manifest case and re-grade a finished run', 
   assert.deepEqual([graded.status, graded.stdout], [0, 'w-fixture-t1\tPASS\tstatus=DONE\n']);
   assert.equal(spawnSync(process.execPath, [script('grade-case.mjs'), join(fx.work, 'nowhere')]).status, 2);
 });
+
+test('a slice case merges its tasks into one stripped brief', () => {
+  const slice = { id: 'l-fixture-t1-2', pool: 'slice', row: 6, plan: PLAN, task: 1, tasks: [1, 2], base: fx.planned, result: fx.shout };
+  const { info, prompt } = buildCase(slice, join(fx.work, 'slice'));
+  const brief = readFileSync(join(info.work, '.superpowers/sdd/eval/task-1-brief.md'), 'utf8');
+  assert.equal(brief.split(MARKER).length - 1, 2);
+  assert.doesNotMatch(brief, /echo hello|echo HELLO|\*\*Evaluation:\*\*|\*\*Implementer:\*\*/);
+  assert.match(brief, /^# Tasks 1-2: Greet; Shout\n/);
+  assert.match(brief, /^## Part 1 \(Task 1\): Greet$[\s\S]*\[ "\$out" = "hello" \][\s\S]*^## Part 2 \(Task 2\): Shout$[\s\S]*\[ "\$out" = "HELLO" \]/m);
+  assert.equal(brief.split('\n## Plan header excerpt\n').length - 1, 1);
+  assert.deepEqual([existsSync(join(info.work, 'docs/superpowers')), existsSync(join(info.work, 'src/greet.sh'))], [false, false]);
+  assert.match(prompt, /^You are implementing Tasks 1-2: Greet; Shout\n/);
+  assert.match(prompt, /These are Tasks 1 and 2 of the plan 2026-09-20-fixture\.md, merged into one task: implement every part of the brief\./);
+  assert.match(prompt, /write that code yourself\. The plan file is not available\./);
+  assert.deepEqual([info.result, info.allowed, info.tests], [fx.shout, ['src/greet.sh', 'tests/greet.test.sh', 'src/shout.sh', 'tests/shout.test.sh'], ['tests/greet.test.sh', 'tests/shout.test.sh']]);
+});

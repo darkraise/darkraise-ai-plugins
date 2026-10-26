@@ -7,7 +7,7 @@ import { PLAN, fixture } from './fixture.mjs';
 
 const fx = fixture();
 after(() => rmSync(fx.top, { recursive: true, force: true }));
-const { candidates, golden, plans, readManifest, select, slug, strippedRow } = await import('../lib/cases.mjs');
+const { candidates, golden, plans, readManifest, select, slug, strippedRow, slices, scoreSlice, orderSlices, pickSlices, sliceId, SLICE_CAP } = await import('../lib/cases.mjs');
 const all = candidates(fx.shout);
 const byTask = n => all.find(c => c.task === n);
 
@@ -66,4 +66,59 @@ test('slug drops the date and the plugin prefix', () => {
     [slug('docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md'), slug('docs/dforge/plans/2026-11-01-dr-forge-settings.md'), slug('docs/dforge/plans/2026-11-02-dforge-cockpit.md'), slug(PLAN)],
     ['review-routing', 'settings', 'cockpit', 'fixture'],
   );
+});
+
+test('scoreSlice scores the merged task with spec 2 under the relaxed Rule S', () => {
+  const m = (task, allowed, tests, axes) => ({ task, allowed, tests, axes: { files: 0, spec: 0, coupling: 0, risk: 0, ...axes } });
+  assert.deepEqual(
+    scoreSlice([m(1, ['a.sh', 't/a.test.sh'], ['t/a.test.sh'], { coupling: 1, risk: 2 }), m(2, ['b.sh', 't/a.test.sh'], ['t/a.test.sh'], { spec: 1, risk: 1 })]),
+    { axes: { files: 1, spec: 2, coupling: 1, risk: 2, total: 6 }, allowed: ['a.sh', 't/a.test.sh', 'b.sh'], tests: ['t/a.test.sh'] },
+  );
+  const seven = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(x => `${x}.sh`);
+  assert.deepEqual(scoreSlice([m(1, seven.slice(0, 4), [], { coupling: 1 }), m(2, seven.slice(4), [], {})]), { reason: 'Rule S: files 3 + spec 2 + coupling 1 = 6' });
+  assert.deepEqual(scoreSlice([m(1, seven.slice(0, 4), [], {}), m(2, seven.slice(2, 6), [], { risk: 1 })]).axes, { files: 2, spec: 2, coupling: 0, risk: 1, total: 5 });
+  assert.deepEqual(scoreSlice([m(1, ['a.sh'], [], { coupling: 1 }), m(2, ['b.sh'], [], {})]), { reason: 'total 4: §1 assigns no slice arm' });
+  assert.deepEqual(scoreSlice([m(5, ['a.sh'], [], { spec: 3 }), m(6, ['b.sh'], [], {})]), { reason: 'Task 5 scores spec 3' });
+});
+
+test('slices merges consecutive eligible tasks committed in task order', () => {
+  const found = slices(all);
+  assert.deepEqual(found.map(w => [w.plan, w.tasks, w.base, w.result, w.reason]), [[PLAN, [1, 2], fx.planned, fx.shout, undefined]]);
+  assert.deepEqual(found[0].axes, { files: 2, spec: 2, coupling: 0, risk: 2, total: 6 });
+  assert.deepEqual([found[0].allowed, found[0].tests], [['src/greet.sh', 'tests/greet.test.sh', 'src/shout.sh', 'tests/shout.test.sh'], ['tests/greet.test.sh', 'tests/shout.test.sh']]);
+  assert.equal(sliceId(found[0]), 'l-fixture-t1-2');
+  const swapped = slices(all.map(c => c.task === 1 ? { ...c, result: fx.shout } : c.task === 2 ? { ...c, base: fx.planned, result: fx.greet } : c));
+  assert.equal(swapped[0].reason, 'the tasks were not committed in task order');
+});
+
+test('orderSlices goes round-robin across plans and pickSlices checks until the cap', async () => {
+  const w = (plan, ...tasks) => ({ plan, tasks });
+  const name = x => `${x.plan}${x.tasks.join('')}`;
+  const ordered = orderSlices([w('b', 4, 5), w('a', 2, 3), w('a', 1, 2), w('b', 6, 7), w('a', 1, 2, 3)]);
+  assert.deepEqual(ordered.map(name), ['a123', 'b45', 'a12', 'b67', 'a23']);
+  const checked = [];
+  const { picked, excluded } = await pickSlices(ordered, async x => {
+    checked.push(name(x));
+    return name(x) === 'b45' ? 'the tests already pass on the base commit' : null;
+  }, 2);
+  assert.deepEqual(picked.map(name), ['a123', 'b67']);
+  assert.deepEqual(checked, ['a123', 'b45', 'b67']);
+  assert.deepEqual(excluded.map(x => [name(x), x.reason]), [
+    ['b45', 'the tests already pass on the base commit'],
+    ['a12', 'overlaps a picked slice'],
+    ['a23', 'not selected: 2 slices already picked'],
+  ]);
+  assert.equal(SLICE_CAP, 5);
+});
+
+test('golden checks a slice against its merged brief and its last commit', async () => {
+  const [slice] = slices(all);
+  assert.equal(await golden(slice), null);
+  assert.equal(await golden({ ...slice, result: fx.greet }), 'tests/shout.test.sh fails on the result commit');
+});
+
+test('readManifest reads a slice row with its task list', () => {
+  const file = join(fx.top, 'slices.tsv');
+  writeFileSync(file, `# start ${fx.planned}\nid\tpool\trow\tplan\ttask\ttasks\tbase\tresult\nl-x-t2-3\tslice\t6\tp.md\t2\t2,3\tb\tr\n`);
+  assert.deepEqual(readManifest(file), { start: fx.planned, cases: [{ id: 'l-x-t2-3', pool: 'slice', row: 6, plan: 'p.md', task: 2, tasks: [2, 3], base: 'b', result: 'r' }] });
 });

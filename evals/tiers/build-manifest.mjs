@@ -1,19 +1,40 @@
 #!/usr/bin/env node
 // Enumerate every eligible task, run the free golden check on each, select the
 // cases and write cases/manifest.tsv and cases/excluded.tsv.
-// Usage: node evals/tiers/build-manifest.mjs
-// Exit: 0 written; 2 the plugin has uncommitted changes.
+// With --slices, merge two or three consecutive tasks of one plan into slice
+// cases instead, golden-check them in order until five pass, and write
+// cases/slices.tsv and cases/slices-excluded.tsv.
+// Usage: node evals/tiers/build-manifest.mjs [--slices]
+// Exit: 0 written; 2 usage, or the plugin has uncommitted changes.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DATA, git } from './lib/sh.mjs';
-import { CAP, MANIFEST, candidates, golden, select, slug, strippedRow } from './lib/cases.mjs';
+import { CAP, MANIFEST, SLICES, candidates, golden, orderSlices, pickSlices, select, sliceId, slices, slug, strippedRow } from './lib/cases.mjs';
 
 const JOBS = 6;
+const sliceMode = process.argv[2] === '--slices';
+if (process.argv.length > 3 || (process.argv.length === 3 && !sliceMode)) {
+  console.error('usage: build-manifest.mjs [--slices]');
+  process.exit(2);
+}
 if (git(['status', '--porcelain', '--', 'plugins/dforge']).trim() !== '') {
   console.error('build-manifest: plugins/dforge has uncommitted changes');
   process.exit(2);
 }
 const start = git(['rev-parse', 'HEAD']).trim();
+if (sliceMode) {
+  const windows = slices(candidates(start));
+  const { picked, excluded } = await pickSlices(orderSlices(windows.filter(w => !w.reason)), golden);
+  const rows = [`# start ${start}`, ['id', 'pool', 'row', 'plan', 'task', 'tasks', 'base', 'result'].join('\t')];
+  for (const w of picked) rows.push([sliceId(w), 'slice', w.axes.total, w.plan, w.tasks[0], w.tasks.join(','), w.base, w.result].join('\t'));
+  const left = [...windows.filter(w => w.reason), ...excluded]
+    .sort((a, b) => a.plan.localeCompare(b.plan) || a.tasks[0] - b.tasks[0] || b.tasks.length - a.tasks.length);
+  mkdirSync(dirname(SLICES), { recursive: true });
+  writeFileSync(SLICES, rows.join('\n') + '\n');
+  writeFileSync(resolve(DATA, 'cases/slices-excluded.tsv'), ['plan\ttasks\treason', ...left.map(w => [w.plan, w.tasks.join(','), w.reason].join('\t'))].join('\n') + '\n');
+  console.log(`build-manifest: ${picked.length} slices, ${left.length} exclusions, start ${start}`);
+  process.exit(0);
+}
 const arms = JSON.parse(readFileSync(resolve(DATA, 'arms.json'), 'utf8'));
 const all = candidates(start);
 const queue = all.filter(c => !c.reason);

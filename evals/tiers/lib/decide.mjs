@@ -60,6 +60,28 @@ export function decideReview(arms, grades) {
   })];
 }
 
+// The relaxed Rule S's assignment rows for totals 5 to 8, fixed here because the harness measures them before the ladder carries rows 7 and 8.
+export const SLICE_ASSIGNED = { 5: 'impl-sonnet-high', 6: 'impl-opus-high', 7: 'impl-opus-high', 8: 'impl-opus-high' };
+export const SLICE_PASS = 4;
+export const SLICE_CASES = 5;
+
+// decideSlices ARMS CASES CELL — ARMS are the slice arms, CASES the slice
+// cases and CELL(id, arm) returns { outcome } or undefined while unscored.
+// §1 is kept when the arm it assigns passes SLICE_PASS of SLICE_CASES cases;
+// fewer cases than SLICE_CASES can only ask for a ruling.
+export function decideSlices(arms, cases, cell) {
+  const rows = cases.map(c => ({ id: c.id, total: c.row, assigned: SLICE_ASSIGNED[c.row], outcomes: arms.map(arm => cell(c.id, arm)?.outcome ?? '-') }));
+  const unscored = rows.filter(r => !cell(r.id, r.assigned)).length;
+  const pass = rows.filter(r => cell(r.id, r.assigned)?.outcome === 'PASS').length;
+  const of = rows.length;
+  let verdict;
+  if (of === 0) verdict = 'NOT MEASURED - no slice case';
+  else if (unscored > 0) verdict = `INCOMPLETE - ${unscored} assigned cells are not scored`;
+  else if (of >= SLICE_CASES && pass >= SLICE_PASS) verdict = `KEEP §1 - the assigned arm passed ${pass} of ${of}`;
+  else verdict = `RULING - the assigned arm passed ${pass} of ${of}; §1 needs ${SLICE_PASS} of ${SLICE_CASES}`;
+  return { verdict, pass, of, rows };
+}
+
 // graderDisagreements GRADES PASS — how many defects the repeat grading, pass
 // PASS + 1, judged differently from pass PASS. More than one means the grader
 // is not usable.

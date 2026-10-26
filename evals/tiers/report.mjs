@@ -2,11 +2,11 @@
 // Print the per-row decision table and the review-seat table as Markdown.
 // Usage: node evals/tiers/report.mjs [--rep N] [--pass P]
 // --pass reads the review grades of pass P and its repeat P + 1 (default 1).
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { readManifest } from './lib/cases.mjs';
-import { decideReview, decideRow, graderDisagreements } from './lib/decide.mjs';
+import { SLICES, readManifest } from './lib/cases.mjs';
+import { decideReview, decideRow, decideSlices, graderDisagreements } from './lib/decide.mjs';
 import { GRADES, RESULTS, readTsv, scored } from './lib/results.mjs';
 import { DATA } from './lib/sh.mjs';
 
@@ -42,9 +42,17 @@ out.push('## Review seats', '', '| Arm | Found | Of | Under-graded | Verdict | M
 for (const s of decideReview(arms.review, grades.filter(g => g.pass === String(pass)))) {
   out.push(`| \`${s.arm}\` | ${s.found} | ${s.of} | ${s.underGraded} | ${s.verdict} | ${s.missedCritical.join(', ') || '-'} |`);
 }
-for (const [id, why] of excluded) if (!cases.some(c => c.id === id)) out.push('', `Excluded review case ${id}: ${why}`);
+const sliceCases = existsSync(SLICES) ? readManifest(SLICES).cases : [];
+for (const [id, why] of excluded) if (!cases.some(c => c.id === id) && !sliceCases.some(c => c.id === id)) out.push('', `Excluded review case ${id}: ${why}`);
 const g = graderDisagreements(grades, pass);
 out.push('', `Grader consistency: ${g.disagreements} disagreements on ${g.repeated} repeated gradings - ${g.disagreements > 1 ? 'INCONSISTENT: fix the grader prompt and re-grade before reading the table above' : 'usable'}.`);
+if (existsSync(SLICES)) {
+  const d = decideSlices(arms.slice, sliceCases.filter(c => !excluded.has(c.id)), cell);
+  out.push('', '## Slice cases', '', `| Case | Total | Assigned | ${arms.slice.map(arm => `\`${arm}\``).join(' | ')} |`, `|${'---|'.repeat(3 + arms.slice.length)}`);
+  for (const r of d.rows) out.push(`| \`${r.id}\` | ${r.total} | \`${r.assigned}\` | ${r.outcomes.join(' | ')} |`);
+  out.push('', `Slice verdict: ${d.verdict}`);
+  for (const c of sliceCases.filter(c => excluded.has(c.id))) out.push(`- excluded ${c.id}: ${excluded.get(c.id)}`);
+}
 const spent = results.filter(r => r.rep === rep).reduce((sum, r) => sum + Number(r.cost), 0);
 out.push('', `Notional spend: ${money(spent)} over ${results.filter(r => r.rep === rep).length} runs.`);
 console.log(out.join('\n'));

@@ -8,5 +8,6 @@
     "6": ["impl-opus-high", "impl-opus-medium"]
   },
   "review": ["judge-opus@high", "judge-opus@medium", "judge-sonnet-high"],
+  "slice": ["impl-sonnet-high", "impl-opus-medium", "impl-opus-high"],
   "grader": { "model": "opus", "effort": "low" }
 }

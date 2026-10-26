@@ -47,3 +47,22 @@ test('graderDisagreements counts second-pass changes', () => {
   assert.deepEqual(graderDisagreements(rows), { repeated: 2, disagreements: 1 });
   assert.deepEqual(graderDisagreements(rows, 3), { repeated: 0, disagreements: 0 });
 });
+
+test('decideSlices keeps §1 on four passes on the assigned arm and asks for a ruling below', async () => {
+  const { decideSlices, SLICE_PASS, SLICE_CASES } = await import('../lib/decide.mjs');
+  const slice = (id, row) => ({ id, row, pool: 'slice' });
+  const five = [slice('l1', 5), slice('l2', 6), slice('l3', 7), slice('l4', 8), slice('l5', 6)];
+  const arms = ['impl-sonnet-high', 'impl-opus-medium', 'impl-opus-high'];
+  const keep = decideSlices(arms, five, table({ 'impl-sonnet-high': { all: pass(1) }, 'impl-opus-medium': { all: fail(1) }, 'impl-opus-high': { all: pass(2), l4: fail(2) } }));
+  assert.equal(keep.verdict, 'KEEP §1 - the assigned arm passed 4 of 5');
+  assert.deepEqual(keep.rows[0], { id: 'l1', total: 5, assigned: 'impl-sonnet-high', outcomes: ['PASS', 'FAIL', 'PASS'] });
+  assert.deepEqual(keep.rows.map(r => r.assigned), ['impl-sonnet-high', 'impl-opus-high', 'impl-opus-high', 'impl-opus-high', 'impl-opus-high']);
+  const ruling = decideSlices(arms, five, table({ 'impl-sonnet-high': { all: fail(1) }, 'impl-opus-high': { all: pass(2), l4: fail(2) } }));
+  assert.equal(ruling.verdict, 'RULING - the assigned arm passed 3 of 5; §1 needs 4 of 5');
+  assert.deepEqual(ruling.rows[0].outcomes, ['FAIL', '-', 'PASS']);
+  const allPass = table({ 'impl-sonnet-high': { all: pass(1) }, 'impl-opus-high': { all: pass(2) } });
+  assert.equal(decideSlices(arms, five.slice(0, 4), allPass).verdict, 'RULING - the assigned arm passed 4 of 4; §1 needs 4 of 5');
+  assert.equal(decideSlices(arms, five, table({ 'impl-opus-high': { all: pass(2) } })).verdict, 'INCOMPLETE - 1 assigned cells are not scored');
+  assert.equal(decideSlices(arms, [], table({})).verdict, 'NOT MEASURED - no slice case');
+  assert.deepEqual([SLICE_PASS, SLICE_CASES], [4, 5]);
+});
