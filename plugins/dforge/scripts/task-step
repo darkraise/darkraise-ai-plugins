@@ -94,7 +94,7 @@ cmd_rereview() (
 
   first=${tasks[0]}
   ids=$(IFS=,; echo "${tasks[*]}")
-  ws=$(bash "$here/sdd-workspace" "$plan")
+  ws=$(dforge_workspace "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")
   state=$ws/task-$first-step.json
   review_head=""
   [ ! -f "$state" ] || review_head=$(jq -r '.reviewHead // empty' "$state" | tr -d '\r')
