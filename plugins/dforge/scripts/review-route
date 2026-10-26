@@ -17,12 +17,15 @@
 #        review-route PLAN_FILE --final-fix FILE [FILE ...]
 # ID is a task number, or a task number and part letter for a split task (7B).
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
-#         (a plan round appends cap=<n>)
+#         (a plan round appends cap=<n>; a single --task ID puts
+#         review=<task|group> before reason=)
 # A Host: codex plan routes only --plan-round and --final-fix, to a native seat
 # printed as primary=native:<model>/<effort>; its other seats come from
 # reference/native-codex.md.
-# Exit: 0 routed; 2 usage error, missing task, unparseable Evaluation, or any
-# other route on a Codex-host plan.
+# Exit: 0 routed, including a lone --task ID with no Evaluation line, which
+# prints review=task reason=unscored; 2 usage error, missing task, unparseable
+# Evaluation, a batch task with no Evaluation line, or any other route on a
+# Codex-host plan.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -351,6 +354,12 @@ for id in "$@"; do
   fi
   [ -z "$(plan_lines Executor <<<"$text")" ] || executor=1
   evs=$(plan_eval_lines <<<"$text")
+  if [ -z "$evs" ] && [ $# -eq 1 ]; then
+    # An unscored task has no band to read, so it takes the strongest judge
+    # alone, whatever the Codex gate or an Executor line says.
+    printf 'review-seat task=%s primary=%s fallback=- review=task reason=unscored\n' "$id" "$OPUS"
+    exit 0
+  fi
   [ -n "$evs" ] || die "Task $id has no **Evaluation:** line"
   # A task without a part letter carries every part's Evaluation line, so it
   # routes on its heaviest part.
@@ -389,5 +398,12 @@ else
   primary=codex:light fallback=$(band "$max_total") reason=band
 fi
 
-printf 'review-seat task=%s primary=%s fallback=%s reason=%s\n' \
-  "$(IFS=,; echo "$*")" "$primary" "$fallback" "$reason"
+# A single task carries its review tier; a batch is already one review, so it
+# carries none.
+tier=""
+if [ $# -eq 1 ]; then
+  tier=" review=group"
+  if [ "$max_risk" -ge 2 ] || [ "$max_total" -ge 5 ]; then tier=" review=task"; fi
+fi
+printf 'review-seat task=%s primary=%s fallback=%s%s reason=%s\n' \
+  "$(IFS=,; echo "$*")" "$primary" "$fallback" "$tier" "$reason"
