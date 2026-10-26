@@ -160,6 +160,24 @@ ledger 'Task 1: complete (commits a..b, review clean)' \
 run "$REPO" "$PLAN_REL"
 lacks "inline assigned: no warning, the controller is the implementer" "$(cat "$TMP/stderr")" "warning"
 
+# --- a waves ledger: the lines that close a wave are not task lines ---
+ledger 'Wave 1: started (base aaaaaaa; Tasks 1-2; at most 2 at once)' \
+       'Task 1: complete (commits a..b, review clean; merged bbbbbbb)' \
+       'Task 2: complete (commits a..c, review clean; merged ccccccc)' \
+       'Wave 1: merged (head ccccccc; check at wave 3)'
+run "$REPO" "$PLAN_REL"
+check "wave merged: exits 0" "$status" "0"
+has "wave merged: counts the complete tasks" "$out" "2 of 3 tasks complete"
+has "wave merged: resumes at the next wave's task" "$out" "**Next:** Resume at Task 3 (Third thing)."
+lacks "wave merged: no warning" "$(cat "$TMP/stderr")" "warning"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: complete (commits b..c, review clean)' \
+       'Wave 2: fix round 1/2 (1 addressed, 0 open — x; commits c..d; fresh (wave))' \
+       'Wave 2: integrated (head ddddddd; bash full.sh → pass; baseline failures only)'
+run "$REPO" "$PLAN_REL"
+has "wave integrated on a red baseline: counts the complete tasks" "$out" "2 of 3 tasks complete"
+lacks "wave integrated on a red baseline: no warning" "$(cat "$TMP/stderr")" "warning"
+
 # --- ledger for another plan is ignored ---
 mkdir -p "$LEDGER_DIR"
 printf '# SDD ledger — plan: docs/plans/other.md\nTask 1: complete (x)\n' > "$LEDGER_DIR/progress.md"

@@ -187,5 +187,32 @@ names "inline mode: delegated fix rounds stop at 2" "$INLINE" 'fix rounds up to 
 names "inline mode: the breaker row" "$INLINE" "| \`breaker\` | A delegated task's findings still open after round 2/2 |"
 only_older "inline mode names R/5 only for older runs" "$INLINE"
 
+# --- the wave check cadence (faster-plans §4) ---
+WP="$P/skills/writing-plans/SKILL.md"
+names "waves ask check-due which check closes a wave" "$PW" '`bash <plugin-root>/scripts/wave check-due PLAN_FILE <k>`'
+names "every wave closes" "$PW" 'Every wave closes with an `integrated` or a `merged` line, one-task and serialized waves included.'
+names "the merged line" "$PW" 'Wave <k>: merged (head <sha7>; check at wave <m>)'
+names "the integrated line may be baseline-only" "$PW" 'Wave <k>: integrated (head <sha7>; <command> → pass[; baseline failures only])'
+names "a wave opens once every earlier wave is closed" "$PW" 'every earlier wave closed by its `integrated` or `merged` line'
+names "an ancestor with no task commits between proves the base" "$PW" 'or an ancestor of `HEAD` with no task commits between'
+names "a task commit outside any wave forces the fallback proof" "$PW" 'Only a task commit outside any wave forces the fallback proof'
+names "the base proof records its failures" "$PW" '`<workspace>/base-proof-failures.txt`'
+names "a new failure hands over every diff since the last pass" "$PW" 'every task diff since the last passing check'
+names "no in-flight run is exempt" "$PW" 'None is exempt.'
+names "an earlier cadence ruling is superseded" "$PW" 'is superseded by this cadence and the red-baseline rule'
+names "an overlap round counts toward two rounds" "$PW" 'It counts toward the two rounds.'
+names "recovery: a wave in flight has no closing line" "$PW" 'A `Wave <k>: started` line with no later `Wave <k>: integrated` or `Wave <k>: merged` line'
+lacks "a one-task wave is no longer line-free" "$PW" 'with no Wave lines, no worktree and no merge'
+lacks "waves no longer count five rounds" "$PW" 'It counts toward the five'
+only_older "waves name R/5 only for older runs" "$PW"
+names "writing-plans: the optional Wave check header line" "$WP" '**Wave check:** [waves only, optional:'
+names "writing-plans: the waves rule names the Wave check" "$WP" '`**Wave check:**`, optional, names a faster command'
+names "subagent mode: the merged grammar" "$SDD" 'Wave <k>: merged (head <sha7>; check at wave <m>)'
+names "subagent mode: the integrated grammar" "$SDD" 'Wave <k>: integrated (head <sha7>; <command> → pass[; baseline failures only])'
+names "subagent mode: compaction reads a merged line as closed" "$SDD" 'A `Wave <k>: started` line with no later `integrated` or `merged` line'
+names "subagent mode: recovery reads merged as closed" "$SDD" '`Wave <k>: merged` closes the wave as `integrated` does'
+lacks "subagent mode: the old integrated grammar is gone" "$SDD" 'Wave <k>: integrated (head <sha7>; <command> → pass)'
+
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

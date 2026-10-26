@@ -549,6 +549,7 @@ fi
 # and every dependency points into an earlier wave, so those are errors; the
 # rest keeps work that cannot share a wave safely in a wave of its own.
 parallelism=$(plan_parallelism "$src")
+wave_check=$(first_label 'Wave check' "$unfenced_header")
 if [ "$parallelism" = bad ]; then
   say ERROR header "Parallelism line does not match '**Parallelism:** sequential' or '**Parallelism:** waves — <N|A-B> | …'"
 elif [ "$parallelism" = waves ]; then
@@ -557,6 +558,9 @@ elif [ "$parallelism" = waves ]; then
   for label in 'Integration check' 'Worktree setup'; do
     [ -n "$(header_line "$label")" ] || say ERROR header "a waves plan needs its **$label:** line"
   done
+  if [ -n "$wave_check" ] && [ -z "$(tr -d ' \t' <<<"${wave_check#'**Wave check:**'}")" ]; then
+    say ERROR header "the **Wave check:** line names no command"
+  fi
   if ! waves=$(plan_waves "$src"); then
     say ERROR header "Parallelism waves must be '<N>' or '<A>-<B>' ranges separated by '|'"
   else
@@ -612,6 +616,8 @@ elif [ "$parallelism" = waves ]; then
       done
     done <<<"$waves"
   fi
+elif [ -n "$wave_check" ]; then
+  say WARN header "**Wave check:** runs only between the waves of a waves plan; this plan is sequential"
 fi
 
 # --- UI/UX contract (dforge:ui-ux) ---

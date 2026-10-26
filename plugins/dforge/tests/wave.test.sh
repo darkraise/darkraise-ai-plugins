@@ -155,5 +155,75 @@ check "clean: a user's own worktree stays" "$(git worktree list | grep -c "$GTMP
 check "clean: the removed worktree is gone" "$([ -d "$TMP/wt-2" ] && echo yes || echo no)" "no"
 check "clean: an unmarked detached worktree in range stays" "$([ -d "$TMP/inspect" ] && echo yes || echo no)" "yes"
 
+# --- check-due: which check closes wave K ---
+# Fixture lines carry a leading | so a plan that quotes this suite still lints.
+sed 's/^|//' > docs/cadence.md <<'PLAN'
+|# Cadence Plan
+|
+|**Execution:** subagent — `claude --model sonnet --effort high` — waves
+|
+|**Parallelism:** waves — 1 | 2-3 | 4 | 5 | 6-7 | 8 | 9
+|
+|**Integration check:** `bash full.sh`
+|
+|**Worktree setup:** none
+|
+|**Wave check:** `bash quick.sh`
+|
+|### Task 1: One
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|### Task 2: Two
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 1 = 1
+|### Task 3: Three
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 2 = 2
+|### Task 4: Four
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|### Task 5: Five
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
+|### Task 6: Six
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|### Task 7: Seven
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|### Task 8: Eight
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|### Task 9: Nine
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+PLAN
+grep -v '^\*\*Wave check:\*\*' docs/cadence.md > docs/cadence-nocheck.md
+git add docs/cadence.md docs/cadence-nocheck.md && git commit -qm "docs: cadence fixtures"
+due() { out=$(HOME="$TMP/home" bash "$WAVE" check-due "$@" 2>&1); status=$?; }
+got="" got_status=""
+for k in 1 2 3 4 5 6 7; do due docs/cadence.md "$k"; got="$got$out "; got_status="$got_status$status"; done
+check "check-due: every third wave, a risk-3 wave and the last run the full check" "$got" "wave-check wave-check full full wave-check full full "
+check "check-due: exits 0 for every wave" "$got_status" "0000000"
+got=""
+for k in 1 2 3 4 5 6 7; do due docs/cadence-nocheck.md "$k"; got="$got$out "; done
+check "check-due: without a Wave check line the other waves run none" "$got" "none none full full none full full "
+due docs/cadence.md 8
+check "check-due: a wave past the last exits 2" "$status" "2"
+due docs/cadence.md 0
+check "check-due: wave 0 exits 2" "$status" "2"
+due docs/cadence.md two
+check "check-due: a wave that is not a number exits 2" "$status" "2"
+due docs/cadence.md
+check "check-due: no wave exits 2" "$status" "2"
+due docs/plan.md 1
+check "check-due: a one-task first wave of two runs the wave check or none" "$out" "none"
+due docs/plan.md 2
+check "check-due: the last wave runs the full check" "$out" "full"
+due "$TMP/seq.md" 1
+check "check-due: a sequential plan exits 2" "$status" "2"
+due "$TMP/bad.md" 1
+check "check-due: waves that do not parse exit 4" "$status" "4"
+# A Header amendment adds a Wave check line without editing the plan file.
+WS_C=$(HOME="$TMP/home" bash "$HERE/../scripts/sdd-workspace" docs/cadence-nocheck.md | tr -d '\r')
+printf '%s\n' '## A1 — Header' 'Reason: a faster check between full checks' 'Cost if wrong: one wave check' \
+  '### Old' '````text' '**Worktree setup:** none' '````' \
+  '### New' '````text' '**Worktree setup:** none' '' '**Wave check:** `bash quick.sh`' '````' > "$WS_C/amendments.md"
+due docs/cadence-nocheck.md 1
+check "check-due: reads a Wave check line an amendment adds" "$out" "wave-check"
+check "check-due: the plan file itself is unchanged" "$(grep -c '^\*\*Wave check:\*\*' docs/cadence-nocheck.md)" "0"
+
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

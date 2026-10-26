@@ -27,7 +27,7 @@ back. Before anything else:
    An assigned line ending `thread pending` is an executor
    wrapper that may still be running: find it in the snapshot's background
    list and wait for its notification, or stop it and record a Ruling.
-   A `Wave <k>: started` line with no later `integrated` or `serialized` line
+   A `Wave <k>: started` line with no later `integrated` or `merged` line
    is a parallel wave in flight: follow
    [parallel-waves.md](../../reference/parallel-waves.md) §Recovery.
 3. When every task has its `complete` line, run `scripts/context-size --final`
@@ -356,7 +356,8 @@ Wave <k>: started (base <sha7>; Tasks <a>-<b>; at most <c> at once)
 Wave <k>: serialized — <reason>
 Wave <k>: check failed — <command> → <one-line summary>
 Wave <k>: fix round R/2 (<same fields as a fix round>)
-Wave <k>: integrated (head <sha7>; <command> → pass)
+Wave <k>: integrated (head <sha7>; <command> → pass[; baseline failures only])
+Wave <k>: merged (head <sha7>; check at wave <m>)
 Task <N>: escalated inline -> subagent — <trigger>          (written by inline mode only)
 Task <N>: minor (deferred): <one-liner>
 Task <N>: parked — <finding> — Ruling: <why the code stands>
@@ -392,7 +393,9 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   sequential and wave mode alike.
 - `Wave` lines and the `wave` and `merged` fields belong to parallel waves
   ([parallel-waves.md](../../reference/parallel-waves.md)); a sequential plan
-  never writes them.
+  never writes them. `Wave <k>: merged` closes the wave as `integrated` does:
+  the next wave starts on it, and its head proves that wave's base
+  (parallel-waves.md §1).
 - The scores clause is present whenever a review seat, Codex or judge, scored the task.
 - The checkpoint after the `—` comes from the report's
   `## Discovered issues (not fixed)` and `## Assumptions made` sections — the

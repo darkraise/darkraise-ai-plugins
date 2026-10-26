@@ -18,6 +18,7 @@
 #                                      since the task forked
 #   wave clean  PLAN_FILE K BASE       remove the worktrees and refs of wave K's
 #                                      merged tasks; never forces
+#   wave check-due PLAN_FILE K   which check closes wave K: full, wave-check or none
 # Exit: 0 done; 1 refused (overlap, conflict, not merged); 2 usage or missing
 # input; 3 the checkout is not clean; 4 the plan's waves do not parse.
 set -uo pipefail
@@ -26,7 +27,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 usage() {
-  echo "usage: wave list PLAN_FILE | ref PLAN_FILE N | enter PLAN_FILE N START | status PLAN_FILE K BASE | merge PLAN_FILE N BASE | clean PLAN_FILE K BASE" >&2
+  echo "usage: wave list PLAN_FILE | ref PLAN_FILE N | enter PLAN_FILE N START | status PLAN_FILE K BASE | merge PLAN_FILE N BASE | clean PLAN_FILE K BASE | check-due PLAN_FILE K" >&2
   exit 2
 }
 die() { echo "wave: $2" >&2; exit "$1"; }
@@ -204,6 +205,32 @@ case $cmd in
       if git branch -d "$ref" >/dev/null 2>&1; then echo "deleted $ref"; else echo "kept $ref: git branch -d refused"; fi
     done
     git worktree prune >/dev/null 2>&1 || true
+    ;;
+
+  check-due)
+    [ $# -eq 1 ] && is_num "$1" && [ "$((10#$1))" -ge 1 ] || usage
+    k=$((10#$1))
+    src=$(mktemp) || die 2 "cannot create a temporary file"
+    trap 'rm -f "$src"' EXIT
+    plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
+      || die 2 "an amendment does not apply; run plan-lint"
+    case $(plan_parallelism "$src") in
+      bad) die 4 "the **Parallelism:** line of $plan does not parse" ;;
+      sequential) die 2 "the plan has no waves **Parallelism:** line" ;;
+    esac
+    w=$(plan_waves "$src") || die 4 "the **Parallelism:** waves line of $plan does not parse"
+    range=$(awk -F'\t' -v k="$k" '$1 == k { print $2, $3 }' <<<"$w")
+    [ -n "$range" ] || die 2 "the plan has no wave $k"
+    read -r a b <<<"$range"
+    last=$(grep -c . <<<"$w")
+    scores=$(plan_scores "$src")
+    risk3=$(awk -F'\t' -v a="$a" -v b="$b" '$1 >= a && $1 <= b && $3 == "3" { print $1 }' <<<"$scores")
+    if [ $((k % 3)) -eq 0 ] || [ "$k" -eq "$last" ] || [ -n "$risk3" ]; then echo full; exit 0; fi
+    check=$(plan_header "$src" | awk "$_PLAN_AWK"'
+      stop { next }
+      in_fence($0) { next }
+      index($0, "**Wave check:**") == 1 { print substr($0, 16); stop = 1 }')
+    if [ -n "$(tr -d ' \t' <<<"$check")" ]; then echo wave-check; else echo none; fi
     ;;
 
   *) usage ;;

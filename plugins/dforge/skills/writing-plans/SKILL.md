@@ -132,6 +132,8 @@ Constraints and Contracts.
 
 **Worktree setup:** [waves only: what a fresh worktree runs before its tests, or `none`]
 
+**Wave check:** [waves only, optional: a faster command — a build and the fast unit suite, say — run after the waves the full check skips; omit the line when there is none]
+
 **Program:** [only when the spec is one sub-project of a program design:
 `<program spec path>` — sub-project <k> of <n> — next: <title of sub-project
 k+1, copied from the program's decomposition>. On the final sub-project,
@@ -267,12 +269,17 @@ never invents parallelism the work does not have:
    — a port, a database, a fixed temporary path, global state — write in
    Global Constraints how each task's tests avoid it, or move the tasks to
    different waves.
-7. **Write the three header lines.** `**Parallelism:** waves — 1 | 2-4 | 5`
+7. **Write the header lines.** `**Parallelism:** waves — 1 | 2-4 | 5`
    lists the waves in order, a single task or an `A-B` range each, covering
    every task once. `**Integration check:**` names the command that proves a
    merged wave works together — normally the whole suite.
    `**Worktree setup:**` is what a fresh checkout needs before its tests run
    (`npm ci`, a code generator), or `none`.
+   `**Wave check:**`, optional, names a faster command run after the waves
+   `scripts/wave check-due` does not give the full check — the full
+   Integration check runs after every third wave, any wave holding a risk-3
+   task and the last wave; without a Wave check those waves rest on each
+   task's own tests and a clean merge.
 8. **The Execution line names `subagent`**, `claude --model sonnet --effort
    high`, whatever the heavy-task count: inline mode implements the tasks it
    does not delegate in the session itself, one after another, so it has

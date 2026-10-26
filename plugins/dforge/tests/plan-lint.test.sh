@@ -1111,6 +1111,20 @@ waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Integration check:\*\*/d; s/^\*\*Exe
 lint waves-inline.md --no-probe
 has "waves: inline is refused" "$out" "ERROR header: parallel waves need a subagent Execution line"
 has "waves: the integration check is required" "$out" "ERROR header: a waves plan needs its **Integration check:** line"
+# An optional **Wave check:** line runs between the full checks of a waves plan.
+with_wave_check() { # with_wave_check <line> — stdin plan with <line> after the Worktree setup line
+  awk -v l="$1" '{ print } /^\*\*Worktree setup:\*\*/ { print ""; print l }'
+}
+waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:** `bash quick.sh`' > waves-check.md
+lint waves-check.md --no-probe
+check "waves: a Wave check line is accepted" "$out" "plan-lint: 0 errors, 0 warnings"
+waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:**' > waves-check-empty.md
+lint waves-check-empty.md --no-probe
+has "waves: a Wave check line needs a command" "$out" "ERROR header: the **Wave check:** line names no command"
+waves_plan 'sequential — one chain' | with_wave_check '**Wave check:** `bash quick.sh`' > seq-check.md
+lint seq-check.md --no-probe
+has "sequential: a Wave check line is flagged" "$out" "WARN header: **Wave check:** runs only between the waves of a waves plan"
+lacks "sequential: a Wave check line is not an error" "$out" "ERROR header: the **Wave check:**"
 
 # --- documents kept in darkmem: Spec paths resolve in the mirror ---
 . "$HERE/fixtures/darkmem-stores.sh"
