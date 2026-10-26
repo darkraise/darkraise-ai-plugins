@@ -30,7 +30,7 @@ Subagent ([JUDGE]):
     implementation body is not a finding, while a missing or stub test is. On
     a `Host: codex` plan every code step carries its complete code.
 
-    You cannot run commands, modify files, or dispatch subagents.
+    You cannot run commands or dispatch subagents, and you write only the report file.
 
     ## Findings
 
@@ -44,21 +44,27 @@ Subagent ([JUDGE]):
       an assumption without evidence, a test that would pass against a stub
     - **Minor** - wording or structure that does not change what gets built
 
-    Locate each finding by `Task N` or `header`, and say what is wrong, why it
-    matters for execution, and the fix.
+    Locate each finding by the plan file and line, begin its one-liner with
+    `Task N:` or `header:`, and say what is wrong, why it matters for
+    execution, and the fix.
 
     ## Output Format
 
-    ## Plan Review
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the scores, the count of findings by severity, and the report path.
+    The report, written without the indent:
 
-    ### Findings
-    - [Critical|Important|Minor] [Task N|header]: <issue> - <why> - <fix>
+        ## Verdict
+        scores: executability <1-20> / coherence <1-20> / coverage <1-20> / assumptions <1-20>
 
-    ### Verification Scores
-    - executability: <1-20>
-    - coherence: <1-20>
-    - coverage: <1-20>
-    - assumptions: <1-20>
+        ## Findings
+        - [Critical|Important|Minor] <file>:<line> — <one-liner>
+
+    `<file>:<line>` is the plan file and the line the finding is about; the
+    one-liner begins `Task N:` or `header:` and carries the issue, why it
+    matters for execution, and the fix. Detail goes on lines indented by two
+    spaces below its finding. Leave Findings empty when there are none.
 
     ## Criteria
 
@@ -78,9 +84,11 @@ Subagent ([JUDGE]):
 - `[PLAN_FILE]`, `[SPEC_FILE]` - REQUIRED: absolute paths.
 - `[LINT_FILE]` - REQUIRED: `<workspace>/plan-lint.txt`, written with
   `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt` before dispatch.
+- `[REPORT_FILE]` - REQUIRED: `<workspace>/plan-review-round-<r>.md`, `<r>` being this round's number.
 
-**Reviewer returns:** findings graded Critical, Important or Minor, and four
-scores. Bands: 1-8 fails, 9-13 borderline, 14-20 passes.
+**Reviewer writes** findings graded Critical, Important or Minor, and four
+scores, to [REPORT_FILE] **and returns** a reply of at most 10 lines.
+Bands: 1-8 fails, 9-13 borderline, 14-20 passes.
 
 **A native judge on Codex** has no Read tool either: running a command is its
 only file access. In this template and the Later rounds one, make change 3 of
@@ -100,12 +108,13 @@ above to `scripts/run-codex-review.sh --kind plan` with four changes:
    while `--output-schema` forbids it gets neither.
 3. Replace the line
 
-       You cannot run commands, modify files, or dispatch subagents.
+       You cannot run commands or dispatch subagents, and you write only the report file.
 
    with
 
        You are running read-only. Read the files named above with your own
-       tools. Do not modify any file, and do not dispatch subagents.
+       tools. Do not modify any file, and do not dispatch subagents. The one
+       exception is a report file this prompt names, which you write.
 
    A Claude judge reads a file with a Read tool, so forbidding commands costs
    it nothing. Codex has no such tool: running a command is its only file
@@ -160,23 +169,29 @@ Subagent ([JUDGE]):
     implementation body is not a finding, while a missing or stub test is. On
     a `Host: codex` plan every code step carries its complete code.
 
-    You cannot run commands, modify files, or dispatch subagents.
+    You cannot run commands or dispatch subagents, and you write only the report file.
 
     ## Output Format
 
-    ## Plan Review
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the scores, the count of findings by severity, and the report path.
+    The report, written without the indent:
 
-    ### Prior findings
-    - [ADDRESSED|NOT ADDRESSED] <the finding, one line> - <evidence>
+        ## Verdict
+        scores: executability <1-20> / coherence <1-20> / coverage <1-20> / assumptions <1-20>
+        prior: <a> addressed, <n> not addressed
 
-    ### Findings
-    - [Critical|Important|Minor] [Task N|header]: <issue> - <why> - <fix>
+        ## Prior findings
+        - [ADDRESSED|NOT ADDRESSED] <the finding, one line> — <evidence>
 
-    ### Verification Scores
-    - executability: <1-20>
-    - coherence: <1-20>
-    - coverage: <1-20>
-    - assumptions: <1-20>
+        ## Findings
+        - [Critical|Important|Minor] <file>:<line> — <one-liner>
+
+    `<file>:<line>` is the plan file and the line the finding is about; the
+    one-liner begins `Task N:` or `header:` and carries the issue, why it
+    matters for execution, and the fix. Detail goes on lines indented by two
+    spaces below its finding. Leave Findings empty when there are none.
 
     Write one Prior findings line for every Critical or Important finding of
     the last round, and repeat each NOT ADDRESSED one under Findings at its
@@ -192,12 +207,13 @@ Subagent ([JUDGE]):
 ```
 
 **Placeholders:** `[PLUGIN_ROOT]`, `[PLAN_FILE]`, `[SPEC_FILE]` and
-`[LINT_FILE]` as above, plus:
+`[LINT_FILE]` as above, and `[REPORT_FILE]` as above, plus:
 - `[ROUND]` - REQUIRED: this round's number.
 - `[DELTA_FILE]` - REQUIRED: `<workspace>/plan-delta-<r>.diff`.
 - `[PRIOR_FINDINGS_FILE]` - REQUIRED: the previous round's
   `<workspace>/plan-review-round-<r-1>.json` or `.md`.
 
-**Reviewer returns:** a verdict per prior Critical or Important finding, new
+**Reviewer writes** a verdict per prior Critical or Important finding, new
 findings graded Critical, Important or Minor, and four scores for the whole
-plan. Bands as above.
+plan, to [REPORT_FILE] **and returns** a reply of at most 10 lines. Bands as
+above.

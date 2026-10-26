@@ -573,8 +573,9 @@ A revision your human partner asks for gets one new round.
    - **`primary=native:<model>/<effort>`** (every round of a Codex-host plan).
      Dispatch a native judge at that pair or above
      ([native-codex.md](../../reference/native-codex.md)): the full-plan
-     template in round 1, the Later rounds template after it, saving each
-     reply to `<workspace>/plan-review-round-<r>.md`. No Codex CLI round runs.
+     template in round 1, the Later rounds template after it, each with
+     `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`. No Codex CLI
+     round runs.
    - **`primary=codex:plan`** (round 1). Write the prompt its Round 1 on Codex
      section describes to `<workspace>/plan-review-prompt.md`, then run, as a
      background Bash call with `timeout` = (row bound + 120) × 1000 ms, 5520000
@@ -591,20 +592,24 @@ A revision your human partner asks for gets one new round.
      `gpt-6.1-sol/xhigh` with `status=OK`, say the substitution aloud with the
      runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
      no review: dispatch the printed `fallback` (`dforge:judge-opus`)
-     with the full-plan template, save its reply to
-     `<workspace>/plan-review-round-1.md`, and say why. Never run the Codex seat
-     twice in one round.
+     with the full-plan template and
+     `[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`, and say why.
+     Never run the Codex seat twice in one round.
    - **`reason=codex-off`** (round 1 while the gate has not opened the review
      surface). No Codex seat runs. The `primary` is `dforge:judge-opus`.
-     Dispatch it with the full-plan template, save its reply to
-     `<workspace>/plan-review-round-1.md`, and say `codex off — <reason>`,
-     quoting the gate line's `reason` (`untrusted` when it printed
-     `usable=true`).
+     Dispatch it with the full-plan template and
+     `[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`, and say
+     `codex off — <reason>`, quoting the gate line's `reason` (`untrusted`
+     when it printed `usable=true`).
    - **`primary=dforge:judge-opus`** (every later round). Write
      `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
      dispatch the seat with the Later rounds template, passing that file and
-     the previous round's findings file, and save its reply to
-     `<workspace>/plan-review-round-<r>.md`.
+     the previous round's findings file, with
+     `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`.
+
+   The seat writes its report to that file and replies in at most 10 lines.
+   Read the report's `## Verdict` section and its Critical and Important
+   findings; the reply carries only counts.
 3. **Fix and repeat.** Fix every Critical and Important finding and re-lint;
    Minor findings are advisory. Run the next round only when a round returned
    a Critical finding or any score of 8 or below, and only while the round is

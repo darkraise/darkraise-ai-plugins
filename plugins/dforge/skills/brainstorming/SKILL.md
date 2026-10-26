@@ -539,7 +539,9 @@ A revision your human partner asks for gets one new round.
 After the self-review block, dispatch the critic once with
 [architecture-critic-prompt.md](references/architecture-critic-prompt.md): the
 spec path, the approved design sections verbatim (under `autoRun=on`, the
-spec's `## Decisions` section) and the repository root. It
+spec's `## Decisions` section) and the repository root. Set `[REPORT_FILE]` to
+`<state>/critic-<spec name>-report.md`; read its `## Verdict` section and its
+Blocker and High findings. It
 runs in an auto run too, before the Fable review. A revision of the spec does
 not earn a second critic round.
 
@@ -548,8 +550,8 @@ in an auto run) and your Process line names neither irreducible risk nor a new
 project or subsystem as a trigger, dispatch no critic. Give Fable's first round
 the critic's job as well: the criteria path
 `[PLUGIN_ROOT]/criteria/architecture-critique.md`, read as lenses and not
-scored, and the critic prompt's Output section, so its reply carries the
-critic's ranked findings under their own heading beside its rulings. Handle
+scored, and the critic prompt's Output section, so its report carries the
+critic's ranked findings under their own heading, ## Critic findings, beside its rulings. Handle
 those findings exactly as the critic's below, before Fable's second round,
 which runs only when a Blocker or High finding is still open and checks only
 those answers. Two seats find more than one on a
@@ -563,6 +565,19 @@ critic round.
 - Commit the spec, then state the counts in the review request below:
   `Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium`,
   followed by ` (in Fable's review)` when the critic was folded into it.
+
+**The spec review's report.** Every Fable spec review round names a report
+file, `<state>/spec-review-<spec name>-<r>-report.md`, and tells the seat to
+write its full report there, write nothing else, and reply in at most 10 lines.
+The report opens with a
+`## Verdict` section of `rulings: <k>`, `undecided: <k>` and
+`open: <b> Blocker, <h> High` (the Blocker and High findings still unanswered
+after this round, its own and a folded critic's), then `## Rulings` (one
+`- <item> — <ruling>` line each), `## Undecided` (one
+`- <item> — <options, recommended first>` line each) and, when the critic is
+folded in, `## Critic findings` in the critic's grammar. Read the Verdict
+section, then the Rulings and Undecided lines; the `open:` line decides whether
+a second round runs.
 
 **User Review Gate:**
 Under `autoRun=on`, this gate is the spec review message in Auto by default.

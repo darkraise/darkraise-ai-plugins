@@ -170,5 +170,43 @@ lacks "ruling: no unnumbered entry heading" "$RULP" '## A? — Task <N>'
 names "final review: the fix wave's re-review names the fixer's report" "$FR" 'its `[IMPLEMENTER_REPORT_FILE]` being that file'
 lacks "final review: the re-review's REPORT_FILE is not the fixer's" "$FR" 'its `[REPORT_FILE]` being that file'
 
+# The plan-review, critic, spec-review and pre-execution ruling seats follow
+# the same report contract: the full report in a file, a reply of at most ten
+# lines, a fixed `## Verdict` section.
+PRP="$P/skills/writing-plans/references/plan-reviewer-prompt.md"
+WP="$P/skills/writing-plans/SKILL.md"
+CP="$P/skills/brainstorming/references/architecture-critic-prompt.md"
+BS="$P/skills/brainstorming/SKILL.md"
+AR="$P/reference/auto-run.md"
+count_of() { grep -cF -- "$2" "$1" 2>/dev/null; } # count_of <file> <text> - lines holding text
+check "plan reviewer: both templates name the report file" "$(count_of "$PRP" 'Write your full report to [REPORT_FILE] and write nothing else')" "2"
+check "plan reviewer: both templates cap the reply" "$(count_of "$PRP" 'Then reply in at most 10 lines')" "2"
+check "plan reviewer: both reports open with the Verdict section" "$(grep -cE '^ *## Verdict$' "$PRP")" "2"
+check "plan reviewer: both carry the scores key" "$(count_of "$PRP" 'scores: executability <1-20> / coherence <1-20> / coverage <1-20> / assumptions <1-20>')" "2"
+check "plan reviewer: both carry the finding grammar" "$(count_of "$PRP" '- [Critical|Important|Minor] <file>:<line> — <one-liner>')" "2"
+check "plan reviewer: the prior findings section" "$(grep -cE '^ *## Prior findings$' "$PRP")" "1"
+names "plan reviewer: the report file placeholder" "$PRP" '`[REPORT_FILE]` - REQUIRED: `<workspace>/plan-review-round-<r>.md`'
+lacks "plan reviewer: no longer forbids modifying files" "$PRP" 'You cannot run commands, modify files, or dispatch subagents.'
+check "plan reviewer: the seat writes only its report, and change 3 quotes that line" \
+  "$(count_of "$PRP" 'You cannot run commands or dispatch subagents, and you write only the report file.')" "3"
+lacks "writing-plans: the controller no longer saves the reply" "$WP" 'save its reply to'
+lacks "writing-plans: nor saves each native reply" "$WP" 'saving each'
+names "writing-plans: round 1 names the report file" "$WP" '`[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`'
+names "writing-plans: later rounds name the report file" "$WP" '`[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`'
+names "critic: names the report file" "$CP" 'Write your full report to [REPORT_FILE] and write nothing else'
+names "critic: caps the reply" "$CP" 'Then reply in at most 10 lines'
+check "critic: the report opens with the Verdict section" "$(grep -cE '^ *## Verdict$' "$CP")" "1"
+names "critic: the counts key" "$CP" 'findings: <b> Blocker, <h> High, <m> Medium, <n> Nit'
+names "critic: the finding grammar on its own scale" "$CP" '- [Blocker|High|Medium|Nit] <file>:<line> — <one-liner>'
+names "critic: the report file" "$CP" '`<state>/critic-<spec name>-report.md`'
+names "spec review: the report file" "$BS" '`<state>/spec-review-<spec name>-<r>-report.md`'
+names "spec review: the reply rule" "$BS" 'write nothing else, and reply in at most 10 lines'
+names "spec review: the open count decides a second round" "$BS" 'open: <b> Blocker, <h> High'
+lacks "spec review: a folded critic's findings are in the report" "$BS" 'so its reply carries the'
+names "auto run: the spec review's report file" "$AR" '`<state>/spec-review-<spec name>-<r>-report.md`'
+names "auto run: the pre-execution ruling's report file" "$AR" '`<state>/rulings-preexec-<k>-report.md`'
+names "auto run: the Fable batch's report file" "$AR" '`<state>/rulings-fable-<k>-report.md`'
+check "auto run: every seat it dispatches caps its reply" "$(count_of "$AR" 'write nothing else, and reply in at most 10 lines')" "3"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

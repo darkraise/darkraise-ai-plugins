@@ -67,7 +67,9 @@ After your own self-review round and the architecture critic
 Fable's first round when no risk or new-subsystem trigger holds), dispatch
 `dforge:judge-fable` on
 the spec against the approved design: the design sections as approved,
-verbatim, and the spec's path. Apply what it rules, and record each ruling
+verbatim, and the spec's path, naming its report file as dforge:brainstorming's
+The spec review's report says (`<state>/spec-review-<spec name>-<r>-report.md`):
+it is told to write nothing else, and reply in at most 10 lines. Apply what it rules, and record each ruling
 with
 `scripts/auto-run ruling add "Fable, spec: <item> — <ruling>"`. Add each item
 it leaves undecided or without a suggestion to the run's register, except a
@@ -102,7 +104,11 @@ The ladder for anything you would have asked:
    as always. Before execution (a spec or planning choice), dispatch
    `dforge:judge-opus` yourself with the question, its options with your
    recommendation first, the spec's path and the plan's path when one exists,
-   asking for `ruling: <choice> — <reason>` or `no ruling`.
+   asking for `ruling: <choice> — <reason>` or `no ruling`, naming the report
+   file `<state>/rulings-preexec-<k>-report.md` (`<k>` the next unused number)
+   and telling it to write nothing else, and reply in at most 10 lines; the
+   report opens with `## Verdict` holding `ruling: <choice> — <reason>` or
+   `no ruling`.
 2. **The pending list.** An Opus `BLOCKED` or `no ruling`, or an implementer
    that exhausted the ladder, is added:
 
@@ -110,7 +116,11 @@ The ladder for anything you would have asked:
 
 3. **Fable, in one batch.** Dispatch `dforge:judge-fable` once with every
    line of `scripts/auto-run decision list`, asking for each item
-   `ruling: <choice> — <reason>` or `no ruling`. Carry out each ruling as a
+   `ruling: <choice> — <reason>` or `no ruling`, naming the report file
+   `<state>/rulings-fable-<k>-report.md` and telling it to
+   write nothing else, and reply in at most 10 lines; its `## Verdict` section holds one
+   `### Item <id>` block per item with `ruling: <choice> — <reason>` or
+   `no ruling`. Read only that section. Carry out each ruling as a
    ruling-seat verdict. Record it as a `Ruling:` ledger line when the plan's
    ledger exists (`Task <N>: Ruling: …` for a task's item), and with
    `scripts/auto-run ruling add` before it does. Then
