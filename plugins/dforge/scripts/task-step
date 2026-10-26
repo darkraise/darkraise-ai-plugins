@@ -854,7 +854,7 @@ parse_report() {
       next
     }
     sect == "Findings" && /^- / {
-      if (tolower($0) ~ /^- none[ \t]*$/) next
+      if (tolower($0) ~ /^- none\.?[ \t]*$/) next
       if ($0 !~ /^- \[(Critical|Important|Minor)\] (\(Task [0-9]+\) )?[^ ]+:[0-9]+(-[0-9]+)? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
       rest = substr($0, 4); sev = rest; sub(/\].*$/, "", sev)
       rest = substr(rest, length(sev) + 3)
@@ -866,6 +866,7 @@ parse_report() {
       if (group && (task == "" || !(task in LISTED))) err("line " NR " is not a finding line: " $0)
       if (!group && task != "") err("line " NR " is not a finding line: " $0)
       if (task == "") task = first
+      if (sev != "Minor") serious[task]++
       loc = rest; sub(/ .*$/, "", loc)
       rest = substr(rest, length(loc) + 2)
       one = rest; sub(/^[^ ]+ /, "", one)
@@ -874,19 +875,33 @@ parse_report() {
       next
     }
     sect == "Cannot verify" && /^- / {
-      if (tolower($0) ~ /^- none[ \t]*$/) next
+      if (tolower($0) ~ /^- none\.?[ \t]*$/) next
       out[++no] = "C\t" substr($0, 3)
       next
+    }
+    # Anything else under these two headings would be dropped unread, so a
+    # line that is neither a bullet nor its indented detail is refused.
+    sect == "Findings" || sect == "Cannot verify" {
+      if ($0 ~ /^[ \t]*$/ || $0 ~ /^(  |\t)/ || tolower($0) ~ /^none\.?[ \t]*$/) next
+      err("line " NR " under ## " sect " is neither a bullet nor an indented detail line: " $0)
     }
     END {
       if (bad) exit 1
       if (!started) err("does not open with ## Verdict")
-      if (mode == "rereview") { need("fix round", "addressed|open"); need("open", "COUNT") }
-      else if (group) for (i = 1; i <= nt; i++) {
+      if (mode == "rereview") {
+        need("fix round", "addressed|open"); need("open", "COUNT")
+        if (KV["fix round"] == "open" && !serious[first]) err("fix round: open with no Critical or Important finding under ## Findings")
+      } else if (group) for (i = 1; i <= nt; i++) {
         need("Task " T[i] " spec", "pass|fail|cannot-verify")
         need("Task " T[i] " quality", "approved|changes")
         need("Task " T[i] " scores", "SCORES")
-      } else { need("spec", "pass|fail|cannot-verify"); need("quality", "approved|changes"); need("scores", "SCORES") }
+        if ((KV["Task " T[i] " spec"] == "fail" || KV["Task " T[i] " quality"] == "changes") && !serious[T[i]])
+          err("Task " T[i] ": spec: fail or quality: changes with no Critical or Important (Task " T[i] ") finding under ## Findings")
+      } else {
+        need("spec", "pass|fail|cannot-verify"); need("quality", "approved|changes"); need("scores", "SCORES")
+        if ((KV["spec"] == "fail" || KV["quality"] == "changes") && !serious[first])
+          err("spec: fail or quality: changes with no Critical or Important finding under ## Findings")
+      }
       if (codex_at && codex_at != nsect) err("## Codex findings is not the report'"'"'s last section")
       for (i = 1; i <= no; i++) print out[i]
     }'

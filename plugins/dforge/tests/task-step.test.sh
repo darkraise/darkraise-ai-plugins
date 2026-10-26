@@ -1126,6 +1126,34 @@ check "verdict --group: the missing key is named" "$(grep -c 'Task 3 spec' <<<"$
 rr_run verdict docs/plan.md 1 3 --group --rereview 1
 check "verdict --group: a group has no re-review report (members re-review alone)" "$rr_rc" "2"
 
+# Finding attribution: a group finding names a member, a task finding names none.
+vd_group() { # vd_group <findings lines...> — a clean group 1,3 report with these Findings lines
+  {
+    printf '## Verdict\n'
+    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' 1 1 1 3 3 3
+    printf '\n## Findings\n'
+    printf '%s\n' "$@"
+  } > "$RR_WS/group-1,3-review-report.md"
+}
+vd_group '- [Minor] app.txt:3 — no task named'
+rr_run verdict docs/plan.md 1 3 --group
+check "verdict --group: a finding without its (Task N) exits 5" "$rr_rc $(grep -c 'no task named' <<<"$rr_err")" "5 1"
+vd_group '- [Minor] (Task 2) app.txt:3 — outside the group'
+rr_run verdict docs/plan.md 1 3 --group
+check "verdict --group: a finding naming a task outside the group exits 5" "$rr_rc $(grep -c 'outside the group' <<<"$rr_err")" "5 1"
+vd_group '- [Minor] (Task 3) other.txt:1 — wording'
+sed -i.bak 's/^Task 3 quality: approved$/Task 3 quality: changes/' "$RR_WS/group-1,3-review-report.md" && rm -f "$RR_WS/group-1,3-review-report.md.bak"
+rr_run verdict docs/plan.md 1 3 --group
+check "verdict --group: quality changes with only a Minor for that task exits 5" "$rr_rc $(grep -c 'Task 3: spec: fail or quality: changes' <<<"$rr_err")" "5 1"
+vd_group '* [Important] (Task 1) app.txt:3 — a star bullet'
+rr_run verdict docs/plan.md 1 3 --group
+check "verdict --group: a line under Findings that is not a bullet exits 5" "$rr_rc $(grep -c 'star bullet' <<<"$rr_err")" "5 1"
+vd_group '- None' '' '## Cannot verify' '- None.'
+rr_run verdict docs/plan.md 1 3 --group
+check "verdict --group: - None under both sections exits 0" "$rr_rc" "0"
+check "verdict --group: and the digest lists nothing" "$(grep -cE '^(Critical|Important|cannot-verify): ' <<<"$rr_out") $(grep '^findings: ' <<<"$rr_out")" \
+  "0 findings: 0 Critical, 0 Important, 0 Minor"
+
 # A wave group spread over two worktrees: one tracked snapshot per member
 # checkout, and verdict checks each.
 rr_reset
@@ -1277,6 +1305,62 @@ REPORT
 rr_run verdict docs/plan.md 1
 check "verdict: a finding line outside the grammar exits 5" "$rr_rc" "5"
 check "verdict: the bad line is quoted" "$(grep -c 'Severe' <<<"$rr_err")" "1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: fail
+|quality: changes
+|scores: spec 7 / scope 15 / verification 12 / quality 9
+|
+|## Findings
+|- [Important] (Task 1) app.txt:2 — a task prefix outside a group
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a task finding with a (Task N) prefix exits 5" "$rr_rc $(grep -c 'prefix outside a group' <<<"$rr_err")" "5 1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: fail
+|quality: changes
+|scores: spec 7 / scope 15 / verification 12 / quality 9
+|
+|## Issues
+|- [Important] app.txt:2 — filed under the wrong heading
+|
+|## Findings
+|- [Minor] app.txt:5 — naming
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: spec fail with no Critical or Important finding exits 5" "$rr_rc $(grep -c 'no Critical or Important finding' <<<"$rr_err")" "5 1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: fail
+|quality: changes
+|scores: spec 7 / scope 15 / verification 12 / quality 9
+|
+|## Findings
+|### Critical
+|- [Critical] app.txt:2 — wrong value
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a sub-heading under Findings exits 5" "$rr_rc $(grep -c '### Critical' <<<"$rr_err")" "5 1"
+vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
+|## Verdict
+|fix round: maybe
+|open: 1
+|
+|## Findings
+|- [Important] other.txt:4 — stale copy
+REPORT
+rr_run verdict docs/plan.md 1 --rereview 1
+check "verdict --rereview: a fix round value outside its set exits 5" "$rr_rc $(grep -c 'fix round: maybe' <<<"$rr_err")" "5 1"
+vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
+|## Verdict
+|fix round: open
+|open: 1
+|
+|## Findings
+REPORT
+rr_run verdict docs/plan.md 1 --rereview 1
+check "verdict --rereview: an open round with no open finding exits 5" "$rr_rc $(grep -c 'fix round: open with no Critical or Important finding' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Verdict
 |spec: pass
