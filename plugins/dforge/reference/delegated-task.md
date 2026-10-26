@@ -251,7 +251,8 @@ needed.
   `task-step review` still wrote the complete judge prompt: dispatch the
   `dforge:judge-opus` seat it names as printed, and say why, quoting that
   note. If `task-step review` itself exits 2 (a `lens-route` failure, a bad
-  `--base`, `--head` or `--cwd`, or an unexpanded placeholder), it printed
+  `--base`, `--head` or `--cwd`, an unexpanded placeholder, or a checkout
+  whose tracked files it cannot record for the verdict check), it printed
   no digest and left its state file unchanged; any prompt file it left is
   stale: take *The steps by hand*.
   Codex hosts are the exception: `review-route --task` exits 2 on every `Host: codex`

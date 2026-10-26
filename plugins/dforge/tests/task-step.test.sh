@@ -329,9 +329,16 @@ check "review: the Codex prompt asks for one JSON object" "$(grep -c 'one JSON o
 check "review: the Codex prompt carries the criteria" "$(grep -c '^#### Spec Compliance {#spec}$' "$CP")" "1"
 check "review: the Codex prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$CP")" "0"
 check "review: the Codex prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS_RAW/review-" "$CP")" "1"
-mkdir -p "$TMP/wt"
+mkdir -p "$TMP/plain"
+state1=$(cat "$WS/task-1-step.json")
+step review docs/plan.md 1 --cwd "$TMP/plain"
+check "review: a --cwd outside any git work tree exits 2" "$rc" "2"
+check "review: and says the tracked files cannot be recorded" "$(grep -c 'cannot record the tracked files' "$TMP/err")" "1"
+check "review: and leaves the state file alone" "$(cat "$WS/task-1-step.json")" "$state1"
+git worktree add -q --detach "$TMP/wt" HEAD
 step review docs/plan.md 1 --cwd "$TMP/wt"
 check "review: --cwd names the runner's working directory" "$(grep -c -- "--kind task --tier light --cwd \"$TMP/wt\" --out" <<<"$out")" "1"
+git worktree remove --force "$TMP/wt"
 step review docs/plan.md 1 --cwd "$TMP/no-such-dir"
 check "review: a missing --cwd directory exits 2" "$rc" "2"
 
@@ -1141,6 +1148,11 @@ vd_report "$RR_WS/group-1,3-review-report.md" <<'REPORT'
 REPORT
 rr_run verdict docs/plan.md 1 3 --group
 check "wave group: clean member checkouts pass" "$rr_rc" "0"
+cp "$RR_WS/group-1,3-step.json" "$RR_TMP/group-1,3.keep"
+jq 'del(.reviewChecks)' "$RR_TMP/group-1,3.keep" > "$RR_WS/group-1,3-step.json"
+rr_run verdict docs/plan.md 1 3 --group
+check "wave group: a group state without its tracked check exits 6" "$rr_rc $(grep -c 'recorded no tracked-file check' <<<"$rr_err")" "6 1"
+cp "$RR_TMP/group-1,3.keep" "$RR_WS/group-1,3-step.json"
 printf 'judge edit\n' >> "$RR_TMP/wt3/app.txt"
 rr_run verdict docs/plan.md 1 3 --group
 check "wave group: a change in one member's checkout exits 6" "$rr_rc" "6"

@@ -31,15 +31,21 @@ usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] |
 
 # dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
-# relative to the work tree's top, so they are hashed from there.
+# relative to the work tree's top, so they are hashed from there. Fails when
+# git cannot list or hash them: an empty list must mean a clean tree.
 dirty_list() {
-  local root p
-  root=$(git -C "$1" rev-parse --show-toplevel | tr -d '\r')
-  git -C "$1" -c core.quotepath=off diff --name-only --no-renames HEAD | tr -d '\r' | LC_ALL=C sort |
+  local root names p h
+  root=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')
+  [ -n "$root" ] || return 1
+  names=$(git -C "$1" -c core.quotepath=off diff --name-only --no-renames HEAD) || return 1
+  [ -n "$names" ] || return 0
+  printf '%s\n' "$names" | tr -d '\r' | LC_ALL=C sort |
     while IFS= read -r p; do
       [ -n "$p" ] || continue
       if [ -f "$root/$p" ]; then
-        printf '%s\t%s\n' "$p" "$(git -C "$root" hash-object -- "$p" | tr -d '\r')"
+        h=$(git -C "$root" hash-object -- "$p" | tr -d '\r')
+        [ -n "$h" ] || exit 1
+        printf '%s\t%s\n' "$p" "$h"
       else
         printf '%s\tdeleted\n' "$p"
       fi
@@ -47,13 +53,15 @@ dirty_list() {
 }
 
 # tracked_snapshot DIR: what a later verdict compares, as one JSON object
-# {cwd, head, dirty: [{path, hash}]}. Prints nothing when DIR is not inside a
-# git work tree.
+# {cwd, head, dirty: [{path, hash}]}. Fails, printing nothing, when DIR is not
+# inside a git work tree or its tracked files cannot be listed.
 tracked_snapshot() {
-  local head
-  [ "$(git -C "$1" rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] || return 0
-  head=$(git -C "$1" rev-parse HEAD 2>/dev/null | tr -d '\r') || return 0
-  dirty_list "$1" | jq -R -s -c --arg cwd "$1" --arg head "$head" \
+  local head dirty
+  [ "$(git -C "$1" rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] || return 1
+  head=$(git -C "$1" rev-parse HEAD 2>/dev/null | tr -d '\r')
+  [ -n "$head" ] || return 1
+  dirty=$(dirty_list "$1") || return 1
+  printf '%s' "$dirty" | jq -R -s -c --arg cwd "$1" --arg head "$head" \
     '{cwd: $cwd, head: $head, dirty: [split("\n")[] | select(. != "") | split("\t") | {path: .[0], hash: .[1]}]}'
 }
 
@@ -227,12 +235,15 @@ cmd_rereview() (
 
   check_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
   [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
-  snap=$(tracked_snapshot "$check_dir")
+  snap=$(tracked_snapshot "$check_dir") || {
+    echo "task-step: cannot record the tracked files of $check_dir for the verdict check" >&2
+    exit 2
+  }
   now=$(date +%s)
   jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
-    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" --arg chk "$snap" \
+    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" --argjson chk "$snap" \
     '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
-     | (if $chk == "" then del(.reviewCheck) else .reviewCheck = ($chk | fromjson) end)' \
+     | .reviewCheck = $chk' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
   if [ -n "$gstate" ]; then
     jq --arg rh "$head_sha" '.reviewHead = $rh' "$gstate" > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot update $gstate"
@@ -626,10 +637,10 @@ do_review() {
   done
   rm -f "$ws/task-$first-review-report.md"
 
-  snap=$(tracked_snapshot "$top")
-  jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" --arg chk "$snap" \
+  snap=$(tracked_snapshot "$top") || die "cannot record the tracked files of $top for the verdict check"
+  jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" --argjson chk "$snap" \
     '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
-     | (if $chk == "" then del(.reviewCheck) else .reviewCheck = ($chk | fromjson) end)' \
+     | .reviewCheck = $chk' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
@@ -781,8 +792,8 @@ do_group() {
   rm -f "$ws/group-$list-review-report.md"
   cp "$TMP/package.md" "$pkg" && cp "$TMP/prompt.md" "$prompt" || die "cannot write $pkg or $prompt"
   for mcwd in "${check_dirs[@]}"; do
-    snap=$(tracked_snapshot "$mcwd")
-    [ -z "$snap" ] || snaps="$snaps$snap"$'\n'
+    snap=$(tracked_snapshot "$mcwd") || die "cannot record the tracked files of $mcwd for the verdict check"
+    snaps="$snaps$snap"$'\n'
   done
   t0=$(date +%s)
   jq -n --argjson tasks "$(printf '%s\n' "${members[@]}" | jq -sc .)" --arg rh "$ghead" --argjson t0 "$t0" \
@@ -886,12 +897,16 @@ parse_report() {
 check_tracked() {
   local vstate=$1 snaps k snap dir old new changed
   if [ "$vgroup" -eq 1 ]; then
-    snaps=$(jq -c '(.reviewChecks // [])[]' "$vstate" | tr -d '\r')
+    snaps=$(jq -c '(.reviewChecks // [])[]' "$vstate" | tr -d '\r') || die "cannot read $vstate"
   else
-    snaps=$(jq -c '.reviewCheck // empty' "$vstate" | tr -d '\r')
+    snaps=$(jq -c '.reviewCheck // empty' "$vstate" | tr -d '\r') || die "cannot read $vstate"
   fi
   k=$(printf '%s' "$snaps" | grep -c .)
-  if [ "$k" -eq 0 ]; then
+  # Group state is as new as the check, so a group without one lost it; a
+  # task's state may come from a review step that predates the check.
+  if [ "$k" -eq 0 ] && [ "$vgroup" -eq 1 ]; then
+    die "group $list recorded no tracked-file check; run task-step review --group for it first" 6
+  elif [ "$k" -eq 0 ]; then
     echo "check tracked: not recorded (the review step predates this check)"
     return
   fi
@@ -911,7 +926,7 @@ check_tracked() {
       exit 6
     fi
     jq -r '.dirty[] | "\(.path)\t\(.hash)"' <<<"$snap" | tr -d '\r' > "$TMP/recorded"
-    dirty_list "$dir" > "$TMP/now"
+    dirty_list "$dir" > "$TMP/now" || die "cannot list the tracked changes in $dir"
     changed=$(awk -F'\t' '
       FNR == NR { rec[$1] = $2; next }
       !($1 in rec) || rec[$1] != $2 { print $1 }
