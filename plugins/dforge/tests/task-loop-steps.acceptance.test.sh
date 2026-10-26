@@ -46,6 +46,9 @@ TMP="$(mktemp -d)"
 # MSYS_NO_PATHCONV below hands git.exe this path untranslated, so it must be a
 # Windows path or git initialises a repository somewhere else.
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# sdd-workspace prints the MSYS form on Git Bash; task-step prints the form git
+# gives, which native jq.exe can open.
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
 unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
@@ -146,7 +149,7 @@ new_repo() { # new_repo <name> — a throwaway repository with the fixture plans
   cp "$R/app.txt" "$R/other.txt"
   cp "$R/app.txt" "$R/test.txt"
   git -C "$R" add -A && git -C "$R" commit -qm "docs: add fixtures"
-  WS=$(cd "$R" && bash "$S/sdd-workspace" docs/plan.md)
+  WS=$(winpath "$(cd "$R" && bash "$S/sdd-workspace" docs/plan.md)")
   review_surface absent
 }
 
@@ -251,7 +254,7 @@ a3() {
   check "A3: and writes nothing" "$(ws_files)" "$before"
 
   local CWS sub
-  CWS=$(cd "$R" && bash "$S/sdd-workspace" docs/codex-plan.md)
+  CWS=$(winpath "$(cd "$R" && bash "$S/sdd-workspace" docs/codex-plan.md)")
   rm -rf "$CWS"
   for sub in start review rereview; do
     ts "$sub" docs/codex-plan.md 1

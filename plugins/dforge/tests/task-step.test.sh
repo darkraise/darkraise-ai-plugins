@@ -15,6 +15,9 @@ check() { # check <name> <got> <want>
 
 TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# sdd-workspace prints the MSYS form on Git Bash; task-step prints the form git
+# gives, which native jq.exe can open.
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME/.claude"
@@ -129,7 +132,7 @@ PLAN
 git add -A && git commit -qm "docs: add fixture plans"
 BASE=$(git rev-parse HEAD)
 
-WS=$(bash "$P/scripts/sdd-workspace" docs/plan.md)
+WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan.md)")
 LEDGER="$WS/progress.md"
 rm -f "$WS"/*
 step() { out=$(bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; }
@@ -225,7 +228,7 @@ step bogus docs/plan.md 1
 check "an unknown subcommand exits 2" "$rc" "2"
 step start docs/missing.md 1
 check "start: a missing plan exits 2" "$rc" "2"
-CWS=$(bash "$P/scripts/sdd-workspace" docs/codex-plan.md)
+CWS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/codex-plan.md)")
 rm -rf "$CWS"
 step start docs/codex-plan.md 1
 check "start: a Host: codex plan exits 2" "$rc" "2"
@@ -553,7 +556,7 @@ rr_run review docs/plan.md 1
 check "rereview fixture: review 1" "$rr_rc" "0"
 rr_run review docs/plan.md 2
 check "rereview fixture: review 2" "$rr_rc" "0"
-RR_WS=$(cd "$RR_REPO" && env HOME="$RR_TMP/home" bash "$RR_S/sdd-workspace" docs/plan.md)
+RR_WS=$(winpath "$(cd "$RR_REPO" && env HOME="$RR_TMP/home" bash "$RR_S/sdd-workspace" docs/plan.md)")
 RR_R0=$(rr_git rev-parse HEAD)
 cp "$RR_WS/task-1-step.json" "$RR_TMP/state1.0"
 cp "$RR_WS/task-2-step.json" "$RR_TMP/state2.0"
