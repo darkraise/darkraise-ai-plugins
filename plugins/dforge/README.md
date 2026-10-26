@@ -89,9 +89,16 @@ at 8.
 changing model before effort except at the two Opus effort rows, where Opus is
 already the top model and there is nowhere else to go. Walks terminate at a
 SPLIT action rather than an agent, and only a task that survives that split
-enters the reserve chain, which terminates at BLOCKED. Used at fix rounds 4
-and 5, at the BLOCKED handler, and at round 3 when the re-review reports
-stalled progress.
+enters the reserve chain, which terminates at BLOCKED. Used at fix round 2
+and at the BLOCKED handler: a task gets at most two fix rounds, then the
+ruling seat.
+
+**Review groups and wave checks.** A task at risk 0 or 1 with a total under 5 is
+reviewed in groups: one judge dispatch for up to four such tasks, or for a
+wave's such tasks before they merge. Riskier tasks keep their own review. Waves
+run the plan's full integration check every third wave, after any risk-3 wave and after the last; a red baseline
+whose failures do not grow counts as a pass. A `Host: codex` plan keeps
+`review_cap: 5` and per-task review.
 
 **Criteria-scored reviews.** `criteria/` holds narrow scored criteria adapted
 from LLM-as-a-Verifier (arXiv:2607.05391): a ground-truth note the judge sees on
@@ -101,7 +108,9 @@ spec, scope, verification, quality - 1 to 20 each, alongside the spec and
 quality verdicts and never replacing them, because the fix loop keys on those
 verdicts. With Codex reviews on (`codexReview`), tasks at risk 3 are reviewed
 by Codex `gpt-6-astra` and then by `judge-opus`, which rules CONFIRMED or
-REJECTED on every Codex finding in the same pass.
+REJECTED on every Codex finding in the same pass. Every judge
+writes its full report to a file in the plan's workspace and replies in at most
+ten lines; `scripts/task-step verdict` prints the digest the session reads.
 
 **Best-of-3 approach selection.** `selecting-approaches` gates an open approach
 decision to inline, one advisory pass, or three scouts ranked by a judge in a
@@ -1052,7 +1061,11 @@ one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
 `criteria/plan-review.md` before it is saved. That Execution line is binding: a
 session does not change mode because subagents happen to be available, and only
-your explicit instruction overrides it. Each task then reads:
+your explicit instruction overrides it. Each task
+carries its interfaces and the complete code of its tests, and gives
+implementation code only for configuration values, generated-file or migration
+commands and constants the spec names; the implementer writes the rest. Each
+task then reads:
 
 ```markdown
 ### Task 4: Wire the export pipeline
@@ -1065,7 +1078,7 @@ your explicit instruction overrides it. Each task then reads:
 - Produces: `runExport(cfg: Config): Promise<Report>`
 
 **Implementer:** dforge:impl-sonnet-high
-**Evaluation:** files 0 - spec 1 - coupling 2 - risk 2 = 5
+**Evaluation:** files 1 - spec 2 - coupling 1 - risk 1 = 5
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```
 
@@ -1084,7 +1097,7 @@ previous task's brief.
 ## Differences from upstream 6.3.0
 
 The upstream loop is kept - the brief and report protocol, the review
-package, the five-round cap, the breaker (whose adjudication now goes to the ruling seat), and the
+package, the breaker (whose adjudication now goes to the ruling seat), and the
 handoff to dforge:finishing-a-development-branch - with these
 differences:
 
@@ -1093,15 +1106,15 @@ differences:
    one would override the agent file's model while `effort` kept its
    frontmatter value. The task reviewer is a judge agent scoring the criteria
    file. General-purpose seats still name their model explicitly.
-2. **Scores and progress.** Task reviews add four 1-to-20 scores alongside the
-   verdicts, and the scoped re-review adds a progress reading that can pull
-   escalation from round 4 to round 3.
-3. **Escalation ladder.** Rounds 4 and 5 and the BLOCKED handler climb
+2. **Scores.** Task reviews add four 1-to-20 scores alongside the
+   verdicts.
+3. **Escalation ladder.** Round 2 and the BLOCKED handler climb
    [ladder.md](reference/ladder.md)'s table, ending in one split and then the
    reserve chain. An external task hands back to its Claude implementer instead.
-4. **Cache-aware resumes.** Fix rounds 1 to 3 resume the implementer only while
+4. **Cache-aware resumes.** Fix round 1 resumes the implementer only while
    its cache is warm - returned under five minutes ago, or under about 100k
-   tokens of context - and otherwise dispatch a fresh copy on the same tier.
+   tokens of context - and otherwise dispatches a fresh copy on the same tier;
+   round 2 goes to the successor rung.
 5. **One ledger grammar.** Every task gets an assigned line and a complete line
    carrying its scores and a checkpoint (done, verified, remaining, discovered
    issues, assumptions), which crash recovery and the final review read.

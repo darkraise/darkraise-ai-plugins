@@ -104,5 +104,14 @@ for file in "$P"/skills/*/SKILL.md "$P"/skills/*/references/*.md "$P"/reference/
   check "${file#"$P"/} names no finish timer" "$(tr '\n' ' ' < "$file" | tr -s ' ' | grep -cE 'finish-choice (arm|due|job)|finishTimeout|configured wait|CronCreate|CronDelete|no wake')" "0"
 done
 
+# The README describes the contract-and-test plan shape, review groups, the
+# two-round fix loop, the wave check cadence and the judge report files.
+names "README: tasks carry tests, not implementation code" "$P/README.md" 'carries its interfaces and the complete code of its tests'
+names "README: low-risk tasks are reviewed in groups" "$P/README.md" 'reviewed in groups'
+names "README: two fix rounds" "$P/README.md" 'at most two fix rounds'
+names "README: the full check runs every third wave" "$P/README.md" 'every third wave'
+names "README: judges write their report to a file" "$P/README.md" 'writes its full report to a file'
+check "README: no five-round loop" "$(grep -cE 'fix rounds 4|rounds 1 to 3|and 5, at the BLOCKED' "$P/README.md")" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
