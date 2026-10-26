@@ -181,8 +181,8 @@ your own: QA commits on this branch.
    `[qa]` finding from step 0.5 and every lens finding, tagged `[lens:<id>]`,
    and the dedupe judge and the fixer receive the lens file paths.
    `lens-skipped` lines and `lenses off` dispatch nothing; step 4 names them
-   and writes each `lens-skipped` line to the ledger. Lens seats are
-   read-only, so a recovery may dispatch them again. A
+   and writes each `lens-skipped` line to the ledger. A lens seat writes
+   only its own report file, so a recovery may dispatch it again. A
    `lens-floor important` line means the plan is below the `lensMinorFrom`
    setting: add the bracketed sentence to every lens prompt. With one list,
    every lens finding enters the fix wave, and on a short plan the Minor tail
@@ -245,7 +245,7 @@ your own: QA commits on this branch.
    its evidence on indented lines. It merges findings that
    name the same defect in the same place (not merely the same file), tags each
    `claude`, `codex`, or `both`, and
-   returns `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a
+   marks each `CONFIRMED` or `REJECTED` with its evidence in that report. The verifier is a
    third seat that wrote neither list, so neither reviewer grades its own work.
    A `[qa]` finding is not given to the verifier: it enters the fix wave as
    confirmed, because only the scoped re-review decides a `REJECTED: A<n>`

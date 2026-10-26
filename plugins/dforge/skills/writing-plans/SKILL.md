@@ -609,7 +609,8 @@ A revision your human partner asks for gets one new round.
 
    The seat writes its report to that file and replies in at most 10 lines.
    Read the report's `## Verdict` section and its Critical and Important
-   findings; the reply carries only counts.
+   findings; the reply carries only the scores, the finding counts and the
+   report path, never the findings themselves.
 3. **Fix and repeat.** Fix every Critical and Important finding and re-lint;
    Minor findings are advisory. Run the next round only when a round returned
    a Critical finding or any score of 8 or below, and only while the round is

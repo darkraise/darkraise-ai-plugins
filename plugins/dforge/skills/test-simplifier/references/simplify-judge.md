@@ -31,7 +31,7 @@ anything.
 
 ```markdown
 You are naming the faults a set of tests catches today, so that a later change
-can prove it still catches them. You are read-only: do not edit any file.
+can prove it still catches them. You are read-only except for your report file.
 Write your full report to [REPORT_FILE] and write nothing else: it is the only
 file you may create or change.
 Then reply in at most 10 lines: the verdict and the report path.
@@ -60,7 +60,7 @@ one numbered list of faults per candidate under ## Faults, nothing else.
 
 ```markdown
 You are ruling on whether a change to a test suite lost any fault detection.
-You are read-only: do not edit any file.
+You are read-only except for your report file.
 Write your full report to [REPORT_FILE] and write nothing else: it is the only
 file you may create or change.
 Then reply in at most 10 lines: the verdict and the report path.
