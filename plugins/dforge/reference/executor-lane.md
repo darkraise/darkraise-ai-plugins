@@ -119,7 +119,7 @@ such a task.
 
 A task carrying an `**Executor:**` line runs on that CLI instead of its
 `**Implementer:**` agent. Everything downstream - the review seat, the fix loop,
-the ledger, the five-round cap - is unchanged, because the contract the loop
+the ledger, the two-round cap - is unchanged, because the contract the loop
 enforces is files and commits, not a particular runtime.
 
 **There is no driver subagent.** Run the wrapper yourself as a background Bash
@@ -223,7 +223,7 @@ for ownership, artifacts, approved write sets, and recovery operations.
    (dforge:handoff step 0).
 
    The thread id must reach the ledger. It also lands in the report file. If it
-   lived only in your context, a compaction would turn round 2 into a fresh
+   lived only in your context, a compaction would turn fix round 1 into a fresh
    dispatch wearing a resume's name.
 
 4. **Review with the routed seat.** Run `scripts/review-route PLAN_FILE --task <N>`
@@ -334,9 +334,9 @@ recorded approved amendment or baseline before automatic work continues.
 
 ## Resuming an executor task
 
-Fix rounds 1 to 3 resume that executor's own session, as a Claude
-implementer's rounds do, to preserve its model, effort, and context. The resume-or-re-dispatch
-cache rule ([delegated-task.md](delegated-task.md) §Rounds 1-3) does not apply here: the session runs on a separate
+Fix round 1 resumes that executor's own session, as a Claude
+implementer's round 1 does, to preserve its model, effort, and context. The resume-or-re-dispatch
+cache rule ([delegated-task.md](delegated-task.md) §4, Round 1) does not apply here: the session runs on a separate
 subscription, so there is no Claude cache cost to protect. Write the open
 findings verbatim into a file and pass that file as the brief - the wrapper
 appends the task contract to every run, resume included:
@@ -357,16 +357,15 @@ that directory is git-ignored. If that workspace is not ignored, write reports
 outside the checkout, because the wrapper only un-stages the artefacts of the
 report path it was given.
 
-**Round 4 is `HANDBACK`.** The Claude implementer inherits the working tree, the
-commits, and the report, which is the loop's own "supply the context and
-re-dispatch" case. If the progress reading says the loop has stalled at round 3,
-the handback happens at round 3 instead: that rule pulls this lane's exit point
-earlier exactly as it pulls the Claude ladder's, and it may never push it later.
+**Round 2 is `HANDBACK`.** It goes to the task's `**Implementer:**` agent. The
+Claude implementer inherits the working tree, the commits, and the report,
+which is the loop's own "supply the context and re-dispatch" case.
 
 Handing back lands the task on the Claude assignment-table row for its score -
 the tier the rubric picked before the fix rounds happened. The change of model
-family plus a fresh context is the capability change rounds 4 and 5 exist to
-buy. Say the handback aloud when it happens.
+family plus a fresh context is the capability change round 2 exists to
+buy. Say the handback aloud when it happens. A finding still open after
+round 2 goes to the breaker ([delegated-task.md](delegated-task.md) §4).
 
 ## When the resume itself fails
 
@@ -381,11 +380,11 @@ unchanged, because two of its responses are unavailable to a fix round.
 [ladder.md](ladder.md) says so, and the reason is that
 changing rung mid-fix-loop discards the session context those rounds exist to
 preserve. A fix round that cannot proceed leaves the lane by `HANDBACK` instead,
-which is where round 4 was taking it anyway.
+which is where round 2 was taking it anyway.
 
 **The two-failure budget is not consulted either.** That budget counts failed
 *initial* runs, and fix-round resumes do not count against it. These rounds are
-bounded by their own rule below and by the five-round cap.
+bounded by their own rule below and by the two-round cap.
 
 | Resume outcome | Response |
 |----------------|----------|
@@ -393,7 +392,7 @@ bounded by their own rule below and by the five-round cap.
 | `note=timed-out` with `exit=124`, without `note=writer-unconfirmed` | Retry the same resume once with `--timeout` raised |
 | `note=writer-unconfirmed` | As for an initial run: confirm the turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | `exit=2` | **Read the durable record's `phase` first: exit 2 does not prove nothing ran.** The wrapper also exits 2 after the turn, on thread-persistence, reap-persistence, scope-validation, staging, commit or report-copy failure. On a preflight phase, nothing ran and the thread is untouched: fix what you passed and re-issue the same resume, which does not count as a failed round. On any later phase, follow [external-task-recovery.md](external-task-recovery.md) before re-issuing anything |
-| `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 4 |
+| `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 2: the Claude implementer takes this round |
 | A second failure of any kind in the same round | `HANDBACK` |
 
 **An empty diff means something different here.** When a run fails calls
@@ -403,14 +402,14 @@ that returns `DONE` with an empty diff has read the findings and elected to
 change nothing, which is a position, not a failure. Read the report's summary:
 if it argues the findings are already addressed or wrong, send that claim to
 the ruling seat as an `executor-empty-diff` item (subagent-driven-development, The
-Ruling Seat) and carry out its verdict. Do not re-dispatch the round to force a diff. Two
-consecutive empty-diff rounds are a stalled loop - `HANDBACK`.
+Ruling Seat) and carry out its verdict. Do not re-dispatch the round to force a diff.
+Round 2 is the `HANDBACK` unless the seat's verdict closes the findings.
 
 Record any of this inside the fix-round line the loop is already writing, never
 as a line of its own:
 
 ```
-Task <N>: fix round 2/5 (0 addressed, 2 open - codex quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-low)
+Task <N>: fix round 1/2 (0 addressed, 2 open - codex quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-low)
 ```
 
 A handback from a failed resume is still a handback: say it aloud, and let the
@@ -576,7 +575,7 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: that executor's successor block (`executors get <id> blocks.successor`) is read only by a failed initial run |
-| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; two in a row is a stalled loop and a `HANDBACK` |
+| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; round 2 is the `HANDBACK` |
 | A review seat's status line says `FALLBACK` | The preferred judge rung refused the run and the runner already used the fallback once. Not a failure: record the substitution and its reason in the ledger line you are already writing |
 
 Every ruling above is logged as `Ruling: <what> — <why> — <cost if wrong>` and

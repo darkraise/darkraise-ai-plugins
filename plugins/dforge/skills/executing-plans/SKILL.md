@@ -27,7 +27,7 @@ back. Before anything else:
    flight, then invoke dforge:handoff. In an auto run, exit 6 (`compact`) is
    [auto-run.md](../../reference/auto-run.md) §The budget line.
 4. Re-read this skill in full before the next task. If a task's last ledger
-   line is an agent-named assigned line or `fix round R/5`, also re-read
+   line is an agent-named assigned line or `fix round R/2`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
 
 ## Auto run
@@ -109,7 +109,7 @@ subagent. Its brief's second line is
 `**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` ends with
 `**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`. Run
 [delegated-task.md](../../reference/delegated-task.md) for it: an implementer
-subagent, the review seat `scripts/review-route` prints, fix rounds up to 5 and
+subagent, the review seat `scripts/review-route` prints, fix rounds up to 2 and
 a reviewed complete line. Read that file the first time a delegated task comes
 up, not before. Delegated tasks are never batched.
 
@@ -308,7 +308,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `assumptions` what you assumed where the plan was silent.
 - Write each line in the same message as your other bookkeeping, never later.
 - A delegated task writes subagent mode's per-task lines instead:
-  the agent-named assigned line, `fix round R/5`, `HANDBACK`, `parked`,
+  the agent-named assigned line, `fix round R/2`, `HANDBACK`, `parked`,
   dispatch `Ruling:` lines, `BLOCKED — <agent> exhausted`, and the complete line
   with `review clean` or `K parked` and its scores clause
   (dforge:subagent-driven-development §The Ledger).
@@ -326,7 +326,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
 | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
 | `fix round 3/3 (…; still failing)` | Go to Switching to subagent mode |
 | `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
-| An agent-named `implementer <agent> (assigned …)` line, or `fix round R/5` | A delegated task: apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
+| An agent-named `implementer <agent> (assigned …)` line, or `fix round R/2` | A delegated task: apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 
 **Plan state.** First, whatever the per-task lines say: if the ledger holds a
@@ -435,7 +435,7 @@ and delegated tasks are all this mode dispatches before the final review.
 | `blocked-plan` | The plan is wrong and no path forward is a mechanical choice |
 | `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
 | `cannot-verify` | A delegated task's "⚠️ Cannot verify from diff" item |
-| `breaker` | A delegated task's findings still open after round 5/5 |
+| `breaker` | A delegated task's findings still open after round 2/2 |
 | `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument |
 | `final-residual` | Findings still open after the final review's one fix wave |
 

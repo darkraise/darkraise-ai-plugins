@@ -113,7 +113,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
   and the prompt above. Never dispatch a `fork` implementer: it would inherit
   your whole context.
 - Record the implementer's agent identity from the dispatch result — fix
-  rounds 1-3 may resume it. `start` already wrote
+  round 1 may resume it. `start` already wrote
   `Task <N>: implementer <agent> (assigned; base <sha7>)`, ending
   `; wave <k>)` for a wave task. When what you dispatch differs from that
   line, or needs a note it cannot know — an agent scored at dispatch, a
@@ -397,10 +397,9 @@ Before the loop starts, two routes leave it immediately:
   the plan without the seat's verdict in the ledger.
 
 Everything else enters the loop. A fix round is one fix dispatch plus one
-scoped re-review. Five rounds maximum per task:
+scoped re-review. Two rounds at most per task:
 
-**Rounds 1-3 — resume or re-dispatch by cache state**, except a round 3 that
-follows stalled progress, which escalates (see **Progress** below). Resuming keeps the
+**Round 1 — resume or re-dispatch by cache state.** Resuming keeps the
 implementer's context, but a cold resume re-writes that whole context into the
 cache. Resume only when all of these hold:
 
@@ -420,33 +419,33 @@ That is not an escalation.
 A task on an external executor resumes that executor's own session instead
 — see [executor-lane.md](executor-lane.md) §Resuming an executor task.
 
-**Rounds 4-5 — escalate.** Dispatch a fresh implementer on the successor rung
-from [ladder.md](ladder.md)'s escalation table, with the brief
-path, the report-file path, the open findings, and this framing: "A prior
-implementer attempted this task [N] times; you own it now. Read the report file
-for what was tried." A loop that survives three resumes usually means the
-implementer cannot see its own problem — fresh eyes and a capability bump in
-one move. An external task hands back to its `**Implementer:**` agent instead.
+**Round 2 — a fresh dispatch on the successor rung.** Dispatch a fresh
+implementer on the successor rung from [ladder.md](ladder.md)'s escalation
+table, with the brief path, the report-file path, the open findings, and this
+framing: "A prior implementer attempted this task [N] times; you own it now.
+Read the report file for what was tried." A finding round 1 did not close
+usually means the implementer cannot see its own problem — fresh eyes and a
+capability bump in one move.
+When the successor is `SPLIT`, round 2 is a fresh dispatch of the same rung (`impl-opus-high`):
+a split is reached only through the breaker's AMEND (below).
+A reserve-tier task takes its reserve successor from ladder.md's reserve
+table; `impl-fable-max`, whose successor is `BLOCKED`, writes
+`Task <N>: BLOCKED — impl-fable-max exhausted — <what a human must decide>`
+instead of a round 2. An external task's round 2 is a `HANDBACK` to its
+`**Implementer:**` agent ([executor-lane.md](executor-lane.md)).
 
-**Progress.** The re-reviewer returns `**Progress:** <1-20>`. If round N's
-reading is less than or equal to round N-1's, escalate at the start of the next
-round rather than waiting for round 4. Never escalate before round 3, and never
-later than round 4. Record the reading on the fix-round line
-(`progress 11 -> 9`). A round whose re-review was skipped has no reading: the
-next reading is compared with the last round that returned one.
-
-**Split and reserve.** The top rung `impl-opus-high` escalates to `SPLIT`:
-send a `blocked-plan` item; the seat's AMEND rewrites the task's body into
-`#### Part A` / `#### Part B` units under the same number, which you apply
-with `scripts/plan-amend` and dispatch in order, one part per dispatch. A task
-is split once; a part that exhausts `impl-opus-high` again enters the reserve
-at `impl-opus-xhigh`, said aloud; `impl-fable-max` exhausted is
-`Task <N>: BLOCKED`. Both splits and reserve entries are `Ruling:` lines. The
-details are in [escalation.md](../skills/subagent-driven-development/references/escalation.md).
+**Split and reserve.** A split follows a tripped breaker: a finding still
+open after round 2 on `impl-opus-high` goes to the breaker, whose AMEND may
+rewrite the task's body into `#### Part A` / `#### Part B` units under the
+same number, which you apply with `scripts/plan-amend` and dispatch in order,
+one part per dispatch. A task is split once: a part on `impl-opus-high` takes
+its reserve successor `impl-opus-xhigh` at round 2, said aloud. Both splits
+and reserve entries are `Ruling:` lines. The details are in
+[escalation.md](../skills/subagent-driven-development/references/escalation.md).
 On a Codex host the rungs are not these: escalation, the single split and the
 reserve chain all come from the `codex-v4` selector
 ([native-codex.md](native-codex.md) §Selector contract), which the caller runs
-through `scripts/select-native-tier.sh`. The five-round cap is the same.
+through `scripts/select-native-tier.sh`. A Codex host keeps its five-round cap (`review_cap: 5`) from [codex-routing.json](codex-routing.json).
 
 **Every round, either way:** the implementer fixes, re-runs the tests
 covering the amended code, appends its fix report to the same report file,
@@ -476,8 +475,8 @@ diff path filled in. It prints the seat and that file; dispatch the seat with
 the prompt "your complete instructions are in `<prompt file>`: read it first
 and follow it". It prints `dforge:judge-sonnet-high`; for a subtle
 concurrency fix dispatch `dforge:judge-opus` with the same file and say so.
-The re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED, flags new
-breakage in the fix diff only, and returns the progress reading. New
+The re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED and flags
+new breakage in the fix diff only. New
 Critical/Important breakage in the fix diff joins the open findings list.
 Out-of-scope observations go to the ledger as deferred minors — they never
 extend the loop.
@@ -489,17 +488,16 @@ changes at most 3 lines (added plus deleted, test files included) and touches
 that finding's file, and the task is not risk 3. It prints
 `re-review: skipped (<n> changed lines, 1 finding, <file>)` and writes no
 prompt: count the finding addressed, dispatch no seat, and write the fix-round
-line with `re-review skipped (<n> lines)` in place of the progress reading. A
-skip never triggers escalation. Without `--covered`, or in any other case, the
-re-review runs.
+line with `re-review skipped (<n> lines)`. A skipped re-review still counts
+as its round. Without `--covered`, or in any other case, the re-review runs.
 
 **After each round,** append to the ledger:
-`Task <N>: fix round <R>/5 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>; progress <p> -> <q> | re-review skipped (<n> lines); resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)`
+`Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)`
 
 Never fix findings yourself in the controller session — your context stays
 clean for coordination, and controller fixes skip review.
 
-**The breaker.** When round 5's re-review still leaves findings open, stop
+**The breaker.** When round 2's re-review still leaves findings open, stop
 dispatching and send every open finding to the ruling seat in one `breaker`
 dispatch. The seat parks a finding that is wrong, contestable, or real but
 built on by nothing downstream; returns CONFIRMED-GAP with the smallest
@@ -599,8 +597,8 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 | Last line | Action |
 |---|---|
 | `implementer <agent> (assigned …)`, the agent not `inline` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it (§3); otherwise dispatch the same agent fresh (§1) |
-| `fix round R/5`, R < 5 | Resume the loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
-| `fix round 5/5` | Go to the breaker (§4) |
+| `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2 — a fresh dispatch on the successor rung (§4) |
+| `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |
 | `awaiting group review (commits …)` | Held: never re-dispatch its implementer. It is reviewed by the next group dispatch (§3a), which the trigger above starts |
 | `review round 1/2` on a group review's `Group` line | Run round 2 (§3a) for each member whose clause is open, one member at a time — after compaction the agent ids are gone, so each is a fresh dispatch |
 | `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker (§4) |

@@ -107,12 +107,6 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
 
     **Fix round:** [All findings addressed, no new Critical/Important
     breakage | Findings remain open] — list the open ones. An upheld rejection is closed; a disputed one is open.
-
-    ### Progress
-
-    **Progress:** <1-20> - given everything the implementer has done so far,
-    would the current state already satisfy the task? 1 certainly not, 10
-    uncertain, 20 verified complete.
 ```
 
 **Placeholders:**
@@ -126,5 +120,4 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
   printed; `task-step rereview` runs it and fills this in
 
 **Re-reviewer returns:** per-finding verdicts (ADDRESSED / NOT ADDRESSED),
-new breakage in the fix diff, out-of-scope observations, a round verdict, and
-a progress reading.
+new breakage in the fix diff, out-of-scope observations, and a round verdict.

@@ -17,7 +17,7 @@
 # 4 an amendment does not apply, hold was refused because review-route reviews
 # the task alone, or review --group was given a task with no awaiting group
 # review line or one already in a group's review rounds; 6 a required earlier
-# step has not run.
+# step has not run; 7 the fix loop is at its two-round cap.
 # 5 is context-size's handoff code and is never used here.
 set -uo pipefail
 
@@ -110,6 +110,10 @@ cmd_rereview() (
   fi
   round=$(jq -r '.round // 0' "$state" | tr -d '\r')
   new_round=$((round + 1))
+  if [ "$new_round" -gt 2 ]; then
+    echo "task-step: fix round $new_round is past the cap of 2; send the open findings to the breaker (reference/delegated-task.md §4)" >&2
+    exit 7
+  fi
 
   fix=$ws/task-$first-fix-$new_round.md
   if [ ! -f "$fix" ]; then

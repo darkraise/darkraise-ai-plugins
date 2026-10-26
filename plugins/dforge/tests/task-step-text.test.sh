@@ -118,5 +118,71 @@ names "waves review grouped tasks before any merges" "$PW" 'once every grouped t
 names "a wave member's fix round stays in its worktree" "$PW" "a member's fix round goes to that task's implementer in its worktree"
 names "a grouped wave task merges once its group is clean" "$PW" 'or, for a grouped task, its group is clean'
 
+# --- the fix loop holds two rounds (faster-plans §3) ---
+ESC="$P/skills/subagent-driven-development/references/escalation.md"
+RRP="$P/skills/subagent-driven-development/references/re-review-prompt.md"
+RUL="$P/skills/subagent-driven-development/references/ruling-prompt.md"
+EL="$P/reference/executor-lane.md"
+LAD="$P/reference/ladder.md"
+# only_older <label> <file> — every line naming an R/5 round is about an older run's ledger
+only_older() { check "$1" "$(grep -E 'round (<R>|[0-9R])/5([^0-9]|$)' "$2" | grep -vc 'older')" "0"; }
+
+names "the loop holds two rounds" "$DT" 'Two rounds at most per task:'
+names "round 1 resumes or re-dispatches by cache state" "$DT" '**Round 1 — resume or re-dispatch by cache state.**'
+names "round 2 is a fresh dispatch on the successor rung" "$DT" '**Round 2 — a fresh dispatch on the successor rung.**'
+names "a SPLIT successor keeps the rung for round 2" "$DT" 'When the successor is `SPLIT`, round 2 is a fresh dispatch of the same rung'
+names "a reserve-tier task takes its reserve successor" "$DT" 'A reserve-tier task takes its reserve successor'
+names "the breaker trips after round 2" "$DT" "When round 2's re-review still leaves findings open"
+names "the fix-round line counts to 2" "$DT" 'Task <N>: fix round <R>/2 ('
+names "recovery: round 1 resumes at round 2" "$DT" '| `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2'
+names "recovery: round 2 goes to the breaker" "$DT" '| `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |'
+names "a Codex host keeps five rounds" "$DT" 'A Codex host keeps its five-round cap (`review_cap: 5`)'
+for gone in '**Progress.**' 'progress <p> -> <q>' 'Rounds 4-5' 'Five rounds maximum' 'rounds 1-3 may resume it' \
+            'The five-round cap is the same.' 'skip never triggers escalation' 'returns the progress reading'; do
+  lacks "the delegated loop drops: $gone" "$DT" "$gone"
+done
+only_older "the delegated loop names R/5 only for older runs" "$DT"
+
+names "escalation: round 2 climbs the ladder" "$ESC" '- **Fix round 2.** Dispatch a fresh implementer on the successor rung'
+names "escalation: the recorded round is 2/2" "$ESC" 'Task <N>: fix round 2/2 (1 addressed, 1 open - <one-liner>; commits <a7>..<b7>; escalated <old-agent> -> <new-agent>)'
+names "escalation: a split comes from the breaker" "$ESC" "a split is reached only through the breaker's AMEND"
+names "escalation: the split ruling counts two rounds" "$ESC" 'impl-opus-high exhausted after 2 rounds'
+for gone in 'Fix rounds 4 and 5' 'progress has stalled' 'after 5 rounds' 'fix round 4/5'; do
+  lacks "escalation drops: $gone" "$ESC" "$gone"
+done
+
+for gone in '### Progress' '**Progress:**' 'a progress reading'; do
+  lacks "the re-review prompt drops: $gone" "$RRP" "$gone"
+done
+names "the breaker item follows the second round" "$RUL" 'breaker: findings still open after the second fix round.'
+lacks "the breaker item no longer waits five rounds" "$RUL" 'fifth fix round'
+
+names "executor: round 1 resumes the session" "$EL" "Fix round 1 resumes that executor's own session"
+names "executor: round 2 hands back" "$EL" '**Round 2 is `HANDBACK`.**'
+names "executor: the failed-resume example is round 1 of 2" "$EL" 'Task <N>: fix round 1/2 (0 addressed, 2 open - codex quota exhausted'
+for gone in 'Round 4 is' 'Fix rounds 1 to 3' 'five-round cap' 'stalled at round 3' 'rounds 4 and 5' 'two in a row' '§Rounds 1-3'; do
+  lacks "executor-lane drops: $gone" "$EL" "$gone"
+done
+names "ladder: the lane resumes once, then hands back" "$LAD" 'resumes the same session on round 1 and hands back on round 2'
+lacks "ladder: no fourth round on the lane" "$LAD" 'heading for at round 4'
+
+names "subagent mode: the fix-round grammar" "$SDD" 'Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)'
+names "subagent mode: the group round grammar" "$SDD" ': review round R/2 ('
+names "subagent mode: a group's round 1 resumes at round 2" "$SDD" "| \`review round 1/2\` on a \`Group\` line, or \`review round 1/5\` from an older run | Resume the group's loop at round 2"
+names "subagent mode: a group's round 2 goes to the breaker" "$SDD" '| `review round 2/2` on a `Group` line, or `review round R/5` with R >= 2 from an older run | Go to the breaker |'
+names "subagent mode: the wave round grammar" "$SDD" 'Wave <k>: fix round R/2 (<same fields as a fix round>)'
+names "subagent mode: older ledgers map R/5" "$SDD" 'A `Task`, `Group` or `Wave` round line written before the two-round cap reads `R/5`: R = 1 resumes at round 2, and R >= 2 goes to the breaker.'
+names "subagent mode: compaction resumes round 1 at round 2" "$SDD" '`fix round 1/2` resumes at round 2 with a fresh dispatch'
+names "subagent mode: the breaker row" "$SDD" '| `breaker` | Every finding still open after round 2/2 |'
+names "subagent mode: the flowchart caps at 2" "$SDD" '"R = 2?"'
+names "subagent mode: the example round has no progress field" "$SDD" '[Ledger: Task 2: fix round 1/2 (2 addressed, 0 open; commits d4e5f6a..b7c8d9e; resumed)]'
+for gone in 'progress p -> q' 'stalled progress' 'round 1 of 5' 'Fix round R of 5' 'Progress: 18' '"R = 5?"'; do
+  lacks "subagent mode drops: $gone" "$SDD" "$gone"
+done
+only_older "subagent mode names R/5 only for older runs" "$SDD"
+names "inline mode: delegated fix rounds stop at 2" "$INLINE" 'fix rounds up to 2 and'
+names "inline mode: the breaker row" "$INLINE" "| \`breaker\` | A delegated task's findings still open after round 2/2 |"
+only_older "inline mode names R/5 only for older runs" "$INLINE"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

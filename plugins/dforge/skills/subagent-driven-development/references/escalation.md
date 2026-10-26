@@ -6,26 +6,24 @@ assignment, escalation, and reserve tables - live in
 
 ## Where escalation applies
 
-Three points, and no others:
+Two points, and no others:
 
-- **Fix rounds 4 and 5.** Dispatch a fresh implementer on the successor rung.
+- **Fix round 2.** Dispatch a fresh implementer on the successor rung (the
+  same rung when that successor is `SPLIT`; a reserve-tier task takes its
+  reserve successor).
 - **The BLOCKED handler**, when the task requires more reasoning. A BLOCKED
   report caused by missing context is not an escalation: supply the context and
   re-dispatch the same agent.
-- **Round 3, when progress has stalled** - the re-review's progress reading is
-  less than or equal to the previous round's. This can only pull the escalation
-  point earlier, never later.
 
-Escalation does **not** apply to fix rounds 1 and 2, nor to round 3 unless
-progress has stalled. Those rounds resume the original agent (subject to the
-cache rule), which preserves its model, its effort, and its context.
-Re-dispatching a different tier there discards exactly what those rounds exist
-to preserve.
+Escalation does **not** apply to fix round 1. That round resumes the original
+agent (subject to the cache rule), which preserves its model, its effort, and
+its context. Re-dispatching a different tier there discards exactly what that
+round exists to preserve.
 
-None of the three applies to a task running on an external executor.
-Its fix rounds resume that executor's own session - the one its
-`**Executor:**` line names - and it leaves the lane by `HANDBACK` instead of
-by climbing a rung - see
+Neither applies to a task running on an external executor.
+Its fix rounds resume that executor's own session at round 1 only - the one its
+`**Executor:**` line names - and round 2 leaves the lane by `HANDBACK` instead
+of climbing a rung - see
 [executor-lane.md](../../../reference/executor-lane.md).
 
 ## Escalating out of inline mode
@@ -51,7 +49,7 @@ successor is `SPLIT`, handled as §The top rung is SPLIT describes.
 Append one clause to the fix-round line the round already writes:
 
 ```
-Task <N>: fix round 4/5 (1 addressed, 1 open - <one-liner>; commits <a7>..<b7>; escalated <old-agent> -> <new-agent>)
+Task <N>: fix round 2/2 (1 addressed, 1 open - <one-liner>; commits <a7>..<b7>; escalated <old-agent> -> <new-agent>)
 ```
 
 A BLOCKED-handler escalation happens outside the fix loop, so it has no
@@ -67,10 +65,12 @@ re-derive every escalated agent after a crash.
 ## The top rung is SPLIT
 
 The ladder's top rung is `impl-opus-high`, whose successor is `SPLIT` - an
-action, not an agent. When it is exhausted, do not report BLOCKED yet, and do
-not decide the decomposition yourself: send a `blocked-plan` item. The seat
-answers with an AMEND that rewrites Task N's body into ordered parts under the
-same heading and number:
+action, not an agent, so round 2 of a task on `impl-opus-high` is a fresh
+dispatch of `impl-opus-high`, and a split is reached only through the breaker's AMEND.
+When round 2 leaves findings open, do not report BLOCKED yet, and do not
+decide the decomposition yourself: the open findings go to the breaker, and
+its AMEND rewrites Task N's body into ordered parts under the same heading and
+number:
 
 ```markdown
 ### Task N: <title>          (unchanged)
@@ -95,12 +95,13 @@ fix-round lines carry `; part A` / `; part B`, and one complete line closes the
 task after the last part, with `parts A, B` in its parenthesis. Log the split:
 
 ```
-Ruling: split Task <N> at the top rung into parts A and B (amendment A<k>) - impl-opus-high exhausted after 5 rounds - if wrong, the parts review separately and merge back
+Ruling: split Task <N> at the top rung into parts A and B (amendment A<k>) - impl-opus-high exhausted after 2 rounds - if wrong, the parts review separately and merge back
 ```
 
-**A task may be split-escalated once.** If a part also exhausts
-`impl-opus-high`, the task has resisted both capability and decomposition, and
-only then does it enter the reserve chain in
+**A task may be split-escalated once.** A part on `impl-opus-high` whose
+round 1 leaves findings open takes `impl-opus-xhigh` at round 2: the split is
+spent, the task has resisted both capability and decomposition, and only then
+does it enter the reserve chain in
 [ladder.md](../../../reference/ladder.md). It enters at `impl-opus-xhigh` and
 walks one successor per further exhaustion. Record the entry as its own ruling,
 and say it aloud:
@@ -113,9 +114,9 @@ A reserve dispatch is the one place this loop spends above the tier the plan
 recorded. It should never be a surprise, which is why it is said aloud as well
 as written down.
 
-`impl-fable-max` has no successor. When it exhausts, write
-`Task <N>: BLOCKED — impl-fable-max exhausted — <what a human must decide>`. Do
-not loop, and do not split a second time.
+`impl-fable-max` has no successor. When its round 1 leaves findings open,
+write `Task <N>: BLOCKED — impl-fable-max exhausted — <what a human must decide>`
+instead of a round 2. Do not loop, and do not split a second time.
 
 ## Reserve agents named in a plan
 

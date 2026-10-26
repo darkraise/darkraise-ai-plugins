@@ -621,6 +621,24 @@ check "rereview round 2: writes the round 2 prompt" "$([ -f "$RR_WS/task-1-rerev
 check "rereview round 2: the fix base is round 1's head" "$(grep -c "Fix base:\*\* $RR_H1 " "$RR_WS/task-1-rereview-2-prompt.md")" "1"
 check "rereview round 2: the state round is 2" "$(rr_state 1 .round)" "2"
 
+# The loop holds two rounds: a third rereview writes nothing and names the breaker.
+rr_edit app.txt add4
+rr_git add -A && rr_git commit -qm fix3
+rr_fix 1 3 "- app.txt: still wrong"
+cp "$RR_WS/task-1-step.json" "$RR_TMP/state1.2"
+rr_run rereview docs/plan.md 1 --covered
+check "rereview round 3: exits 7" "$rr_rc" "7"
+check "rereview round 3: names the cap and the breaker" "$(grep -c 'task-step: fix round 3 is past the cap of 2; send the open findings to the breaker' <<<"$rr_err")" "1"
+check "rereview round 3: writes no prompt" "$([ -f "$RR_WS/task-1-rereview-3-prompt.md" ] && echo yes || echo no)" "no"
+check "rereview round 3: leaves the state alone" "$(cmp -s "$RR_WS/task-1-step.json" "$RR_TMP/state1.2" && echo same || echo changed)" "same"
+check "rereview round 3: prints no digest" "$rr_out" ""
+# A step state an older run left at round 4 of 5 goes to the breaker too.
+jq '.round = 4' "$RR_TMP/state1.2" > "$RR_WS/task-1-step.json"
+rr_fix 1 5 "- app.txt: still wrong"
+rr_run rereview docs/plan.md 1 --covered
+check "rereview after an older run's round 4: exits 7" "$rr_rc" "7"
+check "rereview after an older run's round 4: names round 5" "$(grep -c 'fix round 5 is past the cap of 2' <<<"$rr_err")" "1"
+
 # --base moves the package start, and the skip rule counts from it.
 rr_reset
 rr_edit app.txt mod

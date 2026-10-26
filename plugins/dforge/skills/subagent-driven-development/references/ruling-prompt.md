@@ -102,7 +102,7 @@ Subagent ([JUDGE]):
       text requires, or is labelled plan-mandated.
     - cannot-verify: a requirement the task reviewer could not verify from
       the diff. CONFIRMED-GAP means it is unmet.
-    - breaker: findings still open after the fifth fix round.
+    - breaker: findings still open after the second fix round.
     - blocked-plan: an implementer reported BLOCKED because the plan is
       wrong.
     - executor-empty-diff: an external executor's fix round changed nothing

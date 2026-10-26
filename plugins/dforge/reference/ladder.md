@@ -290,8 +290,7 @@ gpt-6.1-sol/xhigh HANDBACK
 ```
 
 This is a single-successor column consulted at most once per task, not a
-walkable chain. Only a failed *initial run* consults it: the fix loop resumes the
-same session on rounds 1 to 3 and hands back on round 4, so no fix round ever
+walkable chain. Only a failed *initial run* consults it: the fix loop resumes the same session on round 1 and hands back on round 2, so no fix round ever
 reads it. It is named `successor` rather than `escalation` for that reason.
 A refused initial run never reads it either: the account refused the model, and
 every row names that same model, so a refusal goes straight to `HANDBACK`.
@@ -299,7 +298,7 @@ every row names that same model, so a refusal goes straight to `HANDBACK`.
 A fix round whose resume fails to run at all is the case that looks closest to a
 run failure, and it is still excluded. Changing rung mid-loop would discard the
 session context those rounds exist to preserve, so such a round leaves the lane
-by `HANDBACK` instead - the exit it was already heading for at round 4.
+by `HANDBACK` instead - the exit it was already heading for at round 2.
 
 `HANDBACK` is an action, not an executor - the same shape as `SPLIT` at the top
 of the escalation table. It resolves to the Claude assignment-table row for the

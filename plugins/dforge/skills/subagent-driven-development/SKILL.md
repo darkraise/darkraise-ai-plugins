@@ -18,8 +18,10 @@ back. Before anything else:
    and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
    directory it prints: while progress lives in darkmem the two differ.
 2. Trust the ledger and `git log` over the summary. For each task the last
-   ledger line decides: `complete` is done; `fix round R/5` resumes at round
-   R+1 with a fresh dispatch; an assigned line with commits after its base
+   ledger line decides: `complete` is done;
+   `fix round 1/2` resumes at round 2 with a fresh dispatch, and `fix round 2/2`
+   goes to the breaker (an older run's `R/5` maps as §The Ledger's Recovery
+   says); an assigned line with commits after its base
    goes to review;
    `awaiting group review` is reviewed by the next group dispatch, never re-dispatched.
    An assigned line ending `thread pending` is an executor
@@ -37,7 +39,7 @@ back. Before anything else:
    [auto-run.md](../../reference/auto-run.md) §The budget line.
 4. Re-read this skill in full before the next dispatch, and
    [delegated-task.md](../../reference/delegated-task.md) when a task is
-   mid-loop (an agent-named assigned line or `fix round R/5`).
+   mid-loop (an agent-named assigned line or `fix round R/2`).
 
 ## Auto run
 
@@ -181,10 +183,10 @@ digraph process {
         "Verdicts clean and no score 1-8?" [shape=diamond];
         "Finding conflicts with plan text?" [shape=diamond];
         "Ruling seat rules on the conflict (./references/ruling-prompt.md)" [shape=box];
-        "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" [shape=box];
-        "Dispatch scoped re-review with progress (./references/re-review-prompt.md)" [shape=box];
+        "Fix round R of 2: R=1 resume or fresh by cache state; R=2 successor rung, fresh" [shape=box];
+        "Dispatch scoped re-review (./references/re-review-prompt.md)" [shape=box];
         "All findings addressed?" [shape=diamond];
-        "R = 5?" [shape=diamond];
+        "R = 2?" [shape=diamond];
         "Ruling seat adjudicates each open finding" [shape=box];
         "Any CONFIRMED-GAP or AMEND?" [shape=diamond];
         "Carry the fix or amendment forward; BLOCKED stops" [shape=box];
@@ -212,14 +214,14 @@ digraph process {
     "Verdicts clean and no score 1-8?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "Verdicts clean and no score 1-8?" -> "Finding conflicts with plan text?" [label="no"];
     "Finding conflicts with plan text?" -> "Ruling seat rules on the conflict (./references/ruling-prompt.md)" [label="yes"];
-    "Ruling seat rules on the conflict (./references/ruling-prompt.md)" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung";
-    "Finding conflicts with plan text?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" [label="no"];
-    "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" -> "Dispatch scoped re-review with progress (./references/re-review-prompt.md)";
-    "Dispatch scoped re-review with progress (./references/re-review-prompt.md)" -> "All findings addressed?";
+    "Ruling seat rules on the conflict (./references/ruling-prompt.md)" -> "Fix round R of 2: R=1 resume or fresh by cache state; R=2 successor rung, fresh";
+    "Finding conflicts with plan text?" -> "Fix round R of 2: R=1 resume or fresh by cache state; R=2 successor rung, fresh" [label="no"];
+    "Fix round R of 2: R=1 resume or fresh by cache state; R=2 successor rung, fresh" -> "Dispatch scoped re-review (./references/re-review-prompt.md)";
+    "Dispatch scoped re-review (./references/re-review-prompt.md)" -> "All findings addressed?";
     "All findings addressed?" -> "Append completion to ledger, mark todo complete" [label="yes"];
-    "All findings addressed?" -> "R = 5?" [label="no"];
-    "R = 5?" -> "Fix round R of 5: R<=3 resume or fresh by cache state; R>=4, or R=3 after stalled progress, successor rung" [label="no - next round"];
-    "R = 5?" -> "Ruling seat adjudicates each open finding" [label="yes - breaker trips"];
+    "All findings addressed?" -> "R = 2?" [label="no"];
+    "R = 2?" -> "Fix round R of 2: R=1 resume or fresh by cache state; R=2 successor rung, fresh" [label="no - next round"];
+    "R = 2?" -> "Ruling seat adjudicates each open finding" [label="yes - breaker trips"];
     "Ruling seat adjudicates each open finding" -> "Any CONFIRMED-GAP or AMEND?";
     "Any CONFIRMED-GAP or AMEND?" -> "Carry the fix or amendment forward; BLOCKED stops" [label="yes"];
     "Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete" [label="gap carried"];
@@ -346,14 +348,14 @@ This skill owns every line in `<ledger dir>/progress.md`. The grammar:
 ```
 # SDD ledger — plan: <path>
 Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; wave <k>][; executor <id> <model>/<effort>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
-Task <N>: fix round R/5 (X addressed, Y open — <one-liners>; commits a..b[; progress p -> q | re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
-Group <a>-<b>: review round R/5 (<same fields as a fix round>)
+Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
+Group <a>-<b>: review round R/2 (<same fields as a fix round>)
 Task <N>: awaiting group review (commits <a7>..<b7>)
 Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])
 Wave <k>: started (base <sha7>; Tasks <a>-<b>; at most <c> at once)
 Wave <k>: serialized — <reason>
 Wave <k>: check failed — <command> → <one-line summary>
-Wave <k>: fix round R/5 (<same fields as a fix round>)
+Wave <k>: fix round R/2 (<same fields as a fix round>)
 Wave <k>: integrated (head <sha7>; <command> → pass)
 Task <N>: escalated inline -> subagent — <trigger>          (written by inline mode only)
 Task <N>: minor (deferred): <one-liner>
@@ -417,12 +419,16 @@ stepping over `minor (deferred)`, `parked`, `Task <N>: Ruling:`, and bare
 | `awaiting group review` | Reviewed by the next group dispatch ([delegated-task.md](../../reference/delegated-task.md) §3a); never re-dispatch its implementer |
 | `review round 1/2` on a group review's `Group` line | Run round 2 for each member whose clause is open, one member at a time, a fresh dispatch after compaction |
 | `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker |
-| `review round R/5` on a `Group` line, R < 5 | Resume the batch's loop at round R+1 — after compaction the agent id is gone, so the cache rule makes it a fresh dispatch |
-| `review round 5/5` on a `Group` line | Go to the breaker |
-| `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the first rung on the escalation table ranked strictly above both the task's `**Implementer:**` agent and the inline session's rung, the successor of whichever ranks higher ([escalation.md](references/escalation.md) §Escalating out of inline mode) fresh at round 1 of 5, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
-| `implementer <agent> (assigned …; wave <k>)`, or a `fix round R/5` after one | A parallel task: apply [parallel-waves.md](../../reference/parallel-waves.md) §Recovery |
-| `implementer <agent> (assigned …)` or `fix round R/5` | Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
+| `review round 1/2` on a `Group` line, or `review round 1/5` from an older run | Resume the group's loop at round 2 — a fresh dispatch on the successor rung |
+| `review round 2/2` on a `Group` line, or `review round R/5` with R >= 2 from an older run | Go to the breaker |
+| `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the first rung on the escalation table ranked strictly above both the task's `**Implementer:**` agent and the inline session's rung, the successor of whichever ranks higher ([escalation.md](references/escalation.md) §Escalating out of inline mode) fresh at round 1 of 2, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
+| `implementer <agent> (assigned …; wave <k>)`, or a `fix round R/2` after one | A parallel task: apply [parallel-waves.md](../../reference/parallel-waves.md) §Recovery |
+| `implementer <agent> (assigned …)` or `fix round R/2` | Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
 | none | Not started |
+
+A `Task`, `Group` or `Wave` round line written before the two-round cap reads `R/5`: R = 1 resumes at round 2, and R >= 2 goes to the breaker.
+A `Wave` fix-round line resumes the wave's fix loop
+([parallel-waves.md](../../reference/parallel-waves.md) §5) by the same rule.
 
 A ledger written by an older version of this skill may carry an assigned line
 without `base`: take the previous task's complete-line head, or the branch's
@@ -450,7 +456,7 @@ that arises at one point into one dispatch:
 | `preflight` | Once, before Task 1 (Setup) |
 | `plan-conflict` | A review finding labelled plan-mandated, or one that conflicts with what the plan's text requires |
 | `cannot-verify` | Every "⚠️ Cannot verify from diff" item, before the task completes |
-| `breaker` | Every finding still open after round 5/5 |
+| `breaker` | Every finding still open after round 2/2 |
 | `blocked-plan` | An implementer BLOCKED because the plan is wrong |
 | `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../reference/executor-lane.md)) |
 | `final-residual` | Findings still open after the final review's one fix wave |
@@ -694,9 +700,9 @@ Judge: Spec ❌ — missing progress reporting. Important: magic number (100).
 Implementer: Added progress reporting, extracted PROGRESS_INTERVAL. 10/10 passing.
 
 [task-step rereview PLAN_FILE 2: two findings are open, so no skip; dispatch the printed seat with task-2-rereview-1-prompt.md]
-Re-reviewer: both ADDRESSED. New breakage: none. Progress: 18
+Re-reviewer: both ADDRESSED. New breakage: none.
 
-[Ledger: Task 2: fix round 1/5 (2 addressed, 0 open; commits d4e5f6a..b7c8d9e; progress - -> 18; resumed)]
+[Ledger: Task 2: fix round 1/2 (2 addressed, 0 open; commits d4e5f6a..b7c8d9e; resumed)]
 [Ledger: Task 2: complete (commits d4e5f6a..b7c8d9e, review clean; scores spec 16 / scope 17 / verification 15 / quality 15) — …]
 
 ...
