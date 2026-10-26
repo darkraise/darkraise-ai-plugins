@@ -211,6 +211,7 @@ names "subagent mode: the merged grammar" "$SDD" 'Wave <k>: merged (head <sha7>;
 names "subagent mode: the integrated grammar" "$SDD" 'Wave <k>: integrated (head <sha7>; <command> → pass[; baseline failures only])'
 names "subagent mode: compaction reads a merged line as closed" "$SDD" 'A `Wave <k>: started` line with no later `integrated` or `merged` line'
 names "subagent mode: recovery reads merged as closed" "$SDD" '`Wave <k>: merged` closes the wave as `integrated` does'
+names "subagent mode: a one-task wave proves its base and closes by §5" "$SDD" 'A wave of one task runs in the checkout, proves its base first and closes by §5'
 lacks "subagent mode: the old integrated grammar is gone" "$SDD" 'Wave <k>: integrated (head <sha7>; <command> → pass)'
 
 

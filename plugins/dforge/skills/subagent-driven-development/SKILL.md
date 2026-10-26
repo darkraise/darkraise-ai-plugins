@@ -606,9 +606,10 @@ DONE and reviewed with other held tasks in one judge dispatch, per
 every wave of more than one task through
 [parallel-waves.md](../../reference/parallel-waves.md): its tasks run at once,
 each in its own worktree, each through the same loop above, and are merged and
-checked together before the next wave starts. A wave of one task, and every
-task of a plan without that line, runs here exactly as above. Batching never
-crosses a wave boundary.
+checked together before the next wave starts.
+A wave of one task runs in the checkout, proves its base first and closes by §5: run [parallel-waves.md](../../reference/parallel-waves.md) §1 step 2, then the loop above, then §5 (`wave check-due`, then its `integrated` or `merged` line) before the next wave starts.
+Every task of a plan without that line runs here exactly as above. Batching
+never crosses a wave boundary.
 
 ## Final Review
 
