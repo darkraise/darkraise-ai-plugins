@@ -391,7 +391,8 @@ fixes inside a group run one task at a time.
   group's seat returns, run
   `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N M … --group`
   with every member's number and act on its digest: it reads
-  `group-<list>-review-report.md`, writes one fix file per member with a
+  `group-<list>-review-report.md`, prints one verdict line per member
+  (`Task <N>: spec …; quality …; scores …`), writes one fix file per member with a
   Critical or Important finding, and logs each member's Minor findings. A
   member's fix round is read alone with
   `task-step verdict PLAN_FILE N --rereview <R>`. A group never gets a Codex
@@ -525,7 +526,9 @@ When the seat returns, run
 `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N --rereview <R>`.
 Its `fix round:` line says whether the round closed; its finding lines are
 every finding still open, new breakage in the fix diff included, and it has
-written them to the next round's fix file. The re-reviewer's out-of-scope
+written them to the next round's fix file. After round 2 it writes no fix
+file and its `fix:` line reads `breaker (round 2 of 2; …)`: send those
+findings to the breaker. The re-reviewer's out-of-scope
 issues reach the ledger as deferred Minor findings and never extend the loop.
 
 **The skip rule.** Pass `--covered` only after confirming that the fix report

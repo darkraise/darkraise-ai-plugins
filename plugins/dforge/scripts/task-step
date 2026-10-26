@@ -958,9 +958,19 @@ check_tracked() {
   echo "check tracked: clean"
 }
 
+# verdict_val KEY: the value of the first Verdict line with that key, from
+# do_verdict's vals ("<key>\t<value>" entries).
+verdict_val() {
+  local v
+  for v in ${vals[@]+"${vals[@]}"}; do
+    [ "${v%%$'\t'*}" != "$1" ] || { printf '%s' "${v#*$'\t'}"; return; }
+  done
+}
+
 do_verdict() {
   local n list vstate rpath mode check_line recs rc rec tag rest sev task file line one t r fix l nv i room nc budget
-  local members=() fixes=() vlines=() flines=() cvs=() minors=()
+  local k is_req used nx
+  local members=() fixes=() vlines=() flines=() cvs=() minors=() req=() vals=() extras=()
   local crit=0 imp=0 minor=0
   if [ "$vgroup" -eq 1 ]; then
     while IFS= read -r n; do members+=("$n"); done < <(printf '%s\n' "${ids[@]}" | sort -n -u)
@@ -1016,6 +1026,12 @@ do_verdict() {
     else
       r=$(jq -r '.round // 0' "$vstate" | tr -d '\r')
     fi
+    # Past round 2 the open findings go to the breaker, so no third fix file
+    # invites a round that rereview refuses.
+    if [ "${r:-0}" -ge 2 ]; then
+      fixes+=("breaker (round 2 of 2; $n finding$([ "$n" -eq 1 ] || echo s)$([ "$vgroup" -eq 0 ] || echo ", Task $t"))")
+      continue
+    fi
     fix=$ws/task-$t-fix-$(( ${r:-0} + 1 )).md
     awk -F'\t' -v t="$t" -v report="$rpath" '
       $1 == t { n++; sev[n] = $2; loc[n] = $3 ($4 == "0" ? "" : ":" $4); full[n] = $3 ":" $4; one[n] = $5 }
@@ -1029,7 +1045,9 @@ do_verdict() {
   done
 
   for l in ${minors[@]+"${minors[@]}"}; do
-    if [ -f "$ledger" ] && tr -d '\r' < "$ledger" | grep -qxF -- "$l"; then continue; fi
+    # grep -c reads the whole ledger: grep -q would close the pipe early and,
+    # under pipefail, a SIGPIPE'd tr would read as "not there yet".
+    if [ -f "$ledger" ] && [ "$(tr -d '\r' < "$ledger" | grep -cxF -- "$l")" -gt 0 ]; then continue; fi
     ledger_init
     printf '%s\n' "$l" >> "$ledger"
   done
@@ -1039,19 +1057,55 @@ do_verdict() {
   else
     printf 'task %s: verdict from %s\n' "$idlist" "$rpath"
   fi
-  nv=${#vlines[@]}
-  if [ "$nv" -gt 12 ]; then
-    printf '%s\n' "${vlines[@]:0:11}"
-    printf 'verdict: %s more lines in the report\n' "$((nv - 11))"
-    nv=12
-  elif [ "$nv" -gt 0 ]; then
-    printf '%s\n' "${vlines[@]}"
+  # The verdict keys the fix loop reads are always printed, a group's as one
+  # line per member; only the other Verdict lines are cut to fit 12 lines.
+  if [ "$vgroup" -eq 1 ]; then
+    for t in "${members[@]}"; do req+=("Task $t spec" "Task $t quality" "Task $t scores"); done
+  elif [ "$mode" = rereview ]; then
+    req=("fix round" "open")
+  else
+    req=(spec quality scores)
+  fi
+  used="|"
+  for l in ${vlines[@]+"${vlines[@]}"}; do
+    k=${l%%: *}
+    is_req=0
+    for i in "${req[@]}"; do [ "$i" != "$k" ] || is_req=1; done
+    if [ "$is_req" -eq 1 ] && [[ $used != *"|$k|"* ]]; then
+      used="$used$k|" vals+=("$k"$'\t'"${l#*: }")
+    else
+      extras+=("$l")
+    fi
+  done
+  nv=0
+  if [ "$vgroup" -eq 1 ]; then
+    for t in "${members[@]}"; do
+      printf 'Task %s: spec %s; quality %s; scores %s\n' "$t" \
+        "$(verdict_val "Task $t spec")" "$(verdict_val "Task $t quality")" "$(verdict_val "Task $t scores")"
+      nv=$((nv + 1))
+    done
+  else
+    for k in "${req[@]}"; do printf '%s: %s\n' "$k" "$(verdict_val "$k")"; nv=$((nv + 1)); done
+  fi
+  nx=${#extras[@]} room=$((12 - nv))
+  if [ "$nx" -eq 0 ]; then
+    :
+  elif [ "$nx" -le "$room" ]; then
+    for i in "${!extras[@]}"; do printf '%s\n' "${extras[$i]}"; done
+    nv=$((nv + nx))
+  else
+    [ "$room" -ge 1 ] || room=1
+    for ((i = 0; i < room - 1; i++)); do printf '%s\n' "${extras[$i]}"; done
+    printf 'verdict: %s more lines in the report\n' "$((nx - room + 1))"
+    nv=$((nv + room))
   fi
   printf 'findings: %s Critical, %s Important, %s Minor\n' "$crit" "$imp" "$minor"
   [ "${#flines[@]}" -eq 0 ] || printf '%s\n' "${flines[@]}"
   # Every line but the finding lines fits in 20: the first, the verdict lines,
-  # and the findings, fix, minor, check and budget lines leave this many.
+  # and the findings, fix, minor, check and budget lines leave this many. A
+  # group too large for that still gets one line saying how many items wait.
   room=$((20 - nv - 6))
+  [ "$room" -ge 1 ] || room=1
   nc=${#cvs[@]}
   if [ "$nc" -le "$room" ]; then
     for i in ${cvs[@]+"${!cvs[@]}"}; do printf 'cannot-verify: %s\n' "${cvs[$i]}"; done

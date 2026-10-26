@@ -1050,6 +1050,31 @@ gr_run review --group docs/plan.md 6 7
 check "review --group: a range Group line also marks its members as in review rounds" "$gr_rc $(grep -c 'Task 7' <<<"$gr_err")" "4 1"
 gr_git worktree remove --force "$GR_TMP/wt6"
 
+# A group of five: every member's verdict keys reach the digest, one line per
+# member, however many other Verdict lines and cannot-verify items the report holds.
+GR_RH=$(gr_git rev-parse HEAD)
+jq -n --arg rh "$GR_RH" --arg cwd "$GR_REPO" \
+  '{tasks: [1,2,4,6,7], reviewHead: $rh, t0: 0, reviewChecks: [{cwd: $cwd, head: $rh, dirty: []}]}' > "$GR_WS/group-1,2,4,6,7-step.json"
+{
+  printf '## Verdict\n'
+  for t in 1 2 4 6; do
+    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
+  done
+  printf 'Task 7 spec: fail\nTask 7 quality: changes\nTask 7 scores: spec 8 / scope 16 / verification 15 / quality 9\n'
+  for i in 1 2 3 4 5 6 7 8; do printf 'note %s: an extra verdict line\n' "$i"; done
+  printf '\n## Findings\n- [Important] (Task 7) seven.txt:1 — wrong value\n\n## Cannot verify\n'
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf -- '- (Task 6) item %s\n' "$i"; done
+} > "$GR_WS/group-1,2,4,6,7-review-report.md"
+gr_run verdict docs/plan.md 1 2 4 6 7 --group
+check "verdict, five members: exit 0" "$gr_rc" "0"
+check "verdict, five members: one verdict line per member" "$(grep -c '^Task [0-9]: spec ' <<<"$gr_out")" "5"
+check "verdict, five members: the last member's failing verdict is shown" \
+  "$(grep '^Task 7: ' <<<"$gr_out")" "Task 7: spec fail; quality changes; scores spec 8 / scope 16 / verification 15 / quality 9"
+check "verdict, five members: the extra Verdict lines are cut" "$(grep -c '^note ' <<<"$gr_out") $(grep '^verdict: ' <<<"$gr_out")" "6 verdict: 2 more lines in the report"
+check "verdict, five members: the cannot-verify list is cut" "$(grep -c '^cannot-verify: (Task 6)' <<<"$gr_out")" "1"
+check "verdict, five members: and says how many it cut" "$(grep -c '^cannot-verify: 11 more in the report$' <<<"$gr_out")" "1"
+check "verdict, five members: at most 20 lines besides the finding lines" "$(grep -cvE '^(Critical|Important) ' <<<"$gr_out")" "20"
+
 # The re-review judge writes its report where the prompt says; a fresh round
 # discards a stale one at that path.
 rr_reset
@@ -1105,7 +1130,8 @@ REPORT
 rr_run verdict docs/plan.md 1 3 --group
 check "verdict --group: exit 0" "$rr_rc" "0"
 check "verdict --group: the digest names the group report" "$(head -n 1 <<<"$rr_out")" "group 1,3: verdict from $RR_WS/group-1,3-review-report.md"
-check "verdict --group: the per-task verdict lines" "$(grep -c '^Task [13] \(spec\|quality\|scores\): ' <<<"$rr_out")" "6"
+check "verdict --group: one verdict line per member" "$(grep '^Task [13]: spec ' <<<"$rr_out" | tr '\n' ';')" \
+  "Task 1: spec pass; quality changes; scores spec 16 / scope 17 / verification 15 / quality 12;Task 3: spec pass; quality approved; scores spec 18 / scope 18 / verification 17 / quality 17;"
 check "verdict --group: the finding names its task" "$(grep -E '^(Critical|Important) ' <<<"$rr_out")" "Important 1 app.txt:3 — off by one"
 R1=$(( $(rr_state 1 .round) + 1 ))
 check "verdict --group: a fix file for the task with findings" "$(first_block "$RR_WS/task-1-fix-$R1.md")" "- app.txt:3: off by one;"
@@ -1243,6 +1269,12 @@ check "verdict: Minor findings go to the ledger as deferred" \
   "$(grep -cE '^Task 1: minor \(deferred\): (app\.txt:5 — naming|test\.txt:0 — no edge case)$' "$RR_WS/progress.md")" "2"
 rr_run verdict docs/plan.md 1
 check "verdict: a second run adds no ledger line" "$(grep -c '^Task 1: minor (deferred): app.txt:5 — naming$' "$RR_WS/progress.md")" "1"
+# A ledger past the pipe buffer: the Minor line near its top is still found.
+cp "$RR_WS/progress.md" "$RR_TMP/progress.keep"
+awk 'BEGIN { for (i = 0; i < 4000; i++) printf "# filler line %04d of a long ledger, padded to sixty characters\n", i }' >> "$RR_WS/progress.md"
+rr_run verdict docs/plan.md 1
+check "verdict: a long ledger adds no second Minor line" "$(grep -c '^Task 1: minor (deferred): app.txt:5 — naming$' "$RR_WS/progress.md")" "1"
+cp "$RR_TMP/progress.keep" "$RR_WS/progress.md"
 
 # The fix file feeds the re-review, and the re-review's verdict writes the next round's.
 rr_edit app.txt add4
@@ -1268,6 +1300,15 @@ check "verdict --rereview: passes against the state rereview recorded" "$rr_rc" 
 check "verdict --rereview: reads the round's report" "$(head -n 1 <<<"$rr_out")" "task 1: verdict from $RR_WS/task-1-rereview-1-report.md"
 check "verdict --rereview: the round lines" "$(grep -E '^(fix round|open): ' <<<"$rr_out" | tr '\n' ';')" "fix round: open;open: 1;"
 check "verdict --rereview: writes the next round's fix file" "$(first_block "$RR_WS/task-1-fix-2.md")" "- other.txt:4: stale copy;"
+# Round 2 is the cap: what is still open goes to the breaker, not a third fix file.
+jq '.round = 2' "$RR_WS/task-1-step.json" > "$RR_WS/task-1-step.json.tmp" && mv "$RR_WS/task-1-step.json.tmp" "$RR_WS/task-1-step.json"
+cp "$RR_WS/task-1-rereview-1-report.md" "$RR_WS/task-1-rereview-2-report.md"
+rr_run verdict docs/plan.md 1 --rereview 2
+check "verdict --rereview 2: exit 0" "$rr_rc" "0"
+check "verdict --rereview 2: the fix line names the breaker" "$(grep '^fix: ' <<<"$rr_out")" "fix: breaker (round 2 of 2; 1 finding)"
+check "verdict --rereview 2: no third fix file" "$([ -e "$RR_WS/task-1-fix-3.md" ] && echo yes || echo no)" "no"
+rm -f "$RR_WS/task-1-rereview-2-report.md"
+jq '.round = 1' "$RR_WS/task-1-step.json" > "$RR_WS/task-1-step.json.tmp" && mv "$RR_WS/task-1-step.json.tmp" "$RR_WS/task-1-step.json"
 
 # Failures: a missing or malformed report exits 5 and writes no fix file.
 rr_run verdict docs/plan.md 1 --rereview 2
