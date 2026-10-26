@@ -1,2 +1,3 @@
 - 2026-10-24 `docs/dforge/plans/2026-10-24-ui-ux-skill.md` — merged into `main` at c98d3488
 - 2026-10-26 `docs/dforge/plans/2026-10-25-typed-seats-and-drafting.md` — merged into `main` at af9c16e0
+- 2026-10-26 `docs/dforge/plans/2026-10-26-task-loop-steps.md` — merged into `main` at a9855a3a
