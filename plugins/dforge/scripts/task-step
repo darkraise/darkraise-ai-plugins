@@ -225,7 +225,7 @@ cmd_rereview() (
     cp "$tmp/prompt" "$prompt"
   fi
 
-  check_dir=$(jq -r '.reviewCheck.cwd // empty' "$state" | tr -d '\r')
+  check_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
   [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
   snap=$(tracked_snapshot "$check_dir")
   now=$(date +%s)

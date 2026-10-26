@@ -1148,6 +1148,12 @@ check "wave group: the stderr names that checkout" "$(grep -cF "in $RR_TMP/wt3;"
 check "wave group: and the file" "$(grep -cx 'app.txt' <<<"$rr_err")" "1"
 rr_run verdict docs/plan.md 1 3 --group --cwd "$RR_TMP/wt1"
 check "wave group: --cwd cannot stand for two checkouts" "$rr_rc" "2"
+printf -- '- app.txt: judge edit\n' > "$RR_WS/task-3-fix-1.md"
+rr_run rereview docs/plan.md 3
+check "wave group: a member's re-review snapshots its own checkout" "$rr_rc $(rr_state 3 .reviewCheck.cwd)" "0 $RR_TMP/wt3"
+printf 'member edit\n' >> "$RR_TMP/wt3/app.txt"
+rr_run verdict docs/plan.md 3 --rereview 1
+check "wave group: a member's re-review verdict checks its own checkout" "$rr_rc $(grep -cF "in $RR_TMP/wt3;" <<<"$rr_err")" "6 1"
 rr_git worktree remove --force "$RR_TMP/wt1"
 rr_git worktree remove --force "$RR_TMP/wt3"
 
