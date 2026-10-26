@@ -593,12 +593,12 @@ session is doing:
 │   impl-sonnet-low ×1                              │
 │   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
 ╰───────────────────────────────────────────────────╯
-╭ Run ────────────────────────────── round 2/5 · 3/6 ╮
+╭ Run ────────────────────────────── round 2/2 · 3/6 ╮
 │ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
 │ plan docs/plans/cockpit.md                        │
 │ ✓ Task 3: Draw the context section · clean        │
 │ ▸ Task 4: Draw usage and agents                   │
-│   round 2/5 · impl-sonnet-low                     │
+│   round 2/2 · impl-sonnet-low                     │
 │ ○ Task 5: Track the plan and repo                 │
 ╰───────────────────────────────────────────────────╯
 ╭ Repo ─────────────────────────────────── ● dirty ╮
@@ -752,7 +752,7 @@ command adds a red line.
 
 ```
 ╭─ you@example.com · subscription · Remote ● connected ──────────────────────────────────────────────────── Expand ─╮
-│ ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1  ·  Opus 5.5  ·  xhigh  ·  ▸ 2m14s · Bash  ·  run 3/6 r2/5  ·  ● 1 agent │
+│ ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1  ·  Opus 5.5  ·  xhigh  ·  ▸ 2m14s · Bash  ·  run 3/6 r2/2  ·  ● 1 agent │
 │ ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  cache ▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m  ·  7d 61%     │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -1111,10 +1111,13 @@ differences:
 3. **Escalation ladder.** Round 2 and the BLOCKED handler climb
    [ladder.md](reference/ladder.md)'s table, ending in one split and then the
    reserve chain. An external task hands back to its Claude implementer instead.
+   A `Host: codex` plan escalates through the `codex-v4` selector over its
+   five rounds instead.
 4. **Cache-aware resumes.** Fix round 1 resumes the implementer only while
    its cache is warm - returned under five minutes ago, or under about 100k
    tokens of context - and otherwise dispatches a fresh copy on the same tier;
-   round 2 goes to the successor rung.
+   round 2 goes to the successor rung. On a `Host: codex` plan rounds 1-3
+   resume by that rule and rounds 4 and 5 are fresh dispatches.
 5. **One ledger grammar.** Every task gets an assigned line and a complete line
    carrying its scores and a checkpoint (done, verified, remaining, discovered
    issues, assumptions), which crash recovery and the final review read.
