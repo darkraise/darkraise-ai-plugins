@@ -82,16 +82,37 @@ seat: the plan's tests were written by the same author as its code.
 
 ## The report
 
-`[WORKSPACE]/acceptance-report.md`:
+Write your full report to `[WORKSPACE]/acceptance-report.md`, the report
+file, and nothing else outside the test layout. It opens with a
+`## Verdict` section of fixed `key: value` lines, then `## Findings` with one
+line per `fail`, `flaky`, mutation `green` or `cannot-test: no-surface` row,
+as `- [Important] <file>:<line> — [qa] A<n>: <result> — <one-liner>` (the
+acceptance file and the test's line), then `## Results`, the table and the
+command:
 
 ```markdown
+## Verdict
+pass: 2
+fail: 1
+flaky: 0
+cannot-test: 0
+mutation green: 0
+
+## Findings
+- [Important] tests/foo.acceptance.sh:41 — [qa] A3: fail — an empty list is saved
+
+## Results
 | Statement | Test | Result | Mutation |
 |---|---|---|---|
 | A1 | `tests/foo.acceptance.sh` A1: rejects an empty name | pass | n/a |
 | A2 | `tests/foo.acceptance.sh` A2: never writes outside the root | pass | red |
+| A3 | `tests/foo.acceptance.sh` A3: refuses an empty list | fail | n/a |
 
-Command: timeout 300 bash tests/foo.acceptance.sh → 2 passed, 0 failed
+Command: timeout 300 bash tests/foo.acceptance.sh → 2 passed, 1 failed
 ```
+
+Then reply in at most 10 lines: the counts by result, the mutation counts
+and the report path. The session reads the report, not your reply.
 
 Result is one of `pass`, `fail`, `flaky`, `cannot-test: ambiguous` (the
 statement can be read two ways; name both readings in the Test cell),
