@@ -5,7 +5,9 @@
 #
 # One row per run goes to <state>/suites.tsv (<state> is `dforge-path state`):
 #   <HEAD sha> <clean|dirty> <command> <exit> <log path> <epoch>
-# separated by tabs; the output goes to <state>/suites/<epoch>-<pid>.log. Clean
+# separated by tabs, the command's arguments shell-quoted (printf %q) so two
+# commands that split the same text differently never share a row; the output
+# goes to <state>/suites/<epoch>-<pid>.log. Clean
 # means `git status --porcelain --untracked-files=all` printed nothing before
 # and after the run; ignored files, such as a local .env, are outside the
 # guarantee. A pass is reused only from a row with the same HEAD, the same
@@ -57,7 +59,8 @@ mkdir -p "$state/suites" || die "cannot create $state/suites"
 dforge_self_ignore "$state"
 
 record="$state/suites.tsv"
-command_text=$(printf '%s' "$*" | tr '\t\r\n' '   ')
+command_text=$(printf '%q ' "$@")
+command_text=${command_text% }
 subdir=$(git rev-parse --show-prefix 2>/dev/null | tr -d '\r')
 [ -z "$subdir" ] || command_text="(${subdir%/}) $command_text"
 short=${head:0:7}

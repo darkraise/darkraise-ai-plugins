@@ -222,5 +222,12 @@ out=$(cd "$REPO/sub" && bash "$SUITE" -- bash "$TMP/probe.sh" 0 "$TMP/out-tap-pa
 has "a repeat in the subdirectory is reused" "$out" "suite: reused pass at"
 check "the subdirectory reuse does not run the command" "$(runs)" "$((before + 1))"
 
+# --- arguments that differ only in where the spaces fall are different commands
+before=$(runs)
+run -- bash -c 'echo x >> "$PROBE_RUNS"; exit 0' x
+run -- bash -c 'echo x >> "$PROBE_RUNS";' exit 0 x
+check "arguments split differently do not reuse a pass" "$(runs)" "$((before + 2))"
+check "the row keeps the argument boundaries" "$(field 3)" "bash -c echo\\ x\\ \\>\\>\\ \\\"\\\$PROBE_RUNS\\\"\\; exit 0 x"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
