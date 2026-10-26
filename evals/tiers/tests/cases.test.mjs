@@ -77,6 +77,8 @@ test('scoreSlice scores the merged task with spec 2 under the relaxed Rule S', (
   const seven = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(x => `${x}.sh`);
   assert.deepEqual(scoreSlice([m(1, seven.slice(0, 4), [], { coupling: 1 }), m(2, seven.slice(4), [], {})]), { reason: 'Rule S: files 3 + spec 2 + coupling 1 = 6' });
   assert.deepEqual(scoreSlice([m(1, seven.slice(0, 4), [], {}), m(2, seven.slice(2, 6), [], { risk: 1 })]).axes, { files: 2, spec: 2, coupling: 0, risk: 1, total: 5 });
+  // Reducible 5 (files 2 + spec 2 + coupling 1) is the largest slice Rule S keeps.
+  assert.deepEqual(scoreSlice([m(1, seven.slice(0, 4), [], { coupling: 1 }), m(2, [], [], {})]).axes, { files: 2, spec: 2, coupling: 1, risk: 0, total: 5 });
   assert.deepEqual(scoreSlice([m(1, ['a.sh'], [], { coupling: 1 }), m(2, ['b.sh'], [], {})]), { reason: 'total 4: §1 assigns no slice arm' });
   assert.deepEqual(scoreSlice([m(5, ['a.sh'], [], { spec: 3 }), m(6, ['b.sh'], [], {})]), { reason: 'Task 5 scores spec 3' });
 });
@@ -89,6 +91,16 @@ test('slices merges consecutive eligible tasks committed in task order', () => {
   assert.equal(sliceId(found[0]), 'l-fixture-t1-2');
   const swapped = slices(all.map(c => c.task === 1 ? { ...c, result: fx.shout } : c.task === 2 ? { ...c, base: fx.planned, result: fx.greet } : c));
   assert.equal(swapped[0].reason, 'the tasks were not committed in task order');
+});
+
+test('slices takes three-task windows and never spans an ineligible task', () => {
+  const third = { ...byTask(2), task: 3, base: fx.shout, result: fx.shout, allowed: ['src/third.sh', 'tests/third.test.sh'], tests: ['tests/third.test.sh'] };
+  const three = all.filter(c => c.task !== 3 && c.task <= 3).concat(third);
+  const windows = slices(three);
+  assert.deepEqual(windows.map(w => w.tasks), [[1, 2, 3], [1, 2], [2, 3]]);
+  assert.deepEqual(windows[0].axes, { files: 2, spec: 2, coupling: 0, risk: 2, total: 6 });
+  const gap = slices(three.map(c => c.task === 2 ? { plan: c.plan, task: 2, title: c.title, reason: 'no test file in the Files block' } : c));
+  assert.deepEqual(gap.map(w => w.tasks), []);
 });
 
 test('orderSlices goes round-robin across plans and pickSlices checks until the cap', async () => {
@@ -115,6 +127,7 @@ test('golden checks a slice against its merged brief and its last commit', async
   const [slice] = slices(all);
   assert.equal(await golden(slice), null);
   assert.equal(await golden({ ...slice, result: fx.greet }), 'tests/shout.test.sh fails on the result commit');
+  assert.equal(await golden({ ...slice, result: slice.base }), 'stripping removes no code');
 });
 
 test('readManifest reads a slice row with its task list', () => {
