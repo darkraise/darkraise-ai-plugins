@@ -9,9 +9,9 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 Write comprehensive implementation plans assuming the engineer has zero context
 for our codebase and questionable taste. Document everything they need to know:
-which files to touch for each task, code, testing, docs they might need to
-check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI.
-TDD. Frequent commits.
+which files to touch for each task, the interfaces it produces and consumes,
+the tests that pin it, docs they might need to check, how to verify it. Give
+them the whole plan as feature-slice tasks. DRY. YAGNI. TDD. Frequent commits.
 
 Assume they are a skilled developer, but know almost nothing about our toolset
 or problem domain. Assume they don't know good test design very well. Small
@@ -100,16 +100,9 @@ fresh reviewer's gate. When drawing task boundaries: fold setup,
 configuration, scaffolding, and documentation steps into the task whose
 deliverable needs them; split only where a reviewer could meaningfully
 reject one task while approving its neighbor. Each task ends with an
-independently testable deliverable.
-
-## Bite-Sized Task Granularity
-
-**Each step is one action (2-5 minutes):**
-- "Write the failing test" - step
-- "Run it to make sure it fails" - step
-- "Implement the minimal code to make the test pass" - step
-- "Run the tests and make sure they pass" - step
-- "Commit" - step
+independently testable deliverable. A task is a feature slice: on a Claude
+plan its code task carries no implementation code and is scored with spec 2
+(Assign an implementer, step 1).
 
 ## Plan Document Header
 
@@ -359,17 +352,25 @@ def test_specific_behavior():
 Run: `pytest tests/path/test.py::test_name -v`
 Expected: FAIL with "function not defined"
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 3: Implement**
 
-```python
-def function(input):
-    # the complete, real implementation - every line the implementer types
-    ...
-```
+1. [The function or section to change, named by its signature, a heading or
+   a quoted anchor line, never by a line number alone.]
+2. [Its inputs and outputs, the exact strings and exit codes Contracts names,
+   the edge cases, and what must not change.]
 
-Step 3 carries the whole implementation. A body that returns a constant to
-satisfy the test is a plan failure: `plan-review.md` scores it LOW, and the
-implementer will transcribe it literally.
+A task carries its files, its interfaces, the complete code of its tests, the
+decisions it embodies, and the commands that verify it. Step 3 describes the
+implementation; it carries no implementation code. Implementation code
+appears only where no test can pin the behaviour: a configuration value, a
+generated-file or migration command, or a fixed constant the spec names. A
+test that still passes with `return <constant>` or with the implementation
+deleted is a plan failure: `plan-review.md` scores it LOW.
+
+On a Codex host, tasks keep the code-given shape: Step 3 is **Write the
+implementation** and carries every line of it, because
+[native-codex.md](../../reference/native-codex.md) keeps Rule S at
+`reducible >= 4`.
 
 Step 1's test sits at the lowest layer that can fail for the task's change. Plan
 an end-to-end test only for a new user journey, never for an edge case a unit or
@@ -410,12 +411,15 @@ user's inline or delegation preference on either host.
    task as its brief will carry it — the task text plus the header's Global
    Constraints and Contracts: if those contain the complete code and exact
    signatures, spec completeness is 0. Count file shapes, not file instances.
-2. **Apply Rule S before the table.** If `files + spec + coupling >= 4`, split
-   the task where a reviewer could reject one half while approving the other,
-   and re-score both halves. If `spec = 3`, the approach is undecided: settle
-   it with dforge:selecting-approaches, rewrite the task with the
-   decision in its steps, and re-score. Never answer a reducible axis with a
-   bigger model.
+   A Claude plan's code task carries its tests and interfaces but no
+   implementation, so it scores spec 2.
+2. **Apply Rule S before the table.** On a Claude plan, if
+   `files + spec + coupling >= 6`, split the task where a reviewer could
+   reject one half while approving the other, and re-score both halves; on a
+   `Host: codex` plan, if it is `>= 4`, do the same. If `spec = 3`, the
+   approach is undecided: settle it with dforge:selecting-approaches, rewrite
+   the task with the decision in its steps, and re-score. Never answer a
+   reducible axis with a bigger model.
 3. **Assign** from the assignment table, which the total indexes directly.
    Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
    tier. Only a human edit puts one in a plan.
@@ -501,10 +505,10 @@ Every step must contain the actual content an engineer needs. These are
 - "TBD", "TODO", "implement later", "fill in details"
 - "Add appropriate error handling" / "add validation" / "handle edge cases"
 - "Write tests for the above" (without actual test code)
-- "Similar to Task N" (repeat the code — the engineer may be reading tasks out
-  of order)
-- Steps that describe what to do without showing how (code blocks required for
-  code steps)
+- "Similar to Task N" (repeat the test code or the description — the engineer
+  may be reading tasks out of order)
+- Tests that describe behaviour without asserting it (every test step carries
+  its complete test code)
 - References to types, functions, or methods not defined in any task
 
 ## Self-Review
@@ -597,12 +601,14 @@ A revision your human partner asks for gets one new round.
 3. **Fix and repeat.** Fix every Critical and Important finding and re-lint;
    Minor findings are advisory. Run the next round only when a round returned
    a Critical finding or any score of 8 or below, and only while the round is
-   below the `cap=` that `review-route` printed: 1 when the plan's highest
-   task total is 3 or less, 2 for 4 or 5, 3 for 6 (on a Codex-host plan, the
-   raw total, not the weighted routing score). A delta round replaces a
-   fresh full review. At the cap, a Critical finding earns exactly one more
-   delta round (`reason=cap-critical`), scoped to its fix, which earns no
-   other. Any Critical finding still open after it, and any score of 8 or
+   below the `cap=` that `review-route` printed.
+   On a Claude plan the cap is 2 whatever the task totals: round 2 is the
+   delta round, and there is no third. On a Codex-host plan the cap follows the
+   highest raw task total, not the weighted routing score: 1 when it is 3 or
+   less, 2 for 4 or 5, 3 for 6. At the cap a Critical finding
+   earns exactly one more delta round (`reason=cap-critical`), scoped to its
+   fix, which earns no other. A delta round replaces a fresh full review. Any
+   Critical finding still open after the last round, and any score of 8 or
    below at the cap, go to your human partner. A borderline score (9-13) gets
    a one-line decision in the plan's Assumptions.
 4. **Record.** Only now, add the header line

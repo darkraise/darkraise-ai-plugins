@@ -145,5 +145,51 @@ names "drafting: Codex drafts in the session" "$WP" 'On a Codex host, draft ever
 names "drafter prompt: the slice path" "$DPR" '**Write to:** [SLICE_PATH]'
 names "drafter prompt: the scratch worktree" "$DPR" 'Write nothing in this checkout except [SLICE_PATH].'
 
+# The contract-and-test plan shape (docs/dforge/specs/2026-10-26-faster-plans-design.md §1, §5).
+# Matched with line breaks and runs of spaces folded, so a phrase may wrap.
+flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
+says() { # says <label> <file> <text>
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
+}
+lacks() { # lacks <label> <file> <text>
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "no"
+}
+PRP="$P/skills/writing-plans/references/plan-reviewer-prompt.md"
+AI="$P/skills/writing-plans/references/assigning-implementers.md"
+PR="$P/criteria/plan-review.md"
+ALLOWED='a configuration value, a generated-file or migration command, or a fixed constant the spec names'
+says "shape: a task is a feature slice" "$WP" 'A task is a feature slice'
+lacks "shape: bite-sized granularity is gone" "$WP" '## Bite-Sized Task Granularity'
+lacks "shape: no bite-sized wording" "$WP" 'bite-sized'
+says "shape: the task carries its interfaces, tests and verify commands" "$WP" 'its interfaces, the complete code of its tests, the decisions it embodies'
+says "shape: implementation code only where no test pins it" "$WP" "$ALLOWED"
+says "shape: Step 3 describes the implementation" "$WP" 'Step 3 describes the implementation; it carries no implementation code'
+lacks "shape: Step 3 no longer carries the implementation" "$WP" 'Step 3 carries the whole implementation.'
+says "shape: a Codex host keeps code-given tasks" "$WP" 'On a Codex host, tasks keep the code-given shape'
+says "shape: tests that assert nothing are placeholders" "$WP" 'Tests that describe behaviour without asserting it'
+lacks "shape: the old how-not-shown ban is reworded" "$WP" 'Steps that describe what to do without showing how'
+says "shape: a Claude code task scores spec 2" "$WP" 'so it scores spec 2'
+says "shape: Rule S at 6 on a Claude plan" "$WP" 'On a Claude plan, if `files + spec + coupling >= 6`'
+says "shape: Rule S at 4 on a Codex plan" "$WP" 'on a `Host: codex` plan, if it is `>= 4`'
+lacks "shape: no host-blind Rule S at 4" "$WP" 'If `files + spec + coupling >= 4`, split'
+says "drafter prompt: tests and interfaces, not code" "$DPR" 'gives the complete code of its tests'
+says "drafter prompt: implementation code only where no test pins it" "$DPR" "$ALLOWED"
+says "drafter prompt: tests fail on the current tree" "$DPR" 'confirm each fails for the reason the task fixes'
+lacks "drafter prompt: no complete code of every step" "$DPR" 'gives the complete code of every step'
+lacks "drafter prompt: no prototyping" "$DPR" 'You may prototype'
+says "plan reviewer: a missing implementation body is not a finding" "$PRP" 'a missing implementation body is not a finding'
+says "plan reviewer: a stub or missing test is" "$PRP" 'a missing or stub test is'
+says "plan review criteria: a precise description is not a gap" "$PR" 'a task that describes its implementation precisely without its code is not a gap'
+says "plan review criteria: implementation code only where no test pins it" "$PR" "$ALLOWED"
+lacks "plan review criteria: no host-blind complete-code rule" "$PR" 'exact file paths, every code step carries the complete code'
+says "assigning: a Claude code task scores spec 2" "$AI" 'gives its tests and interfaces but not its implementation, so it scores 2'
+says "assigning: the Claude cap is 8" "$AI" 'Rule S caps a compliant Claude total at 8'
+lacks "assigning: no cap at 6" "$AI" 'Rule S also caps a compliant total at 6'
+says "spec review: Fable's second round needs an open Blocker or High" "$BS" 'a second only when round 1 leaves a Blocker or High finding open'
+says "spec review: the folded second round needs an open finding" "$BS" 'which runs only when a Blocker or High finding is still open'
+lacks "spec review: no unconditional answer check" "$BS" 'which checks each Blocker and High answer'
+says "auto-run.md: Fable's second round needs an open Blocker or High" "$P/reference/auto-run.md" 'A second runs only when round 1 leaves a Blocker or High finding open'
+lacks "auto-run.md: no unconditional second round" "$P/reference/auto-run.md" 'At most two Fable rounds run (review, revise, re-review)'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -385,9 +385,10 @@ when the setting is `ask`. Then:
    its `Q:` until the spec review.
 4. **Reviews before the stop.** Run the spec self-review round, then the
    architecture critic, then `dforge:judge-fable` on the spec against its
-   `## Decisions`, at most two rounds (review, revise, re-review); without a
-   risk or new-subsystem trigger, Fable's first round takes the critic's place
-   (Architecture critic). Apply what
+   `## Decisions`: one round, and a second only when round 1 leaves a Blocker
+   or High finding open, its own or a folded critic's, checking only those
+   answers; without a risk or new-subsystem trigger, Fable's first round
+   takes the critic's place (Architecture critic). Apply what
    Fable rules and list each ruling as one line in a `## Review rulings`
    section of the spec.
 5. **The spec review**, the one stop: one message, its questions asked with the
@@ -550,7 +551,8 @@ the critic's job as well: the criteria path
 scored, and the critic prompt's Output section, so its reply carries the
 critic's ranked findings under their own heading beside its rulings. Handle
 those findings exactly as the critic's below, before Fable's second round,
-which checks each Blocker and High answer. Two seats find more than one on a
+which runs only when a Blocker or High finding is still open and checks only
+those answers. Two seats find more than one on a
 risky or new design, so a risk or new-subsystem trigger keeps the separate
 critic round.
 

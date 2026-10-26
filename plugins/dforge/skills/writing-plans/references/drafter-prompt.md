@@ -27,13 +27,17 @@ Subagent (dforge:drafter-sonnet):
     order, with the titles the Task index gives, and nothing else: no
     header, no index and no assignment lines (`**Implementer:**`,
     `**Evaluation:**`); the session scores the tasks after joining. Each task
-    names its exact files, gives the complete code of every step, and ends
-    with a check that proves it.
+    names its exact files and its interfaces, gives the complete code of its
+    tests, and describes the implementation precisely without its code:
+    implementation code appears only for a configuration value, a
+    generated-file or migration command, or a fixed constant the spec names.
+    Each task ends with the commands that verify it.
 
-    Read the code your tasks change. You may prototype and run tests, but
-    only in a scratch worktree of your own
+    Read the code your tasks change and the suite each task's tests join.
+    Run your tests against the current tree in a scratch worktree of your own
     (`git worktree add --detach <scratch dir> HEAD`, removed before you
-    finish). Write nothing in this checkout except [SLICE_PATH].
+    finish), and confirm each fails for the reason the task fixes.
+    Write nothing in this checkout except [SLICE_PATH].
 
     You do not dispatch subagents.
 

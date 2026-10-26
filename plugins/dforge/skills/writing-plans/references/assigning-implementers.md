@@ -7,7 +7,9 @@ section. This file holds the reasons, for when a rule looks arbitrary.
 
 "Spec completeness" is a fact about the plan text: if the task's steps contain
 the complete code to write, that axis is 0 no matter how clever the code is.
-Score the task as the plan describes it, not as you imagine it might grow.
+A Claude plan's code task gives its tests and interfaces but not its
+implementation, so it scores 2. Score the task as the plan describes it, not
+as you imagine it might grow.
 
 Count file shapes, not file instances: sixteen files generated from one template
 carry one decision, and the axis measures decisions.
@@ -18,8 +20,9 @@ Three of the four axes measure how you drew the task, not how hard the change
 is. Buying capability to cover a decomposition defect keeps the defect and pays
 for it. If a task keeps failing Rule S no matter how you split it, that is a
 real finding about the work - say so in the plan rather than scoring around it.
-Rule S also caps a compliant total at 6, which is why the assignment table stops
-there; see [ladder.md](../../../reference/ladder.md).
+Rule S caps a compliant Claude total at 8 (`reducible <= 5` plus risk 3), which
+is why the assignment table stops there; a `Host: codex` plan keeps
+`reducible <= 3`. See [ladder.md](../../../reference/ladder.md).
 
 ## Reserve agents are never an assignment output
 

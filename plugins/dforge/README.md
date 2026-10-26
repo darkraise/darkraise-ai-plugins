@@ -230,8 +230,8 @@ tasks totalling 0 to 6, and `gpt-6-astra` followed by `judge-opus` at risk 3. A 
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
 Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
 `judge-opus` 4 to 6 and at risk 3. Plan review takes Astra for round 1
-(`judge-opus` when Codex is off) and `judge-opus` for delta rounds,
-capped by the plan's highest task total.
+(`judge-opus` when Codex is off) and `judge-opus` for the delta round:
+at most two rounds on a Claude plan.
 The final whole-branch review runs on `judge-opus`, its one fix subagent on
 the highest tier among the tasks the findings touch, and with `codexReview` on gains a Codex round. When both reviewers return findings,
 a fresh `judge-opus` dedupes and verifies them. No review route names `judge-fable`:

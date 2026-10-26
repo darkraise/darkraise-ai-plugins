@@ -25,6 +25,11 @@ Subagent ([JUDGE]):
     the task text plus the header's Global Constraints and Contracts, nothing
     else.
 
+    On a Claude plan a code task gives its interfaces, the complete code of
+    its tests and its verify commands, not its implementation: a missing
+    implementation body is not a finding, while a missing or stub test is. On
+    a `Host: codex` plan every code step carries its complete code.
+
     You cannot run commands, modify files, or dispatch subagents.
 
     ## Findings
@@ -149,6 +154,11 @@ Subagent ([JUDGE]):
     what you may read: a fix in one task can break a name another task
     consumes. For every name, path, signature, helper or test the delta adds,
     removes or renames, read the tasks that produce and consume it.
+
+    On a Claude plan a code task gives its interfaces, the complete code of
+    its tests and its verify commands, not its implementation: a missing
+    implementation body is not a finding, while a missing or stub test is. On
+    a `Host: codex` plan every code step carries its complete code.
 
     You cannot run commands, modify files, or dispatch subagents.
 

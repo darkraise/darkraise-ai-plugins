@@ -59,28 +59,27 @@ if [ "$native" -eq 1 ] && [ "$1" != --plan-round ] && [ "$1" != --final-fix ]; t
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 
-# plan_shape — sets cap (plan-review rounds from the highest task total: 1 for
-# <= 3, 2 for 4-5, 3 for 6) and intricate (1 when a task is at risk 3 or
-# totals 6). A plan with no Evaluation line gets cap 1.
+# plan_shape — sets intricate (1 when a task is at risk 3 or totals 6) for
+# --ruling. It no longer sets cap: a Claude plan's review cap is a flat 2.
 plan_shape() {
-  local n t r max=-1
-  cap=1 intricate=0
+  local n t r
+  intricate=0
   while IFS=$'\t' read -r n t r; do
     [ -n "$n" ] || continue
     [ "$t" != "?" ] || die "Task $n: the Evaluation line does not parse"
     [ "$t" != "-" ] || continue
-    [ "$t" -le "$max" ] || max=$t
     if [ "$r" -ge 3 ] || [ "$t" -ge 6 ]; then intricate=1; fi
   done < <(plan_scores "$src")
-  cap_for "$max"
 }
 
-cap_for() { # cap_for MAX — cap from the highest task total
+# cap_for MAX — a Codex-host plan's review cap from its highest raw task total;
+# a Claude plan's cap does not come from here.
+cap_for() {
   cap=1
   if [ "$1" -ge 6 ]; then cap=3; elif [ "$1" -ge 4 ]; then cap=2; fi
 }
 
-# native_shape — sets cap as plan_shape does, from each task's raw total
+# native_shape — sets cap through cap_for, from each task's raw total
 # (files+spec+coupling+risk, still 0-6), never the weighted routing score: the
 # bands were drawn for the raw total.
 native_shape() {
@@ -264,8 +263,12 @@ case "$1" in
   --plan-round)
     [ $# -eq 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
     r=$2 claude=$OPUS
-    if [ "$native" -eq 1 ]; then native_shape; else plan_shape; fi
-    if [ "$r" -gt $((cap + 1)) ]; then
+    # A Claude plan's cap is 2 whatever its totals, with no cap-critical round,
+    # so it reads no Evaluation line.
+    if [ "$native" -eq 1 ]; then native_shape; else cap=2; fi
+    if [ "$native" -eq 0 ] && [ "$r" -gt "$cap" ]; then
+      die "plan round $r is past the cap ($cap)"
+    elif [ "$r" -gt $((cap + 1)) ]; then
       die "plan round $r is past the cap ($cap) and its one cap-critical round"
     elif [ "$native" -eq 1 ]; then
       # Every round takes the judge floor's pair; there is no external Codex round.
@@ -277,10 +280,8 @@ case "$1" in
       printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round cap=%s\n' "$claude" "$cap"
     elif [ "$r" -eq 1 ]; then
       printf 'review-seat plan-round=1 primary=%s fallback=- reason=codex-off cap=%s\n' "$claude" "$cap"
-    elif [ "$r" -le "$cap" ]; then
-      printf 'review-seat plan-round=%s primary=%s fallback=- reason=round cap=%s\n' "$r" "$OPUS" "$cap"
     else
-      printf 'review-seat plan-round=%s primary=%s fallback=- reason=cap-critical cap=%s\n' "$r" "$OPUS" "$cap"
+      printf 'review-seat plan-round=%s primary=%s fallback=- reason=round cap=%s\n' "$r" "$OPUS" "$cap"
     fi
     exit 0 ;;
   --ruling)

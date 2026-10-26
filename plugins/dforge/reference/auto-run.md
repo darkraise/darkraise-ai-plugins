@@ -75,9 +75,11 @@ critic Blocker, which takes the note below:
 
     scripts/register add <register> "<item>" --state deferred --note "Fable: <its words>"
 
-At most two Fable rounds run (review, revise, re-review); anything still open
-after the second is deferred the same way. Then write the plan in this
-session: `scripts/context-size --plan` does not run in an auto run.
+Fable runs one round. A second runs only when round 1 leaves a Blocker or High
+finding open, its own or a folded critic's, and checks only those answers;
+anything still open after the last round is deferred the same way. Then write
+the plan in this session: `scripts/context-size --plan` does not run in an
+auto run.
 
 **Acceptance statements and critic findings in the spec phase:**
 

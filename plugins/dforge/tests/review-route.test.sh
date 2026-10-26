@@ -177,25 +177,24 @@ route --task 1 5
 check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dforge:judge-sonnet-high fallback=- reason=executor"
 
 rround "$TMP/round.md" 1
-check "an intricate plan's round 1 is Codex with an Opus fallback, cap 3" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=3"
+check "a Claude plan's round 1 is Codex with an Opus fallback, cap 2 whatever its totals" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
 rround "$TMP/light.md" 1
-check "a plain plan's round 1 falls back to Opus, cap 1" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
+check "a light plan's round 1 is cap 2 too" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
 rround "$TMP/light.md" 2
-check "cap 1: round 2 is the cap-critical round" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=cap-critical cap=1"
+check "a light plan's round 2 is a round within cap 2" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
 rround "$TMP/light.md" 3
-check "cap 1: round 3 exits 2" "$rc" "2"
+check "a Claude plan has no round 3" "$rc" "2"
 rround "$TMP/mid.md" 2
 check "highest total 5: round 2 is within cap 2" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
-rround "$TMP/mid.md" 3
-check "cap 2: round 3 is cap-critical" "$out" "review-seat plan-round=3 primary=dforge:judge-opus fallback=- reason=cap-critical cap=2"
 rround "$TMP/round.md" 3
-check "cap 3: round 3 is a round" "$out" "review-seat plan-round=3 primary=dforge:judge-opus fallback=- reason=round cap=3"
-rround "$TMP/round.md" 4
-check "cap 3: round 4 is cap-critical" "$out" "review-seat plan-round=4 primary=dforge:judge-opus fallback=- reason=cap-critical cap=3"
-rround "$TMP/round.md" 5
-check "cap 3: round 5 exits 2" "$rc" "2"
+check "an intricate Claude plan has no cap-critical round 3" "$rc" "2"
+shape_plan "$TMP/slice.md" '**Evaluation:** files 2 - spec 2 - coupling 1 - risk 3 = 8'
+rround "$TMP/slice.md" 2
+check "a total-8 plan's round 2 is a round within cap 2" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
+rround "$TMP/slice.md" 3
+check "a total-8 plan has no round 3" "$rc" "2"
 rround "$TMP/plan.md" 1
-check "an unparseable Evaluation line fails a plan round" "$rc" "2"
+check "a Claude plan round reads no Evaluation line" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
 
 # --- the ruling seat -------------------------------------------------------------
 # Rulings go to Opus, except a list made only of cannot-verify and
@@ -273,16 +272,16 @@ check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 prim
 route --task 6
 check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dforge:judge-sonnet-high fallback=- reason=executor"
 rround "$TMP/round.md" 1
-check "codex off: an intricate plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=3"
+check "codex off: an intricate plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
 rround "$TMP/light.md" 1
-check "codex off: a plain plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
+check "codex off: a plain plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
 rround "$TMP/round.md" 2
-check "codex off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=3"
+check "codex off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
 review_surface absent
 route --task 3
 check "no session file is off" "$out" "review-seat task=3 primary=dforge:judge-opus fallback=- reason=codex-off"
 rround "$TMP/round.md" 1
-check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=3"
+check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
 review_surface true
 printf 'not json' > "$DR_CODEX_SESSION_DIR/review-route-test.json"
 route --task 1
@@ -329,7 +328,9 @@ present "writing-plans runs the Codex plan kind" "$WP" '--kind plan'
 present "writing-plans writes the delta" "$WP" '<workspace>/plan-delta-<r>.diff'
 present "writing-plans caps rounds by score" "$WP" 'below the `cap=` that `review-route` printed'
 present "writing-plans re-rounds only on Critical or a low score" "$WP" 'Run the next round only when a round returned'
-present "writing-plans gives a Critical at the cap one more round" "$WP" 'earns exactly one more'
+present "writing-plans gives a Codex plan's Critical at the cap one more round" "$WP" 'earns exactly one more'
+present "writing-plans caps a Claude plan at two rounds" "$WP" 'On a Claude plan the cap is 2 whatever the task totals'
+absent "writing-plans no longer derives a Claude cap from the totals" "$WP" 'printed: 1 when the plan'"'"'s highest'
 present "writing-plans states the heavy-majority rule" "$WP" '`subagent` when more than half the tasks are heavy'
 present "writing-plans raises a delegating inline effort" "$WP" 'raised to `high` when any task is'
 present "writing-plans falls back to Opus on exit 2" "$WP" 'exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native'
@@ -338,7 +339,8 @@ present "final review records the native fix seat" "$P/reference/final-review.md
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
 present "using-dforge states the mixed-mode rule" "$P/skills/using-dforge/SKILL.md" 'an inline plan delegates those'
 present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
-present "README caps plan review" "$P/README.md" 'capped by the plan'"'"'s highest task total'
+present "README caps plan review at two rounds" "$P/README.md" 'at most two rounds on a Claude plan'
+absent "README no longer caps plan review by task total" "$P/README.md" 'capped by the plan'"'"'s highest task total'
 absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'
 present "the prompt file has a Codex round-1 section" "$PRP" '## Round 1 on Codex'
 present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-schema.json'
