@@ -223,7 +223,14 @@ needed.
   context, and a reviewer is never dispatched without it.
 - **The seat:** dispatch the `seat:` line's `subagent_type`, with no `model`
   or `effort` argument, and the prompt "your complete instructions are in
-  `<prompt file>`: read it first and follow it". A Codex seat's line names
+  `<prompt file>`: read it first and follow it". When a judge seat returns,
+  run `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N` with the
+  review's task numbers, and act on its digest.
+  Never Read the report file yourself: the digest carries the verdicts, the
+  scores, one line per Critical or Important finding and the cannot-verify
+  items, and verdict has already written the fix file and logged the Minor
+  findings. A `codex:light` seat that reviewed writes no report: read its JSON
+  as Codex seats below says. A Codex seat's line names
   both prompt files, `seat: codex:light prompt: <Codex prompt> fallback:
   <judge> prompt: <judge prompt>` or `seat: codex:heavy+judge-opus prompt:
   <Codex prompt> then: dforge:judge-opus prompt: <judge prompt>`: run the
@@ -255,8 +262,8 @@ needed.
   Claude judge beside it reads them. On a `Host: codex` plan `lens-route`
   exits 2; choose the lenses as [native-codex.md](native-codex.md) says.
 - **Reviewer inputs:** the brief file (it ends with the plan's Global
-  Constraints and Contracts — the reviewer's attention lens), the report
-  file, and the diff file, all named in the prompt file. Never tell the
+  Constraints and Contracts — the reviewer's attention lens), the
+  implementer's report file, and the diff file, all named in the prompt file. Never tell the
   reviewer which lane produced the diff: a judge that knows the author scores
   the author.
 - Do not add open-ended directives like "check all uses" or "run race tests
@@ -270,14 +277,14 @@ needed.
   as a defect," "at most Minor," or "the plan chose" — stop: you are
   pre-judging, usually to spare yourself a review loop.
 
-**Scores are additive.** The judge returns the spec and quality verdicts and
-four scores — spec, scope, verification, quality — each 1 to 20 against
+**Scores are additive.** The verdict digest carries the spec and quality
+verdicts and the four scores — spec, scope, verification, quality — each 1 to 20 against
 [task-review.md](../criteria/task-review.md). Read them as bands: **1-8
 fails** and joins the fix-loop trigger; **9-13** is borderline, recorded on
 the complete line for the final review to triage, never settled by you;
-**14-20 passes**. The verdicts still drive the loop; a
-judge that returns scores but drops the verdicts has produced an unusable
-review — re-dispatch it.
+**14-20 passes**. The verdicts still drive the loop; a report that drops a
+verdict line is malformed: `task-step verdict` exits 5 on it (When
+`task-step verdict` fails).
 
 **Mechanical checks.** `task-step review` also checks the commits from the
 base to the review head and prints `check identity:` and `check attribution:`
@@ -288,6 +295,24 @@ that differs from `git config user.name` and `user.email`, or a
 found something is a finding for the fix loop. A reviewer's cannot-verify item
 that a `clean` line answers is settled without a seat (subagent-driven-development,
 The Ruling Seat).
+
+**When `task-step verdict` fails.** Exit 5 means the seat wrote no report,
+or one outside the grammar, and stderr says which; exit 6 means a tracked
+file in the reviewed checkout changed during the review, or HEAD moved, and
+stderr names the files and the checkout. The review saw the committed
+state, so on exit 6 restore it with
+`git -C <dir> checkout -- <files>`.
+Then, either way, log `Task <N>: Ruling: review seat <seat> <wrote no
+report | wrote a malformed report | changed <files>> —
+restored the committed state and re-dispatched once
+— none`, delete the report file, and re-dispatch the same seat once with the
+same prompt file.
+A second failure dispatches the route's fallback judge:
+the judge after `fallback:` on the `seat:` line when it names one, otherwise
+`dforge:judge-opus`, a fresh dispatch even when the failed seat was
+judge-opus; say so. A third failure is `Task <N>: BLOCKED — review seat —
+no usable report after three dispatches`. Exit 6 with
+`run task-step review … first` means the review step never ran: run it.
 
 **Codex seats.** `task-step review` wrote the task-reviewer prompt for Codex,
 as [executor-lane.md](executor-lane.md) §Codex task review
@@ -317,7 +342,7 @@ the runner's own gate refused, or a quota error turned Codex off for the rest of
 the session, so the next task's `review-route` names Claude seats. Read a
 Codex review from its JSON — `spec_verdict` (`compliant` or `issues`),
 `task_quality` (`approved` or `needs_fixes`), the four scores, `findings` and
-`cannot_verify` — and apply the bands, the ⚠️ route and the fix loop to it
+`cannot_verify` — and apply the bands, the cannot-verify route and the fix loop to it
 exactly as to a judge's report.
 
 **Risk 3.** On `primary=codex:heavy+judge-opus`, run the Codex seat
@@ -325,14 +350,14 @@ first, then dispatch `dforge:judge-opus` with the judge prompt file, whose
 Second Pass section already names the Codex seat's `--out` path. The task's
 verdicts and scores are the judge's. Its findings,
 plus every Codex finding it marks CONFIRMED, drive the fix loop; each CONFIRMED
-cannot-verify item goes to the ruling seat as a `cannot-verify` item. A reply whose `### Codex findings`
-section is not its last section formed its own review after reading Codex's:
-re-dispatch it. If the Codex seat produced nothing, dispatch the judge with the
+cannot-verify item goes to the ruling seat as a `cannot-verify` item.
+A report whose `## Codex findings` section is not its last formed its own
+review after reading Codex's; `task-step verdict` exits 5 on it. If the Codex seat produced nothing, dispatch the judge with the
 same prompt file and one added line, "No Codex review file exists: skip the
 Second Pass section", and say so. This replaces the three-seat average earlier
 versions used for risk 3.
 
-The task reviewer may report "⚠️ Cannot verify from diff" items — requirements
+The digest's `cannot-verify:` lines are requirements
 that live in unchanged code or span tasks. These do not block the rest of the
 review, but each goes to the ruling seat as a `cannot-verify` item before
 the task completes, unless a mechanical check settles it: the seat holds
@@ -358,10 +383,17 @@ fixes inside a group run one task at a time.
   runs the mechanical checks for every member, and prints the `seat:` line,
   the check lines, the state it recorded and the budget line. Dispatch the
   `seat:` line's judge as §3 says for a judge, with the prompt "your complete
-  instructions are in `<prompt file>`: read it first and follow it". A group
-  never gets a Codex seat.
+  instructions are in `<prompt file>`: read it first and follow it". When the
+  group's seat returns, run
+  `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N M … --group`
+  with every member's number and act on its digest: it reads
+  `group-<list>-review-report.md`, writes one fix file per member with a
+  Critical or Important finding, and logs each member's Minor findings. A
+  member's fix round is read alone with
+  `task-step verdict PLAN_FILE N --rereview <R>`. A group never gets a Codex
+  seat.
 - **The report** holds one block per task. Apply §3's verdicts, score bands,
-  ⚠️ route and plan-conflict route to each task on its own, and §4's Minor
+  cannot-verify route and plan-conflict route to each task on its own, and §4's Minor
   rule (`Task <N>: minor (deferred): …`).
 - **Fix rounds.** A member with findings enters §4's fix loop with the fix
   message `<workspace>/task-<N>-fix-<R>.md`, and is re-reviewed with
@@ -380,19 +412,21 @@ fixes inside a group run one task at a time.
 
 ## 4. The fix loop
 
-The loop triggers when the review reports spec ❌, any Critical or Important
-finding, any score of 1-8, or a ⚠️ item the ruling seat confirmed as a gap.
+The loop triggers when the digest shows `spec: fail`, any Critical or Important
+finding line, any score of 1-8, or a cannot-verify item the ruling seat confirmed as a gap.
 
 Before the loop starts, two routes leave it immediately:
 
-- Record Minor findings in the progress ledger as you go
-  (`Task <N>: minor (deferred): <one-liner>`), and point the final
+- `task-step verdict` records Minor findings in the progress ledger
+  (`Task <N>: minor (deferred): <file>:<line> — <one-liner>`); point the final
   whole-branch review at that list so it can triage which must be fixed
   before merge. A roll-up nobody reads is a silent discard. Minor findings
   never enter the loop.
-- A finding labeled plan-mandated — or any finding that conflicts with
+- A finding labeled plan-mandated (its digest line's one-liner begins
+  `plan-mandated:`) — or any finding that conflicts with
   what the plan's text requires — goes to the ruling seat as a
-  `plan-conflict` item before you act on it. Do not dismiss the finding
+  `plan-conflict` item before you act on it; delete its bullet from the fix
+  file before the fix dispatch. Do not dismiss the finding
   because the plan mandates it, and do not dispatch a fix that contradicts
   the plan without the seat's verdict in the ledger.
 
@@ -462,7 +496,13 @@ the round you are starting (1 for the first). Its first lines are one bullet
 per open finding, `- <file>: <finding one-liner>`, then a blank line, then
 what the implementer needs: the finding's detail, the ruling's smallest fix,
 the covering test files. Send the implementer, resumed or fresh, the file's
-path rather than its text. `task-step rereview` reads the bullets for the
+path rather than its text.
+`task-step verdict` writes its bullets from the report, each `<file>`
+carrying the finding's `:<line>`, with the severity lines after the blank
+line; append the ruling's smallest fix and the covering test files below
+them. Write the file yourself only for findings no report holds: a
+mechanical check's finding, a CONFIRMED-GAP from the ruling seat, or a
+Codex seat's JSON review. `task-step rereview` reads the bullets for the
 findings list and the skip rule, so write the file before you call it.
 
 **The re-review is scoped.** Run
@@ -477,11 +517,12 @@ diff path filled in. It prints the seat and that file; dispatch the seat with
 the prompt "your complete instructions are in `<prompt file>`: read it first
 and follow it". It prints `dforge:judge-sonnet-high`; for a subtle
 concurrency fix dispatch `dforge:judge-opus` with the same file and say so.
-The re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED and flags
-new breakage in the fix diff only. New
-Critical/Important breakage in the fix diff joins the open findings list.
-Out-of-scope observations go to the ledger as deferred minors — they never
-extend the loop.
+When the seat returns, run
+`bash <plugin-root>/scripts/task-step verdict PLAN_FILE N --rereview <R>`.
+Its `fix round:` line says whether the round closed; its finding lines are
+every finding still open, new breakage in the fix diff included, and it has
+written them to the next round's fix file. The re-reviewer's out-of-scope
+issues reach the ledger as deferred Minor findings and never extend the loop.
 
 **The skip rule.** Pass `--covered` only after confirming that the fix report
 names the covering tests, the command and passing output. With it,
@@ -586,11 +627,17 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   [task-reviewer-prompt.md](../skills/subagent-driven-development/references/task-reviewer-prompt.md)
   yourself, `[PLUGIN_ROOT]` expanded to this plugin's resolved directory and
   `[LENS_FILES]` set to each `criteria=` path `scripts/lens-route PLAN_FILE --task <N>`
-  prints (with none, delete that section). Check the commits' identity and
+  prints (with none, delete that section),
+  `[IMPLEMENTER_REPORT_FILE]` set to the implementer's report and `[REPORT_FILE]` to `<workspace>/task-<N>-review-report.md`.
+  Check the commits' identity and
   attribution yourself, as the mechanical checks above describe.
+  `task-step verdict` exits 2 on a `Host: codex` plan, so read the report's
+  `## Verdict` section and its finding lines yourself and write the fix file
+  from them.
 - **§4.** Run `scripts/review-package PLAN_FILE FIX_BASE HEAD` where FIX_BASE
   is the head the previous review saw, with `date +%s` in the same call as the
-  next round's `t0`, and fill the re-review prompt's placeholders yourself.
+  next round's `t0`, and fill the re-review prompt's placeholders yourself;
+  its `[REPORT_FILE]` is `<workspace>/task-<N>-rereview-<R>-report.md`.
 
 ## Recovery
 

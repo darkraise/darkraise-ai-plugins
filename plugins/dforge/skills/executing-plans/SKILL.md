@@ -434,7 +434,7 @@ and delegated tasks are all this mode dispatches before the final review.
 | `preflight` | Once, before Task 1, when the plan has a heavy task (Setup) |
 | `blocked-plan` | The plan is wrong and no path forward is a mechanical choice |
 | `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
-| `cannot-verify` | A delegated task's "⚠️ Cannot verify from diff" item |
+| `cannot-verify` | A delegated task's `cannot-verify:` digest line |
 | `breaker` | A delegated task's findings still open after round 2/2 |
 | `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument |
 | `final-residual` | Findings still open after the final review's one fix wave |
@@ -450,7 +450,12 @@ its task, and the paths it needs, with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` and dispatch the
 `primary` it prints with
 [ruling-prompt.md](../subagent-driven-development/references/ruling-prompt.md),
-expanding its placeholders. Items of several kinds at one point share one
+expanding its placeholders. Its `[REPORT_FILE]` is
+`<workspace>/rulings-<point>-<task>-report.md`. The seat writes its report
+there and replies in at most 10 lines;
+read only its `## Verdict` section
+(`awk '/^## / { on = ($0 == "## Verdict") } on' <report>`), never the rest.
+Items of several kinds at one point share one
 dispatch, and `<kind>` is then one comma-separated list; the route prints
 `dforge:judge-sonnet-high` when every kind is `cannot-verify` or
 `executor-empty-diff` and no task it names is risk 3, and `dforge:judge-opus`
@@ -476,12 +481,12 @@ verbatim:
   [delegated-task.md](../../reference/delegated-task.md) §5 completes it.
 - **PARK** - log `Task <N>: parked — <finding> — Ruling: <why>`; the code
   stands.
-- **AMEND** - copy the entry, from its `## A?` line through the New fence's
-  closing line, to `<workspace>/amend-<id>.md` and run
-  `scripts/plan-amend PLAN_FILE <workspace>/amend-<id>.md`. On `amended: A<k> …`, write the amendment ledger line; your next
+- **AMEND** - run
+  `scripts/plan-amend PLAN_FILE --report <workspace>/rulings-<point>-<task>-report.md --id A<k>`,
+  `A<k>` being the item's `Amendment:` line; never copy the entry by hand. On `amended: A<k> …`, write the amendment ledger line; your next
   `task-brief` carries the amendment. On `rejected: …`, make one fresh seat
-  dispatch carrying the entry and the rejection output; a second rejection is
-  BLOCKED. A Header amendment is confirmed by a second, independent `judge-opus` dispatch
+  dispatch carrying the report path, the entry's id and the rejection output;
+  a second rejection is BLOCKED. A Header amendment is confirmed by a second, independent `judge-opus` dispatch
   before `plan-amend` runs, exactly as dforge:subagent-driven-development
   §The Ruling Seat describes, including its ledger line.
 - **BLOCKED** - log `Task <N>: BLOCKED — ruling seat — <decision>`, name it in

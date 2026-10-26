@@ -482,8 +482,7 @@ Pass section: that pass is the Claude judge's. And **replace the Output Format s
 the criteria block's output-format paragraph with the schema, rather than
 appending to them.** The shipped schema, `criteria/codex-review-schema.json`,
 carries the four criterion names, the 1 to 20 range, and the spec and quality
-verdicts, and the final message is JSON rather than a markdown
-`### Verification Scores` section. Send the criteria themselves - where to look,
+verdicts, and the final message is JSON rather than a markdown report file. Send the criteria themselves - where to look,
 what scores high, what to ignore - and let the schema state the shape. Sent
 unedited, the prompt would order markdown while `--output-schema` forbids it.
 

@@ -1072,5 +1072,282 @@ check "group report: review --group exits 0" "$rr_rc" "0"
 check "group report: the prompt names the group report file" \
   "$(grep -cF "Write your full report to $RR_WS/group-1,3-review-report.md and write nothing else" "$RR_WS/group-1,3-review-prompt.md")" "1"
 check "group report: a fresh group review discards the last report" "$([ -e "$RR_WS/group-1,3-review-report.md" ] && echo yes || echo no)" "no"
+# --- verdict: the report digest, the fix files and the tracked-file check ---
+vd_report() { sed 's/^|//' > "$1"; } # vd_report <file> — the report on stdin, its leading | stripped
+first_block() { awk '{ sub(/\r$/, "") } /^$/ { exit } { print }' "$1" | tr '\n' ';'; }
+
+# A group report: findings and fix files per member task, from the state the
+# group block above left (Task 5's review --group).
+vd_report "$RR_WS/group-1,3-review-report.md" <<'REPORT'
+|## Verdict
+|Task 1 spec: pass
+|Task 1 quality: changes
+|Task 1 scores: spec 16 / scope 17 / verification 15 / quality 12
+|Task 3 spec: pass
+|Task 3 quality: approved
+|Task 3 scores: spec 18 / scope 18 / verification 17 / quality 17
+|
+|## Findings
+|- [Important] (Task 1) app.txt:3 — off by one
+|  The loop stops one line early.
+|- [Minor] (Task 3) other.txt:1 — wording
+|
+|## Cannot verify
+|- (Task 3) the caller passes the flag
+REPORT
+rr_run verdict docs/plan.md 1 3 --group
+check "verdict --group: exit 0" "$rr_rc" "0"
+check "verdict --group: the digest names the group report" "$(head -n 1 <<<"$rr_out")" "group 1,3: verdict from $RR_WS/group-1,3-review-report.md"
+check "verdict --group: the per-task verdict lines" "$(grep -c '^Task [13] \(spec\|quality\|scores\): ' <<<"$rr_out")" "6"
+check "verdict --group: the finding names its task" "$(grep -E '^(Critical|Important) ' <<<"$rr_out")" "Important 1 app.txt:3 — off by one"
+R1=$(( $(rr_state 1 .round) + 1 ))
+check "verdict --group: a fix file for the task with findings" "$(first_block "$RR_WS/task-1-fix-$R1.md")" "- app.txt:3: off by one;"
+check "verdict --group: no fix file for a task without one" "$(ls "$RR_WS"/task-3-fix-*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+check "verdict --group: the member's Minor goes to the ledger" "$(grep -c '^Task 3: minor (deferred): other.txt:1 — wording$' "$RR_WS/progress.md")" "1"
+check "verdict --group: the cannot-verify item keeps its task" "$(grep '^cannot-verify: ' <<<"$rr_out")" "cannot-verify: (Task 3) the caller passes the flag"
+vd_report "$RR_WS/group-1,3-review-report.md" <<'REPORT'
+|## Verdict
+|Task 1 spec: pass
+|Task 1 quality: approved
+|Task 1 scores: spec 16 / scope 17 / verification 15 / quality 16
+|
+|## Findings
+REPORT
+rr_run verdict docs/plan.md 1 3 --group
+check "verdict --group: a report missing a member's verdict exits 5" "$rr_rc" "5"
+check "verdict --group: the missing key is named" "$(grep -c 'Task 3 spec' <<<"$rr_err")" "1"
+rr_run verdict docs/plan.md 1 3 --group --rereview 1
+check "verdict --group: a group has no re-review report (members re-review alone)" "$rr_rc" "2"
+
+# A wave group spread over two worktrees: one tracked snapshot per member
+# checkout, and verdict checks each.
+rr_reset
+rr_git worktree add -q --detach "$RR_TMP/wt1" HEAD
+rr_git worktree add -q --detach "$RR_TMP/wt3" HEAD
+rr_run hold docs/plan.md 1 --cwd "$RR_TMP/wt1"
+rr_run hold docs/plan.md 3 --cwd "$RR_TMP/wt3"
+check "wave group: hold records the member's checkout" "$(rr_state 3 .heldCwd)" "$RR_TMP/wt3"
+rr_run review --group docs/plan.md 1 3
+check "wave group: one tracked snapshot per member checkout" \
+  "$(jq -r '[.reviewChecks[].cwd] | sort | join(" ")' "$RR_WS/group-1,3-step.json" | tr -d '\r')" "$RR_TMP/wt1 $RR_TMP/wt3"
+vd_report "$RR_WS/group-1,3-review-report.md" <<'REPORT'
+|## Verdict
+|Task 1 spec: pass
+|Task 1 quality: approved
+|Task 1 scores: spec 17 / scope 18 / verification 16 / quality 16
+|Task 3 spec: pass
+|Task 3 quality: approved
+|Task 3 scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+rr_run verdict docs/plan.md 1 3 --group
+check "wave group: clean member checkouts pass" "$rr_rc" "0"
+printf 'judge edit\n' >> "$RR_TMP/wt3/app.txt"
+rr_run verdict docs/plan.md 1 3 --group
+check "wave group: a change in one member's checkout exits 6" "$rr_rc" "6"
+check "wave group: the stderr names that checkout" "$(grep -cF "in $RR_TMP/wt3;" <<<"$rr_err")" "1"
+check "wave group: and the file" "$(grep -cx 'app.txt' <<<"$rr_err")" "1"
+rr_run verdict docs/plan.md 1 3 --group --cwd "$RR_TMP/wt1"
+check "wave group: --cwd cannot stand for two checkouts" "$rr_rc" "2"
+rr_git worktree remove --force "$RR_TMP/wt1"
+rr_git worktree remove --force "$RR_TMP/wt3"
+
+# A task review: the digest, the fix file, the deferred Minor lines.
+rr_reset
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: fail
+|quality: changes
+|scores: spec 7 / scope 15 / verification 12 / quality 9
+|
+|## Strengths
+|Small and focused.
+|
+|## Findings
+|- [Critical] app.txt:2 — wrong value
+|  The second line must read "line 2".
+|- [Important] other.txt:4 — stale copy
+|- [Minor] app.txt:5 — naming
+|- [Minor] test.txt:0 — no edge case
+|
+|## Cannot verify
+|- the caller passes the flag
+|
+|## Assessment
+|Needs fixes.
+REPORT
+rr_run verdict docs/plan.md 1
+VD=$rr_out
+check "verdict: exit 0" "$rr_rc" "0"
+check "verdict: the digest names the report" "$(head -n 1 <<<"$VD")" "task 1: verdict from $RR_WS/task-1-review-report.md"
+check "verdict: the verdict lines" "$(grep -E '^(spec|quality|scores): ' <<<"$VD" | tr '\n' ';')" \
+  "spec: fail;quality: changes;scores: spec 7 / scope 15 / verification 12 / quality 9;"
+check "verdict: the counts by severity" "$(grep '^findings: ' <<<"$VD")" "findings: 1 Critical, 1 Important, 2 Minor"
+check "verdict: one line per Critical or Important finding" "$(grep -E '^(Critical|Important) ' <<<"$VD" | tr '\n' ';')" \
+  "Critical 1 app.txt:2 — wrong value;Important 1 other.txt:4 — stale copy;"
+check "verdict: Minor findings are not listed" "$(grep -c '^Minor ' <<<"$VD")" "0"
+check "verdict: the cannot-verify item" "$(grep '^cannot-verify: ' <<<"$VD")" "cannot-verify: the caller passes the flag"
+check "verdict: the fix line" "$(grep '^fix: ' <<<"$VD")" "fix: $RR_WS/task-1-fix-1.md (2 findings)"
+check "verdict: the minor line" "$(grep '^minor: ' <<<"$VD")" "minor: 2 logged as deferred"
+check "verdict: the tracked check" "$(grep '^check tracked: ' <<<"$VD")" "check tracked: clean"
+check "verdict: the last line is the budget line" "$(tail -n 1 <<<"$VD" | cut -c1-6)" "budget"
+check "verdict: at most 20 lines besides the finding lines" "$([ "$(grep -cvE '^(Critical|Important) ' <<<"$VD")" -le 20 ] && echo yes || echo no)" "yes"
+check "verdict: the fix file's bullets" "$(first_block "$RR_WS/task-1-fix-1.md")" "- app.txt:2: wrong value;- other.txt:4: stale copy;"
+check "verdict: the fix file names the report" "$(grep -cF "$RR_WS/task-1-review-report.md" "$RR_WS/task-1-fix-1.md")" "1"
+check "verdict: Minor findings go to the ledger as deferred" \
+  "$(grep -cE '^Task 1: minor \(deferred\): (app\.txt:5 — naming|test\.txt:0 — no edge case)$' "$RR_WS/progress.md")" "2"
+rr_run verdict docs/plan.md 1
+check "verdict: a second run adds no ledger line" "$(grep -c '^Task 1: minor (deferred): app.txt:5 — naming$' "$RR_WS/progress.md")" "1"
+
+# The fix file feeds the re-review, and the re-review's verdict writes the next round's.
+rr_edit app.txt add4
+rr_git add -A && rr_git commit -qm fix
+rr_run rereview docs/plan.md 1
+check "verdict then rereview: the fix file's findings reach the prompt" \
+  "$(grep -cE '^- (app\.txt:2: wrong value|other\.txt:4: stale copy)$' "$RR_WS/task-1-rereview-1-prompt.md")" "2"
+vd_report "$RR_WS/task-1-rereview-1-report.md" <<'REPORT'
+|## Verdict
+|fix round: open
+|open: 1
+|
+|## Finding verdicts
+|- app.txt:2: wrong value — ADDRESSED — app.txt:2 reads "line 2"
+|- other.txt:4: stale copy — NOT ADDRESSED — other.txt:4 is unchanged
+|
+|## Findings
+|- [Important] other.txt:4 — stale copy
+|- [Minor] app.txt:9 — out of scope: trailing space
+REPORT
+rr_run verdict docs/plan.md 1 --rereview 1
+check "verdict --rereview: passes against the state rereview recorded" "$rr_rc" "0"
+check "verdict --rereview: reads the round's report" "$(head -n 1 <<<"$rr_out")" "task 1: verdict from $RR_WS/task-1-rereview-1-report.md"
+check "verdict --rereview: the round lines" "$(grep -E '^(fix round|open): ' <<<"$rr_out" | tr '\n' ';')" "fix round: open;open: 1;"
+check "verdict --rereview: writes the next round's fix file" "$(first_block "$RR_WS/task-1-fix-2.md")" "- other.txt:4: stale copy;"
+
+# Failures: a missing or malformed report exits 5 and writes no fix file.
+rr_run verdict docs/plan.md 1 --rereview 2
+check "verdict: a missing report exits 5" "$rr_rc" "5"
+check "verdict: a missing report is named" "$(grep -cF "$RR_WS/task-1-rereview-2-report.md" <<<"$rr_err")" "1"
+check "verdict: a missing report writes no fix file" "$([ -e "$RR_WS/task-1-fix-3.md" ] && echo yes || echo no)" "no"
+printf 'spec: pass\n' > "$RR_WS/task-1-review-report.md"
+rr_run verdict docs/plan.md 1
+check "verdict: a report that does not open with ## Verdict exits 5" "$rr_rc" "5"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a report missing a verdict key exits 5" "$rr_rc" "5"
+check "verdict: the missing key is named" "$(grep -c 'quality' <<<"$rr_err")" "1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: ✅
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a verdict value outside its set exits 5" "$rr_rc" "5"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: fail
+|quality: changes
+|scores: spec 7 / scope 15 / verification 12 / quality 9
+|
+|## Findings
+|- [Severe] app.txt:2 — wrong value
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a finding line outside the grammar exits 5" "$rr_rc" "5"
+check "verdict: the bad line is quoted" "$(grep -c 'Severe' <<<"$rr_err")" "1"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|## Codex findings
+|- [CONFIRMED] app.txt:2 wrong value - the diff shows it
+|
+|## Findings
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: Codex findings that are not the last section exit 5" "$rr_rc" "5"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|## Findings
+REPORT
+rm -f "$RR_WS"/task-1-fix-*.md
+rr_run verdict docs/plan.md 1
+check "verdict: a clean report exits 0" "$rr_rc" "0"
+check "verdict: a clean report writes no fix file" "$(grep '^fix: ' <<<"$rr_out")" "fix: none"
+check "verdict: and leaves no fix file behind" "$(ls "$RR_WS"/task-1-fix-*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+
+# Failures: a tracked file changed during the review exits 6 and names it.
+printf 'judge edit\n' >> "$RR_REPO/app.txt"
+rr_run verdict docs/plan.md 1
+check "verdict: a tracked file changed during the review exits 6" "$rr_rc" "6"
+check "verdict: the changed file is named on its own line" "$(grep -cx 'app.txt' <<<"$rr_err")" "1"
+rr_git checkout -- app.txt
+rr_run verdict docs/plan.md 1
+check "verdict: restored files pass the check" "$rr_rc" "0"
+printf 'new\n' > "$RR_REPO/untracked.txt"
+rr_run verdict docs/plan.md 1
+check "verdict: an untracked file is not a tracked change" "$rr_rc" "0"
+rm -f "$RR_REPO/untracked.txt"
+rr_git commit -q --allow-empty -m "moved"
+rr_run verdict docs/plan.md 1
+check "verdict: a HEAD that moved exits 6" "$rr_rc" "6"
+check "verdict: a HEAD that moved is named" "$(grep -c 'HEAD moved' <<<"$rr_err")" "1"
+rr_git reset -q --hard HEAD~1
+
+# A file already changed when the review ran is compared by content.
+rr_reset
+printf 'dirty\n' >> "$RR_REPO/other.txt"
+rr_run review docs/plan.md 1
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a file already changed at review time passes" "$rr_rc" "0"
+printf 'more\n' >> "$RR_REPO/other.txt"
+rr_run verdict docs/plan.md 1
+check "verdict: a further change to it exits 6" "$rr_rc" "6"
+check "verdict: and names it" "$(grep -cx 'other.txt' <<<"$rr_err")" "1"
+rr_git checkout -- other.txt
+
+# A state recorded before the check existed still reads its report; usage.
+rr_reset
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+REPORT
+jq 'del(.reviewCheck)' "$RR_TMP/state1.0" > "$RR_WS/task-1-step.json"
+rr_run verdict docs/plan.md 1
+check "verdict: a state without a recorded check exits 0" "$rr_rc" "0"
+check "verdict: and says the check was not recorded" "$(grep -c '^check tracked: not recorded' <<<"$rr_out")" "1"
+rr_reset
+rr_run verdict docs/plan.md 1 --cwd "$RR_TMP/no-such-dir"
+check "verdict: a missing --cwd directory exits 2" "$rr_rc" "2"
+jq '.reviewHead = null' "$RR_TMP/state2.0" > "$RR_WS/task-2-step.json"
+rr_run verdict docs/plan.md 2
+check "verdict: before review exits 6" "$rr_rc" "6"
+cp "$RR_TMP/state2.0" "$RR_WS/task-2-step.json"
+rr_run verdict docs/plan.md
+check "verdict: no task number exits 2" "$rr_rc" "2"
+rr_run verdict docs/plan.md 1 --rereview x
+check "verdict: a non-numeric --rereview exits 2" "$rr_rc" "2"
+rr_run verdict docs/plan.md 99
+check "verdict: no such task exits 3" "$rr_rc" "3"
+rr_run verdict docs/codex-plan.md 1
+check "verdict: a Host: codex plan exits 2" "$rr_rc" "2"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -215,5 +215,30 @@ names "subagent mode: a one-task wave proves its base and closes by §5" "$SDD" 
 lacks "subagent mode: the old integrated grammar is gone" "$SDD" 'Wave <k>: integrated (head <sha7>; <command> → pass)'
 
 
+# The controller reads a review through task-step verdict and an AMEND through
+# plan-amend --report; it never reads or copies a report's text.
+check "the loop steps run task-step verdict" "$([ "$(loop_steps | grep -cF -- 'task-step verdict PLAN_FILE N')" -ge 1 ] && echo yes || echo no)" "yes"
+names "the re-review is read through verdict --rereview" "$DT" '`bash <plugin-root>/scripts/task-step verdict PLAN_FILE N --rereview <R>`'
+names "verdict writes the fix file's bullets" "$DT" '`task-step verdict` writes its bullets from the report'
+names "the seat's report is never read" "$DT" 'Never Read the report file yourself'
+names "a failed verdict restores the tracked files" "$DT" '`git -C <dir> checkout -- <files>`'
+names "a failed verdict is a Ruling line" "$DT" 'restored the committed state and re-dispatched once'
+names "a second failure takes the fallback judge" "$DT" 'A second failure dispatches the route'"'"'s fallback judge'
+names "the risk-3 check reads the report's last section" "$DT" 'A report whose `## Codex findings` section is not its last'
+lacks "the risk-3 check no longer reads the reply" "$DT" 'A reply whose `### Codex findings`'
+for f in "$SDD" "$INLINE"; do
+  s=$(basename "$(dirname "$f")")
+  names "$s: an AMEND applies from the report" "$f" 'scripts/plan-amend PLAN_FILE --report <workspace>/rulings-<point>-<task>-report.md --id A<k>'
+  lacks "$s: an AMEND is no longer copied by hand" "$f" 'copy the entry, from its `## A?` line'
+  names "$s: the ruling report is read by its Verdict section" "$f" 'read only its `## Verdict` section'
+done
+names "the example workflow reads the verdict with task-step" "$SDD" '[task-step verdict PLAN_FILE 1:'
+names "a header amendment's confirmation reads the first report" "$SDD" 'then the path of the first seat'"'"'s report'
+names "by hand: the review prompt's two report placeholders" "$DT" '`[IMPLEMENTER_REPORT_FILE]` set to the implementer'"'"'s report and `[REPORT_FILE]` to `<workspace>/task-<N>-review-report.md`'
+names "the lane's review prompt no longer names a Verification Scores section" "$P/reference/executor-lane.md" 'rather than a markdown report file'
+names "a group review is read through verdict --group" "$DT" '`bash <plugin-root>/scripts/task-step verdict PLAN_FILE N M … --group`'
+names "Codex seats apply the cannot-verify route" "$DT" 'the bands, the cannot-verify route and the fix loop'
+names "a group applies the cannot-verify route" "$DT" 'cannot-verify route and plan-conflict route'
+lacks "no ⚠️ route is left in delegated-task.md" "$DT" '⚠️ route'
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

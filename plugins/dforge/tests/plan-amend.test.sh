@@ -239,6 +239,52 @@ check "a failed write: never says amended" "$(grep -c '^amended' <<<"$out")" "0"
 check "a failed write: amendments unchanged" \
   "$(cmp -s "$REPO/.dforge/sdd/race/amendments.md" "$TMP/race-snapshot" && echo same)" "same"
 
+# --- --report: an AMEND entry taken from a ruling report, never hand-copied ---
+# A ruling report numbers its entries A1, A2 … in the report; --id names one.
+# Applied from the report, the entry lands exactly as the hand-copied block does.
+entry "$TMP/rep-e1" '## A1 — Task 2' 'Print `hello NAME` twice.' 'Print `hello NAME` three times.'
+entry "$TMP/rep-e2" '## A2 — Header' '- Bash only.' '- Bash 4 or later.'
+{
+  printf '## Verdict\n\n### Item 1\nVerdict: AMEND\nRuling: the count is wrong — say three times — one fix round\nAmendment: A1\n\n'
+  printf '### Item 2\nVerdict: AMEND\nRuling: pin the shell — Bash 4 — one fix round\nAmendment: A2\n\n'
+  cat "$TMP/rep-e1"; echo; cat "$TMP/rep-e2"
+  printf '\n## Notes\n\nTrailing text that belongs to no entry.\n'
+} > "$TMP/ruling-report.md"
+for n in a b c d; do cp docs/plan.md "docs/rep-$n.md"; done
+REP_A="$REPO/.dforge/sdd/rep-a/amendments.md" REP_B="$REPO/.dforge/sdd/rep-b/amendments.md"
+run docs/rep-a.md b1.md
+check "report: the hand-copied block applies" "$out" "amended: A1 Task 2"
+run docs/rep-b.md --report "$TMP/ruling-report.md" --id A1
+check "report: exit 0" "$status" "0"
+check "report: the entry applies" "$out" "amended: A1 Task 2"
+check "report: amendments.md matches the hand-copied block's byte for byte" "$(cmp -s "$REP_A" "$REP_B" && echo same || echo differs)" "same"
+run docs/rep-b.md --report "$TMP/ruling-report.md" --id A2
+check "report: a later entry applies" "$out" "amended: A2 Header"
+check "report: nothing after the New fence is taken" "$(grep -c 'Trailing text\|^## Notes\|^Verdict:\|^Amendment:' "$REP_B")" "0"
+run docs/rep-c.md --id A1 --report "$TMP/ruling-report.md"
+check "report: the flags in either order" "$out" "amended: A1 Task 2"
+sed 's/$/\r/' "$TMP/ruling-report.md" > "$TMP/ruling-report-crlf.md"
+run docs/rep-d.md --report "$TMP/ruling-report-crlf.md" --id A1
+check "report: a CRLF report" "$out" "amended: A1 Task 2"
+
+cp "$REP_B" "$TMP/rep-snapshot"
+run docs/rep-b.md --report "$TMP/ruling-report.md" --id A9
+check "report: an id the report lacks: exit 1" "$status" "1"
+has "report: an id the report lacks: named" "$out" "rejected: no entry A9 in $TMP/ruling-report.md"
+check "report: an id the report lacks: amendments unchanged" "$(cmp -s "$REP_B" "$TMP/rep-snapshot" && echo same)" "same"
+{ printf '## Verdict\n\n'; printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nPrint `hello NAME`.\n````\n### New\n````text\nPrint `hi NAME`.\n'; } > "$TMP/open-fence.md"
+run docs/rep-b.md --report "$TMP/open-fence.md" --id A1
+check "report: an entry whose New fence never closes: exit 1" "$status" "1"
+has "report: an entry whose New fence never closes: named" "$out" "rejected: entry A1 in $TMP/open-fence.md has no closed New fence"
+run docs/rep-b.md --report "$TMP/no-such-report.md" --id A1
+check "report: a missing report file: exit 2" "$status" "2"
+run docs/rep-b.md --report "$TMP/ruling-report.md" --id 1
+check "report: an id that is not A<k>: exit 2" "$status" "2"
+run docs/rep-b.md --report "$TMP/ruling-report.md"
+check "report: --report without --id: exit 2" "$status" "2"
+run docs/rep-b.md --id A1
+check "report: --id without --report: exit 2" "$status" "2"
+check "report: the refusals left amendments unchanged" "$(cmp -s "$REP_B" "$TMP/rep-snapshot" && echo same)" "same"
 # A linked worktree session must not amend the primary checkout's plan: the
 # worktree's task-brief would never see the amendment.
 git add -A && git commit -qm 'test: seed' && git worktree add -q "$TMP/wt"

@@ -11,21 +11,51 @@
 #        task-step hold   PLAN_FILE N [--head REF] [--cwd DIR]
 #        task-step review --group PLAN_FILE N M ... [--cwd DIR]
 #        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]
+#        task-step verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]
 # A start that finds the task's state file keeps it (and writes no second
 # assigned line) unless --reset is given.
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
 # 4 an amendment does not apply, hold was refused because review-route reviews
 # the task alone, or review --group was given a task with no awaiting group
-# review line or one already in a group's review rounds; 6 a required earlier
-# step has not run; 7 the fix loop is at its two-round cap.
-# 5 is context-size's handoff code and is never used here.
+# review line or one already in a group's review rounds; 5 (verdict) the seat
+# wrote no report, or one outside the grammar; 6 a required earlier step has
+# not run, or (verdict) a tracked file changed during the review; 7 the fix
+# loop is at its two-round cap.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
+
+# dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
+# HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
+# relative to the work tree's top, so they are hashed from there.
+dirty_list() {
+  local root p
+  root=$(git -C "$1" rev-parse --show-toplevel | tr -d '\r')
+  git -C "$1" -c core.quotepath=off diff --name-only --no-renames HEAD | tr -d '\r' | LC_ALL=C sort |
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if [ -f "$root/$p" ]; then
+        printf '%s\t%s\n' "$p" "$(git -C "$root" hash-object -- "$p" | tr -d '\r')"
+      else
+        printf '%s\tdeleted\n' "$p"
+      fi
+    done
+}
+
+# tracked_snapshot DIR: what a later verdict compares, as one JSON object
+# {cwd, head, dirty: [{path, hash}]}. Prints nothing when DIR is not inside a
+# git work tree.
+tracked_snapshot() {
+  local head
+  [ "$(git -C "$1" rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] || return 0
+  head=$(git -C "$1" rev-parse HEAD 2>/dev/null | tr -d '\r') || return 0
+  dirty_list "$1" | jq -R -s -c --arg cwd "$1" --arg head "$head" \
+    '{cwd: $cwd, head: $head, dirty: [split("\n")[] | select(. != "") | split("\t") | {path: .[0], hash: .[1]}]}'
+}
 
 rr_usage() {
   echo "usage: task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]" >&2
@@ -63,7 +93,7 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t scores row risk
   local fix bullets nopen file review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate
+  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate check_dir snap
   local tasks=() base_arg="" head_arg="" covered=0
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
@@ -195,10 +225,14 @@ cmd_rereview() (
     cp "$tmp/prompt" "$prompt"
   fi
 
+  check_dir=$(jq -r '.reviewCheck.cwd // empty' "$state" | tr -d '\r')
+  [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
+  snap=$(tracked_snapshot "$check_dir")
   now=$(date +%s)
   jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
-    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" \
-    '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)' \
+    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" --arg chk "$snap" \
+    '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
+     | (if $chk == "" then del(.reviewCheck) else .reviewCheck = ($chk | fromjson) end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
   if [ -n "$gstate" ]; then
     jq --arg rh "$head_sha" '.reviewHead = $rh' "$gstate" > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot update $gstate"
@@ -223,27 +257,31 @@ if [ "${1:-}" = rereview ]; then
 fi
 [ $# -ge 3 ] || usage
 sub=$1; shift
-case $sub in start|review|hold) ;; *) usage ;; esac
+case $sub in start|review|hold|verdict) ;; *) usage ;; esac
 if [ "$sub" = review ] && [ "$1" = --group ]; then
   sub=group; shift
   [ $# -ge 2 ] || usage
 fi
 plan_arg=$1; shift
 
-ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg=""
+ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
     --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
     --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
     --head) [[ $sub =~ ^(review|hold)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
-    --cwd) [[ $sub =~ ^(review|hold|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
+    --cwd) [[ $sub =~ ^(review|hold|group|verdict)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
+    --group) [ "$sub" = verdict ] || usage; vgroup=1; shift ;;
+    --rereview) [ "$sub" = verdict ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; rereview_arg=$2; shift 2 ;;
     -*) usage ;;
     *) [[ $1 =~ ^[0-9]+$ ]] || usage; ids+=("$((10#$1))"); shift ;;
   esac
 done
 [ ${#ids[@]} -ge 1 ] || usage
 [ "$sub" != hold ] || [ ${#ids[@]} -eq 1 ] || usage
+# A group member's fix round is re-reviewed alone, so a group has no re-review report.
+[ "$vgroup" -eq 0 ] || [ -z "$rereview_arg" ] || usage
 first=${ids[0]}
 idlist=$(IFS=,; echo "${ids[*]}")
 
@@ -507,7 +545,7 @@ route_field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<"$route" | tr -d '\r'; }
 
 do_review() {
   local base head basesha headsha diff pkgout rc t0 gate route rrc primary fallback reason note="" tier="" judge
-  local lens_files="" lout lrc n line secs timeout_ms cmd top drops=() unexpanded
+  local lens_files="" lout lrc n line secs timeout_ms cmd top drops=() unexpanded snap
   local template="$plugin_root/skills/subagent-driven-development/references/task-reviewer-prompt.md"
   local judge_prompt="$ws/task-$first-review-prompt.md" codex_prompt="$ws/task-$first-review-codex-prompt.md"
   local codex_out="$ws/task-$first-review-codex.json"
@@ -588,8 +626,10 @@ do_review() {
   done
   rm -f "$ws/task-$first-review-report.md"
 
-  jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" \
-    '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)' \
+  snap=$(tracked_snapshot "$top")
+  jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" --arg chk "$snap" \
+    '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
+     | (if $chk == "" then del(.reviewCheck) else .reviewCheck = ($chk | fromjson) end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
@@ -608,7 +648,7 @@ do_review() {
 }
 
 do_hold() {
-  local route tier="" held base line appended=1 budget
+  local route tier="" held base line appended=1 budget held_cwd
   # A route that cannot score the task never groups it.
   route=$(bash "$HERE/review-route" "$plan" --task "$first" 2>/dev/null) && tier=$(route_field review)
   [ "$tier" = group ] || die "Task $first is reviewed alone (review-route: review=task); run task-step review" 4
@@ -629,7 +669,10 @@ do_hold() {
     ledger_init
     printf '%s\n' "$line" >> "$ledger"
   fi
-  jq --arg h "$held" --arg head "$head_arg" '.heldHead = $h | (if $head == "" then . else .head = $head end)' \
+  held_cwd=$cwd_arg
+  [ -n "$held_cwd" ] || held_cwd=$(git rev-parse --show-toplevel | tr -d '\r')
+  jq --arg h "$held" --arg head "$head_arg" --arg hc "$held_cwd" \
+    '.heldHead = $h | .heldCwd = $hc | (if $head == "" then . else .head = $head end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
 
   if [ "$appended" -eq 1 ]; then
@@ -645,7 +688,8 @@ do_hold() {
 do_group() {
   local n i list pending="" rounds ghead mstate sbase sheld lout lrc lenses pkgout rc
   local route rrc primary fallback note="" judge unexpanded t0 line id_line at_line budget
-  local members=() bases=() helds=()
+  local mcwd default_cwd snaps="" snap seen
+  local members=() bases=() helds=() check_dirs=()
   local template="$plugin_root/skills/subagent-driven-development/references/group-reviewer-prompt.md"
 
   while IFS= read -r n; do members+=("$n"); done < <(printf '%s\n' "${ids[@]}" | sort -n -u)
@@ -674,6 +718,8 @@ do_group() {
     ghead=$(git rev-parse HEAD) || die "not inside a git checkout"
   fi
 
+  default_cwd=$cwd_arg
+  [ -n "$default_cwd" ] || default_cwd=$(git rev-parse --show-toplevel | tr -d '\r')
   printf '# Group review package: Tasks %s\n' "$list" > "$TMP/package.md"
   for n in "${members[@]}"; do
     mstate="$ws/task-$n-step.json"
@@ -682,6 +728,11 @@ do_group() {
     sheld=$(jq -r '.heldHead // empty' "$mstate" | tr -d '\r')
     [ -n "$sheld" ] || die "Task $n has no held head; run task-step hold first" 6
     bases+=("$sbase") helds+=("$sheld")
+    mcwd=$(jq -r '.heldCwd // empty' "$mstate" | tr -d '\r')
+    [ -n "$mcwd" ] || mcwd=$default_cwd
+    seen=0
+    for i in ${check_dirs[@]+"${!check_dirs[@]}"}; do [ "${check_dirs[$i]}" != "$mcwd" ] || seen=1; done
+    [ "$seen" -eq 1 ] || check_dirs+=("$mcwd")
     lout=$(bash "$HERE/lens-route" "$plan" --task "$n" 2>&1); lrc=$?
     [ "$lrc" -eq 0 ] || die "lens-route: $(tr -d '\r' <<<"$lout" | head -n 1)"
     lenses=$(sed -n 's/^lens [^ ]* criteria=\(.*\)$/\1/p' <<<"$lout" | tr -d '\r' | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
@@ -729,9 +780,14 @@ do_group() {
 
   rm -f "$ws/group-$list-review-report.md"
   cp "$TMP/package.md" "$pkg" && cp "$TMP/prompt.md" "$prompt" || die "cannot write $pkg or $prompt"
+  for mcwd in "${check_dirs[@]}"; do
+    snap=$(tracked_snapshot "$mcwd")
+    [ -z "$snap" ] || snaps="$snaps$snap"$'\n'
+  done
   t0=$(date +%s)
   jq -n --argjson tasks "$(printf '%s\n' "${members[@]}" | jq -sc .)" --arg rh "$ghead" --argjson t0 "$t0" \
-    '{tasks: $tasks, reviewHead: $rh, t0: $t0}' > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot write $gstate"
+    --argjson checks "$(printf '%s' "$snaps" | jq -sc .)" \
+    '{tasks: $tasks, reviewHead: $rh, t0: $t0, reviewChecks: $checks}' > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot write $gstate"
   for n in "${members[@]}"; do
     mstate="$ws/task-$n-step.json"
     # A member held with --head is a wave task: its own held head is what was reviewed.
@@ -748,9 +804,248 @@ do_group() {
   printf '%s\n' "${budget:-budget: unknown}"
 }
 
+# parse_report REPORT MODE TASKS GROUP: checks the judge report grammar and
+# prints one record per line: "K\t<verdict key line>", "F\t<severity>\t<task>\t
+# <file>\t<line>\t<one-liner>", "C\t<cannot-verify item>". On the first
+# refusal it prints "E\t<reason>" and exits 1. MODE is review or rereview;
+# TASKS is the comma list whose verdict keys a group report must carry.
+parse_report() {
+  tr -d '\r' < "$1" | awk -v mode="$2" -v tasks="$3" -v group="$4" -v first="$first" '
+    function err(s) { print "E\t" s; bad = 1; exit 1 }
+    function need(key, allowed, v) {
+      if (!(key in KV)) err("missing verdict line '"'"'" key ": …'"'"'")
+      v = KV[key]
+      if (allowed == "SCORES") {
+        if (v !~ /^spec [0-9]+ \/ scope [0-9]+ \/ verification [0-9]+ \/ quality [0-9]+$/) err("bad verdict line: " KL[key])
+        n = split(v, w, " ")
+        for (j = 2; j <= n; j += 3) if (w[j] + 0 < 1 || w[j] + 0 > 20) err("bad verdict line: " KL[key])
+      } else if (allowed == "COUNT") {
+        if (v !~ /^[0-9]+$/) err("bad verdict line: " KL[key])
+      } else if (index("|" allowed "|", "|" v "|") == 0) err("bad verdict line: " KL[key])
+    }
+    BEGIN { nt = split(tasks, T, ","); for (i = 1; i <= nt; i++) LISTED[T[i]] = 1 }
+    !started {
+      if ($0 ~ /^[ \t]*$/) next
+      if ($0 != "## Verdict") err("does not open with ## Verdict")
+      started = 1; sect = "Verdict"; nsect = 1; next
+    }
+    /^## / {
+      sect = substr($0, 4); sub(/[ \t]+$/, "", sect); nsect++
+      if (sect == "Codex findings") codex_at = nsect
+      next
+    }
+    sect == "Verdict" {
+      if ($0 !~ /^[^:]+: .+$/) next
+      key = $0; sub(/: .*$/, "", key)
+      val = substr($0, length(key) + 3); sub(/[ \t]+$/, "", val)
+      if (!(key in KV)) { KV[key] = val; KL[key] = $0 }
+      out[++no] = "K\t" $0
+      next
+    }
+    sect == "Findings" && /^- / {
+      if (tolower($0) ~ /^- none[ \t]*$/) next
+      if ($0 !~ /^- \[(Critical|Important|Minor)\] (\(Task [0-9]+\) )?[^ ]+:[0-9]+(-[0-9]+)? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
+      rest = substr($0, 4); sev = rest; sub(/\].*$/, "", sev)
+      rest = substr(rest, length(sev) + 3)
+      task = ""
+      if (rest ~ /^\(Task [0-9]+\) /) {
+        task = rest; sub(/\).*$/, "", task); sub(/^\(Task /, "", task)
+        rest = substr(rest, index(rest, ") ") + 2)
+      }
+      if (group && (task == "" || !(task in LISTED))) err("line " NR " is not a finding line: " $0)
+      if (!group && task != "") err("line " NR " is not a finding line: " $0)
+      if (task == "") task = first
+      loc = rest; sub(/ .*$/, "", loc)
+      rest = substr(rest, length(loc) + 2)
+      one = rest; sub(/^[^ ]+ /, "", one)
+      match(loc, /:[0-9]+(-[0-9]+)?$/)
+      out[++no] = "F\t" sev "\t" task "\t" substr(loc, 1, RSTART - 1) "\t" substr(loc, RSTART + 1) "\t" one
+      next
+    }
+    sect == "Cannot verify" && /^- / {
+      if (tolower($0) ~ /^- none[ \t]*$/) next
+      out[++no] = "C\t" substr($0, 3)
+      next
+    }
+    END {
+      if (bad) exit 1
+      if (!started) err("does not open with ## Verdict")
+      if (mode == "rereview") { need("fix round", "addressed|open"); need("open", "COUNT") }
+      else if (group) for (i = 1; i <= nt; i++) {
+        need("Task " T[i] " spec", "pass|fail|cannot-verify")
+        need("Task " T[i] " quality", "approved|changes")
+        need("Task " T[i] " scores", "SCORES")
+      } else { need("spec", "pass|fail|cannot-verify"); need("quality", "approved|changes"); need("scores", "SCORES") }
+      if (codex_at && codex_at != nsect) err("## Codex findings is not the report'"'"'s last section")
+      for (i = 1; i <= no; i++) print out[i]
+    }'
+}
+
+# check_tracked: the check line, after comparing every snapshot the review
+# step recorded with its checkout now. Exits 6 on a change, naming it.
+check_tracked() {
+  local vstate=$1 snaps k snap dir old new changed
+  if [ "$vgroup" -eq 1 ]; then
+    snaps=$(jq -c '(.reviewChecks // [])[]' "$vstate" | tr -d '\r')
+  else
+    snaps=$(jq -c '.reviewCheck // empty' "$vstate" | tr -d '\r')
+  fi
+  k=$(printf '%s' "$snaps" | grep -c .)
+  if [ "$k" -eq 0 ]; then
+    echo "check tracked: not recorded (the review step predates this check)"
+    return
+  fi
+  [ -z "$cwd_arg" ] || [ "$k" -eq 1 ] || die "--cwd names one checkout; this group recorded $k"
+  while IFS= read -r snap; do
+    dir=$cwd_arg
+    [ -n "$dir" ] || dir=$(jq -r '.cwd' <<<"$snap" | tr -d '\r')
+    [ -d "$dir" ] || die "bad --cwd: $dir"
+    old=$(jq -r '.head' <<<"$snap" | tr -d '\r')
+    new=$(git -C "$dir" rev-parse HEAD 2>/dev/null | tr -d '\r')
+    [ -n "$new" ] || die "bad --cwd: $dir"
+    if [ "$new" != "$old" ]; then
+      {
+        printf 'task-step: HEAD moved during the review in %s (%s -> %s); files changed since:\n' "$dir" "${old:0:7}" "${new:0:7}"
+        git -C "$dir" -c core.quotepath=off diff --name-only --no-renames "$old" | tr -d '\r'
+      } >&2
+      exit 6
+    fi
+    jq -r '.dirty[] | "\(.path)\t\(.hash)"' <<<"$snap" | tr -d '\r' > "$TMP/recorded"
+    dirty_list "$dir" > "$TMP/now"
+    changed=$(awk -F'\t' '
+      FNR == NR { rec[$1] = $2; next }
+      !($1 in rec) || rec[$1] != $2 { print $1 }
+      { delete rec[$1] }
+      END { for (p in rec) print p }' "$TMP/recorded" "$TMP/now" | LC_ALL=C sort -u)
+    if [ -n "$changed" ]; then
+      {
+        printf 'task-step: tracked files changed during the review in %s; restore them with git -C %s checkout -- <files>:\n' "$dir" "$dir"
+        printf '%s\n' "$changed"
+      } >&2
+      exit 6
+    fi
+  done <<<"$snaps"
+  echo "check tracked: clean"
+}
+
+do_verdict() {
+  local n list vstate rpath mode check_line recs rc rec tag rest sev task file line one t r fix l nv i room nc budget
+  local members=() fixes=() vlines=() flines=() cvs=() minors=()
+  local crit=0 imp=0 minor=0
+  if [ "$vgroup" -eq 1 ]; then
+    while IFS= read -r n; do members+=("$n"); done < <(printf '%s\n' "${ids[@]}" | sort -n -u)
+    list=$(IFS=,; echo "${members[*]}")
+    vstate=$ws/group-$list-step.json
+    [ -f "$vstate" ] && [ -n "$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')" ] \
+      || die "run task-step review --group for group $list first" 6
+    rpath=$ws/group-$list-review-report.md
+  else
+    members=("$first")
+    list=$first
+    vstate=$state
+    [ -f "$vstate" ] && [ -n "$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')" ] \
+      || die "run task-step review for task $first first" 6
+    rpath=$ws/task-$first-review-report.md
+    [ -z "$rereview_arg" ] || rpath=$ws/task-$first-rereview-$rereview_arg-report.md
+  fi
+  mode=review
+  [ -z "$rereview_arg" ] || mode=rereview
+
+  [ -z "$cwd_arg" ] || [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
+  check_line=$(check_tracked "$vstate"); rc=$?
+  [ "$rc" -eq 0 ] || exit "$rc"
+
+  [ -f "$rpath" ] || die "no report at $rpath: the seat wrote none" 5
+  recs=$(parse_report "$rpath" "$mode" "$list" "$vgroup"); rc=$?
+  [ "$rc" -eq 0 ] || die "$rpath: ${recs#E$'\t'}" 5
+
+  : > "$TMP/serious"
+  while IFS= read -r rec; do
+    tag=${rec%%$'\t'*} rest=${rec#*$'\t'}
+    case $tag in
+      K) vlines+=("$rest") ;;
+      C) cvs+=("$rest") ;;
+      F)
+        IFS=$'\t' read -r sev task file line one <<<"$rest"
+        case $sev in
+          Critical) crit=$((crit + 1)) ;;
+          Important) imp=$((imp + 1)) ;;
+          *) minor=$((minor + 1)); minors+=("Task $task: minor (deferred): $file:$line — $one"); continue ;;
+        esac
+        flines+=("$sev $task $file:$line — $one")
+        printf '%s\t%s\t%s\t%s\t%s\n' "$task" "$sev" "$file" "$line" "$one" >> "$TMP/serious"
+        ;;
+    esac
+  done <<<"$recs"
+
+  for t in "${members[@]}"; do
+    n=$(awk -F'\t' -v t="$t" '$1 == t { c++ } END { print c + 0 }' "$TMP/serious")
+    [ "$n" -gt 0 ] || continue
+    if [ "$vgroup" -eq 1 ]; then
+      r=$(jq -r '.round // 0' "$ws/task-$t-step.json" 2>/dev/null | tr -d '\r')
+    else
+      r=$(jq -r '.round // 0' "$vstate" | tr -d '\r')
+    fi
+    fix=$ws/task-$t-fix-$(( ${r:-0} + 1 )).md
+    awk -F'\t' -v t="$t" -v report="$rpath" '
+      $1 == t { n++; sev[n] = $2; loc[n] = $3 ($4 == "0" ? "" : ":" $4); full[n] = $3 ":" $4; one[n] = $5 }
+      END {
+        for (i = 1; i <= n; i++) print "- " loc[i] ": " one[i]
+        print ""
+        print "Severity and detail: " report
+        for (i = 1; i <= n; i++) print "- [" sev[i] "] " full[i] " — " one[i]
+      }' "$TMP/serious" > "$fix" || die "cannot write $fix"
+    fixes+=("$fix ($n finding$([ "$n" -eq 1 ] || echo s))")
+  done
+
+  for l in ${minors[@]+"${minors[@]}"}; do
+    if [ -f "$ledger" ] && tr -d '\r' < "$ledger" | grep -qxF -- "$l"; then continue; fi
+    ledger_init
+    printf '%s\n' "$l" >> "$ledger"
+  done
+
+  if [ "$vgroup" -eq 1 ]; then
+    printf 'group %s: verdict from %s\n' "$list" "$rpath"
+  else
+    printf 'task %s: verdict from %s\n' "$idlist" "$rpath"
+  fi
+  nv=${#vlines[@]}
+  if [ "$nv" -gt 12 ]; then
+    printf '%s\n' "${vlines[@]:0:11}"
+    printf 'verdict: %s more lines in the report\n' "$((nv - 11))"
+    nv=12
+  elif [ "$nv" -gt 0 ]; then
+    printf '%s\n' "${vlines[@]}"
+  fi
+  printf 'findings: %s Critical, %s Important, %s Minor\n' "$crit" "$imp" "$minor"
+  [ "${#flines[@]}" -eq 0 ] || printf '%s\n' "${flines[@]}"
+  # Every line but the finding lines fits in 20: the first, the verdict lines,
+  # and the findings, fix, minor, check and budget lines leave this many.
+  room=$((20 - nv - 6))
+  nc=${#cvs[@]}
+  if [ "$nc" -le "$room" ]; then
+    for i in ${cvs[@]+"${!cvs[@]}"}; do printf 'cannot-verify: %s\n' "${cvs[$i]}"; done
+  else
+    for ((i = 0; i < room - 1; i++)); do printf 'cannot-verify: %s\n' "${cvs[$i]}"; done
+    printf 'cannot-verify: %s more in the report\n' "$((nc - room + 1))"
+  fi
+  if [ "${#fixes[@]}" -eq 0 ]; then
+    echo "fix: none"
+  else
+    printf 'fix: %s' "${fixes[0]}"
+    for i in "${!fixes[@]}"; do [ "$i" -eq 0 ] || printf '; %s' "${fixes[$i]}"; done
+    echo
+  fi
+  printf 'minor: %s logged as deferred\n' "$minor"
+  printf '%s\n' "$check_line"
+  budget=$(DFORGE_BUDGET_CALLER="task-step:verdict" bash "$HERE/context-size" 2>/dev/null | budget_of)
+  printf '%s\n' "${budget:-budget: unknown}"
+}
+
 case $sub in
   start) do_start ;;
   review) do_review ;;
   hold) do_hold ;;
   group) do_group ;;
+  verdict) do_verdict ;;
 esac

@@ -5,9 +5,12 @@
 # itself is never edited during execution.
 #
 # Usage: plan-amend PLAN_FILE BLOCK_FILE
+#        plan-amend PLAN_FILE --report FILE --id A<k>
 # BLOCK_FILE heading: "## A? — Task N", "## Task N", "## A? — Header" or
 # "## Header" ("-" accepted for the dash), then "Reason:", "Cost if wrong:",
 # "### Old" and "### New", each followed by a fence of 4 or more backticks.
+# --report takes the entry "## A<k> — Task N" (or Header) from a ruling
+# report, through its New fence's closing line, and applies it as that block.
 # Exit: 0 appended ("amended: A<k> <target>"); 1 rejected, or the lock is
 # busy; 2 usage, or the write failed.
 set -uo pipefail
@@ -16,10 +19,29 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 . "$HERE/lib/lock.sh"
 
-[ $# -eq 2 ] || { echo "usage: plan-amend PLAN_FILE BLOCK_FILE" >&2; exit 2; }
-plan=$(plan_locate "$1") block=$2
+usage() {
+  printf '%s\n' "usage: plan-amend PLAN_FILE BLOCK_FILE" "       plan-amend PLAN_FILE --report FILE --id A<k>" >&2
+  exit 2
+}
+block="" report="" id=""
+case $# in
+  2) block=$2 ;;
+  5)
+    if [ "$2" = --report ] && [ "$4" = --id ]; then report=$3 id=$5
+    elif [ "$2" = --id ] && [ "$4" = --report ]; then id=$3 report=$5
+    else usage
+    fi
+    [[ $id =~ ^A[0-9]+$ ]] || usage
+    ;;
+  *) usage ;;
+esac
+plan=$(plan_locate "$1")
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-[ -f "$block" ] || { echo "no such block file: $block" >&2; exit 2; }
+if [ -n "$report" ]; then
+  [ -f "$report" ] || { echo "no such report file: $report" >&2; exit 2; }
+else
+  [ -f "$block" ] || { echo "no such block file: $block" >&2; exit 2; }
+fi
 # Resolved from the working directory, like task-brief and review-route, so a
 # worktree session cannot amend the primary checkout's copy of the plan.
 plan_require_same_project "$plan"
@@ -30,7 +52,34 @@ reject() { echo "rejected: $1"; exit 1; }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-tr -d '\r' < "$block" > "$TMP/block"
+if [ -z "$report" ]; then
+  tr -d '\r' < "$block" > "$TMP/block"
+else
+  # The entry runs from its heading through the line that closes the fence
+  # after its "### New"; fences are tracked so a heading inside one is text.
+  tr -d '\r' < "$report" | awk -v k="${id#A}" -v out="$TMP/block" "$_PLAN_AWK"'
+    BEGIN { head = "^## A" k " (—|-) (Task [0-9]+|Header)[ \t]*$" }
+    !found {
+      if ($0 ~ head) { found = 1; sub(/^## A[0-9]+ /, "## A? "); print > out }
+      next
+    }
+    mode != "" {
+      print > out
+      if (close_marker($0, open)) { if (mode == "new") { done = 1; exit } mode = "" }
+      next
+    }
+    /^## A[0-9]+ / { exit }
+    { print > out }
+    /^### Old[ \t]*$/ { sect = "old"; next }
+    /^### New[ \t]*$/ { sect = "new"; next }
+    sect != "" && match($0, /^(````+|~~~~+)/) { open = substr($0, RSTART, RLENGTH); mode = sect; sect = "" }
+    END { if (!found) exit 3; if (!done) exit 4 }'
+  case $? in
+    0) ;;
+    3) reject "no entry $id in $report" ;;
+    *) reject "entry $id in $report has no closed New fence" ;;
+  esac
+fi
 
 head_line=$(grep -m 1 -E '^## ' "$TMP/block" || true)
 if [[ "$head_line" =~ ^##\ (A\?\ (—|-)\ )?(Task\ ([0-9]+)|Header)[[:space:]]*$ ]]; then

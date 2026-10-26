@@ -459,7 +459,7 @@ that arises at one point into one dispatch:
 |---|---|
 | `preflight` | Once, before Task 1 (Setup) |
 | `plan-conflict` | A review finding labelled plan-mandated, or one that conflicts with what the plan's text requires |
-| `cannot-verify` | Every "⚠️ Cannot verify from diff" item, before the task completes |
+| `cannot-verify` | Every `cannot-verify:` line of a `task-step verdict` digest, before the task completes |
 | `breaker` | Every finding still open after round 2/2 |
 | `blocked-plan` | An implementer BLOCKED because the plan is wrong |
 | `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../reference/executor-lane.md)) |
@@ -473,7 +473,11 @@ packages — with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` for the point's
 kinds and the tasks its items concern, and dispatch the `primary` it prints
 with [ruling-prompt.md](references/ruling-prompt.md), expanding its
-placeholders. Items of different kinds at one point share one dispatch, and
+placeholders. Its `[REPORT_FILE]` is `<workspace>/rulings-<point>-<task>-report.md`. The
+seat writes its report there and replies in at most 10 lines;
+read only its `## Verdict` section
+(`awk '/^## / { on = ($0 == "## Verdict") } on' <report>`), never the rest.
+Items of different kinds at one point share one dispatch, and
 `<kind>` is then one comma-separated list, such as
 `cannot-verify,executor-empty-diff`. The route prints
 `dforge:judge-sonnet-high` (`reason=simple-kind`) when every kind in the list
@@ -502,19 +506,21 @@ verbatim:
   next task in plan order; after the last task, into the final review.
 - **PARK** — log `Task <N>: parked — <finding> — Ruling: <why>`; the code
   stands.
-- **AMEND** — copy the entry, from its `## A?` line through the New fence's
-  closing line, to `<workspace>/amend-<id>.md` and run
-  `scripts/plan-amend PLAN_FILE <workspace>/amend-<id>.md`. On `amended: A<k> …`, write the amendment ledger line; the next
+- **AMEND** — run
+  `scripts/plan-amend PLAN_FILE --report <workspace>/rulings-<point>-<task>-report.md --id A<k>`,
+  `A<k>` being the item's `Amendment:` line; never copy the entry by hand. On `amended: A<k> …`, write the amendment ledger line; the next
   dispatch uses a fresh `task-brief`, which carries the amendment. On
-  `rejected: …`, make one fresh seat dispatch carrying the entry and the
-  rejection output; a second rejection is BLOCKED.
+  `rejected: …`, make one fresh seat dispatch carrying the report path, the
+  entry's id and the rejection output; a second rejection is BLOCKED.
 
   **A Header amendment is confirmed first.** Before `plan-amend`, write
   `<workspace>/rulings-<point>-<task>-confirm.md`: the original item entry
-  unchanged, then the first verdict block verbatim. Confirm it with
+  unchanged, then the path of the first seat's report and the item's id. Confirm it with
   a second, independent `dforge:judge-opus` dispatch, made directly
   rather than through `review-route`, with the same template and
-  `[CONFIRM_NOTE]` filled. The second verdict replaces the first and is carried
+  `[CONFIRM_NOTE]` filled; its `[REPORT_FILE]` is
+  `<workspace>/rulings-<point>-<task>-confirm-report.md`, and its AMEND is
+  applied with `--report` on that file. The second verdict replaces the first and is carried
   out like any verdict; the one fresh dispatch after a `rejected:` is a
   confirming seat too. Log
   `Ruling: header amendment A<k> confirmed by a second judge-opus — <its
@@ -687,8 +693,8 @@ Task 1: Hook installation script  (**Implementer:** dforge:impl-sonnet-low)
 Implementer: DONE — 5/5 passing; report file written; assumptions: user-level install (brief silent)
 
 [task-step review PLAN_FILE 1: seat judge-sonnet-high, prompt task-1-review-prompt.md, check identity: clean, check attribution: clean; dispatch the seat with the prompt path]
-Judge: Spec ✅. Task quality: Approved.
-  Verification Scores: spec 17 / scope 18 / verification 16 / quality 16
+Judge: report task-1-review-report.md — spec pass, quality approved, scores 17/18/16/16, 0 findings
+[task-step verdict PLAN_FILE 1: spec: pass, quality: approved, scores: spec 17 / scope 18 / verification 16 / quality 16, fix: none, check tracked: clean]
 
 [Ledger: Task 1: complete (commits a1b2c3d..d4e5f6a, review clean; scores spec 17 / scope 18 / verification 16 / quality 16) — done: install-hook command; verified: node --test test/hook.test.js → 5/5; remaining: none; discovered: none; assumptions: user-level install]
 
@@ -698,14 +704,15 @@ Task 2: Recovery modes  (**Implementer:** dforge:impl-sonnet-medium)
 Implementer: DONE — 8/8 passing
 
 [task-step review PLAN_FILE 2: state line shows t0; dispatch judge-sonnet-high with the prompt path]
-Judge: Spec ❌ — missing progress reporting. Important: magic number (100).
-  Verification Scores: spec 7 / scope 17 / verification 15 / quality 12
+Judge: report task-2-review-report.md — spec fail, quality changes, scores 7/17/15/12, 2 Important
+[task-step verdict PLAN_FILE 2: spec: fail; Important 2 src/progress.ts:0 — missing progress reporting; Important 2 src/index.ts:88 — magic number (100); fix: task-2-fix-1.md (2 findings)]
 
 [date +%s → t1; t1 − t0 = 140s, so resume the implementer with the path of task-2-fix-1.md, whose two bullets name both findings]
 Implementer: Added progress reporting, extracted PROGRESS_INTERVAL. 10/10 passing.
 
 [task-step rereview PLAN_FILE 2: two findings are open, so no skip; dispatch the printed seat with task-2-rereview-1-prompt.md]
-Re-reviewer: both ADDRESSED. New breakage: none.
+Re-reviewer: report task-2-rereview-1-report.md — fix round addressed, 0 open
+[task-step verdict PLAN_FILE 2 --rereview 1: fix round: addressed, open: 0, fix: none]
 
 [Ledger: Task 2: fix round 1/2 (2 addressed, 0 open; commits d4e5f6a..b7c8d9e; resumed)]
 [Ledger: Task 2: complete (commits d4e5f6a..b7c8d9e, review clean; scores spec 16 / scope 17 / verification 15 / quality 15) — …]
