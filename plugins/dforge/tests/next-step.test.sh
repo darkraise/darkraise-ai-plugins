@@ -44,8 +44,11 @@ write_plan() { # write_plan <file> <execution line> <program line or empty>
     printf '%s\n\n' "$2"
     [ -n "$3" ] && printf '%s\n\n' "$3"
     printf '## Task index\n\n1. First\n2. Second\n3. Third\n\n'
-    printf '### Task 1: First thing\n\nBody.\n\n```bash\n### Task 9: fenced, not a task\n```\n\n'
-    printf '### Task 2: Second thing\n\nBody.\n\n### Task 3: Third thing\n\nBody.\n'
+    # Scored so that review-route grades every task review=group: a held task
+    # is then followed by one that can still be dispatched.
+    printf '### Task 1: First thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n\n```bash\n### Task 9: fenced, not a task\n```\n\n'
+    printf '### Task 2: Second thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n\n'
+    printf '### Task 3: Third thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk %s = %s\n\nBody.\n' "${TASK3_RISK:-0}" "$(( ${TASK3_RISK:-0} + 1 ))"
   } > "$1"
 }
 EXEC_SUB='**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4'
@@ -114,6 +117,19 @@ ledger 'Task 1: complete (commits a..b, review clean)' \
 run "$REPO" "$PLAN_REL"
 has "held: every open task held means the group review is next" "$out" "**Next:** Review the held Tasks 2,3 as one group (\`task-step review --group\`), then write their complete lines."
 lacks "held: no task is named to start" "$out" "Resume at Task"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: complete (commits b..c, review clean)' \
+       'Task 3: awaiting group review (commits ccccccc..ddddddd)'
+run "$REPO" "$PLAN_REL"
+has "held: one held task is named in the singular" "$out" "**Next:** Review the held Task 3 as one group (\`task-step review --group\`), then write its complete line."
+# The next open task is reviewed alone (risk 2), so the held group goes first.
+TASK3_RISK=2 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)'
+run "$REPO" "$PLAN_REL"
+has "held: before a task reviewed alone, the group review is next" "$out" "**Next:** Review the held Task 2 as one group (\`task-step review --group\`), then write its complete line. Dispatch Task 3 (Third thing) only once the group is clean."
+lacks "held: and Task 3 is not resumed first" "$out" "Resume at Task 3"
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
 
 # --- a group in its fix rounds blocks every new dispatch ---
 ledger 'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)' \
@@ -136,6 +152,13 @@ ledger 'Task 1: complete (commits a..b, review clean)' \
        'Group 2,3: review round 1/2 (Task 2: clean; Task 3: clean; commits ddddddd..eeeeeee (Task 2))'
 run "$REPO" "$PLAN_REL"
 has "group clean: the complete lines are next" "$out" "**Next:** Write the complete lines of Group 2,3's members: the group is clean."
+ledger 'Task 1: complete (commits a..b, review clean)' \
+       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
+       'Task 3: awaiting group review (commits ccccccc..ddddddd)' \
+       'Group 2,3: review round 1/2 (Task 2: clean; Task 3: open — y; commits ddddddd..eeeeeee (Task 2))'
+run "$REPO" "$PLAN_REL"
+has "group unread: a clause with no count is not read as clean" "$out" "it holds no \`<k> open\` or \`clean\` clause for Task 3."
+lacks "group unread: and no complete line is called for" "$out" "the group is clean"
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
        'Task 2: complete (commits bbbbbbb..ccccccc, review clean)'
