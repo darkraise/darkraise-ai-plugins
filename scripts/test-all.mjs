@@ -51,7 +51,7 @@ const [tscExecutable, tscPrefix] = process.platform === 'win32' ? [process.env.C
 const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
 // plan-lint runs about 240 checks of a few processes each, which take over ten
 // minutes on a Windows runner and under a minute on Linux.
-const suiteSeconds = { 'plan-lint.test.sh': 900 };
+const suiteSeconds = { 'plan-lint.test.sh': 900, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step.test.sh': 1200 };
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],

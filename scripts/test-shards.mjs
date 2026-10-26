@@ -1,5 +1,6 @@
 // Approximate Windows seconds from Actions run 39725084214 (plan-revise,
-// roots and turn-end from 39716794435, which ran them whole). These are
+// roots and turn-end from 39716794435, which ran them whole; the task-loop
+// and ui-ux suites from 40266273254 and 40269409913). These are
 // scheduling weights, not timeouts; newly discovered suites receive the
 // default weight.
 const windowsSeconds = {
@@ -13,10 +14,13 @@ const windowsSeconds = {
   'detect.test.sh': 130,
   'dforge-config.test.sh': 35,
   'dforge-migrate.test.sh': 75,
+  'draft-pack.test.sh': 40,
   'executor-recovery.test.sh': 295,
   'finish-choice.test.sh': 80,
   'hook.test.sh': 80,
+  'in-flight.test.sh': 30,
   'inline-mode.test.sh': 65,
+  'lens-route.test.sh': 65,
   'next-step.test.sh': 335,
   'plan-amend.test.sh': 215,
   'plan-lib.test.sh': 40,
@@ -27,8 +31,14 @@ const windowsSeconds = {
   'review-route.test.sh': 330,
   'roadmap.test.sh': 110,
   'roots.test.sh': 50,
+  'suite-run.test.sh': 55,
+  'task-loop-steps.acceptance.test.sh': 900,
   'task-state.test.sh': 55,
+  'task-step.test.sh': 800,
   'turn-end.test.sh': 55,
+  'ui-hooks.test.sh': 65,
+  'ui-proof.test.sh': 195,
+  'ui-ux-skill.acceptance.test.sh': 280,
   'wave.test.sh': 35,
   'working-directory.test.sh': 80,
 };
