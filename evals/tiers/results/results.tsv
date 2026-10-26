@@ -182,3 +182,18 @@ rep	stage	case	pool	row	arm	outcome	model	cost	seconds	turns	detail
 1	manual	s-review-routing-t17	stripped	3	impl-sonnet-high	EXCLUDED		0.0000	0	0	case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
 1	manual	s-review-fixes-t8	stripped	3	impl-sonnet-high	EXCLUDED		0.0000	0	0	case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
 1	manual	s-execution-cost-t15	stripped	4	impl-sonnet-high	EXCLUDED		0.0000	0	0	case defect: a stripped snapshot deletes docs/superpowers, which this case's tests or Files block need; owner ruling 2026-10-02
+1	slice	l-fold-companions-t3-4	slice	6	impl-opus-medium	PASS	claude-opus-5-5	0.4649	154	16	status=DONE
+1	slice	l-fold-companions-t3-4	slice	6	impl-sonnet-high	PASS	claude-sonnet-5-5	0.2225	185	15	status=DONE
+1	slice	l-standalone-base-t7-8	slice	6	impl-sonnet-high	PASS	claude-sonnet-5-5	0.1893	87	10	status=DONE
+1	slice	l-fold-companions-t3-4	slice	6	impl-opus-high	PASS	claude-opus-5-5	0.4853	177	21	status=DONE
+1	slice	l-standalone-base-t7-8	slice	6	impl-opus-medium	PASS	claude-opus-5-5	0.3786	106	12	status=DONE
+1	slice	l-standalone-base-t7-8	slice	6	impl-opus-high	PASS	claude-opus-5-5	0.5266	127	18	status=DONE
+1	slice	l-judge-seats-t3-4	slice	7	impl-opus-medium	PASS	claude-opus-5-5	1.0589	226	29	status=DONE_WITH_CONCERNS
+1	slice	l-judge-seats-t3-4	slice	7	impl-sonnet-high	PASS	claude-sonnet-5-5	0.4389	231	18	status=DONE_WITH_CONCERNS
+1	slice	l-project-state-t1-2	slice	5	impl-sonnet-high	PASS	claude-sonnet-5-5	0.3468	123	14	status=DONE_WITH_CONCERNS
+1	slice	l-judge-seats-t3-4	slice	7	impl-opus-high	PASS	claude-opus-5-5	1.1624	270	26	status=DONE_WITH_CONCERNS
+1	slice	l-project-state-t1-2	slice	5	impl-opus-medium	PASS	claude-opus-5-5	0.8620	214	23	status=DONE
+1	slice	l-project-state-t1-2	slice	5	impl-opus-high	PASS	claude-opus-5-5	1.4741	345	35	status=DONE
+1	slice	l-review-routing-t11-12	slice	7	impl-sonnet-high	PASS	claude-sonnet-5-5	0.4673	203	22	status=DONE_WITH_CONCERNS
+1	slice	l-review-routing-t11-12	slice	7	impl-opus-medium	PASS	claude-opus-5-5	1.1497	280	36	status=DONE_WITH_CONCERNS
+1	slice	l-review-routing-t11-12	slice	7	impl-opus-high	PASS	claude-opus-5-5	1.8874	332	48	status=DONE_WITH_CONCERNS

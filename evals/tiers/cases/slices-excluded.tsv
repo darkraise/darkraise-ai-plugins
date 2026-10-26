@@ -1,0 +1,181 @@
+plan	tasks	reason
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	1,2	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-11-dr-superpowers-fold-companions.md	2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	1,2	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	3,4,5	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	3,4	plugins/dr-superpowers/tests/budget-line.test.sh fails on the result commit
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	4,5,6	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-11-dr-superpowers-session-budget.md	5,6	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	6,7,8	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-11-dr-superpowers-standalone-base.md	6,7	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	1,2	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-12-dr-superpowers-small-model-planning.md	3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	1,2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	1,2	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	2,3,4	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-judge-seats.md	2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	1,2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	2,3,4	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	2,3	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	3,4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	3,4	total 4: §1 assigns no slice arm
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	4,5,6	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	5,6,7	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	5,6	total 4: §1 assigns no slice arm
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	6,7,8	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	6,7	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	7,8,9	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	7,8	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	8,9,10	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	8,9	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	9,10,11	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	9,10	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-14-dr-superpowers-project-state.md	10,11	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	1,2	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	3,4,5	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	3,4	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	4,5	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	11,12,13	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	12,13,14	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	12,13	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	13,14	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-15-dr-superpowers-review-routing.md	16,17	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	2,3,4	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	2,3	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	3,4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	3,4	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-16-dr-superpowers-codex-through-plugin.md	12,13	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	1,2	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	2,3,4	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	2,3	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	3,4,5	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	3,4	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	4,5,6	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	5,6,7	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	5,6	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	6,7,8	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	6,7	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	7,8,9	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	7,8	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	8,9,10	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	8,9	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	9,10,11	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	9,10	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	10,11,12	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	10,11	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	11,12,13	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	11,12	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	12,13,14	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	12,13	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	13,14,15	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	13,14	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-execution-cost.md	14,15	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	1,2	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	2,3	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	3,4,5	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	4,5,6	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	4,5	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	5,6,7	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	5,6	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	6,7,8	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	6,7	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	7,8,9	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	7,8	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	8,9,10	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	8,9	total 4: §1 assigns no slice arm
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	9,10,11	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	9,10	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	10,11,12	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	10,11	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-17-dr-superpowers-review-fixes.md	11,12	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	1,2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	1,2	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	2,3,4	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	3,4,5	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	3,4	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	4,5,6	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-codex-budget.md	5,6	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	1,2,3	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	1,2	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	2,3,4	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	2,3	total 4: §1 assigns no slice arm
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	3,4,5	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	3,4	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	4,5,6	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	4,5	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	5,6,7	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	5,6	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	6,7,8	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	6,7	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	7,8,9	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	7,8	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	8,9,10	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	8,9	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	9,10,11	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	9,10	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	10,11,12	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	10,11	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-20-dr-superpowers-item-registers.md	11,12	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	1,2	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	3,4	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	14,15,16	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	14,15	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	15,16,17	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	15,16	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	16,17,18	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	16,17	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-21-dr-superpowers-executor-interface.md	17,18	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	4,5,6	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	4,5	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	5,6,7	Rule S: files 3 + spec 2 + coupling 1 = 6
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	5,6	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-23-dr-superpowers-codex-v3.md	6,7	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	4,5,6	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	4,5	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	5,6,7	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	5,6	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	6,7,8	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	6,7	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-24-darkmem-sync-client.md	7,8	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	1,2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	1,2	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	2,3	Rule S: files 2 + spec 2 + coupling 2 = 6
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	3,4,5	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	4,5,6	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	4,5	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-26-darkmem-sync-hardening.md	5,6	not selected: 5 slices already picked
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	1,2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	1,2	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	2,3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	2,3	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	3,4,5	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	3,4	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	4,5,6	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	4,5	Rule S: files 3 + spec 2 + coupling 2 = 7
+docs/superpowers/plans/2026-09-30-dr-superpowers-sonnet-5-5.md	5,6	Rule S: files 3 + spec 2 + coupling 1 = 6
