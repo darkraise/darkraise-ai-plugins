@@ -74,5 +74,22 @@ lacks "the rationalization row no longer says every round is re-reviewed" "$SDD"
 names "inline mode hands delegated tasks to delegated-task.md" "$INLINE" '[delegated-task.md](../../reference/delegated-task.md) for this task instead'
 check "inline mode restates no hand-run review mechanic" "$(grep -cE 'date \+%s|codex-gate|lens-route' "$INLINE")" "0"
 
+# --- the group reviewer template ---
+GRP="$P/skills/subagent-driven-development/references/group-reviewer-prompt.md"
+check "the group reviewer template exists" "$([ -f "$GRP" ] && echo yes || echo no)" "yes"
+for ph in '[GROUP_LIST]' '[PACKAGE_FILE]' '[REPORT_FILE]' '[PLUGIN_ROOT]'; do
+  names "the group template carries $ph" "$GRP" "$ph"
+done
+names "the group template is a fenced prompt task-step can fill" "$GRP" '  prompt: |'
+names "the group package holds one section per task" "$GRP" 'one section per task, headed `## Task <N>`'
+names "the group reviewer scores each task on its own" "$GRP" 'Score each task on its own'
+names "the group report holds one block per task" "$GRP" 'one block per task, headed `### Task <N>`'
+names "a group finding names its task" "$GRP" 'prefix its file with `(Task <N>) `'
+names "a finding in one task never fails another" "$GRP" 'A finding in one task never fails another task'
+names "the group reviewer reads a section's lens files" "$GRP" 'a `**Lenses:**` line'
+lacks "the group template takes no single diff placeholder" "$GRP" '[DIFF_FILE]'
+check "the group prompt holds no placeholder task-step does not fill" \
+  "$(awk '/^  prompt: \|/ { on = 1; next } on && /^```/ { exit } on' "$GRP" 2>/dev/null | grep -oE '\[[A-Z][A-Z_]*\]' | sort -u | grep -cvxE '\[(GROUP_LIST|PACKAGE_FILE|REPORT_FILE|PLUGIN_ROOT)\]')" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

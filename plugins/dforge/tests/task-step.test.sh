@@ -697,5 +697,313 @@ check "rereview with an empty --base exits 2" "$rr_rc" "2"
 rr_run rereview docs/plan.md 1 --head ""
 check "rereview with an empty --head exits 2" "$rr_rc" "2"
 
+# --- hold and review --group: grouped tasks reviewed together ---
+# The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
+GR_TMP=$TMP/gr
+GR_REPO=$GR_TMP/repo
+mkdir -p "$GR_TMP/home" "$GR_REPO/docs"
+gr_run() { # gr_run <args...> — task-step in the group fixture repo; sets gr_out, gr_err, gr_rc
+  gr_out=$(cd "$GR_REPO" && env HOME="$GR_TMP/home" DR_CODEX_SESSION_DIR="$GR_TMP/sessions" CLAUDE_CODE_SESSION_ID=gr-test \
+    GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-step" "$@" 2>"$GR_TMP/err"); gr_rc=$?
+  gr_err=$(cat "$GR_TMP/err")
+}
+gr_git() { git -C "$GR_REPO" "$@"; }
+gr_commit() { # gr_commit <file> — append a line to a fixture file and commit it
+  GR_N=$((GR_N + 1))
+  printf 'line %s\n' "$GR_N" >> "$GR_REPO/$1"
+  gr_git add -A && gr_git commit -qm "feat: change $1"
+}
+gr_short() { gr_git rev-parse --short "$1"; }
+gr_state() { # gr_state <task> <jq filter>
+  jq -r "$2" "$GR_WS/task-$1-step.json" | tr -d '\r'
+}
+gr_lines() { wc -l < "$GR_LEDGER" | tr -d ' '; }
+gr_section() { # gr_section <package> <task> — the package's section for one task
+  awk -v h="## Task $2" '{ sub(/\r$/, "") } $0 == h { on = 1; next } /^## / { on = 0 } on' "$1"
+}
+
+git init -q "$GR_REPO"
+gr_git config user.name t
+gr_git config user.email t@example.invalid
+sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
+|# Group Fixture Plan
+|
+|**Goal:** Fixture.
+|
+|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|
+|## Global Constraints
+|
+|- Fixture constraint.
+|
+|## Contracts
+|
+|- Fixture contract.
+|
+|## Task index
+|
+|1. Light one
+|2. Light two
+|3. Heavy
+|4. Light three
+|5. Unscored
+|6. Wave six
+|7. Wave seven
+|
+|### Task 1: Light one
+|
+|**Files:**
+|- Modify: `one.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|**Lenses:** lang-bash
+|
+|### Task 2: Light two
+|
+|**Files:**
+|- Modify: `two.txt`
+|
+|**Implementer:** dforge:impl-sonnet-medium
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
+|
+|### Task 3: Heavy
+|
+|**Files:**
+|- Modify: `three.txt`
+|
+|**Implementer:** dforge:impl-opus-high
+|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
+|
+|### Task 4: Light three
+|
+|**Files:**
+|- Modify: `four.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+|
+|### Task 5: Unscored
+|
+|**Implementer:** dforge:impl-sonnet-low
+|
+|Body.
+|
+|### Task 6: Wave six
+|
+|**Files:**
+|- Modify: `six.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 7: Wave seven
+|
+|**Files:**
+|- Modify: `seven.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+PLAN
+awk '{ print } /^\*\*Goal:\*\*/ { print ""; print "**Host:** codex" }' "$GR_REPO/docs/plan.md" > "$GR_REPO/docs/codex-plan.md"
+for f in one two three four six seven; do printf 'base\n' > "$GR_REPO/$f.txt"; done
+gr_git add -A && gr_git commit -qm base
+GR_N=0
+GR_MAIN=$(gr_git symbolic-ref --short HEAD)
+GR_WS=$(winpath "$(cd "$GR_REPO" && env HOME="$GR_TMP/home" bash "$RR_S/sdd-workspace" docs/plan.md)")
+GR_LEDGER=$GR_WS/progress.md
+
+# hold: the preconditions, then the awaiting line and the held head.
+gr_run hold docs/plan.md 1
+check "hold: before start exits 6" "$gr_rc" "6"
+gr_run start docs/plan.md 1
+GR_B1=$(gr_git rev-parse HEAD)
+gr_commit one.txt
+GR_H1=$(gr_git rev-parse HEAD)
+gr_run hold docs/plan.md 1
+check "hold: exit 0" "$gr_rc" "0"
+check "hold: the awaiting line" "$(tail -n 1 "$GR_LEDGER")" "Task 1: awaiting group review (commits $(gr_short "$GR_B1")..$(gr_short "$GR_H1"))"
+check "hold: records the held head" "$(gr_state 1 .heldHead)" "$GR_H1"
+check "hold: keeps the base" "$(gr_state 1 .base)" "$GR_B1"
+check "hold: the digest's first line" "$(head -n 1 <<<"$gr_out")" "task 1: held for group review (commits $(gr_short "$GR_B1")..$(gr_short "$GR_H1"))"
+check "hold: the digest is at most 15 lines" "$([ "$(count_lines "$gr_out")" -le 15 ] && echo yes || echo no)" "yes"
+check "hold: the last line is the budget line" "$(tail -n 1 <<<"$gr_out" | cut -c1-6)" "budget"
+before=$(gr_lines)
+gr_run hold docs/plan.md 1
+check "hold again: exit 0" "$gr_rc" "0"
+check "hold again: no second awaiting line" "$(gr_lines)" "$before"
+
+# hold refuses a task review-route reviews alone, and writes nothing for it.
+gr_run start docs/plan.md 3
+gr_commit three.txt
+before=$(gr_lines)
+gr_run hold docs/plan.md 3
+check "hold: a review=task task exits 4" "$gr_rc" "4"
+check "hold: says the task is reviewed alone" "$(grep -c 'review=task' <<<"$gr_err")" "1"
+check "hold: a review=task task gets no awaiting line" "$(gr_lines)" "$before"
+check "hold: a review=task task records no held head" "$(gr_state 3 '.heldHead // "none"')" "none"
+gr_run hold docs/plan.md 5
+check "hold: an unscored task is reviewed alone and exits 4" "$gr_rc" "4"
+gr_run hold docs/plan.md 99
+check "hold: no such task exits 3" "$gr_rc" "3"
+gr_run hold docs/plan.md
+check "hold: no task number exits 2" "$gr_rc" "2"
+gr_run hold docs/plan.md 1 2
+check "hold: two task numbers exit 2" "$gr_rc" "2"
+gr_run hold docs/plan.md 1 --head
+check "hold: --head without a value exits 2" "$gr_rc" "2"
+gr_run hold docs/plan.md 1 --head nope
+check "hold: a bad ref exits 2" "$gr_rc" "2"
+gr_run hold docs/codex-plan.md 1
+check "hold: a Host: codex plan exits 2" "$gr_rc" "2"
+
+gr_run start docs/plan.md 2
+GR_B2=$(gr_git rev-parse HEAD)
+gr_commit two.txt
+gr_run hold docs/plan.md 2
+gr_run start docs/plan.md 4
+gr_commit four.txt
+GR_H4=$(gr_git rev-parse HEAD)
+gr_run hold docs/plan.md 4
+check "hold: a third grouped task" "$gr_rc" "0"
+
+# review --group: every member must be held.
+gr_run review --group docs/plan.md 1 3
+check "review --group: a member that is not held exits 4" "$gr_rc" "4"
+check "review --group: names the task that is not held" "$(grep -c 'Task 3' <<<"$gr_err")" "1"
+check "review --group: a refused group writes no file" "$(ls "$GR_WS" | grep -c '^group-')" "0"
+gr_run review --group docs/plan.md 1 5
+check "review --group: a task with no ledger line exits 4" "$gr_rc" "4"
+gr_run review --group docs/plan.md 1 99
+check "review --group: no such task exits 3" "$gr_rc" "3"
+gr_run review --group docs/plan.md
+check "review --group: no task number exits 2" "$gr_rc" "2"
+gr_run review --group docs/plan.md 1 2 --head HEAD
+check "review --group: --head is not a group flag" "$gr_rc" "2"
+gr_run review --group docs/codex-plan.md 1
+check "review --group: a Host: codex plan exits 2" "$gr_rc" "2"
+
+# review --group: the package, the prompt, the digest and the state. The review
+# surface is open, and a group is still reviewed by a Claude judge alone.
+mkdir -p "$GR_TMP/sessions"
+printf '{"session_id":"gr-test","usable":true,"review":true,"lane":false}\n' > "$GR_TMP/sessions/gr-test.json"
+gr_run review --group docs/plan.md 4 1 2
+GL=1,2,4
+GPKG=$GR_WS/group-$GL-review-package.md
+GPR=$GR_WS/group-$GL-review-prompt.md
+check "review --group: exit 0" "$gr_rc" "0"
+check "review --group: the files are named after the sorted list" \
+  "$([ -f "$GR_WS/group-$GL-step.json" ] && [ -f "$GPKG" ] && [ -f "$GPR" ] && echo yes || echo no)" "yes"
+check "review --group: one section per task, in order" "$(grep '^## ' "$GPKG" | tr -d '\r' | tr '\n' ';')" "## Task 1;## Task 2;## Task 4;"
+check "review --group: a section names its brief" "$(gr_section "$GPKG" 1 | grep -cxF "**Brief:** $GR_WS/task-1-brief.md")" "1"
+check "review --group: a section names its report" "$(gr_section "$GPKG" 1 | grep -cxF "**Report:** $GR_WS/task-1-report.md")" "1"
+check "review --group: a section names its range" "$(gr_section "$GPKG" 1 | grep -cxF "**Commits:** $(gr_short "$GR_B1")..$(gr_short "$GR_H1")")" "1"
+check "review --group: a section holds its own diff" "$(gr_section "$GPKG" 1 | grep -c '^diff --git a/one.txt b/one.txt$')" "1"
+check "review --group: a section holds no other task's diff" "$(gr_section "$GPKG" 1 | grep -cE '^diff --git a/(two|three|four)\.txt')" "0"
+check "review --group: a later member's diff starts at its own base" "$(gr_section "$GPKG" 2 | grep -cE '^diff --git a/(one|three|four)\.txt')" "0"
+check "review --group: the later member's diff" "$(gr_section "$GPKG" 2 | grep -c '^diff --git a/two.txt b/two.txt$')" "1"
+check "review --group: the last member's diff" "$(gr_section "$GPKG" 4 | grep -c '^diff --git a/four.txt b/four.txt$')" "1"
+check "review --group: a section names its lens files" "$(gr_section "$GPKG" 1 | grep -cxF "**Lenses:** $PR/criteria/lenses/lang-bash.md")" "1"
+check "review --group: a task with no lens has no lens line" "$(gr_section "$GPKG" 2 | grep -c '^\*\*Lenses:\*\*')" "0"
+check "review --group: the prompt has no unexpanded placeholder" "$(placeholders "$GPR")" "0"
+check "review --group: the prompt names the package" "$([ "$(grep -cF "$GPKG" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
+check "review --group: the prompt names the report file" "$([ "$(grep -cF "$GR_WS/group-$GL-review-report.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
+check "review --group: the prompt names the criteria file" "$([ "$(grep -cF "$PR/criteria/task-review.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
+check "review --group: the prompt names the group" "$([ "$(grep -cF "$GL" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
+check "review --group: the seat is the route's Claude judge" "$(grep '^seat:' <<<"$gr_out")" "seat: dforge:judge-opus prompt: $GPR"
+check "review --group: no Codex seat runs" "$(grep -cE '^(codex|timeout):' <<<"$gr_out")" "0"
+check "review --group: no Codex prompt is written" "$(ls "$GR_WS" | grep -c 'codex')" "0"
+check "review --group: the identity check" "$(grep '^check identity' <<<"$gr_out")" "check identity: clean"
+check "review --group: the attribution check" "$(grep '^check attribution' <<<"$gr_out")" "check attribution: clean"
+check "review --group: the digest is at most 15 lines" "$([ "$(count_lines "$gr_out")" -le 15 ] && echo yes || echo no)" "yes"
+check "review --group: the last line is the budget line" "$(tail -n 1 <<<"$gr_out" | cut -c1-6)" "budget"
+check "review --group: the group state names its tasks" "$(jq -c .tasks "$GR_WS/group-$GL-step.json" | tr -d '\r')" "[1,2,4]"
+check "review --group: the group state records the group head" "$(jq -r .reviewHead "$GR_WS/group-$GL-step.json" | tr -d '\r')" "$GR_H4"
+check "review --group: the group state records t0" "$(jq -r '.t0 | type' "$GR_WS/group-$GL-step.json" | tr -d '\r')" "number"
+for n in 1 2 4; do
+  check "review --group: Task $n records the group head" "$(gr_state "$n" .reviewHead)" "$GR_H4"
+  check "review --group: Task $n records round 0" "$(gr_state "$n" .round)" "0"
+  check "review --group: Task $n records t0" "$(gr_state "$n" '.t0 | type')" "number"
+  check "review --group: Task $n names its group" "$(gr_state "$n" .group)" "$GL"
+done
+check "review --group: a member keeps its base" "$(gr_state 2 .base)" "$GR_B2"
+check "review --group: a task outside the group is untouched" "$(gr_state 3 '.reviewHead // "none"')" "none"
+
+# A member's fix round re-reviews alone. In one checkout the fixes run one at a
+# time, so each member's fix diff starts where the group's last review ended.
+gr_commit one.txt
+GR_F1=$(gr_git rev-parse HEAD)
+printf -- '- one.txt: wrong value\n\nFix it.\n' > "$GR_WS/task-1-fix-1.md"
+gr_run rereview docs/plan.md 1
+GRR1=$GR_WS/task-1-rereview-1-prompt.md
+check "member rereview: exit 0" "$gr_rc" "0"
+check "member rereview: the fix base is the group head" "$(grep -c "Fix base:\*\* $GR_H4 " "$GRR1")" "1"
+check "member rereview: records the round" "$(gr_state 1 .round)" "1"
+check "member rereview: records its review head" "$(gr_state 1 .reviewHead)" "$GR_F1"
+check "member rereview: the group records the latest review head" "$(jq -r .reviewHead "$GR_WS/group-$GL-step.json" | tr -d '\r')" "$GR_F1"
+gr_commit two.txt
+printf -- '- two.txt: stale\n\nFix it.\n' > "$GR_WS/task-2-fix-1.md"
+gr_run rereview docs/plan.md 2
+GRR2=$GR_WS/task-2-rereview-1-prompt.md
+GRD2=$(sed -n 's/^\*\*Diff file:\*\* //p' "$GRR2")
+check "member rereview: the next member's fix base is the last fix head" "$(grep -c "Fix base:\*\* $GR_F1 " "$GRR2")" "1"
+check "member rereview: the next member's fix diff holds its own fix" "$(grep -c '^diff --git a/two.txt b/two.txt$' "$GRD2")" "1"
+check "member rereview: the next member's fix diff leaves the earlier fix out" "$(grep -c '^diff --git a/one.txt' "$GRD2")" "0"
+gr_commit four.txt
+printf -- '- four.txt: off by one\n\nFix it.\n' > "$GR_WS/task-4-fix-1.md"
+gr_run rereview docs/plan.md 4 --base "$GR_H4"
+check "member rereview: --base <group review head> works for a member" "$gr_rc $(grep -c "Fix base:\*\* $GR_H4 " "$GR_WS/task-4-rereview-1-prompt.md")" "0 1"
+
+# A group with a review round line is in its fix rounds: reviewing it again
+# would reset every member's round and lift the two-round cap.
+printf '%s\n' 'Group 1,2,4: review round 1/2 (Task 1: clean; Task 2: clean; Task 4: 1 open — off by one; commits aaaaaaa..bbbbbbb (Task 1), bbbbbbb..ccccccc (Task 2), ccccccc..ddddddd (Task 4))' >> "$GR_LEDGER"
+gr_run review --group docs/plan.md 1 2 4
+check "review --group: a group in its fix rounds exits 4" "$gr_rc" "4"
+check "review --group: names every member already in review rounds" "$(grep -c 'Task 1' <<<"$gr_err") $(grep -c 'Task 2' <<<"$gr_err") $(grep -c 'Task 4' <<<"$gr_err")" "1 1 1"
+check "review --group: a refused group keeps each member's round" "$(gr_state 1 .round) $(gr_state 2 .round) $(gr_state 4 .round)" "1 1 1"
+
+# A wave: each member is held at its task ref and re-reviewed from its own head.
+GR_W=$(gr_git rev-parse HEAD)
+gr_run start docs/plan.md 6
+gr_run start docs/plan.md 7
+gr_git branch t6 "$GR_W"
+gr_git branch t7 "$GR_W"
+gr_git checkout -q t6
+gr_commit six.txt
+GR_H6=$(gr_git rev-parse HEAD)
+gr_git checkout -q t7
+gr_commit seven.txt
+GR_H7=$(gr_git rev-parse HEAD)
+gr_git checkout -q "$GR_MAIN"
+gr_git worktree add -q --detach "$GR_TMP/wt6" t6
+gr_run hold docs/plan.md 6 --cwd "$GR_TMP/wt6"
+check "hold --cwd: records that checkout's HEAD" "$(gr_state 6 .heldHead)" "$GR_H6"
+before=$(gr_lines)
+gr_run hold docs/plan.md 6 --head t6
+check "hold --head: exit 0" "$gr_rc" "0"
+check "hold --head: records the ref" "$(gr_state 6 .head)" "t6"
+check "hold --head: the same range writes no second line" "$(gr_lines)" "$before"
+gr_run hold docs/plan.md 7 --head t7
+check "hold --head: records the ref's commit" "$(gr_state 7 .heldHead)" "$GR_H7"
+gr_run review --group docs/plan.md 6 7 --cwd "$GR_TMP/wt6"
+GPKG67=$GR_WS/group-6,7-review-package.md
+check "wave group: exit 0" "$gr_rc" "0"
+check "wave group: --cwd names the checkout whose HEAD is the group head" "$(jq -r .reviewHead "$GR_WS/group-6,7-step.json" | tr -d '\r')" "$GR_H6"
+check "wave group: a member's review head is its own held head" "$(gr_state 6 .reviewHead) $(gr_state 7 .reviewHead)" "$GR_H6 $GR_H7"
+check "wave group: each section holds its own task ref's diff" \
+  "$(gr_section "$GPKG67" 6 | grep -c '^diff --git a/seven.txt') $(gr_section "$GPKG67" 7 | grep -c '^diff --git a/seven.txt b/seven.txt$')" "0 1"
+gr_git checkout -q t6
+gr_commit six.txt
+GR_F6=$(gr_git rev-parse HEAD)
+gr_git checkout -q "$GR_MAIN"
+printf -- '- six.txt: wrong value\n\nFix it.\n' > "$GR_WS/task-6-fix-1.md"
+gr_run rereview docs/plan.md 6
+check "wave member rereview: the fix base is its own held head" "$(grep -c "Fix base:\*\* $GR_H6 " "$GR_WS/task-6-rereview-1-prompt.md")" "1"
+check "wave member rereview: the head is its task ref" "$(grep -c "Head:\*\* $GR_F6\$" "$GR_WS/task-6-rereview-1-prompt.md")" "1"
+printf '%s\n' 'Group 6-7: review round 1/2 (Task 6: 1 open — wrong value; Task 7: clean; commits aaaaaaa..bbbbbbb (Task 6))' >> "$GR_LEDGER"
+gr_run review --group docs/plan.md 6 7
+check "review --group: a range Group line also marks its members as in review rounds" "$gr_rc $(grep -c 'Task 7' <<<"$gr_err")" "4 1"
+gr_git worktree remove --force "$GR_TMP/wt6"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

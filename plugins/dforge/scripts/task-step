@@ -3,15 +3,21 @@
 # (reference/delegated-task.md): each wraps today's scripts, writes the filled
 # prompt to a file in the plan workspace and prints a digest of at most 15
 # lines. State for a task, or a batch named after its first task, lives in
-# <workspace>/task-<N>-step.json.
+# <workspace>/task-<N>-step.json; a group review's in
+# <workspace>/group-<list>-step.json.
 #
 # Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset]
 #        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR]
+#        task-step hold   PLAN_FILE N [--head REF] [--cwd DIR]
+#        task-step review --group PLAN_FILE N M ... [--cwd DIR]
 #        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]
 # A start that finds the task's state file keeps it (and writes no second
 # assigned line) unless --reset is given.
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
-# 4 an amendment does not apply; 6 a required earlier step has not run.
+# 4 an amendment does not apply, hold was refused because review-route reviews
+# the task alone, or review --group was given a task with no awaiting group
+# review line or one already in a group's review rounds; 6 a required earlier
+# step has not run.
 # 5 is context-size's handoff code and is never used here.
 set -uo pipefail
 
@@ -19,7 +25,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]"; }
 
 rr_usage() {
   echo "usage: task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]" >&2
@@ -56,7 +62,7 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t scores row risk
   local fix bullets nopen file review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids
+  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate
   local tasks=() base_arg="" head_arg="" covered=0
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
@@ -125,7 +131,16 @@ cmd_rereview() (
   [ -n "$head_ref" ] || head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
   [ -n "$head_ref" ] || head_ref=HEAD
   head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; exit 2; }
+  # A sequential group member's fixes run one after another in one checkout,
+  # so its fix diff starts where the group's last review ended. A wave member
+  # (one with a head ref) keeps its own review head.
+  group=$(jq -r '.group // empty' "$state" | tr -d '\r')
+  gstate=""
+  if [ -n "$group" ] && [ -z "$(jq -r '.head // empty' "$state" | tr -d '\r')" ] && [ -f "$ws/group-$group-step.json" ]; then
+    gstate=$ws/group-$group-step.json
+  fi
   fix_base=$base_arg
+  [ -n "$fix_base" ] || [ -z "$gstate" ] || fix_base=$(jq -r '.reviewHead // empty' "$gstate" | tr -d '\r')
   [ -n "$fix_base" ] || fix_base=$review_head
   fix_base_sha=$(git rev-parse --verify --quiet "$fix_base^{commit}") || { echo "bad BASE: $fix_base" >&2; exit 2; }
 
@@ -178,6 +193,9 @@ cmd_rereview() (
     --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" \
     '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+  if [ -n "$gstate" ]; then
+    jq --arg rh "$head_sha" '.reviewHead = $rh' "$gstate" > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot update $gstate"
+  fi
 
   if [ "$skip" -eq 1 ]; then
     printf 'task %s: re-review round %s: packaged %s..%s, skipped\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
@@ -197,8 +215,13 @@ if [ "${1:-}" = rereview ]; then
   exit $?
 fi
 [ $# -ge 3 ] || usage
-sub=$1; plan_arg=$2; shift 2
-case $sub in start|review) ;; *) usage ;; esac
+sub=$1; shift
+case $sub in start|review|hold) ;; *) usage ;; esac
+if [ "$sub" = review ] && [ "$1" = --group ]; then
+  sub=group; shift
+  [ $# -ge 2 ] || usage
+fi
+plan_arg=$1; shift
 
 ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg=""
 while [ $# -gt 0 ]; do
@@ -206,13 +229,14 @@ while [ $# -gt 0 ]; do
     --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
     --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
-    --head) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
-    --cwd) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
+    --head) [[ $sub =~ ^(review|hold)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
+    --cwd) [[ $sub =~ ^(review|hold|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
     -*) usage ;;
     *) [[ $1 =~ ^[0-9]+$ ]] || usage; ids+=("$((10#$1))"); shift ;;
   esac
 done
 [ ${#ids[@]} -ge 1 ] || usage
+[ "$sub" != hold ] || [ ${#ids[@]} -eq 1 ] || usage
 first=${ids[0]}
 idlist=$(IFS=,; echo "${ids[*]}")
 
@@ -342,6 +366,40 @@ state_line() {
   jq -r '"state: base \(.base[0:7]) review-head \(if .reviewHead then .reviewHead[0:7] else "-" end) round \(.round) t0 \(.t0 // "-")"' "$state" | tr -d '\r'
 }
 
+ledger_init() {
+  [ -f "$ledger" ] && return
+  mkdir -p "$(dirname "$ledger")"
+  printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
+}
+
+# terminal_line N: the task's last `Task <N>: ` ledger line, stepping over the
+# minor (deferred), parked and Ruling: lines (the Recovery rule of
+# subagent-driven-development).
+terminal_line() {
+  [ -f "$ledger" ] || return 0
+  tr -d '\r' < "$ledger" | awk -v p="Task $1: " '
+    index($0, p) != 1 { next }
+    { rest = substr($0, length(p) + 1) }
+    index(rest, "minor (deferred)") == 1 || index(rest, "parked") == 1 || index(rest, "Ruling:") == 1 { next }
+    { last = $0 }
+    END { print last }'
+}
+
+# Every task a `Group <list>: review round` line names, one per line: a comma
+# list names each task it lists, a range a-b every task from a to b.
+group_round_tasks() {
+  [ -f "$ledger" ] || return 0
+  tr -d '\r' < "$ledger" | awk '
+    /^Group [0-9][0-9,-]*: review round/ {
+      l = $2; sub(/:$/, "", l)
+      n = split(l, parts, ",")
+      for (i = 1; i <= n; i++) {
+        if (split(parts[i], r, "-") == 2) { for (k = r[1] + 0; k <= r[2] + 0; k++) print k }
+        else if (parts[i] != "") print parts[i] + 0
+      }
+    }'
+}
+
 do_start() {
   local base base7 out rc n a agent="" best=-1 rank unknown=0 exec_id="" suffix=")" label titles kept=0
   local template="$plugin_root/skills/subagent-driven-development/references/implementer-prompt.md"
@@ -389,10 +447,7 @@ do_start() {
 
   [ -z "$wave" ] || suffix="; wave $wave)"
   if [ -n "$agent" ] && [ -z "$exec_id" ] && [ "$kept" -eq 0 ]; then
-    if [ ! -f "$ledger" ]; then
-      mkdir -p "$(dirname "$ledger")"
-      printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
-    fi
+    ledger_init
     for n in "${ids[@]}"; do
       printf 'Task %s: implementer %s (assigned; base %s%s\n' "$n" "$agent" "$base7" "$suffix" >> "$ledger"
     done
@@ -543,7 +598,149 @@ do_review() {
   printf '%s\n' "$(budget_of <<<"$pkgout")"
 }
 
+do_hold() {
+  local route tier="" held base line appended=1 budget
+  # A route that cannot score the task never groups it.
+  route=$(bash "$HERE/review-route" "$plan" --task "$first" 2>/dev/null) && tier=$(route_field review)
+  [ "$tier" = group ] || die "Task $first is reviewed alone (review-route: review=task); run task-step review" 4
+  [ -f "$state" ] || die "Task $first has no step state; run task-step start first" 6
+  if [ -n "$cwd_arg" ] && [ ! -d "$cwd_arg" ]; then die "bad --cwd: $cwd_arg"; fi
+  if [ -n "$head_arg" ]; then
+    held=$(git rev-parse --verify --quiet "$head_arg^{commit}") || die "bad head: $head_arg"
+  elif [ -n "$cwd_arg" ]; then
+    held=$(git -C "$cwd_arg" rev-parse HEAD) || die "bad --cwd: $cwd_arg"
+  else
+    held=$(git rev-parse HEAD) || die "not inside a git checkout"
+  fi
+  base=$(jq -r '.base' "$state" | tr -d '\r')
+  line="Task $first: awaiting group review (commits ${base:0:7}..${held:0:7})"
+  if [ "$(terminal_line "$first")" = "$line" ]; then
+    appended=0
+  else
+    ledger_init
+    printf '%s\n' "$line" >> "$ledger"
+  fi
+  jq --arg h "$held" --arg head "$head_arg" '.heldHead = $h | (if $head == "" then . else .head = $head end)' \
+    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+
+  if [ "$appended" -eq 1 ]; then
+    printf 'task %s: held for group review (commits %s..%s)\n' "$first" "${base:0:7}" "${held:0:7}"
+  else
+    printf 'task %s: already held for group review (commits %s..%s)\n' "$first" "${base:0:7}" "${held:0:7}"
+  fi
+  printf 'state: base %s held-head %s\n' "${base:0:7}" "${held:0:7}"
+  budget=$(DFORGE_BUDGET_CALLER=task-step:hold bash "$HERE/context-size" 2>/dev/null | budget_of)
+  printf '%s\n' "${budget:-budget: unknown}"
+}
+
+do_group() {
+  local n i list pending="" rounds ghead mstate sbase sheld lout lrc lenses pkgout rc
+  local route rrc primary fallback note="" judge unexpanded t0 line id_line at_line budget
+  local members=() bases=() helds=()
+  local template="$plugin_root/skills/subagent-driven-development/references/group-reviewer-prompt.md"
+
+  while IFS= read -r n; do members+=("$n"); done < <(printf '%s\n' "${ids[@]}" | sort -n -u)
+  list=$(IFS=,; echo "${members[*]}")
+  local pkg="$ws/group-$list-review-package.md" prompt="$ws/group-$list-review-prompt.md"
+  local gstate="$ws/group-$list-step.json"
+
+  for n in "${members[@]}"; do
+    case $(terminal_line "$n") in
+      "Task $n: awaiting group review ("*) ;;
+      *) die "Task $n holds no awaiting group review line; hold it or review it alone" 4 ;;
+    esac
+  done
+  # A group in its fix rounds is never reviewed again: that would reset each
+  # member's round to 0 and lift the two-round cap.
+  rounds=$(group_round_tasks)
+  for n in "${members[@]}"; do
+    if grep -qxF "$n" <<<"$rounds"; then pending="${pending:+$pending, }Task $n"; fi
+  done
+  [ -z "$pending" ] || die "already in group review rounds: $pending; re-review a member with task-step rereview" 4
+
+  if [ -n "$cwd_arg" ]; then
+    [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
+    ghead=$(git -C "$cwd_arg" rev-parse HEAD) || die "bad --cwd: $cwd_arg"
+  else
+    ghead=$(git rev-parse HEAD) || die "not inside a git checkout"
+  fi
+
+  printf '# Group review package: Tasks %s\n' "$list" > "$TMP/package.md"
+  for n in "${members[@]}"; do
+    mstate="$ws/task-$n-step.json"
+    [ -f "$mstate" ] || die "Task $n has no step state; run task-step start first" 6
+    sbase=$(jq -r '.base' "$mstate" | tr -d '\r')
+    sheld=$(jq -r '.heldHead // empty' "$mstate" | tr -d '\r')
+    [ -n "$sheld" ] || die "Task $n has no held head; run task-step hold first" 6
+    bases+=("$sbase") helds+=("$sheld")
+    lout=$(bash "$HERE/lens-route" "$plan" --task "$n" 2>&1); lrc=$?
+    [ "$lrc" -eq 0 ] || die "lens-route: $(tr -d '\r' <<<"$lout" | head -n 1)"
+    lenses=$(sed -n 's/^lens [^ ]* criteria=\(.*\)$/\1/p' <<<"$lout" | tr -d '\r' | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
+    pkgout=$(bash "$HERE/review-package" "$plan" "$sbase" "$sheld" "$TMP/task-$n.diff"); rc=$?
+    [ "$rc" -eq 0 ] || { printf '%s\n' "$pkgout" >&2; exit "$rc"; }
+    {
+      printf '\n## Task %s\n\n**Brief:** %s\n**Report:** %s\n**Commits:** %s..%s\n' \
+        "$n" "$ws/task-$n-brief.md" "$ws/task-$n-report.md" "${sbase:0:7}" "${sheld:0:7}"
+      [ -z "$lenses" ] || printf '**Lenses:** %s\n' "$lenses"
+      tail -n +2 "$TMP/task-$n.diff" | sed 's/^## /### /'
+    } >> "$TMP/package.md"
+  done
+
+  route=$(bash "$HERE/review-route" "$plan" --task "${members[@]}" 2>"$TMP/route.err"); rrc=$?
+  if [ "$rrc" -eq 0 ]; then
+    primary=$(route_field primary) fallback=$(route_field fallback)
+  else
+    primary=dforge:judge-opus fallback=-
+    note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
+  fi
+  case $primary in
+    codex:light) judge=$fallback ;;
+    codex:*) judge=dforge:judge-opus ;;
+    *) judge=$primary ;;
+  esac
+  case $judge in dforge:*) ;; *) judge=dforge:judge-opus ;; esac
+
+  [ -f "$template" ] || die "missing template $template"
+  prompt_text "$template" | fill '[GROUP_LIST]' "$list" '[PACKAGE_FILE]' "$pkg" \
+    '[REPORT_FILE]' "$ws/group-$list-review-report.md" '[PLUGIN_ROOT]' "$plugin_root" > "$TMP/prompt.md"
+  unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$TMP/prompt.md" | head -n 1)
+  [ -s "$TMP/prompt.md" ] && [ -z "$unexpanded" ] || die "group prompt is empty or holds an unexpanded placeholder ${unexpanded:-}"
+
+  id_line="check identity: clean" at_line="check attribution: clean"
+  for i in "${!members[@]}"; do
+    line=$(check_identity "${bases[$i]}" "${helds[$i]}")
+    if [ "$id_line" = "check identity: clean" ] && [ "$line" != "$id_line" ]; then
+      id_line="check identity: Task ${members[$i]}: ${line#check identity: }"
+    fi
+    line=$(check_attribution "${bases[$i]}" "${helds[$i]}")
+    if [ "$at_line" = "check attribution: clean" ] && [ "$line" != "$at_line" ]; then
+      at_line="check attribution: Task ${members[$i]}: ${line#check attribution: }"
+    fi
+  done
+
+  cp "$TMP/package.md" "$pkg" && cp "$TMP/prompt.md" "$prompt" || die "cannot write $pkg or $prompt"
+  t0=$(date +%s)
+  jq -n --argjson tasks "$(printf '%s\n' "${members[@]}" | jq -sc .)" --arg rh "$ghead" --argjson t0 "$t0" \
+    '{tasks: $tasks, reviewHead: $rh, t0: $t0}' > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot write $gstate"
+  for n in "${members[@]}"; do
+    mstate="$ws/task-$n-step.json"
+    # A member held with --head is a wave task: its own held head is what was reviewed.
+    jq --arg g "$ghead" --argjson t0 "$t0" --arg list "$list" \
+      '.reviewHead = (if (.head // "") != "" then .heldHead else $g end) | .t0 = $t0 | .round = 0 | .group = $list' \
+      "$mstate" > "$mstate.tmp" && mv "$mstate.tmp" "$mstate" || die "cannot update $mstate"
+  done
+
+  printf 'group %s: packaged %s task(s) at head %s, package %s\n' "$list" "${#members[@]}" "${ghead:0:7}" "$pkg"
+  printf 'seat: %s prompt: %s%s\n' "$judge" "$prompt" "$note"
+  printf '%s\n%s\n' "$id_line" "$at_line"
+  printf 'state: group %s review-head %s round 0 t0 %s\n' "$list" "${ghead:0:7}" "$t0"
+  budget=$(DFORGE_BUDGET_CALLER=task-step:review-group bash "$HERE/context-size" 2>/dev/null | budget_of)
+  printf '%s\n' "${budget:-budget: unknown}"
+}
+
 case $sub in
   start) do_start ;;
   review) do_review ;;
+  hold) do_hold ;;
+  group) do_group ;;
 esac
