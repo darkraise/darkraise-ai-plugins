@@ -140,6 +140,17 @@ if ln -s "$TMP/a15-transcript.jsonl" "$TMP/a15.output" 2>/dev/null && [ -L "$TMP
   check "an output file that is a link: the age of what it points at" "$(grep -c '^- agent a15 - idle 33m Review task 7$' <<<"$out")" "1"
 fi
 
+# --- a shell moved to the background by its foreground timeout ---
+use toolu_t16 'Run the long suite'
+result toolu_t16 "Command did not complete within its 120s timeout and was moved to the background (ID: b16). Output is being written to: $TMP/b16.output. You will be notified when it completes. To check interim output, use Read on that file path."
+: > "$TMP/b16.output"; ago 3 "$TMP/b16.output"
+out=$(bash "$INFLIGHT")
+check "a shell moved to the background by its timeout is listed with its output file" \
+  "$(grep -c '^- shell b16 - idle 3m Run the long suite$' <<<"$out")" "1"
+notify toolu_t16 completed
+out=$(bash "$INFLIGHT")
+check "its notification ends it" "$(grep -c '^- shell b16 ' <<<"$out")" "0"
+
 # --- no transcript for this session ---
 rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"
 check "no session record: exit 3" "$(cd "$REPO" && bash "$INFLIGHT" >/dev/null; echo $?)" "3"

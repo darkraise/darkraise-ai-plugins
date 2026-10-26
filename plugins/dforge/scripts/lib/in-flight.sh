@@ -3,7 +3,9 @@
 # defines functions only.
 #
 # The transcript schema is observed, not documented. A launch's tool result
-# opens "Command running in background with ID: <id>" (Bash) or "Async agent
+# opens "Command running in background with ID: <id>" or, for a command moved
+# there by its foreground timeout, "Command did not complete within its <n>s
+# timeout and was moved to the background (ID: <id>)" (Bash), or "Async agent
 # launched" with an "agentId: <id>" line (Agent). Its task notification names
 # the launch's tool_use id and a status. A launch is still running when:
 #   - it has no notification with a finished status yet, or
@@ -63,8 +65,8 @@ inflight_scan() {
           (.timestamp? // "") as $ts
           | .message.content? | arrays | .[] | select(.type? == "tool_result")
           | (.content | if type == "array" then (.[0].text? // "") else tostring end) as $text
-          | if ($text | test("^Command running in background with ID")) then
-              "L\t\(.tool_use_id // "-")\t\(($text | capture("with ID: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tshell\t\(hm($ts))\t\(([$text | capture("Output is being written to: (?<p>[^\\s]+)").p | sub("\\.$"; "")] | first) // "-")"
+          | if ($text | test("^Command (running in background with ID|did not complete within its [0-9]+s timeout and was moved to the background)")) then
+              "L\t\(.tool_use_id // "-")\t\(($text | capture("(with ID: |\\(ID: )(?<id>[A-Za-z0-9_-]+)").id) // "-")\tshell\t\(hm($ts))\t\(([$text | capture("Output is being written to: (?<p>[^\\s]+)").p | sub("\\.$"; "")] | first) // "-")"
             elif ($text | test("^Async agent launched")) then
               "L\t\(.tool_use_id // "-")\t\(($text | capture("agentId: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tagent\t\(hm($ts))\t\(([$text | capture("output_file: (?<p>[^\\s]+)").p] | first) // "-")"
             elif ($text | test("^(\\{\"message\":\")?Successfully (stopped task|killed shell): ")) then
