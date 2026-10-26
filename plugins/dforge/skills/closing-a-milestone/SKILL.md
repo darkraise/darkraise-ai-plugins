@@ -38,9 +38,11 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
 5. **Commit, then dispatch the judge.** The tree must be clean. Dispatch
    dforge:judge-opus with [milestone-judge.md](references/milestone-judge.md),
    the commit SHA, the milestone's exit criteria, the product spec path, the
-   rows, and the gate outputs. A fresh judge has no memory of the build; that
-   is the point.
-6. **Act on the verdict.**
+   rows, and the gate outputs, and the report file
+   `<state>/milestone-M<n>-audit-report.md`, outside the tree so it stays clean.
+   A fresh judge has no memory of the build; that is the point.
+6. **Act on the verdict.** Read the report's ## Verdict section and its GAP and
+   UNVERIFIABLE rows.
    - Any `GAP`: write each back with
      `scripts/register set <file> <id> open --note "audit: <the judge's reason>"`
      (or `scripts/register add` for a gap no row names), report them, and stop.

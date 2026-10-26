@@ -5,7 +5,7 @@
 // --exclude runs nothing: it records the cell as EXCLUDED, for a case whose
 // run cannot start for a harness reason.
 // Exit: 0 scored or excluded; 1 NOT_RUN; 2 usage.
-import { rmSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -15,7 +15,7 @@ import { agent, invoke } from './lib/claude.mjs';
 import { RESULTS, RESULT_COLUMNS, appendTsv, armDir } from './lib/results.mjs';
 
 const IMPL = { tools: ['Bash', 'Edit', 'Write', 'Read', 'Grep', 'Glob'], seconds: 1800 };
-const REVIEW = { tools: ['Read', 'Grep', 'Glob'], seconds: 1200 };
+const REVIEW = { tools: ['Read', 'Grep', 'Glob', 'Write'], seconds: 1200 };
 
 // runCell { rep, stage, c, arm } — C is a manifest row (it has a pool) or a
 // review case. A rate limit or a harness error is NOT_RUN and its detail
@@ -33,7 +33,8 @@ export async function runCell({ rep, stage, c, arm }) {
     if (inv.kind === 'limit' || inv.kind === 'error') return { ...row, outcome: 'NOT_RUN', detail: `${inv.kind}: ${inv.text.slice(0, 200)}` };
     if (!review) return { ...row, ...(await gradeImpl(built.info, inv)) };
     if (inv.kind !== 'ok') return { ...row, outcome: 'BLOCKED', detail: `cut=${inv.kind}` };
-    writeFileSync(join(dir, 'review.md'), inv.text);
+    writeFileSync(join(dir, 'reply.md'), inv.text);
+    if (!existsSync(built.info.report)) return { ...row, outcome: 'BLOCKED', detail: 'cut=no-report' };
     return { ...row, outcome: 'REVIEWED', detail: '' };
   } catch (error) {
     return { ...row, outcome: 'NOT_RUN', detail: `error: ${error.message.slice(0, 200)}` };

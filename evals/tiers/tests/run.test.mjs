@@ -78,14 +78,19 @@ test('a harness failure costs one NOT_RUN row, not the stage', async () => {
   assert.match(broken.detail, /^error: snapshot no-such-commit/);
 });
 
-test('a review cell runs read-only at the arm effort and keeps the review', async () => {
+test('a review cell writes only its report, at the arm effort, and keeps report and reply', async () => {
   writeFileSync(join(fx.stub, 'review.md'), '### Issues\nThe script greets in lower case only.\n');
   const row = await cell('review', 'judge-opus@medium', review);
   assert.deepEqual([row.outcome, row.pool, row.row], ['REVIEWED', 'review', '']);
   const call = lastCall();
-  assert.deepEqual([call.args[call.args.indexOf('--tools') + 1], call.args[call.args.indexOf('--effort') + 1]], ['Read,Grep,Glob', 'medium']);
+  assert.deepEqual([call.args[call.args.indexOf('--tools') + 1], call.args[call.args.indexOf('--effort') + 1]], ['Read,Grep,Glob,Write', 'medium']);
   assert.equal(existsSync(join(call.cwd, '.superpowers/sdd/eval/review.diff')), true);
-  assert.match(readFileSync(join(armDir(1, 'r-code-fixture', 'judge-opus@medium'), 'review.md'), 'utf8'), /lower case only/);
+  const dir = armDir(1, 'r-code-fixture', 'judge-opus@medium');
+  assert.match(readFileSync(JSON.parse(readFileSync(join(dir, 'case.json'), 'utf8')).report, 'utf8'), /lower case only/);
+  assert.match(readFileSync(join(dir, 'reply.md'), 'utf8'), /^Report: /);
+  assert.equal(existsSync(join(dir, 'review.md')), false);
+  const silent = await cell('noreport', 'judge-opus@medium', review);
+  assert.deepEqual([silent.outcome, silent.detail], ['BLOCKED', 'cut=no-report']);
   const cut = await cell('budget', 'judge-opus@medium', review);
   assert.deepEqual([cut.outcome, cut.detail], ['BLOCKED', 'cut=budget']);
 });

@@ -53,6 +53,25 @@ test('gradeReview appends one grade per defect and returns the grading row', asy
   assert.match(call.prompt, /<rubric>\n# Rubric[\s\S]*<review>\nThe refusal search/);
 });
 
+test('gradeReview reads the report file case.json names, not the reply', async () => {
+  const dir = armDir(4, 'r-code-fixture', 'judge-opus@high');
+  mkdirSync(join(dir, 'work'), { recursive: true });
+  const report = join(dir, 'work', 'review-report.md');
+  writeFileSync(report, '## Verdict\nready to merge: no\n\n## Findings\n- [Important] src/greet.sh:1 — The refusal search is unanchored, so any line matches.\n');
+  writeFileSync(join(dir, 'case.json'), JSON.stringify({ id: 'r-code-fixture', kind: 'review', work: join(dir, 'work'), report }));
+  writeFileSync(join(dir, 'reply.md'), 'A ten-line digest that names no defect.');
+  reply([{ id: 'D1', found: true, severity: 'Important', quote: 'The refusal search is unanchored, so any line matches.' }]);
+  modes(fx.stub, 'grade');
+  const row = await gradeReview({ rep: '4', id: 'r-code-fixture', arm: 'judge-opus@high', pass: '1', grader });
+  assert.deepEqual([row.outcome, row.detail], ['GRADED', 'found=1/2']);
+  assert.match(lastCall().prompt, /<review>\n## Verdict\nready to merge: no/);
+  rmSync(report);
+  const calls = readFileSync(join(fx.stub, 'calls.log'), 'utf8');
+  const gone = await gradeReview({ rep: '4', id: 'r-code-fixture', arm: 'judge-opus@high', pass: '2', grader });
+  assert.deepEqual([gone.outcome, gone.detail], ['GRADED', 'found=0/2']);
+  assert.equal(readFileSync(join(fx.stub, 'calls.log'), 'utf8'), calls);
+});
+
 test('a grader reply without JSON, or a rate limit, is NOT_RUN and writes no grade', async () => {
   reviewed(2, 'judge-opus@high');
   modes(fx.stub, 'blocked');

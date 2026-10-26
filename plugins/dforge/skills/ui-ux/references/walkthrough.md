@@ -125,15 +125,25 @@ Subagent (judge seat):
     **Report:** [REPORT_PATH]
     **Evidence:** every file the report cites, under [EVIDENCE_DIR], and the state boards the contract names
     **Fingerprint:** [FINGERPRINT]
+    **Report file:** [REPORT_FILE]
 
     Read the criteria, the contract and the report. Open every cited
-    screenshot and board. Then answer as the criteria's Output section says,
-    ending with exactly one line: "Verdict: ship [FINGERPRINT]" or
-    "Verdict: fix [FINGERPRINT]".
+    screenshot and board.
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the verdict, the scores, the count of disputed items, and the report
+    path. The report opens with a Verdict section, written without the indent:
+
+        ## Verdict
+        verdict: ship | fix [FINGERPRINT]
+        scores: <criterion> <1-20> / …
+
+    then answers as the criteria's Output section says, and ends with
+    exactly one line: "Verdict: ship [FINGERPRINT]" or "Verdict: fix [FINGERPRINT]".
 ```
 
-Save the reply verbatim beside the report as `<report name>.judge.md`, then
-set the report header's `**Judge:** <ship|fix> <fingerprint> — <that file's repository path>`
+Its `[REPORT_FILE]` is `<report name>.judge.md` beside the report. When it
+returns, set the report header's `**Judge:** <ship|fix> <fingerprint> — <that file's repository path>`
 line, replacing any earlier one. On `fix`, correct what the judge disputes, then rerun
-from step 8. A judge reply that does not end with the verdict line is
+from step 8. A judge file that does not end with the verdict line is
 re-dispatched once with that instruction repeated.

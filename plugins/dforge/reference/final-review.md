@@ -173,7 +173,8 @@ your own: QA commits on this branch.
    **Lenses.** Run `scripts/lens-route PLAN_FILE --final MERGE_BASE HEAD`. In
    the same message as the Claude review, dispatch each printed `seat` with
    the prompt below, so they run in parallel; on a Codex host, a native judge
-   at rank 8 or above. Then save each reply to `<workspace>/lens-<id>.md`:
+   at rank 8 or above, and
+   each lens seat writes its report to `<workspace>/lens-<id>.md`:
    the Claude list for step 3 is the Claude review's findings plus every
    `[qa]` finding from step 0.5 and every lens finding, tagged `[lens:<id>]`,
    and the dedupe judge and the fixer receive the lens file paths.
@@ -189,11 +190,16 @@ your own: QA commits on this branch.
    You are a specialist reviewer. Read the lens at <criteria path>: its
    criteria are defect patterns, not a rubric, so do not score them. Review
    the branch diff in <package path> against the spec <spec path> and the
-   plan <plan path>, and report each hit, most severe first, as
-   `### <Critical|Important|Minor>: [lens:<id>] <one-line claim>` followed by
-   at most three lines: file:line, what fails, and the fix. Report at most ten
+   plan <plan path>. Write your full report to <workspace>/lens-<id>.md,
+   write nothing else, and reply in at most 10 lines: the counts by
+   severity and the report path. The report opens with `## Verdict` holding
+   `findings: <c> Critical, <i> Important, <m> Minor`, then lists each hit
+   under `## Findings`, most severe first, as
+   `- [Critical|Important|Minor] <file>:<line> — [lens:<id>] <one-liner>`
+   followed by at most three lines indented by two spaces: what fails and
+   the fix. Report at most ten
    findings. [Report Critical and Important findings only; leave Minor ones
-   out.] With none, write `No findings.` and stop.
+   out.] With none, leave Findings empty.
    ```
 
    Then run `scripts/review-route PLAN_FILE --final` and dispatch
@@ -201,7 +207,8 @@ your own: QA commits on this branch.
    for a plan with a task at risk 3 or totalling 6. Use
    dforge:requesting-code-review's
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
-   with `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
+   with `[REPORT_FILE]` set to `<workspace>/final-review-report.md`,
+   `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
    spec and plan paths, and the SHAs to `MERGE_BASE` and `HEAD`. Dispatch the
    `primary` as `subagent_type`, in place of the template's seat line. A
    Codex-host plan takes its final-review seat from
@@ -226,7 +233,14 @@ your own: QA commits on this branch.
 
    **Dedupe and verify, only with two lists.** When the Claude review and the
    Codex round each produced at least one finding, dispatch a fresh
-   `dforge:judge-opus` once, given both lists. It merges findings that
+   `dforge:judge-opus` once, given both lists' report paths
+   (the Claude review's and the lens reports, and the Codex round's JSON),
+   with the report file `<workspace>/final-dedupe-report.md`: tell it to
+   write its full report there, write nothing else, and reply in at most 10 lines.
+   The report opens with `## Verdict` holding `confirmed: <k>` and
+   `rejected: <k>`, and lists each merged finding under `## Findings` as
+   `- [<severity>] <file>:<line> — [CONFIRMED|REJECTED] [claude|codex|both] <one-liner>`,
+   its evidence on indented lines. It merges findings that
    name the same defect in the same place (not merely the same file), tags each
    `claude`, `codex`, or `both`, and
    returns `CONFIRMED` or `REJECTED` with evidence for each. The verifier is a
@@ -261,7 +275,9 @@ A confirmed finding gates the handoff whichever reviewer raised it; a rejected
 one never does. With one list, every finding gates the handoff until the fixer
 fixes it or rejects it with evidence the re-review upholds.
 
-If confirmed findings remain, fix them in ONE wave with the complete list — in
+If confirmed findings remain, fix them in ONE wave with the complete list,
+given as report paths (the dedupe report with two lists; the Claude review's
+and lens reports and the [qa] findings with one), never pasted — in
 subagent mode one fix subagent, in inline mode one pass of your own. Never one
 fixer per finding: per-finding fixers each rebuild context and re-run suites,
 and a real session's final-review fix wave cost more than all its tasks

@@ -40,11 +40,12 @@ HEAD_SHA=$(git rev-parse HEAD)
 STATE_DIR=$(bash <plugin-root>/scripts/dforge-path state) && [ -n "$STATE_DIR" ] && [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ] &&
   mkdir -p "$STATE_DIR" && . <plugin-root>/scripts/lib/dforge-dir.sh && dforge_self_ignore "$STATE_DIR" &&
   DIFF_FILE="$STATE_DIR/review-$(git rev-parse --short "$HEAD_SHA").diff" &&
+  REPORT_FILE="$STATE_DIR/review-$(git rev-parse --short "$HEAD_SHA")-report.md" &&
   { git log --oneline "$BASE_SHA..$HEAD_SHA" && echo && git diff --stat "$BASE_SHA..$HEAD_SHA" && echo && git diff -U10 "$BASE_SHA..$HEAD_SHA"; } > "$DIFF_FILE" &&
   [ -s "$DIFF_FILE" ] && ! git diff --quiet "$BASE_SHA..$HEAD_SHA" || { echo "no diff file written: do not dispatch" >&2; false; }
 ```
 
-Dispatch `dforge:judge-opus` as `subagent_type`, with no `model` or `effort` argument, filling the template at [code-reviewer.md](references/code-reviewer.md). The judge is read-only and has no shell: the diff file is its view of the change.
+Dispatch `dforge:judge-opus` as `subagent_type`, with no `model` or `effort` argument, filling the template at [code-reviewer.md](references/code-reviewer.md). The judge has no shell and writes only its report file: the diff file is its view of the change, and its reply of at most 10 lines names the report.
 
 **Placeholders:**
 - `[DESCRIPTION]` - Brief summary of what you built
@@ -52,6 +53,7 @@ Dispatch `dforge:judge-opus` as `subagent_type`, with no `model` or `effort` arg
 - `[DIFF_FILE]` - REQUIRED: the diff file you wrote above
 - `[BASE_SHA]` - Starting commit
 - `[HEAD_SHA]` - Ending commit
+- `[REPORT_FILE]` - REQUIRED: the `$REPORT_FILE` path above
 
 **Security lens:** when the change touches authentication, secrets, input
 parsing or shell command construction, add to the prompt: "Also read
@@ -59,7 +61,7 @@ parsing or shell command construction, add to the prompt: "Also read
 checks: report each hit as an issue tagged `[lens:security]` at your own
 severity; do not score them."
 
-**3. Act on feedback:**
+**3. Act on feedback:** Read the report's ## Verdict and ## Findings sections, then:
 - Fix Critical issues immediately
 - Fix Important issues before proceeding
 - Note Minor issues for later
@@ -82,13 +84,9 @@ HEAD_SHA=$(git rev-parse HEAD)
   PLAN_OR_REQUIREMENTS: Task 2 from <docs>/plans/deployment-plan.md
   BASE_SHA: a7981ec
   HEAD_SHA: 3df7661
+  REPORT_FILE: .dforge/review-3df7661-report.md
 
-[Subagent returns]:
-  Strengths: Clean architecture, real tests
-  Issues:
-    Important: Missing progress indicators
-    Minor: Magic number (100) for reporting interval
-  Assessment: Ready to proceed
+[Subagent replies]: ready to merge: with fixes — 1 Important, 1 Minor — .dforge/review-3df7661-report.md
 
 You: [Fix progress indicators]
 [Continue to Task 3]

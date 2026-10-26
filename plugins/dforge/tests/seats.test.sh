@@ -208,5 +208,50 @@ names "auto run: the pre-execution ruling's report file" "$AR" '`<state>/rulings
 names "auto run: the Fable batch's report file" "$AR" '`<state>/rulings-fable-<k>-report.md`'
 check "auto run: every seat it dispatches caps its reply" "$(count_of "$AR" 'write nothing else, and reply in at most 10 lines')" "3"
 
+# The final review's seats and the standalone verifiers follow the same report
+# contract.
+MJ="$P/skills/closing-a-milestone/references/milestone-judge.md"
+CM="$P/skills/closing-a-milestone/SKILL.md"
+DJ="$P/skills/distilling-docs/references/distil-judge.md"
+DD="$P/skills/distilling-docs/SKILL.md"
+SJ="$P/skills/test-simplifier/references/simplify-judge.md"
+WT="$P/skills/ui-ux/references/walkthrough.md"
+SA="$P/skills/selecting-approaches/SKILL.md"
+RM="$P/README.md"
+names "code reviewer: names the report file" "$CR" 'Write your full report to [REPORT_FILE] and write nothing else'
+names "code reviewer: caps the reply" "$CR" 'Then reply in at most 10 lines'
+check "code reviewer: the report opens with the Verdict section" "$(grep -qE '^ *## Verdict$' "$CR" && echo yes || echo no)" "yes"
+names "code reviewer: the merge verdict key" "$CR" 'ready to merge: yes | no | with fixes'
+names "code reviewer: the finding grammar" "$CR" '- [Critical|Important|Minor] <file>:<line> — <one-liner>'
+names "code reviewer: the report file placeholder" "$CR" '`[REPORT_FILE]` — REQUIRED'
+names "requesting review: the report file beside the diff" "$RCR" 'REPORT_FILE="$STATE_DIR/review-$(git rev-parse --short "$HEAD_SHA")-report.md"'
+names "final review: the reviewer's report file" "$FR" '`[REPORT_FILE]` set to `<workspace>/final-review-report.md`'
+names "final review: lens seats write their report" "$FR" 'each lens seat writes its report to `<workspace>/lens-<id>.md`'
+names "final review: the lens finding grammar" "$FR" '- [Critical|Important|Minor] <file>:<line> — [lens:<id>] <one-liner>'
+names "final review: the dedupe report file" "$FR" '`<workspace>/final-dedupe-report.md`'
+check "final review: the lens and dedupe seats cap their reply" "$(count_of "$FR" 'write nothing else, and reply in at most 10 lines')" "2"
+lacks "final review: the controller no longer saves lens replies" "$FR" 'save each reply to'
+names "milestone judge: writes its report file" "$MJ" 'write nothing else'
+names "milestone judge: caps the reply" "$MJ" 'reply in at most 10 lines'
+check "milestone judge: the report opens with the Verdict section" "$(grep -qE '^ *## Verdict$' "$MJ" && echo yes || echo no)" "yes"
+names "closing a milestone: the report file" "$CM" '`<state>/milestone-M<n>-audit-report.md`'
+names "distil judge: names the report file" "$DJ" 'Write your full report to [REPORT_FILE] and write nothing else'
+names "distil judge: caps the reply" "$DJ" 'Then reply in at most 10 lines'
+check "distil judge: the report opens with the Verdict section" "$(grep -qE '^ *## Verdict$' "$DJ" && echo yes || echo no)" "yes"
+names "distil judge: the per-source verdict line" "$DJ" '<source path>: CARRIED | MISSING | DISTORTED'
+lacks "distilling: the judge's tools are stated as they are" "$DD" 'grants `Read, Grep, Glob, WebFetch` and'
+check "simplify judge: both prompts name the report file" "$(count_of "$SJ" 'Write your full report to [REPORT_FILE] and write nothing else')" "2"
+check "simplify judge: both prompts cap the reply" "$(count_of "$SJ" 'Then reply in at most 10 lines')" "2"
+names "simplify judge: the ruling verdict key" "$SJ" 'verdict: KEPT | LOST | VIOLATED'
+names "walkthrough judge: names the report file" "$WT" 'Write your full report to [REPORT_FILE] and write nothing else'
+names "walkthrough judge: caps the reply" "$WT" 'Then reply in at most 10 lines'
+names "walkthrough judge: the verdict key" "$WT" 'verdict: ship | fix [FINGERPRINT]'
+lacks "walkthrough: the controller no longer saves the reply" "$WT" 'Save the reply verbatim'
+check "approaches: the ranker and the advisor cap their reply" "$(count_of "$SA" 'write nothing else, and reply in at most 10 lines')" "2"
+names "approaches: the ranking's report file" "$SA" '`<state>/approaches-<decision>-rank-report.md`'
+lacks "README: the judges are no longer described as Write-free" "$RM" 'frontmatter omits `Edit`, `Write`, and `Agent`'
+names "README: a judge writes only its report file" "$RM" 'a judge writes only its report file'
+names "native Codex: a judge writes only its report file" "$P/reference/native-codex.md" 'no file writes except the one report file the prompt names'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

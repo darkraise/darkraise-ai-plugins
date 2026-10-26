@@ -267,11 +267,14 @@ Include all of the following directly in each child's task message:
 - Task brief, approved files, repository instructions, and relevant criteria.
 - The verification-before-completion instructions and required evidence.
 - Its exact model/effort and the expected report format.
-- For scouts/judges: no file writes and no further delegation.
+- For scouts/judges: no file writes except the one report file the prompt names, and no further delegation. The judge writes the full report there and replies in at most 10 lines; read the report from the file.
 
 Claude agent frontmatter does not supply native restrictions or skill context.
 Apply enforced per-agent read-only restrictions when the active tool supports
-them. Otherwise disclose that the restrictions are instruction-only, ensure no
+them. A judge's restriction must still allow its report file: scope the write
+permission to that one path. If the tool cannot, keep the judge read-only, have
+it return the full report in its reply, and write that reply to the report path
+yourself. Otherwise disclose that the restrictions are instruction-only, ensure no
 concurrent writers, and take a snapshot before and after the review:
 
 ```bash
@@ -304,7 +307,7 @@ invoke a Codex CLI round. Independence here does not guarantee cross-provider
 review. Record the restriction mode and this limitation in the ledger.
 
 The process roles take native seats too. The architecture critic and every review lens are native judges at rank 8 (Astra high) or above, with no
-file writes. Acceptance QA is a native implementer at `gpt-6.1-sol / high`
+file writes beyond their report files. Acceptance QA is a native implementer at `gpt-6.1-sol / high`
 (the `impl-sonnet-high` row), dispatched with
 [acceptance-qa.md](acceptance-qa.md). `scripts/lens-route` exits 2 on a
 `Host: codex` plan, as `review-route` does, so pick the lenses by hand. For

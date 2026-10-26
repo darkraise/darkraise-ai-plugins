@@ -16,13 +16,19 @@ instruction set: the judge has no other context.
   documents in darkmem, the text of each source restored with `darkmem-sync restore`,
   as distilling-docs §Documents in darkmem says). `none` when the wave added
   entries only.
+- `[REPORT_FILE]` — `<state>/distil-<wave>-report.md`, `<wave>` the wave's
+  number.
 
 ## The prompt
 
 ```markdown
 You are verifying that a set of source documents can be safely deleted, because
-every fact in them now lives in a distilled corpus. You are read-only: do not
-edit any file. Your verdict decides whether these files are deleted.
+every fact in them now lives in a distilled corpus. You are read-only on the
+repository: do not edit any file there.
+Write your full report to [REPORT_FILE] and write nothing else: it is the only
+file you may create or change.
+Then reply in at most 10 lines: one verdict per source file and the report path.
+Your verdict decides whether these files are deleted.
 
 Sources under review:
 [SOURCES]
@@ -61,6 +67,13 @@ Enumerate before you map. A judge that reads holistically grades the summary it
 was handed, and cannot notice the fact that is absent from both the summary and
 its own attention. That failure is the entire reason this seat exists.
 
-Output: the numbered enumeration per file, the mapping, the rewrite findings,
-then the verdict list. Nothing else.
+The report opens with this section, then `## Enumeration`, `## Mapping` and
+`## Rewrites`, in the order the steps above produce them:
+
+    ## Verdict
+    commit: [COMMIT]
+    <source path>: CARRIED | MISSING | DISTORTED
+
+one verdict line per source file. Enumerate before you map: the Verdict section
+comes first in the file, never first in your work.
 ```

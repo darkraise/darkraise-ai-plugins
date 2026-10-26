@@ -20,6 +20,9 @@ path it can read or text in the prompt.
   run, and red or green.
 - `[GUARDS]` — the regression tests, contract, error-path and security tests,
   and `gates.md` references among the wave's tests, as the ledger lists them.
+- `[REPORT_FILE]` — `<state>/test-simplifier/<wave>/fault-report.md` for the
+  fault prompt, `<state>/test-simplifier/<wave>/ruling-report.md` for the
+  ruling prompt.
 
 ## The fault prompt
 
@@ -29,6 +32,9 @@ anything.
 ```markdown
 You are naming the faults a set of tests catches today, so that a later change
 can prove it still catches them. You are read-only: do not edit any file.
+Write your full report to [REPORT_FILE] and write nothing else: it is the only
+file you may create or change.
+Then reply in at most 10 lines: the verdict and the report path.
 
 Module under test: [MODULE]
 Candidate tests and the action proposed for each:
@@ -46,15 +52,19 @@ For EACH candidate, in this order:
 Do not consider what other tests catch. Do not judge whether the candidate
 should be removed.
 
-Output: one numbered list of faults per candidate, nothing else.
+The report opens with ## Verdict holding faults: <n> for <k> candidates, then
+one numbered list of faults per candidate under ## Faults, nothing else.
 ```
 
 ## The ruling prompt
 
 ```markdown
 You are ruling on whether a change to a test suite lost any fault detection.
-You are read-only: do not edit any file. Your verdict decides whether the
-change stands or is reverted.
+You are read-only: do not edit any file.
+Write your full report to [REPORT_FILE] and write nothing else: it is the only
+file you may create or change.
+Then reply in at most 10 lines: the verdict and the report path.
+Your verdict decides whether the change stands or is reverted.
 
 Module under test: [MODULE]
 Candidates and the action taken on each:
@@ -94,6 +104,9 @@ Map assertions before ruling. A judge that reads the summary in the ledger
 grades the summary, and cannot notice the assertion that was quietly dropped
 from a merged table.
 
-Output: the step 1 finding, the numbered assertion mapping, the evidence
-finding, the guard check, then the verdict. Nothing else.
+The report opens with ## Verdict holding
+verdict: KEPT | LOST | VIOLATED
+and commit: [COMMIT], then the step 1 finding, the numbered assertion mapping,
+the evidence finding and the guard check, each under its own ## heading,
+nothing else.
 ```

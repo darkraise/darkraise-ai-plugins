@@ -52,18 +52,22 @@ export function readGrades(ids, review, reply) {
   });
 }
 
-// gradeReview { rep, id, arm, pass, grader } — grades DIR/review.md, appends
-// one row per defect to review-grades.tsv, and returns the results row. A cell
-// with no review.md was cut short before it reported anything: it misses
-// every defect, with no grader call, so the arm still has a full set of grades.
+// gradeReview { rep, id, arm, pass, grader } — grades the report file
+// DIR/case.json names (DIR/review.md for a cell run before reviewers wrote
+// report files), appends one row per defect to review-grades.tsv, and returns
+// the results row. A cell with no such file was cut short before it reported
+// anything: it misses every defect, with no grader call, so the arm still has
+// a full set of grades.
 export async function gradeReview({ rep, id, arm, pass, grader }) {
   const row = { rep, stage: 'grade', case: id, pool: 'review', row: '', arm: `grade${pass}:${arm}`, model: '', cost: '0.0000', seconds: 0, turns: 0 };
   try {
     const dir = armDir(rep, id, arm);
     const ids = defects(readFileSync(resolve(DATA, 'cases/reviews', `${id}.md`), 'utf8'));
+    const caseFile = join(dir, 'case.json');
+    const file = (existsSync(caseFile) && JSON.parse(readFileSync(caseFile, 'utf8')).report) || join(dir, 'review.md');
     let grades;
-    if (existsSync(join(dir, 'review.md'))) {
-      const review = readFileSync(join(dir, 'review.md'), 'utf8');
+    if (existsSync(file)) {
+      const review = readFileSync(file, 'utf8');
       const rubric = readFileSync(resolve(DATA, 'cases/reviews', `${id}.md`), 'utf8');
       const inv = await invoke({ ...grader, body: null, prompt: graderPrompt(rubric, review), cwd: dir, tools: [], seconds: SECONDS, dir: join(dir, `grade${pass}`) });
       Object.assign(row, { model: inv.model, cost: inv.cost.toFixed(4), seconds: inv.seconds, turns: inv.turns });

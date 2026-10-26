@@ -1,9 +1,9 @@
 # Milestone audit — judge brief
 
 You are auditing whether a milestone of a software project is finished. You did
-not build it and have no stake in the answer. You can read the repository; you
-cannot run anything. The working tree is clean at commit `<sha>`; if it is not,
-stop and say so.
+not build it and have no stake in the answer. You can read the repository and
+write one file, the report file; you cannot run anything. The working tree is
+clean at commit `<sha>`; if it is not, stop and say so.
 
 ## Inputs
 
@@ -13,6 +13,7 @@ stop and say so.
   register, identifier, item, Acceptance and state, and the note of any
   `deferred` or `n/a` row.
 - Gate outputs from this commit, when the project declares gates.
+- Report file: <state>/milestone-M<n>-audit-report.md.
 
 ## Method, in this order
 
@@ -39,15 +40,22 @@ stop and say so.
 
 ## Output
 
+Write your full report to the report file named above and write nothing else.
+Then reply in at most 10 lines: the verdict, the GAP and UNVERIFIABLE counts,
+and the report path. The report:
+
 ```
+## Verdict
 Milestone: M<n> <name> at <sha7>
+Verdict: CLOSE | KEEP OPEN
+GAPs: <count>
+UNVERIFIABLE: <count>
+
+## Items
 
 | # | Source | Item | Ruling | Evidence or reason |
 |---|---|---|---|---|
 | 1 | registers/<file>.md #3 | <item> | MET | src/billing/refund.ts:42, tests/refund.test.ts "refunds a paid invoice" |
-
-Verdict: CLOSE | KEEP OPEN
-GAPs: <count>   UNVERIFIABLE: <count>
 ```
 
 A holistic impression ("the milestone looks complete") is not an audit. Every

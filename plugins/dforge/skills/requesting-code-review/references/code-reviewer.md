@@ -29,7 +29,8 @@ Subagent (dforge:judge-opus):
     ## Read-Only Review
 
     Your review is read-only and you have no shell: read the diff file and
-    the repository files it touches, and change nothing.
+    the repository files it touches, and change nothing in the repository:
+    your one write is the report file.
 
     ## You Do Not Dispatch Subagents
 
@@ -86,34 +87,33 @@ Subagent (dforge:judge-opus):
 
     ## Output Format
 
-    ### Strengths
-    [What's well done? Be specific.]
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the verdict, the count of findings by severity, and the report path.
+    The report, written without the indent:
 
-    ### Issues
+        ## Verdict
+        ready to merge: yes | no | with fixes
 
-    #### Critical (Must Fix)
-    [Bugs, security issues, data loss risks, broken functionality]
+        ## Strengths
+        <what is well done, specifically>
 
-    #### Important (Should Fix)
-    [Architecture problems, missing features, poor error handling, test gaps]
+        ## Findings
+        - [Critical|Important|Minor] <file>:<line> — <one-liner>
 
-    #### Minor (Nice to Have)
-    [Code style, optimization opportunities, documentation polish]
+        ## Recommendations
+        <improvements for code quality, architecture, or process>
 
-    For each issue:
-    - File:line reference
-    - What's wrong
-    - Why it matters
-    - How to fix (if not obvious)
+        ## Assessment
+        <one or two sentences of technical assessment>
 
-    ### Recommendations
-    [Improvements for code quality, architecture, or process]
-
-    ### Assessment
-
-    **Ready to merge?** [Yes | No | With fixes]
-
-    **Reasoning:** [1-2 sentence technical assessment]
+    One line per finding, most severe first: Critical for bugs, security
+    issues, data loss risks and broken functionality; Important for
+    architecture problems, missing features, poor error handling and test
+    gaps; Minor for code style, optimization and documentation polish.
+    `<line>` is 0 when no single line applies. Below each finding, on lines
+    indented by two spaces: what is wrong, why it matters, and how to fix
+    it when that is not obvious. Leave a section with nothing in it empty.
 
     ## Critical Rules
 
@@ -140,43 +140,37 @@ Subagent (dforge:judge-opus):
   (requesting-code-review step 2)
 - `[BASE_SHA]` — starting commit
 - `[HEAD_SHA]` — ending commit
+- `[REPORT_FILE]` — REQUIRED: the file the reviewer writes its report to:
+  `<workspace>/final-review-report.md` in the final review, or the
+  `$REPORT_FILE` requesting-code-review step 2 sets outside a plan
 
-**Reviewer returns:** Strengths, Issues (Critical / Important / Minor), Recommendations, Assessment
+**Reviewer writes** its report to [REPORT_FILE] and **returns** a reply of at most 10 lines.
 
 ## Example Output
 
 ```
-### Strengths
+## Verdict
+ready to merge: with fixes
+
+## Strengths
 - Clean database schema with proper migrations (db.ts:15-42)
 - Comprehensive test coverage (18 tests, all edge cases)
 - Good error handling with fallbacks (summarizer.ts:85-92)
 
-### Issues
+## Findings
+- [Important] index-conversations:1 — Missing help text in CLI wrapper
+  No --help flag, so users won't discover --concurrency.
+  Fix: add a --help case with usage examples.
+- [Important] search.ts:25 — Date validation missing
+  Invalid dates silently return no results.
+  Fix: validate the ISO format and throw an error with an example.
+- [Minor] indexer.ts:130 — No progress indicator
+  No "X of Y" counter for long operations, so users don't know how long to wait.
 
-#### Important
-1. **Missing help text in CLI wrapper**
-   - File: index-conversations:1-31
-   - Issue: No --help flag, users won't discover --concurrency
-   - Fix: Add --help case with usage examples
-
-2. **Date validation missing**
-   - File: search.ts:25-27
-   - Issue: Invalid dates silently return no results
-   - Fix: Validate ISO format, throw error with example
-
-#### Minor
-1. **Progress indicators**
-   - File: indexer.ts:130
-   - Issue: No "X of Y" counter for long operations
-   - Impact: Users don't know how long to wait
-
-### Recommendations
+## Recommendations
 - Add progress reporting for user experience
 - Consider config file for excluded projects (portability)
 
-### Assessment
-
-**Ready to merge: With fixes**
-
-**Reasoning:** Core implementation is solid with good architecture and tests. Important issues (help text, date validation) are easily fixed and don't affect core functionality.
+## Assessment
+Core implementation is solid with good architecture and tests. The Important findings (help text, date validation) are easily fixed and don't affect core functionality.
 ```

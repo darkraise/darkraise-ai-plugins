@@ -59,12 +59,15 @@ escalation. Since 1.27.0 no score assigns `impl-haiku` either: total 0 runs on
 `impl-sonnet-low`, which cost less per pass in the tier evaluation, and Haiku
 is reached only by a human `**Implementer:**` override. Nine reserve implementers - the `xhigh` and `max` efforts, and
 every Fable 5.1 tier - are reachable only by a human override, or by a task
-that has already been split once and still exhausted `impl-opus-high`. Four
-read-only role agents - the judges `judge-opus`, `judge-sonnet-high` and
-`judge-fable` (an auto run's spec review and rulings, or a human override), and `scout-sonnet` - whose `tools:`
-frontmatter omits `Edit`, `Write`, and `Agent`, so a reviewer that cannot
-modify the tree or spawn subagents is a fact about the registry rather than a
-request in a prompt.
+that has already been split once and still exhausted `impl-opus-high`.
+Four role agents - the judges `judge-opus`, `judge-sonnet-high` and
+`judge-fable` (an auto run's spec review and rulings, or a human override),
+and `scout-sonnet` - whose `tools:` frontmatter omits `Edit`, `Bash` and
+`Agent`, so a reviewer that cannot spawn subagents is a fact about the
+registry rather than a request in a prompt. The scout carries no `Write`
+either; a judge writes only its report file, whose path its prompt names,
+replies in at most ten lines, and `scripts/task-step verdict` checks that no
+tracked file changed during a task review.
 One drafter, `drafter-sonnet`, writes a slice of 2-3 tasks of a plan whose
 header is written (writing-plans' Drafting the tasks); it may run code in a
 scratch worktree of its own, so it carries `Bash`, `Write` and `Edit`, but

@@ -73,7 +73,7 @@ if sel A5; then
   # The repository check (§1) runs on a copy of the skills, references and the check itself.
   mk() { # mk <dir> - a copy of what the repository check scans
     mkdir -p "$1/tests"
-    cp -r "$PLUGIN/skills" "$PLUGIN/reference" "$1/"
+    cp -r "$PLUGIN/skills" "$PLUGIN/reference" "$PLUGIN/README.md" "$1/"
     cp "$HERE/seats.test.sh" "$1/tests/"
   }
   run_seats() { (cd "$1" && timeout 120 bash tests/seats.test.sh >/dev/null 2>&1; echo $?); }

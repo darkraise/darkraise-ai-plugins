@@ -106,7 +106,11 @@ runs over its three drafts.
 pass: three comparisons, **A vs B, B vs C, C vs A**, scoring both candidates
 against every criterion in
 [`../../criteria/approach-selection.md`](../../criteria/approach-selection.md)
-each time.
+each time. It writes its full report to
+`<state>/approaches-<decision>-rank-report.md` (`<decision>` a short slug of
+the decision): write nothing else, and reply in at most 10 lines. The report
+opens with `## Verdict` holding `winner: <candidate>` and
+`wins: A <a> / B <b> / C <c>`, then the three comparisons and the grafts.
 
 The ring is the whole reason for three comparisons rather than one. Every
 candidate sits in slot A exactly once and slot B exactly once, so a judge's
@@ -125,9 +129,12 @@ tie the criteria could not see.
 
 ## Run advisor
 
-State your chosen approach in a paragraph, then dispatch one judge to score it
-against the same criteria file and answer one question: is this approach wrong
-for this repository, and if so, what specifically would fail?
+State your chosen approach in a paragraph, then dispatch one judge to score it,
+naming the report file `<state>/approaches-<decision>-advisor-report.md`:
+write nothing else, and reply in at most 10 lines; its `## Verdict` section
+holds `verdict: sound | wrong`. The judge scores it against the same criteria
+file and answers one question: is this approach wrong for this repository, and
+if so, what specifically would fail?
 
 A judge that finds nothing is not a rubber stamp - it is the cheap outcome you
 were paying for. A judge that finds something is why the seat exists; treat its

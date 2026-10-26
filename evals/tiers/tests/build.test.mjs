@@ -59,7 +59,10 @@ test('a code review case snapshots the head and hands over one diff file', () =>
   assert.match(prompt, /## What Was Implemented\n\nAdds the greet script\./);
   assert.match(prompt, new RegExp(`Read this file first: ${diffFile}`));
   assert.match(prompt, new RegExp(`for ${fx.planned.slice(0, 7)}\\.\\.${fx.greet.slice(0, 7)}`));
-  assert.doesNotMatch(prompt, /\[DESCRIPTION\]|\[PLAN_OR_REQUIREMENTS\]|\[DIFF_FILE\]|\[BASE_SHA\]|\[HEAD_SHA\]/);
+  assert.doesNotMatch(prompt, /\[DESCRIPTION\]|\[PLAN_OR_REQUIREMENTS\]|\[DIFF_FILE\]|\[BASE_SHA\]|\[HEAD_SHA\]|\[REPORT_FILE\]/);
+  assert.equal(info.report, join(info.work, '.superpowers/sdd/eval/review-report.md'));
+  assert.ok(prompt.includes(`Write your full report to ${info.report} and write nothing else`));
+  assert.deepEqual(JSON.parse(readFileSync(join(fx.work, 'codereview/case.json'), 'utf8')).report, info.report);
 });
 
 test('a plan review case hides the earlier verdict and supplies the criteria', () => {
@@ -69,6 +72,9 @@ test('a plan review case hides the earlier verdict and supplies the criteria', (
   const root = prompt.match(/Read the criteria file at (\S+)\/criteria\/plan-review\.md/)[1];
   assert.equal(existsSync(join(root, 'criteria/plan-review.md')), true);
   assert.match(readFileSync(prompt.match(/\*\*plan-lint output:\*\* (\S+)/)[1], 'utf8'), /was not run/);
+  assert.equal(info.report, join(info.work, '.superpowers/sdd/eval/review-report.md'));
+  assert.ok(prompt.includes(`Write your full report to ${info.report} and write nothing else`));
+  assert.doesNotMatch(prompt, /\[REPORT_FILE\]/);
   assert.throws(() => buildReview({ id: 'r-plan-bad', kind: 'plan', commit: fx.planned, plan: PLAN, spec: 'docs/none.md' }, join(fx.work, 'bad')), /docs\/none\.md is missing/);
 });
 

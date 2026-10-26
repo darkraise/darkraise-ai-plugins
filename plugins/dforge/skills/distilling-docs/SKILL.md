@@ -56,7 +56,7 @@ wave's judge has ruled.
 Eligible by path and extension: Markdown files (`*.md`) under
 `<docs>/notes/` and `<docs>/findings/`. Every non-Markdown
 file under those paths is **never eligible** — captures and fixtures live there
-too, and a judge whose tools are `Read, Grep, Glob, WebFetch` cannot enumerate
+too, and a judge with no shell cannot enumerate
 the facts in a binary, so `CARRIED` is unreachable for one by construction.
 
 Three conditions, checked per file, all required:
@@ -102,14 +102,16 @@ be invalidated by any later edit — a merge, a split, or a fix made for another
 file's verdict — and would then be attesting to text that no longer exists.
 
 **The judge reads the working tree, not the commit.** `agents/judge-opus.md`
-grants `Read, Grep, Glob, WebFetch` and **no Bash**, so it cannot run
+grants `Read, Grep, Glob, WebFetch, Write` (`Write` for its report file only)
+and **no Bash**, so it cannot run
 `git show <sha>:<path>`. Committing first therefore binds the verdict only under
 three conditions you must hold: the working tree is clean at that SHA when you
 dispatch, nothing is edited until the verdict returns, and the verdict names the
 SHA it was given. A verdict returned against an edited tree is void; re-judge.
 
 Dispatch dforge:judge-opus with
-[distil-judge.md](references/distil-judge.md). It must work in one order:
+[distil-judge.md](references/distil-judge.md), its `[REPORT_FILE]` set to
+`<state>/distil-<wave>-report.md` (outside the tree). It must work in one order:
 enumerate every fact in each source as a numbered list first, then map each
 numbered fact to the entry that carries it, and only then return a verdict. A
 judge that reads holistically grades the summary it was handed.

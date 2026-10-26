@@ -66,6 +66,7 @@ export function buildCase(c, dir) {
 export function buildReview(c, dir) {
   const work = join(dir, 'work');
   const scratch = join(work, SCRATCH);
+  const report = join(scratch, 'review-report.md');
   let prompt;
   if (c.kind === 'code') {
     snapshot(c.head, work);
@@ -82,6 +83,7 @@ export function buildReview(c, dir) {
       '[DIFF_FILE]': diffFile,
       '[BASE_SHA]': c.base.slice(0, 7),
       '[HEAD_SHA]': c.head.slice(0, 7),
+      '[REPORT_FILE]': report,
     });
   } else {
     snapshot(c.commit, work);
@@ -100,9 +102,10 @@ export function buildReview(c, dir) {
       '[SPEC_FILE]': join(work, c.spec),
       '[LINT_FILE]': lintFile,
       '[PLUGIN_ROOT]': join(scratch, 'plugin'),
+      '[REPORT_FILE]': report,
     });
   }
-  const info = { id: c.id, kind: 'review', work };
+  const info = { id: c.id, kind: 'review', work, report };
   writeFileSync(join(dir, 'case.json'), JSON.stringify(info, null, 2) + '\n');
   return { info, prompt };
 }

@@ -2,7 +2,7 @@
 // $STUB_DIR/modes, records its arguments in $STUB_DIR/calls.log, acts in its
 // working directory as that mode says, and prints the JSON a headless run
 // prints.
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -26,6 +26,7 @@ else if (mode === 'blocked') { reply('**Status:** BLOCKED - the brief is unclear
 else if (mode === 'budget') { apply(); reply('', { is_error: true, subtype: 'error_max_budget_usd' }); process.exitCode = 1; }
 else if (mode === 'limit') { reply("You've hit your usage limit", { is_error: true, total_cost_usd: 0 }); process.exitCode = 1; }
 else if (mode === 'crash') { console.error('boom'); process.exitCode = 2; }
-else if (mode === 'review') { reply(file('review.md')); }
+else if (mode === 'review') { mkdirSync('.superpowers/sdd/eval', { recursive: true }); writeFileSync('.superpowers/sdd/eval/review-report.md', file('review.md')); reply('Report: .superpowers/sdd/eval/review-report.md'); }
+else if (mode === 'noreport') { reply('A review with no report file.'); }
 else if (mode === 'grade') { reply(file('grade.json')); }
 else { console.error(`stub-claude: unknown mode ${mode}`); process.exitCode = 2; }
