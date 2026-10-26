@@ -157,10 +157,10 @@ your own: QA commits on this branch.
 
   (e) Append
       `Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo`,
-      counted from the final report's rows (a report you completed or wrote
-      yourself keeps acceptance-qa.md's shape, its `## Verdict` counts
-      included), except `<d>`: the number of the spec's
-      statements tagged `demo`, which QA is not given and finishing lists.
+      counted from the final report, except `<d>`: the number of the spec's
+      statements tagged `demo`, which QA is not given and finishing lists. A
+      report you completed or wrote yourself keeps acceptance-qa.md's shape,
+      its `## Verdict` counts included.
 
   QA is re-dispatched at most once per final review, the recovery
   re-dispatch included. Before that re-dispatch, append
