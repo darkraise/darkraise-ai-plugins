@@ -142,14 +142,17 @@ Implementer subagents report one of four statuses, or none. Handle each appropri
 
 **DONE:** In subagent mode, hold the task first:
 `bash <plugin-root>/scripts/task-step hold PLAN_FILE N` (a wave task adds
-`--head <task ref>`). Exit 0 holds the task for its group review (§3a) and
-writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3). Inline mode never holds a task: it reviews every
+`--head <task ref> --cwd <worktree>`, so the group review's tracked-file
+check reads the task's worktree, where no sibling's merge moves HEAD). Exit 0 holds the task for its group review (§3a) and
+writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3).
+On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
+Inline mode never holds a task: it reviews every
 task it delegates alone, including an `**Executor:**` task that
 `review-route` grades `review=group`, so it goes straight to step 3, as a
 batch does. `task-step review` packages the
 diff and records `t0`, the time the cache rule in step 4 needs.
 
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
+**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review: in subagent mode hold the task first, as DONE says, so a task `review-route` grades `review=group` waits for its group review. A correctness or scope concern takes a grouped task out of its group (below).
 
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided.
 If the answer is mechanical - a path, a name, a value that the header, an
@@ -378,6 +381,7 @@ dispatching it. A parallel wave reviews its grouped tasks as
 [parallel-waves.md](parallel-waves.md) §3 says. Once the group review is
 triggered, no new task is dispatched until the group is clean, and
 fixes inside a group run one task at a time.
+On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
 
 - **One call does the plumbing:**
   `bash <plugin-root>/scripts/task-step review --group PLAN_FILE N M …`,
@@ -661,3 +665,12 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 | `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker (§4) |
 
 On a Codex plan the Codex row wins; the `older run` mappings apply to a Claude plan only.
+
+Members read `awaiting group review` until round 1's `Group` line is
+written. When `<workspace>/group-<list>-step.json` already exists for them,
+the group review ran: never run `review --group` again, which would re-review
+the members' old diffs and leave any fix committed since unreviewed. Without
+`group-<list>-review-report.md`, dispatch the seat again with the prompt file
+`review --group` wrote; with it, run `task-step verdict … --group` before any
+fix commit, and once a member's fix is committed, re-review that member with
+`task-step rereview` from its fix file (§3a).

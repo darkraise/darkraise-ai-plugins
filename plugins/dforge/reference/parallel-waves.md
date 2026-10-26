@@ -188,8 +188,11 @@ substitutions:
   way.
 
 **Grouped tasks.** A wave task graded `review=group` is not reviewed on its
-own. When it reports DONE, run `task-step hold PLAN_FILE N --head <TASK_REF>`;
-once every grouped task in the wave is held, before any of them merges, run
+own. When it reports DONE, run
+`task-step hold PLAN_FILE N --head <TASK_REF> --cwd <worktree>`: the group
+review then checks the task's worktree for edits, not your checkout, whose
+HEAD a sibling reviewed alone may move by merging meanwhile.
+Then, once every grouped task in the wave is held, before any of them merges, run
 one `task-step review --group PLAN_FILE <their numbers>` and dispatch its seat
 ([delegated-task.md](delegated-task.md) §3a). Each member keeps its held head
 as its review head, so
@@ -273,7 +276,10 @@ When every task of the wave has a complete line:
    `Wave <k>: integrated (head <sha7>; <command> → pass; baseline failures only)`,
    and a Wave check logs an ordinary merged line. Compare with TAP numbers
    removed on both sides (`sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'`); the failures
-   are a subset when `grep -vxFf <baseline> <current>` prints nothing. A
+   are a subset when the baseline file exists, `<current>` holds at least
+   one line, and `grep -vxFf <baseline> <current>` exits 1 (it printed
+   nothing); only then. A missing baseline file, an empty `<current>`, or a grep exit
+   of 2 is not a subset: go to step 6. A
    digest that names no test (`last 30 lines of <log>:`) is never the
    baseline.
 6. **Fail:** any other failure logs

@@ -420,10 +420,8 @@ stepping over `minor (deferred)`, `parked`, `Task <N>: Ruling:`, and bare
 | `complete` | Done; never re-dispatch |
 | `BLOCKED` | Terminal; never re-dispatch. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `awaiting group review` | Reviewed by the next group dispatch ([delegated-task.md](../../reference/delegated-task.md) §3a); never re-dispatch its implementer |
-| `review round 1/2` on a group review's `Group` line | Run round 2 for each member whose clause is open, one member at a time, a fresh dispatch after compaction |
-| `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker |
-| `review round 1/2` on a `Group` line, or `review round 1/5` from an older run | Resume the group's loop at round 2 — a fresh dispatch on the successor rung |
-| `review round 2/2` on a `Group` line, or `review round R/5` with R >= 2 from an older run | Go to the breaker |
+| `review round 1/2` on a `Group` line, or `review round 1/5` from an older run | Resume the group's loop at round 2 — a fresh dispatch on the successor rung. On a group review's line (its clause starts `Task <N>:`), run round 2 for each member whose clause is open, one member at a time; on a batch's line, run it once for the batch |
+| `review round 2/2` on a `Group` line, or `review round R/5` with R >= 2 from an older run | Go to the breaker: a group review's line (its clause starts `Task <N>:`) sends each member's open findings, a batch's line the batch's |
 | `escalated inline -> subagent` | Inline mode escalated this task here. Dispatch the first rung on the escalation table ranked strictly above both the task's `**Implementer:**` agent and the inline session's rung, the successor of whichever ranks higher ([escalation.md](references/escalation.md) §Escalating out of inline mode) fresh at round 1 of 2, with the brief and the task's preceding fix-round lines; the inline session already spent three rounds at or above the assigned tier, and the task's earlier commits are in `git log` |
 | `implementer <agent> (assigned …; wave <k>)`, or a `fix round R/2` after one | A parallel task: apply [parallel-waves.md](../../reference/parallel-waves.md) §Recovery |
 | `implementer <agent> (assigned …)` or `fix round R/2` | Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery |
