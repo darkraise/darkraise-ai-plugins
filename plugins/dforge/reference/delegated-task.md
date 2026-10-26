@@ -143,8 +143,10 @@ Implementer subagents report one of four statuses, or none. Handle each appropri
 **DONE:** In subagent mode, hold the task first:
 `bash <plugin-root>/scripts/task-step hold PLAN_FILE N` (a wave task adds
 `--head <task ref>`). Exit 0 holds the task for its group review (§3a) and
-writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3). Inline mode delegates only tasks `review-route`
-reviews alone, so it goes straight to step 3, as a batch does. `task-step review` packages the
+writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3). Inline mode never holds a task: it reviews every
+task it delegates alone, including an `**Executor:**` task that
+`review-route` grades `review=group`, so it goes straight to step 3, as a
+batch does. `task-step review` packages the
 diff and records `t0`, the time the cache rule in step 4 needs.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review.

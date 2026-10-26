@@ -92,6 +92,7 @@ has "mid-plan: handoff keeps later sections" "$hand" "## Do not"
 lacks "mid-plan: handoff drops the stale block" "$hand" "Old stale block."
 check "mid-plan: handoff has one Next session section" "$(grep -c '^## Next session' "$HANDOFF")" "1"
 has "mid-plan: handoff carries the new next step" "$hand" "Resume at Task 3 (Third thing)."
+lacks "mid-plan: no assigned-line warning" "$(cat "$TMP/stderr")" "warning"
 
 # --- held tasks: a task awaiting its group review is not the next to start ---
 ledger 'Task 1: complete (commits a..b, review clean)' \
@@ -143,7 +144,6 @@ has "held: a held task that completed is not held" "$out" "**Next:** Resume at T
 lacks "held: and is not named as held" "$out" "held for group review"
 
 # --- a ledger ending on an assigned line warns, and still prints the block ---
-lacks "mid-plan: no assigned-line warning" "$(cat "$TMP/stderr")" "warning"
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: implementer impl-sonnet-low (assigned; base bbbbbbb; executor codex gpt-6.1-sol/low, thread pending)'
 run "$REPO" "$PLAN_REL"
