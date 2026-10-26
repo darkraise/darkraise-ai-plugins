@@ -43,6 +43,9 @@ absent() { # absent <name> <haystack> <ERE>
 }
 
 TMP="$(mktemp -d)"
+# MSYS_NO_PATHCONV below hands git.exe this path untranslated, so it must be a
+# Windows path or git initialises a repository somewhere else.
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
 unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
