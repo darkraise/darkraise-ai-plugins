@@ -48,7 +48,8 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
       sub(/^    /, "")
       if ($0 == "[FINDINGS]") { print fl; next }
       $0 = rep($0, "[BRIEF_FILE]", ENVIRON["RR_BRIEF"])
-      $0 = rep($0, "[REPORT_FILE]", ENVIRON["RR_REPORT"])
+      $0 = rep($0, "[IMPLEMENTER_REPORT_FILE]", ENVIRON["RR_REPORT"])
+      $0 = rep($0, "[REPORT_FILE]", ENVIRON["RR_JUDGE_REPORT"])
       $0 = rep($0, "[FIX_BASE_SHA]", ENVIRON["RR_FIX_BASE"])
       $0 = rep($0, "[HEAD_SHA]", ENVIRON["RR_HEAD"])
       $0 = rep($0, "[DIFF_FILE]", ENVIRON["RR_DIFF"])
@@ -183,12 +184,14 @@ cmd_rereview() (
     tpl=$here/../skills/subagent-driven-development/references/re-review-prompt.md
     [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
     printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
-    RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_FIX_BASE=$fix_base_sha \
-      RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
-    if grep -qE '\[(BRIEF_FILE|FINDINGS|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
+    judge_report=$ws/task-$first-rereview-$new_round-report.md
+    RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_JUDGE_REPORT=$judge_report \
+      RR_FIX_BASE=$fix_base_sha RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
+    if grep -qE '\[(BRIEF_FILE|FINDINGS|IMPLEMENTER_REPORT_FILE|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
       echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
       exit 2
     fi
+    rm -f "$judge_report"
     cp "$tmp/prompt" "$prompt"
   fi
 
@@ -558,14 +561,15 @@ do_review() {
   [ "$tier" = heavy ] || drops+=("Second Pass")
   prompt_text "$template" | drop_sections ${drops[@]+"${drops[@]}"} | fill \
     '[BASE_SHA]' "$basesha" '[HEAD_SHA]' "$headsha" '[DIFF_FILE]' "$diff" '[BRIEF_FILE]' "$brief" \
-    '[REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" '[JUDGE]' "$judge" \
+    '[IMPLEMENTER_REPORT_FILE]' "$report" '[REPORT_FILE]' "$ws/task-$first-review-report.md" \
+    '[PLUGIN_ROOT]' "$plugin_root" '[JUDGE]' "$judge" \
     '[LENS_FILES]' "$lens_files" '[CODEX_REVIEW_FILE]' "$codex_out" > "$judge_prompt"
 
   if [ -n "$tier" ]; then
     {
       prompt_text "$template" | drop_sections "Output Format" "Criteria" "Lens Criteria" "Second Pass" | fill \
         '[BASE_SHA]' "$basesha" '[HEAD_SHA]' "$headsha" '[DIFF_FILE]' "$diff" '[BRIEF_FILE]' "$brief" \
-        '[REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" '[JUDGE]' "$judge"
+        '[IMPLEMENTER_REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" '[JUDGE]' "$judge"
       printf '\n## Criteria\n\nScore each criterion independently on a 1 to 20 scale, where 1 is a clear failure, 10 is genuinely uncertain, and 20 is clearly met.\n\n'
       tr -d '\r' < "$plugin_root/criteria/task-review.md" | sed 's/^#/##/'
       printf '\nScore against those criteria and nothing else. Where a criterion tells you to ignore something, ignoring it is part of scoring correctly.\n\n'
@@ -582,6 +586,7 @@ do_review() {
     unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$line" | head -n 1)
     [ -z "$unexpanded" ] || die "unexpanded placeholder $unexpanded in $line"
   done
+  rm -f "$ws/task-$first-review-report.md"
 
   jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" \
     '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)' \
@@ -722,6 +727,7 @@ do_group() {
     fi
   done
 
+  rm -f "$ws/group-$list-review-report.md"
   cp "$TMP/package.md" "$pkg" && cp "$TMP/prompt.md" "$prompt" || die "cannot write $pkg or $prompt"
   t0=$(date +%s)
   jq -n --argjson tasks "$(printf '%s\n' "${members[@]}" | jq -sc .)" --arg rh "$ghead" --argjson t0 "$t0" \

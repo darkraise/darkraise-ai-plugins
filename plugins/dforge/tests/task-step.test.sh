@@ -445,6 +445,26 @@ check "review: a lens-route failure says which lens" "$(grep -c 'unknown lens id
 check "review: a lens-route failure writes no prompt file" "$([ -e "$WS/task-9-review-prompt.md" ] && echo yes || echo no)" "no"
 check "review: a lens-route failure leaves the state file alone" "$(cat "$WS/task-9-step.json")" "$state9"
 
+# review: the judge writes its report where the prompt says, and a fresh
+# review discards the last one; the Codex seat gets no report-file rule.
+review_surface absent
+printf 'stale\n' > "$WS/task-2-review-report.md"
+step review docs/plan.md 2
+RP2="$WS/task-2-review-prompt.md"
+check "review report: exit 0" "$rc" "0"
+check "review report: the prompt names the report file" \
+  "$(grep -cF "Write your full report to $WS/task-2-review-report.md and write nothing else" "$RP2")" "1"
+check "review report: the implementer's report keeps its own line" "$(grep -cF "Read the implementer's report: $WS/task-2-report.md" "$RP2")" "1"
+check "review report: no placeholder is left" "$(placeholders "$RP2")" "0"
+check "review report: a fresh review discards the last report" "$([ -e "$WS/task-2-review-report.md" ] && echo yes || echo no)" "no"
+review_surface true
+step review docs/plan.md 1
+check "review report: the Codex prompt carries no report-file rule" \
+  "$(grep -c 'review-report.md\|write nothing else' "$WS/task-1-review-codex-prompt.md")" "0"
+check "review report: the Codex prompt keeps the implementer's report" \
+  "$(grep -cF "Read the implementer's report: $WS/task-1-report.md" "$WS/task-1-review-codex-prompt.md")" "1"
+review_surface absent
+
 # --- rereview: the skip rule, the package and the state ---
 # The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
 RR_S="$HERE/../scripts"
@@ -1023,5 +1043,34 @@ gr_run review --group docs/plan.md 6 7
 check "review --group: a range Group line also marks its members as in review rounds" "$gr_rc $(grep -c 'Task 7' <<<"$gr_err")" "4 1"
 gr_git worktree remove --force "$GR_TMP/wt6"
 
+# The re-review judge writes its report where the prompt says; a fresh round
+# discards a stale one at that path.
+rr_reset
+rr_edit app.txt add4
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value|- other.txt: stale"
+printf 'stale\n' > "$RR_WS/task-1-rereview-1-report.md"
+rr_run rereview docs/plan.md 1
+RR_P=$RR_WS/task-1-rereview-1-prompt.md
+check "rereview report: exit 0" "$rr_rc" "0"
+check "rereview report: the prompt names the round's report file" \
+  "$(grep -cF "Write your full report to $RR_WS/task-1-rereview-1-report.md and write nothing else" "$RR_P")" "1"
+check "rereview report: the implementer's report is filled" "$(grep -cF "$RR_WS/task-1-report.md" "$RR_P")" "1"
+check "rereview report: no implementer-report placeholder is left" "$(grep -c '\[IMPLEMENTER_REPORT_FILE\]' "$RR_P")" "0"
+check "rereview report: a fresh round discards the stale report" "$([ -e "$RR_WS/task-1-rereview-1-report.md" ] && echo yes || echo no)" "no"
+
+# A group review's judge writes one report for the group (Task 5's hold and
+# review --group).
+rr_reset
+rr_run hold docs/plan.md 1
+check "group report: hold 1" "$rr_rc" "0"
+rr_run hold docs/plan.md 3
+check "group report: hold 3" "$rr_rc" "0"
+printf 'stale\n' > "$RR_WS/group-1,3-review-report.md"
+rr_run review --group docs/plan.md 1 3
+check "group report: review --group exits 0" "$rr_rc" "0"
+check "group report: the prompt names the group report file" \
+  "$(grep -cF "Write your full report to $RR_WS/group-1,3-review-report.md and write nothing else" "$RR_WS/group-1,3-review-prompt.md")" "1"
+check "group report: a fresh group review discards the last report" "$([ -e "$RR_WS/group-1,3-review-report.md" ] && echo yes || echo no)" "no"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

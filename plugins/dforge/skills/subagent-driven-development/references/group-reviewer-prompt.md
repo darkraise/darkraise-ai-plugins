@@ -91,8 +91,8 @@ Subagent (the judge seat task-step review --group prints):
       solved
 
     If a requirement cannot be verified from the package alone (it lives in
-    unchanged code or spans tasks), report it as a ⚠️ item of that task
-    instead of broadening your search.
+    unchanged code or spans tasks), report it under Cannot verify as an item
+    of that task instead of broadening your search.
 
     **Part 2: Code Quality**, for each task: clean separation of concerns,
     proper error handling, DRY without premature abstraction, edge cases
@@ -125,51 +125,63 @@ Subagent (the judge seat task-step review --group prints):
 
     ## Output Format
 
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the verdicts, the scores, the count of findings by severity, and the
+    report path. A script reads the report, so keep its grammar exactly.
+
     Return one block per task, headed `### Task <N>`, in the package's order.
     Every finding names its task: prefix its file with `(Task <N>) `, as in `(Task 4) src/a.ts:12`.
 
-    Each block holds:
+    The report begins directly with its Verdict section; every line after
+    it is a verdict, a finding with file:line, or a check you ran — no
+    preamble, no process narration, no closing summary. The three Verdict
+    lines appear once for every task in [GROUP_LIST], in that order, and
+    every finding and cannot-verify item begins with the `(Task <N>) ` of
+    the task it is about. The `### Task <N>` blocks are the ones under
+    `## Tasks`, each holding that task's strengths and assessment. Its
+    shape, written without the indent:
 
-    #### Spec Compliance
+        ## Verdict
+        Task <N> spec: pass | fail | cannot-verify
+        Task <N> quality: approved | changes
+        Task <N> scores: spec <1-20> / scope <1-20> / verification <1-20> / quality <1-20>
 
-    - ✅ Spec compliant | ❌ Issues found: what is missing, extra or
-      misunderstood, with file:line references
-    - ⚠️ Cannot verify from the package: the requirements you could not
-      verify, and what the controller should check — report alongside the
-      ✅/❌ verdict for everything you could verify
+        ## Findings
+        - [Critical|Important|Minor] (Task <N>) <file>:<line> — <one-liner>
+          <what is wrong, why it matters, how to fix it when not obvious>
 
-    #### Strengths
+        ## Cannot verify
+        - (Task <N>) <one-liner: the requirement, and what the controller should check>
 
-    What is well done in this task. Be specific.
+        ## Tasks
 
-    #### Issues
+        ### Task <N>
+        <what is well done, specifically; then one or two sentences of assessment>
 
-    Critical (Must Fix), Important (Should Fix) and Minor (Nice to Have), in
-    that order. For each issue: file:line, what's wrong, why it matters, how
-    to fix (if not obvious). List at most three Minor issues per task, the
-    ones most worth fixing, and end the list with
-    `(<k> more Minor left out)` when you dropped any.
+    Give each verdict line one of the values shown. `spec: pass` means the
+    task's diff meets its brief; `fail` that it misses, adds or misreads a
+    requirement; `cannot-verify` that everything you could verify passes
+    but a requirement lives in unchanged code or spans tasks. `quality:
+    changes` means the task needs fixes before it can be trusted. Score
+    each criterion of [PLUGIN_ROOT]/criteria/task-review.md independently
+    on a 1 to 20 scale, where 1 is a clear failure, 10 is genuinely
+    uncertain, and 20 is clearly met, and put a task's four Verification
+    Scores on its scores: line. Score against those criteria and nothing
+    else; the scores ride alongside the verdicts and never replace them.
 
-    **Task quality:** Approved | Needs fixes
+    Write one line per finding, most severe first, its detail on lines
+    indented by two spaces below it. `<file>` is the repository path the
+    fix belongs in and `<line>` the line, or 0 when no single line applies.
+    Every missing, extra or misunderstood requirement is a finding at
+    Critical or Important. A plan-mandated finding begins its one-liner
+    with `plan-mandated: `. Leave a section with nothing in it empty under
+    its heading.
 
-    **Reasoning:** a 1-2 sentence technical assessment of this task
-
-    ### Verification Scores
-    - spec: <1-20>
-    - scope: <1-20>
-    - verification: <1-20>
-    - quality: <1-20>
-
-    Score each criterion of [PLUGIN_ROOT]/criteria/task-review.md
-    independently on a 1 to 20 scale, where 1 is a clear failure, 10 is
-    genuinely uncertain, and 20 is clearly met. Score against those criteria
-    and nothing else; the scores ride alongside the verdicts and never
-    replace them.
-
-    Your final message is the report itself: begin directly with the first
-    task's block. Every line is a verdict, a finding with file:line, or a
-    check you ran — no preamble, no process narration, no closing summary.
-    The controller keeps your report at [REPORT_FILE].
+    List at most three Minor issues per task, the ones most worth fixing,
+    and end the section with `(Task <N>) (<k> more Minor left out)` for
+    each task whose Minor issues you dropped. Each Minor is carried to the
+    final review's triage, which reads them all.
 ```
 
 **Placeholders:**
@@ -177,12 +189,9 @@ Subagent (the judge seat task-step review --group prints):
   joined by commas (`1,2,4`)
 - `[PACKAGE_FILE]` — REQUIRED: the group review package
   `task-step review --group` wrote, one section per task
-- `[REPORT_FILE]` — REQUIRED: the file the controller keeps this review's
-  report in, `<workspace>/group-<list>-review-report.md`
+- `[REPORT_FILE]` — REQUIRED: the file this judge writes its report to, `<workspace>/group-<list>-review-report.md`; `task-step review --group` fills it
 - `[PLUGIN_ROOT]` — REQUIRED: the resolved dforge plugin directory. Expand it
   before sending; a judge handed the literal token cannot open the criteria
   file
 
-**Reviewer returns:** one block per task, each holding its Spec Compliance
-verdict (✅/❌/⚠️), Strengths, Issues (Critical/Important/Minor), Task quality
-verdict, and Verification Scores for spec, scope, verification, and quality
+**Reviewer writes** its report to [REPORT_FILE] — the Verdict section (spec, quality and scores once per task), Findings, Cannot verify and one `### Task <N>` block per task under Tasks — **and returns** a reply of at most 10 lines.

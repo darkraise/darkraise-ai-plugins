@@ -29,17 +29,28 @@ Subagent ([JUDGE]):
     Where the plan and the spec disagree, the spec wins. Where neither
     answers, decide, and say what it costs if you are wrong.
 
-    You cannot modify files or dispatch subagents. Read what each item
-    points at; do not crawl the codebase beyond what an item's question
-    needs, and name any file you read outside the listed paths.
+    You write only the report file and cannot dispatch subagents. Read what
+    each item points at; do not crawl the codebase beyond what an item's
+    question needs, and name any file you read outside the listed paths.
 
     ## Verdicts
 
-    Return exactly one block per item, in item order:
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the count of verdicts by kind and the report path; a BLOCKED verdict
+    also puts the decision a human must make in your reply.
+
+    The report opens with its Verdict section, exactly one block per item,
+    in item order, written without the indent:
+
+        ## Verdict
 
         ### Item <id>
         Verdict: CONFIRMED-GAP | PARK | AMEND | REWORD | BLOCKED
         Ruling: <what> — <why> — <cost if wrong>
+
+    After the Verdict section come a preflight's table under
+    `## Preflight table`, then every AMEND entry, in item order.
 
     - CONFIRMED-GAP: the finding or gap is real. The Ruling names the
       smallest change that fixes it, precisely enough for an implementer.
@@ -50,10 +61,12 @@ Subagent ([JUDGE]):
       `New statement: <the statement, reworded so it reads one way>`. PARK on
       an acceptance-ambiguous item defers the statement to the register.
     - AMEND: the plan's text is what is wrong. After the Ruling line, write
-      one amendment entry, starting at column 0, in exactly this shape
-      (heading `## A? — Task <N>`, or `## A? — Header` for the header):
+      `Amendment: A<k>` at column 0, numbering this report's AMEND entries
+      A1, A2 … in item order. Write the entry itself after the Verdict
+      section, starting at column 0, in exactly this shape (heading
+      `## A<k> — Task <N>`, or `## A<k> — Header` for the header):
 
-          ## A? — Task <N>
+          ## A<k> — Task <N>
           Reason: <one line>
           Cost if wrong: <one line>
           ### Old
@@ -83,13 +96,14 @@ Subagent ([JUDGE]):
       tasks that contradict each other, the Contracts or the Global
       Constraints, and for anything the plan mandates that a reviewer would
       call a defect (a test that asserts nothing, verbatim duplication of a
-      logic block). First return a table: one row for every pair of tasks
-      that share a file or an interface (the two tasks, what one produces
-      against what the other consumes, what you found), and one row for
-      every task on whether its own text agrees with itself (its tests
-      against its code, the files it creates against the files it later
-      touches). Then one verdict block per row that found something, with id
-      `preflight-<row number>`. Rows that found nothing get no block.
+      logic block). Write a table under ## Preflight table: one row for
+      every pair of tasks that share a file or an interface (the two tasks,
+      what one produces against what the other consumes, what you found),
+      and one row for every task on whether its own text agrees with itself
+      (its tests against its code, the files it creates against the files
+      it later touches). Then one verdict block per row that found
+      something, in the Verdict section, with id `preflight-<row number>`.
+      Rows that found nothing get no block.
       When the header has a `**Parallelism:** waves` line, add one row for
       every pair of tasks in the same wave, whether or not they share a
       file: can either observe the other's change at run or test time — a
@@ -129,14 +143,15 @@ Subagent ([JUDGE]):
   and `<ledger dir>/progress.md`.
 - `[PROVISIONAL_NOTE]` — when the plan's Spec path is unreachable, "The spec is
   unreachable. Mark every Ruling (provisional)."; otherwise delete the line.
-- `[CONFIRM_NOTE]` — only for a Header amendment's confirmation: "Another seat
-  returned the verdict at the end of the items file for item <id>. Return your
-  own verdict block for that item."; otherwise delete the line.
+- `[CONFIRM_NOTE]` — only for a Header amendment's confirmation: "Another seat's
+  report on item <id> is named at the end of the items file: read that item's
+  verdict block and its amendment entry there, then write your own verdict
+  block for the item, with your own amendment entry when your verdict is
+  AMEND."; otherwise delete the line.
 - `[ITEMS_FILE]` — REQUIRED: `<workspace>/rulings-<point>-<task>.md`, where
   `<task>` is the task number the items concern, or `plan` for a plan-level
   point. One entry per item: its id, kind, task (or `plan`), and the paths it
   needs — brief, report, review packages — with the findings copied verbatim.
+- `[REPORT_FILE]` — REQUIRED: the items file's path with `.md` replaced by `-report.md`: `<workspace>/rulings-<point>-<task>-report.md`, or `<workspace>/rulings-<point>-<task>-confirm-report.md` for a Header amendment's confirmation
 
-**The seat returns** one verdict block per item (a table first for
-`preflight`). Copy an AMEND entry from its `## A?` line through the New
-fence's closing line into a file for `scripts/plan-amend`.
+**The seat writes** its report to [REPORT_FILE] — the Verdict section with one block per item, a preflight's table, then the AMEND entries ## A1 … — **and returns** a reply of at most 10 lines. The execution skill's The Ruling Seat section says how the controller reads the report and applies an AMEND entry by its Amendment: id.

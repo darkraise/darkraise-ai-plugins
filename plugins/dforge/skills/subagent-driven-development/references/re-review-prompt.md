@@ -29,7 +29,7 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
     ## The Fix
 
     Read the implementer's report (fix reports are appended at the end):
-    [REPORT_FILE]
+    [IMPLEMENTER_REPORT_FILE]
 
     **Fix base:** [FIX_BASE_SHA] (the head the previous review saw)
     **Head:** [HEAD_SHA]
@@ -55,7 +55,7 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
     Your scope is the findings list and the fix diff. Verdict every finding.
     Inspect the fix diff for new problems the fix itself introduced. Do NOT
     re-review code the fix did not touch: if you notice an issue entirely
-    outside the fix diff, report it under Out-of-Scope Observations — it
+    outside the fix diff, report it as an out-of-scope Minor finding (Output Format) — it
     does not block this task and does not extend the loop. A broad
     whole-branch review happens after all tasks are complete.
 
@@ -73,51 +73,59 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
     `a<n>_`, or which the QA report identifies as an acceptance test (an
     acceptance test the final review's QA seat wrote), ask: would this test
     still fail if the code violated statement A<n> of the spec? A change that
-    makes the answer no weakens the test: report it under New Breakage in the
-    Fix Diff, even when the fix report argues for it.
+    makes the answer no weakens the test: report it under Findings as
+    breakage the fix introduced, even when the fix report argues for it.
 
     ## Output Format
 
-    Your final message is the report itself: begin directly with the first
-    finding's verdict. Every line is a verdict, a finding with file:line,
-    or a check you ran — no preamble, no process narration.
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the verdict, the count of findings by severity, and the report path.
+    A script reads the report, so keep its grammar exactly. Every line in
+    it is a verdict, a finding with file:line, or a check you ran — no
+    preamble, no process narration. Its shape, written without the indent:
 
-    ### Finding Verdicts
+        ## Verdict
+        fix round: addressed | open
+        open: <k>
 
-    For each finding in The Findings Under Verification, in order:
-    - **[finding one-liner]** — ADDRESSED | NOT ADDRESSED, with file:line
-      evidence. "Attempted" is not addressed: the specific defect must no
-      longer exist.
-    - For a finding the fix report lists under `REJECTED:` (a final review
-      with one findings list): **[finding one-liner]** — REJECTION UPHELD |
-      REJECTION DISPUTED, with file:line evidence. Uphold only when the
-      evidence shows the finding is wrong, not merely unfixed.
+        ## Finding verdicts
+        - <finding one-liner> — ADDRESSED | NOT ADDRESSED — <file:line evidence>
+        - <finding one-liner> — REJECTION UPHELD | REJECTION DISPUTED — <file:line evidence>
 
-    ### New Breakage in the Fix Diff
+        ## Findings
+        - [Critical|Important|Minor] <file>:<line> — <one-liner>
 
-    Anything the fix itself broke or introduced, with severity
-    (Critical/Important/Minor) and file:line. "None" if clean.
+    `fix round: addressed` means every finding is addressed and the fix
+    diff adds no Critical or Important breakage; otherwise it is `open`,
+    and `open:` counts the findings still open.
 
-    ### Out-of-Scope Observations
+    Write one Finding verdicts line for each finding in The Findings Under
+    Verification, in order. "Attempted" is not addressed: the specific
+    defect must no longer exist. Use the rejection form for a finding the
+    fix report lists under `REJECTED:` (a final review with one findings
+    list), and uphold only when the evidence shows the finding is wrong,
+    not merely unfixed.
+    An upheld rejection is closed; a disputed one is open.
 
-    Issues you noticed entirely outside the fix diff. Non-blocking; the
-    controller ledgers these for the final review. "None" if none.
-
-    ### Verdict
-
-    **Fix round:** [All findings addressed, no new Critical/Important
-    breakage | Findings remain open] — list the open ones. An upheld rejection is closed; a disputed one is open.
+    Under Findings, list every finding still open — each NOT ADDRESSED one
+    and each disputed rejection, at the severity the fix message gives it
+    — and anything the fix itself broke or introduced, at its own severity.
+    An issue entirely outside the fix diff is a Minor finding whose
+    one-liner begins `out of scope: `: the controller ledgers it for the
+    final review and it never extends the loop. `<line>` is 0 when no
+    single line applies. Leave a section with nothing in it empty under
+    its heading.
 ```
 
 **Placeholders:**
 - `[BRIEF_FILE]` — the task brief file (same file the implementer worked from)
-- `[FINDINGS]` — the Critical/Important findings and spec gaps from the
-  previous review, copied verbatim, one per bullet
-- `[REPORT_FILE]` — the implementer's report file (fix reports appended)
+- `[FINDINGS]` — the fix message's bullets, one per open finding; task-step rereview fills them in
+- `[IMPLEMENTER_REPORT_FILE]` — the implementer's report file (fix reports appended)
+- `[REPORT_FILE]` — REQUIRED: the file this judge writes its report to, `<workspace>/task-<N>-rereview-<R>-report.md`; `task-step rereview` fills it, and the final review's fix wave names `<workspace>/final-rereview-report.md`
 - `[FIX_BASE_SHA]` — the head the previous review saw
 - `[HEAD_SHA]` — current commit
 - `[DIFF_FILE]` — REQUIRED: the path `scripts/review-package PLAN_FILE FIX_BASE HEAD`
   printed; `task-step rereview` runs it and fills this in
 
-**Re-reviewer returns:** per-finding verdicts (ADDRESSED / NOT ADDRESSED),
-new breakage in the fix diff, out-of-scope observations, and a round verdict.
+**Re-reviewer writes** the round verdict, a verdict per finding and every finding still open (new breakage included, out-of-scope issues as Minor) to [REPORT_FILE], **and returns** a reply of at most 10 lines.

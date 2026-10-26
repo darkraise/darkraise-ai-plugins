@@ -124,5 +124,51 @@ names "entry point: the Seats section" "$UD" '## Seats'
 names "entry point: general-purpose takes a model" "$UD" '`general-purpose` takes an explicit `model`'
 names "entry point: read-only checks on a judge" "$UD" 'Read-only checks (register rows, findings, a claim) go to `dforge:judge-sonnet-high`'
 
+# Judge seats in the task loop write their full report to the file the prompt
+# names and reply in at most ten lines. The report opens with a fixed
+# `## Verdict` section and lists findings in one grammar, so task-step verdict
+# can read it and the controller never has to.
+lacks() { # lacks <label> <file> <text>
+  check "$1" "$(grep -qF -- "$3" "$2" 2>/dev/null && echo yes || echo no)" "no"
+}
+TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+GRP="$P/skills/subagent-driven-development/references/group-reviewer-prompt.md"
+RULP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
+FR="$P/reference/final-review.md"
+for t in "$TRP" "$RRP" "$GRP" "$RULP"; do
+  n=$(basename "$t" .md)
+  names "$n: names the report file" "$t" 'Write your full report to [REPORT_FILE] and write nothing else'
+  names "$n: the reply is at most 10 lines" "$t" 'Then reply in at most 10 lines'
+  check "$n: the report opens with the Verdict section" "$(grep -qE '^ *## Verdict$' "$t" 2>/dev/null && echo yes || echo no)" "yes"
+  names "$n: the report file is a placeholder" "$t" '`[REPORT_FILE]` — REQUIRED'
+  lacks "$n: the final message is no longer the report" "$t" 'Your final message is the report itself'
+  lacks "$n: the seat no longer says it cannot modify files" "$t" 'You cannot modify files'
+done
+for t in "$TRP" "$RRP"; do
+  n=$(basename "$t" .md)
+  names "$n: the finding grammar" "$t" '- [Critical|Important|Minor] <file>:<line> — <one-liner>'
+  names "$n: the implementer's report has its own placeholder" "$t" '[IMPLEMENTER_REPORT_FILE]'
+done
+names "task reviewer: the spec verdict key" "$TRP" 'spec: pass | fail | cannot-verify'
+names "task reviewer: the quality verdict key" "$TRP" 'quality: approved | changes'
+names "task reviewer: the scores key" "$TRP" 'scores: spec <1-20> / scope <1-20> / verification <1-20> / quality <1-20>'
+names "task reviewer: the cannot-verify section" "$TRP" '## Cannot verify'
+check "task reviewer: the Codex findings are a report section" "$(grep -qE '^ *## Codex findings$' "$TRP" && echo yes || echo no)" "yes"
+lacks "task reviewer: no Verification Scores block" "$TRP" '### Verification Scores'
+names "re-review: the round verdict key" "$RRP" 'fix round: addressed | open'
+names "re-review: the open count key" "$RRP" 'open: <k>'
+names "re-review: the per-finding verdicts" "$RRP" '## Finding verdicts'
+names "group reviewer: the per-task finding grammar" "$GRP" '- [Critical|Important|Minor] (Task <N>) <file>:<line> — <one-liner>'
+names "group reviewer: per-task verdict keys" "$GRP" 'Task <N> spec: pass | fail | cannot-verify'
+names "group reviewer: per-task scores" "$GRP" 'Task <N> scores: spec <1-20> / scope <1-20> / verification <1-20> / quality <1-20>'
+names "ruling: the item verdict lines" "$RULP" 'Verdict: CONFIRMED-GAP | PARK | AMEND | REWORD | BLOCKED'
+names "ruling: an AMEND names its entry" "$RULP" 'Amendment: A<k>'
+names "ruling: entries are numbered in the report" "$RULP" '## A<k> — Task <N>'
+names "ruling: a BLOCKED reply carries the decision" "$RULP" 'the decision a human must make'
+names "ruling: the report file follows the items file" "$RULP" '`<workspace>/rulings-<point>-<task>-report.md`'
+lacks "ruling: no unnumbered entry heading" "$RULP" '## A? — Task <N>'
+names "final review: the fix wave's re-review names the fixer's report" "$FR" 'its `[IMPLEMENTER_REPORT_FILE]` being that file'
+lacks "final review: the re-review's REPORT_FILE is not the fixer's" "$FR" 'its `[REPORT_FILE]` being that file'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

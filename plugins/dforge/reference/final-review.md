@@ -295,12 +295,13 @@ fix subagent writes it as its report file; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
-its `[REPORT_FILE]` being that file). When QA committed tests, FIX_BASE is the
+its `[IMPLEMENTER_REPORT_FILE]` being that file and its `[REPORT_FILE]`
+being `<workspace>/final-rereview-report.md`). When QA committed tests, FIX_BASE is the
 review's HEAD (the `Acceptance QA: dispatched` SHA), so the range holds QA's
 commits too: the final reviewers never saw them. When no confirmed finding
 needs a fix wave but QA committed tests, still run that one scoped re-review
 over the same range, with `<workspace>/acceptance-report.md` as
-`[REPORT_FILE]`.
+`[IMPLEMENTER_REPORT_FILE]`.
 Send any residual findings — `NOT ADDRESSED`, and `REJECTION DISPUTED` in the
 one-list case — to the ruling seat as `final-residual` items and carry out its
 verdicts. The scoped re-review is a Claude seat that wrote none of the code, so

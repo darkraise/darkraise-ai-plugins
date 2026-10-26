@@ -25,7 +25,7 @@ Subagent ([JUDGE]):
 
     ## What the Implementer Claims They Built
 
-    Read the implementer's report: [REPORT_FILE]
+    Read the implementer's report: [IMPLEMENTER_REPORT_FILE]
 
     ## Diff Under Review
 
@@ -107,7 +107,7 @@ Subagent ([JUDGE]):
     batch looks.
 
     If a requirement cannot be verified from this diff alone (it lives in
-    unchanged code or spans tasks), report it as a ⚠️ item instead of
+    unchanged code or spans tasks), report it under Cannot verify instead of
     broadening your search.
 
     ## Part 2: Code Quality
@@ -135,11 +135,6 @@ Subagent ([JUDGE]):
     "yes." A tight report that cites lines gives the controller everything
     it needs.
 
-    Your final message is the report itself: begin directly with the
-    spec-compliance verdict. Every line is a verdict, a finding with
-    file:line, or a check you ran — no preamble, no process narration,
-    no closing summary.
-
     ## Calibration
 
     Categorize issues by actual severity. Not everything is Critical.
@@ -158,35 +153,51 @@ Subagent ([JUDGE]):
 
     ## Output Format
 
-    ### Spec Compliance
+    Write your full report to [REPORT_FILE] and write nothing else: it is
+    the only file you may create or change. Then reply in at most 10 lines:
+    the verdict, the scores, the count of findings by severity, and the
+    report path. A script reads the report, so keep its grammar exactly.
 
-    - ✅ Spec compliant | ❌ Issues found: [what's missing/extra/misunderstood,
-      with file:line references]
-    - ⚠️ Cannot verify from diff: [requirements you could not verify from the
-      diff alone, and what the controller should check — report alongside the
-      ✅/❌ verdict for everything you could verify]
+    The report begins directly with its Verdict section; every line after
+    it is a verdict, a finding with file:line, or a check you ran — no
+    preamble, no process narration, no closing summary. Its shape, written
+    without the indent:
 
-    ### Strengths
-    [What's well done? Be specific.]
+        ## Verdict
+        spec: pass | fail | cannot-verify
+        quality: approved | changes
+        scores: spec <1-20> / scope <1-20> / verification <1-20> / quality <1-20>
 
-    ### Issues
+        ## Strengths
+        <what is well done, specifically>
 
-    #### Critical (Must Fix)
-    #### Important (Should Fix)
-    #### Minor (Nice to Have)
+        ## Findings
+        - [Critical|Important|Minor] <file>:<line> — <one-liner>
+          <what is wrong, why it matters, how to fix it when not obvious>
 
-    For each issue: file:line, what's wrong, why it matters, how to fix
-    (if not obvious).
+        ## Cannot verify
+        - <one-liner: the requirement, and what the controller should check>
+
+        ## Assessment
+        <one or two sentences of technical assessment>
+
+    Give each verdict line one of the values shown. `spec: pass` means the
+    diff meets the brief; `fail` that it misses, adds or misreads a
+    requirement; `cannot-verify` that everything you could verify passes
+    but a requirement lives in unchanged code or spans tasks. `quality:
+    changes` means the task needs fixes before it can be trusted.
+
+    Write one line per finding, most severe first, its detail on lines
+    indented by two spaces below it. `<file>` is the repository path the
+    fix belongs in and `<line>` the line, or 0 when no single line applies.
+    Every missing, extra or misunderstood requirement is a finding at
+    Critical or Important. A plan-mandated finding begins its one-liner
+    with `plan-mandated: `. Leave a section with nothing in it empty under
+    its heading.
 
     List at most three Minor issues, the ones most worth fixing, and end
     the section with `(<k> more Minor left out)` when you dropped any. Each
     Minor is carried to the final review's triage, which reads them all.
-
-    ### Assessment
-
-    **Task quality:** [Approved | Needs fixes]
-
-    **Reasoning:** [1-2 sentence technical assessment]
 
     ## Criteria
 
@@ -194,13 +205,8 @@ Subagent ([JUDGE]):
     each criterion independently on a 1 to 20 scale, where 1 is a clear
     failure, 10 is genuinely uncertain, and 20 is clearly met.
 
-    Add this block to the end of your report, after the Assessment section:
-
-    ### Verification Scores
-    - spec: <1-20>
-    - scope: <1-20>
-    - verification: <1-20>
-    - quality: <1-20>
+    Put the four Verification Scores on the scores: line of your report's
+    Verdict section.
 
     Score against those criteria and nothing else. Where a criterion tells you
     to ignore something, ignoring it is part of scoring correctly. The scores
@@ -219,21 +225,23 @@ Subagent ([JUDGE]):
     [Include this section only on a risk 3 task whose Codex seat
     produced a review. Delete it otherwise.]
 
-    Do this only after your Spec Compliance, Strengths, Issues, Assessment and
-    Verification Scores sections are written in full. Then read the Codex
+    Do this only after your Spec Compliance verdict, findings and
+    Verification Scores are written in full. Then read the Codex
     review of the same diff: [CODEX_REVIEW_FILE]
 
-    It is a JSON object; read its `findings` and `cannot_verify`. Append this
-    section to the end of your report:
+    It is a JSON object; read its `findings` and `cannot_verify`. Append
+    this section to your report file, as its last section:
 
-    ### Codex findings
-    - [CONFIRMED|REJECTED] <file:line> <the finding, one line> - <your evidence>
-    - [CONFIRMED|REJECTED] cannot-verify: <the item, one line> - <your evidence>
+        ## Codex findings
+        - [CONFIRMED|REJECTED] <file:line> <the finding, one line> - <your evidence>
+        - [CONFIRMED|REJECTED] cannot-verify: <the item, one line> - <your evidence>
 
     Write one line for every entry in `findings` and every entry in
-    `cannot_verify`. CONFIRMED means the diff supports it. A CONFIRMED finding
-    your Issues section missed is added there too, at your own severity and
-    marked `(from codex)`, and may lower a score you gave; nothing in the Codex
+    `cannot_verify`. CONFIRMED means the diff supports it. A CONFIRMED
+    finding your Findings section missed is added there too, in the finding
+    grammar, at your own severity and with `(from codex)` ending its
+    one-liner; a CONFIRMED cannot-verify item is added under Cannot verify
+    the same way. Either may lower a score you gave; nothing in the Codex
     review raises a score, and nothing else you wrote before reading it changes.
 ```
 
@@ -249,14 +257,12 @@ Subagent ([JUDGE]):
 - `[LENS_FILES]` — OPTIONAL: the `criteria=` paths `scripts/lens-route PLAN_FILE --task <N>` printed. Delete the Lens Criteria section when there are none.
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N`
   prints the path; same file the implementer worked from)
-- `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed
-  report to
+- `[IMPLEMENTER_REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed report to
+- `[REPORT_FILE]` — REQUIRED: the file this judge writes its report to, `<workspace>/task-<N>-review-report.md`; `task-step review` fills both
 - `[BASE_SHA]` — commit before this task
 - `[HEAD_SHA]` — current commit
 - `[DIFF_FILE]` — REQUIRED: the path the controller wrote the review
   package to (`scripts/review-package PLAN_FILE BASE HEAD` prints the unique
   path it wrote; the package never enters the controller's context)
 
-**Reviewer returns:** Spec Compliance verdict (✅/❌/⚠️), Strengths, Issues
-(Critical/Important/Minor), Task quality verdict, and Verification Scores for
-spec, scope, verification, and quality
+**Reviewer writes** its report to [REPORT_FILE] — the Verdict section (spec, quality, scores), Strengths, Findings, Cannot verify and Assessment, with Codex findings last on a risk 3 task — **and returns** a reply of at most 10 lines.
