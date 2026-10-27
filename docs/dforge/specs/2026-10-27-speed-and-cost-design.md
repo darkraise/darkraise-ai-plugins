@@ -91,78 +91,142 @@ reference file; none is deleted.
 
 - **Implementer.** `implementer-prompt.md` drops the final full-suite run: the
   implementer runs the focused tests that cover its change before each commit,
-  reports them, and returns.
+  reports them, and returns. The Report Format gains `## Verified`, one bullet
+  per command run: `` - `<command>` — pass | fail: <n> passed, <m> failed ``;
+  the short reply's last line is `Report: <absolute path>`. The Run Control
+  paragraph names `[PLUGIN_ROOT]/scripts/context-size`, so `[PLUGIN_ROOT]`
+  keeps a use in the prompt.
+- **Suite command** (recommended; the owner confirms it at the spec review).
+  `task-step start` takes `--suite '<command>'` and records it in
+  `task-<N>-step.json`. The controller takes the command from the plan
+  header's `**Integration check:**`, else from `<docs>/gates.md`'s test
+  command, else decides it once at Setup from the project's manifest and logs
+  `Ruling: suite command — <command> — none`.
 - **Controller.** On a DONE or DONE_WITH_CONCERNS report,
   `reference/delegated-task.md` has the controller start
   `scripts/suite-run -- <suite command>` as a background command at the task's
   head and dispatch the task review in the same turn. The controller runs
   `task-step verdict` only once both the review report and the suite's
-  completion notification are in. `verdict` reads suite-run's record for that
-  head: a pass, or failures that all also fail at the base commit (the
-  baseline check below), lets the task complete; any other failure becomes an
-  Important finding (`suite: <test> fails at <head7>`) in the fix round. A fix round's
-  head gets its own suite run beside its re-review. A group review runs one
-  suite at the group's last head. Inline mode and Codex hosts are unchanged.
+  completion notification are in. `verdict` reads `suites.tsv` in the state
+  directory of `--cwd` when given, else of the checkout, and takes the row
+  whose command text equals the recorded one at the review head:
+  - a pass, or failures that are all baseline (below), lets the task complete;
+  - any other failure becomes an Important finding
+    (`suite: <test> fails at <head7>`) in the fix file, and `verdict` prints
+    `fix:` naming it;
+  - no row prints `suite: not run (<command>)` and exits 7; the controller
+    re-runs the suite before `verdict` again. A suite still in flight at a
+    handoff is listed by `scripts/in-flight` and re-run by the next session.
+- **Baseline failures.** For a red suite, `verdict` runs the recorded suite
+  command once at the base commit in a temporary worktree through
+  `suite-run --timeout 600`, after the header's `**Worktree setup:**` when it
+  has one, reusing a `suites.tsv` row at the base sha when one exists. A
+  failing line is baseline when the same line appears in the base run's
+  failing lines, as `reference/parallel-waves.md` §1 already does with
+  `base-proof-failures.txt`.
+- **Fix rounds and groups.** A fix round's head gets its own suite run beside
+  its re-review. In sequential mode a group's suite runs once at the last held
+  member's head; a wave's grouped tasks get no per-group suite, since the
+  wave's merged check is their suite.
+- **Where the loop applies.** Inline mode's own tasks (executing-plans steps
+  2-7, including its full-suite-before-commit rule) are unchanged; a task
+  inline mode delegates follows this loop. `reference/delegated-task.md`'s
+  `## The steps by hand` §2 (Codex hosts and any run without `task-step`)
+  gains: "On a DONE report, run
+  `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
+  background at the task's head and treat a non-baseline failure as §3's
+  Important finding." `reference/final-review.md`'s fix-wave subagent (which
+  still runs the suite so finishing reuses it) and the SKILL.md example line
+  that shows a suite-run call are deliberately unchanged.
 - **Baseline and existence facts.** The task-reviewer prompt gives
   cannot-verify items a structured form when they ask a mechanical question:
   `cannot-verify: exists <path|symbol> at <base|head> — <why it matters>` or
-  `cannot-verify: baseline <test> — <why>`. `task-step verdict` settles them
-  itself: `exists` by `git grep -n -F` (or `git cat-file -e` for a path) at the
-  named commit, `baseline` by running only that test at the base commit in a
-  temporary worktree through suite-run. A settled item is logged
-  `Task <N>: Ruling: cannot-verify — settled by task-step check <exists|baseline> — none`
-  and reaches no seat; a free-text item still goes to the ruling seat.
+  `cannot-verify: baseline <command> — <why>`. `task-step verdict` settles them
+  itself: `exists` by `git cat-file -e` for a path or `git grep -nwF` for a
+  symbol at the named commit; `baseline` by running the named command verbatim
+  at the base commit in a temporary worktree through
+  `suite-run --timeout 600`, after `**Worktree setup:**` when the header has
+  one. A settled item is logged
+  `Task <N>: Ruling: cannot-verify — settled by task-step check <exists|baseline> — <evidence>`,
+  where the evidence is the `git grep` hit `<file>:<line>`, `path present` or
+  `path absent`, or the base run's log path, and reaches no seat; a free-text
+  item still goes to the ruling seat.
 
 ### 3. Implementer agent clauses (row 7)
 
 Every `agents/impl-*.md` gains three clauses after its scope paragraph: write a
 general solution, never one that only passes specific test inputs; when a test
 looks wrong, report it instead of working around it; never edit or delete an
-existing test unless the brief names it. The Opus tiers gain the scope-limit
-clause the Sonnet tiers already carry.
+existing test unless the brief names it. Every non-Sonnet tier
+(`impl-opus-*`, `impl-fable-*`, `impl-haiku`) gains the scope-limit clause
+the Sonnet tiers already carry ("Change only what the brief asks for");
+recommended, the owner confirms the tier set at the spec review.
 
 ### 4. Implementer stop gate (row 13)
 
-A plugin `SubagentStop` hook in `hooks/hooks.json`, matcher `dforge:impl-.*`,
-runs `scripts/impl-stop-gate`. It reads the hook input (`agent_type`,
-`agent_id`, `last_assistant_message`) and blocks with exit 2 and a one-line
-reason when the last message reports `DONE` or `DONE_WITH_CONCERNS` and:
+A plugin `SubagentStop` hook in `hooks/hooks.json`, matcher
+`(dforge:)?impl-.*`, runs `scripts/impl-stop-gate`. Whether `agent_type`
+carries the plugin prefix is unverified, so the gate also checks that
+`agent_type` matches `(^|:)impl-` itself, and part D's first task logs one real
+`SubagentStop` input and records the observed value in its test.
 
-- it names no report file, or the file does not exist;
-- the file lacks `## Discovered issues (not fixed)` or `## Assumptions made`;
-- the file names no test command with a result.
+The gate acts only when `last_assistant_message` carries `**Status:** DONE` or
+`**Status:** DONE_WITH_CONCERNS` and a `Report: <path>` line; every other stop
+passes (other agent types, BLOCKED, NEEDS_CONTEXT, and `impl-*` dispatches
+with their own report contracts such as acceptance-qa and the final-review fix
+wave). When it acts, it reads only the `Report:` line and the report file's
+`## Verified`, `## Discovered issues (not fixed)` and `## Assumptions made`
+headings, and blocks with exit 2 and a one-line reason naming what is missing
+when:
 
-It passes every other agent type, BLOCKED and NEEDS_CONTEXT stops, and the
-third stop of one agent id after two blocks (counted in a file under the
-plugin's state directory, keyed by agent id), logging that pass-through. It
-runs no tests and makes no network call. The hooks docs state that
+- the file does not exist;
+- it lacks `## Discovered issues (not fixed)` or `## Assumptions made`;
+- `## Verified` is missing or holds no bullet in §2's grammar.
+
+`<state>` is the output of `bash "$CLAUDE_PLUGIN_ROOT/scripts/dforge-path" state`
+run from the hook input's `cwd`. The counter file
+`<state>/impl-stop-gate/<agent_id>` holds the block count and the sha256 of
+the last blocked `last_assistant_message`; a stop whose hash equals the stored
+one is the same stop fired twice and does not raise the count. The third
+distinct stop of one agent id after two blocks passes and appends one line to
+`<state>/impl-stop-gate.log`:
+`<epoch> <agent_id> <agent_type> pass-through after 2 blocks — <last reason>`.
+The gate runs no tests and makes no network call. The hooks docs state that
 `SubagentStop` input carries `agent_type` and that exit 2 keeps the subagent
 running with the reason as its next instruction
-(https://code.claude.com/docs/en/hooks); Claude Code before 2.1.311 can fire
-it twice, so the gate is idempotent per stop.
+(https://code.claude.com/docs/en/hooks). That Claude Code before 2.1.311 fires
+it twice was verified on 2.1.311 (research note), not stated by the hooks docs.
 
-### 5. Replay eval (rows 11, 12)
+### 5. Replay eval (row 11)
 
 A new `pipeline` stage in `evals/tiers` replays a finished task through the
 whole loop under a given plugin directory: an isolated clone at the task's base
 commit with its own HOME and XDG directories, `claude -p --plugin-dir <arm>`
 driving one task's implementer, suite, task review and up to two fix rounds,
-then the existing hidden-test grader. It records per run: pass, `costUsd`,
-wall time, dispatch count and fix rounds. `arms.json` gains
-`"pipeline": { "baseline": "<ref>", "candidate": "<ref>" }`, each ref built
-into its own plugin directory with `git worktree add`. The manifest takes 20
-cases from finished plans, preferring tasks that needed a fix round; each arm
-runs 3 times. The report prints pass^3 (cases passing all three runs), total
-cost and median wall time per arm. A baseline arm's results are reused by every
-comparison against the same baseline ref. Nothing runs in a real project
-checkout or reads the owner's settings.
+then the existing hidden-test grader. Each arm's plugin directory is
+materialised with `lib/snapshot.mjs`'s `snapshot(ref, <eval root>/arms/<ref7>)`;
+no git worktree is created. `arms.json` gains
+`"pipeline": { "baseline": "<ref>", "candidate": "<ref>" }`.
+
+Pipeline runs go to `results/pipeline.tsv` with columns
+`rep, case, arm, run, outcome, costUsd, seconds, dispatches, fixRounds, detail`.
+`results.tsv` and `run-grid.mjs`'s existing stages are untouched, and the
+start-commit refusal in `run-grid.mjs` does not apply to the pipeline stage,
+whose arms are refs. The manifest takes 20 cases from finished plans,
+preferring tasks that needed a fix round; each arm runs 3 times. The report
+prints pass^3 (cases passing all three runs), total cost and median wall time
+per arm. Nothing runs in a real project checkout or reads the owner's
+settings.
 
 ### 6. Measured lane (rows 3, 4, 6, 8, 9, 10, 12, 15, 17)
 
-Each item is built on its own branch from the merged mechanical lane and run as
-the candidate arm. It merges when its pass^3 count is at least the baseline's
-and its total cost or median wall time is at least 10% lower; otherwise its row
-closes `n/a` with the numbers. Order, by expected value:
+Every candidate branches from, and is compared against, the mechanical-lane
+merge commit `<M>` (recommended; the owner confirms it at the spec review).
+The baseline arm runs once at `<M>`; a winning item is rebased onto main.
+After the lane, one confirmation comparison of main against `<M>` (one arm,
+about $120) checks the merged set together. An item merges when it meets the
+merge rule (A14); otherwise its row closes `n/a` with the numbers. Order, by
+expected value:
 
 1. Lean plans (row 15): briefs carry decisions, signatures and test assertions,
    not full code. Needs a pipeline variant that re-drafts each case's brief
@@ -180,7 +244,9 @@ closes `n/a` with the numbers. Order, by expected value:
 7. Pilots (row 12): no judge for score 0-2 tasks; escalation on early
    trajectory signals.
 8. Stagger (row 10): measured from transcripts instead (first-request cache
-   reads of a second same-type dispatch), no eval arm.
+   reads of a second same-type dispatch), no eval arm. Row 10's other half,
+   workers with disjoint files and shared decisions, already shipped as
+   parallel waves (`reference/parallel-waves.md`).
 
 ### 7. Docs and audit (rows 16, 18)
 
@@ -196,12 +262,20 @@ candidate, never a direct edit.
 | Part | Owns | Consumes | Runs |
 |---|---|---|---|
 | F foundation | every `plugins/dforge/skills/*/SKILL.md` over 20 KB and its new `references/*.md`; `tests/skill-size.test.sh`; pin tests repointed by the split | — | first |
-| A task loop | `skills/subagent-driven-development/**` after F; `reference/delegated-task.md`; `scripts/task-step`; `scripts/suite-run`; their tests | F's layout | with C, D, E, G |
-| C agent clauses | `agents/impl-*.md`; their pin test | — | with A, D, E, G |
-| D stop gate | `hooks/hooks.json`; `scripts/impl-stop-gate`; `tests/impl-stop-gate.test.sh` | the report format in `implementer-prompt.md` (read only) | with A, C, E, G |
+| A task loop | `skills/subagent-driven-development/**` after F; `reference/delegated-task.md`; `scripts/task-step`; `scripts/suite-run`; their tests, including `task-step-text.test.sh`, `task-step.test.sh`, `task-loop-steps.acceptance.test.sh` and a pin on the `## Verified` grammar and `Report:` line in `implementer-prompt.md` | F's layout | with C, D, E, G |
+| C agent clauses | `agents/impl-*.md`; new `tests/impl-clauses.test.sh` | — | with A, D, E, G |
+| D stop gate | `hooks/hooks.json`; `scripts/impl-stop-gate`; `tests/impl-stop-gate.test.sh` | §2's report grammar, copied from this spec into its fixtures | with A, C, E, G |
 | E replay eval | `evals/**` | the plugin as a directory (read only) | with A, C, D, G |
 | G docs and audit | `plugins/dforge/README.md`; `docs/dforge/notes/2026-10-27-prompt-audit.md`; plugin version files and changelog | — | with A, C, D, E |
 | M measured lane | one branch per item | A-G merged | after E, one item at a time |
+
+Part A keeps `skills/subagent-driven-development/SKILL.md` at or under the
+20,000-byte cap after its edits. In part A, the `task-step-text.test.sh` pin on
+the implementer prompt's suite-run line flips to `lacks`, and the two checks
+that the dispatch file carries the expanded `scripts/suite-run -- ` are
+repointed at the expanded `scripts/context-size`. D reads the report grammar
+from this spec rather than from `implementer-prompt.md`, so it does not wait on
+A; the pin that keeps the two in step lives in A's tests.
 
 Tests isolate by fixtures under each test's own temp directory; no part's test
 shares a port, database or fixed path with another's.
@@ -210,32 +284,87 @@ shares a port, database or fixed path with another's.
 
 A1. [test, high] Every `plugins/dforge/skills/*/SKILL.md` is at most 20,000 bytes, and `tests/skill-size.test.sh` fails naming each file over the cap with its size.
 A2. [test, neg, high] No rule is lost by the split: every new reference file is linked from its SKILL.md at the step that uses it, and the pin tests that existed before the split all still run and pass.
-A3. [test, high] The subagent-mode implementer prompt no longer tells the implementer to run the full suite; it tells it to run and report the focused tests that cover its change.
+A3. [test, high] The subagent-mode implementer prompt no longer tells the implementer to run the full suite; it tells it to run the focused tests that cover its change and report each under `## Verified` in §2's grammar, ending its reply with a `Report:` line.
 A4. [test, high] After an implementer's DONE report, the controller starts suite-run in the background at the task's head and dispatches the task review in the same turn.
-A5. [test, neg, high] A task never gets a `complete` line while suite-run's record for its head shows a failure that is not marked baseline; that failure becomes a fix-round finding.
-A6. [test, high] A structured `cannot-verify: exists …` or `cannot-verify: baseline …` item is settled by `task-step verdict` and logged as settled by task-step, with no seat dispatched.
+A5. [test, neg, high] `task-step verdict` at a head whose recorded suite row has a non-baseline failure writes `suite: <test> fails at <head7>` as an Important finding into the fix file and prints `fix:` naming it; with no row for that head and command it prints `suite: not run (<command>)` and exits 7. `reference/delegated-task.md` says a task is marked complete only after `verdict` passes.
+A6. [test, high] A structured `cannot-verify: exists …` or `cannot-verify: baseline …` item is settled by `task-step verdict` and logged as settled by task-step with its evidence, with no seat dispatched.
 A7. [test, neg, high] A free-text cannot-verify item still goes to the ruling seat.
-A8. [test, high] Every `agents/impl-*.md` carries the anti-hardcoding, report-incorrect-tests and tests-are-immutable clauses, and every `agents/impl-opus-*.md` carries the scope-limit clause.
-A9. [test, high] The stop gate exits 2 with a reason naming what is missing when a `dforge:impl-*` agent stops with DONE or DONE_WITH_CONCERNS and its report file is missing, lacks a required section, or names no test command with a result.
-A10. [test, neg, high] The gate exits 0 for any other agent type, for BLOCKED and NEEDS_CONTEXT stops, and for the third stop of one agent id after two blocks, which it logs.
-A11. [test, neg, high] The gate runs no test command and finishes in under 2 seconds on a 1,000-line report.
-A12. [test, high] The pipeline stage replays one case end to end under a given plugin directory and records pass, costUsd, wall time, dispatch count and fix rounds per run.
+A8. [test, high] Every `agents/impl-*.md` carries the anti-hardcoding, report-incorrect-tests and tests-are-immutable clauses, and every non-Sonnet `agents/impl-*.md` carries the scope-limit clause.
+A9. [test, high] The stop gate exits 2 with a reason naming what is missing when an `impl-*` agent stops with `**Status:** DONE` or `DONE_WITH_CONCERNS` and a `Report:` line, and the report file is missing, lacks a required section, or has no `## Verified` bullet in §2's grammar.
+A10. [test, neg, high] The gate exits 0 for any other agent type, for BLOCKED and NEEDS_CONTEXT stops, for a stop with no `Report:` line, and for the third distinct stop of one agent id after two blocks, which it logs to `<state>/impl-stop-gate.log`; a repeated identical stop does not raise the block count.
+A11. [test, neg, high] The gate runs no test command and makes no network call: with recording stubs for common test runners and network tools ahead on PATH, a gate run on a 1,000-line report invokes none of them.
+A12. [test, high] The pipeline stage replays one case end to end under a given plugin directory and records pass, costUsd, wall time, dispatch count and fix rounds per run in `results/pipeline.tsv`.
 A13. [test, neg, high] No pipeline run uses a working directory, plugin directory or HOME outside the eval's own temporary root.
-A14. [test, medium] A measured item merges only when its pass^3 count over the same 20 cases x 3 runs is at least the baseline's and its total cost or median wall time is at least 10% lower. Q: is "pass^3 at least baseline, and 10% cheaper or faster" the merge rule you want?
-A15. [demo, medium] The measured lane runs comparisons in the Design §6 order until eval spend reaches $1,200 (a reused baseline plus about $120 per candidate arm covers all eight). Q: is $1,200 the right spend cap, or should the plan stop after a smaller first batch?
+A14. [test, medium] A measured item merges only when its pass^3 count over the same 20 cases x 3 runs is at least the baseline's and its total cost or median wall time is at least 10% lower. Q: is "pass^3 at least baseline, and 10% cheaper or faster" the merge rule you want, or should it allow a noise margin (pass^3 at least baseline − 1, or a fourth run to break a tie), since one case is 5% of 20?
+A15. [demo, medium] The measured lane runs comparisons in the Design §6 order until eval spend reaches $1,200. Seven candidate arms (item 8 has none) plus one baseline at about $120 each is $960, plus $120 for the confirmation run, $1,080; this holds only with the single-baseline rule in §6. Q: is $1,200 the right spend cap, or should the plan stop after a smaller first batch?
 A16. [test, high] The plugin README documents auto mode for unattended waves and `worktree.baseRef: "head"` for wave worktrees, each with its reason.
 A17. [demo, medium] The prompt-audit note records `/doctor prompt-audit` and `/skill-doctor` output for dforge, and each proposed change appears as a register row. Q: if `/doctor prompt-audit` cannot run headless, is one owner-run session acceptable?
-A18. [test, neg, high] Codex hosts are unchanged: `reference/native-codex.md` and the executing-plans inline suite rule are not edited.
+A18. [test, neg, high] `reference/native-codex.md` and executing-plans' inline suite rule are not edited; `reference/delegated-task.md`'s by-hand section runs the suite the controller used to get from the implementer.
+A19. [demo, high] The stop gate finishes in under 2 seconds on a 1,000-line report on the Linux host.
 
 ## Riskiest assumption
 
 The replay eval can drive one task's whole loop headless: `claude -p
 --plugin-dir <arm>` in an isolated clone runs the controller's task loop
 (implementer, background suite, review, fix rounds) to completion without a
-human, and the hidden-test grader scores it. Evidence so far: the tier eval
-already runs single seats with `claude -p` in isolated snapshots
-(`evals/tiers/README.md`), and the controller-model pilot drove whole sessions
-(`evals/controller/`); neither ran the full loop under a second plugin
-directory. Unverified — part E's first task verifies it with one smoke case on
-both arms before the rest of E is built; the mechanical lane does not depend
-on it.
+human, and the hidden-test grader scores it. The weakest step is the wait: the
+controller's protocol is to end its turn and let the completion notification
+start the next one (`skills/subagent-driven-development/SKILL.md`), and under
+`claude -p` ending the turn may end the process. Evidence so far: the tier
+eval already runs single seats with `claude -p` in isolated snapshots
+(`evals/tiers/README.md`), and the controller-model pilot read transcripts of
+interactive sessions (`evals/controller/`); neither ran the full loop under a
+second plugin directory. Unverified — part E's first task verifies it with one
+smoke case on both arms before the rest of E is built. The smoke passes only
+when both arms produce a `Task N: complete` ledger line, a graded result, and
+a transcript in which the background suite-run and the judge dispatch overlap.
+If `-p` ends at the first wait, the pipeline drives an interactive session
+(tmux) and §5 is amended before E continues. The mechanical lane does not
+depend on it.
+
+## Review rulings
+
+Fable, round 1 (2026-10-28):
+
+1. Suite command source: `task-step start --suite`, from Integration check, else gates.md, else a Setup ruling; no row means `suite: not run`, exit 7 — recommended, owner confirms.
+2. Inline mode: its own tasks unchanged; tasks it delegates follow the new loop.
+3. Codex and by-hand runs: the by-hand §2 runs suite-run itself; A18 reworded.
+4. Baseline: reviewer names a command; red suites compare failing lines against one base run, as parallel-waves §1 does.
+5. `verdict` reads `suites.tsv` from `--cwd`'s state directory when given.
+6. Group suite: sequential groups at the last held head; wave groups rely on the merged check.
+7. Report grammar fixed in the spec: `## Verified` bullets and a `Report:` line.
+8. Gate matcher `(dforge:)?impl-.*`, self-check `(^|:)impl-`, first task logs a real input.
+9. Double fires keyed by sha256 of the last blocked message.
+10. `<state>` from `dforge-path state`; pass-through log `<state>/impl-stop-gate.log`.
+11. Gate acts only on a DONE status with a `Report:` line.
+12. §5 covers row 11 only.
+13. Arm plugin directories via `snapshot.mjs`, no git worktree.
+14. Pipeline results in `results/pipeline.tsv`; existing stages and refusal untouched.
+15. Measured lane: single baseline at `<M>`, rebase winners, one confirmation run — recommended, owner confirms.
+16. Row 10's wave half already shipped; only the stagger is measured.
+17. Scope-limit clause on every non-Sonnet tier — recommended, owner confirms.
+18. Part C owns a new `tests/impl-clauses.test.sh`.
+19. Part A flips the suite-run pin and repoints the two expansion checks at context-size; final-review.md and the SKILL.md example line unchanged.
+20. A5 reworded to what `task-step verdict` does.
+21. A14 question offers a noise margin; A15 arithmetic corrected.
+22. Double-fire claim attributed to the research note.
+23. Smoke pass criteria and the tmux fallback added to the riskiest assumption.
+
+## Critic findings
+
+Critic folded into Fable's round 1.
+
+- **High — the suite result has no addressable key (§2).** Fixed: §2 Suite command and Controller (ruling 1), pending the owner's confirmation of the command source.
+- **High — Codex hosts lose their only full-suite run (§2, A18).** Fixed: by-hand §2 runs suite-run (ruling 3).
+- **High — measured-lane baseline economics are inconsistent (§6, A15).** Fixed: single baseline at `<M>` (ruling 15), pending the owner's confirmation.
+- **High — the headless whole-loop assumption is untested at the wait (Riskiest assumption).** Fixed: smoke criteria and tmux fallback (ruling 23).
+- **High — the A/D contract is a free-text report format (§2, §4).** Fixed: grammar fixed in §2 (ruling 7). The pin on `implementer-prompt.md` lives in A's tests rather than D's, so D's test does not fail before A merges.
+- **Medium — `baseline` settlement as specified cannot run.** Fixed (ruling 4).
+- **Medium — the gate catches non-task `impl-*` dispatches.** Fixed (ruling 11).
+- **Medium — evaluation power with 20 cases.** Moved into A14's question (ruling 21).
+- **Medium — wave worktrees keep their own `.dforge`.** Fixed (ruling 5).
+- **Medium — A11's wall-clock bound would flake on Windows shards.** Fixed: A11 asserts no test or network command via PATH stubs; timing moved to A19 as a demo.
+- **Medium — settled items leave no evidence.** Fixed: the settlement line carries its evidence; symbols use `git grep -nwF`.
+- **Medium — simpler arm materialisation.** Fixed (ruling 13).
+- **Medium — no outcome for a suite that never finishes.** Fixed: `suite: not run`, exit 7, re-run; `scripts/in-flight` lists a suite in flight at handoff.
+- **Nit — row 12 double-listed; row 10's wave half; Fable and Haiku omitted from the scope clause; part C's test unnamed; double-fire attribution; part A's cap after its edits.** Fixed (rulings 12, 16, 17, 18, 22; Parallel decomposition).
