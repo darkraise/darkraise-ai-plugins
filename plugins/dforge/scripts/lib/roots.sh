@@ -54,7 +54,9 @@ _dforge_local() { # DIR TOP
 
 dforge_stores_init() { # [DIR]
   local dir=${1:-$PWD} top key out kind store root extra
-  top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=""
+  # Git Bash's $PWD is /tmp/... or /d/...; under MSYS_NO_PATHCONV git.exe takes
+  # that form verbatim and finds no repository.
+  top=$(git -C "$(dr_native_path "$dir")" rev-parse --show-toplevel 2>/dev/null) || top=""
   key="${HOME:-}|${top:-nogit:$dir}"
   [ "$_DFORGE_KEY" = "$key" ] && return 0
   _DFORGE_TOP=$top

@@ -272,7 +272,7 @@ a16() {
   check "A16: a Spec path in the darkmem mirror resolves as plan-lint resolves it" "$rc:$out" \
     "0:depth=light spec=light tasks=light reason=spec,task-risk:1"
   out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
-  check "A16: plan-lint resolves the same path" "$(grep -c 'Spec path does not exist' <<<"$out")" "0"
+  check "A16: plan-lint finds the plan and resolves the same path" "$(grep -c -e 'Spec path does not exist' -e 'No such plan file' <<<"$out")" "0"
 }
 
 # --- A7: review-route's plan-round cap -------------------------------------
