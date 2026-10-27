@@ -35,7 +35,11 @@ die() { echo "wave: $2" >&2; exit "$1"; }
 [ $# -ge 2 ] || usage
 cmd=$1 plan=$(plan_locate "$2")
 shift 2
-[ -f "$plan" ] || die 2 "no such plan file: $plan"
+# enter is a fresh worktree's first command, and that worktree may start on a
+# commit that predates the plan: the plan arrives with the detach at START.
+if [ ! -f "$plan" ] && ! { [ "$cmd" = enter ] && [ $# -eq 2 ] && git cat-file -e "$2:./$plan" 2>/dev/null; }; then
+  die 2 "no such plan file: $plan"
+fi
 
 slug=$(basename "$plan" .md)
 task_ref() { # task_ref N — the branch name, checked by git's own rules

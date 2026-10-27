@@ -93,6 +93,19 @@ out=$(cd "$TMP/wt-markfail" && bash "$WAVE" enter "$REPO/docs/plan.md" 2 "$BASE"
 check "enter: a mark that cannot be written exits 2" "$status" "2"
 check "enter: and the worktree is not left detached" "$(git -C "$TMP/wt-markfail" branch --show-current)" "markfail"
 git worktree remove --force "$TMP/wt-markfail" && git branch -q -D markfail
+# A fresh worktree can start on a commit that predates the plan; the plan
+# arrives with the detach at START, so enter reads it from there.
+OLD=$(git commit-tree "$(git hash-object -t tree /dev/null)" -m old)
+git worktree add -q --detach "$TMP/wt-fresh" "$OLD"
+out=$(cd "$TMP/wt-fresh" && bash "$WAVE" enter docs/nope.md 2 "$BASE" 2>&1); status=$?
+check "enter: a plan in neither the worktree nor START exits 2" "$status" "2"
+out=$(cd "$TMP/wt-fresh" && bash "$WAVE" enter docs/plan.md 2 "$OLD" 2>&1); status=$?
+check "enter: a START without the plan exits 2" "$status" "2"
+check "enter: and the worktree stays where it was" "$(git -C "$TMP/wt-fresh" rev-parse HEAD)" "$OLD"
+out=$(cd "$TMP/wt-fresh" && bash "$WAVE" enter docs/plan.md 2 "$BASE" 2>&1); status=$?
+check "enter: a worktree that predates the plan enters at START" "$status:$(git -C "$TMP/wt-fresh" rev-parse HEAD)" "0:$BASE"
+check "enter: and the plan is there afterwards" "$([ -f "$TMP/wt-fresh/docs/plan.md" ] && echo yes)" "yes"
+git worktree remove --force "$TMP/wt-fresh"
 
 # --- a task worktree, as an implementer would leave it ---
 task() { # task <N> <file> — commit <file> in a detached worktree and move the ref
