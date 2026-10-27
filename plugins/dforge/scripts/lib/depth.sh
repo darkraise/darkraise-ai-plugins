@@ -68,15 +68,18 @@ depth_from_triggers() {
 }
 
 # depth_spec_file SPEC_FILE — the first word after **Depth:** on the first line
-# outside a fenced block that begins with it, when that word is a depth; "none"
-# for a missing file, no such line, or any other word. awk reads to the end
-# rather than exiting early: an early exit can leave tr on a closed pipe, which
-# pipefail reports.
+# outside a fenced block that begins with it, above the spec's first "## "
+# heading, when that word is a depth; "none" for a missing file, no such line,
+# or any other word. A body that quotes a Depth line must not stand in for a
+# header that lacks one, which would lower an old spec below full. awk reads to
+# the end rather than exiting early: an early exit can leave tr on a closed
+# pipe, which pipefail reports.
 depth_spec_file() {
   local word=""
   if [ -f "${1:-}" ]; then
     word=$(tr -d '\r' < "$1" | awk "$_PLAN_AWK"'
       in_fence($0) { next }
+      /^## / { done = 1 }
       !done && /^\*\*Depth:\*\*/ { sub(/^\*\*Depth:\*\*[ \t]*/, ""); print $1; done = 1 }')
   fi
   case $word in

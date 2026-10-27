@@ -87,6 +87,8 @@ check "depth_spec_file of an unknown word" "$(depth_spec_file "$FIX/spec-bad-wor
 check "depth_spec_file with no Depth line" "$(depth_spec_file "$FIX/spec-no-depth.md")" "none"
 printf '# Fixture\n\n```\n**Depth:** full — quoted\n```\n\n**Depth:** light — real\n' > "$TMP/fenced-spec.md"
 check "depth_spec_file ignores a Depth line inside a fenced block" "$(depth_spec_file "$TMP/fenced-spec.md")" "light"
+printf '# Fixture\n\n## Design\n\n**Depth:** light — quoted in the body\n' > "$TMP/body-spec.md"
+check "depth_spec_file ignores a Depth line below the first section heading" "$(depth_spec_file "$TMP/body-spec.md")" "none"
 sed 's/$/\r/' "$FIX/spec-full.md" > "$TMP/crlf-spec.md"
 check "depth_spec_file tolerates CRLF" "$(depth_spec_file "$TMP/crlf-spec.md")" "full"
 
