@@ -103,6 +103,74 @@ bash "$ROUTE" plan.md >/dev/null 2>&1; check "usage: exit 2" "$?" "2"
 { printf 'Host: codex\n\n'; cat plan.md; } > codex.md
 bash "$ROUTE" codex.md --task 1 >/dev/null 2>&1; check "a Codex-host plan exits 2" "$?" "2"
 
+# --- the depth of the plan sizes the final lenses ---
+# A plan's depth is the higher of its spec's Depth line and its riskiest task
+# (lib/depth.sh). Light keeps security only, standard at most two lenses, full
+# up to lensCap. The change set is HEAD2's: shell, a TypeScript test and a README.
+mkdir -p specs
+for d in light standard full; do
+  printf '# Spec\n\n**Depth:** %s — fixture\n' "$d" > "specs/$d.md"
+done
+write_depth_plan() { # write_depth_plan <file> <spec name> <risk> - a one-task plan
+  sed 's/^|//' > "$1" <<EOF2
+|# Depth Fixture Plan
+|
+|**Spec:** \`specs/$2.md\`
+|
+|## Task index
+|
+|1. only
+|
+|### Task 1: only
+|
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk $3 = $3
+EOF2
+}
+write_depth_plan light-plan.md light 0
+write_depth_plan standard-plan.md standard 0
+write_depth_plan full-plan.md full 0
+write_depth_plan light-risk2.md light 2
+write_depth_plan light-risk3.md light 3
+sed '/^\*\*Spec:\*\*/d' light-plan.md > nospec-plan.md
+out=$(bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
+check "light: security only, every other applicable lens skipped for its depth" "$(short <<<"$out")" \
+  "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
+out=$(DFORGE_LENS_CAP=1 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
+check "light: lensCap 1 still keeps security" "$(grep -c '^lens security ' <<<"$out")" "1"
+out=$(DFORGE_LENS_CAP=0 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
+check "light: lensCap 0 is still lenses off" "$out" "lenses off"
+out=$(DFORGE_LENS_MINOR_FROM=4 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD1")
+check "light: the floor counts the one lens printed" "$(short <<<"$out")" \
+  "lens security;lens-skipped lang-bash reason=depth;lens-floor important tasks=1 from=4;"
+out=$(bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
+check "standard: two lenses, the rest past the cap" "$(short <<<"$out")" \
+  "lens security;lens silent-failures;lens-skipped test-quality reason=cap;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
+out=$(DFORGE_LENS_CAP=1 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
+check "standard: a lower lensCap wins" "$(grep -c '^lens ' <<<"$out")" "1"
+out=$(DFORGE_LENS_CAP=3 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
+check "standard: a lensCap of 3 is cut to 2" "$(grep -c '^lens ' <<<"$out")" "2"
+out=$(bash "$ROUTE" full-plan.md --final "$BASE" "$HEAD2")
+check "full: the default cap of 4, as before" "$(short <<<"$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
+out=$(bash "$ROUTE" light-risk2.md --final "$BASE" "$HEAD2")
+check "a light spec with a risk-2 task is standard: two lenses" "$(grep -c '^lens ' <<<"$out")" "2"
+out=$(bash "$ROUTE" light-risk3.md --final "$BASE" "$HEAD2")
+check "a light spec with a risk-3 task is full: four lenses" "$(grep -c '^lens ' <<<"$out")" "4"
+out=$(bash "$ROUTE" nospec-plan.md --final "$BASE" "$HEAD2")
+check "a risk-0 plan with no Spec line routes at full" "$(grep -c '^lens ' <<<"$out")" "4"
+# Security applies by its Applies clause; a copy of the script tree with a
+# narrower clause shows light printing no lens line when it does not match.
+mkdir -p "$TMP/plug/criteria"
+cp -R "$HERE/../scripts" "$HERE/../config" "$TMP/plug/"
+cp -R "$HERE/../criteria/lenses" "$TMP/plug/criteria/lenses"
+sed 's/^Applies: always$/Applies: paths nothing\/*/' "$HERE/../criteria/lenses/security.md" > "$TMP/plug/criteria/lenses/security.md"
+out=$(bash "$TMP/plug/scripts/lens-route" light-plan.md --final "$BASE" "$HEAD2")
+check "light: security prints nothing when its Applies clause does not match" "$(short <<<"$out")" \
+  "lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
+{ cat light-plan.md; printf '**Lenses:** lang-bash\n'; } > light-lenses.md
+out=$(bash "$ROUTE" light-lenses.md --task 1); status=$?
+check "light: --task names its lenses as before" "$status:$(sed -E 's/ criteria=[^ ]*//' <<<"$out")" "0:lens lang-bash"
+
 # --- the ui-ux lens (dforge:ui-ux) ---
 UIR="$TMP/uirepo"
 git init -q "$UIR" && cd "$UIR" || exit 1
