@@ -1250,7 +1250,7 @@ a23() {
   check "A23: no task-step subcommand wrote workspace state for the Codex plan" "$(ls -A "$R/.dforge" 2>/dev/null | sort | tr '\n' ' ')" "$before"
 
   # Five fix rounds.
-  check "A23: the Codex routing policy keeps review_cap 5" "$(jq -r '.review_cap' "$PLUGIN/reference/codex-routing.json" | tr -d '\r')" "5"
+  check "A23: the Codex routing policy keeps review_cap 5" "$(jq -r '.review_cap' < "$PLUGIN/reference/codex-routing.json" | tr -d '\r')" "5"
   local nc delegated sdd lad
   nc=$(doc "$PLUGIN/reference/native-codex.md")
   delegated=$(doc "$PLUGIN/reference/delegated-task.md")
