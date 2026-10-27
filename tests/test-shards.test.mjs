@@ -14,11 +14,11 @@ function list(...args) {
 
 test('Windows shards cover every discovered suite exactly once', () => {
   const all = list();
-  const shards = Array.from({ length: 8 }, (_, i) => list('--shard', `${i + 1}/8`));
+  const shards = Array.from({ length: 12 }, (_, i) => list('--shard', `${i + 1}/12`));
   assert.ok(shards.every(shard => shard.length > 0));
   assert.deepEqual(shards.flat().sort(), all.sort());
   assert.equal(new Set(shards.flat()).size, all.length);
-  assert.deepEqual(list('--shard', '1/8'), shards[0]);
+  assert.deepEqual(list('--shard', '1/12'), shards[0]);
 });
 
 test('new suites are included automatically and unsharded runs retain their order', () => {
@@ -28,6 +28,15 @@ test('new suites are included automatically and unsharded runs retain their orde
   const selected = [selectShard(jobs, '1/2'), selectShard(jobs, '2/2')].flat();
   assert.equal(selected.length, jobs.length);
   for (const job of jobs) assert.ok(selected.includes(job));
+});
+
+test('a suite run in parts splits its weight among them', () => {
+  const lint = ['bash', ['plugins/dforge/tests/plan-lint.test.sh'], 900];
+  const first = ['bash', ['plugins/dforge/tests/faster-plans.acceptance.test.sh', 'a1'], 600];
+  const second = ['bash', ['plugins/dforge/tests/faster-plans.acceptance.test.sh', 'a2'], 600];
+  const jobs = [lint, first, second];
+  assert.deepEqual(selectShard(jobs, '1/2'), [lint]);
+  assert.deepEqual(selectShard(jobs, '2/2'), [first, second]);
 });
 
 test('invalid shard arguments fail instead of silently skipping tests', () => {
