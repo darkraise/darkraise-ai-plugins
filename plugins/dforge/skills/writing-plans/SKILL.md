@@ -564,7 +564,9 @@ A revision your human partner asks for gets one new round.
 2. **Review.** Write the lint output to the plan's workspace:
    `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
    `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
-   Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`,
+   Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.
+   At depth light (step 1's line) skip `scripts/codex-gate`: no seat runs, so
+   run only `scripts/review-route PLAN_FILE --plan-round 1`. Otherwise
    run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),
    then `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
    seat it prints, using
