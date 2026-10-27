@@ -113,8 +113,9 @@ scores. A spec with no `**Depth:**` line, a plan whose spec has none, and a
 keeps today's process. The spec phase and the plan phase follow the depth:
 light runs the self-review round alone and no plan review, and a light plan of
 1-3 tasks goes on to execution in the same session when the budget allows,
-standard folds the architecture critic into one Fable round and runs one plan
-review round, and full runs the separate critic, one or two Fable rounds and
+standard folds the architecture critic into one Fable round when Fable reviews
+the spec (the separate critic runs when attended) and runs one plan review
+round, and full runs the separate critic, one or two Fable rounds and
 one or two plan review rounds. Execution is unchanged at every depth. The
 final review scales as follows:
 
