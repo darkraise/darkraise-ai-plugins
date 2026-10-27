@@ -50,7 +50,7 @@ if [ "$source" = probe ] && [ "$refresh" -eq 0 ] && [ -n "$file" ] && [ -r "$fil
   # which would shift every field after an empty one.
   cached=$(jq -r '[(.usable | tostring), (.reason // ""), (.resets_at // ""),
                    (.resets_at_epoch // "" | tostring), (.plugin_version // "")] | join("\u001f")' \
-    "$file" 2>/dev/null | tr -d '\r')
+    < "$file" 2>/dev/null | tr -d '\r')
   IFS=$'\x1f' read -r c_usable c_reason c_resets c_epoch c_version <<<"$cached"
   # A hand-edited non-numeric epoch would make the -gt below write "integer
   # expression expected" to stderr; 0 is never in the future, so it reads as
@@ -94,7 +94,9 @@ fi
 
 # Trust is read on every call, cache hit or probe, and written back, so a trust
 # commit mid-session reaches the readers without a --refresh.
-trust() { jq -r --arg g "$1" '.trust[$g] == "pass"' "$POLICY" 2>/dev/null | tr -d '\r'; }
+# jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
+# form pwd gives on Git Bash.
+trust() { jq -r --arg g "$1" '.trust[$g] == "pass"' < "$POLICY" 2>/dev/null | tr -d '\r'; }
 review=false lane=false
 # Without a session id there is no session file, and every reader of the file
 # answers off, so the gate's line says off too rather than disagree with them.
