@@ -556,13 +556,15 @@ a8() {
   absent "A8: and no new task is started" "$out" '(Start|Resume) at Task'
 
   # Four held tasks, with more of the plan still open, take the group review before any new dispatch.
+  # The next open task, Task 9, is review=group, so only the held count can send the group first.
   {
     printf '# SDD ledger — plan: docs/plan.md\n'
     for i in 1 3 6 7; do printf 'Task %s: awaiting group review (commits aaaaaaa..bbbbbbb)\n' "$i"; done
-    printf 'Task 2: complete (commits aaaaaaa..bbbbbbb, review clean)\n'
+    for i in 2 4 5 8; do printf 'Task %s: complete (commits aaaaaaa..bbbbbbb, review clean)\n' "$i"; done
   } > "$WS/progress.md"
   out=$(cd "$R" && timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
   has "A8: with 4 tasks held the next action is their group review" "$out" "Review the held Tasks 1,3,6,7 as one group"
+  absent "A8: and Task 9 is not started before the group review" "$out" '(Start|Resume) at Task 9'
 
   # A review=task task is not dispatched while a group is held.
   {
