@@ -9,19 +9,25 @@
 # Usage: lens-route PLAN_FILE --final BASE HEAD
 #        lens-route PLAN_FILE --task ID
 # Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added|ui-paths>
-#         lens-skipped <id> reason=cap      (--final, past the lensCap setting)
+#         lens-skipped <id> reason=cap      (--final, past the lensCap setting, or
+#                                           at standard depth past 2 lenses)
+#         lens-skipped <id> reason=depth    (--final, a lens other than security
+#                                           that applied, at light depth)
 #         lens-floor important tasks=<n> from=<m>
 #                                           (--final, after the lens lines, when
 #                                           the plan has fewer tasks than the
 #                                           lensMinorFrom setting)
 #         lenses off                        (--final, lensCap 0)
 #         lens <id> criteria=<path>         (--task, one per id on the task's **Lenses:** line)
+# The depth (scripts/depth-route) sizes --final: light keeps only security,
+# standard keeps at most 2 lenses, full keeps up to lensCap.
 # Exit: 0 routed, also when no lens applies; 2 usage error, a missing plan or
 # task, an unknown lens id, or a Host: codex plan.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/depth.sh"
 . "$HERE/lib/dforge-env.sh"
 LENSES="$(cd "$HERE/../criteria/lenses" 2>/dev/null && pwd)"
 SEAT=dforge:judge-sonnet-high
@@ -104,6 +110,8 @@ case $1 in
     cap=${DFORGE_LENS_CAP:-$(dforge_setting lensCap 4)}
     [[ "$cap" =~ ^[0-9]$ ]] || cap=4
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
+    depth=$(depth_plan_depth "$src" "$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)")
+    if [ "$depth" = standard ] && [ "$cap" -gt 2 ]; then cap=2; fi
     changed=$(git diff --name-only "$base..$head")
     added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}')
     # dforge:ui-ux — the UI lens applies where the UI gate does.
@@ -121,7 +129,9 @@ case $1 in
     while IFS= read -r id; do
       [ -n "$id" ] || continue
       reason=$(lens_match "$id") || continue
-      if [ "$n" -lt "$cap" ]; then
+      if [ "$depth" = light ] && [ "$id" != security ]; then
+        printf 'lens-skipped %s reason=depth\n' "$id"
+      elif [ "$n" -lt "$cap" ]; then
         printf 'lens %s criteria=%s seat=%s reason=%s\n' "$id" "$LENSES/$id.md" "$SEAT" "$reason"
         n=$((n + 1))
       else
