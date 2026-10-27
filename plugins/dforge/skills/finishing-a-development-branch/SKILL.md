@@ -191,6 +191,11 @@ partner chooses how to integrate with them in view. Without that line (a plan
 that ran at standard or full depth, or one older than depth routing), print
 nothing here.
 
+**Lenses skipped.** Print every `final review lens-skipped <id> reason=<reason>`
+ledger line, whatever its reason, with the rulings. The final review wrote
+them; never run `scripts/lens-route` here, since after a merge base..HEAD is
+empty.
+
 ## Step 4: Present Options
 
 **Nothing still running.** "Implementation complete" is a claim about every
