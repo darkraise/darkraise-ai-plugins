@@ -267,8 +267,10 @@ Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
 Task <N>: complete (commits a..b, unreviewed | K parked) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
+Review depth: <light|standard|full> (<reason>)
 Acceptance QA: dispatched (base <sha7>)
 Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo
+Acceptance QA: skipped (depth light)
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
 ```
 
@@ -278,6 +280,10 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   line and `<workspace>/acceptance-report.md` present means read the report
   and write `complete`; with no report, re-dispatch QA once with `[MODE]`
   `rerun`. Step 0.5 holds the rest of the procedure.
+- `Acceptance QA: skipped (depth light)` counts as `complete` on recovery.
+  `Review depth: <light|standard|full> (<reason>)` is written once, before
+  step 0 of the final review, and is read on recovery, never recomputed; it is
+  not a `Final review:` line, which recovery keys on.
 - After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
   at `complete`, also promote the task's durable facts
   ([project-state.md](../../reference/project-state.md) §darkmem sync points).

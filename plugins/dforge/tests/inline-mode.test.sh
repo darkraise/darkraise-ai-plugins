@@ -133,9 +133,14 @@ present "inline fix rounds record their outcome" "$INLINE" "passing | still fail
 absent "inline no longer marks the switch on a fix-round line" "$INLINE" "escalated inline -> subagent)"
 
 # One ledger grammar for both modes.
-for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean'; do
+for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean' 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
   present "inline ledger has: $line" "$INLINE" "$line"
   present "subagent ledger has: $line" "$SDD" "$line"
+done
+for f in "$INLINE" "$SDD"; do
+  s=$(basename "$(dirname "$f")")
+  present "$s: a skipped QA line counts as complete on recovery" "$f" 'Acceptance QA: skipped (depth light)` counts as `complete` on recovery.'
+  present "$s: the Review depth line is never recomputed" "$f" 'and is read on recovery, never recomputed; it is'
 done
 present "inline marks an unreviewed completion" "$INLINE" "unreviewed"
 present "inline assigns itself" "$INLINE" "implementer inline"
