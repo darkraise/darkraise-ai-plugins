@@ -66,7 +66,7 @@ Measured over 56 dforge sessions (2026-09-27 to 2026-10-27, list API prices):
   After compaction Claude Code re-attaches only the first 5,000 tokens of each
   invoked skill; upstream superpowers lost its fix-round cap that way.
 - No implementer tier carries an anti-hardcoding, report-incorrect-tests or
-  tests-are-immutable clause; the Opus tiers lack the scope-limit clause the
+  tests-are-immutable clause; the Opus, Fable and Haiku tiers lack the scope-limit clause the
   Sonnet tiers have.
 - The behaviour-changing ideas (lean plans, judge discipline, merged tasks,
   effort sweep) have outside evidence but none on dforge's own tasks, and the
@@ -100,16 +100,25 @@ reference file; none is deleted.
   `task-step start` takes `--suite '<command>'` and records it in
   `task-<N>-step.json`. The controller takes the command from the plan
   header's `**Integration check:**`, else from `<docs>/gates.md`'s test
-  command, else decides it once at Setup from the project's manifest and logs
-  `Ruling: suite command — <command> — none`.
+  command, else decides it once from the project's manifest. The resolution
+  rule is written in `reference/delegated-task.md` §1 Dispatch, so subagent
+  mode and inline mode's delegated tasks read the same text; the
+  `Ruling: suite command — <command> — none` line is logged the first time
+  `task-step start --suite` runs on a plan, whichever caller runs it.
+  executing-plans is not edited.
 - **Controller.** On a DONE or DONE_WITH_CONCERNS report,
   `reference/delegated-task.md` has the controller start
-  `scripts/suite-run -- <suite command>` as a background command at the task's
-  head and dispatch the task review in the same turn. The controller runs
-  `task-step verdict` only once both the review report and the suite's
-  completion notification are in. `verdict` reads `suites.tsv` in the state
-  directory of `--cwd` when given, else of the checkout, and takes the row
-  whose command text equals the recorded one at the review head:
+  `bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'` as a
+  background command from the checkout root (or from `--cwd` for a wave task)
+  at the task's head, and dispatch the task review in the same turn. The
+  controller runs `task-step verdict` only once both the review report and the
+  suite's completion notification are in. `verdict` reads `suites.tsv` in the
+  state directory of `--cwd` when given, else of the checkout, and matches the
+  row by the `%q` form suite-run records for that argv, so a run started from a
+  subdirectory never matches. It accepts a `clean` or `dirty` row at the
+  review head, printing `suite: pass (<clean|dirty>)`: the controller's own
+  uncommitted ledger lines make the tree dirty, and the tracked-file check
+  already guards the reviewed state.
   - a pass, or failures that are all baseline (below), lets the task complete;
   - any other failure becomes an Important finding
     (`suite: <test> fails at <head7>`) in the fix file, and `verdict` prints
@@ -117,15 +126,23 @@ reference file; none is deleted.
   - no row prints `suite: not run (<command>)` and exits 7; the controller
     re-runs the suite before `verdict` again. A suite still in flight at a
     handoff is listed by `scripts/in-flight` and re-run by the next session.
-- **Baseline failures.** For a red suite, `verdict` runs the recorded suite
+- **Baseline failures.** For a red suite, `verdict` needs the base commit's
+  failing lines. It reuses, in order, a `suites.tsv` row at the base sha in
+  the checkout (a previous task's head), else
+  `<workspace>/task-<N>-base-failures.txt`, else runs the recorded suite
   command once at the base commit in a temporary worktree through
   `suite-run --timeout 600`, after the header's `**Worktree setup:**` when it
-  has one, reusing a `suites.tsv` row at the base sha when one exists. A
-  failing line is baseline when the same line appears in the base run's
-  failing lines, as `reference/parallel-waves.md` §1 already does with
+  has one, and writes that file from the digest's failing lines before
+  removing the worktree (whose own `.dforge` record goes with it). A failing
+  line is baseline when the same line appears in the base failing lines, as
+  `reference/parallel-waves.md` §1 already does with
   `base-proof-failures.txt`.
 - **Fix rounds and groups.** A fix round's head gets its own suite run beside
-  its re-review. In sequential mode a group's suite runs once at the last held
+  its re-review. `task-step rereview --covered` runs only after the fix head's
+  suite notification; it skips the re-review only when `suites.tsv` holds a
+  pass row (or all-baseline failures) for the recorded command at that head,
+  and otherwise prints `re-review: not skipped (suite <red|not run>)` and
+  writes the prompt. In sequential mode a group's suite runs once at the last held
   member's head; a wave's grouped tasks get no per-group suite, since the
   wave's merged check is their suite.
 - **Where the loop applies.** Inline mode's own tasks (executing-plans steps
@@ -171,14 +188,16 @@ carries the plugin prefix is unverified, so the gate also checks that
 `SubagentStop` input and records the observed value in its test.
 
 The gate acts only when `last_assistant_message` carries `**Status:** DONE` or
-`**Status:** DONE_WITH_CONCERNS` and a `Report: <path>` line; every other stop
-passes (other agent types, BLOCKED, NEEDS_CONTEXT, and `impl-*` dispatches
-with their own report contracts such as acceptance-qa and the final-review fix
-wave). When it acts, it reads only the `Report:` line and the report file's
+`**Status:** DONE_WITH_CONCERNS`; every other stop passes (other agent types,
+BLOCKED, NEEDS_CONTEXT). Only `implementer-prompt.md` uses that status
+contract; acceptance-qa and the final-review fix wave dispatch `impl-*` agents
+without it, and part D's first task records a real reply from one of them to
+confirm. When it acts, it reads only the `Report:` line and the report file's
 `## Verified`, `## Discovered issues (not fixed)` and `## Assumptions made`
 headings, and blocks with exit 2 and a one-line reason naming what is missing
 when:
 
+- the message has no `Report: <path>` line;
 - the file does not exist;
 - it lacks `## Discovered issues (not fixed)` or `## Assumptions made`;
 - `## Verified` is missing or holds no bullet in §2's grammar.
@@ -194,8 +213,9 @@ distinct stop of one agent id after two blocks passes and appends one line to
 The gate runs no tests and makes no network call. The hooks docs state that
 `SubagentStop` input carries `agent_type` and that exit 2 keeps the subagent
 running with the reason as its next instruction
-(https://code.claude.com/docs/en/hooks). That Claude Code before 2.1.311 fires
-it twice was verified on 2.1.311 (research note), not stated by the hooks docs.
+(https://code.claude.com/docs/en/hooks). The research note records that
+versions before 2.1.311 fire it twice (observed during its 2.1.311
+verification); the hooks docs do not state it.
 
 ### 5. Replay eval (row 11)
 
@@ -204,8 +224,10 @@ whole loop under a given plugin directory: an isolated clone at the task's base
 commit with its own HOME and XDG directories, `claude -p --plugin-dir <arm>`
 driving one task's implementer, suite, task review and up to two fix rounds,
 then the existing hidden-test grader. Each arm's plugin directory is
-materialised with `lib/snapshot.mjs`'s `snapshot(ref, <eval root>/arms/<ref7>)`;
-no git worktree is created. `arms.json` gains
+materialised with `lib/snapshot.mjs`'s `snapshot(ref, <eval root>/arms/<ref7>)`,
+which holds the whole repository tree, so the arm is loaded with
+`--plugin-dir <eval root>/arms/<ref7>/plugins/dforge`; no git worktree is
+created. `arms.json` gains
 `"pipeline": { "baseline": "<ref>", "candidate": "<ref>" }`.
 
 Pipeline runs go to `results/pipeline.tsv` with columns
@@ -290,8 +312,8 @@ A5. [test, neg, high] `task-step verdict` at a head whose recorded suite row has
 A6. [test, high] A structured `cannot-verify: exists …` or `cannot-verify: baseline …` item is settled by `task-step verdict` and logged as settled by task-step with its evidence, with no seat dispatched.
 A7. [test, neg, high] A free-text cannot-verify item still goes to the ruling seat.
 A8. [test, high] Every `agents/impl-*.md` carries the anti-hardcoding, report-incorrect-tests and tests-are-immutable clauses, and every non-Sonnet `agents/impl-*.md` carries the scope-limit clause.
-A9. [test, high] The stop gate exits 2 with a reason naming what is missing when an `impl-*` agent stops with `**Status:** DONE` or `DONE_WITH_CONCERNS` and a `Report:` line, and the report file is missing, lacks a required section, or has no `## Verified` bullet in §2's grammar.
-A10. [test, neg, high] The gate exits 0 for any other agent type, for BLOCKED and NEEDS_CONTEXT stops, for a stop with no `Report:` line, and for the third distinct stop of one agent id after two blocks, which it logs to `<state>/impl-stop-gate.log`; a repeated identical stop does not raise the block count.
+A9. [test, high] The stop gate exits 2 with a reason naming what is missing when an `impl-*` agent stops with `**Status:** DONE` or `DONE_WITH_CONCERNS` and the message has no `Report:` line, or the report file is missing, lacks a required section, or has no `## Verified` bullet in §2's grammar.
+A10. [test, neg, high] The gate exits 0 for any other agent type, for BLOCKED and NEEDS_CONTEXT stops, and for the third distinct stop of one agent id after two blocks, which it logs to `<state>/impl-stop-gate.log`; a repeated identical stop does not raise the block count.
 A11. [test, neg, high] The gate runs no test command and makes no network call: with recording stubs for common test runners and network tools ahead on PATH, a gate run on a 1,000-line report invokes none of them.
 A12. [test, high] The pipeline stage replays one case end to end under a given plugin directory and records pass, costUsd, wall time, dispatch count and fix rounds per run in `results/pipeline.tsv`.
 A13. [test, neg, high] No pipeline run uses a working directory, plugin directory or HOME outside the eval's own temporary root.
@@ -326,7 +348,7 @@ depend on it.
 
 Fable, round 1 (2026-10-28):
 
-1. Suite command source: `task-step start --suite`, from Integration check, else gates.md, else a Setup ruling; no row means `suite: not run`, exit 7 — recommended, owner confirms.
+1. Suite command source: `task-step start --suite`, from Integration check, else gates.md, else a one-time ruling; no row means `suite: not run`, exit 7 — recommended, owner confirms.
 2. Inline mode: its own tasks unchanged; tasks it delegates follow the new loop.
 3. Codex and by-hand runs: the by-hand §2 runs suite-run itself; A18 reworded.
 4. Baseline: reviewer names a command; red suites compare failing lines against one base run, as parallel-waves §1 does.
@@ -349,6 +371,17 @@ Fable, round 1 (2026-10-28):
 21. A14 question offers a noise margin; A15 arithmetic corrected.
 22. Double-fire claim attributed to the research note.
 23. Smoke pass criteria and the tmux fallback added to the riskiest assumption.
+
+Fable, round 2 (2026-10-28):
+
+24. A DONE stop with no `Report:` line blocks; A9 and A10 follow.
+25. The controller runs `suite-run -- bash -c '<command>'` from the root; `verdict` matches the `%q` row and accepts clean or dirty.
+26. `rereview --covered` waits for the fix head's suite and skips only on a pass.
+27. The suite-command resolution rule lives in delegated-task.md §1; executing-plans is not edited.
+28. Base failing lines persist in `task-<N>-base-failures.txt` before the temporary worktree goes.
+29. Arm plugin directory is `<eval root>/arms/<ref7>/plugins/dforge`.
+30. Problem lists Opus, Fable and Haiku as lacking the scope-limit clause.
+31. Double-fire sentence reworded.
 
 ## Critic findings
 
