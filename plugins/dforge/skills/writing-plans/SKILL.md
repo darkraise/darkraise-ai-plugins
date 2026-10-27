@@ -649,7 +649,8 @@ A revision your human partner asks for gets one new round.
 
 ## Execution Handoff
 
-A saved, reviewed plan is a hard stop: execution starts in a fresh session (in
+A saved, reviewed plan is a hard stop (except at depth light, below): execution
+starts in a fresh session (in
 an auto run the session switches in place instead; see Auto run).
 Invoke dforge:handoff. It commits (or pushes) the plan and the spec, writes
 `<latest.md>`, runs `scripts/next-step PLAN_FILE`, and ends

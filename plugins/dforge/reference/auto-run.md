@@ -90,8 +90,9 @@ critic Blocker, which takes the note below:
 
 Fable runs one round. A second runs only when round 1 leaves a Blocker or High
 finding open at depth `full`, and checks only those answers; at depth
-`standard` no second round runs, and anything still open after the last round
-is deferred the same way. Then write
+`standard` no second round runs. At either depth, anything still open after
+the last round, a Blocker or High finding of Fable's included, is deferred the
+same way. Then write
 the plan in this session: `scripts/context-size --plan` does not run in an
 auto run.
 
