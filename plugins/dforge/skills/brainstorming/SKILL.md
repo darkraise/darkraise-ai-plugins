@@ -623,7 +623,7 @@ after this round, its own and a folded critic's), then `## Rulings` (one
 `- <item> — <options, recommended first>` line each) and, when the critic is
 folded in, `## Critic findings` in the critic's grammar. Read the Verdict
 section, then the Rulings and Undecided lines; the `open:` line decides whether
-a second round runs.
+a second round runs at depth `full`; at `standard` none runs.
 
 **User Review Gate:**
 Under `autoRun=on`, this gate is the spec review message in Auto by default.

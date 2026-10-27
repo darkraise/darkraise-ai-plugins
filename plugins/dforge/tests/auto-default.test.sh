@@ -88,6 +88,7 @@ says "auto-run.md: the critic folds at depth standard" "$AR" 'folds the critic i
 says "auto-run.md: no second Fable round at standard" "$AR" 'at depth `standard` no second round runs'
 says "auto-run.md: finishing lists every lens-skipped line" "$AR" '`final review lens-skipped <id> reason=<reason>` line in the ledger, whatever its reason'
 says "auto-run.md: light finishing lists the unverified test statements" "$AR" 'every `test` statement of the spec under `not verified (depth light)`'
+says "brainstorming: the open line decides a second round only at full" "$B" 'decides whether a second round runs at depth `full`; at `standard` none runs.'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
