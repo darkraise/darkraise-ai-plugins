@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when a budget line says handoff, at a hard phase stop (plan saved outside an auto run, or a switch from inline to subagent mode), on Codex after 3 tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
+description: Use when a budget line says handoff, at a hard phase stop (plan saved outside an auto run, except a light plan of 1-3 tasks with room to continue, or a switch from inline to subagent mode), on Codex after 3 tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
 ---
 
 # Handoff
@@ -21,7 +21,10 @@ cleanly."
   through its `Task N: complete` line, then hand off; start no new task. The
   budget leaves room for one task to finish.
 - A hard stop: the plan is saved outside an auto run, or a plan has just
-  switched from inline to subagent mode.
+  switched from inline to subagent mode. A saved plan at depth light is a stop
+  only when it has 4 or more tasks, or when `scripts/context-size` does not
+  say `ok` after steps 0-4 (dforge:writing-plans §Execution Handoff): a light
+  plan of 1-3 tasks runs steps 0-4 and continues in this session.
   The last task completing is never a stop in either execution mode: the
   final review and finishing run in the same session whatever
   `scripts/context-size --final` prints. A task budget line printed during
@@ -135,6 +138,8 @@ cleanly."
 5. **End the session.** Your final message is one line on why you stopped,
    then the block, verbatim, as the last thing. The block is the resume guide:
    the launch command, the directory to launch it in, and the first prompt.
+   A caller that continues in this session instead, as a light plan of 1-3
+   tasks with room does, stops after step 4.
 
 ## handoff.md
 
