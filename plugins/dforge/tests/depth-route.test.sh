@@ -85,6 +85,8 @@ check "depth_spec_file reads the first word" "$(depth_spec_file "$FIX/spec-stand
 check "depth_spec_file of a missing file" "$(depth_spec_file "$TMP/none.md")" "none"
 check "depth_spec_file of an unknown word" "$(depth_spec_file "$FIX/spec-bad-word.md")" "none"
 check "depth_spec_file with no Depth line" "$(depth_spec_file "$FIX/spec-no-depth.md")" "none"
+printf '# Fixture\n\n```\n**Depth:** full — quoted\n```\n\n**Depth:** light — real\n' > "$TMP/fenced-spec.md"
+check "depth_spec_file ignores a Depth line inside a fenced block" "$(depth_spec_file "$TMP/fenced-spec.md")" "light"
 sed 's/$/\r/' "$FIX/spec-full.md" > "$TMP/crlf-spec.md"
 check "depth_spec_file tolerates CRLF" "$(depth_spec_file "$TMP/crlf-spec.md")" "full"
 
