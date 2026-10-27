@@ -84,6 +84,11 @@ for f in "$R" "$FIN"; do
 done
 names "finishing: a deferred statement or unresolved Blocker keeps the branch" "$FIN" 'row whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`.'
 names "finishing: the final message lists demos and lenses" "$FIN" 'every `demo` statement of the spec, every lens'
+names "finishing: every lens-skipped line is read, whatever its reason" "$FIN" 'a `final review lens-skipped <id> reason=<reason>` ledger line names,'
+check "finishing: no lens-skipped line is read for reason=cap alone" "$(grep -c 'lens-skipped <id> reason=cap' "$FIN")" "0"
+names "finishing: light lists the unverified test statements" "$FIN" 'every `A<n>` statement tagged `test` under `not verified (depth light)`'
+names "finishing: Step 3 lists them before the menu" "$FIN" '**Unverified at light depth.** When the ledger holds a `Review depth: light`'
+names "finishing: a skipped QA line carries no counts" "$FIN" 'An `Acceptance QA: skipped (depth light)` line carries no counts, so the'
 
 # The default flow (docs/superpowers/specs/2026-10-18-auto-execution-default-design.md).
 names "auto-run.md: the default" "$R" 'The default on Claude Code (`autoRun=on`): once your human partner approves the'

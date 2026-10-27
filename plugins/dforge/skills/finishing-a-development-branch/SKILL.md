@@ -43,6 +43,9 @@ When `scripts/auto-run status` exits 0
   A row deferred at the spec review, before the run started, counts as one
   the run added. `merge` also keeps when the run added a deferred row whose
   Note is `final review residual`.
+  An `Acceptance QA: skipped (depth light)` line carries no counts, so the
+  `cannot-test` case does not apply to it; Step 7's final message lists what
+  went unchecked.
   `merge` and `pr` also keep when Step 1b's `ui-proof check` exited 1
   after the Prove re-run.
   The line's `fail` and `flaky` counts are not read: they are taken before the
@@ -61,8 +64,11 @@ When `scripts/auto-run status` exits 0
   `scripts/auto-run ruling list`, and Step 7's final message lists every
   deferred row the run added to its register (`scripts/auto-run status` names
   it; the `final review residual` rows among them),
+  every `A<n>` statement tagged `test` under `not verified (depth light)`
+  when the ledger's `Review depth:` line names light (no acceptance QA ran),
   every `demo` statement of the spec, every lens
-  a `final review lens-skipped <id> reason=cap` ledger line names (the final
+  a `final review lens-skipped <id> reason=<reason>` ledger line names,
+  whatever its reason (the final
   review wrote them; never run `scripts/lens-route` here, since after a merge
   base..HEAD is empty). Run
   `scripts/auto-run stop` with no `--reason` before printing the next-step block:
@@ -177,6 +183,13 @@ order, each with what it costs if wrong, then every `BLOCKED` task; under
 full. The execution skills leave these lists to this step, so they are
 exhaustive here. Your human partner chooses how to integrate with those
 decisions in view.
+
+**Unverified at light depth.** When the ledger holds a `Review depth: light`
+line, no acceptance QA checked the spec. Print every `A<n>` statement tagged
+`test` under `not verified (depth light)` with the rulings, so your human
+partner chooses how to integrate with them in view. Without that line (a plan
+that ran at standard or full depth, or one older than depth routing), print
+nothing here.
 
 ## Step 4: Present Options
 
