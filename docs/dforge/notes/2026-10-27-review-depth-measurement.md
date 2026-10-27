@@ -13,7 +13,7 @@ The question: on plans whose spec scores light and whose tasks are all at risk 1
 Completed plans whose tasks are all scored at risk 1 or below, with the evidence the workspaces and the ledger store still hold (plan names with the retired dcc- prefix print without it, because the repository validator rejects that prefix in docs outside docs/superpowers):
 
 ```
-stores: documents local progress local 
+stores: documents local progress local
 worktrees searched:
 /root/repositories/darkraise-ai-plugins
 /root/repositories/darkraise-ai-plugins/.claude/worktrees/agent-a0336e1d480ef96e6
@@ -45,6 +45,8 @@ PLAN docs/superpowers/plans/2026-10-18-controller-model-eval.md tasks=4 spec=doc
   plan-review header: **Plan review:** 2026-10-18 — dr-superpowers:judge-opus — executability 16 / coherence 17 / coverage 17 / assumptions 13 (round 2)
   no evidence held
 ```
+
+The survey listed worktrees from `.claude/worktrees/*`, not `git worktree list`, so a worktree outside that directory was not searched; the re-check lists them with `git worktree list`.
 
 ## Sample
 
