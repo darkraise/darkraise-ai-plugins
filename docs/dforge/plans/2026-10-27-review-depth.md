@@ -238,7 +238,7 @@ fi
   else
     printf 'No candidate holds a plan-review report or an `Acceptance QA` ledger line, so no plan was read.\n'
   fi
-} | sed 's/dcc-darkraise-/darkraise-/g' > "$note"
+} | sed 's/dc[c]-darkraise-/darkraise-/g' > "$note"
 EOF
 bash .dforge/review-depth-measure/note.sh .dforge/review-depth-measure docs/dforge/notes/2026-10-27-review-depth-measurement.md
 ```
@@ -249,7 +249,7 @@ The builder counts a plan into the sample when its row says spec light `yes` and
 
 Run: `grep -nE '^\*\*(Sample size|Plans with a Critical plan-review finding or a QA fail|Verdict):\*\*' docs/dforge/notes/2026-10-27-review-depth-measurement.md`
 
-Expected: three lines, the last one `**Verdict:** inconclusive`, `**Verdict:** keep` or `**Verdict:** stop`. Then run `grep -c 'dcc-darkraise' docs/dforge/notes/2026-10-27-review-depth-measurement.md`. Expected: `0`, because the repository validator rejects that prefix in docs outside `docs/superpowers`.
+Expected: three lines, the last one `**Verdict:** inconclusive`, `**Verdict:** keep` or `**Verdict:** stop`. Then run `grep -c 'dc[c]-darkraise' docs/dforge/notes/2026-10-27-review-depth-measurement.md`. Expected: `0`, because the repository validator rejects that prefix in docs outside `docs/superpowers`.
 
 - [ ] **Step 6: Act on the verdict**
 
