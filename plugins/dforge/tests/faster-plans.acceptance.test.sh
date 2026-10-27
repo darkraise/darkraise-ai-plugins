@@ -631,7 +631,9 @@ cockpit_rounds() { # cockpit_rounds <ledger text> — "<n>=<round>" per task the
   printf '%s\n' "$1" > "$TMP/cockpit-ledger.txt"
   cat > "$TMP/cockpit-check.mjs" <<EOF
 import { readFileSync } from 'node:fs'
-import { parseLedger } from '$(winpath "$PLUGIN")/hooks/cockpit/lib.ts'
+import { pathToFileURL } from 'node:url'
+// The ESM loader takes a Windows drive path only as a file:// URL.
+const { parseLedger } = await import(pathToFileURL('$(winpath "$PLUGIN")/hooks/cockpit/lib.ts').href)
 const ledger = parseLedger(readFileSync('$(winpath "$TMP")/cockpit-ledger.txt', 'utf8'))
 console.log(ledger.tasks.map(t => t.n + '=' + (t.round ?? '-')).join(' '))
 EOF
