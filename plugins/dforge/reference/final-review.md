@@ -30,6 +30,26 @@ of the work being done.
 
 ## The review
 
+**Depth.** Before step 0 run `scripts/depth-route PLAN_FILE` and append
+`Review depth: <depth> (<reason>)` to the ledger, `<depth>` and `<reason>`
+being the values of its `depth=` and `reason=` fields. When the ledger already
+holds a `Review depth:` line, as it does after a compaction, read that line
+and run no new route, so every step of one review reads the same depth. The
+prefix keeps the line apart from `Final review:`, which recovery keys on. The
+depth sizes the steps below:
+
+| Step | light | standard | full |
+|---|---|---|---|
+| 0 Gates | runs | runs | runs |
+| 0.2 UI proof | runs | runs | runs |
+| 0.5 Acceptance QA | skipped | runs | runs |
+| 1 Claude review | runs | runs | runs |
+| 1 Lenses | `security` only, when it applies | at most 2 | up to `lensCap` |
+| 2 Codex round | skipped | skipped | as today |
+| 3 Dedupe judge | never (one list) | never (one list) | with two lists |
+
+The fix wave and its scoped re-review run at every depth.
+
 MERGE_BASE is the commit the branch started from, for example
 `git merge-base main HEAD`. Step 0 runs first, then step 0.2. Step 0.5 dispatches QA in the
 background and goes straight on to step 1: QA runs alongside the Claude review,
@@ -70,8 +90,11 @@ your own: QA commits on this branch.
   auto-run.md §Stopping says; any other second exit 1 is the first finding on
   the fix wave's list.
 
-- 0.5 **Acceptance QA.** Skip this step, saying so in one line, when the
-  plan's spec has no `A<n>` statement tagged `test`, or when
+- 0.5 **Acceptance QA.** At depth light, skip this step: append
+  `Acceptance QA: skipped (depth light)` to the ledger, once, and go on to
+  step 1. Recovery reads that line as `Acceptance QA: complete`, so the step
+  never reopens. At any other depth, skip this step, saying so in one line,
+  when the plan's spec has no `A<n>` statement tagged `test`, or when
   the ledger already holds `Acceptance QA: complete`. When the ledger holds
   `Acceptance QA: dispatched` with no `complete` line, QA was cut off. First,
   when `<workspace>/qa-status-before.txt` exists, remove QA's uncommitted work
@@ -186,7 +209,11 @@ your own: QA commits on this branch.
    `lens-floor important` line means the plan is below the `lensMinorFrom`
    setting: add the bracketed sentence to every lens prompt. With one list,
    every lens finding enters the fix wave, and on a short plan the Minor tail
-   costs the fixer more triage than it yields fixes.
+   costs the fixer more triage than it yields fixes. `lens-route` reads the
+   depth itself: at light it prints a `lens` line only for `security`, and
+   only when its Applies clause matches; at standard it prints at most two,
+   fewer when `lensCap` is lower. A lens it drops prints
+   `lens-skipped <id> reason=depth` (light) or `reason=cap`.
 
    ```
    You are a specialist reviewer. Read the lens at <criteria path>: its
@@ -215,7 +242,9 @@ your own: QA commits on this branch.
    `primary` as `subagent_type`, in place of the template's seat line. A
    Codex-host plan takes its final-review seat from
    [native-codex.md](native-codex.md) instead.
-2. **Codex round.** Run the round in
+2. **Codex round.** At depth light or standard, skip it: say
+   `codex round skipped (depth <d>)` in one line and go to step 3 with the
+   Claude review alone. At depth full, run the round in
    [executor-lane.md](executor-lane.md) §Final-review Codex round. Its
    runner reports one of four outcomes: `OK` and `FALLBACK` produce findings
    for step 3, and `FALLBACK` also means the preferred judge rung refused the
@@ -230,7 +259,8 @@ your own: QA commits on this branch.
    `TIMEOUT` or `FAILED`: end the turn and resume on its notification. An
    absent report from a launched runner is a round still running, never a
    one-list case. When step 2 skipped the round without launching one
-   (`codexReview` off, or the gate did not print `review=true`), there is
+   (`codexReview` off, the gate did not print `review=true`,
+   or depth light or standard), there is
    nothing to wait for: go straight to the one-list case.
 
    **Dedupe and verify, only with two lists.** When the Claude review and the
@@ -257,9 +287,11 @@ your own: QA commits on this branch.
    finds).
 4. **Report.** Name the lenses that ran, each `lens-skipped` lens (or
    `lenses off`), whether a `lens-floor` line held them to Critical and
-   Important, and the `Acceptance QA: complete` counts. Append each
-   `lens-skipped <id> reason=cap` line step 1 printed to the ledger as
-   `final review lens-skipped <id> reason=cap`, one line per lens, unless the
+   Important, and the `Acceptance QA:` line (its counts, or `skipped (depth
+   light)`). Append each
+   `lens-skipped <id> reason=<reason>` line step 1 printed to the ledger as
+   `final review lens-skipped <id> reason=<reason>`, whatever its reason
+   (`cap` or `depth`), one line per lens, unless the
    ledger already holds it: finishing lists them from there, because after a
    merge `scripts/lens-route` has no diff left to read. With two lists:
    confirmed findings ranked most severe first, then the rejected ones with

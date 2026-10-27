@@ -47,5 +47,28 @@ for f in "$SDD" "$EP" "$H" "$FR"; do
   check "${f#"$P"/} no longer hands off after --final" "$(tr '\n' ' ' < "$f" | tr -s ' ' | grep -cE -- '--final` (said|says) `handoff`')" "0"
 done
 
+# Review depth: the final review by depth. Matched with line breaks folded.
+flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
+says() { # says <label> <file> <text>
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
+}
+says "final review: depth-route runs before step 0" "$FR" 'Before step 0 run `scripts/depth-route PLAN_FILE`'
+says "final review: the depth is ledgered" "$FR" 'append `Review depth: <depth> (<reason>)` to the ledger'
+says "final review: a recovered review reads the ledgered depth" "$FR" 'read that line and run no new route'
+names "final review: gates run at every depth" "$FR" '| 0 Gates | runs | runs | runs |'
+names "final review: UI proof runs at every depth" "$FR" '| 0.2 UI proof | runs | runs | runs |'
+names "final review: QA is skipped at light only" "$FR" '| 0.5 Acceptance QA | skipped | runs | runs |'
+names "final review: the Claude review runs at every depth" "$FR" '| 1 Claude review | runs | runs | runs |'
+names "final review: the lens column by depth" "$FR" '| 1 Lenses | `security` only, when it applies | at most 2 | up to `lensCap` |'
+names "final review: the Codex round is skipped below full" "$FR" '| 2 Codex round | skipped | skipped | as today |'
+names "final review: the dedupe judge needs two lists" "$FR" '| 3 Dedupe judge | never (one list) | never (one list) | with two lists |'
+says "final review: the fix wave runs at every depth" "$FR" 'The fix wave and its scoped re-review run at every depth.'
+says "final review: light writes the skipped QA line" "$FR" 'append `Acceptance QA: skipped (depth light)` to the ledger, once'
+says "final review: recovery reads skipped as complete" "$FR" 'Recovery reads that line as `Acceptance QA: complete`'
+says "final review: the Codex round skip is said" "$FR" '`codex round skipped (depth <d>)`'
+says "final review: the skipped round leaves nothing to wait for" "$FR" 'or depth light or standard), there is nothing to wait for'
+says "final review: lens-route reads the depth itself" "$FR" '`lens-route` reads the depth itself'
+says "final review: every lens-skipped line reaches the ledger" "$FR" 'as `final review lens-skipped <id> reason=<reason>`, whatever its reason'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
