@@ -46,7 +46,8 @@ first. Then nothing in this skill waits on your human partner:
   start no timed question.
 - **At the review cap,** a Critical finding or a score of 8 or below goes on
   the pending list, and the Fable batch rules on it with the rest.
-- **Once the plan is reviewed:** `scripts/auto-run attach --plan PLAN_FILE`,
+- **Once the plan is reviewed** (at depth light, once it is linted):
+  `scripts/auto-run attach --plan PLAN_FILE`,
   the Fable batch when `scripts/auto-run decision list` prints anything, then
   the switch instead of Execution Handoff: when the spec's `## Decisions`
   holds a `Finish: <action>` line, `scripts/finish-choice set <action> --plan
@@ -556,6 +557,10 @@ A revision your human partner asks for gets one new round.
    explain it in one line of the plan's Assumptions. The checker covers the
    header sections, the task headings and index, the Execution line,
    placeholders, and every task's assignment lines.
+   Then run `scripts/depth-route PLAN_FILE` and say its line aloud
+   (`depth=<d> spec=<d> tasks=<d> reason=<items>`). The depth sizes the review
+   below and the handoff after it; `review-route` reads the same depth, so
+   never pick it by hand.
 2. **Review.** Write the lint output to the plan's workspace:
    `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
    `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
@@ -570,6 +575,9 @@ A revision your human partner asks for gets one new round.
    [plan-review.md](../../criteria/plan-review.md) and lists findings. On
    exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native
    judge at Astra high or above) and say why, quoting its message.
+   - **`primary=none`** (`reason=depth-light`, round 1 of a light plan). No
+     review round runs: dispatch no seat, skip step 3, and record the skip in
+     step 4.
    - **`primary=native:<model>/<effort>`** (every round of a Codex-host plan).
      Dispatch a native judge at that pair or above
      ([native-codex.md](../../reference/native-codex.md)): the full-plan
@@ -616,13 +624,16 @@ A revision your human partner asks for gets one new round.
    a Critical finding or any score of 8 or below, and only while the round is
    below the `cap=` that `review-route` printed.
    On a Claude plan the cap is 2 whatever the task totals: round 2 is the
-   delta round, and there is no third. On a Codex-host plan the cap follows the
-   highest raw task total, not the weighted routing score: 1 when it is 3 or
-   less, 2 for 4 or 5, 3 for 6. At the cap a Critical finding
+   delta round, and there is no third. Only the plan's depth lowers it: 1 at
+   standard, so round 1 is the only round, and 0 at light, so none runs. On a
+   Codex-host plan the cap follows the highest raw task total, not the weighted
+   routing score, at every depth: 1 when it is 3 or less, 2 for 4 or 5, 3 for
+   6. At the cap a Codex-host plan's Critical finding
    earns exactly one more delta round (`reason=cap-critical`), scoped to its
-   fix, which earns no other. A delta round replaces a fresh full review. Any
-   Critical finding still open after the last round, and any score of 8 or
-   below at the cap, go to your human partner. A borderline score (9-13) gets
+   fix, which earns no other; a Claude plan has no such round. A delta round
+   replaces a fresh full review. Any Critical finding still open after the
+   last round, and any score of 8 or below at the cap, go to your human partner
+   (in an auto run, onto the pending list). A borderline score (9-13) gets
    a one-line decision in the plan's Assumptions.
 4. **Record.** Only now, add the header line
    `**Plan review:** <YYYY-MM-DD> — <seat> — executability e / coherence c / coverage v / assumptions a (round r)`
@@ -630,7 +641,9 @@ A revision your human partner asks for gets one new round.
    `<seat>` is the seat that ran the last round:
    `codex <model> / <effort>` from the runner's status line, or the judge
    agent. The header template deliberately omits it, so `plan-lint` warns
-   until the review has run.
+   until the review has run. At depth light no review ran: write
+   `**Plan review:** <YYYY-MM-DD> — skipped (depth light)` in the same place,
+   and `plan-lint` accepts it.
 
 ## Execution Handoff
 
@@ -641,3 +654,15 @@ Invoke dforge:handoff. It commits (or pushes) the plan and the spec, writes
 your message with the resume guide — the launch command from the Execution
 line and the first prompt for the skill that line names. Offer no execution
 choice: the Execution line already made it.
+
+The exception is a plan at depth light, which is no hard stop outside an auto
+run (an auto run switches at every depth). A light plan of 4 or more tasks
+still ends with dforge:handoff as above. A light plan of 1-3 tasks runs
+dforge:handoff steps 0-4 only (reconcile background work, commit the plan and
+the spec, write the handoff notes, `scripts/next-step PLAN_FILE`), so that
+`latest.md` names this plan, then plain `scripts/context-size`: the task
+budget, not `--plan`, which measures room to write a plan. On `ok`, say in one
+line that the Execution line's model and effort are not applied in this
+session, and invoke the skill that line names; print no resume guide. On any
+other result, run handoff step 5 and end the session as above. The task count
+decides only this, never the depth.
