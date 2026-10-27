@@ -46,7 +46,7 @@ first. Then nothing in this skill waits on your human partner:
   start no timed question.
 - **At the review cap,** a Critical finding or a score of 8 or below goes on
   the pending list, and the Fable batch rules on it with the rest.
-- **Once the plan is reviewed** (at depth light, once it is linted):
+- **Once the plan is reviewed:**
   `scripts/auto-run attach --plan PLAN_FILE`,
   the Fable batch when `scripts/auto-run decision list` prints anything, then
   the switch instead of Execution Handoff: when the spec's `## Decisions`
@@ -564,10 +564,8 @@ A revision your human partner asks for gets one new round.
 2. **Review.** Write the lint output to the plan's workspace:
    `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
    `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
-   Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.
-   At depth light (step 1's line) skip `scripts/codex-gate`: no seat runs, so
-   run only `scripts/review-route PLAN_FILE --plan-round 1`. Otherwise
-   run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),
+   Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`,
+   then run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),
    then `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
    seat it prints, using
    [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). The gate
@@ -577,9 +575,6 @@ A revision your human partner asks for gets one new round.
    [plan-review.md](../../criteria/plan-review.md) and lists findings. On
    exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native
    judge at Astra high or above) and say why, quoting its message.
-   - **`primary=none`** (`reason=depth-light`, round 1 of a light plan). No
-     review round runs: dispatch no seat, skip step 3, and record the skip in
-     step 4.
    - **`primary=native:<model>/<effort>`** (every round of a Codex-host plan).
      Dispatch a native judge at that pair or above
      ([native-codex.md](../../reference/native-codex.md)): the full-plan
@@ -627,7 +622,7 @@ A revision your human partner asks for gets one new round.
    below the `cap=` that `review-route` printed.
    On a Claude plan the cap is 2 whatever the task totals: round 2 is the
    delta round, and there is no third. Only the plan's depth lowers it: 1 at
-   standard, so round 1 is the only round, and 0 at light, so none runs. On a
+   light and standard, so round 1 is the only round. On a
    Codex-host plan the cap follows the highest raw task total, not the weighted
    routing score, at every depth: 1 when it is 3 or less, 2 for 4 or 5, 3 for
    6. At the cap a Codex-host plan's Critical finding
@@ -643,9 +638,7 @@ A revision your human partner asks for gets one new round.
    `<seat>` is the seat that ran the last round:
    `codex <model> / <effort>` from the runner's status line, or the judge
    agent. The header template deliberately omits it, so `plan-lint` warns
-   until the review has run. At depth light no review ran: write
-   `**Plan review:** <YYYY-MM-DD> — skipped (depth light)` in the same place,
-   and `plan-lint` accepts it.
+   until the review has run.
 
 ## Execution Handoff
 
