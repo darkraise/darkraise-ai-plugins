@@ -390,6 +390,9 @@ a9() {
   has "A9: brainstorming reports the skipped critic at light" "$bs" 'Critic: skipped (depth light)'
   lacks "A9: the fold no longer keys on the Process line's triggers" "$bs" 'names neither irreducible risk nor a new'
   matches "A9: the spec review message carries the depth" "$bs" 'Depth: <[a-z]+> — <reason'
+  has "A9: standard runs no second Fable round" "$bs" 'No second Fable round runs at standard'
+  has "A9: full keeps the separate critic" "$bs" 'At `full`, the separate critic round runs, then Fable for one or two rounds'
+  has "A9: the fold is decided by the depth, not the trigger list" "$bs" 'The depth decides, not the trigger list'
 }
 
 a10() {
@@ -397,10 +400,14 @@ a10() {
   wp=$(doc "$WP"); ho=$(doc "$HO")
   has "A10: writing-plans records the skipped plan review at light" "$wp" '**Plan review:** <YYYY-MM-DD> — skipped (depth light)'
   has "A10: writing-plans runs the handoff steps first" "$wp" 'handoff steps 0-4'
-  has "A10: and measures the budget with plain context-size" "$wp" 'context-size'
+  has "A10: a light plan of 1-3 tasks is the one that continues" "$wp" 'A light plan of 1-3 tasks runs'
+  has "A10: and measures the budget with plain context-size" "$wp" 'plain `scripts/context-size`'
+  has "A10: and continues in the session only on ok" "$wp" 'On `ok`, say in one line'
+  has "A10: and ends as a handoff on any other result" "$wp" 'On any other result, run handoff step 5'
+  has "A10: a light plan skips the Codex gate probe" "$wp" "At depth light (step 1's line) skip \`scripts/codex-gate\`"
   has "A10: standard and full keep the hard stop" "$wp" 'The exception is a plan at depth light, which is no hard stop outside an auto run'
   has "A10: a light plan of 4 or more tasks keeps the handoff" "$wp" 'A light plan of 4 or more tasks still ends with dforge:handoff as above.'
-  matches "A10: handoff names the depth in its hard-stop rule" "$ho" 'depth'
+  has "A10: handoff makes a light plan a stop only from 4 tasks or without room" "$ho" 'A saved plan at depth light is a stop only when it has 4 or more tasks'
   lacks "A10: handoff no longer calls every saved plan a hard stop" "$ho" '(plan saved outside an auto run, or a switch'
 
   mkplan p10.md spec-light.md - 0
@@ -425,6 +432,8 @@ a11() {
   has "A11: step 0.5 carries the light skip" "$step05" 'skipped (depth light)'
   step2=$(between "$fr" '2. **Codex round.**' '3. **Wait for QA.**')
   has "A11: step 2 carries the Codex skip" "$step2" 'codex round skipped (depth'
+  has "A11: step 2 skips the round at light and at standard" "$step2" 'At depth light or standard, skip it'
+  has "A11: step 3 waits for no runner at light or standard" "$(between "$fr" '3. **Wait for QA.**' '**Dedupe and verify')" 'or depth light or standard'
   has "A11: executing-plans lists the Review depth ledger line" "$ep" 'Review depth: <'
   has "A11: executing-plans lists the skipped QA ledger line" "$ep" 'Acceptance QA: skipped (depth light)'
   has "A11: subagent-driven-development lists the Review depth ledger line" "$sd" 'Review depth: <'
@@ -432,7 +441,7 @@ a11() {
 }
 
 a12() {
-  local fr gates ui claude fixwave p
+  local fr gates ui claude fixwave p bs gate step5
   mkplan p12l.md spec-light.md - 0 1
   mkplan p12s.md spec-standard.md - 1
   mkplan p12f.md spec-full.md - 0 1
@@ -444,15 +453,27 @@ a12() {
   fr=$(doc "$FR")
   gates=$(between "$fr" '0. **Gates.**' '- 0.2 **UI proof.**')
   ui=$(between "$fr" '- 0.2 **UI proof.**' '- 0.5 **Acceptance QA.**')
-  claude=$(between "$fr" '1. **Claude review.**' '**Lenses.**')
+  claude=$(between "$fr" 'Then run `scripts/review-route PLAN_FILE --final` and dispatch the `primary` it prints' '2. **Codex round.**')
   fixwave=${fr#*'## Fixing what it finds'}
+  bs=$(doc "$BS")
+  gate=$(between "$bs" 'In an auto run (`scripts/auto-run status` exits 0), skip this gate' 'Otherwise, after posting')
+  step5=$(between "$bs" '5. **The spec review**, the one stop' '6. **Start the run.**')
   check "A12: the Gates step is found" "$([ -n "$gates" ] && echo yes || echo no)" "yes"
   check "A12: the UI proof step is found" "$([ -n "$ui" ] && echo yes || echo no)" "yes"
-  check "A12: the Claude review step is found" "$([ -n "$claude" ] && echo yes || echo no)" "yes"
+  check "A12: the Claude review dispatch is found" "$([ -n "$claude" ] && echo yes || echo no)" "yes"
+  check "A12: the fix wave section is found" "$([ -n "$fixwave" ] && [ "$fixwave" != "$fr" ] && echo yes || echo no)" "yes"
+  check "A12: the spec review stop is found" "$([ -n "$step5" ] && echo yes || echo no)" "yes"
+  check "A12: the User Review Gate skip rules are found" "$([ -n "$gate" ] && echo yes || echo no)" "yes"
   lacks "A12: gates are not cut by a depth" "$gates" 'depth'
   lacks "A12: the UI proof is not cut by a depth" "$ui" 'depth'
-  lacks "A12: the Claude review is not cut by a depth" "$claude" 'depth'
-  lacks "A12: the fix wave is not cut by a depth" "$fixwave" 'depth light'
+  lacks "A12: the Claude review dispatch is not cut by a depth" "$claude" 'depth'
+  lacks "A12: nor is the Claude review dispatch skipped at light" "$claude" 'light'
+  lacks "A12: the fix wave is not cut by a depth" "$fixwave" 'depth'
+  lacks "A12: nor is the fix wave skipped at light" "$fixwave" 'light'
+  lacks "A12: the User Review Gate skip rules name no depth" "$gate" 'depth'
+  lacks "A12: nor does the gate skip name light" "$gate" 'light'
+  has "A12: the spec review stop is not skipped by specReview=false" "$step5" '`specReview=false` does not skip this stop'
+  lacks "A12: the spec review stop is not skipped by a depth" "$step5" 'skip the spec review'
   has "A12: the light approve option says the plan is not a stop" "$(doc "$BS")" 'depth light: the plan is not a stop'
 }
 
@@ -480,13 +501,20 @@ a15() {
   lacks "A15: auto-run.md's Finishing no longer reads only reason=cap" "$ar" 'lens-skipped <id> reason=cap'
   has "A15: finishing lists the unverified test statements at light" "$fin" 'not verified (depth light)'
   has "A15: from the statements tagged test" "$fin" 'tagged `test`'
+  has "A15: an attended finish lists the lens-skipped lines at Step 3" "$(between "$fin" '**Lenses skipped.**' '## Step 4: Present Options')" 'final review lens-skipped <id> reason=<reason>'
   has "A15: auto-run.md's Finishing lists them too" "$ar" 'not verified (depth light)'
 }
 
 ALL="a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16"
 if [ $# -gt 0 ]; then
   sel=""
-  for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done
+  for n in "$@"; do
+    n=$(tr 'A-Z' 'a-z' <<<"$n")
+    case " $ALL " in
+      *" $n "*) sel="$sel $n" ;;
+      *) echo "unknown test: $n" >&2; exit 2 ;;
+    esac
+  done
 else
   sel=$ALL
 fi
