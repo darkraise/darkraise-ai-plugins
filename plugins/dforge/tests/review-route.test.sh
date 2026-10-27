@@ -194,7 +194,62 @@ check "a total-8 plan's round 2 is a round within cap 2" "$out" "review-seat pla
 rround "$TMP/slice.md" 3
 check "a total-8 plan has no round 3" "$rc" "2"
 rround "$TMP/plan.md" 1
-check "a Claude plan round reads no Evaluation line" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+check "a Claude plan round with an unparsable Evaluation line routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+
+# --- the plan-round cap follows the depth ----------------------------------------
+# A Claude plan's cap is 0 at light, 1 at standard, 2 at full (lib/depth.sh): the
+# higher of its spec's Depth line and its riskiest task. The specs live in a
+# throwaway repository so the plans' **Spec:** paths resolve.
+git init -q "$TMP/drepo"
+mkdir -p "$TMP/drepo/specs"
+for d in light standard full; do
+  printf '# Spec\n\n**Depth:** %s — fixture\n' "$d" > "$TMP/drepo/specs/$d.md"
+done
+depth_fixture() { # depth_fixture <file> <spec name> <evaluation line>... - one task per line
+  local f=$1 spec=$2 i=0 ev; shift 2
+  { printf '# Depth Fixture\n\n**Spec:** `specs/%s.md`\n\n' "$spec"
+    for ev in "$@"; do i=$((i + 1)); printf '### Task %s: t\n\n%s\n\n' "$i" "$ev"; done
+  } > "$f"
+}
+EV0='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1'
+EV1='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 1 = 2'
+EV2='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3'
+EV3='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4'
+depth_fixture "$TMP/drepo/light.md" light "$EV0" "$EV1"
+depth_fixture "$TMP/drepo/light-r2.md" light "$EV0" "$EV2"
+depth_fixture "$TMP/drepo/light-r3.md" light "$EV0" "$EV3"
+depth_fixture "$TMP/drepo/light-bad.md" light "$EV0" '**Evaluation:** one plus one'
+depth_fixture "$TMP/drepo/standard.md" standard "$EV0"
+depth_fixture "$TMP/drepo/full.md" full "$EV0"
+depth_fixture "$TMP/drepo/missing.md" missing "$EV0"
+rround "$TMP/drepo/light.md" 1
+check "light: round 1 runs no review" "$rc:$out" "0:review-seat plan-round=1 primary=none fallback=- reason=depth-light cap=0"
+rround "$TMP/drepo/light.md" 2
+check "light: round 2 exits 2" "$rc" "2"
+present "light: round 2 names the cap" "$TMP/err" "past the cap (0)"
+rround "$TMP/drepo/light-r2.md" 1
+check "a light spec with a risk-2 task is standard: cap 1" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
+rround "$TMP/drepo/light-r2.md" 2
+check "standard: round 2 exits 2" "$rc" "2"
+present "standard: round 2 names the cap" "$TMP/err" "past the cap (1)"
+rround "$TMP/drepo/standard.md" 1
+check "a standard spec with a risk-0 task: cap 1" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
+rround "$TMP/drepo/light-r3.md" 2
+check "a light spec with a risk-3 task is full: round 2 within cap 2" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
+rround "$TMP/drepo/light-r3.md" 3
+check "full: a Claude plan has no round 3" "$rc" "2"
+rround "$TMP/drepo/full.md" 1
+check "a full spec with a risk-0 task stays at cap 2" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+rround "$TMP/drepo/light-bad.md" 1
+check "a light spec with an unparsable task routes at full: cap 2" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+rround "$TMP/drepo/missing.md" 1
+check "a Spec path that does not exist routes at full: cap 2" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+review_surface false
+rround "$TMP/drepo/light.md" 1
+check "light with Codex off: still no review round" "$rc:$out" "0:review-seat plan-round=1 primary=none fallback=- reason=depth-light cap=0"
+rround "$TMP/drepo/standard.md" 1
+check "standard with Codex off: round 1 goes to Opus alone, cap 1" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
+review_surface true
 
 # --- the ruling seat -------------------------------------------------------------
 # Rulings go to Opus, except a list made only of cannot-verify and
@@ -705,6 +760,13 @@ check "native plan round: one cap-critical round" "$out" \
   "review-seat plan-round=3 primary=native:gpt-6-astra/high fallback=- reason=cap-critical cap=2"
 native --plan-round 4
 check "native plan round: past the cap exits 2" "$rc" "2"
+sed '/^\*\*Routing policy:\*\*/a **Spec:** `specs/light.md`' "$FF/docs/native.md" > "$TMP/drepo/native-light.md"
+rround "$TMP/drepo/native-light.md" 1
+check "native plan round: a light spec leaves the native cap alone" "$rc:$out" \
+  "0:review-seat plan-round=1 primary=native:gpt-6-astra/high fallback=- reason=round cap=2"
+rround "$TMP/drepo/native-light.md" 3
+check "native plan round: a light spec keeps the cap-critical round" "$out" \
+  "review-seat plan-round=3 primary=native:gpt-6-astra/high fallback=- reason=cap-critical cap=2"
 native --task 1
 check "native: a task seat still exits 2" "$rc" "2"
 # A score with a leading zero is read as decimal, as plan_scores reads it.
