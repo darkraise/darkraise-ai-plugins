@@ -760,7 +760,7 @@ check "native plan round: one cap-critical round" "$out" \
   "review-seat plan-round=3 primary=native:gpt-6-astra/high fallback=- reason=cap-critical cap=2"
 native --plan-round 4
 check "native plan round: past the cap exits 2" "$rc" "2"
-sed '/^\*\*Routing policy:\*\*/a **Spec:** `specs/light.md`' "$FF/docs/native.md" > "$TMP/drepo/native-light.md"
+awk '{ print } /^\*\*Routing policy:\*\*/ { print "**Spec:** `specs/light.md`" }' "$FF/docs/native.md" > "$TMP/drepo/native-light.md"
 rround "$TMP/drepo/native-light.md" 1
 check "native plan round: a light spec leaves the native cap alone" "$rc:$out" \
   "0:review-seat plan-round=1 primary=native:gpt-6-astra/high fallback=- reason=round cap=2"
