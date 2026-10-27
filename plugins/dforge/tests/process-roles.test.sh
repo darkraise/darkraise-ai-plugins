@@ -64,8 +64,8 @@ names "critic: counts in the review request" "$BS" 'Critic: <b> Blocker, <h> Hig
 names "critic: live Fable review checks answers" "$P/reference/auto-run.md" \
   'each answer to a Blocker or High finding'
 names "critic: the process graph" "$BS" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
-names "critic: folded into Fable without a risk trigger" "$BS" 'and your Process line names neither irreducible risk nor a new'
-names "critic: a risk trigger keeps the separate round" "$BS" 'a risk or new-subsystem trigger keeps the separate'
+names "critic: folded into Fable at depth standard" "$BS" 'and the spec'"'"'s depth is `standard`, dispatch no critic.'
+names "critic: depth full keeps the separate round" "$BS" 'new-subsystem trigger gives it, keeps the separate critic round.'
 names "critic: the folded counts say so" "$BS" 'followed by ` (in Fable'"'"'s review)` when the critic was folded into it.'
 names "auto-run.md: the critic may fold into Fable" "$P/reference/auto-run.md" 'which folds the critic into'
 
@@ -186,7 +186,7 @@ says "assigning: a Claude code task scores spec 2" "$AI" 'gives its tests and in
 says "assigning: the Claude cap is 8" "$AI" 'Rule S caps a compliant Claude total at 8'
 lacks "assigning: no cap at 6" "$AI" 'Rule S also caps a compliant total at 6'
 says "spec review: Fable's second round needs an open Blocker or High" "$BS" 'a second only when round 1 leaves a Blocker or High finding open'
-says "spec review: the folded second round needs an open finding" "$BS" 'which runs only when a Blocker or High finding is still open'
+says "spec review: the folded critic gets no second Fable round" "$BS" 'No second Fable round runs at standard'
 lacks "spec review: no unconditional answer check" "$BS" 'which checks each Blocker and High answer'
 says "auto-run.md: Fable's second round needs an open Blocker or High" "$P/reference/auto-run.md" 'A second runs only when round 1 leaves a Blocker or High finding open'
 lacks "auto-run.md: no unconditional second round" "$P/reference/auto-run.md" 'At most two Fable rounds run (review, revise, re-review)'

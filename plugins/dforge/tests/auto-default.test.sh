@@ -52,5 +52,42 @@ names "Fable's open items are asked at the review" "$B" '- every item Fable left
 names "critic prompt: the decisions" "$P/skills/brainstorming/references/architecture-critic-prompt.md" 'or under `autoRun=on` the spec'"'"'s'
 names "using-dforge: the approval is the spec review" "$P/skills/using-dforge/SKILL.md" 'still get approval (under `autoRun=on`, the spec review).'
 
+# Review depth: the spec phase by depth. Matched with line breaks folded.
+flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
+says() { # says <label> <file> <text>
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
+}
+lacks() { # lacks <label> <file> <text>
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "no"
+}
+AR="$P/reference/auto-run.md"
+PROC='`Process: architectural, <inline|subagent>, depth <d> — <triggers>`'
+says "using-dforge: the Process line names the depth" "$P/skills/using-dforge/SKILL.md" "$PROC"
+says "using-dforge: the depth comes from depth-route" "$P/skills/using-dforge/SKILL.md" '`<d>` from `scripts/depth-route --spec-triggers`'
+says "brainstorming: the Process line names the depth" "$B" "$PROC"
+says "brainstorming: the depth comes from depth-route" "$B" 'take `<d>` from `scripts/depth-route --spec-triggers <ids>`'
+says "brainstorming: a later trigger reruns depth-route and the depth only rises" "$B" 'reruns `scripts/depth-route --spec-triggers` with the whole list, and the depth can only rise'
+says "brainstorming: an owner line survives the ratchet" "$B" 'a `**Depth:** <d> — owner` line is left as it is'
+says "brainstorming: the depth decides the fold, not the triggers" "$B" 'The depth decides, not the trigger list'
+says "brainstorming: an owner full line gets the separate critic" "$B" 'a spec whose line reads `**Depth:** full — owner` and holds no risk trigger gets the separate critic'
+says "brainstorming: light runs the self-review round only" "$B" 'At `light`, run the spec self-review round and nothing else: no critic, no Fable review'
+says "brainstorming: standard folds the critic and runs no second round" "$B" 'with the critic folded into it (Architecture critic), and no second round'
+says "brainstorming: a Codex host runs the spec phase as full" "$B" 'On a Codex host the spec phase runs as `full` at every depth'
+says "brainstorming: light reports the critic as skipped" "$B" '`Critic: skipped (depth light)`'
+says "brainstorming: the spec review names the depth" "$B" '`Depth: <d> — <reasons>`'
+says "brainstorming: the light approve option says the plan is not a stop" "$B" '(depth light: the plan is not a stop; execution follows in this session)'
+says "brainstorming: the owner sets the depth under Changes needed" "$B" 'sets the depth by hand under **Changes needed**: write `**Depth:** <d> — owner` in the spec'
+says "brainstorming: no rulings to import at light" "$B" '(none at depth light)'
+says "brainstorming: self-review checks the Depth line" "$B" 'its first word is `light`, `standard` or `full`'
+says "brainstorming: every architectural spec carries the Depth line" "$B" 'carries a `**Depth:**` line directly below its `**Execution strategy:**` line'
+lacks "brainstorming: the fold no longer keys on the Process line's triggers" "$B" 'your Process line names neither irreducible risk nor a new'
+says "auto-run.md: the spec depth sizes the phase" "$AR" 'The spec'"'"'s `**Depth:**` line sizes this phase'
+says "auto-run.md: light dispatches no critic and no Fable review" "$AR" 'dispatch no critic and no Fable review, record no spec ruling'
+says "auto-run.md: light under ask reaches execution with no reader" "$AR" 'reaches execution with no reader of the written spec'
+says "auto-run.md: the critic folds at depth standard" "$AR" 'folds the critic into Fable'"'"'s first round at depth standard'
+says "auto-run.md: no second Fable round at standard" "$AR" 'at depth `standard` no second round runs'
+says "auto-run.md: finishing lists every lens-skipped line" "$AR" '`final review lens-skipped <id> reason=<reason>` line in the ledger, whatever its reason'
+says "auto-run.md: light finishing lists the unverified test statements" "$AR" 'every `test` statement of the spec under `not verified (depth light)`'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

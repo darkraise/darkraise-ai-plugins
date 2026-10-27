@@ -57,14 +57,25 @@ when refused, 5 when the run stopped (`handoff` for `verdict` and
 ## The spec
 
 Under `autoRun=on` the critic and the Fable review run before the run starts,
-as dforge:brainstorming §Auto by default says: what Fable leaves undecided is
+at the spec's depth (below), as dforge:brainstorming §Auto by default says:
+what Fable leaves undecided is
 asked at the spec review instead of deferred, and its rulings are imported
 after `start` with `scripts/auto-run ruling add`. The rest of this section is
 the spec phase of a run started under `autoRun=ask`.
 
+The spec's `**Depth:**` line sizes this phase. At `light` the self-review
+round is the whole of it: dispatch no critic and no Fable review, record no
+spec ruling, and go on to the plan. Under `autoRun=ask`, a light run started
+from the offer therefore reaches execution with no reader of the written spec:
+every design section and acceptance statement was approved by hand before the
+run started, and that is the review light keeps. At `standard` the critic is
+folded into one Fable round with no second round; at `full` the separate
+critic runs first and Fable for one or two rounds. The depth decides, not the
+trigger list. What follows is the phase at `standard` and `full`.
+
 After your own self-review round and the architecture critic
 (dforge:brainstorming §Architecture critic, which folds the critic into
-Fable's first round when no risk or new-subsystem trigger holds), dispatch
+Fable's first round at depth standard), dispatch
 `dforge:judge-fable` on
 the spec against the approved design: the design sections as approved,
 verbatim, and the spec's path, naming its report file as dforge:brainstorming's
@@ -78,8 +89,9 @@ critic Blocker, which takes the note below:
     scripts/register add <register> "<item>" --state deferred --note "Fable: <its words>"
 
 Fable runs one round. A second runs only when round 1 leaves a Blocker or High
-finding open, its own or a folded critic's, and checks only those answers;
-anything still open after the last round is deferred the same way. Then write
+finding open at depth `full`, and checks only those answers; at depth
+`standard` no second round runs, and anything still open after the last round
+is deferred the same way. Then write
 the plan in this session: `scripts/context-size --plan` does not run in an
 auto run.
 
@@ -358,8 +370,10 @@ with base `none` opens its request against the code host's default branch. No
 menu. Its final message lists every `Ruling:` ledger line, every line of
 `scripts/auto-run ruling list`, every deferred row the run added,
 every `demo` statement of the spec, every lens
-named by a `final review lens-skipped <id> reason=cap` line in the ledger
-(final-review.md step 4 writes them; do not run `scripts/lens-route --final`
-here, since after a merge its base..HEAD range is empty), and it runs
+named by a `final review lens-skipped <id> reason=<reason>` line in the ledger,
+whatever its reason (final-review.md step 4 writes them; do not run
+`scripts/lens-route --final` here, since after a merge its base..HEAD range is
+empty), and, when the ledger's `Review depth:` line says `light`, every `test`
+statement of the spec under `not verified (depth light)`. It runs
 `scripts/auto-run stop` with no `--reason` before the next-step block: a
 reason marks the run as stopped and sends a `blocked` notice.

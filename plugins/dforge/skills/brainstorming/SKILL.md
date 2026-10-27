@@ -32,6 +32,15 @@ exploring; a load-bearing approach question is open; irreducible risk
 (security, data loss, migration, concurrency); behaviour too intricate for
 a chat design; or your human partner asked for a spec.
 
+On the architectural path the line also names the depth,
+`Process: architectural, <inline|subagent>, depth <d> — <triggers>`. Name each
+trigger that holds by its id (`new-subsystem`, `interface`, `unenumerable`,
+`approach`, `risk`, `intricate`, `asked`, in the order of the list above), and
+take `<d>` from `scripts/depth-route --spec-triggers <ids>`: `full` for `risk`
+or `new-subsystem`, `standard` for `interface`, `light` otherwise. The depth
+sizes the reviews that follow the spec; it never removes the approval. Your
+human partner may set it by hand at the spec review.
+
 - **Spike** — a feasibility question ("can we...", "is it possible...",
   "quick and dirty is fine") whose output is an answer, not code you
   keep. Present the question and what you'll try in 2-3 sentences, get
@@ -45,14 +54,17 @@ a chat design; or your human partner asked for a spec.
   STOP. Implementation starts only after your human partner says yes
   to that design — a bounded task's approval is as hard a gate as an
   architectural one. No spec file, no implementation plan document.
-- **Architectural** — at least one trigger holds; name it. Follow the
+- **Architectural** — at least one trigger holds; name it and the depth. Follow the
   full process: questions, approaches, sectioned
   design, written spec, then the writing-plans skill.
 
 Doubt means check the trigger list, not jump to the heavier path
 (`processBias` moves where doubt lands; see Settings). The
 ratchet is one-way: a trigger discovered mid-task upgrades the path —
-stop, say so, and step up. Nothing downgrades mid-task.
+stop, say so, and step up. A trigger found after the Process line was said
+reruns `scripts/depth-route --spec-triggers` with the whole list, and the depth
+can only rise; a `**Depth:** <d> — owner` line is left as it is. Nothing
+downgrades mid-task.
 
 ## Settings
 
@@ -140,10 +152,10 @@ and 12-13 run as Auto by default says)
 6. **Present design** — in sections scaled to their complexity, get user approval after each section
 7. **Draft acceptance** — numbered, tagged, rated statements; ask your human partner about every one rated below `high` (see Drafting acceptance)
 8. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the acceptance statements are settled (see After the Design)
-9. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` and commit
+9. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` with its `**Depth:**` line, and commit
 10. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
-11. **Architecture critic** — one `dforge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic, which folds it into Fable's first round when Fable reviews a spec with no risk or new-subsystem trigger)
-12. **User reviews written spec** — ask user to review the spec file before proceeding; under `autoRun=on` Fable reviews it first and this is Auto by default's spec review message (an auto run started from the offer has Fable review it instead)
+11. **Architecture critic** — one `dforge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic: depth light skips it, and depth standard folds it into Fable's first round when Fable reviews)
+12. **User reviews written spec** — ask user to review the spec file before proceeding; under `autoRun=on` this is Auto by default's spec review message, after Fable's review at depth standard or full (an auto run started from the offer has Fable review it instead, at those depths)
 13. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
@@ -204,7 +216,9 @@ digraph brainstorming {
     "Write spec directly\n(autoRun=on, with ## Decisions)" -> "Draft acceptance in the spec\n(ask nothing yet)";
     "Draft acceptance in the spec\n(ask nothing yet)" -> "Spec self-review\n(one round, shown)";
     "Architecture critic\n(one judge-opus round)" -> "Fable spec review\n(at most two rounds)" [label="autoRun=on"];
-    "Spec self-review\n(one round, shown)" -> "Fable spec review\n(at most two rounds)" [label="Fable reviews; no risk or\nnew-subsystem trigger"];
+    "Spec self-review\n(one round, shown)" -> "Fable spec review\n(at most two rounds)" [label="Fable reviews;\ndepth standard"];
+    "Spec self-review\n(one round, shown)" -> "Spec review\n(the one stop)" [label="depth light\n(autoRun=on)"];
+    "Spec self-review\n(one round, shown)" -> "User reviews spec?" [label="depth light\n(attended)"];
     "Fable spec review\n(at most two rounds)" -> "Spec review\n(the one stop)";
     "Spec review\n(the one stop)" -> "Revise spec\n+ one new self-review round" [label="changes needed"];
     "Revise spec\n+ one new self-review round" -> "Spec review\n(the one stop)";
@@ -376,24 +390,30 @@ when the setting is `ask`. Then:
    acceptance question first. One spec covers the whole request: no
    sub-project decomposition, no program spec, no `**Program:**` line. A new
    product still goes to dforge:planning-a-product.
-2. **Record the decisions.** Below its `**Execution strategy:**` line the spec
-   carries a `## Decisions` section: every clarifying question and approach
+2. **Record the decisions.** Below its `**Execution strategy:**` and
+   `**Depth:**` lines the spec carries a `## Decisions` section: every
+   clarifying question and approach
    choice, with your human partner's answer quoted. The critic and Fable check
    the spec against it in place of approved design sections.
 3. **Acceptance in the spec.** Draft and rate the statements as Drafting
    acceptance says, but ask nothing yet: a statement rated below `high` keeps
    its `Q:` until the spec review.
-4. **Reviews before the stop.** Run the spec self-review round, then the
-   architecture critic, then `dforge:judge-fable` on the spec against its
-   `## Decisions`: one round, and a second only when round 1 leaves a Blocker
-   or High finding open, its own or a folded critic's, checking only those
-   answers; without a risk or new-subsystem trigger, Fable's first round
-   takes the critic's place (Architecture critic). Apply what
-   Fable rules and list each ruling as one line in a `## Review rulings`
-   section of the spec.
+4. **Reviews before the stop,** by the spec's depth. At `light`, run the spec
+   self-review round and nothing else: no critic, no Fable review, no
+   `## Review rulings` section. At `standard`, run it, then one
+   `dforge:judge-fable` round on the spec against its `## Decisions` with the
+   critic folded into it (Architecture critic), and no second round. At
+   `full`, run it, then the architecture critic, then `dforge:judge-fable` on
+   the spec against its `## Decisions`: one round, and a second only when
+   round 1 leaves a Blocker or High finding open, checking only those
+   answers. Apply what Fable rules and list each ruling as one line in a
+   `## Review rulings` section of the spec.
 5. **The spec review**, the one stop: one message, its questions asked with the
    multiple-choice prompt, at most four per call:
-   - the spec path, the `Critic: …` counts and the number of Fable rulings;
+   - the spec path, `Depth: <d> — <reasons>` (the `depth=` and `reason=` of
+     `scripts/depth-route --spec-triggers`, or `owner`), the `Critic: …` counts
+     (at `light`, `Critic: skipped (depth light)`) and the number of Fable
+     rulings;
    - every statement rated below `high`, asked as Drafting acceptance asks it;
      a deferral runs
      `scripts/register add <register> "A<n>: <statement>" --state deferred --note "Q: <question>"`;
@@ -408,6 +428,12 @@ when the setting is `ask`. Then:
    - **Approve and run unattended**, **Approve, keep the normal stops**, or
      **Changes needed**.
 
+   At `light`, the **Approve, keep the normal stops** option adds "(depth
+   light: the plan is not a stop; execution follows in this session)". Your
+   human partner sets the depth by hand under **Changes needed**: write
+   `**Depth:** <d> — owner` in the spec. The plan checkpoint can still raise
+   it, and the ratchet never replaces an owner line.
+
    Apply the answers to the spec. **Changes needed** gets the revision and one
    new self-review round; the critic and Fable do not run again. Then present
    this step's message again, with the questions still open, until your human
@@ -418,10 +444,10 @@ when the setting is `ask`. Then:
    `--register <path>` when a register is open, and always the register
    step 5's deferrals went to), then import each
    `## Review rulings` line with
-   `scripts/auto-run ruling add "Fable, spec: <line>"`. Invoke
-   dforge:writing-plans in this session: `scripts/context-size --plan` does not
-   run. On exit 2 or 4 from `start`, say why in one line and continue as
-   **Approve, keep the normal stops**.
+   `scripts/auto-run ruling add "Fable, spec: <line>"` (none at depth light).
+   Invoke dforge:writing-plans in this session: `scripts/context-size --plan`
+   does not run. On exit 2 or 4 from `start`, say why in one line and continue
+   as **Approve, keep the normal stops**.
 7. **Approve, keep the normal stops** commits the spec and the register and
    continues at Implementation below, with no run.
 
@@ -501,6 +527,12 @@ without an auto run. On no, continue as below.
 
 - Write the validated design (spec) to `<docs>/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
+- Every architectural spec carries a `**Depth:**` line directly below its
+  `**Execution strategy:**` line: `**Depth:** <light|standard|full> — <reason ids>`,
+  the `depth=` and `reason=` that `scripts/depth-route --spec-triggers`
+  printed for the Process line's triggers, or `**Depth:** <d> — owner` when
+  your human partner set it. `## Decisions` sits below it. A spec without the
+  line routes at `full`.
 - Every spec has an `## Acceptance` section holding the statements settled in
   Drafting acceptance, one per line in the form
   `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`. Cover the main
@@ -526,7 +558,7 @@ required, and it is yours: run it once, never through a subagent.
 2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition (not under `autoRun=on` on Claude Code)?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
-5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output.
+5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output. The `**Depth:**` line is present below it, and its first word is `light`, `standard` or `full`.
 6. **Acceptance:** The `## Acceptance` section is present, every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>` and is checkable by a test or a demo, at least one carries `neg`, and no rating other than `high` or `confirmed` appears. Under `autoRun=on`, a statement rated `medium` or `low` passes when it carries its `Q:`; the spec review settles it.
 7. **Riskiest assumption:** The `## Riskiest assumption` section is present and names its evidence, or reads `unverified — the plan's first task verifies it`.
 
@@ -535,6 +567,17 @@ per item: clean, or what you fixed. Do not re-review after fixing.
 A revision your human partner asks for gets one new round.
 
 **Architecture critic:**
+
+The spec's `**Depth:**` line decides which reviews run. At `light`, neither the
+critic nor a Fable spec review runs: the self-review round is the whole spec
+phase. At `standard`, when Fable reviews the spec (under `autoRun=on`, or in an
+auto run) no separate critic runs and Fable's first round takes its job
+(Folded into Fable, below); when Fable does not review it (attended), the
+critic round below runs as written. At `full`, the separate critic round runs,
+then Fable for one or two rounds. The depth decides, not the trigger list: a
+spec whose line reads `**Depth:** full — owner` and holds no risk trigger gets
+the separate critic. On a Codex host the spec phase runs as `full` at every
+depth.
 
 After the self-review block, dispatch the critic once with
 [architecture-critic-prompt.md](references/architecture-critic-prompt.md): the
@@ -546,17 +589,18 @@ runs in an auto run too, before the Fable review. A revision of the spec does
 not earn a second critic round.
 
 **Folded into Fable.** When Fable will review this spec (under `autoRun=on`, or
-in an auto run) and your Process line names neither irreducible risk nor a new
-project or subsystem as a trigger, dispatch no critic. Give Fable's first round
-the critic's job as well: the criteria path
+in an auto run) and the spec's depth is `standard`, dispatch no critic. Give
+Fable's first round the critic's job as well: the criteria path
 `[PLUGIN_ROOT]/criteria/architecture-critique.md`, read as lenses and not
 scored, and the critic prompt's Output section, so its report carries the
 critic's ranked findings under their own heading, ## Critic findings, beside its rulings. Handle
-those findings exactly as the critic's below, before Fable's second round,
-which runs only when a Blocker or High finding is still open and checks only
-those answers. Two seats find more than one on a
-risky or new design, so a risk or new-subsystem trigger keeps the separate
-critic round.
+those findings exactly as the critic's below. No second Fable round runs at
+standard: a critic Blocker that round 1 leaves open is asked at the spec
+review as one Fable did not settle, or, in an auto run started from the
+offer, deferred to the register
+([auto-run.md](../../reference/auto-run.md) §The spec). Two seats find more
+than one on a risky or new design, so a spec at depth `full`, which a risk or
+new-subsystem trigger gives it, keeps the separate critic round.
 
 - Fix each Blocker and High finding in the spec, or keep the design with the
   finding answered in a `## Critic findings` section at the end of the spec:
@@ -565,6 +609,8 @@ critic round.
 - Commit the spec, then state the counts in the review request below:
   `Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium`,
   followed by ` (in Fable's review)` when the critic was folded into it.
+  At depth light the review request says `Critic: skipped (depth light)`
+  instead, since no critic ran.
 
 **The spec review's report.** Every Fable spec review round names a report
 file, `<state>/spec-review-<spec name>-<r>-report.md`, and tells the seat to
@@ -589,7 +635,11 @@ With `specReview=false` (see Settings), skip this gate and go to Implementation.
 Otherwise, after posting the self-review block, ask the user to review the
 written spec before proceeding:
 
-> "Spec written and committed to `<path>`. Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+> "Spec written and committed to `<path>`. Depth: <d> — <reasons>. Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+
+At depth light, `Critic: skipped (depth light)` replaces the counts. Your human
+partner may set the depth in the reply; write `**Depth:** <d> — owner` in the
+spec.
 
 Wait for the user's response. If they request changes, make them and run one new self-review round. Only proceed once the user approves.
 
