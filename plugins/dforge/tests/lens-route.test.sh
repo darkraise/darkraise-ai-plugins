@@ -132,11 +132,13 @@ write_depth_plan full-plan.md full 0
 write_depth_plan light-risk2.md light 2
 write_depth_plan light-risk3.md light 3
 sed '/^\*\*Spec:\*\*/d' light-plan.md > nospec-plan.md
+sed 's#specs/light.md#specs/gone.md#' light-plan.md > gone-spec-plan.md
 out=$(bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
 check "light: security only, every other applicable lens skipped for its depth" "$(short <<<"$out")" \
   "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
 out=$(DFORGE_LENS_CAP=1 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
-check "light: lensCap 1 still keeps security" "$(grep -c '^lens security ' <<<"$out")" "1"
+check "light: lensCap 1 still keeps security, the rest skipped for depth" "$(short <<<"$out")" \
+  "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
 out=$(DFORGE_LENS_CAP=0 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
 check "light: lensCap 0 is still lenses off" "$out" "lenses off"
 out=$(DFORGE_LENS_MINOR_FROM=4 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD1")
@@ -158,6 +160,8 @@ out=$(bash "$ROUTE" light-risk3.md --final "$BASE" "$HEAD2")
 check "a light spec with a risk-3 task is full: four lenses" "$(grep -c '^lens ' <<<"$out")" "4"
 out=$(bash "$ROUTE" nospec-plan.md --final "$BASE" "$HEAD2")
 check "a risk-0 plan with no Spec line routes at full" "$(grep -c '^lens ' <<<"$out")" "4"
+out=$(bash "$ROUTE" gone-spec-plan.md --final "$BASE" "$HEAD2")
+check "a risk-0 plan whose Spec path does not exist routes at full" "$(grep -c '^lens ' <<<"$out")" "4"
 # Security applies by its Applies clause; a copy of the script tree with a
 # narrower clause shows light printing no lens line when it does not match.
 mkdir -p "$TMP/plug/criteria"

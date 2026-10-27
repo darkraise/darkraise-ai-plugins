@@ -141,6 +141,9 @@ for f in "$INLINE" "$SDD"; do
   s=$(basename "$(dirname "$f")")
   present "$s: a skipped QA line counts as complete on recovery" "$f" 'Acceptance QA: skipped (depth light)` counts as `complete` on recovery.'
   present "$s: the Review depth line is never recomputed" "$f" 'and is read on recovery, never recomputed; it is'
+  for line in 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
+    check "$s: the ledger grammar block holds the line $line" "$(grep -Fxc -- "$line" "$f")" "1"
+  done
 done
 present "inline marks an unreviewed completion" "$INLINE" "unreviewed"
 present "inline assigns itself" "$INLINE" "implementer inline"
