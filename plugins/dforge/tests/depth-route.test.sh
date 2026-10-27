@@ -140,7 +140,7 @@ check "full spec, risk 0 tasks: the plan never lowers it" "$(plan_line f-zero)" 
 mkplan f-three spec-full "" 3
 check "full spec, risk 3: both inputs named" "$(plan_line f-three)" "depth=full spec=full tasks=full reason=spec,task-risk:1"
 mkplan empty spec-light ""
-check "a plan with no tasks is light on tasks" "$(plan_line empty)" "depth=light spec=light tasks=light reason=spec"
+check "a plan with no tasks cannot be scored: full" "$(plan_line empty)" "depth=full spec=light tasks=full reason=no-tasks"
 
 # --- A4: task count and totals never raise the depth ---
 risks=()

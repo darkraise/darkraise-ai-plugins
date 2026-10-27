@@ -91,11 +91,11 @@ depth_spec_file() {
 # depth_plan SRC ROOT — the plan checkpoint for SRC, a plan file with its
 # amendments applied, whose **Spec:** path resolves against the checkout ROOT:
 #   depth=<d> spec=<d|none> tasks=<d> reason=<items>
-# The plan never lowers the spec's depth; a missing spec depth or a Host: codex
-# header raises it to full.
+# The plan never lowers the spec's depth; a missing spec depth, a plan with no
+# tasks or a Host: codex header raises it to full.
 depth_plan() {
   local src=$1 root=$2 header spec_line spec_path spec_file spec tasks depth
-  local codex=0 n t r hi=-1 hi_task="" unscored="" reasons=()
+  local codex=0 n t r hi=-1 hi_task="" unscored="" count=0 reasons=()
   header=$(plan_header "$src")
   grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
 
@@ -114,13 +114,14 @@ depth_plan() {
 
   while IFS=$'\t' read -r n t r; do
     [ -n "$n" ] || continue
+    count=$((count + 1))
     if [ "$r" = "-" ] || [ "$r" = "?" ]; then
       [ -n "$unscored" ] || unscored=$n
     elif [ "$r" -gt "$hi" ]; then
       hi=$r hi_task=$n
     fi
   done < <(plan_scores "$src")
-  if [ -n "$unscored" ] || [ "$hi" -ge 3 ]; then tasks=full
+  if [ "$count" -eq 0 ] || [ -n "$unscored" ] || [ "$hi" -ge 3 ]; then tasks=full
   elif [ "$hi" -eq 2 ]; then tasks=standard
   else tasks=light
   fi
@@ -135,7 +136,9 @@ depth_plan() {
   else
     [ "$spec" != none ] || reasons+=(no-spec-depth)
     [ "$spec" != "$depth" ] || reasons+=(spec)
-    if [ -n "$unscored" ]; then
+    if [ "$count" -eq 0 ]; then
+      reasons+=(no-tasks)
+    elif [ -n "$unscored" ]; then
       reasons+=("unscored:$unscored")
     elif [ "$tasks" = "$depth" ] && [ -n "$hi_task" ]; then
       reasons+=("task-risk:$hi_task")
