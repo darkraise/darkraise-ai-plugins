@@ -34,9 +34,10 @@ of the work being done.
 `Review depth: <depth> (<reason>)` to the ledger, `<depth>` and `<reason>`
 being the values of its `depth=` and `reason=` fields. When the ledger already
 holds a `Review depth:` line, as it does after a compaction, read that line
-and run no new route, so every step of one review reads the same depth. The
-prefix keeps the line apart from `Final review:`, which recovery keys on. The
-depth sizes the steps below:
+and run no new route, so every step of one review reads the same depth. When
+the route exits 2, log `Review depth: full (depth-route failed)` and run every
+step. The prefix keeps the line apart from `Final review:`, which recovery
+keys on. The depth sizes the steps below:
 
 | Step | light | standard | full |
 |---|---|---|---|
@@ -51,9 +52,10 @@ depth sizes the steps below:
 The fix wave and its scoped re-review run at every depth.
 
 MERGE_BASE is the commit the branch started from, for example
-`git merge-base main HEAD`. Step 0 runs first, then step 0.2. Step 0.5 dispatches QA in the
-background and goes straight on to step 1: QA runs alongside the Claude review,
-the lenses and the Codex round, and the fix wave waits for it (step 3).
+`git merge-base main HEAD`. After the depth line, step 0 runs first, then
+step 0.2. Step 0.5 dispatches QA in the background and goes straight on to
+step 1: QA runs alongside the Claude review, the lenses and the Codex round,
+and the fix wave waits for it (step 3).
 Serializing them added QA's whole run, often a quarter of an hour, to every
 final review. Because QA commits while the reviewers read, HEAD in steps 1 and
 2 is the SHA recorded in the `Acceptance QA: dispatched (base <sha7>)` line,
