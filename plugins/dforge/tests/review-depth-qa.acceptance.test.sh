@@ -35,11 +35,15 @@ absent() { # absent <name> <haystack> <ERE>
 }
 flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
 sect() { # sect FILE START_ERE END_ERE — flattened text from the first START line to the line before the next END match
-  awk -v s="$2" -v e="$3" '!on && $0 ~ s { on = 1; print; next } on && $0 ~ e { exit } on { print }' "$1" | tr '\n' ' ' | tr -s ' '
+  # ENVIRON, not -v: gawk turns the \* and \. of a -v value into * and .
+  S="$2" E="$3" awk '!on && $0 ~ ENVIRON["S"] { on = 1; print; next } on && $0 ~ ENVIRON["E"] { exit } on { print }' "$1" | tr '\n' ' ' | tr -s ' '
 }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# MSYS_NO_PATHCONV below hands git.exe this path untranslated, so it must be a
+# Windows path or git initialises a repository somewhere else.
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
 unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR DFORGE_LENS_CAP DFORGE_LENS_MINOR_FROM
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
