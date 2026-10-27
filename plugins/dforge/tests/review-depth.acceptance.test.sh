@@ -441,7 +441,7 @@ a11() {
 }
 
 a12() {
-  local fr gates ui claude fixwave p bs gate step5
+  local fr gates ui claude claudehead fixwave p bs gate step5 step5rest
   mkplan p12l.md spec-light.md - 0 1
   mkplan p12s.md spec-standard.md - 1
   mkplan p12f.md spec-full.md - 0 1
@@ -454,13 +454,16 @@ a12() {
   gates=$(between "$fr" '0. **Gates.**' '- 0.2 **UI proof.**')
   ui=$(between "$fr" '- 0.2 **UI proof.**' '- 0.5 **Acceptance QA.**')
   claude=$(between "$fr" 'Then run `scripts/review-route PLAN_FILE --final` and dispatch the `primary` it prints' '2. **Codex round.**')
+  claudehead=$(between "$fr" '1. **Claude review.**' '**Lenses.**')
   fixwave=${fr#*'## Fixing what it finds'}
   bs=$(doc "$BS")
   gate=$(between "$bs" 'In an auto run (`scripts/auto-run status` exits 0), skip this gate' 'Otherwise, after posting')
   step5=$(between "$bs" '5. **The spec review**, the one stop' '6. **Start the run.**')
+  step5rest=${step5//'`specReview=false` does not skip this stop'/}
   check "A12: the Gates step is found" "$([ -n "$gates" ] && echo yes || echo no)" "yes"
   check "A12: the UI proof step is found" "$([ -n "$ui" ] && echo yes || echo no)" "yes"
   check "A12: the Claude review dispatch is found" "$([ -n "$claude" ] && echo yes || echo no)" "yes"
+  check "A12: the Claude review heading is found" "$([ -n "$claudehead" ] && echo yes || echo no)" "yes"
   check "A12: the fix wave section is found" "$([ -n "$fixwave" ] && [ "$fixwave" != "$fr" ] && echo yes || echo no)" "yes"
   check "A12: the spec review stop is found" "$([ -n "$step5" ] && echo yes || echo no)" "yes"
   check "A12: the User Review Gate skip rules are found" "$([ -n "$gate" ] && echo yes || echo no)" "yes"
@@ -468,12 +471,16 @@ a12() {
   lacks "A12: the UI proof is not cut by a depth" "$ui" 'depth'
   lacks "A12: the Claude review dispatch is not cut by a depth" "$claude" 'depth'
   lacks "A12: nor is the Claude review dispatch skipped at light" "$claude" 'light'
+  lacks "A12: the Claude review heading is not cut by a depth" "$claudehead" 'depth'
+  lacks "A12: nor is the Claude review skipped at light" "$claudehead" 'light'
   lacks "A12: the fix wave is not cut by a depth" "$fixwave" 'depth'
   lacks "A12: nor is the fix wave skipped at light" "$fixwave" 'light'
   lacks "A12: the User Review Gate skip rules name no depth" "$gate" 'depth'
   lacks "A12: nor does the gate skip name light" "$gate" 'light'
   has "A12: the spec review stop is not skipped by specReview=false" "$step5" '`specReview=false` does not skip this stop'
   lacks "A12: the spec review stop is not skipped by a depth" "$step5" 'skip the spec review'
+  lacks "A12: the spec review stop has no other skip" "$step5rest" 'skip '
+  lacks "A12: nor is the stop said to be skipped" "$step5rest" 'is skipped'
   has "A12: the light approve option says the plan is not a stop" "$(doc "$BS")" 'depth light: the plan is not a stop'
 }
 
