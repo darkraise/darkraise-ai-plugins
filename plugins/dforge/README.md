@@ -100,6 +100,37 @@ run the plan's full integration check every third wave, after any risk-3 wave an
 whose failures do not grow counts as a pass. A `Host: codex` plan keeps
 `review_cap: 5` and per-task review.
 
+**Review depth.** An architectural plan runs at one of three depths, sized by
+risk rather than length. `scripts/depth-route` prints the depth: `full` for a
+risk trigger (security, data loss, migration, concurrency), a new subsystem, or
+any task at risk 3; `standard` when an interface that something outside its own
+files depends on changes, or any task is at risk 2; `light` for everything else,
+however many tasks the plan has. The spec records it on a `**Depth:**` line,
+your human partner may set it there by hand (`**Depth:** light — owner`), and
+the check after the plan is written can only raise it, from the tasks' real
+scores. A spec with no `**Depth:**` line, a plan whose spec has none, and a
+`Host: codex` plan run at `full`, so every plan written before depth routing
+keeps today's process. The spec phase and the plan phase follow the depth:
+light runs the self-review round alone and no plan review, and a light plan of
+1-3 tasks goes on to execution in the same session when the budget allows,
+standard folds the architecture critic into one Fable round and runs one plan
+review round, and full runs the separate critic, one or two Fable rounds and
+one or two plan review rounds. Execution is unchanged at every depth. The
+final review scales as follows:
+
+| Stage | light | standard | full |
+|---|---|---|---|
+| 0 Gates | runs | runs | runs |
+| 0.2 UI proof | runs | runs | runs |
+| 0.5 Acceptance QA | skipped | runs | runs |
+| 1 Claude review (`dforge:judge-opus`) | runs | runs | runs |
+| 1 Lenses | security only, when it applies | at most 2 | up to `lensCap` |
+| 2 Codex round | skipped | skipped | as today |
+| 3 Dedupe judge | never (one list) | never (one list) | with two lists |
+
+At light, finishing lists the spec's `test` statements under
+`not verified (depth light)`, since no acceptance QA checked them.
+
 **Criteria-scored reviews.** `criteria/` holds narrow scored criteria adapted
 from LLM-as-a-Verifier (arXiv:2607.05391): a ground-truth note the judge sees on
 every evaluation, and 2 to 4 criteria that each say where to look, what scores
