@@ -49,6 +49,19 @@ time.
   listing tokens per turn stay unsaved.
 - **Ruling (session): row 2 is folded into row 1.** Once the implementer no
   longer runs the full suite, it has no long wait left to background.
+- **Spec review (2026-10-28).** Merge rule (A14): "Allow baseline − 1".
+  Spend (A15): "reduce the number of evaluation round and size", then
+  "12 cases × 2 runs, items 1-3" — the option read: "~$48 per arm; baseline +
+  3 candidates + confirmation ≈ $240. Decide on items 4-7 after seeing
+  results." This replaces the Eval size answer above. Prompt audit (A17):
+  "Right" — one owner-run session is acceptable. Suite command (ruling 1):
+  "Integration check → gates.md → ruling". Baseline (ruling 15): "Single
+  baseline at <M>". Scope clause (ruling 17): "All non-Sonnet tiers".
+  Finish: "Merge into main, and need worktree for this spec since there is
+  another session running" — all implementation runs in a worktree created
+  from local main, never in the main checkout.
+
+Finish: merge
 
 ## Problem
 
@@ -96,7 +109,7 @@ reference file; none is deleted.
   the short reply's last line is `Report: <absolute path>`. The Run Control
   paragraph names `[PLUGIN_ROOT]/scripts/context-size`, so `[PLUGIN_ROOT]`
   keeps a use in the prompt.
-- **Suite command** (recommended; the owner confirms it at the spec review).
+- **Suite command.**
   `task-step start` takes `--suite '<command>'` and records it in
   `task-<N>-step.json`. The controller takes the command from the plan
   header's `**Integration check:**`, else from `<docs>/gates.md`'s test
@@ -176,8 +189,7 @@ general solution, never one that only passes specific test inputs; when a test
 looks wrong, report it instead of working around it; never edit or delete an
 existing test unless the brief names it. Every non-Sonnet tier
 (`impl-opus-*`, `impl-fable-*`, `impl-haiku`) gains the scope-limit clause
-the Sonnet tiers already carry ("Change only what the brief asks for");
-recommended, the owner confirms the tier set at the spec review.
+the Sonnet tiers already carry ("Change only what the brief asks for").
 
 ### 4. Implementer stop gate (row 13)
 
@@ -234,21 +246,22 @@ Pipeline runs go to `results/pipeline.tsv` with columns
 `rep, case, arm, run, outcome, costUsd, seconds, dispatches, fixRounds, detail`.
 `results.tsv` and `run-grid.mjs`'s existing stages are untouched, and the
 start-commit refusal in `run-grid.mjs` does not apply to the pipeline stage,
-whose arms are refs. The manifest takes 20 cases from finished plans,
-preferring tasks that needed a fix round; each arm runs 3 times. The report
-prints pass^3 (cases passing all three runs), total cost and median wall time
-per arm. Nothing runs in a real project checkout or reads the owner's
+whose arms are refs. The manifest takes 12 cases from finished plans,
+preferring tasks that needed a fix round; each arm runs 2 times (about $48
+per arm). The report prints pass^2 (cases passing both runs), total cost and
+median wall time per arm. Nothing runs in a real project checkout or reads the owner's
 settings.
 
 ### 6. Measured lane (rows 3, 4, 6, 8, 9, 10, 12, 15, 17)
 
 Every candidate branches from, and is compared against, the mechanical-lane
-merge commit `<M>` (recommended; the owner confirms it at the spec review).
-The baseline arm runs once at `<M>`; a winning item is rebased onto main.
-After the lane, one confirmation comparison of main against `<M>` (one arm,
-about $120) checks the merged set together. An item merges when it meets the
-merge rule (A14); otherwise its row closes `n/a` with the numbers. Order, by
-expected value:
+merge commit `<M>`. The baseline arm runs once at `<M>`; a winning item is
+rebased onto main. After the first batch, one confirmation comparison of main
+against `<M>` (one arm, about $48) checks the merged set together. An item
+merges when it meets the merge rule (A14); otherwise its row closes `n/a` with
+the numbers. The first batch is items 1-3 below, plus item 8, which costs no
+eval arm; items 4-7 are deferred in the register until the owner reviews the
+first batch's results. Order, by expected value:
 
 1. Lean plans (row 15): briefs carry decisions, signatures and test assertions,
    not full code. Needs a pipeline variant that re-drafts each case's brief
@@ -317,10 +330,10 @@ A10. [test, neg, high] The gate exits 0 for any other agent type, for BLOCKED an
 A11. [test, neg, high] The gate runs no test command and makes no network call: with recording stubs for common test runners and network tools ahead on PATH, a gate run on a 1,000-line report invokes none of them.
 A12. [test, high] The pipeline stage replays one case end to end under a given plugin directory and records pass, costUsd, wall time, dispatch count and fix rounds per run in `results/pipeline.tsv`.
 A13. [test, neg, high] No pipeline run uses a working directory, plugin directory or HOME outside the eval's own temporary root.
-A14. [test, medium] A measured item merges only when its pass^3 count over the same 20 cases x 3 runs is at least the baseline's and its total cost or median wall time is at least 10% lower. Q: is "pass^3 at least baseline, and 10% cheaper or faster" the merge rule you want, or should it allow a noise margin (pass^3 at least baseline − 1, or a fourth run to break a tie), since one case is 5% of 20?
-A15. [demo, medium] The measured lane runs comparisons in the Design §6 order until eval spend reaches $1,200. Seven candidate arms (item 8 has none) plus one baseline at about $120 each is $960, plus $120 for the confirmation run, $1,080; this holds only with the single-baseline rule in §6. Q: is $1,200 the right spend cap, or should the plan stop after a smaller first batch?
+A14. [test, confirmed] A measured item merges only when its pass^2 count over the same 12 cases x 2 runs is at least the baseline's minus one and its total cost or median wall time is at least 10% lower.
+A15. [demo, confirmed] The measured lane's first batch runs one baseline arm at `<M>`, candidate arms for Design §6 items 1-3 and one confirmation arm, at 12 cases x 2 runs each (about $240 in all), then stops for the owner; items 4-7 stay deferred in the register until then.
 A16. [test, high] The plugin README documents auto mode for unattended waves and `worktree.baseRef: "head"` for wave worktrees, each with its reason.
-A17. [demo, medium] The prompt-audit note records `/doctor prompt-audit` and `/skill-doctor` output for dforge, and each proposed change appears as a register row. Q: if `/doctor prompt-audit` cannot run headless, is one owner-run session acceptable?
+A17. [demo, confirmed] The prompt-audit note records `/doctor prompt-audit` and `/skill-doctor` output for dforge, from one owner-run session when the commands cannot run headless, and each proposed change appears as a register row.
 A18. [test, neg, high] `reference/native-codex.md` and executing-plans' inline suite rule are not edited; `reference/delegated-task.md`'s by-hand section runs the suite the controller used to get from the implementer.
 A19. [demo, high] The stop gate finishes in under 2 seconds on a 1,000-line report on the Linux host.
 
@@ -348,7 +361,7 @@ depend on it.
 
 Fable, round 1 (2026-10-28):
 
-1. Suite command source: `task-step start --suite`, from Integration check, else gates.md, else a one-time ruling; no row means `suite: not run`, exit 7 — recommended, owner confirms.
+1. Suite command source: `task-step start --suite`, from Integration check, else gates.md, else a one-time ruling; no row means `suite: not run`, exit 7 — confirmed by the owner at the spec review.
 2. Inline mode: its own tasks unchanged; tasks it delegates follow the new loop.
 3. Codex and by-hand runs: the by-hand §2 runs suite-run itself; A18 reworded.
 4. Baseline: reviewer names a command; red suites compare failing lines against one base run, as parallel-waves §1 does.
@@ -362,9 +375,9 @@ Fable, round 1 (2026-10-28):
 12. §5 covers row 11 only.
 13. Arm plugin directories via `snapshot.mjs`, no git worktree.
 14. Pipeline results in `results/pipeline.tsv`; existing stages and refusal untouched.
-15. Measured lane: single baseline at `<M>`, rebase winners, one confirmation run — recommended, owner confirms.
+15. Measured lane: single baseline at `<M>`, rebase winners, one confirmation run — confirmed by the owner at the spec review.
 16. Row 10's wave half already shipped; only the stagger is measured.
-17. Scope-limit clause on every non-Sonnet tier — recommended, owner confirms.
+17. Scope-limit clause on every non-Sonnet tier — confirmed by the owner at the spec review.
 18. Part C owns a new `tests/impl-clauses.test.sh`.
 19. Part A flips the suite-run pin and repoints the two expansion checks at context-size; final-review.md and the SKILL.md example line unchanged.
 20. A5 reworded to what `task-step verdict` does.
