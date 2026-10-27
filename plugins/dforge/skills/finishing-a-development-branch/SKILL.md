@@ -193,8 +193,8 @@ nothing here.
 
 **Lenses skipped.** Print every `final review lens-skipped <id> reason=<reason>`
 ledger line, whatever its reason, with the rulings. The final review wrote
-them; never run `scripts/lens-route` here, since after a merge base..HEAD is
-empty.
+them; never run `scripts/lens-route` here: a new route reads the branch after
+the fix wave, not the range the final review saw.
 
 ## Step 4: Present Options
 
