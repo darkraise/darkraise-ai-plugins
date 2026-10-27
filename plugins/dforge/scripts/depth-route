@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Print the review depth that sizes an architectural plan's spec phase, plan
+# phase and final review.
+#
+# The rule lives in lib/depth.sh, called from a script rather than written in
+# skill prose, for the reason review-route gives: a rule a session must follow
+# is only reachable when a test can reach it. review-route and lens-route read
+# the same rule when they route.
+#
+# Usage: depth-route --spec-triggers LIST
+#        depth-route PLAN_FILE
+# LIST is comma-separated Process Depth trigger ids: new-subsystem, interface,
+# unenumerable, approach, risk, intricate, asked.
+# Output: depth=<light|standard|full> reason=<id>[,<id>...]
+#         (PLAN_FILE adds, before reason=: spec=<light|standard|full|none>
+#         tasks=<light|standard|full>; the plan is read with its amendments.md
+#         applied)
+# Exit: 0 routed; 2 usage error, an empty or unknown trigger list, a missing
+# plan file, or an amendment that does not apply.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+. "$HERE/lib/depth.sh"
+
+die() { printf 'depth-route: %s\n' "$1" >&2; exit 2; }
+usage() { die "usage: depth-route --spec-triggers LIST | PLAN_FILE"; }
+
+[ $# -ge 1 ] || usage
+case $1 in
+  --spec-triggers)
+    [ $# -eq 2 ] || usage
+    out=$(depth_from_triggers "$2" 2>&1) || die "$out"
+    IFS=$'\t' read -r depth reason <<<"$out"
+    printf 'depth=%s reason=%s\n' "$depth" "$reason"
+    exit 0 ;;
+  -*) die "unknown option: $1" ;;
+esac
+[ $# -eq 1 ] || usage
+
+plan=$(plan_locate "$1")
+[ -f "$plan" ] || die "no such plan file: $plan"
+dforge_stores_init "$(_plan_ctx "$plan")"
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+src="$TMP/plan.md"
+plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
+  || die "an amendment does not apply; run plan-lint"
+root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+depth_plan "$src" "$root"
