@@ -19,6 +19,9 @@
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
 #         (a plan round appends cap=<n>; a single --task ID puts
 #         review=<task|group> before reason=)
+# A Claude plan's round cap comes from scripts/depth-route's depth: light 0,
+# standard 1, full 2. At cap 0 round 1 prints primary=none reason=depth-light,
+# meaning no review round runs; any round past the cap exits 2.
 # A Host: codex plan routes only --plan-round and --final-fix, to a native seat
 # printed as primary=native:<model>/<effort>; its other seats come from
 # reference/native-codex.md.
@@ -30,6 +33,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/depth.sh"
 . "$HERE/lib/executor-session.sh"
 
 SONNET=dforge:judge-sonnet-high
@@ -63,7 +67,7 @@ if [ "$native" -eq 1 ] && [ "$1" != --plan-round ] && [ "$1" != --final-fix ]; t
 fi
 
 # plan_shape — sets intricate (1 when a task is at risk 3 or totals 6) for
-# --ruling. It no longer sets cap: a Claude plan's review cap is a flat 2.
+# --ruling. It sets no cap: a Claude plan's review cap comes from claude_cap.
 plan_shape() {
   local n t r
   intricate=0
@@ -73,6 +77,15 @@ plan_shape() {
     [ "$t" != "-" ] || continue
     if [ "$r" -ge 3 ] || [ "$t" -ge 6 ]; then intricate=1; fi
   done < <(plan_scores "$src")
+}
+
+# claude_cap — a Claude plan's review cap from its depth (lib/depth.sh): light
+# 0, standard 1, full 2. A depth that does not print takes the full cap.
+claude_cap() {
+  local root depth
+  root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
+  depth=$(depth_plan_depth "$src" "$root")
+  case $depth in light) cap=0 ;; standard) cap=1 ;; *) cap=2 ;; esac
 }
 
 # cap_for MAX — a Codex-host plan's review cap from its highest raw task total;
@@ -266,10 +279,12 @@ case "$1" in
   --plan-round)
     [ $# -eq 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage
     r=$2 claude=$OPUS
-    # A Claude plan's cap is 2 whatever its totals, with no cap-critical round,
-    # so it reads no Evaluation line.
-    if [ "$native" -eq 1 ]; then native_shape; else cap=2; fi
-    if [ "$native" -eq 0 ] && [ "$r" -gt "$cap" ]; then
+    # A Claude plan's cap follows its depth, never its totals, and it has no
+    # cap-critical round: a round past the cap exits 2.
+    if [ "$native" -eq 1 ]; then native_shape; else claude_cap; fi
+    if [ "$native" -eq 0 ] && [ "$cap" -eq 0 ] && [ "$r" -eq 1 ]; then
+      printf 'review-seat plan-round=1 primary=none fallback=- reason=depth-light cap=0\n'
+    elif [ "$native" -eq 0 ] && [ "$r" -gt "$cap" ]; then
       die "plan round $r is past the cap ($cap)"
     elif [ "$r" -gt $((cap + 1)) ]; then
       die "plan round $r is past the cap ($cap) and its one cap-critical round"
