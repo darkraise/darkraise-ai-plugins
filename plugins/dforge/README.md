@@ -521,6 +521,34 @@ a passing `ui-proof check` in a project with a UI profile (or a session that
 ran the skill); the line `UI proof: pending — <why>` releases it, and it
 stands down while an auto run is bound.
 
+## Unattended runs
+
+Two Claude Code settings keep a parallel plan moving while nobody is at the
+keyboard. They belong to Claude Code, and dforge neither sets nor reads them.
+
+**Auto mode.** Start the session with `claude --permission-mode auto`. A wave
+runs its implementers as subagents, several at once, and a tool call that needs
+a permission prompt makes that implementer wait for an answer you are not there
+to give, which holds up the whole wave. In auto mode a classifier approves
+routine calls and blocks risky ones, so no implementer stops on a prompt. This is Claude Code's permission mode; dforge's
+own auto run (see [reference/auto-run.md](reference/auto-run.md)) keeps a plan
+going from approval to finishing and works under any permission mode.
+
+**Wave worktrees from your local HEAD.** Set `worktree.baseRef` to `"head"` in
+your user settings (`~/.claude/settings.json`):
+
+```json
+{ "worktree": { "baseRef": "head" } }
+```
+
+Claude Code creates each wave implementer's worktree itself. Its default,
+`"fresh"`, branches from `origin/<default-branch>`, so when your local main is
+ahead of origin, or the plan sits on a feature branch, the worktree lacks the
+unpushed commits: the plan and the earlier waves' merged tasks. dforge's
+dispatch detaches the implementer to the wave's base afterwards, but a worktree
+that starts from your HEAD begins in the right place. The setting applies to
+every worktree Claude Code creates for you, not only dforge's.
+
 ## Session budget
 
 Long sessions cost more than they look: every request re-reads the whole
