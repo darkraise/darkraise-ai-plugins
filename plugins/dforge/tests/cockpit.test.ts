@@ -250,6 +250,8 @@ type World = {
   env?: Record<string, string>
   /** Files the plugin reads, by path, with their modification time. */
   files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other'; isLink?: boolean }>
+  /** Paths whose stat rejects with this error code. */
+  statErrors?: Record<string, string>
   /** What the plugin writes, by path. */
   written?: Record<string, string>
   /** Each request the plugin sends through $.http.fetch. */
@@ -509,6 +511,8 @@ function world(on: On, w: World) {
     return { value: w.sessionId ?? 'sess-1' }
   })
   on('fs.stat', (_$, e) => {
+    const code = w.statErrors?.[e.path]
+    if (code !== undefined) throw Object.assign(new Error(code), { code })
     const file = w.files?.[e.path]
     if (file === undefined) throw new Error('ENOENT')
     return { value: { kind: file.kind ?? 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: file.isLink ?? false } }
@@ -898,6 +902,8 @@ describe('review seat write guard', () => {
     const through = `${linkedDir}/task-1-review-report.md`
     await started($, on, [REVIEW, linkedFile, through], {
       files: {
+        [`${STATE}/sdd`]: { text: '', kind: 'dir' },
+        [WS]: { text: '', kind: 'dir' },
         [linkedDir]: { text: '', kind: 'dir', isLink: true },
         [linkedFile]: { text: 'x', isLink: true },
       },
@@ -905,6 +911,40 @@ describe('review seat write guard', () => {
     expect((await write($, 'judge-1', through)).deny).toMatch(GUARD)
     expect((await write($, 'judge-1', linkedFile)).deny).toMatch(GUARD)
     expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
+
+  // The test engine passes the mod no error code, so this pins the no-code
+  // rule: a stat rejection below a file refuses.
+  test('refuses a report whose directory is a file', async ($, on) => {
+    await started($, on, [REVIEW], { files: { [`${STATE}/sdd`]: { text: '', kind: 'dir' }, [WS]: { text: 'x', kind: 'file' } } })
+    expect((await write($, 'judge-1', REVIEW)).deny).toMatch(GUARD)
+  })
+
+  test('allows a report whose directory is not there yet', async ($, on) => {
+    await started($, on, [REVIEW], { files: { [`${STATE}/sdd`]: { text: '', kind: 'dir' } }, statErrors: { [WS]: 'ENOENT' } })
+    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
+
+  test('keeps a POSIX root under a one-letter directory exact, and walks it for links', async ($, on) => {
+    const w: World = { tokens: 10_000, agentIds: ['judge-1'], checkout: '/x/repo' }
+    world(on, w)
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    const named = '/x/repo/.dforge/sdd/p/task-1-review-report.md'
+    await $.agent.spawn(dispatch(`Write your report to ${named}.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', named)).deny).toBeUndefined()
+    expect((await write($, 'judge-1', '/X/repo/.dforge/sdd/p/task-1-review-report.md')).deny).toMatch(GUARD)
+    expect((await write($, 'judge-1', 'X:/repo/.dforge/sdd/p/task-1-review-report.md')).deny).toMatch(GUARD)
+    w.files = { '/x/repo/.dforge/sdd': { text: '', kind: 'dir', isLink: true } }
+    expect((await write($, 'judge-1', named)).deny).toMatch(GUARD)
+  })
+
+  test('refuses a judge write the refusal list cannot take, whatever guardAttribution says', async ($, on) => {
+    world(on, { tokens: 10_000, config: { guardAttribution: false } })
+    on('agent.list', () => ({ value: [{ id: 'listed-1', type: 'dforge:judge-opus', description: 'Review', status: 'running' }] }) as never)
+    on('state.set', { plugin: 'dforge', key: 'refusals' } as never, (() => ({ deny: 'state unavailable' })) as never)
+    await $.session.start(START)
+    expect((await write($, 'listed-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
   })
 
   test('takes the roots from the checkout and the primary, and a moved checkout', async ($, on) => {

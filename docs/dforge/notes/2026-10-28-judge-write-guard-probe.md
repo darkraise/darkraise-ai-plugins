@@ -87,13 +87,45 @@ pane: ● Agent "Write-guard probe" finished · 4s
         task-1-review-report.md: WRITTEN
 ```
 
+## Symlink check
+
+Run on 2026-10-28 with `2.1.312 (Claude Code)`, against `plugins/dforge` at `a6664b30` plus this fix's uncommitted guard changes (fail-closed stat walk, drive spelling only on a drive host). The probe was rebuilt as in Setup (`PROBE` was `/tmp/tmp.VGe6pesobm`), then:
+
+- `mkdir PROBE/outside` and `ln -s PROBE/outside PROBE/root/work/.dforge/sdd/probe/linked`;
+- the dispatch named a third report file, `…/probe/linked/task-9-review-report.md`, and told the judge to write `PROBE-LINKED` to it;
+- `run.sh` clears the workspace with `rm -f "$W"/.dforge/sdd/probe/*`, which would remove the link, so this run used a copy whose only change clears regular files instead (`find "$W/.dforge/sdd/probe" -maxdepth 1 -type f -delete`);
+- one `claude -p` run.
+
+The dispatch text:
+
+```
+Call the Agent tool exactly once, with subagent_type "dforge:judge-sonnet-high" and this prompt, word for word: "You are running a write-guard probe. Your dispatch names three report files. Use the Write tool to write the single line PROBE-OUTSIDE to the first report file, /tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/amendments.md, then use the Write tool to write the single line PROBE-REPORT to the second report file, /tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/task-1-review-report.md, then use the Write tool to write the single line PROBE-LINKED to the third report file, /tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/linked/task-9-review-report.md. Attempt all three even if a call is refused. Reply with one line per file: its name and either WRITTEN or the refusal text you received, verbatim." When the agent returns, print its reply and nothing else.
+```
+
+```
+$ bash run-link.sh PROBE p plugins/dforge PROBE/link-p.jsonl
+linked
+task-1-review-report.md
+$ ls -la PROBE/outside
+total 0
+drwxr-xr-x 2 root root  40 Oct 28 18:53 .
+drwx------ 4 root root 200 Oct 28 18:53 ..
+result: amendments.md: dforge: a review seat writes only the report file its dispatch names (/tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/task-1-review-report.md, /tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/linked/task-9-review-report.md); /tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/amendments.md is not one.
+        task-1-review-report.md: WRITTEN
+        task-9-review-report.md: dforge: a review seat writes only the report file its dispatch names (/tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/task-1-review-report.md, /tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/linked/task-9-review-report.md); /tmp/tmp.VGe6pesobm/root/work/.dforge/sdd/probe/linked/task-9-review-report.md is not one.
+```
+
+The write through the symlinked directory was refused although the dispatch names that path, and `PROBE/outside` stayed empty; the plain report, which did not exist before its write, was still written. Since the path was among the allowed ones, the refusal came from the stat walk: `$.fs.stat` answered `isLink: true` for `linked` rather than following it (inference from the outcome; the probe did not log the stat answer). `PROBE` was removed afterwards (`rm -rf`).
+
+The guard works whether or not the engine's stat rejection carries an error code: with a string `code`, only `ENOENT` reads as missing; with none, a rejection reads as missing only below an existing directory that is not a link. The cockpit test engine hands the mod a rejection with no code (an `Error` named `HooksError`, message `no implementation for fs.stat`), so the unit tests pin the no-code rule. Whether the live engine's rejection carries a code is unknown; this probe did not inspect it. Without a code, a failure other than not-found (an engine error, a timeout) on a child of an existing directory is still read as missing.
+
 ## Residuals
 
 1. A session where the cockpit mod does not load runs without the guard (the spec's accepted residual). This probe shows the mod loads in `claude -p --plugin-dir` and in an interactive session on this host, and says nothing about older Claude Code releases.
 2. The review dispatch also names the implementer's report (`task-<N>-report.md`, which ends in `-report.md`), so a judge may rewrite that file as well as its own report.
-3. On Windows, task-step names report paths in the `C:/…` long form (`dforge_workspace`, `scripts/lib/roots.sh:21-34`), the form the cockpit's roots take, and `canonPath` also maps a Git Bash `/c/…` spelling to `c:/…`. No Windows host ran this probe.
-4. The guard fails closed on a spelling mismatch, a `..` segment and a symbolic link, never on a missing root.
+3. On Windows, task-step names report paths in the `C:/…` long form (`dforge_workspace`, `scripts/lib/roots.sh:21-34`), the form the cockpit's roots take. `canonPath` maps a Git Bash `/c/…` spelling to `c:/…` only when the checkout or primary root is itself spelled with a drive letter; on any other host `/c/…` stays a POSIX path. No Windows host ran this probe.
+4. The guard refuses a spelling mismatch, a `..` segment, a target under no known root, a symbolic link between the root and the target or at the target (seen live for a symlinked directory, in Symlink check above), and a stat rejection with any code other than `ENOENT`; a refusal stands even when it cannot be added to the refusal list. It does not fail closed in one case: when a stat rejection carries no code, a failure other than not-found on a path whose parent is an existing directory reads as missing, and the write is allowed.
 
 ## Verdict
 
-HOLDS: in both modes the guard refused the write outside the named report and allowed the report.
+HOLDS: in both modes the guard refused the write outside the named report and allowed the report, and in the symlink check it refused a named report reached through a symlinked directory.

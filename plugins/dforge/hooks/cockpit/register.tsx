@@ -198,6 +198,7 @@ const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
 // The tools that move the session into or out of a worktree.
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
+// The tools a review seat's write guard looks at.
 const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
 // An absolute path ending -report.md, as a dispatch prompt spells it: not
 // begun inside a relative path, not ending before more of a name.
@@ -730,8 +731,13 @@ export const register: Register = on => {
     if (e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(tool)) {
       const denial = await judgeWriteDenial($, tool, e)
       if (denial !== null) {
-        const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line: denial }
-        await update($, refusals, list => [...list, refusal].slice(-20))
+        try {
+          const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line: denial }
+          await update($, refusals, list => [...list, refusal].slice(-20))
+        } catch {
+          // The refusal stands unlisted: the .catch below knows no judge
+          // that only $.agent.list() names.
+        }
         return { deny: denial }
       }
     }
@@ -4016,12 +4022,17 @@ function trimmedSpawns(list: CockpitSpawn[]): CockpitSpawn[] {
   })
 }
 
+// Windows is told from the roots: the engine names no platform.
+function isDriveHost(): boolean {
+  return [S.where.checkout, S.where.primary].some(dir => dir !== null && /^[A-Za-z]:\//.test(dir.replace(/\\/g, '/')))
+}
+
 // A `..` segment is refused, not resolved: `<dir>/x/../f` is not `<dir>/f`
 // when x is a symbolic link, which the guard cannot see.
 function canonPath(path: string): string | null {
   let rest = path.replace(/\\/g, '/')
   let drive = ''
-  const letter = /^\/([A-Za-z])\//.exec(rest) ?? /^([A-Za-z]):\//.exec(rest)
+  const letter = isDriveHost() ? (/^\/([A-Za-z])\//.exec(rest) ?? /^([A-Za-z]):\//.exec(rest)) : null
   if (letter !== null) {
     drive = `${(letter[1] ?? '').toLowerCase()}:`
     rest = rest.slice(2)
@@ -4032,7 +4043,7 @@ function canonPath(path: string): string | null {
   return `${drive}/${segments.join('/')}`
 }
 
-// Windows is told from the path itself: the engine names no platform.
+// Only a drive host spells a canonical path with a drive letter.
 function pathKey(canon: string): string {
   return /^[a-z]:\//.test(canon) ? canon.toLowerCase() : canon
 }
@@ -4058,8 +4069,11 @@ function reportPathsIn(prompt: string, roots: readonly string[]): string[] {
   return found
 }
 
-// The root is trusted; each path below it down to the target must not be a
-// symbolic link, and one that cannot be stat'ed does not exist yet.
+// The root is trusted as an existing directory; each path below it down to
+// the target must not be a symbolic link. A stat rejection means the path does
+// not exist only when its code is ENOENT, or, with no code, when the path
+// above it is a directory and not a link; any other rejection refuses. The
+// walk stops at the first missing path, as nothing below it exists.
 async function isNamedReport($: EngineInterface, target: string, allowed: readonly string[]): Promise<boolean> {
   const canon = canonPath(target)
   if (canon === null) return false
@@ -4072,8 +4086,17 @@ async function isNamedReport($: EngineInterface, target: string, allowed: readon
   const root = rootOf(canon, reviewRoots())
   if (root === undefined) return false
   const parts = canon.split('/')
+  let isAboveDir = true
   for (let at = root.split('/').length + 1; at <= parts.length; at++) {
-    if ((await $.fs.stat(parts.slice(0, at).join('/')).catch(() => null))?.isLink === true) return false
+    let info: Awaited<ReturnType<EngineInterface['fs']['stat']>>
+    try {
+      info = await $.fs.stat(parts.slice(0, at).join('/'))
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code
+      return typeof code === 'string' ? code === 'ENOENT' : isAboveDir
+    }
+    if (info.isLink === true) return false
+    isAboveDir = info.kind === 'dir'
   }
   return true
 }
