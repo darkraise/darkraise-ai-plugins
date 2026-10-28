@@ -199,6 +199,24 @@ Subagent ([JUDGE]):
     the section with `(<k> more Minor left out)` when you dropped any. Each
     Minor is carried to the final review's triage, which reads them all.
 
+    A Cannot verify item that asks a question the repository answers
+    mechanically takes one of two exact forms, which a script answers for
+    you without a seat:
+
+        - cannot-verify: exists <path|symbol> at <base|head>, expect <present|absent> — <why>
+        - cannot-verify: baseline <command>, expect <pass|fail> — <why>
+
+    `exists` asks whether a path, or a single-word symbol, is present at the
+    task's base or head commit; write the path or symbol without spaces.
+    `baseline` asks for the result of one command run verbatim, through
+    `bash -c`, at the task's base commit. `expect` names the answer the task
+    needs: `present` or `absent`; `pass` (exit 0) or `fail` (any other exit).
+    A matching answer is logged and closes the item; a mismatch becomes an
+    Important finding the implementer must fix. An item without `expect`
+    goes to the ruling seat as free text. Use these forms only for such
+    questions; every other item stays a one-line requirement and what to
+    check.
+
     ## Criteria
 
     Read the criteria file at [PLUGIN_ROOT]/criteria/task-review.md and score

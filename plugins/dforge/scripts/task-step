@@ -1098,6 +1098,96 @@ check_tracked() {
   echo "check tracked: clean"
 }
 
+# settle_item ITEM BASE HEAD LOG: answers one structured cannot-verify item.
+# Prints "<exists|baseline>\t<evidence>\t<match|mismatch>\t<check>, expect <answer>"
+# and returns 0; returns 1 for free text, an item without expect, a malformed
+# item, or a check that could not run.
+settle_item() {
+  local item=$1 base=$2 head=$3 log=$4 rest spec want got res target where sha hit ev cmd code
+  case $item in
+    'cannot-verify: exists '*' — '*)
+      rest=${item#cannot-verify: exists }
+      spec=${rest%% — *}
+      case $spec in *', expect '*) ;; *) return 1 ;; esac
+      want=${spec##*, expect }
+      spec=${spec%, expect *}
+      case $want in present | absent) ;; *) return 1 ;; esac
+      where=${spec##* at }
+      target=${spec% at *}
+      case $where in base) sha=$base ;; head) sha=$head ;; *) return 1 ;; esac
+      case $target in '' | *' '*) return 1 ;; esac
+      [ -n "$sha" ] || return 1
+      got=present
+      if git cat-file -e "$sha:$target" 2>/dev/null; then
+        ev="path present"
+      elif [[ $target == */* ]]; then
+        ev="path absent" got=absent
+      else
+        hit=$(git grep -nwF -e "$target" "$sha" 2>/dev/null | head -n 1 | tr -d '\r')
+        if [ -n "$hit" ]; then
+          ev=$(printf '%s\n' "${hit#"$sha":}" | awk -F: '{ print $1 ":" $2 }')
+        else
+          ev=absent got=absent
+        fi
+      fi
+      res=mismatch; [ "$got" != "$want" ] || res=match
+      printf 'exists\t%s\t%s\texists %s, expect %s\n' "$ev" "$res" "$spec" "$want" ;;
+    'cannot-verify: baseline '*' — '*)
+      rest=${item#cannot-verify: baseline }
+      spec=${rest%% — *}
+      case $spec in *', expect '*) ;; *) return 1 ;; esac
+      want=${spec##*, expect }
+      cmd=${spec%, expect *}
+      case $want in pass | fail) ;; *) return 1 ;; esac
+      [ -n "$cmd" ] && [ -n "$base" ] || return 1
+      code=$(run_at_base "$base" "$cmd" "$log") || return 1
+      got=fail; [ "$code" != 0 ] || got=pass
+      res=mismatch; [ "$got" != "$want" ] || res=match
+      printf 'baseline\texit %s, log %s\t%s\tbaseline %s, expect %s\n' "$code" "$log" "$res" "$cmd" "$want" ;;
+    *) return 1 ;;
+  esac
+}
+
+# settle_cannot_verify: do_verdict's helper. It answers a single task's
+# structured cannot-verify items and removes them from do_verdict's cvs array.
+# An answer that matches the item's expect is logged to the ledger. A mismatch
+# is never settled silently: it becomes an Important finding (file
+# cannot-verify, line 0) in do_verdict's $TMP/serious, flines and imp, so the
+# fix-file loop below writes it and the digest prints it. Free text, items
+# without expect and items it could not check reach the ruling seat. A kept
+# item loses its "cannot-verify: " prefix, which the digest line adds back.
+# The k-th baseline item writes task-N-baseline-k.log.
+settle_cannot_verify() {
+  local item out kind ev res label one line base head bk=0 j seen="" open=()
+  [ "$vgroup" -eq 0 ] || return 0
+  base=$(jq -r '.base // empty' "$vstate" | tr -d '\r')
+  head=$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')
+  for item in ${cvs[@]+"${cvs[@]}"}; do
+    case $item in 'cannot-verify: baseline '*) bk=$((bk + 1)) ;; esac
+    if out=$(settle_item "$item" "$base" "$head" "$ws/task-$first-baseline-$bk.log"); then
+      IFS=$'\t' read -r kind ev res label <<<"$out"
+      if [ "$res" = mismatch ]; then
+        one="$label — got $ev"
+        printf '%s\tImportant\tcannot-verify\t0\t%s\n' "$first" "$one" >> "$TMP/serious"
+        flines+=("Important $first cannot-verify:0 — $one")
+        imp=$((imp + 1))
+        continue
+      fi
+      line="Task $first: Ruling: cannot-verify — settled by task-step check $kind — $ev"
+      j=$(printf '%s' "$seen" | grep -cxF -- "$line" || true)
+      j=$((j + 1))
+      seen="$seen$line"$'\n'
+      if [ ! -f "$ledger" ] || [ "$(tr -d '\r' < "$ledger" | grep -cxF -- "$line")" -lt "$j" ]; then
+        ledger_init
+        printf '%s\n' "$line" >> "$ledger"
+      fi
+    else
+      open+=("${item#cannot-verify: }")
+    fi
+  done
+  cvs=(${open[@]+"${open[@]}"})
+}
+
 # verdict_val KEY: the value of the first Verdict line with that key, from
 # do_verdict's vals ("<key>\t<value>" entries).
 verdict_val() {
@@ -1205,6 +1295,7 @@ do_verdict() {
         ;;
     esac
   done <<<"$recs"
+  settle_cannot_verify
 
   if [ -s "$TMP/suite-findings" ]; then
     cat "$TMP/suite-findings" >> "$TMP/serious"
