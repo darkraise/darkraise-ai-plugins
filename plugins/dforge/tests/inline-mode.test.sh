@@ -162,8 +162,8 @@ present "final review routes the Claude seat" "$FINAL" '`scripts/review-route PL
 absent "final review drops the most capable model" "$FINAL" 'most capable'
 present "final review routes the fix subagent" "$FINAL" '`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]`'
 present "final review ledgers the fix subagent" "$FINAL" '`Final fix: implementer <agent> (assigned; base <sha7>)`'
-absent "subagent mode drops the most capable final seat" "$SDD" 'most capable available'
-absent "subagent mode drops the most capable final reviewer" "$SDD" 'final reviewer on the most capable model'
+absent "subagent mode drops the most capable final seat" <(sdd_text) 'most capable available'
+absent "subagent mode drops the most capable final reviewer" <(sdd_text) 'final reviewer on the most capable model'
 present "subagent ledger has the Final fix line" "$SDD_LEDGER" 'Final fix: implementer <agent> (assigned; base <sha7>)'
 present "subagent mode recovers a lost fix wave" "$SDD_LEDGER" 'A `Final fix:` line and no `Final review:` line'
 present "inline mode names the final seat" "$INLINE" '`scripts/review-route PLAN_FILE --final` prints'
@@ -204,7 +204,7 @@ for h in '## Contract' '## Seats' '## 1. Dispatch the implementer' '## 2. Handle
 done
 for h in '### 1. Dispatch the implementer' '### 2. Handle the report' '### 3. Review the task' \
          '### 4. The fix loop' '### 5. Complete the task'; do
-  check "subagent mode no longer holds: $h" "$(grep -cxF -- "$h" "$SDD")" "0"
+  check "subagent mode no longer holds: $h" "$(sdd_text | grep -cxF -- "$h")" "0"
 done
 present "subagent mode links the delegated loop" "$SDD" "../../reference/delegated-task.md"
 present "subagent mode defers per-task recovery" "$SDD_LEDGER" 'Apply [delegated-task.md](../../../reference/delegated-task.md) §Recovery'

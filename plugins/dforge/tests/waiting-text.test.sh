@@ -51,8 +51,8 @@ names "a Claude Code session ends the turn when only waiting remains" "$SDD" \
   'arrive on their own. When only waiting remains, end the turn: each completion'
 names "the prohibition is stated" "$SDD" 'Never wait with `Monitor`, `sleep` or a polling loop.'
 names "a notification turn starts with in-flight" "$SDD" 'On a turn that a notification started, run `scripts/in-flight` before'
-lacks "the bounded Monitor stretch is gone" "$SDD" 'a bounded stretch is a `Monitor`'
-lacks "the stretch advice is gone" "$SDD" 'wait in bounded stretches (five to ten'
+lacks "the bounded Monitor stretch is gone" <(sdd_text) 'a bounded stretch is a `Monitor`'
+lacks "the stretch advice is gone" <(sdd_text) 'wait in bounded stretches (five to ten'
 names "Codex keeps its stretches in the skill" "$SDD" 'On Codex, `wait_agent` covers the idle window instead, in bounded stretches,'
 lacks "the delegated loop no longer says wait in bounded stretches" "$DT" 'wait in bounded stretches'
 names "the delegated loop points at the waiting rule" "$DT" \

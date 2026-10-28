@@ -44,7 +44,7 @@ names "README: the last task completing is never a stop" "$P/README.md" 'The las
 names "subagent mode: the spec's Finish line replaces the question" "$SDD_SETUP" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
 names "inline mode: the spec's Finish line replaces the question" "$EP" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
 check "handoff: no spec-to-plan trigger is left" "$(grep -c 'spec-to-plan' "$H")" "0"
-for f in "$SDD" "$SDD_BUDGET" "$SDD_LEDGER" "$EP" "$H" "$FR"; do
+for f in "$SDD" "$SDD_BATCHING" "$SDD_BUDGET" "$SDD_EXAMPLE" "$SDD_FINISH_RULINGS" "$SDD_GRAPH" "$SDD_LEDGER" "$SDD_RATIONALE" "$SDD_RATIONALIZATIONS" "$SDD_RULING_SEAT" "$SDD_SETUP" "$EP" "$H" "$FR"; do
   check "${f#"$P"/} no longer hands off after --final" "$(tr '\n' ' ' < "$f" | tr -s ' ' | grep -cE -- '--final` (said|says) `handoff`')" "0"
 done
 

@@ -501,7 +501,7 @@ present "judge-sonnet-high reviews totals 0 to 3" "$P/agents/judge-sonnet-high.m
 present "judge-opus reviews totals 4 to 6" "$P/agents/judge-opus.md" 'totals 4 to 6'
 
 # --- risk3-spread is retired -----------------------------------------------------
-for f in "$P/skills/subagent-driven-development/SKILL.md" "$SDD_RULING_SEAT" "$SDD_LEDGER" "$SDD_GRAPH" \
+for f in "$P/skills/subagent-driven-development/SKILL.md" "$SDD_RULING_SEAT" "$SDD_LEDGER" "$SDD_GRAPH" "$SDD_BATCHING" "$SDD_BUDGET" "$SDD_EXAMPLE" "$SDD_FINISH_RULINGS" "$SDD_RATIONALE" "$SDD_RATIONALIZATIONS" "$SDD_SETUP" \
          "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
          "$P/skills/executing-plans/SKILL.md"; do
   absent "no risk3-spread in ${f#"$P/"}" "$f" 'risk3-spread'
