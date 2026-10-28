@@ -368,6 +368,9 @@ digest carries exactly one `suite:` line, read from the run §2 started:
   Every failing line that is not a base failure is in the fix file, however
   many; the digest shows the first 20 and then
   `suite: <k> more failing lines in <fix file>`.
+  Past round 2 `verdict` writes no fix file, and that line reads
+  `suite: <k> more failing lines in the suite log <log>`: the log holds every
+  failing line, base failures included.
 - `suite: not run (<command>)`: no run was recorded at the review head, and
   `verdict` exits 7 with no fix file. Run the suite (§2) at the review head
   and call `verdict` again.

@@ -1347,6 +1347,7 @@ suite_check() {
     return 0
   fi
   IFS=$'\t' read -r _ kind _ code log _ <<<"$row"
+  suite_log=$log
   if [ "$code" = 0 ]; then
     suite_state=pass suite_line="suite: pass ($kind)"
     return 0
@@ -1377,7 +1378,7 @@ do_verdict() {
   local n list vstate rpath mode check_line recs rc rec tag rest sev task file line one t r fix l nv i room nc budget
   local k is_req used nx
   local members=() fixes=() vlines=() flines=() cvs=() minors=() req=() vals=() extras=()
-  local crit=0 imp=0 minor=0 ns=0 suite_more=0 suite_fix=
+  local crit=0 imp=0 minor=0 ns=0 suite_more=0 suite_fix= suite_log=
   if [ "$vgroup" -eq 1 ]; then
     while IFS= read -r n; do members+=("$n"); done < <(printf '%s\n' "${ids[@]}" | sort -n -u)
     list=$(IFS=,; echo "${members[*]}")
@@ -1451,13 +1452,14 @@ do_verdict() {
       r=$(jq -r '.round // 0' "$vstate" | tr -d '\r')
     fi
     fix=$ws/task-$t-fix-$(( ${r:-0} + 1 )).md
-    [ "$t" != "${members[${#members[@]}-1]}" ] || suite_fix=$fix
     # Past round 2 the open findings go to the breaker, so no third fix file
     # invites a round that rereview refuses.
     if [ "${r:-0}" -ge 2 ]; then
+      [ "$t" != "${members[${#members[@]}-1]}" ] || suite_fix="the suite log $suite_log"
       fixes+=("breaker (round 2 of 2; $n finding$([ "$n" -eq 1 ] || echo s)$([ "$vgroup" -eq 0 ] || echo ", Task $t"))")
       continue
     fi
+    [ "$t" != "${members[${#members[@]}-1]}" ] || suite_fix=$fix
     awk -F'\t' -v t="$t" -v report="$rpath" '
       $1 == t { n++; sev[n] = $2; loc[n] = $3 ($4 == "0" ? "" : ":" $4); full[n] = $3 ":" $4; one[n] = $5 }
       END {
