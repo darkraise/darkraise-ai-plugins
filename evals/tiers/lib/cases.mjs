@@ -61,7 +61,7 @@ export function candidates(start) {
   return out;
 }
 
-function candidate(plan, task, headText, subjects, tmp) {
+export function candidate(plan, task, headText, subjects, tmp) {
   const messages = commitMessages(headText);
   if (messages.length !== 1) return { reason: `${messages.length} commit messages in the task` };
   const shas = subjects.get(messages[0]) ?? [];

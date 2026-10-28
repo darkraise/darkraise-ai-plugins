@@ -1,0 +1,13 @@
+case	plan	task	base	fixRounds
+p-ui-ux-skill-t2	docs/dforge/plans/2026-10-24-ui-ux-skill.md	2	5458aa069af01b4b7babd61b95e87732f7e0cb94	2
+p-ui-ux-skill-t8	docs/dforge/plans/2026-10-24-ui-ux-skill.md	8	1bd60234cb95d658ac9e46132c5e0977c9d687b2	0
+p-ui-ux-skill-t9	docs/dforge/plans/2026-10-24-ui-ux-skill.md	9	a11fa0b3797d70e3c67dcb09998bec1dd8a52b24	0
+p-ui-ux-skill-t10	docs/dforge/plans/2026-10-24-ui-ux-skill.md	10	4b47be59ac144debd7b054503a621281d3a0534f	0
+p-ui-ux-skill-t14	docs/dforge/plans/2026-10-24-ui-ux-skill.md	14	71a04226679813c9800d9fa59343122a2a2bff57	1
+p-faster-plans-t2	docs/dforge/plans/2026-10-26-faster-plans.md	2	0948351b71617e9f8acbc4cc87bc4b6424947891	0
+p-faster-plans-t3	docs/dforge/plans/2026-10-26-faster-plans.md	3	3d88cd5f9d923303c2d0b80d7106a26599894135	0
+p-faster-plans-t7	docs/dforge/plans/2026-10-26-faster-plans.md	7	4741a706c7405067d877f9bde6628d866c97f7e6	1
+p-faster-plans-t8	docs/dforge/plans/2026-10-26-faster-plans.md	8	56ca91659d58d082ebb7d45ef24eda94c8529fe7	1
+p-review-depth-t3	docs/dforge/plans/2026-10-27-review-depth.md	3	5db1c30bc3f428720b7e0b73c351115df769fce4	0
+p-review-depth-t4	docs/dforge/plans/2026-10-27-review-depth.md	4	5db1c30bc3f428720b7e0b73c351115df769fce4	0
+p-review-depth-t6	docs/dforge/plans/2026-10-27-review-depth.md	6	01200290b764b5e4890d4a557cce3e1f8261422b	1

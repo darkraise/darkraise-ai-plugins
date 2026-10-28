@@ -1,17 +1,28 @@
 #!/usr/bin/env node
 // Print the per-row decision table and the review-seat table as Markdown.
 // Usage: node evals/tiers/report.mjs [--rep N] [--pass P]
+//        node evals/tiers/report.mjs --pipeline [--rep N]
+// --pipeline prints the pipeline stage's pass^2, cost and median wall time per arm.
 // --pass reads the review grades of pass P and its repeat P + 1 (default 1).
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { SLICES, readManifest } from './lib/cases.mjs';
 import { decideReview, decideRow, decideSlices, graderDisagreements } from './lib/decide.mjs';
-import { GRADES, RESULTS, readTsv, scored } from './lib/results.mjs';
+import { summarize } from './lib/pipeline-report.mjs';
+import { GRADES, PIPELINE_RESULTS, RESULTS, readTsv, scored } from './lib/results.mjs';
 import { DATA } from './lib/sh.mjs';
 
-const { values } = parseArgs({ options: { rep: { type: 'string', default: '1' }, pass: { type: 'string', default: '1' } } });
+const { values } = parseArgs({ options: { rep: { type: 'string', default: '1' }, pass: { type: 'string', default: '1' }, pipeline: { type: 'boolean', default: false } } });
 const rep = values.rep;
+if (values.pipeline) {
+  const lines = [`# Pipeline eval - repetition ${rep}`, ''];
+  const arms = summarize(readTsv(PIPELINE_RESULTS).filter(r => r.rep === rep));
+  if (arms.length === 0) lines.push('No pipeline runs recorded.');
+  for (const a of arms) lines.push(`- \`${a.arm}\`: pass^2 ${a.pass2}/${a.cases}, cost $${a.cost.toFixed(2)}, median ${a.median}s`);
+  console.log(lines.join('\n'));
+  process.exit(0);
+}
 const pass = Number(values.pass);
 const arms = JSON.parse(readFileSync(resolve(DATA, 'arms.json'), 'utf8'));
 const { start, cases } = readManifest();

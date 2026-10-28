@@ -28,6 +28,8 @@ Run them from the repository root.
 | `node evals/tiers/grade-case.mjs RUN_DIR` | Re-grades a finished implementation run |
 | `node evals/tiers/grade-review.mjs CASE_ID ARM [--rep N] [--pass P]` | Grades one review against its rubric |
 | `node evals/tiers/report.mjs [--rep N] [--pass P]` | Prints the decision table, reading review grades of pass P |
+| `node evals/tiers/build-pipeline-manifest.mjs` | Golden-checks the tasks of the finished plans in `docs/dforge/plans/completed.md`, picks 12 (tasks with fix rounds first) and writes `cases/pipeline.tsv` |
+| `node evals/tiers/report.mjs --pipeline [--rep N]` | Prints pass^2, total cost and median wall time per pipeline arm from `results/pipeline.tsv` |
 | `node --test evals/tiers/tests/*.test.mjs` | The harness tests, against a stub `claude` |
 
 `run-grid.mjs` exits 0 when the stage is complete, 3 when it stopped at a
@@ -47,6 +49,7 @@ A manifest built before dforge 4.0.0 names a start commit without `plugins/dforg
 | `cases/excluded.tsv` | Every task left out, with the reason |
 | `cases/slices.tsv` | The slice cases; its first line pins its own start commit |
 | `cases/slices-excluded.tsv` | Every slice window left out, with the reason |
+| `cases/pipeline.tsv` | The 12 pipeline cases: case, plan, task, base commit and fix rounds |
 | `cases/reviews/cases.json` | The ten review cases |
 | `cases/reviews/<case>.md` | The known defects of one review case, one `## D<n>:` heading each |
 | `results/results.tsv` | One line per run |
