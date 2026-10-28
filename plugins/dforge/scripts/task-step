@@ -96,8 +96,97 @@ suite_failing_lines() {
   tr -d '\r' < "$1" | grep -E '^[[:space:]]*(not ok|\(fail\)|FAIL)' | cut -c1-200 | sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'
 }
 
-suite_base_lines() { # STEP_FILE N [DIR]
-  return 0
+# run_at_base BASE_SHA COMMAND OUT_LOG: runs COMMAND once at BASE_SHA in a
+# temporary detached worktree, after the plan header's **Worktree setup:**
+# command when it names one, through suite-run --timeout 600. Copies the run's
+# log to OUT_LOG and prints the command's exit code. Prints nothing, and
+# returns 1, when the worktree, its setup or the run's log is missing. The
+# header is read from $src, the amended plan, when the caller has one.
+run_at_base() {
+  local sha=$1 cmd=$2 out=$3 wt line setup="" run log code rc=1
+  if [ -n "${src:-}" ] && [ -f "$src" ]; then
+    line=$(plan_header_line "$src" 'Worktree setup')
+    setup=$(printf '%s' "${line#\*\*Worktree setup:\*\*}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^`(.*)`$/\1/')
+    [ "$setup" != none ] || setup=""
+  fi
+  wt=$(mktemp -d) || return 1
+  if command -v cygpath >/dev/null 2>&1; then wt=$(cygpath -m "$wt"); fi
+  if ! git worktree add --detach "$wt" "$sha" >/dev/null 2>&1; then
+    rm -rf "$wt"
+    echo "task-step: cannot create a worktree at ${sha:0:7}" >&2
+    return 1
+  fi
+  if [ -n "$setup" ] && ! (cd "$wt" && bash -c "$setup") >/dev/null 2>&1; then
+    echo "task-step: the worktree setup failed at ${sha:0:7}" >&2
+  else
+    run=$(cd "$wt" && bash "$HERE/suite-run" --timeout 600 -- bash -c "$cmd")
+    code=$?
+    log=$(printf '%s\n' "$run" | tr -d '\r' | sed -n 's/^log: //p' | tail -n 1)
+    if [ -n "$log" ] && [ -f "$log" ] && cp "$log" "$out"; then
+      printf '%s\n' "$code"
+      rc=0
+    fi
+  fi
+  git worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
+  git worktree prune >/dev/null 2>&1
+  return $rc
+}
+
+# suite_base_lines STEP_FILE N [DIR]: the base commit's failing lines for the
+# step file's suite command, one per line, nothing for a passing base. It
+# reuses a suites.tsv row at the base in the checkout's state (then DIR's),
+# then <workspace>/task-N-base-failures.txt, and only then runs the suite at
+# the base. A base run that cannot finish writes no file, so a later call tries
+# again, and every failing line counts as new meanwhile.
+suite_base_lines() {
+  local step=$1 n=$2 dir=${3:-} cmd base ws file row code log
+  cmd=$(jq -r '.suite // empty' "$step" | tr -d '\r')
+  base=$(jq -r '.base // empty' "$step" | tr -d '\r')
+  [ -n "$cmd" ] && [ -n "$base" ] || return 0
+  ws=$(dirname "$step")
+  file=$ws/task-$n-base-failures.txt
+  row=$(suite_row "$step" "$base")
+  [ -n "$row" ] || [ -z "$dir" ] || row=$(suite_row "$step" "$base" "$dir")
+  if [ -n "$row" ]; then
+    code=$(cut -f4 <<<"$row")
+    log=$(cut -f5 <<<"$row")
+    [ "$code" != 0 ] || return 0
+    if [ "$code" != 124 ] && [ -f "$log" ]; then
+      suite_failing_lines "$log" || true
+      return 0
+    fi
+  fi
+  if [ -f "$file" ]; then cat "$file"; return 0; fi
+  if ! code=$(run_at_base "$base" "$cmd" "$ws/task-$n-base.log") || [ "$code" = 124 ]; then
+    echo "task-step: no base run at ${base:0:7}; every failing line counts as new" >&2
+    return 0
+  fi
+  if [ "$code" = 0 ]; then
+    : > "$file"
+  else
+    suite_failing_lines "$ws/task-$n-base.log" > "$file" || true
+  fi
+  cat "$file"
+}
+
+# suite_gap STEP_FILE N SHA [DIR]: nothing when the step file records no suite
+# or SHA's suite row passes or fails with baseline lines only; otherwise "not
+# run" (no row) or "red".
+suite_gap() {
+  local step=$1 n=$2 sha=$3 dir=${4:-.} row log base_lines line k=0
+  [ -n "$(jq -r '.suite // empty' "$step" | tr -d '\r')" ] || return 0
+  row=$(suite_row "$step" "$sha" "$dir")
+  if [ -z "$row" ]; then echo "not run"; return 0; fi
+  [ "$(cut -f4 <<<"$row")" != 0 ] || return 0
+  log=$(cut -f5 <<<"$row")
+  if [ ! -f "$log" ]; then echo red; return 0; fi
+  base_lines=$(suite_base_lines "$step" "$n" "$dir")
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    k=$((k + 1))
+    if ! grep -qxF -- "$line" <<<"$base_lines"; then echo red; return 0; fi
+  done < <(suite_failing_lines "$log" || true)
+  [ "$k" -gt 0 ] || echo red
 }
 
 rr_usage() {
@@ -136,7 +225,7 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t scores row risk
   local fix bullets nopen file review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate check_dir snap
+  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate check_dir snap suite_why suite_dir
   local tasks=() base_arg="" head_arg="" covered=0
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
@@ -248,6 +337,12 @@ cmd_rereview() (
   elif [ "$touched" -ne 1 ]; then why="the fix does not touch $file"
   else skip=1
   fi
+  suite_why=""
+  if [ "$skip" -eq 1 ]; then
+    suite_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
+    suite_why=$(suite_gap "$state" "$first" "$head_sha" "$suite_dir")
+    if [ -n "$suite_why" ]; then skip=0 why="suite $suite_why"; fi
+  fi
 
   pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; exit 2; }
   diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
@@ -290,6 +385,7 @@ cmd_rereview() (
   else
     printf 'task %s: re-review round %s: packaged %s..%s, prompt written (not skipped: %s)\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}" "$why"
     printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
+    [ -z "$suite_why" ] || printf 're-review: not skipped (suite %s)\n' "$suite_why"
   fi
   printf 'state: base %s review-head %s round %s t0 %s\n' \
     "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
