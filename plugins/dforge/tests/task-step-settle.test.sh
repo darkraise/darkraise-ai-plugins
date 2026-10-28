@@ -65,6 +65,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 PLAN
 printf '#!/usr/bin/env bash\necho old\n' > "$REPO/lib/old.sh"
+printf 'see gone.md\n' > "$REPO/notes.txt"
 printf '#!/usr/bin/env bash\necho "not ok 1 - alpha"\nexit 1\n' > "$REPO/check.sh"
 g add -A && g commit -qm base
 
@@ -99,6 +100,7 @@ Fine.
 - cannot-verify: exists lib/new.sh at head, expect present — the brief names this file
 - cannot-verify: exists lib/old.sh at base, expect present — the brief says it predates the task
 - cannot-verify: exists lib/gone.sh at head, expect absent — the brief says it is removed
+- cannot-verify: exists ./gone.md at head, expect absent — a root file another file mentions
 - cannot-verify: exists compute_total at head, expect present — callers need the function
 - cannot-verify: exists no_such_symbol at head, expect present — the brief names a helper
 - cannot-verify: exists lib/old.sh at head, expect absent — the brief says the task removes it
@@ -118,7 +120,7 @@ cannot-verify: exists two words at head, expect present — a malformed target
 cannot-verify: exists lib/new.sh at head — an item without expect"
 LINE="Task 1: Ruling: cannot-verify — settled by task-step check"
 check "a present path" "$(ledger_count "$LINE exists — path present")" "2"
-check "a path absent at head" "$(ledger_count "$LINE exists — path absent")" "1"
+check "a path absent at head" "$(ledger_count "$LINE exists — path absent")" "2"
 check "a symbol's first hit" "$(ledger_count "$LINE exists — lib/new.sh:2")" "1"
 check "a missing symbol against expect present is not settled" "$(ledger_count "$LINE exists — absent")" "0"
 check "a baseline command" "$(ledger_count "$LINE baseline — exit 1, log $WS/task-1-baseline-1.log")" "1"
@@ -131,7 +133,7 @@ check "a mismatch names the fix file" "$(grep '^fix: ' <<<"$out")" "fix: $WS/tas
 check "the fix file's bullets" "$(first_block "$WS/task-1-fix-1.md")" \
   "- cannot-verify: exists no_such_symbol at head, expect present — got absent;- cannot-verify: exists lib/old.sh at head, expect absent — got path present;"
 ts verdict docs/plan.md 1
-check "a second verdict logs nothing twice" "$(grep -c 'settled by task-step check' "$LEDGER")" "5"
+check "a second verdict logs nothing twice" "$(grep -c 'settled by task-step check' "$LEDGER")" "6"
 
 # Free text alone goes to the seat as today, and nothing is run.
 cat > "$WS/task-1-review-report.md" <<'REPORT'

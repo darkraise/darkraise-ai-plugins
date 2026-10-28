@@ -207,7 +207,8 @@ Subagent ([JUDGE]):
         - cannot-verify: baseline <command>, expect <pass|fail> — <why>
 
     `exists` asks whether a path, or a single-word symbol, is present at the
-    task's base or head commit; write the path or symbol without spaces.
+    task's base or head commit; write the path or symbol without spaces, and
+    a file at the repository root as `./<name>` so it is read as a path.
     `baseline` asks for the result of one command run verbatim, through
     `bash -c`, at the task's base commit. `expect` names the answer the task
     needs: `present` or `absent`; `pass` (exit 0) or `fail` (any other exit).

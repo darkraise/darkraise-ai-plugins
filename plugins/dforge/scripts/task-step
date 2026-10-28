@@ -1118,7 +1118,7 @@ settle_item() {
       case $target in '' | *' '*) return 1 ;; esac
       [ -n "$sha" ] || return 1
       got=present
-      if git cat-file -e "$sha:$target" 2>/dev/null; then
+      if git cat-file -e "$sha:${target#./}" 2>/dev/null; then
         ev="path present"
       elif [[ $target == */* ]]; then
         ev="path absent" got=absent
