@@ -328,5 +328,54 @@ cannot-verify: baseline bash mark.sh prose 0, expect pass — a line that does n
 cannot-verify: baseline bash mark.sh task2-run 0, expect pass — a command only Task 2 names (command not named in the plan)"
 check "named: no temporary worktree is left" "$(g worktree list | wc -l | tr -d ' ')" "1"
 
+# A symbol that only a binary file holds is absent, and a root file written ./<name>
+# reads as a path when verdict runs from a subdirectory.
+printf '\n### Task 3: Three\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
+g add -A && g commit -qm "task 3 fixture"
+ts start docs/plan.md 3
+printf 'only_in_blob\0\0' > "$REPO/blob.bin"
+g add -A && g commit -qm "a binary file"
+ts review docs/plan.md 3
+cat > "$WS/task-3-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: exists only_in_blob at head, expect present — the symbol is named in the brief
+
+## Assessment
+Fine.
+REPORT
+ts verdict docs/plan.md 3
+check "binary: a symbol found only in a binary file is a mismatch, absent" "$rc $(grep '^Important ' <<<"$out")" \
+  "0 Important 3 cannot-verify:0 — exists only_in_blob at head, expect present — got absent"
+check "binary: no ledger line cites the binary file" "$(grep -c 'Binary file' "$LEDGER")" "0"
+cat > "$WS/task-3-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: exists ./notes.txt at head, expect present — a root file
+
+## Assessment
+Fine.
+REPORT
+out=$(cd "$REPO/lib" && bash "$S/task-step" verdict "$REPO/docs/plan.md" 3 2>"$TMP/err"); rc=$?
+check "subdirectory: ./notes.txt is a path, present at head" "$rc $(grep -cxF 'Task 3: Ruling: cannot-verify — settled by task-step check exists — path present' "$LEDGER")" "0 1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

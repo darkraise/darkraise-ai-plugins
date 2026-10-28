@@ -176,8 +176,9 @@ background Bash command from the checkout's top level (a wave task: from its
 the run by the quoted form `suite-run` records for that command, so a command
 typed differently, or run from a subdirectory, is never found. The report's
 `## Verified` section lists the focused tests the implementer ran; this run is
-the full suite. End the turn when only waiting remains, and run
-`task-step verdict` only once both the seat's report and the suite's
+the full suite. The last `## Verified` section of the report is the current
+evidence: a fix round appends its own. End the turn when only waiting remains,
+and run `task-step verdict` only once both the seat's report and the suite's
 completion notification are in. A suite still running at a handoff shows in
 `scripts/in-flight`, and the next session starts it again. A held task starts
 no suite now: its group's suite starts with the group review (§3a), and a
@@ -364,6 +365,9 @@ digest carries exactly one `suite:` line, read from the run §2 started:
   was cut short (exit 124, or 126 and up) adds the finding
   `suite: suite did not finish (exit <code>) at <head7>` whatever its partial
   log shows.
+  Every failing line that is not a base failure is in the fix file, however
+  many; the digest shows the first 20 and then
+  `suite: <k> more failing lines in <fix file>`.
 - `suite: not run (<command>)`: no run was recorded at the review head, and
   `verdict` exits 7 with no fix file. Run the suite (§2) at the review head
   and call `verdict` again.

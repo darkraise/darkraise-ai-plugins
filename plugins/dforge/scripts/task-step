@@ -1233,7 +1233,7 @@ settle_item() {
         ev="path absent" got=absent
       else
         # git grep exits 1 for no match and 141 when head closed the pipe on a hit.
-        hit=$(git grep -nwF -e "$target" "$sha" 2>/dev/null | head -n 1 | tr -d '\r'; exit "${PIPESTATUS[0]}")
+        hit=$(git grep -InwF -e "$target" "$sha" 2>/dev/null | head -n 1 | tr -d '\r'; exit "${PIPESTATUS[0]}")
         grc=$?
         case $grc in 0 | 1 | 141) ;; *) return 1 ;; esac
         if [ -n "$hit" ]; then
@@ -1327,7 +1327,8 @@ verdict_val() {
 
 # suite_check: reads the suite record for the review head and sets suite_state
 # (none|pass|red|notrun) and suite_line; the findings a red suite adds are
-# written to $TMP/suite-findings, one "task, severity, file, line, summary" row each.
+# written to $TMP/suite-findings, one "task, severity, file, line, summary" row
+# per new failing line, uncapped.
 suite_check() {
   local target st rh head7 row kind code log fails nfail nnew nbase line suite_cmd
   suite_state=none suite_line="suite: none recorded"
@@ -1364,19 +1365,19 @@ suite_check() {
   nnew=$(grep -c '' "$TMP/suite-new")
   nbase=$((nfail - nnew))
   suite_line="suite: red ($nnew failing, $nbase baseline)"
-  head -n 20 "$TMP/suite-new" | while IFS= read -r line; do
+  while IFS= read -r line; do
     case $line in
       'suite did not finish'*) printf '%s\tImportant\tsuite\t0\tsuite: %s at %s\n' "$target" "$line" "$head7" ;;
       *) printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line//$'\t'/ }" "$head7" ;;
     esac
-  done > "$TMP/suite-findings"
+  done < "$TMP/suite-new" > "$TMP/suite-findings"
 }
 
 do_verdict() {
   local n list vstate rpath mode check_line recs rc rec tag rest sev task file line one t r fix l nv i room nc budget
   local k is_req used nx
   local members=() fixes=() vlines=() flines=() cvs=() minors=() req=() vals=() extras=()
-  local crit=0 imp=0 minor=0
+  local crit=0 imp=0 minor=0 ns=0 suite_more=0 suite_fix=
   if [ "$vgroup" -eq 1 ]; then
     while IFS= read -r n; do members+=("$n"); done < <(printf '%s\n' "${ids[@]}" | sort -n -u)
     list=$(IFS=,; echo "${members[*]}")
@@ -1436,7 +1437,8 @@ do_verdict() {
     cat "$TMP/suite-findings" >> "$TMP/serious"
     while IFS=$'\t' read -r task sev file line one; do
       imp=$((imp + 1))
-      flines+=("$sev $task $file:$line — $one")
+      ns=$((ns + 1))
+      if [ "$ns" -le 20 ]; then flines+=("$sev $task $file:$line — $one"); else suite_more=$((suite_more + 1)); fi
     done < "$TMP/suite-findings"
   fi
 
@@ -1448,13 +1450,14 @@ do_verdict() {
     else
       r=$(jq -r '.round // 0' "$vstate" | tr -d '\r')
     fi
+    fix=$ws/task-$t-fix-$(( ${r:-0} + 1 )).md
+    [ "$t" != "${members[${#members[@]}-1]}" ] || suite_fix=$fix
     # Past round 2 the open findings go to the breaker, so no third fix file
     # invites a round that rereview refuses.
     if [ "${r:-0}" -ge 2 ]; then
       fixes+=("breaker (round 2 of 2; $n finding$([ "$n" -eq 1 ] || echo s)$([ "$vgroup" -eq 0 ] || echo ", Task $t"))")
       continue
     fi
-    fix=$ws/task-$t-fix-$(( ${r:-0} + 1 )).md
     awk -F'\t' -v t="$t" -v report="$rpath" '
       $1 == t { n++; sev[n] = $2; loc[n] = $3 ($4 == "0" ? "" : ":" $4); full[n] = $3 ":" $4; one[n] = $5 }
       END {
@@ -1523,6 +1526,7 @@ do_verdict() {
   fi
   printf 'findings: %s Critical, %s Important, %s Minor\n' "$crit" "$imp" "$minor"
   [ "${#flines[@]}" -eq 0 ] || printf '%s\n' "${flines[@]}"
+  [ "$suite_more" -eq 0 ] || printf 'suite: %s more failing lines in %s\n' "$suite_more" "$suite_fix"
   printf '%s\n' "$suite_line"
   # Every line but the finding lines fits in 20: the first, the verdict lines,
   # and the findings, suite, fix, minor, check and budget lines leave this many. A
