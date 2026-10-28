@@ -1071,8 +1071,8 @@ check "verdict, five members: one verdict line per member" "$(grep -c '^Task [0-
 check "verdict, five members: the last member's failing verdict is shown" \
   "$(grep '^Task 7: ' <<<"$gr_out")" "Task 7: spec fail; quality changes; scores spec 8 / scope 16 / verification 15 / quality 9"
 check "verdict, five members: the extra Verdict lines are cut" "$(grep -c '^note ' <<<"$gr_out") $(grep '^verdict: ' <<<"$gr_out")" "6 verdict: 2 more lines in the report"
-check "verdict, five members: the cannot-verify list is cut" "$(grep -c '^cannot-verify: (Task 6)' <<<"$gr_out")" "1"
-check "verdict, five members: and says how many it cut" "$(grep -c '^cannot-verify: 11 more in the report$' <<<"$gr_out")" "1"
+check "verdict, five members: the cannot-verify list is cut" "$(grep -c '^cannot-verify: (Task 6)' <<<"$gr_out")" "0"
+check "verdict, five members: and says how many it cut" "$(grep -c '^cannot-verify: 12 more in the report$' <<<"$gr_out")" "1"
 check "verdict, five members: at most 20 lines besides the finding lines" "$(grep -cvE '^(Critical|Important) ' <<<"$gr_out")" "20"
 
 # The re-review judge writes its report where the prompt says; a fresh round

@@ -6,7 +6,7 @@
 # <workspace>/task-<N>-step.json; a group review's in
 # <workspace>/group-<list>-step.json.
 #
-# Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset]
+# Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND]
 #        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR]
 #        task-step hold   PLAN_FILE N [--head REF] [--cwd DIR]
 #        task-step review --group PLAN_FILE N M ... [--cwd DIR]
@@ -20,14 +20,15 @@
 # review line or one already in a group's review rounds; 5 (verdict) the seat
 # wrote no report, or one outside the grammar; 6 a required earlier step has
 # not run, or (verdict) a tracked file changed during the review; 7 the fix
-# loop is at its two-round cap.
+# loop is at its two-round cap (rereview), or (verdict) the step file names a
+# suite command with no record at the review head.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
 
 # dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
@@ -63,6 +64,40 @@ tracked_snapshot() {
   dirty=$(dirty_list "$1") || return 1
   printf '%s' "$dirty" | jq -R -s -c --arg cwd "$1" --arg head "$head" \
     '{cwd: $cwd, head: $head, dirty: [split("\n")[] | select(. != "") | split("\t") | {path: .[0], hash: .[1]}]}'
+}
+
+# suite_key COMMAND: the key suite-run records for `suite-run -- bash -c COMMAND`
+# run from the top level: column 3 of suites.tsv.
+suite_key() {
+  local k
+  k=$(printf '%q ' bash -c "$1")
+  printf '%s\n' "${k% }"
+}
+
+# suite_row STEP_FILE SHA [DIR]: the last suites.tsv row whose HEAD is SHA and
+# whose command is the step file's `suite`, from the state directory of DIR
+# (default: the current directory). Prints nothing without a row or a suite.
+suite_row() {
+  local cmd sdir key
+  cmd=$(jq -r '.suite // empty' "$1" 2>/dev/null | tr -d '\r')
+  [ -n "$cmd" ] || return 0
+  sdir=$(cd "${3:-.}" && bash "$HERE/dforge-path" state | tr -d '\r') || return 0
+  [ -f "$sdir/suites.tsv" ] || return 0
+  key=$(suite_key "$cmd")
+  tr -d '\r' < "$sdir/suites.tsv" | RH=$2 K=$key awk -F'\t' '
+    $1 == ENVIRON["RH"] && $3 == ENVIRON["K"] { row = $0 }
+    END { if (row != "") print row }'
+}
+
+# suite_failing_lines LOG: the failing lines of a suite log, numbers dropped
+# from TAP "not ok" lines so the same test reads the same at two commits.
+suite_failing_lines() {
+  [ -f "$1" ] || return 0
+  tr -d '\r' < "$1" | grep -E '^[[:space:]]*(not ok|\(fail\)|FAIL)' | cut -c1-200 | sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'
+}
+
+suite_base_lines() { # STEP_FILE N [DIR]
+  return 0
 }
 
 rr_usage() {
@@ -275,11 +310,12 @@ if [ "$sub" = review ] && [ "$1" = --group ]; then
 fi
 plan_arg=$1; shift
 
-ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg=""
+ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg="" suite_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
     --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
+    --suite) [ "$sub" = start ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
     --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
     --head) [[ $sub =~ ^(review|hold)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
     --cwd) [[ $sub =~ ^(review|hold|group|verdict)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
@@ -513,6 +549,14 @@ do_start() {
     jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$base" --argjson wave "${wave:-null}" \
       '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null, wave: $wave}' > "$state.tmp" \
       && mv "$state.tmp" "$state"
+  fi
+
+  if [ -n "$suite_arg" ]; then
+    jq --arg s "$suite_arg" '.suite = $s' "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+    ledger_init
+    if [ "$(tr -d '\r' < "$ledger" | grep -cF 'Ruling: suite command —')" -eq 0 ]; then
+      printf 'Task %s: Ruling: suite command — %s — none\n' "$first" "$suite_arg" >> "$ledger"
+    fi
   fi
 
   if [ -z "$exec_id" ]; then
@@ -967,6 +1011,46 @@ verdict_val() {
   done
 }
 
+# suite_check: reads the suite record for the review head and sets suite_state
+# (none|pass|red|notrun) and suite_line; the findings a red suite adds are
+# written to $TMP/suite-findings, one "task, severity, file, line, summary" row each.
+suite_check() {
+  local target st rh head7 row kind code log fails nfail nnew nbase line suite_cmd
+  suite_state=none suite_line="suite: none recorded"
+  : > "$TMP/suite-findings"
+  target=${members[${#members[@]}-1]}
+  st=$ws/task-$target-step.json
+  [ -f "$st" ] || return 0
+  suite_cmd=$(jq -r '.suite // empty' "$st" | tr -d '\r')
+  [ -n "$suite_cmd" ] || return 0
+  if [ "$vgroup" -eq 1 ] && [ -n "$(jq -r '.wave // empty' "$st" | tr -d '\r')" ]; then return 0; fi
+  rh=$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')
+  head7=${rh:0:7}
+  row=$(suite_row "$st" "$rh" "${cwd_arg:-.}")
+  if [ -z "$row" ]; then
+    suite_state=notrun suite_line="suite: not run ($suite_cmd)"
+    return 0
+  fi
+  IFS=$'\t' read -r _ kind _ code log _ <<<"$row"
+  if [ "$code" = 0 ]; then
+    suite_state=pass suite_line="suite: pass ($kind)"
+    return 0
+  fi
+  suite_state=red
+  fails=$(suite_failing_lines "$log")
+  [ -n "$fails" ] || fails="command exit $code"
+  printf '%s\n' "$fails" > "$TMP/suite-fails"
+  suite_base_lines "$st" "$target" "${cwd_arg:-.}" > "$TMP/suite-base"
+  if [ -s "$TMP/suite-base" ]; then grep -vxF -f "$TMP/suite-base" "$TMP/suite-fails" > "$TMP/suite-new"; else cp "$TMP/suite-fails" "$TMP/suite-new"; fi
+  nfail=$(grep -c '' "$TMP/suite-fails")
+  nnew=$(grep -c '' "$TMP/suite-new")
+  nbase=$((nfail - nnew))
+  suite_line="suite: red ($nnew failing, $nbase baseline)"
+  head -n 20 "$TMP/suite-new" | while IFS= read -r line; do
+    printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line//$'\t'/ }" "$head7"
+  done > "$TMP/suite-findings"
+}
+
 do_verdict() {
   local n list vstate rpath mode check_line recs rc rec tag rest sev task file line one t r fix l nv i room nc budget
   local k is_req used nx
@@ -999,6 +1083,14 @@ do_verdict() {
   recs=$(parse_report "$rpath" "$mode" "$list" "$vgroup"); rc=$?
   [ "$rc" -eq 0 ] || die "$rpath: ${recs#E$'\t'}" 5
 
+  suite_check
+  if [ "$suite_state" = notrun ]; then
+    if [ "$vgroup" -eq 1 ]; then printf 'group %s: verdict from %s\n' "$list" "$rpath"
+    else printf 'task %s: verdict from %s\n' "$idlist" "$rpath"; fi
+    printf '%s\n' "$suite_line"
+    exit 7
+  fi
+
   : > "$TMP/serious"
   while IFS= read -r rec; do
     tag=${rec%%$'\t'*} rest=${rec#*$'\t'}
@@ -1017,6 +1109,14 @@ do_verdict() {
         ;;
     esac
   done <<<"$recs"
+
+  if [ -s "$TMP/suite-findings" ]; then
+    cat "$TMP/suite-findings" >> "$TMP/serious"
+    while IFS=$'\t' read -r task sev file line one; do
+      imp=$((imp + 1))
+      flines+=("$sev $task $file:$line — $one")
+    done < "$TMP/suite-findings"
+  fi
 
   for t in "${members[@]}"; do
     n=$(awk -F'\t' -v t="$t" '$1 == t { c++ } END { print c + 0 }' "$TMP/serious")
@@ -1101,10 +1201,11 @@ do_verdict() {
   fi
   printf 'findings: %s Critical, %s Important, %s Minor\n' "$crit" "$imp" "$minor"
   [ "${#flines[@]}" -eq 0 ] || printf '%s\n' "${flines[@]}"
+  printf '%s\n' "$suite_line"
   # Every line but the finding lines fits in 20: the first, the verdict lines,
-  # and the findings, fix, minor, check and budget lines leave this many. A
+  # and the findings, suite, fix, minor, check and budget lines leave this many. A
   # group too large for that still gets one line saying how many items wait.
-  room=$((20 - nv - 6))
+  room=$((20 - nv - 7))
   [ "$room" -ge 1 ] || room=1
   nc=${#cvs[@]}
   if [ "$nc" -le "$room" ]; then
