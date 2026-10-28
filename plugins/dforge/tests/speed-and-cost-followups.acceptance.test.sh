@@ -429,7 +429,8 @@ fi
 # ------------------------------------------------------------------ A16
 if selected A16; then
   mkdir -p "$TMP/xdg-host"
-  out=$(cd "$HERE" && XDG_STATE_HOME="$TMP/xdg-host" timeout 300 bash "$HERE/impl-stop-gate.test.sh" 2>&1); rc=$?
+  # As test-all runs it: this suite's MSYS_NO_PATHCONV would break its paths on Git Bash.
+  out=$(cd "$HERE" && env -u MSYS_NO_PATHCONV XDG_STATE_HOME="$TMP/xdg-host" timeout 300 bash "$HERE/impl-stop-gate.test.sh" 2>&1); rc=$?
   check "A16: impl-stop-gate.test.sh passes with XDG_STATE_HOME set in the calling environment" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
   check "A16: and writes nothing under it" "$(find "$TMP/xdg-host" -mindepth 1 | wc -l | tr -d ' ')" "0"
 fi
