@@ -28,7 +28,7 @@ checkout() { # checkout DIR — a repository with one committed plan, docs/p.md
 }
 
 checkout "$TMP/new"
-top=$(cd "$TMP/new" && pwd)
+top=$(git -C "$TMP/new" rev-parse --show-toplevel)
 dir=$(cd "$TMP/new" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
 check "new checkout: workspace" "${dir#"$top"}" "/.dforge/sdd/p"
 (cd "$TMP/new" && bash "$SCRIPTS/finish-choice" set pr --base main > /dev/null)
@@ -42,14 +42,14 @@ check "new checkout: an existing sdd ignore is kept" "$(cat "$TMP/new/.dforge/sd
 checkout "$TMP/linked"
 mkdir -p "$TMP/linked/.dforge/sdd" "$TMP/outside"
 ln -s "$TMP/outside/planted" "$TMP/linked/.dforge/sdd/.gitignore"
-top=$(cd "$TMP/linked" && pwd)
+top=$(git -C "$TMP/linked" rev-parse --show-toplevel)
 dir=$(cd "$TMP/linked" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
 check "linked ignore: workspace" "${dir#"$top"}" "/.dforge/sdd/p"
 check "linked ignore: never written through" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
 
 checkout "$TMP/old"
 mkdir -p "$TMP/old/.superpowers"
-top=$(cd "$TMP/old" && pwd)
+top=$(git -C "$TMP/old" rev-parse --show-toplevel)
 dir=$(cd "$TMP/old" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
 check "pre-3.0 checkout: workspace under .dforge" "${dir#"$top"}" "/.dforge/sdd/p"
 (cd "$TMP/old" && bash "$SCRIPTS/finish-choice" set pr --base main > /dev/null)
@@ -58,7 +58,7 @@ check "pre-3.0 checkout: .superpowers left to dforge-migrate" "$(ls -A "$TMP/old
 
 # A worktree resolves under its own root, as sdd-workspace always did.
 git -C "$TMP/old" worktree add -q -b wt "$TMP/wt"
-top=$(cd "$TMP/wt" && pwd)
+top=$(git -C "$TMP/wt" rev-parse --show-toplevel)
 dir=$(cd "$TMP/wt" && bash "$SCRIPTS/sdd-workspace" docs/p.md)
 check "worktree: workspace under the worktree" "${dir#"$top"}" "/.dforge/sdd/p"
 
