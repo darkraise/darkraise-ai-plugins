@@ -189,6 +189,9 @@ if [[ "\${args[\$i]}" =~ ^[0-9]+\$ ]] && [ "\${args[\$i]}" -ge 100 ]; then args[
 exec "$real_timeout" "\${args[@]}"
 SHIM
   chmod +x "$TMP/s7-shim/timeout"
+  # PATH takes the POSIX form: TMP's C:/… splits at its drive letter's colon.
+  SHIM_PATH=$TMP/s7-shim
+  if command -v cygpath >/dev/null 2>&1; then SHIM_PATH=$(cygpath -u "$SHIM_PATH"); fi
 
   # a baseline item whose setup runs past the bound
   ts start docs/plan.md 1
@@ -197,7 +200,7 @@ SHIM
   ts review docs/plan.md 1
   cv_report "$WS/task-1-review-report.md" "- cannot-verify: baseline bash check.sh, expect pass — does the check pass at the base"
   start=$(date +%s)
-  PATH="$TMP/s7-shim:$PATH" SUITE_RUN_KILL_AFTER=1 TS_LIMIT=100 ts verdict docs/plan.md 1
+  PATH="$SHIM_PATH:$PATH" SUITE_RUN_KILL_AFTER=1 TS_LIMIT=100 ts verdict docs/plan.md 1
   took=$(( $(date +%s) - start ))
   check "A7: a setup that sleeps past the bound does not hang a baseline item's verdict" "$rc $([ "$took" -lt 60 ] && echo prompt || echo slow)" "0 prompt"
   check "A7: the item goes to the seat, without the not-named label" "$(digest_cv)" "cannot-verify: baseline bash check.sh, expect pass — does the check pass at the base"

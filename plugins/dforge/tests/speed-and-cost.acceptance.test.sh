@@ -356,7 +356,7 @@ fi
 
 # ---------------------------------------------------------------- A9
 if selected A9; then
-  hooks=$(jq -r '.hooks.SubagentStop[0] | [.matcher, .hooks[0].command] | @tsv' "$PLUGIN/hooks/hooks.json" | tr -d '\r')
+  hooks=$(jq -r '.hooks.SubagentStop[0] | [.matcher, .hooks[0].command] | @tsv' < "$PLUGIN/hooks/hooks.json" | tr -d '\r')
   has "A9: hooks.json registers the gate on SubagentStop for impl agents" "$hooks" '(dforge:)?impl-.*'
   has "A9: and runs scripts/impl-stop-gate" "$hooks" 'scripts/impl-stop-gate'
 
@@ -452,7 +452,10 @@ if selected A11; then
     printf '#!/bin/sh\necho "%s $*" >> "%s"\nexit 0\n' "$tool" "$STUBLOG" > "$STUBS/$tool"
     chmod +x "$STUBS/$tool"
   done
-  PATH="$STUBS:$PATH" npm test >/dev/null 2>&1
+  # PATH takes the POSIX form: TMP's C:/… splits at its drive letter's colon.
+  STUBS_PATH=$STUBS
+  if command -v cygpath >/dev/null 2>&1; then STUBS_PATH=$(cygpath -u "$STUBS"); fi
+  PATH="$STUBS_PATH:$PATH" npm test >/dev/null 2>&1
   check "A11: the recording stubs work (control: npm is recorded)" "$(grep -c '^npm test' "$STUBLOG")" "1"
   : > "$STUBLOG"
 
@@ -463,7 +466,7 @@ if selected A11; then
   check "A11: the report is a 1,000-line file" "$([ "$(wc -l < "$TMP/reports/big.md")" -ge 1000 ] && echo yes || echo no)" "yes"
 
   OLDPATH=$PATH
-  export PATH="$STUBS:$OLDPATH"
+  export PATH="$STUBS_PATH:$OLDPATH"
   gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big.md")"
   check "A11: a complete 1,000-line report passes" "$grc" "0"
   gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big-bad.md")"
