@@ -656,8 +656,9 @@ in. `rereview` then skips only when the fix head's suite passes or fails with
 base failures only; otherwise it prints
 `re-review: not skipped (suite <red|not run>)` and writes the prompt as it
 does without `--covered`. A red fix-head suite can make `--covered` run the
-suite once at the base commit, which takes up to ten minutes: start
-`rereview --covered` as a background command and end the turn.
+suite once at the base commit, which takes up to an hour
+(`TASK_STEP_BASE_TIMEOUT`): start `rereview --covered` as a background
+command and end the turn.
 
 **After each round,** append to the ledger:
 `Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)`

@@ -7,6 +7,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 S="$P/scripts"
+DT="$P/reference/delegated-task.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -29,7 +30,7 @@ export SUITE_MARK="$TMP/marks"
 # The helpers run before task-step's rereview dispatch, which exits before any
 # later definition exists.
 dispatch=$(grep -n '^if \[ "\${1:-}" = rereview \]; then$' "$S/task-step" | head -n 1 | cut -d: -f1)
-for fn in suite_key suite_row suite_failing_lines suite_fail_set suite_unfinished suite_base_sha suite_base_lines run_at_base suite_gap; do
+for fn in suite_key suite_row suite_failing_lines suite_fail_set suite_unfinished suite_base_sha require_step_file suite_base_lines run_at_base suite_gap; do
   at=$(grep -n "^$fn() {" "$S/task-step" | head -n 1 | cut -d: -f1)
   check "$fn is defined before the rereview dispatch" "$([ -n "$at" ] && [ -n "$dispatch" ] && [ "$at" -lt "$dispatch" ] && echo yes || echo no)" "yes"
 done
@@ -303,6 +304,8 @@ clean_report 6
 ts verdict docs/plan.md 6
 check "task 6: no base run, no baseline" "$(grep '^suite: ' <<<"$out")" "suite: red (2 failing, 0 baseline)"
 check "task 6: the stderr says why" "$(grep -c 'no base run' <<<"$err") $(grep -c 'worktree setup failed' <<<"$err")" "1 1"
+check "task 6: the stderr names the setup log" "$(grep -cF "(log $WS/task-6-base.log.setup.log)" <<<"$err")" "1"
+check "task 6: the setup log is kept" "$([ -f "$WS/task-6-base.log.setup.log" ] && echo yes || echo no)" "yes"
 check "task 6: no file is kept, so the next verdict tries again" "$([ -e "$WS/task-6-base-failures.txt" ] && echo file || echo nofile)" "nofile"
 check "task 6: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
 
@@ -336,6 +339,22 @@ ts verdict docs/plan.md 7 8 --group
 check "group: a regression made by an earlier member is not baseline" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
 check "group: the finding is in the last member's fix file" "$(grep '^fix: ' <<<"$out")" "fix: $WS/task-8-fix-1.md (1 finding)"
 check "group: the fix file names the regression" "$(grep -cF regress "$WS/task-8-fix-1.md")" "2"
+
+# A step file that cannot be read is not "no suite recorded".
+cp "$WS/task-8-step.json" "$TMP/step8.bak"
+rm -f "$WS/task-8-step.json"
+ts verdict docs/plan.md 7 8 --group
+check "group: a missing last member's step file exits 6" "$rc $(grep -cF "cannot read $WS/task-8-step.json" <<<"$err") $(grep -c 'suite: none recorded' <<<"$out")" "6 1 0"
+printf '{not json\n' > "$WS/task-8-step.json"
+ts verdict docs/plan.md 7 8 --group
+check "group: an invalid last member's step file exits 6" "$rc $(grep -cF "cannot read $WS/task-8-step.json" <<<"$err") $(grep -c 'suite: none recorded' <<<"$out")" "6 1 0"
+cp "$TMP/step8.bak" "$WS/task-8-step.json"
+
+# rereview --base would move the group's comparison base, so a sequential
+# member refuses it.
+ts rereview docs/plan.md 8 --base "$(g rev-parse HEAD~1)"
+check "group: rereview --base on a sequential member exits 2" "$rc $(grep -cF -- '--base does not apply to a group member; see delegated-task.md §3a' <<<"$err")" "2 1"
+check "group: the refused rereview leaves the step file as it was" "$(cmp -s "$TMP/step8.bak" "$WS/task-8-step.json" && echo same || echo changed)" "same"
 
 # Task 9: a red suite whose failing lines are all baseline lets the task complete.
 set_failing $'not ok 1 - alpha\n'
@@ -400,6 +419,147 @@ unset TASK_STEP_BASE_TIMEOUT SUITE_RUN_KILL_AFTER
 check "task 12: a second verdict does not run the base again" "$(($(marks setup) - runs0)) $(grep '^suite: ' <<<"$out")" "1 suite: red (1 failing, 0 baseline)"
 check "task 12: the stderr says the base timed out" "$(grep -c 'timed out' <<<"$err")" "1"
 check "task 12: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
+# Tasks 13 to 18 join the fixture plan; Task 14 names the command its baseline item runs.
+for n in 13 14 15 16 17 18; do
+  printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$n" "$n"
+  [ "$n" != 14 ] || printf '\nRun: `bash suite.sh`\n'
+done >> "$REPO/docs/plan.md"
+set_setup() { # set_setup <command> — the plan header's Worktree setup
+  awk -v s="$1" '/^\*\*Worktree setup:\*\*/ { print "**Worktree setup:** `" s "`"; next } { print }' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" \
+    && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"
+}
+setup_runs() { grep -c . "$SUITE_MARK.setup" 2>/dev/null || true; }
+
+# Task 13: a Worktree setup that hangs is bounded, logged and not run again.
+set_setup 'echo hanging; echo ran >> "$SUITE_MARK.setup"; exec sleep 20'
+printf 'more\n' >> "$REPO/app.txt"
+commit "a setup that hangs"
+ts start docs/plan.md 13 --suite 'bash suite.sh'
+printf 'impl 13\n' >> "$REPO/app.txt"
+commit "work 13"
+sr
+ts review docs/plan.md 13
+clean_report 13
+plain0=$(marks plain)
+export TASK_STEP_BASE_TIMEOUT=1 SUITE_RUN_KILL_AFTER=1
+ts verdict docs/plan.md 13
+check "task 13: a hung setup excuses nothing" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+check "task 13: the timeout is recorded" "$([ -e "$WS/task-13-base-timeout" ] && echo marker || echo none)" "marker"
+check "task 13: the setup ran once and the suite never ran at the base" "$(setup_runs) $(($(marks plain) - plain0))" "1 0"
+check "task 13: the setup log holds its output" "$(cat "$WS/task-13-base.log.setup.log" 2>/dev/null)" "hanging"
+check "task 13: the base log is the setup log" "$(cmp -s "$WS/task-13-base.log" "$WS/task-13-base.log.setup.log" && echo same || echo differ)" "same"
+check "task 13: the stderr says the base timed out" "$(grep -c 'timed out' <<<"$err")" "1"
+ts verdict docs/plan.md 13
+unset TASK_STEP_BASE_TIMEOUT SUITE_RUN_KILL_AFTER
+check "task 13: a second verdict does not run the setup again" "$(setup_runs) $(($(marks plain) - plain0))" "1 0"
+check "task 13: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
+# Task 14: a baseline item whose setup times out goes to the seat, with the setup log kept.
+set_setup 'echo setup-124; echo ran >> "$SUITE_MARK.setup"; exit 124'
+commit "a setup that reports a timeout"
+ts start docs/plan.md 14
+printf 'impl 14\n' >> "$REPO/app.txt"
+commit "work 14"
+ts review docs/plan.md 14
+cat > "$WS/task-14-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: baseline bash suite.sh, expect fail — does the suite fail before the task
+
+## Assessment
+Fine.
+REPORT
+setup0=$(setup_runs)
+ts verdict docs/plan.md 14
+check "task 14: the item stays for the seat, without the not-named label" "$rc $(grep '^cannot-verify: ' <<<"$out")" \
+  "0 cannot-verify: baseline bash suite.sh, expect fail — does the suite fail before the task"
+check "task 14: the setup ran once" "$(($(setup_runs) - setup0))" "1"
+check "task 14: the setup log is kept beside the baseline log" "$(cat "$WS/task-14-baseline-1.log.setup.log" 2>/dev/null)" "setup-124"
+check "task 14: nothing is settled and nothing is a finding" "$(grep -c 'Task 14: Ruling: cannot-verify' "$WS/progress.md") $(grep '^findings: ' <<<"$out")" "0 findings: 0 Critical, 0 Important, 0 Minor"
+check "task 14: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
+# Task 15: a passing suites.tsv row at the base answers without a base run.
+set_setup 'touch setup.done'
+set_failing ''
+commit "green base for task 15"
+sr
+ts start docs/plan.md 15 --suite 'bash suite.sh'
+set_failing $'not ok 1 - delta\n'
+commit "work 15"
+sr
+ts review docs/plan.md 15
+clean_report 15
+setups0=$(marks setup)
+ts verdict docs/plan.md 15
+check "task 15: a passing base row leaves no baseline" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+check "task 15: no base run and no base failures file" "$(($(marks setup) - setups0)) $([ -e "$WS/task-15-base-failures.txt" ] && echo file || echo nofile)" "0 nofile"
+
+# Task 16: a base row that timed out is not an answer; the suite runs at the base.
+set_failing $'not ok 1 - alpha\n'
+commit "alpha fails at the base of task 16"
+: > "$REPO/slow.txt"
+sr_timeout
+rm -f "$REPO/slow.txt"
+ts start docs/plan.md 16 --suite 'bash suite.sh'
+set_failing $'not ok 1 - alpha\nnot ok 2 - beta\n'
+commit "work 16"
+sr
+ts review docs/plan.md 16
+clean_report 16
+setups0=$(marks setup)
+ts verdict docs/plan.md 16
+check "task 16: a timed-out base row falls through to a base run" "$rc $(grep '^suite: ' <<<"$out") $(($(marks setup) - setups0))" "0 suite: red (1 failing, 1 baseline) 1"
+check "task 16: the base run's failures are kept" "$(cat "$WS/task-16-base-failures.txt" 2>/dev/null)" "not ok - alpha"
+check "task 16: no timeout is recorded" "$([ -e "$WS/task-16-base-timeout" ] && echo marker || echo none)" "none"
+
+# Task 17: verdict --cwd finds the base row in that checkout's state when the main checkout's has none.
+set_failing $'not ok 1 - alpha\n'
+commit "alpha fails at the base of task 17"
+ts start docs/plan.md 17 --suite 'bash suite.sh'
+WT=$TMP/wt17
+g worktree add -q --detach "$WT" HEAD
+(cd "$WT" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1)
+printf 'not ok 1 - alpha\nnot ok 2 - beta\n' > "$WT/failing.txt"
+git -C "$WT" add -A && git -C "$WT" commit -qm "work 17"
+W17=$(git -C "$WT" rev-parse HEAD | tr -d '\r')
+(cd "$WT" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1)
+ts review docs/plan.md 17 --head "$W17" --cwd "$WT"
+clean_report 17
+setups0=$(marks setup)
+ts verdict docs/plan.md 17 --cwd "$WT"
+check "task 17: the base row in the --cwd checkout's state excuses alpha" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 1 baseline)"
+check "task 17: no base run and no base failures file" "$(($(marks setup) - setups0)) $([ -e "$WS/task-17-base-failures.txt" ] && echo file || echo nofile)" "0 nofile"
+g worktree remove --force "$WT"
+
+# Task 18: a wave task in a group, which carries a head ref, keeps rereview --base.
+ts start docs/plan.md 18
+printf 'impl 18\n' >> "$REPO/app.txt"
+commit "work 18"
+g branch t18-ref
+ts review docs/plan.md 18 --head t18-ref
+jq '.group = "18,19"' "$WS/task-18-step.json" > "$TMP/s18.json" && mv "$TMP/s18.json" "$WS/task-18-step.json"
+printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-18-fix-1.md"
+printf 'fix 18\n' >> "$REPO/app.txt"
+commit "fix 18"
+g branch -f t18-ref HEAD
+EARLIER=$(g rev-parse HEAD~2 | tr -d '\r')
+ts rereview docs/plan.md 18 --base "$EARLIER"
+check "task 18: rereview --base on a grouped wave task is accepted and recorded" "$rc $(jq -r '.base' "$WS/task-18-step.json" | tr -d '\r')" "0 $EARLIER"
+
+# Row 29: the stale ten-minute figure for a red fix-head suite is gone.
+dt=$(tr -d '\r' < "$DT" | tr '\n' ' ' | tr -s ' ')
+check "the doc says a base run under rereview --covered takes up to an hour" "$(grep -cF 'which takes up to an hour (`TASK_STEP_BASE_TIMEOUT`)' <<<"$dt")" "1"
+check "the doc no longer says it takes up to ten minutes" "$(grep -cF 'which takes up to ten minutes' <<<"$dt")" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

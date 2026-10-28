@@ -987,6 +987,7 @@ check "member rereview: records the round" "$(gr_state 1 .round)" "1"
 check "member rereview: records its review head" "$(gr_state 1 .reviewHead)" "$GR_F1"
 check "member rereview: the group records the latest review head" "$(jq -r .reviewHead "$GR_WS/group-$GL-step.json" | tr -d '\r')" "$GR_F1"
 gr_commit two.txt
+GR_F2=$(gr_git rev-parse HEAD)
 printf -- '- two.txt: stale\n\nFix it.\n' > "$GR_WS/task-2-fix-1.md"
 gr_run rereview docs/plan.md 2
 GRR2=$GR_WS/task-2-rereview-1-prompt.md
@@ -997,7 +998,9 @@ check "member rereview: the next member's fix diff leaves the earlier fix out" "
 gr_commit four.txt
 printf -- '- four.txt: off by one\n\nFix it.\n' > "$GR_WS/task-4-fix-1.md"
 gr_run rereview docs/plan.md 4 --base "$GR_H4"
-check "member rereview: --base <group review head> works for a member" "$gr_rc $(grep -c "Fix base:\*\* $GR_H4 " "$GR_WS/task-4-rereview-1-prompt.md")" "0 1"
+check "member rereview: --base is refused for a sequential member" "$gr_rc $(grep -cF -- '--base does not apply to a group member; see delegated-task.md §3a' <<<"$gr_err") $(gr_state 4 .round)" "2 1 0"
+gr_run rereview docs/plan.md 4
+check "member rereview: without --base the fix base is the last fix head" "$gr_rc $(grep -c "Fix base:\*\* $GR_F2 " "$GR_WS/task-4-rereview-1-prompt.md")" "0 1"
 
 # A group with a review round line is in its fix rounds: reviewing it again
 # would reset every member's round and lift the two-round cap.

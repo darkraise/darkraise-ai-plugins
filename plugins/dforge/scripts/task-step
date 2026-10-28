@@ -131,15 +131,23 @@ suite_base_sha() {
   printf '%s\n' "$base"
 }
 
+# require_step_file FILE: exits 6 unless FILE is valid JSON. Call it from the
+# shell that reads the step file: an exit inside $(…) leaves only that subshell.
+require_step_file() {
+  jq -e . "$1" >/dev/null 2>&1 || die "cannot read $1" 6
+}
+
 # run_at_base BASE_SHA COMMAND OUT_LOG [SECONDS]: runs COMMAND once at
 # BASE_SHA in a temporary detached worktree, after the plan header's
 # **Worktree setup:** command when it names one, through suite-run --timeout
-# SECONDS (default 600). Copies the run's
-# log to OUT_LOG and prints the command's exit code. Prints nothing, and
+# SECONDS (default 600). The setup is bounded by the same SECONDS and its
+# output is kept in OUT_LOG.setup.log. Copies the run's
+# log to OUT_LOG and prints the command's exit code; a setup that times out
+# prints 124 and returns 0, with the setup log as OUT_LOG. Prints nothing, and
 # returns 1, when the worktree, its setup or the run's log is missing. The
 # header is read from $src, the amended plan, when the caller has one.
 run_at_base() {
-  local sha=$1 cmd=$2 out=$3 secs=${4:-600} wt line setup="" run log code rc=1
+  local sha=$1 cmd=$2 out=$3 secs=${4:-600} wt line setup="" run log code scode=0 rc=1
   if [ -n "${src:-}" ] && [ -f "$src" ]; then
     line=$(plan_header_line "$src" 'Worktree setup')
     setup=$(printf '%s' "${line#\*\*Worktree setup:\*\*}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^`(.*)`$/\1/')
@@ -152,8 +160,18 @@ run_at_base() {
     echo "task-step: cannot create a worktree at ${sha:0:7}" >&2
     return 1
   fi
-  if [ -n "$setup" ] && ! (cd "$wt" && bash -c "$setup") >/dev/null 2>&1; then
-    echo "task-step: the worktree setup failed at ${sha:0:7}" >&2
+  if [ -n "$setup" ]; then
+    (cd "$wt" && timeout -k "${SUITE_RUN_KILL_AFTER:-10}" "$secs" bash -c "$setup" < /dev/null) > "$out.setup.log" 2>&1
+    scode=$?
+    [ "$scode" -ne 137 ] || scode=124
+  fi
+  if [ "$scode" -eq 124 ]; then
+    if cp "$out.setup.log" "$out"; then
+      printf '124\n'
+      rc=0
+    fi
+  elif [ "$scode" -ne 0 ]; then
+    echo "task-step: the worktree setup failed at ${sha:0:7} (log $out.setup.log)" >&2
   else
     run=$(cd "$wt" && bash "$HERE/suite-run" --timeout "$secs" -- bash -c "$cmd")
     code=$?
@@ -176,6 +194,7 @@ run_at_base() {
 # (default 3600). A base run that cannot start writes no file, so a later call
 # tries again; one that timed out leaves task-N-base-timeout, so a later call
 # does not run it again. Every failing line counts as new meanwhile.
+# STEP_FILE has passed require_step_file in the caller.
 suite_base_lines() {
   local step=$1 n=$2 dir=${3:-} cmd base ws file marker row code log
   cmd=$(jq -r '.suite // empty' "$step" | tr -d '\r')
@@ -219,7 +238,7 @@ suite_base_lines() {
 
 # suite_gap STEP_FILE N SHA [DIR]: nothing when the step file records no suite
 # or SHA's suite row passes or fails with baseline lines only; otherwise "not
-# run" (no row) or "red".
+# run" (no row) or "red". STEP_FILE has passed require_step_file in the caller.
 suite_gap() {
   local step=$1 n=$2 sha=$3 dir=${4:-.} row code log base_lines line
   [ -n "$(jq -r '.suite // empty' "$step" | tr -d '\r')" ] || return 0
@@ -318,6 +337,10 @@ cmd_rereview() (
     echo "task-step: rereview before review: run task-step review for task $first first" >&2
     exit 6
   fi
+  if [ -n "$base_arg" ] && [ -n "$(jq -r '.group // empty' "$state" | tr -d '\r')" ] && [ -z "$(jq -r '.head // empty' "$state" | tr -d '\r')" ]; then
+    echo "task-step: --base does not apply to a group member; see delegated-task.md §3a" >&2
+    exit 2
+  fi
   round=$(jq -r '.round // 0' "$state" | tr -d '\r')
   new_round=$((round + 1))
   if [ "$new_round" -gt 2 ]; then
@@ -387,6 +410,7 @@ cmd_rereview() (
   suite_why=""
   if [ "$skip" -eq 1 ]; then
     suite_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
+    require_step_file "$state"
     suite_why=$(suite_gap "$state" "$first" "$head_sha" "$suite_dir")
     if [ -n "$suite_why" ]; then skip=0 why="suite $suite_why"; fi
   fi
@@ -1310,7 +1334,7 @@ suite_check() {
   : > "$TMP/suite-findings"
   target=${members[${#members[@]}-1]}
   st=$ws/task-$target-step.json
-  [ -f "$st" ] || return 0
+  require_step_file "$st"
   suite_cmd=$(jq -r '.suite // empty' "$st" | tr -d '\r')
   [ -n "$suite_cmd" ] || return 0
   if [ "$vgroup" -eq 1 ] && [ -n "$(jq -r '.wave // empty' "$st" | tr -d '\r')" ]; then return 0; fi
