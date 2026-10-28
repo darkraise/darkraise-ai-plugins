@@ -29,6 +29,20 @@ const baseKnown = () => spawnSync('git', ['cat-file', '-e', `${BASE}^{commit}`],
 // purpose to point at the reference that now holds the table it names.
 const norm = s => s.replace(/\]\([^)]*\)/g, ']').replace(/\r/g, '').replace(/\s+/g, ' ').trim();
 const REWORDED = ['escalated inline -> subagent` ledger line, and the Recovery table below says what to do with it.'];
+// Sentences the main branch's "review light plans once" change removed or
+// reworded in writing-plans after BASE; the split cannot have lost them.
+const REMOVED = [
+  '- **Once the plan is reviewed** (at depth light, once it is linted):',
+  'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
+  "At depth light (step 1's line) skip `scripts/codex-gate`:",
+  'no seat runs, so run only `scripts/review-route PLAN_FILE --plan-round 1`.',
+  'Otherwise run `scripts/codex-gate` (say its line aloud when it ends `source=probe`), then `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the seat it prints, using [plan-reviewer-prompt.md].',
+  '- **`primary=none`** (`reason=depth-light`, round 1 of a light plan).',
+  'dispatch no seat, skip step 3, and record the skip in step 4.',
+  '1 at standard, so round 1 is the only round, and 0 at light, so none runs.',
+  'At depth light no review ran:',
+  'write `**Plan review:** <YYYY-MM-DD> — skipped (depth light)` in the same place, and `plan-lint` accepts it.',
+];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 
 for (const skill of SPLIT) {
@@ -42,7 +56,7 @@ for (const skill of SPLIT) {
     const hay = norm(now);
     const sentences = norm(old.replace(/\n\n/g, ' ¶ ')).split(/(?<=[.!?:]) |¶/).map(s => s.trim()).filter(s => s.length > 25);
     assert.ok(sentences.length > 100, `only ${sentences.length} sentences were read from the base skill`);
-    const lost = sentences.filter(s => !hay.includes(s) && !REWORDED.includes(s));
+    const lost = sentences.filter(s => !hay.includes(s) && !REWORDED.includes(s) && !REMOVED.includes(s));
     assert.deepEqual(lost, []);
   });
 }
