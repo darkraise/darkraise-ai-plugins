@@ -15,7 +15,7 @@ check() { # check <name> <got> <want>
 }
 flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
 says() { # says <label> <file> <text>
-  check "$1" "$(flat "$2" | grep -cF -- "$3")" "1"
+  check "$1" "$(flat "$2" | grep -oF -- "$3" | wc -l | tr -d ' ')" "1"
 }
 
 n=0

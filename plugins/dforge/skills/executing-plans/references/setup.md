@@ -25,10 +25,10 @@ file, not only in todos.
   THIS plan except its ledger and handoff note, which live in `<ledger dir>`.
   Another plan's directory is never yours to read or write.
 - This plan's ledger is `<ledger dir>/progress.md`. If its first line names your
-  plan file, recover each task's state with the Recovery table under The
-  Ledger. A ledger whose first line names a different plan - or a stray ledger
-  at the old flat path `<state>/sdd/progress.md` - is another plan's
-  progress: leave it in place and start your own, fresh.
+  plan file, recover each task's state with the Recovery table in
+  [recovery.md](recovery.md). A ledger whose first line names a different
+  plan - or a stray ledger at the old flat path `<state>/sdd/progress.md` - is
+  another plan's progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
   `# SDD ledger — plan: <plan name>` — `bash <plugin-root>/scripts/dforge-path name PLAN_FILE`,
   so the ledger names the plan in either store.

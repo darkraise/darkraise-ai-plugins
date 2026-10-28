@@ -44,7 +44,8 @@ never a silent skip.
 7. **Write the report** (format below) at
    `<docs>/ui-ux/proofs/<YYYY-MM-DD>-<slug>.md`.
 8. **Stamp it:** `bash <plugin-root>/scripts/ui-proof stamp <report>`.
-9. **Have it judged** (below), save the reply, and add the Judge line.
+9. **Have it judged** (below), copy its report beside the proof report as
+   `<report name>.judge.md`, and add the Judge line.
 10. **Check:** `bash <plugin-root>/scripts/ui-proof check --base <ref>`, adding
     `--spec <spec>` when the work has a contract. `<ref>` is the commit the
     work started from. Fix the UI or the proof until it exits 0.
@@ -142,8 +143,12 @@ Subagent (judge seat):
     exactly one line: "Verdict: ship [FINGERPRINT]" or "Verdict: fix [FINGERPRINT]".
 ```
 
-Its `[REPORT_FILE]` is `<report name>.judge.md` beside the report. When it
-returns, set the report header's `**Judge:** <ship|fix> <fingerprint> — <that file's repository path>`
-line, replacing any earlier one. On `fix`, correct what the judge disputes, then rerun
-from step 8. A judge file that does not end with the verdict line is
-re-dispatched once with that instruction repeated.
+Its `[REPORT_FILE]` is the absolute path
+`<checkout>/.dforge/ui-proof-<report name>-report.md`, where `<report name>`
+is the proof report's file name without `.md`: a judge seat may write only a
+`-report.md` file under `.dforge`. A judge report that does not end with the
+verdict line is re-dispatched once with that instruction repeated. When it
+returns ending with that line, copy that file to `<report name>.judge.md` beside the report,
+then set the report header's `**Judge:** <ship|fix> <fingerprint> — <the copy's repository path>`
+line, replacing any earlier one. On `fix`, correct what the judge disputes,
+then rerun from step 8.

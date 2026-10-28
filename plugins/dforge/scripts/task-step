@@ -131,15 +131,23 @@ suite_base_sha() {
   printf '%s\n' "$base"
 }
 
+# require_step_file FILE: exits 6 unless FILE is valid JSON. Call it from the
+# shell that reads the step file: an exit inside $(…) leaves only that subshell.
+require_step_file() {
+  jq -e . "$1" >/dev/null 2>&1 || die "cannot read $1" 6
+}
+
 # run_at_base BASE_SHA COMMAND OUT_LOG [SECONDS]: runs COMMAND once at
 # BASE_SHA in a temporary detached worktree, after the plan header's
 # **Worktree setup:** command when it names one, through suite-run --timeout
-# SECONDS (default 600). Copies the run's
-# log to OUT_LOG and prints the command's exit code. Prints nothing, and
+# SECONDS (default 600). The setup is bounded by the same SECONDS and its
+# output is kept in OUT_LOG.setup.log. Copies the run's
+# log to OUT_LOG and prints the command's exit code; a setup that times out
+# prints 124 and returns 0, with the setup log as OUT_LOG. Prints nothing, and
 # returns 1, when the worktree, its setup or the run's log is missing. The
 # header is read from $src, the amended plan, when the caller has one.
 run_at_base() {
-  local sha=$1 cmd=$2 out=$3 secs=${4:-600} wt line setup="" run log code rc=1
+  local sha=$1 cmd=$2 out=$3 secs=${4:-600} wt line setup="" run log code scode=0 rc=1
   if [ -n "${src:-}" ] && [ -f "$src" ]; then
     line=$(plan_header_line "$src" 'Worktree setup')
     setup=$(printf '%s' "${line#\*\*Worktree setup:\*\*}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^`(.*)`$/\1/')
@@ -152,8 +160,18 @@ run_at_base() {
     echo "task-step: cannot create a worktree at ${sha:0:7}" >&2
     return 1
   fi
-  if [ -n "$setup" ] && ! (cd "$wt" && bash -c "$setup") >/dev/null 2>&1; then
-    echo "task-step: the worktree setup failed at ${sha:0:7}" >&2
+  if [ -n "$setup" ]; then
+    (cd "$wt" && timeout -k "${SUITE_RUN_KILL_AFTER:-10}" "$secs" bash -c "$setup" < /dev/null) > "$out.setup.log" 2>&1
+    scode=$?
+    [ "$scode" -ne 137 ] || scode=124
+  fi
+  if [ "$scode" -eq 124 ]; then
+    if cp "$out.setup.log" "$out"; then
+      printf '124\n'
+      rc=0
+    fi
+  elif [ "$scode" -ne 0 ]; then
+    echo "task-step: the worktree setup failed at ${sha:0:7} (log $out.setup.log)" >&2
   else
     run=$(cd "$wt" && bash "$HERE/suite-run" --timeout "$secs" -- bash -c "$cmd")
     code=$?
@@ -176,6 +194,7 @@ run_at_base() {
 # (default 3600). A base run that cannot start writes no file, so a later call
 # tries again; one that timed out leaves task-N-base-timeout, so a later call
 # does not run it again. Every failing line counts as new meanwhile.
+# STEP_FILE has passed require_step_file in the caller.
 suite_base_lines() {
   local step=$1 n=$2 dir=${3:-} cmd base ws file marker row code log
   cmd=$(jq -r '.suite // empty' "$step" | tr -d '\r')
@@ -219,7 +238,7 @@ suite_base_lines() {
 
 # suite_gap STEP_FILE N SHA [DIR]: nothing when the step file records no suite
 # or SHA's suite row passes or fails with baseline lines only; otherwise "not
-# run" (no row) or "red".
+# run" (no row) or "red". STEP_FILE has passed require_step_file in the caller.
 suite_gap() {
   local step=$1 n=$2 sha=$3 dir=${4:-.} row code log base_lines line
   [ -n "$(jq -r '.suite // empty' "$step" | tr -d '\r')" ] || return 0
@@ -318,6 +337,10 @@ cmd_rereview() (
     echo "task-step: rereview before review: run task-step review for task $first first" >&2
     exit 6
   fi
+  if [ -n "$base_arg" ] && [ -n "$(jq -r '.group // empty' "$state" | tr -d '\r')" ] && [ -z "$(jq -r '.head // empty' "$state" | tr -d '\r')" ]; then
+    echo "task-step: --base does not apply to a group member; see delegated-task.md §3a" >&2
+    exit 2
+  fi
   round=$(jq -r '.round // 0' "$state" | tr -d '\r')
   new_round=$((round + 1))
   if [ "$new_round" -gt 2 ]; then
@@ -387,6 +410,7 @@ cmd_rereview() (
   suite_why=""
   if [ "$skip" -eq 1 ]; then
     suite_dir=$(jq -r '.reviewCheck.cwd // .heldCwd // empty' "$state" | tr -d '\r')
+    require_step_file "$state"
     suite_why=$(suite_gap "$state" "$first" "$head_sha" "$suite_dir")
     if [ -n "$suite_why" ]; then skip=0 why="suite $suite_why"; fi
   fi
@@ -1145,10 +1169,45 @@ check_tracked() {
   echo "check tracked: clean"
 }
 
+# plan_named_commands TASK STEP_FILE: the baseline commands the plan names for
+# TASK, one per line: the step file's suite command, the header's Integration
+# check, then the first code span of each of the task's Run: and **Check:**
+# lines outside fenced blocks. Reads $src, the amended plan. A suite command
+# with a newline is left out: a one-line item can never equal it.
+plan_named_commands() {
+  local n=$1 step=$2 suite line integ
+  suite=$(jq -r '.suite // empty' "$step" | tr -d '\r')
+  case $suite in '' | *$'\n'*) ;; *) printf '%s\n' "$suite" ;; esac
+  line=$(plan_header "$src" | plan_lines 'Integration check' | sed -n 1p)
+  integ=$(printf '%s' "${line#\*\*Integration check:\*\*}" | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//; s/^`(.*)`$/\1/')
+  [ -z "$integ" ] || printf '%s\n' "$integ"
+  # A lone * before a blank is a list marker, so the ** of **Check:** is never
+  # stripped. A span opened by a double backtick, unclosed, empty or closed by
+  # a double backtick names nothing.
+  plan_task_text "$src" "$n" | awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    {
+      rest = $0
+      while (match(rest, /^[ \t|]+/) || match(rest, /^([-*+]|[0-9]+[.)])[ \t]/)) rest = substr(rest, RLENGTH + 1)
+      if (index(rest, "Run:") == 1) rest = substr(rest, 5)
+      else if (index(rest, "**Check:**") == 1) rest = substr(rest, 11)
+      else next
+      i = index(rest, "`")
+      if (!i) next
+      rest = substr(rest, i + 1)
+      if (substr(rest, 1, 1) == "`") next
+      j = index(rest, "`")
+      if (!j || substr(rest, j + 1, 1) == "`") next
+      print substr(rest, 1, j - 1)
+    }
+  '
+}
+
 # settle_item ITEM BASE HEAD LOG: answers one structured cannot-verify item.
 # Prints "<exists|baseline>\t<evidence>\t<match|mismatch>\t<check>, expect <answer>"
 # and returns 0; returns 1 for free text, an item without expect, a malformed
-# item, or a check that could not run.
+# item or a check that could not run, and 2 for a baseline command the plan
+# does not name (a whole line of $named_file).
 settle_item() {
   local item=$1 base=$2 head=$3 log=$4 rest spec want got res target where sha hit ev cmd code grc
   case $item in
@@ -1174,7 +1233,7 @@ settle_item() {
         ev="path absent" got=absent
       else
         # git grep exits 1 for no match and 141 when head closed the pipe on a hit.
-        hit=$(git grep -nwF -e "$target" "$sha" 2>/dev/null | head -n 1 | tr -d '\r'; exit "${PIPESTATUS[0]}")
+        hit=$(git grep -InwF -e "$target" "$sha" 2>/dev/null | head -n 1 | tr -d '\r'; exit "${PIPESTATUS[0]}")
         grc=$?
         case $grc in 0 | 1 | 141) ;; *) return 1 ;; esac
         if [ -n "$hit" ]; then
@@ -1192,7 +1251,13 @@ settle_item() {
       want=${spec##*, expect }
       cmd=${spec%, expect *}
       case $want in pass | fail) ;; *) return 1 ;; esac
-      [ -n "$cmd" ] && [ -n "$base" ] || return 1
+      cmd=${cmd#"${cmd%%[![:blank:]]*}"}
+      cmd=${cmd%"${cmd##*[![:blank:]]}"}
+      [ -n "$cmd" ] || return 1
+      # The seat's text runs only when it is byte for byte a command the plan
+      # names, so a review seat cannot choose what runs on the controller host.
+      [ -n "${named_file:-}" ] && [ -r "$named_file" ] && LC_ALL=C grep -qxF -- "$cmd" "$named_file" || return 2
+      [ -n "$base" ] || return 1
       code=$(run_at_base "$base" "$cmd" "$log") || return 1
       # Only an exit the command itself produced answers pass or fail: a
       # timeout, a command that cannot run and one that is not found go to the seat.
@@ -1212,15 +1277,20 @@ settle_item() {
 # fix-file loop below writes it and the digest prints it. Free text, items
 # without expect and items it could not check reach the ruling seat. A kept
 # item loses its "cannot-verify: " prefix, which the digest line adds back.
+# A baseline item whose command the plan does not name (plan_named_commands)
+# is not run and is kept with " (command not named in the plan)" appended.
 # The k-th baseline item writes task-N-baseline-k.log.
 settle_cannot_verify() {
-  local item out kind ev res label one line base head bk=0 j seen="" open=()
+  local item out kind ev res label one line base head src_rc named_file bk=0 j seen="" open=()
   [ "$vgroup" -eq 0 ] || return 0
+  named_file=$TMP/named-commands
+  plan_named_commands "$first" "$vstate" > "$named_file"
   base=$(jq -r '.base // empty' "$vstate" | tr -d '\r')
   head=$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')
   for item in ${cvs[@]+"${cvs[@]}"}; do
     case $item in 'cannot-verify: baseline '*) bk=$((bk + 1)) ;; esac
-    if out=$(settle_item "$item" "$base" "$head" "$ws/task-$first-baseline-$bk.log"); then
+    out=$(settle_item "$item" "$base" "$head" "$ws/task-$first-baseline-$bk.log"); src_rc=$?
+    if [ "$src_rc" -eq 0 ]; then
       IFS=$'\t' read -r kind ev res label <<<"$out"
       if [ "$res" = mismatch ]; then
         one="$label — got $ev"
@@ -1237,6 +1307,8 @@ settle_cannot_verify() {
         ledger_init
         printf '%s\n' "$line" >> "$ledger"
       fi
+    elif [ "$src_rc" -eq 2 ]; then
+      open+=("${item#cannot-verify: } (command not named in the plan)")
     else
       open+=("${item#cannot-verify: }")
     fi
@@ -1255,14 +1327,15 @@ verdict_val() {
 
 # suite_check: reads the suite record for the review head and sets suite_state
 # (none|pass|red|notrun) and suite_line; the findings a red suite adds are
-# written to $TMP/suite-findings, one "task, severity, file, line, summary" row each.
+# written to $TMP/suite-findings, one "task, severity, file, line, summary" row
+# per new failing line, uncapped.
 suite_check() {
   local target st rh head7 row kind code log fails nfail nnew nbase line suite_cmd
   suite_state=none suite_line="suite: none recorded"
   : > "$TMP/suite-findings"
   target=${members[${#members[@]}-1]}
   st=$ws/task-$target-step.json
-  [ -f "$st" ] || return 0
+  require_step_file "$st"
   suite_cmd=$(jq -r '.suite // empty' "$st" | tr -d '\r')
   [ -n "$suite_cmd" ] || return 0
   if [ "$vgroup" -eq 1 ] && [ -n "$(jq -r '.wave // empty' "$st" | tr -d '\r')" ]; then return 0; fi
@@ -1274,6 +1347,7 @@ suite_check() {
     return 0
   fi
   IFS=$'\t' read -r _ kind _ code log _ <<<"$row"
+  suite_log=$log
   if [ "$code" = 0 ]; then
     suite_state=pass suite_line="suite: pass ($kind)"
     return 0
@@ -1292,19 +1366,19 @@ suite_check() {
   nnew=$(grep -c '' "$TMP/suite-new")
   nbase=$((nfail - nnew))
   suite_line="suite: red ($nnew failing, $nbase baseline)"
-  head -n 20 "$TMP/suite-new" | while IFS= read -r line; do
+  while IFS= read -r line; do
     case $line in
       'suite did not finish'*) printf '%s\tImportant\tsuite\t0\tsuite: %s at %s\n' "$target" "$line" "$head7" ;;
       *) printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line//$'\t'/ }" "$head7" ;;
     esac
-  done > "$TMP/suite-findings"
+  done < "$TMP/suite-new" > "$TMP/suite-findings"
 }
 
 do_verdict() {
   local n list vstate rpath mode check_line recs rc rec tag rest sev task file line one t r fix l nv i room nc budget
   local k is_req used nx
   local members=() fixes=() vlines=() flines=() cvs=() minors=() req=() vals=() extras=()
-  local crit=0 imp=0 minor=0
+  local crit=0 imp=0 minor=0 ns=0 suite_more=0 suite_fix= suite_log=
   if [ "$vgroup" -eq 1 ]; then
     while IFS= read -r n; do members+=("$n"); done < <(printf '%s\n' "${ids[@]}" | sort -n -u)
     list=$(IFS=,; echo "${members[*]}")
@@ -1364,7 +1438,8 @@ do_verdict() {
     cat "$TMP/suite-findings" >> "$TMP/serious"
     while IFS=$'\t' read -r task sev file line one; do
       imp=$((imp + 1))
-      flines+=("$sev $task $file:$line — $one")
+      ns=$((ns + 1))
+      if [ "$ns" -le 20 ]; then flines+=("$sev $task $file:$line — $one"); else suite_more=$((suite_more + 1)); fi
     done < "$TMP/suite-findings"
   fi
 
@@ -1376,13 +1451,15 @@ do_verdict() {
     else
       r=$(jq -r '.round // 0' "$vstate" | tr -d '\r')
     fi
+    fix=$ws/task-$t-fix-$(( ${r:-0} + 1 )).md
     # Past round 2 the open findings go to the breaker, so no third fix file
     # invites a round that rereview refuses.
     if [ "${r:-0}" -ge 2 ]; then
+      [ "$t" != "${members[${#members[@]}-1]}" ] || suite_fix="the suite log $suite_log"
       fixes+=("breaker (round 2 of 2; $n finding$([ "$n" -eq 1 ] || echo s)$([ "$vgroup" -eq 0 ] || echo ", Task $t"))")
       continue
     fi
-    fix=$ws/task-$t-fix-$(( ${r:-0} + 1 )).md
+    [ "$t" != "${members[${#members[@]}-1]}" ] || suite_fix=$fix
     awk -F'\t' -v t="$t" -v report="$rpath" '
       $1 == t { n++; sev[n] = $2; loc[n] = $3 ($4 == "0" ? "" : ":" $4); full[n] = $3 ":" $4; one[n] = $5 }
       END {
@@ -1451,6 +1528,7 @@ do_verdict() {
   fi
   printf 'findings: %s Critical, %s Important, %s Minor\n' "$crit" "$imp" "$minor"
   [ "${#flines[@]}" -eq 0 ] || printf '%s\n' "${flines[@]}"
+  [ "$suite_more" -eq 0 ] || printf 'suite: %s more failing lines in %s\n' "$suite_more" "$suite_fix"
   printf '%s\n' "$suite_line"
   # Every line but the finding lines fits in 20: the first, the verdict lines,
   # and the findings, suite, fix, minor, check and budget lines leave this many. A

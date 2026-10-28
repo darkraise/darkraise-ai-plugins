@@ -56,6 +56,8 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Implementer:** dforge:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
+|Run: `bash check.sh`
+|
 |### Task 2: Two
 |
 |**Files:**
@@ -63,6 +65,9 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |
 |**Implementer:** dforge:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|Run: `bash check.sh`
+|Run: `no_such_command_zz`
 PLAN
 printf '#!/usr/bin/env bash\necho old\n' > "$REPO/lib/old.sh"
 printf 'see gone.md\n' > "$REPO/notes.txt"
@@ -215,6 +220,162 @@ check "an unrunnable baseline command and an unknown base commit are left for th
   "cannot-verify: baseline no_such_command_zz, expect fail — the brief says the command fails
 cannot-verify: exists lib/old.sh at base, expect absent — the brief says it is new"
 check "neither is settled or a finding" "$(grep -c 'settled by task-step check' "$LEDGER") $(grep '^findings: ' <<<"$out")" "$settled findings: 0 Critical, 0 Important, 0 Minor"
+
+# A baseline command runs only when the plan names it for the task being
+# settled; every marker file below is made by a command that ran.
+MARK_DIR="$TMP/marks"
+mkdir -p "$MARK_DIR" "$TMP/marks-sr"
+export MARK_DIR
+printf '#!/usr/bin/env bash\n: > "$MARK_DIR/$1"\nexit "${2:-0}"\n' > "$REPO/mark.sh"
+sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
+|# Named Commands Fixture Plan
+|
+|**Goal:** Fixture.
+|
+|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|
+|**Integration check:** `bash mark.sh integ 0`
+|
+|## Task index
+|
+|1. One
+|2. Two
+|
+|### Task 1: One
+|
+|**Files:**
+|- Modify: `lib/new.sh`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|Run: `bash mark.sh run-first 0` and then `bash mark.sh second-span 0`
+|- Run: `bash mark.sh run-list 0`
+|Run: `bash mark.sh timed 124`
+|Run: ``bash mark.sh dbl 0``
+|Afterwards run: `bash mark.sh prose 0`
+|**Check:** `bash mark.sh check 0` prints nothing.
+|
+|```bash
+|bash mark.sh fenced 0
+|Run: `bash mark.sh fenced-run 0`
+|```
+|
+|### Task 2: Two
+|
+|**Files:**
+|- Modify: `lib/new.sh`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|Run: `bash mark.sh task2-run 0`
+PLAN
+g add -A && g commit -qm "named commands fixture"
+ts start docs/named.md 1 --suite 'bash mark.sh suite 0'
+NWS=$(winpath "$(cd "$REPO" && bash "$S/sdd-workspace" docs/named.md)")
+NLEDGER="$NWS/progress.md"
+printf '#!/usr/bin/env bash\ncompute_total() {\n  echo 3\n}\n' > "$REPO/lib/new.sh"
+g add -A && g commit -qm "named work"
+(cd "$REPO" && MARK_DIR="$TMP/marks-sr" bash "$S/suite-run" -- bash -c 'bash mark.sh suite 0' >/dev/null 2>&1)
+ts review docs/named.md 1
+check "named: review exits 0" "$rc" "0"
+cat > "$NWS/task-1-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: baseline bash mark.sh run-first 0, expect pass — the first span of a Run line
+- cannot-verify: baseline  bash mark.sh run-list 0 , expect pass — a listed Run line, padded with spaces
+- cannot-verify: baseline bash mark.sh check 0, expect pass — a Check line
+- cannot-verify: baseline bash mark.sh integ 0, expect pass — the Integration check
+- cannot-verify: baseline bash mark.sh suite 0, expect pass — the recorded suite command
+- cannot-verify: baseline bash mark.sh timed 124, expect pass — a plan-named command that exits 124
+- cannot-verify: baseline bash mark.sh nowhere 0, expect pass — a command the plan never names
+- cannot-verify: baseline bash mark.sh run-first 0; bash mark.sh appended 0, expect pass — a named command with more after it
+- cannot-verify: baseline bash mark.sh fenced 0, expect pass — a line of a fenced block
+- cannot-verify: baseline bash mark.sh fenced-run 0, expect pass — a Run line inside a fenced block
+- cannot-verify: baseline bash mark.sh second-span 0, expect pass — the second span of a Run line
+- cannot-verify: baseline bash mark.sh dbl 0, expect pass — a double-backtick span
+- cannot-verify: baseline bash mark.sh prose 0, expect pass — a line that does not begin with Run:
+- cannot-verify: baseline bash mark.sh task2-run 0, expect pass — a command only Task 2 names
+
+## Assessment
+Fine.
+REPORT
+ts verdict docs/named.md 1
+check "named: verdict exits 0" "$rc" "0"
+check "named: only plan-named commands ran" "$(ls "$MARK_DIR" | sort | tr '\n' ' ')" "check integ run-first run-list suite timed "
+check "named: the five settled items are logged, the rest add no ledger line" "$(grep -c 'settled by task-step check baseline' "$NLEDGER")" "5"
+check "named: the suite command's item is settled with its own log" "$(grep -cxF "Task 1: Ruling: cannot-verify — settled by task-step check baseline — exit 0, log $NWS/task-1-baseline-5.log" "$NLEDGER")" "1"
+check "named: a command that is not plan-named is no finding" "$(grep '^findings: ' <<<"$out")" "findings: 0 Critical, 0 Important, 0 Minor"
+check "named: unnamed commands carry the label, a named command that exits 124 does not" "$(grep '^cannot-verify: ' <<<"$out")" \
+  "cannot-verify: baseline bash mark.sh timed 124, expect pass — a plan-named command that exits 124
+cannot-verify: baseline bash mark.sh nowhere 0, expect pass — a command the plan never names (command not named in the plan)
+cannot-verify: baseline bash mark.sh run-first 0; bash mark.sh appended 0, expect pass — a named command with more after it (command not named in the plan)
+cannot-verify: baseline bash mark.sh fenced 0, expect pass — a line of a fenced block (command not named in the plan)
+cannot-verify: baseline bash mark.sh fenced-run 0, expect pass — a Run line inside a fenced block (command not named in the plan)
+cannot-verify: baseline bash mark.sh second-span 0, expect pass — the second span of a Run line (command not named in the plan)
+cannot-verify: baseline bash mark.sh dbl 0, expect pass — a double-backtick span (command not named in the plan)
+cannot-verify: baseline bash mark.sh prose 0, expect pass — a line that does not begin with Run: (command not named in the plan)
+cannot-verify: baseline bash mark.sh task2-run 0, expect pass — a command only Task 2 names (command not named in the plan)"
+check "named: no temporary worktree is left" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
+# A symbol that only a binary file holds is absent, and a root file written ./<name>
+# reads as a path when verdict runs from a subdirectory.
+printf '\n### Task 3: Three\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
+g add -A && g commit -qm "task 3 fixture"
+ts start docs/plan.md 3
+printf 'only_in_blob\0\0' > "$REPO/blob.bin"
+g add -A && g commit -qm "a binary file"
+ts review docs/plan.md 3
+cat > "$WS/task-3-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: exists only_in_blob at head, expect present — the symbol is named in the brief
+
+## Assessment
+Fine.
+REPORT
+ts verdict docs/plan.md 3
+check "binary: a symbol found only in a binary file is a mismatch, absent" "$rc $(grep '^Important ' <<<"$out")" \
+  "0 Important 3 cannot-verify:0 — exists only_in_blob at head, expect present — got absent"
+check "binary: no ledger line cites the binary file" "$(grep -c 'Binary file' "$LEDGER")" "0"
+cat > "$WS/task-3-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: exists ./notes.txt at head, expect present — a root file
+
+## Assessment
+Fine.
+REPORT
+out=$(cd "$REPO/lib" && bash "$S/task-step" verdict "$REPO/docs/plan.md" 3 2>"$TMP/err"); rc=$?
+check "subdirectory: ./notes.txt is a path, present at head" "$rc $(grep -cxF 'Task 3: Ruling: cannot-verify — settled by task-step check exists — path present' "$LEDGER")" "0 1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -18,7 +18,7 @@ back. Before anything else:
    and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
    directory it prints: while progress lives in darkmem the two differ.
 2. Trust the ledger and `git log` over the summary. For each task the last
-   ledger line decides; see the Recovery table under The Ledger.
+   ledger line decides; see the Recovery table in [recovery.md](references/recovery.md).
 3. When every task has its `complete` line, run `scripts/context-size --final`
    and go on to the final review or finishing whatever it prints: the final
    phase never hands off. In an auto run it also moves the run to the final

@@ -185,14 +185,14 @@ check "plan reviewer: both reports open with the Verdict section" "$(grep -cE '^
 check "plan reviewer: both carry the scores key" "$(count_of "$PRP" 'scores: executability <1-20> / coherence <1-20> / coverage <1-20> / assumptions <1-20>')" "2"
 check "plan reviewer: both carry the finding grammar" "$(count_of "$PRP" '- [Critical|Important|Minor] <file>:<line> — <one-liner>')" "2"
 check "plan reviewer: the prior findings section" "$(grep -cE '^ *## Prior findings$' "$PRP")" "1"
-names "plan reviewer: the report file placeholder" "$PRP" '`[REPORT_FILE]` - REQUIRED: `<workspace>/plan-review-round-<r>.md`'
+names "plan reviewer: the report file placeholder" "$PRP" '`[REPORT_FILE]` - REQUIRED: `<workspace>/plan-review-round-<r>-report.md`'
 lacks "plan reviewer: no longer forbids modifying files" "$PRP" 'You cannot run commands, modify files, or dispatch subagents.'
 check "plan reviewer: the seat writes only its report, and change 3 quotes that line" \
   "$(count_of "$PRP" 'You cannot run commands or dispatch subagents, and you write only the report file.')" "3"
 lacks "writing-plans: the controller no longer saves the reply" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'save its reply to'
 lacks "writing-plans: nor saves each native reply" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'saving each'
-names "writing-plans: round 1 names the report file" "$P/skills/writing-plans/references/lint-and-review.md" '`[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`'
-names "writing-plans: later rounds name the report file" "$P/skills/writing-plans/references/lint-and-review.md" '`[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`'
+names "writing-plans: round 1 names the report file" "$P/skills/writing-plans/references/lint-and-review.md" '`[REPORT_FILE]` set to `<workspace>/plan-review-round-1-report.md`'
+names "writing-plans: later rounds name the report file" "$P/skills/writing-plans/references/lint-and-review.md" '`[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>-report.md`'
 names "critic: names the report file" "$CP" 'Write your full report to [REPORT_FILE] and write nothing else'
 names "critic: caps the reply" "$CP" 'Then reply in at most 10 lines'
 check "critic: the report opens with the Verdict section" "$(grep -cE '^ *## Verdict$' "$CP")" "1"
@@ -226,7 +226,7 @@ names "code reviewer: the finding grammar" "$CR" '- [Critical|Important|Minor] <
 names "code reviewer: the report file placeholder" "$CR" '`[REPORT_FILE]` — REQUIRED'
 names "requesting review: the report file beside the diff" "$RCR" 'REPORT_FILE="$STATE_DIR/review-$(git rev-parse --short "$HEAD_SHA")-report.md"'
 names "final review: the reviewer's report file" "$FR" '`[REPORT_FILE]` set to `<workspace>/final-review-report.md`'
-names "final review: lens seats write their report" "$FR" 'each lens seat writes its report to `<workspace>/lens-<id>.md`'
+names "final review: lens seats write their report" "$FR" 'each lens seat writes its report to `<workspace>/lens-<id>-report.md`'
 names "final review: the lens finding grammar" "$FR" '- [Critical|Important|Minor] <file>:<line> — [lens:<id>] <one-liner>'
 names "final review: the dedupe report file" "$FR" '`<workspace>/final-dedupe-report.md`'
 check "final review: the lens and dedupe seats cap their reply" "$(count_of "$FR" 'write nothing else, and reply in at most 10 lines')" "2"
@@ -252,6 +252,33 @@ names "approaches: the ranking's report file" "$SA" '`<state>/approaches-<decisi
 lacks "README: the judges are no longer described as Write-free" "$RM" 'frontmatter omits `Edit`, `Write`, and `Agent`'
 names "README: a judge writes only its report file" "$RM" 'a judge writes only its report file'
 names "native Codex: a judge writes only its report file" "$P/reference/native-codex.md" 'no file writes except the one report file the prompt names'
+
+# The cockpit's write guard lets a judge seat write only a path ending
+# `-report.md`, so every report path a judge dispatch names must end that way.
+# bad_report_paths FILE... - "FAIL <file>: <path>" per backticked path that does not
+bad_report_paths() {
+  local f t
+  for f in "$@"; do
+    grep -iE 'REPORT_FILE|report to|report file' "$f" | grep -oE '`[^`]*`' | tr -d '`' \
+      | grep -E '/.*\.md$' | grep -vE -- '-report\.md$' \
+      | while IFS= read -r t; do printf 'FAIL %s: %s\n' "${f#"$P"/}" "$t"; done
+  done
+}
+JUDGE_TEMPLATES=(
+  "$P/skills/writing-plans/references/lint-and-review.md" "$PRP"
+  "$FR" "$DT" "$AR" "$WT"
+  "$RRP" "$GRP" "$RULP" "$P/skills/subagent-driven-development/references/ruling-seat.md" "$TRP"
+  "$P/skills/executing-plans/references/ruling-seat.md"
+  "$CR" "$RCR" "$DJ" "$SJ" "$CM" "$SA"
+  "$P/skills/brainstorming/references/architecture-critic.md" "$CP"
+)
+check "judge templates: every report path ends -report.md" "$(bad_report_paths "${JUDGE_TEMPLATES[@]}")" ""
+sed 's|lens-<id>-report\.md|lens-<id>.md|' "$FR" > "$TMP/final-review.md"
+check "judge templates: the sweep flags a report path the guard refuses" \
+  "$(bad_report_paths "$TMP/final-review.md" | grep -c '^FAIL .*: <workspace>/lens-<id>\.md$')" "1"
+names "walkthrough judge: the report file lies under .dforge" "$WT" '`<checkout>/.dforge/ui-proof-<report name>-report.md`'
+names "walkthrough: the controller copies the report beside the proof" "$WT" 'copy that file to `<report name>.judge.md` beside the report'
+lacks "requesting review: the example report file is absolute" "$RCR" 'REPORT_FILE: .dforge/'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -23,8 +23,9 @@ export function finishedPlans(text) {
 // follows it is the final review's fixes. This approximates the fix rounds the
 // ledger counted, which survive only on the machine that ran the plan.
 export function fixRounds({ result, merge, allowed, own }) {
-  const log = git(['log', '--reverse', '--no-merges', '--ancestry-path', '--format=@@%H%x09%s', '--name-only', `${result}..${merge}`])
-    .split('@@').filter(Boolean).map(block => {
+  // A NUL cannot occur in a commit subject; "@@" can.
+  const log = git(['log', '--reverse', '--no-merges', '--ancestry-path', '--format=%x00%H%x09%s', '--name-only', `${result}..${merge}`])
+    .split('\0').filter(Boolean).map(block => {
       const [head, ...files] = block.split('\n').filter(Boolean);
       return { subject: head.slice(head.indexOf('\t') + 1), files };
     });

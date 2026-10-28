@@ -176,8 +176,9 @@ background Bash command from the checkout's top level (a wave task: from its
 the run by the quoted form `suite-run` records for that command, so a command
 typed differently, or run from a subdirectory, is never found. The report's
 `## Verified` section lists the focused tests the implementer ran; this run is
-the full suite. End the turn when only waiting remains, and run
-`task-step verdict` only once both the seat's report and the suite's
+the full suite. The last `## Verified` section of the report is the current
+evidence: a fix round appends its own. End the turn when only waiting remains,
+and run `task-step verdict` only once both the seat's report and the suite's
 completion notification are in. A suite still running at a handoff shows in
 `scripts/in-flight`, and the next session starts it again. A held task starts
 no suite now: its group's suite starts with the group review (§3a), and a
@@ -364,6 +365,12 @@ digest carries exactly one `suite:` line, read from the run §2 started:
   was cut short (exit 124, or 126 and up) adds the finding
   `suite: suite did not finish (exit <code>) at <head7>` whatever its partial
   log shows.
+  Every failing line that is not a base failure is in the fix file, however
+  many; the digest shows the first 20 and then
+  `suite: <k> more failing lines in <fix file>`.
+  Past round 2 `verdict` writes no fix file, and that line reads
+  `suite: <k> more failing lines in the suite log <log>`: the log holds every
+  failing line, base failures included.
 - `suite: not run (<command>)`: no run was recorded at the review head, and
   `verdict` exits 7 with no fix file. Run the suite (§2) at the review head
   and call `verdict` again.
@@ -378,9 +385,16 @@ answered by `verdict` itself: `exists` by `git cat-file -e` (a path) or
 command at the task's base commit as the suite is run there (log
 `<workspace>/task-<N>-baseline-<k>.log` for the k-th). A file at the
 repository root is written `./<name>`, so it is read as a path and not as a
-symbol. A `baseline` command's text comes from a review seat, and a review
-seat has no shell: `verdict` runs it on the controller host, unsandboxed and
-with your rights, as the suite is run there. An item whose check could not
+symbol. A `baseline` command runs only when the plan names it: the step file's
+suite command, the plan header's `**Integration check:**` command, or the first
+code span of one of the task's `Run:` or `**Check:**` lines, byte for byte
+after trimming. `verdict` runs the plan's copy of the command, never the seat's
+text. A plan-named command still runs on the controller host, unsandboxed and
+with your rights, as the suite is run there. Any other `baseline` command is
+not run: it stays for the ruling seat, its digest line ending
+` (command not named in the plan)`. Review seats can write only their report
+files (the cockpit refuses any other write), so a seat cannot add a command to
+the plan, its amendments or the step file. An item whose check could not
 run (an unknown commit, a git error, a command that timed out or was not
 found) stays for the ruling seat. An answer that matches
 `expect` is logged
@@ -649,8 +663,9 @@ in. `rereview` then skips only when the fix head's suite passes or fails with
 base failures only; otherwise it prints
 `re-review: not skipped (suite <red|not run>)` and writes the prompt as it
 does without `--covered`. A red fix-head suite can make `--covered` run the
-suite once at the base commit, which takes up to ten minutes: start
-`rereview --covered` as a background command and end the turn.
+suite once at the base commit, which takes up to an hour
+(`TASK_STEP_BASE_TIMEOUT`): start `rereview --covered` as a background
+command and end the turn.
 
 **After each round,** append to the ledger:
 `Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)`

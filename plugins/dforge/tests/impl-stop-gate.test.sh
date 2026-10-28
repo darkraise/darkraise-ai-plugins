@@ -19,7 +19,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR XDG_STATE_HOME
 
 fjq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
 
@@ -116,6 +116,12 @@ check "a hyphen instead of the em dash: exit 2" "$CODE|$(has "$ERR" '`## Verifie
 { printf '## Verified\nnothing\n\n## Summary\n- `make test` — pass: 3 passed, 0 failed\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n'; } > "$TMP/elsewhere.md"
 gate "$(input dforge:impl-sonnet-high a-9 $'**Status:** DONE\nReport: '"$TMP/elsewhere.md")"
 check "a bullet outside ## Verified does not count" "$CODE|$(has "$ERR" '`## Verified` holds no bullet like')" "2|1"
+{ printf '## Verified\n- `make test` — pass: 3 passed, 0 failed\n\n## Verified\nFix round: nothing re-run.\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n'; } > "$TMP/stale-verified.md"
+gate "$(input dforge:impl-sonnet-high a-11 $'**Status:** DONE\nReport: '"$TMP/stale-verified.md")"
+check "a valid bullet in an earlier ## Verified does not count: exit 2" "$CODE|$(has "$ERR" '`## Verified` holds no bullet like')" "2|1"
+{ printf '## Verified\nfirst round, nothing run\n\n## Verified\n- `make test` — pass: 3 passed, 0 failed\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n'; } > "$TMP/fixed-verified.md"
+gate "$(input dforge:impl-sonnet-high a-12 $'**Status:** DONE\nReport: '"$TMP/fixed-verified.md")"
+check "a valid bullet in the last ## Verified passes" "$CODE|$OUT|$ERR" "0||"
 printf '# Task 4\n' > "$TMP/bare.md"
 gate "$(input dforge:impl-sonnet-high a-10 $'**Status:** DONE\nReport: '"$TMP/bare.md")"
 check "several gaps are named together" "$CODE|$(has "$ERR" 'lacks `## Discovered issues (not fixed)`; the report lacks `## Assumptions made`; the report lacks `## Verified`')" "2|1"
@@ -200,6 +206,73 @@ HOME3="$TMP/home3"; mkdir -p "$HOME3/.local/state" "$TMP/victim-dir"
 ln -s "$TMP/victim-dir" "$HOME3/.local/state/dforge"
 HOME="$HOME3" gate '{"agent_type":"dforge:impl-haiku"'
 check "a symlinked log directory is not written through" "$CODE|$(ls "$TMP/victim-dir" | wc -l | tr -d ' ')" "0|0"
+
+# --- a blocked agent's next stop is checked even without a status ---
+awaiting() { sed -n 3p "$STATE/impl-stop-gate/$1"; }
+FALLBACK_LINES=$(wc -l < "$FALLBACK" | tr -d ' ')
+BAD=$'**Status:** DONE\nFirst attempt, no report.'
+blocked() { gate "$(input dforge:impl-sonnet-high "$1" "$BAD")"; }
+
+blocked agent-s1
+check "a block marks the counter awaiting" "$CODE|$(awaiting agent-s1)" "2|awaiting"
+gate "$(input dforge:impl-sonnet-high agent-s1 $'Retry without a status line.\nReport: '"$TMP/no-verified.md")"
+check "a status-less retry with an incomplete report blocks" "$CODE|$(has "$ERR" 'the report lacks `## Verified`')" "2|1"
+check "and the counter stays awaiting" "$(awaiting agent-s1)" "awaiting"
+gate "$(input dforge:impl-sonnet-high agent-s1 $'Second retry, still no status.\nReport: '"$R")"
+check "a status-less retry with a complete report passes and clears awaiting" "$CODE|$OUT|$ERR|$(awaiting agent-s1)" "0|||"
+gate "$(input dforge:impl-sonnet-high agent-s1 'A later reply of the resumed agent.')"
+check "a later status-less reply of that agent passes" "$CODE|$OUT|$ERR" "0||"
+
+blocked agent-s2
+gate "$(input dforge:impl-sonnet-high agent-s2 $'Retry without a status line.\nReport: '"$R")"
+check "one block, then a status-less retry with a complete report: exit 0" "$CODE|$OUT|$ERR" "0||"
+
+blocked agent-s3
+gate "$(input dforge:impl-sonnet-high agent-s3 'Done, everything works.')"
+check "a status-less retry with no Report line blocks" "$CODE|$(has "$ERR" 'your reply has no `Report: <absolute path>` line')" "2|1"
+
+blocked agent-s4
+gate "$(input dforge:impl-sonnet-high agent-s4 $'Status: blocked\nI need a decision.')"
+check "a retry saying Status: blocked passes and clears awaiting" "$CODE|$OUT|$ERR|$(awaiting agent-s4)" "0|||"
+blocked agent-s4b
+gate "$(input dforge:impl-sonnet-high agent-s4b $'status: needs_context\nWhich branch?')"
+check "a retry saying status: needs_context passes" "$CODE|$OUT|$ERR|$(awaiting agent-s4b)" "0|||"
+blocked agent-s4c
+gate "$(input dforge:impl-sonnet-high agent-s4c $'Status:\tBlocked\nNeeds a key.')"
+check "a tab after the colon passes too" "$CODE|$OUT|$ERR|$(awaiting agent-s4c)" "0|||"
+
+printf '# Report\n\n**Status:** BLOCKED\nNeeds a key.\n' > "$TMP/blocked-report.md"
+blocked agent-s5
+gate "$(input dforge:impl-sonnet-high agent-s5 $'Report: '"$TMP/blocked-report.md")"
+check "a status-less retry whose report opens with **Status:** BLOCKED passes" "$CODE|$OUT|$ERR|$(awaiting agent-s5)" "0|||"
+printf '# Report\n\n**Status:** DONE\n\nlater\n**Status:** BLOCKED\n' > "$TMP/done-then-blocked.md"
+blocked agent-s5b
+gate "$(input dforge:impl-sonnet-high agent-s5b $'Report: '"$TMP/done-then-blocked.md")"
+check "only the report's first status line counts: a later BLOCKED does not pass" "$CODE|$(has "$ERR" 'the report lacks `## Verified`')" "2|1"
+
+blocked agent-s6
+gate "$(input dforge:impl-sonnet-high agent-s6 "$DONE")"
+check "a block, then a complete DONE: exit 0 and awaiting cleared" "$CODE|$OUT|$ERR|$(awaiting agent-s6)" "0|||"
+gate "$(input dforge:impl-sonnet-high agent-s6 'Thanks, noted.')"
+check "and a status-less reply after it passes" "$CODE|$OUT|$ERR" "0||"
+
+blocked agent-s7
+gate "$(input dforge:impl-sonnet-high agent-s7 $'**Status:** BLOCKED\nReport: /nonexistent/report.md')"
+check "a block, then **Status:** BLOCKED: exit 0 and awaiting cleared" "$CODE|$OUT|$ERR|$(awaiting agent-s7)" "0|||"
+gate "$(input dforge:impl-sonnet-high agent-s7 'Still here.')"
+check "and a status-less reply after it passes" "$CODE|$OUT|$ERR" "0||"
+
+blocked agent-s8
+gate "$(input dforge:impl-sonnet-high agent-s8 $'First retry.\nReport: '"$TMP/no-verified.md")"
+gate "$(input dforge:impl-sonnet-high agent-s8 $'Second retry.\nReport: '"$TMP/no-verified.md")"
+check "after two blocks a distinct status-less failing stop passes" "$CODE|$OUT|$ERR|$(awaiting agent-s8)" "0|||passed"
+
+gate "$(input dforge:impl-sonnet-high agent-never 'Fixed the typo in README.md.')"
+check "a status-less reply from an agent never blocked passes" "$CODE|$OUT|$ERR" "0||"
+check "and writes no counter" "$([ -e "$STATE/impl-stop-gate/agent-never" ] && echo yes || echo no)" "no"
+gate "$(fjq -nc --arg m 'Fixed it.' '{cwd:"/nonexistent/dir",agent_id:"agent-nocwd",agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
+check "a status-less stop that cannot enter cwd passes" "$CODE|$OUT|$ERR" "0||"
+check "none of these status-less passes added a fallback-log line" "$(wc -l < "$FALLBACK" | tr -d ' ')" "$FALLBACK_LINES"
 
 # --- no test runner, no network ---
 STUBS="$TMP/stubs"; mkdir -p "$STUBS"

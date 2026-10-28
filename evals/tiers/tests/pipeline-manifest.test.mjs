@@ -31,6 +31,10 @@ commit({ 'other.sh': 'x' }, 'fix: unrelated');
 const two = commit({ 'src/two.sh': 'echo 2' }, 'feat: two');
 const end = commit({ 'src/two.sh': 'echo 2b' }, 'fix: final review');
 const own = new Set(['feat: one', 'feat: two']);
+const three = commit({ 'src/three.sh': 'echo 3' }, 'feat: three');
+commit({ 'src/three.sh': 'echo 3b' }, 'fix: escape @@');
+const tail = commit({ 'src/four.sh': 'echo 4' }, 'feat: four @@ done');
+const ownAt = new Set(['feat: three', 'feat: four @@ done']);
 
 const { PIPELINE_CASES, caseId, finishedPlans, fixRounds, manifestText, pickCases } = await import('../lib/pipeline-manifest.mjs');
 
@@ -54,6 +58,10 @@ test('fixRounds counts the commits on a task\'s files before the next task commi
 
 test('the last task of a plan has no fix rounds: what follows it is the final review', () => {
   assert.equal(fixRounds({ result: two, merge: end, allowed: ['src/two.sh'], own }), 0);
+});
+
+test('fixRounds counts a commit whose subject contains @@ as one commit', () => {
+  assert.equal(fixRounds({ result: three, merge: tail, allowed: ['src/three.sh'], own: ownAt }), 1);
 });
 
 const c = (plan, task, fixRounds) => ({ plan, task, fixRounds, base: 'b'.repeat(40) });

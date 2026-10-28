@@ -17,7 +17,8 @@ check() { # check <name> <got> <want>
 }
 in_loop() { sed '/^## The steps by hand/,$d' "$DT" | grep -cF -- "$1"; } # in_loop <text> — matching lines in the loop steps
 by_hand() { sed -n '/^## The steps by hand/,/^## Recovery/p' "$DT" | grep -cF -- "$1"; }
-has() { check "$1" "$([ "$("$2" "$3")" -ge 1 ] && echo yes || echo no)" "yes"; } # has <label> <in_loop|by_hand> <text>
+in_loop_flat() { sed '/^## The steps by hand/,$d' "$DT" | tr -d '\r' | tr '\n' ' ' | tr -s ' ' | grep -cF -- "$1"; } # in_loop_flat <text> — the loop steps as one line, so a wrapped sentence matches
+has() { check "$1" "$([ "$("$2" "$3")" -ge 1 ] && echo yes || echo no)" "yes"; } # has <label> <in_loop|in_loop_flat|by_hand> <text>
 
 has "the start call carries --suite" in_loop "every start adds"
 has "the suite command comes from the header's Integration check" in_loop '`**Integration check:**` line'
@@ -46,7 +47,11 @@ has "the base run is bounded" in_loop 'bounded at 3600 seconds'
 has "a timed-out base run is recorded" in_loop 'task-<N>-base-timeout'
 has "a group is compared with its first member's base" in_loop "group's first member's base"
 has "verdict is always started in the background" in_loop 'Always start `verdict` as a'
-has "a baseline command runs unsandboxed from a seat with no shell" in_loop 'seat has no shell: `verdict` runs it'
+has "a baseline command runs only when the plan names it" in_loop_flat 'A `baseline` command runs only when the plan names it'
+has "a plan-named command still runs unsandboxed with your rights" in_loop_flat 'A plan-named command still runs on the controller host, unsandboxed and with your rights'
+has "an unnamed command stays for the ruling seat with its label" in_loop_flat 'ending ` (command not named in the plan)`'
+has "review seats write only their report files" in_loop_flat 'Review seats can write only their report files'
+check "the seat's text is no longer described as run verbatim" "$(in_loop_flat 'a review seat has no shell')" "0"
 has "exit 7 re-runs the suite and writes no ruling" in_loop 'Exit 7 is not a seat failure'
 has "--covered waits for the fix head's suite" in_loop 'only after that run'"'"'s notification is'
 has "a covered skip can be refused by the suite" in_loop '`re-review: not skipped (suite <red|not run>)`'

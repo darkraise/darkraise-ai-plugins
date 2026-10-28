@@ -8,6 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 STEP="$P/scripts/task-step"
 SUITE="$P/scripts/suite-run"
+DT="$P/reference/delegated-task.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -173,6 +174,35 @@ step verdict docs/plan.md 1
 check "verdict, failing run without test lines: one failing line" "$(grep '^suite: red' <<<"$out")" "suite: red (1 failing, 0 baseline)"
 check "verdict, failing run without test lines: the finding names the exit code" "$(grep '^Important ' <<<"$out")" "Important 1 suite:0 — suite: command exit 1 fails at $H7"
 
+# --- verdict: every new failing line reaches the fix file, the digest shows the first 20 ---
+failing=()
+for i in $(seq 1 25); do failing+=("$(printf 'not ok %d - case-%02d' "$i" "$i")"); done
+commit_result "${failing[@]}"
+H7=${HEAD_SHA:0:7}
+set_review 1 "$HEAD_SHA" "$REPO"
+rm -f "$WS"/task-1-fix-*.md
+run_suite
+step verdict docs/plan.md 1
+check "verdict, 25 failing lines: the suite line counts them all" "$rc $(grep '^suite: red' <<<"$out")" "0 suite: red (25 failing, 0 baseline)"
+check "verdict, 25 failing lines: the findings line counts 25 Important" "$(grep '^findings: ' <<<"$out")" "findings: 0 Critical, 25 Important, 0 Minor"
+check "verdict, 25 failing lines: the fix file holds all 25" "$(grep -c '^- suite: suite: not ok - case-' "$WS/task-1-fix-1.md")" "25"
+check "verdict, 25 failing lines: the digest prints 20 finding lines" "$(grep -c '^Important ' <<<"$out")" "20"
+check "verdict, 25 failing lines: the digest counts the rest and names the fix file" "$(grep '^suite: ' <<<"$out" | tr '\n' ';')" \
+  "suite: 5 more failing lines in $WS/task-1-fix-1.md;suite: red (25 failing, 0 baseline);"
+check "verdict, 25 failing lines: the fix line counts 25" "$(grep '^fix: ' <<<"$out")" "fix: $WS/task-1-fix-1.md (25 findings)"
+
+# --- verdict: past round 2 the rest of the failing lines are in the suite log ---
+LOG25=$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $5 }' .dforge/suites.tsv | tail -n 1 | tr -d '\r')
+jq '.round = 2' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"
+rm -f "$WS"/task-1-fix-*.md
+step verdict docs/plan.md 1
+check "verdict, 25 failing lines at round 2: the fix line hands them to the breaker" "$(grep '^fix: ' <<<"$out")" "fix: breaker (round 2 of 2; 25 findings)"
+check "verdict, 25 failing lines at round 2: no fix file is written" "$(ls "$WS"/task-1-fix-*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+check "verdict, 25 failing lines at round 2: the digest names the suite log" "$(grep '^suite: ' <<<"$out" | tr '\n' ';')" \
+  "suite: 5 more failing lines in the suite log $LOG25;suite: red (25 failing, 0 baseline);"
+check "verdict, 25 failing lines at round 2: the suite log holds the 25th line" "$(grep -q 'case-25' "$LOG25" && echo yes)" "yes"
+jq 'del(.round)' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"
+
 # --- verdict: a run cut short is red even when its partial log shows only baseline lines ---
 printf '%s\n' 'echo "not ok 1 - alpha"' 'sleep 20' > slow.sh
 git add slow.sh && git commit -qm "slow suite"
@@ -242,5 +272,15 @@ step verdict docs/plan.md 1 2 --group
 check "verdict --group: a wave group has no per-group suite" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 
 git worktree remove --force "$WT"
+
+# --- the doc says so ---
+dt=$(tr -d '\r' < "$DT" | tr '\n' ' ' | tr -s ' ')
+check "the doc: every failing line is in the fix file and the digest shows 20" \
+  "$(grep -cF 'is in the fix file, however many; the digest shows the first 20 and then `suite: <k> more failing lines in <fix file>`.' <<<"$dt")" "1"
+check "the doc: the last Verified section is the current evidence" \
+  "$(grep -cF 'The last `## Verified` section of the report is the current evidence' <<<"$dt")" "1"
+check "the doc: past round 2 the line names the suite log" \
+  "$(grep -cF 'Past round 2 `verdict` writes no fix file, and that line reads `suite: <k> more failing lines in the suite log <log>`' <<<"$dt")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

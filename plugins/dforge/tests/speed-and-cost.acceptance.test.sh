@@ -135,7 +135,7 @@ if need_fixture; then
     printf '# Acceptance Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n## Task index\n\n'
     for n in 1 2 3 4 5; do printf '%s. Task %s\n' "$n" "$n"; done
     for n in 1 2 3 4 5; do
-      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$n" "$n"
+      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"
     done
   } > "$FIX/docs/plan.md"
   printf '#!/usr/bin/env bash\nif grep -qx ok state.txt; then echo "ok 1 - alpha"; else echo "not ok 1 - alpha"; exit 1; fi\n' > "$FIX/suite.sh"

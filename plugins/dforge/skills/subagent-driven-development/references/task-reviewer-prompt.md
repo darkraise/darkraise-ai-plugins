@@ -209,8 +209,11 @@ Subagent ([JUDGE]):
     `exists` asks whether a path, or a single-word symbol, is present at the
     task's base or head commit; write the path or symbol without spaces, and
     a file at the repository root as `./<name>` so it is read as a path.
-    `baseline` asks for the result of one command run verbatim, through
-    `bash -c`, at the task's base commit. `expect` names the answer the task
+    `baseline` asks for the result of one command at the task's base
+    commit. It runs only a command the plan names: the task's suite
+    command, the plan's Integration check, or the command of one of the
+    task's `Run:` or `**Check:**` lines, copied exactly. Any other command
+    is not run and goes to the ruling seat. `expect` names the answer the task
     needs: `present` or `absent`; `pass` (exit 0) or `fail` (any other exit).
     A matching answer is logged and closes the item; a mismatch becomes an
     Important finding the implementer must fix. An item without `expect`

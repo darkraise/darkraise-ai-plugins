@@ -21,7 +21,7 @@ back. Before anything else:
    [ledger.md](references/ledger.md) §Recovery before you act on a ledger line. For each task the last
    ledger line decides: `complete` is done;
    `fix round 1/2` resumes at round 2 with a fresh dispatch, and `fix round 2/2`
-   goes to the breaker (an older run's `R/5` maps as §The Ledger's Recovery
+   goes to the breaker (an older run's `R/5` maps as ledger.md §Recovery
    says); an assigned line with commits after its base
    goes to review;
    `awaiting group review` is reviewed by the next group dispatch, never re-dispatched.

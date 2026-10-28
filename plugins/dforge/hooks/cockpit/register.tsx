@@ -198,6 +198,13 @@ const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
 // The tools that move the session into or out of a worktree.
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
+// The tools a review seat's write guard looks at.
+const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
+// An absolute path ending -report.md, as a dispatch prompt spells it: not
+// begun inside a relative path, not ending before more of a name.
+const REPORT_PATH = /(?<![\w.~/\\-])(?:\/|[A-Za-z]:[\\/])[^\s'"`<>()|*?[\]{},;]*-report\.md(?![\w-]|\.[\w-])/g
+// The rest of a report path, read from just past a root matched literally.
+const REPORT_TAIL = /^[\\/][^\s'"`<>()|*?[\]{},;]*-report\.md(?![\w-]|\.[\w-])/
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -522,8 +529,9 @@ export const register: Register = on => {
       isDone: false,
       outcome: null,
       startedAt: await $.clock.now(),
+      ...(isJudgeSeat(e.subagentType) ? { reports: reportPathsIn(e.prompt, reviewRoots()) } : {}),
     }
-    await update($, spawns, list => [...list, spawn].slice(-50))
+    await update($, spawns, list => trimmedSpawns([...list, spawn]))
     await syncTicker($)
 
     return started
@@ -722,6 +730,19 @@ export const register: Register = on => {
   // only point its context grows between turns.
   on('tool.call', async ($, e, next) => {
     const tool = String(e.tool)
+    if (e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(tool)) {
+      const denial = await judgeWriteDenial($, tool, e)
+      if (denial !== null) {
+        try {
+          const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line: denial }
+          await update($, refusals, list => [...list, refusal].slice(-20))
+        } catch {
+          // The refusal stands unlisted: the .catch below knows no judge
+          // that only $.agent.list() names.
+        }
+        return { deny: denial }
+      }
+    }
     const line = (await live($)).guardAttribution ? await attributionLine($, tool, e) : undefined
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
@@ -775,9 +796,12 @@ export const register: Register = on => {
     }
 
     return ran
-  }).catch(async ($, e, next) =>
-    next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dforge: its attribution guard failed.' },
-  )
+  }).catch(async ($, e, next) => {
+    if (!next.called && e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(String(e.tool)) && isJudgeSeat((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat)) {
+      return { deny: `dforge: the review-seat write guard could not check this write (${next.error.message || next.error.kind}); it is refused.` }
+    }
+    return next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dforge: its attribution guard failed.' }
+  })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const table = $.ui.resolve(e)
@@ -3983,6 +4007,139 @@ function planWindow(items: readonly CockpitPlanItem[], size: number): CockpitPla
   const at = items.findIndex(item => item.status !== 'completed')
   const start = Math.max(0, Math.min((at === -1 ? items.length : at) - 2, items.length - size))
   return items.slice(start, start + size)
+}
+
+function isJudgeSeat(seat: string | undefined): boolean {
+  return seat !== undefined && isDforge(seat) && seat.slice(seat.indexOf(':') + 1).startsWith('judge-')
+}
+
+// Past 50 records the oldest finished ones go; a running one stays, as the
+// review-seat write guard reads its reports.
+function trimmedSpawns(list: CockpitSpawn[]): CockpitSpawn[] {
+  let excess = list.length - 50
+  return list.filter(one => {
+    if (excess <= 0 || !one.isDone) return true
+    excess--
+    return false
+  })
+}
+
+// Windows is told from the roots: the engine names no platform.
+function isDriveHost(): boolean {
+  return [S.where.checkout, S.where.primary].some(dir => dir !== null && /^[A-Za-z]:\//.test(dir.replace(/\\/g, '/')))
+}
+
+// A `..` segment is refused, not resolved: `<dir>/x/../f` is not `<dir>/f`
+// when x is a symbolic link, which the guard cannot see.
+function canonPath(path: string): string | null {
+  let rest = path.replace(/\\/g, '/')
+  let drive = ''
+  const letter = isDriveHost() ? (/^\/([A-Za-z])\//.exec(rest) ?? /^([A-Za-z]):\//.exec(rest)) : null
+  if (letter !== null) {
+    drive = `${(letter[1] ?? '').toLowerCase()}:`
+    rest = rest.slice(2)
+  }
+  if (!rest.startsWith('/')) return null
+  const segments = rest.split('/').filter(one => one !== '' && one !== '.')
+  if (segments.includes('..')) return null
+  return `${drive}/${segments.join('/')}`
+}
+
+// Only a drive host spells a canonical path with a drive letter.
+function pathKey(canon: string): string {
+  return /^[a-z]:\//.test(canon) ? canon.toLowerCase() : canon
+}
+
+function reviewRoots(): string[] {
+  return [S.where.checkout, S.where.primary].flatMap(dir => {
+    const root = dir === null ? null : canonPath(`${dir}/.dforge`)
+    return root === null ? [] : [root]
+  })
+}
+
+function rootOf(canon: string, roots: readonly string[]): string | undefined {
+  const key = pathKey(canon)
+  return roots.find(root => key.startsWith(`${pathKey(root)}/`))
+}
+
+// Each root is also matched literally, in either slash, so a path under a root
+// that holds spaces or parentheses is captured whole; below the root a path
+// still stops at them, as REPORT_TAIL says.
+function reportPathsIn(prompt: string, roots: readonly string[]): string[] {
+  const found: string[] = []
+  const add = (path: string) => {
+    const canon = canonPath(path)
+    if (canon !== null && rootOf(canon, roots) !== undefined && !found.includes(path)) found.push(path)
+  }
+  for (const [path] of prompt.matchAll(REPORT_PATH)) add(path)
+  for (const dir of [S.where.checkout, S.where.primary]) {
+    if (dir === null) continue
+    const raw = `${dir}/.dforge`
+    for (const spelling of new Set([raw, raw.replace(/\\/g, '/'), raw.replace(/\//g, '\\')])) {
+      const literal = spelling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const head = new RegExp(`(?<![\\w.~/\\\\-])${literal}`, /^[A-Za-z]:/.test(spelling) ? 'gi' : 'g')
+      for (const at of prompt.matchAll(head)) {
+        const tail = REPORT_TAIL.exec(prompt.slice(at.index + at[0].length))
+        if (tail !== null) add(at[0] + tail[0])
+      }
+    }
+  }
+  return found
+}
+
+// The root is trusted as an existing directory; each path below it down to
+// the target must not be a symbolic link. A stat rejection means the path does
+// not exist only when its code is ENOENT, or, with no code, when the path
+// above it is a directory and not a link; any other rejection refuses. The
+// walk stops at the first missing path, as nothing below it exists.
+async function isNamedReport($: EngineInterface, target: string, allowed: readonly string[]): Promise<boolean> {
+  const canon = canonPath(target)
+  if (canon === null) return false
+  const key = pathKey(canon)
+  const isAllowed = allowed.some(path => {
+    const one = canonPath(path)
+    return one !== null && pathKey(one) === key
+  })
+  if (!isAllowed) return false
+  const root = rootOf(canon, reviewRoots())
+  if (root === undefined) return false
+  const parts = canon.split('/')
+  let isAboveDir = true
+  for (let at = root.split('/').length + 1; at <= parts.length; at++) {
+    let info: Awaited<ReturnType<EngineInterface['fs']['stat']>>
+    try {
+      info = await $.fs.stat(parts.slice(0, at).join('/'))
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code
+      return typeof code === 'string' ? code === 'ENOENT' : isAboveDir
+    }
+    if (info.isLink === true) return false
+    isAboveDir = info.kind === 'dir'
+  }
+  return true
+}
+
+// A failing agent list refuses no write of a loop the spawn record does not
+// call a judge's; for one it does, the hook's .catch refuses the write.
+async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?: string }): Promise<string | null> {
+  const spawn = (await read($, spawns)).find(one => one.agentId === e.agentId)
+  const isRecordedJudge = isJudgeSeat(spawn?.seat)
+  const agents = await $.agent.list().catch(error => {
+    if (isRecordedJudge) throw error
+    return null
+  })
+  if (agents === null) return null
+  if (!isRecordedJudge && !isJudgeSeat(agents.find(one => one.id === e.agentId)?.type)) return null
+  try {
+    const paths = e as { file_path?: unknown; notebook_path?: unknown }
+    const named = tool === 'NotebookEdit' ? paths.notebook_path : paths.file_path
+    const target = typeof named === 'string' ? named : ''
+    const allowed = spawn?.reports ?? []
+    if (await isNamedReport($, target, allowed)) return null
+    return `dforge: a review seat writes only the report file its dispatch names (${allowed.length === 0 ? 'none' : allowed.join(', ')}); ${target} is not one.`
+  } catch (error) {
+    return `dforge: the review-seat write guard could not check this write (${error instanceof Error && error.message !== '' ? error.message : String(error)}); it is refused.`
+  }
 }
 
 async function attributionLine($: EngineInterface, tool: string, e: object): Promise<string | undefined> {

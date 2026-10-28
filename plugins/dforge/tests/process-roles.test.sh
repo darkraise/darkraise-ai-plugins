@@ -81,7 +81,7 @@ names "final review: recovery from the report" "$FR" '`<workspace>/acceptance-re
 names "final review: recovery re-dispatch" "$FR" 'otherwise re-dispatch once with `[MODE]` `rerun`'
 names "final review: leftover worktree" "$FR" 'git worktree remove --force <workspace>/qa-mutation'
 names "final review: ambiguous goes to the ruling seat" "$FR" '`scripts/review-route PLAN_FILE --ruling acceptance-ambiguous`'
-names "final review: lens replies as files" "$FR" 'each lens seat writes its report to `<workspace>/lens-<id>.md`'
+names "final review: lens replies as files" "$FR" 'each lens seat writes its report to `<workspace>/lens-<id>-report.md`'
 names "final review: residual acceptance failure" "$FR" 'is the one edit allowed on an acceptance test'
 names "final review: a spent re-dispatch writes the report" "$FR" 'is spent: write `<workspace>/acceptance-report.md` yourself, with'
 names "final review: the QA timer outlives the background default" "$FR" 'call'"'"'s `timeout` set to (`<s>` + 120) × 1000 ms'

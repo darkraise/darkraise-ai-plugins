@@ -16,6 +16,7 @@ FR="$P/reference/final-review.md"
 FIN="$P/skills/finishing-a-development-branch/SKILL.md"
 IP="$P/skills/subagent-driven-development/references/implementer-prompt.md"
 SDD="$P/skills/subagent-driven-development/SKILL.md"
+TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
 INLINE="$(skill_view executing-plans)"
 . "$HERE/fixtures/sdd-text.sh"
 
@@ -29,6 +30,13 @@ names() { # names <label> <file> <text>
 }
 lacks() { # lacks <label> <file> <text>
   check "$1" "$(grep -qF -- "$3" "$2" 2>/dev/null && echo yes || echo no)" "no"
+}
+flat() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, so a wrapped sentence matches
+names_flat() { # names_flat <label> <file> <text>
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
+}
+lacks_flat() { # lacks_flat <label> <file> <text>
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "no"
 }
 
 # loop_steps - the delegated loop's text before its by-hand section
@@ -86,6 +94,12 @@ lacks "the rationalization row no longer says every round is re-reviewed" "$SDD_
 names "inline mode hands delegated tasks to delegated-task.md" "$INLINE" '[delegated-task.md](../../reference/delegated-task.md) for this task instead'
 check "inline mode restates no hand-run review mechanic" "$(grep -cE 'date \+%s|codex-gate|lens-route' "$INLINE")" "0"
 
+# --- baseline items run only a command the plan names ---
+names_flat "the reviewer prompt: baseline runs only a command the plan names" "$TRP" 'It runs only a command the plan names:'
+names_flat "the reviewer prompt names the Run and Check lines" "$TRP" 'Integration check, or the command of one of the'
+names_flat "the reviewer prompt: copied exactly, anything else goes to the ruling seat" "$TRP" 'copied exactly. Any other command is not run and goes to the ruling seat.'
+lacks_flat "the reviewer prompt no longer says a baseline command runs verbatim" "$TRP" 'run verbatim, through'
+
 # --- the group reviewer template ---
 GRP="$P/skills/subagent-driven-development/references/group-reviewer-prompt.md"
 check "the group reviewer template exists" "$([ -f "$GRP" ] && echo yes || echo no)" "yes"
@@ -124,7 +138,7 @@ names "the recovery table resumes a group review's round 2 per open member" "$SD
 names "the recovery table sends a group review's open findings to the breaker" "$SDD_LEDGER" 'Go to the breaker: a group review'"'"'s line (its clause starts `Task <N>:`) sends each member'"'"'s open findings, a batch'"'"'s line the batch'"'"'s |'
 check "the recovery table has one row per Group round" "$(grep -c '^| `review round [12]/2` on a' "$SDD_LEDGER")" "2"
 names "after compaction a held task waits for its group" "$SDD" '`awaiting group review` is reviewed by the next group dispatch'
-names "the process graph names the group template" "$SDD_GRAPH" './references/group-reviewer-prompt.md'
+names "the process graph names the group template" "$SDD_GRAPH" './group-reviewer-prompt.md'
 lacks "the overview no longer reviews every task alone" <(sdd_text) 'a judge-scored task review after each task;'
 names "waves hold a grouped task at its ref, in its worktree" "$PW" '`task-step hold PLAN_FILE N --head <TASK_REF> --cwd <worktree>`'
 names "a wave task's hold carries its worktree" "$DT" '`--head <task ref> --cwd <worktree>`'
