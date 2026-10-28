@@ -17,6 +17,10 @@
 - **Amended plan.** The plan text a baseline command is matched against is the amended plan task-step already reads (`$src`), so a header amendment that changes a task's commands takes effect. Amendments are the controller's to write; §1's write guard keeps review seats out of `amendments.md`.
 - **Judge write guard (added after the architecture critic).** The critic's Blocker showed that the owner's choice holds only if a review seat cannot write the files task-step trusts: the judge seats carry an unscoped Write tool (`plugins/dforge/agents/judge-*.md:6`), and nothing enforces "writes only its report file". §1 adds the guard; the spec review confirms it.
 - **Execution strategy.** `executionStrategy=parallel` is in force; recorded without asking.
+- **Spec review (2026-10-28), write guard.** Question: "Keep the guard in scope?" Answer: "Keep the guard (Recommended)": "Plan-named commands plus the judge write guard, as the spec says."
+- **Spec review (2026-10-28), fail-open residual.** Question: "Accept that residual?" Answer: "Accept and record (Recommended)": "Record the residual in Decisions. The plan's first task checks that the guard fires in interactive and `claude -p` sessions." The owner accepts that a session without the cockpit mod runs without the write guard.
+
+Finish: merge
 
 ## Design
 
@@ -84,7 +88,7 @@ Text follows the code:
 
 ### Error handling
 
-Every new refusal fails closed: a judge write outside its report path, an unnamed baseline command, an unreadable step file and a timed-out setup are refused or reach the seat with a message; none reads as a pass. The one fail-open path is a Claude Code session where the cockpit mod did not load: a Claude Code older than the mod engine, or a `claude -p` run if mods do not load there (the plan's first task checks it). The write guard is then off, and since every file `verdict` trusts lives under the state directory a judge could then write, no mechanical second lock exists; the plan-named rule still keeps commands a seat merely writes in its report from running. The spec review records whether the owner accepts this residual.
+Every new refusal fails closed: a judge write outside its report path, an unnamed baseline command, an unreadable step file and a timed-out setup are refused or reach the seat with a message; none reads as a pass. The one fail-open path is a Claude Code session where the cockpit mod did not load: a Claude Code older than the mod engine, or a `claude -p` run if mods do not load there (the plan's first task checks it). The write guard is then off, and since every file `verdict` trusts lives under the state directory a judge could then write, no mechanical second lock exists; the plan-named rule still keeps commands a seat merely writes in its report from running. The owner accepted this residual at the spec review (Decisions).
 
 ## Parallel decomposition
 
