@@ -46,6 +46,12 @@ dr_lock_old() {
   [[ $changed =~ ^[0-9]+$ ]] && [ $(( $(date +%s) - changed )) -gt "$DR_LOCK_STALE_SECONDS" ]
 }
 
+# dr_dir_take DIR — create DIR and hold it: only the shell that creates
+# DIR/claim does, since mkdir is not exclusive everywhere (see dr_lock_take).
+dr_dir_take() {
+  mkdir -- "$1" 2>/dev/null && ( set -o noclobber; : > "$1/claim" ) 2>/dev/null
+}
+
 # dr_lock_reclaim DIR — remove DIR when its owner provably exited: same host,
 # and its PID is gone or names a process started at another time. A lock with
 # no pid is taken once it is old. Reclaims are serialized so one cannot remove
@@ -60,8 +66,10 @@ dr_lock_reclaim() {
       [ -e "$guard" ] || mv -- "$aside" "$guard" 2>/dev/null
       return 1
     fi
-    rmdir -- "$aside" 2>/dev/null
-    mkdir -- "$guard" 2>/dev/null || return 1
+    rm -f -- "$aside/claim"; rmdir -- "$aside" 2>/dev/null
+    dr_dir_take "$guard" || return 1
+  elif ! ( set -o noclobber; : > "$guard/claim" ) 2>/dev/null; then
+    return 1
   fi
   pid="$(cat "$lock/pid" 2>/dev/null)"
   host="$(cat "$lock/host" 2>/dev/null)"
@@ -84,7 +92,9 @@ dr_lock_reclaim() {
     rm -f -- "$lock/pid" "$lock/start" "$lock/host" "$lock/claim"
     rmdir -- "$lock" 2>/dev/null || stale=1
   fi
-  rmdir -- "$guard"
+  # As in dr_lock_release, another reclaimer may claim the guard between the
+  # rm and the rmdir.
+  rm -f -- "$guard/claim"; rmdir -- "$guard" 2>/dev/null
   return "$stale"
 }
 
