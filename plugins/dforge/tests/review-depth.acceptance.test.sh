@@ -285,10 +285,11 @@ a7() {
   mkplan p7s.md spec-standard.md - 1
   mkplan p7f.md spec-full.md - 0
   rr docs/dforge/plans/p7l.md --plan-round 1
-  check "A7: light round 1 routes to no seat, cap 0" "$rc:$out" "0:review-seat plan-round=1 primary=none fallback=- reason=depth-light cap=0"
+  # Register row 1 of the review-depth register ruled that light keeps one plan-review round.
+  check "A7 (register row 1): light round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
   rr docs/dforge/plans/p7l.md --plan-round 2
   check "A7: light round 2 exits 2" "$rc" "2"
-  has "A7: and says the round is past the cap" "$err" "plan round 2 is past the cap (0)"
+  has "A7: and says the round is past the cap" "$err" "plan round 2 is past the cap (1)"
   rr docs/dforge/plans/p7s.md --plan-round 1
   check "A7: standard round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
   rr docs/dforge/plans/p7s.md --plan-round 2
@@ -402,13 +403,13 @@ a9() {
 a10() {
   local wp ho out_with out_without
   wp=$(skill_doc "$WP"); ho=$(doc "$HO")
-  has "A10: writing-plans records the skipped plan review at light" "$wp" '**Plan review:** <YYYY-MM-DD> — skipped (depth light)'
+  lacks "A10 (register row 1): writing-plans no longer skips the plan review at light" "$wp" 'skipped (depth light)'
   has "A10: writing-plans runs the handoff steps first" "$wp" 'handoff steps 0-4'
   has "A10: a light plan of 1-3 tasks is the one that continues" "$wp" 'A light plan of 1-3 tasks runs'
   has "A10: and measures the budget with plain context-size" "$wp" 'plain `scripts/context-size`'
   has "A10: and continues in the session only on ok" "$wp" 'On `ok`, say in one line'
   has "A10: and ends as a handoff on any other result" "$wp" 'On any other result, run handoff step 5'
-  has "A10: a light plan skips the Codex gate probe" "$wp" "At depth light (step 1's line) skip \`scripts/codex-gate\`"
+  lacks "A10 (register row 1): a light plan runs the Codex gate probe" "$wp" "At depth light (step 1's line) skip"
   has "A10: standard and full keep the hard stop" "$wp" 'The exception is a plan at depth light, which is no hard stop outside an auto run'
   has "A10: a light plan of 4 or more tasks keeps the handoff" "$wp" 'A light plan of 4 or more tasks still ends with dforge:handoff as above.'
   has "A10: handoff makes a light plan a stop only from 4 tasks or without room" "$ho" 'A saved plan at depth light is a stop only when it has 4 or more tasks'
@@ -419,7 +420,7 @@ a10() {
   has "A10: plan-lint warns while the header has no Plan review line" "$out_without" 'no **Plan review:** line yet'
   PLAN_REVIEW='**Plan review:** 2026-10-27 — skipped (depth light)' mkplan p10b.md spec-light.md - 0
   out_with=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10b.md --no-probe 2>&1)
-  lacks "A10: plan-lint accepts the skipped line with no Plan review warning" "$out_with" 'no **Plan review:** line yet'
+  lacks "A10: plan-lint still accepts an older light plan's skipped line" "$out_with" 'no **Plan review:** line yet'
   check "A10: and no header warning mentions it" "$(grep -ci 'WARN header.*plan review' <<<"$out_with")" "0"
 }
 

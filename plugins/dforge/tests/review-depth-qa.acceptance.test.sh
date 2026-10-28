@@ -312,9 +312,9 @@ if want A7; then
   pl=$(mkplan a7-light s-light - "" r0t1 r1t2)
   rr "$pl" 1
   check "A7: light, round 1 exits 0" "$status" 0
-  present "A7: light, round 1 prints cap=0" "$out" "cap=0"
-  present "A7: light, round 1 prints primary=none" "$out" "primary=none"
-  present "A7: light, round 1 prints reason=depth-light" "$out" "reason=depth-light"
+  # Register row 1 of the review-depth register ruled that light keeps one plan-review round.
+  present "A7 (register row 1): light, round 1 prints cap=1" "$out" "cap=1"
+  absent "A7 (register row 1): light, round 1 routes to a seat" "$out" "primary=none"
   rr "$pl" 2; check "A7: light, round 2 exits 2" "$status" 2
   rr "$pl" 3; check "A7: light, round 3 exits 2" "$status" 2
 
@@ -479,11 +479,11 @@ fi
 if want A10; then
   W=$(flat_skill "$WP"); WH=$(sect "$WPR/execution-handoff.md" '^## Execution Handoff' '^## NEVER_MATCHES$'); HF=$(flat "$HO")
   WR=$(sect "$WPR/lint-and-review.md" '^4\. \*\*Record\.\*\*' '^## Execution Handoff')
-  present "A10: writing-plans records the skipped Plan review line at light" "$WR" '\*\*Plan review:\*\* <YYYY-MM-DD> — skipped \(depth light\)'
+  absent "A10 (register row 1): writing-plans no longer records a skipped plan review" "$WR" 'skipped \(depth light\)'
   today=$(date +%F)
   lintp=$(mkplan a10-lint s-light - "**Plan review:** $today — skipped (depth light)" r0t1 r1t2)
   lint_out=$(cd "$REPO" && timeout 60 bash "$LINT" "$lintp" 2>&1); lint_st=$?
-  check "A10: plan-lint accepts the skipped line (exit 0)" "$lint_st" 0
+  check "A10: plan-lint still accepts an older light plan's skipped line (exit 0)" "$lint_st" 0
   present "A10: plan-lint reports 0 errors" "$lint_out" "0 errors"
   absent "A10: plan-lint prints no Plan review header warning" "$lint_out" "Plan review"
   absent "A10: plan-lint prints no header error" "$lint_out" "ERROR header"

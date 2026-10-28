@@ -14,7 +14,7 @@ first. Then nothing in this skill waits on your human partner:
   start no timed question.
 - **At the review cap,** a Critical finding or a score of 8 or below goes on
   the pending list, and the Fable batch rules on it with the rest.
-- **Once the plan is reviewed** (at depth light, once it is linted):
+- **Once the plan is reviewed:**
   `scripts/auto-run attach --plan PLAN_FILE`,
   the Fable batch when `scripts/auto-run decision list` prints anything, then
   the switch instead of Execution Handoff: when the spec's `## Decisions`

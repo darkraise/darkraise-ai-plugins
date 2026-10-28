@@ -201,7 +201,7 @@ rround "$TMP/plan.md" 1
 check "a Claude plan round with an unparsable Evaluation line routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
 
 # --- the plan-round cap follows the depth ----------------------------------------
-# A Claude plan's cap is 0 at light, 1 at standard, 2 at full (lib/depth.sh): the
+# A Claude plan's cap is 1 at light and standard, 2 at full (lib/depth.sh): the
 # higher of its spec's Depth line and its riskiest task. The specs live in a
 # throwaway repository so the plans' **Spec:** paths resolve.
 git init -q "$TMP/drepo"
@@ -227,10 +227,10 @@ depth_fixture "$TMP/drepo/standard.md" standard "$EV0"
 depth_fixture "$TMP/drepo/full.md" full "$EV0"
 depth_fixture "$TMP/drepo/missing.md" missing "$EV0"
 rround "$TMP/drepo/light.md" 1
-check "light: round 1 runs no review" "$rc:$out" "0:review-seat plan-round=1 primary=none fallback=- reason=depth-light cap=0"
+check "light: round 1 reviews at cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
 rround "$TMP/drepo/light.md" 2
 check "light: round 2 exits 2" "$rc" "2"
-present "light: round 2 names the cap" "$TMP/err" "past the cap (0)"
+present "light: round 2 names the cap" "$TMP/err" "past the cap (1)"
 rround "$TMP/drepo/light-r2.md" 1
 check "a light spec with a risk-2 task is standard: cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
 rround "$TMP/drepo/light-r2.md" 2
@@ -250,7 +250,7 @@ rround "$TMP/drepo/missing.md" 1
 check "a Spec path that does not exist routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
 review_surface false
 rround "$TMP/drepo/light.md" 1
-check "light with Codex off: still no review round" "$rc:$out" "0:review-seat plan-round=1 primary=none fallback=- reason=depth-light cap=0"
+check "light with Codex off: round 1 goes to Opus alone, cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
 rround "$TMP/drepo/standard.md" 1
 check "standard with Codex off: round 1 goes to Opus alone, cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
 review_surface true
