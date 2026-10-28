@@ -163,7 +163,8 @@ Read [execution-line.md](references/execution-line.md) before you write the head
 
 **Ask first.** Read the spec's `**Execution strategy:**` line. When the spec has
 none — it predates the question, or there is no spec — ask your human partner
-the question in dforge:brainstorming §Choosing the execution strategy
+the question in dforge:brainstorming's
+[design-phase.md](../brainstorming/references/design-phase.md) (Choosing the execution strategy)
 before you draft any task, and wait for the answer; when the `executionStrategy`
 setting is `sequential` or `parallel` (dforge:brainstorming §Settings; the
 default is `parallel`), take that value and do not ask. On a Codex host do not ask:

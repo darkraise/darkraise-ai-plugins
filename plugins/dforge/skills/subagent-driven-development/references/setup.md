@@ -29,7 +29,7 @@ a ledger file, not only in todos.
   Another plan's directory is never yours to read or write.
 - Check for this plan's ledger at `<ledger dir>/progress.md`. If its first
   line names your plan file, recover each task's state with the Recovery
-  table under The Ledger. A ledger whose first line names a different plan
+  table in [ledger.md](ledger.md) §Recovery. A ledger whose first line names a different plan
   file — or a stray ledger at the old flat path `<state>/sdd/progress.md`
   — is another plan's progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
