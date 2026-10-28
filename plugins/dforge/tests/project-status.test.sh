@@ -8,6 +8,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 STATE="$P/reference/project-state.md"
+. "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -178,8 +179,8 @@ present "writing-plans: a design-time deferral becomes a row" "$PLANS" \
   "deferred"
 
 # --- execution marks rows doing, and the README documents the artifact ---
-for skill_file in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md"; do
-  present "execution: rows go to doing at the start ($(basename "$(dirname "$skill_file")"))" \
+for skill_file in "$P/skills/executing-plans/SKILL.md" "$SDD_SETUP"; do
+  present "execution: rows go to doing at the start ($(basename "$(dirname "$skill_file")")/$(basename "$skill_file"))" \
     "$skill_file" "scripts/register set"
 done
 present "README: the register is documented" "$P/README.md" "registers/"
@@ -192,8 +193,8 @@ present "status: an unresolved register row outranks 'between programmes'" "$SKI
 present "status: Open items is omitted when empty" "$SKILL" \
   "omit when no register holds an unresolved row"
 present "finishing: the Program spec is checked too" "$FIN" "when that differs"
-for skill_file in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md"; do
-  present "execution: a resolved row is never set back to doing ($(basename "$(dirname "$skill_file")"))" \
+for skill_file in "$P/skills/executing-plans/SKILL.md" "$SDD_SETUP"; do
+  present "execution: a resolved row is never set back to doing ($(basename "$(dirname "$skill_file")")/$(basename "$skill_file"))" \
     "$skill_file" 'skipping any row already at `verify`'
 done
 
@@ -213,9 +214,9 @@ present "project-state: promotion uses memory_add" "$STATE" 'file each with `mem
 present "project-state: promotion keys on the mapping" "$STATE" '`dforge-path project` prints a project (darkmem is on and the repository'
 present "project-state: promotion falls back to a notes file" "$STATE" '`<docs>/notes/<YYYY-MM-DD>-facts.md`'
 present "project-state: the facts note is committed, so distilling-docs can absorb it" "$STATE" 'commit it in a `docs(notes): …`'
-for skill in subagent-driven-development executing-plans; do
-  present "$skill: pushes after each ledger line" "$P/skills/$skill/SKILL.md" '§darkmem sync points'
-  present "$skill: the push instruction itself" "$P/skills/$skill/SKILL.md" \
+for skill_file in "$SDD_LEDGER" "$P/skills/executing-plans/SKILL.md"; do
+  present "$(basename "$(dirname "$skill_file")")/$(basename "$skill_file"): pushes after each ledger line" "$skill_file" '§darkmem sync points'
+  present "$(basename "$(dirname "$skill_file")")/$(basename "$skill_file"): the push instruction itself" "$skill_file" \
     'After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;'
 done
 HANDOFF_SKILL="$P/skills/handoff/SKILL.md"

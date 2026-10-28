@@ -443,6 +443,7 @@ present "the live spec self-review requires assumption evidence" "$BS" 'section 
 
 # --- task review prose -----------------------------------------------------------
 SDD="$P/skills/subagent-driven-development/SKILL.md"
+. "$HERE/fixtures/sdd-text.sh"
 DT="$P/reference/delegated-task.md"
 TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
 present "the Seats table routes the task reviewer" "$DT" '| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints'
@@ -454,9 +455,9 @@ present "the task seats pair Codex with Opus at risk 3" "$P/reference/executor-l
 present "the second pass points at the delegated loop" "$P/reference/executor-lane.md" 'per [delegated-task.md](delegated-task.md) §3 Review the task.'
 absent "README drops risk 2 Fable reviews" "$P/README.md" 'at risk 2 or above'
 present "the second pass runs at risk 3 only" "$P/skills/subagent-driven-development/references/task-reviewer-prompt.md" '[Include this section only on a risk 3 task whose Codex seat'
-absent "SDD no longer averages three seats" "$SDD" 'average each criterion'
+check "SDD no longer averages three seats" "$(sdd_text | grep -cF -- 'average each criterion')" "0"
 absent "the delegated loop does not average three seats" "$DT" 'average each criterion'
-absent "SDD no longer writes K=3" "$SDD" 'K=3'
+check "SDD no longer writes K=3" "$(sdd_text | grep -cF -- 'K=3')" "0"
 absent "the delegated loop does not write K=3" "$DT" 'K=3'
 present "the delegated loop writes the seat clause" "$DT" ', seat <seat>'
 present "the delegated loop keeps the runner name" "$DT" 'run-codex-review.sh'
@@ -465,7 +466,7 @@ present "the scoped re-review names its judge seats" "$DT" '| Scoped re-review |
 # has to accept it, or the loop has no legal next step.
 present "a carried breaker gap lets the task complete" "$DT" 'confirmed and carried into a later task, with a ruling at the cap'
 present "the dependent task's dispatch takes the carried gap" "$DT" 'carried a CONFIRMED-GAP to this task, the dispatch names the gap'
-present "the flow graph completes a task whose gap is carried" "$SDD" '"Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete"'
+present "the flow graph completes a task whose gap is carried" "$SDD_GRAPH" '"Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete"'
 present "inline mode never fixes a delegated task's gap itself" "$P/skills/executing-plans/SKILL.md" "A delegated task's gap is"
 present "inline mode carries a delegated breaker gap forward" "$P/skills/executing-plans/SKILL.md" 'into the next dependent task'"'"'s dispatch (with none, the next task in plan'
 present "a gap with no dependent task goes to the next task in plan order" "$DT" 'the next task in plan order; after the last task, to the final review'
@@ -487,9 +488,9 @@ present "a Codex finding never raises a score" "$TRP" 'review raises a score, an
 # --- ruling seat prose -----------------------------------------------------------
 RULP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
 present "SDD routes the ruling seat" "$SDD" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
-absent "SDD no longer pins the ruling seat to Fable" "$SDD" '`dforge:judge-fable` (`judge-opus` under the Fable-unavailable rule,'
-present "SDD confirms a header amendment on a second seat" "$SDD" 'a second, independent `dforge:judge-opus` dispatch'
-absent "SDD no longer keeps the confirmation off Opus" "$SDD" 'never hand it'
+check "SDD no longer pins the ruling seat to Fable" "$(sdd_text | grep -cF -- '`dforge:judge-fable` (`judge-opus` under the Fable-unavailable rule,')" "0"
+present "SDD confirms a header amendment on a second seat" "$SDD_RULING_SEAT" 'a second, independent `dforge:judge-opus` dispatch'
+check "SDD no longer keeps the confirmation off Opus" "$(sdd_text | grep -cF -- 'never hand it')" "0"
 present "the ruling prompt has the confirmation note" "$RULP" '[CONFIRM_NOTE]'
 present "the ruling prompt routes its judge" "$RULP" 'the `primary` that `scripts/review-route PLAN_FILE --ruling <kind>'
 present "no route names judge-fable" "$P/agents/judge-fable.md" 'No dforge route names it'
@@ -500,7 +501,7 @@ present "judge-sonnet-high reviews totals 0 to 3" "$P/agents/judge-sonnet-high.m
 present "judge-opus reviews totals 4 to 6" "$P/agents/judge-opus.md" 'totals 4 to 6'
 
 # --- risk3-spread is retired -----------------------------------------------------
-for f in "$P/skills/subagent-driven-development/SKILL.md" \
+for f in "$P/skills/subagent-driven-development/SKILL.md" "$SDD_RULING_SEAT" "$SDD_LEDGER" "$SDD_GRAPH" \
          "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
          "$P/skills/executing-plans/SKILL.md"; do
   absent "no risk3-spread in ${f#"$P/"}" "$f" 'risk3-spread'
@@ -881,7 +882,7 @@ ESC="$P/skills/subagent-driven-development/references/escalation.md"
 LOOP="$P/reference/delegated-task.md"
 present "the ruling prompt explains the neutral kind" "$RP" 'executor-empty-diff'
 absent "the ruling prompt no longer names the Codex-only kind" "$RP" 'codex-empty-diff'
-present "the ledger grammar is executor-neutral" "$SDD" 'executor <id> <model>/<effort>, thread'
+present "the ledger grammar is executor-neutral" "$SDD_LEDGER" 'executor <id> <model>/<effort>, thread'
 present "escalation resumes the executor's own session" "$ESC" "Its fix rounds resume that executor's own session"
 absent "escalation no longer names a Codex session" "$ESC" 'rounds resume the same Codex session'
 present "the loop resumes the executor's own session" "$LOOP" "A task on an external executor resumes that executor's own session instead"

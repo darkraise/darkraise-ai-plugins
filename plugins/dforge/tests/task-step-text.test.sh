@@ -14,6 +14,7 @@ FIN="$P/skills/finishing-a-development-branch/SKILL.md"
 IP="$P/skills/subagent-driven-development/references/implementer-prompt.md"
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 INLINE="$P/skills/executing-plans/SKILL.md"
+. "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -64,13 +65,13 @@ names "finishing verifies the merged result through suite-run" "$FIN" 'bash <plu
 names "implementers run the full suite through suite-run" "$IP" '`bash [PLUGIN_ROOT]/scripts/suite-run -- <the suite command>` and report'
 lacks "implementers no longer run the full suite before committing" "$IP" 'full suite once before committing, not after every edit.'
 
-names "the example workflow starts a task with task-step" "$SDD" '[task-step start PLAN_FILE 1:'
-names "the example workflow reviews with task-step" "$SDD" '[task-step review PLAN_FILE 1:'
-names "the example workflow re-reviews with task-step" "$SDD" '[task-step rereview PLAN_FILE 2:'
-lacks "the example workflow no longer hand-runs review-package" "$SDD" 'review-package PLAN_FILE a1b2c3d HEAD'
+names "the example workflow starts a task with task-step" "$SDD_EXAMPLE" '[task-step start PLAN_FILE 1:'
+names "the example workflow reviews with task-step" "$SDD_EXAMPLE" '[task-step review PLAN_FILE 1:'
+names "the example workflow re-reviews with task-step" "$SDD_EXAMPLE" '[task-step rereview PLAN_FILE 2:'
+lacks "the example workflow no longer hand-runs review-package" "$SDD_EXAMPLE" 'review-package PLAN_FILE a1b2c3d HEAD'
 names "the budget line is on every task-step digest" "$SDD" 'every `scripts/task-step`'
-names "the rationalization row names the skip rule" "$SDD" 'Only `task-step rereview --covered` skips one'
-lacks "the rationalization row no longer says every round is re-reviewed" "$SDD" 'Every round ends with a scoped re-review.'
+names "the rationalization row names the skip rule" "$SDD_RATIONALIZATIONS" 'Only `task-step rereview --covered` skips one'
+lacks "the rationalization row no longer says every round is re-reviewed" "$SDD_RATIONALIZATIONS" 'Every round ends with a scoped re-review.'
 names "inline mode hands delegated tasks to delegated-task.md" "$INLINE" '[delegated-task.md](../../reference/delegated-task.md) for this task instead'
 check "inline mode restates no hand-run review mechanic" "$(grep -cE 'date \+%s|codex-gate|lens-route' "$INLINE")" "0"
 
@@ -103,16 +104,16 @@ names "a member re-reviews on the moving group head" "$DT" "each member's re-rev
 names "a group runs two fix rounds" "$DT" 'A group runs at most two fix rounds'
 names "each member gets its own complete line" "$DT" 'each member gets its own `complete` line once the group is clean'
 names "the loop's recovery reads a held task" "$DT" '| `awaiting group review (commits …)` |'
-names "the ledger grammar holds the awaiting line" "$SDD" 'Task <N>: awaiting group review (commits <a7>..<b7>)'
-names "the ledger grammar holds the group review line" "$SDD" 'Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])'
-names "a group list is a comma list or a range" "$SDD" 'joined by commas (`Group 4,6,7`), or a contiguous range (`Group <a>-<b>`)'
-names "a comma list covers the tasks it names" "$SDD" 'a comma list covers the tasks it names'
-names "the recovery table reads a held task" "$SDD" '| `awaiting group review` | Reviewed by the next group dispatch'
-names "the recovery table resumes a group review's round 2 per open member" "$SDD" 'On a group review'"'"'s line (its clause starts `Task <N>:`), run round 2 for each member whose clause is open, one member at a time; on a batch'"'"'s line, run it once for the batch |'
-names "the recovery table sends a group review's open findings to the breaker" "$SDD" 'Go to the breaker: a group review'"'"'s line (its clause starts `Task <N>:`) sends each member'"'"'s open findings, a batch'"'"'s line the batch'"'"'s |'
-check "the recovery table has one row per Group round" "$(grep -c '^| `review round [12]/2` on a' "$SDD")" "2"
+names "the ledger grammar holds the awaiting line" "$SDD_LEDGER" 'Task <N>: awaiting group review (commits <a7>..<b7>)'
+names "the ledger grammar holds the group review line" "$SDD_LEDGER" 'Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])'
+names "a group list is a comma list or a range" "$SDD_LEDGER" 'joined by commas (`Group 4,6,7`), or a contiguous range (`Group <a>-<b>`)'
+names "a comma list covers the tasks it names" "$SDD_LEDGER" 'a comma list covers the tasks it names'
+names "the recovery table reads a held task" "$SDD_LEDGER" '| `awaiting group review` | Reviewed by the next group dispatch'
+names "the recovery table resumes a group review's round 2 per open member" "$SDD_LEDGER" 'On a group review'"'"'s line (its clause starts `Task <N>:`), run round 2 for each member whose clause is open, one member at a time; on a batch'"'"'s line, run it once for the batch |'
+names "the recovery table sends a group review's open findings to the breaker" "$SDD_LEDGER" 'Go to the breaker: a group review'"'"'s line (its clause starts `Task <N>:`) sends each member'"'"'s open findings, a batch'"'"'s line the batch'"'"'s |'
+check "the recovery table has one row per Group round" "$(grep -c '^| `review round [12]/2` on a' "$SDD_LEDGER")" "2"
 names "after compaction a held task waits for its group" "$SDD" '`awaiting group review` is reviewed by the next group dispatch'
-names "the process graph names the group template" "$SDD" './references/group-reviewer-prompt.md'
+names "the process graph names the group template" "$SDD_GRAPH" './references/group-reviewer-prompt.md'
 lacks "the overview no longer reviews every task alone" "$SDD" 'a judge-scored task review after each task;'
 names "waves hold a grouped task at its ref, in its worktree" "$PW" '`task-step hold PLAN_FILE N --head <TASK_REF> --cwd <worktree>`'
 names "a wave task's hold carries its worktree" "$DT" '`--head <task ref> --cwd <worktree>`'
@@ -175,21 +176,22 @@ done
 names "ladder: the lane resumes once, then hands back" "$LAD" 'resumes the same session on round 1 and hands back on round 2'
 lacks "ladder: no fourth round on the lane" "$LAD" 'heading for at round 4'
 
-names "subagent mode: the fix-round grammar" "$SDD" 'Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)'
-names "subagent mode: the group round grammar" "$SDD" ': review round R/2 ('
-names "subagent mode: a group's round 1 resumes at round 2" "$SDD" "| \`review round 1/2\` on a \`Group\` line, or \`review round 1/5\` from an older run | Resume the group's loop at round 2"
-names "subagent mode: a group's round 2 goes to the breaker" "$SDD" '| `review round 2/2` on a `Group` line, or `review round R/5` with R >= 2 from an older run | Go to the breaker'
-names "subagent mode: the wave round grammar" "$SDD" 'Wave <k>: fix round R/2 (<same fields as a fix round>)'
-names "subagent mode: older ledgers map R/5" "$SDD" 'A `Task`, `Group` or `Wave` round line written before the two-round cap reads `R/5`: R = 1 resumes at round 2, and R >= 2 goes to the breaker.'
-names "subagent mode: a Codex R/5 line is live" "$SDD" 'On a `Host: codex` plan a `Task` or `Wave` round line reading `R/5` is live, not older: apply the Codex row of [delegated-task.md](../../reference/delegated-task.md) §Recovery.'
+names "subagent mode: the fix-round grammar" "$SDD_LEDGER" 'Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)'
+names "subagent mode: the group round grammar" "$SDD_LEDGER" ': review round R/2 ('
+names "subagent mode: a group's round 1 resumes at round 2" "$SDD_LEDGER" "| \`review round 1/2\` on a \`Group\` line, or \`review round 1/5\` from an older run | Resume the group's loop at round 2"
+names "subagent mode: a group's round 2 goes to the breaker" "$SDD_LEDGER" '| `review round 2/2` on a `Group` line, or `review round R/5` with R >= 2 from an older run | Go to the breaker'
+names "subagent mode: the wave round grammar" "$SDD_LEDGER" 'Wave <k>: fix round R/2 (<same fields as a fix round>)'
+names "subagent mode: older ledgers map R/5" "$SDD_LEDGER" 'A `Task`, `Group` or `Wave` round line written before the two-round cap reads `R/5`: R = 1 resumes at round 2, and R >= 2 goes to the breaker.'
+names "subagent mode: a Codex R/5 line is live" "$SDD_LEDGER" 'On a `Host: codex` plan a `Task` or `Wave` round line reading `R/5` is live, not older: apply the Codex row of [delegated-task.md](../../../reference/delegated-task.md) §Recovery.'
 names "subagent mode: compaction resumes round 1 at round 2" "$SDD" '`fix round 1/2` resumes at round 2 with a fresh dispatch'
-names "subagent mode: the breaker row" "$SDD" '| `breaker` | Every finding still open after round 2/2 |'
-names "subagent mode: the flowchart caps at 2" "$SDD" '"R = 2?"'
-names "subagent mode: the example round has no progress field" "$SDD" '[Ledger: Task 2: fix round 1/2 (2 addressed, 0 open; commits d4e5f6a..b7c8d9e; resumed)]'
+names "subagent mode: the breaker row" "$SDD_RULING_SEAT" '| `breaker` | Every finding still open after round 2/2 |'
+names "subagent mode: the flowchart caps at 2" "$SDD_GRAPH" '"R = 2?"'
+names "subagent mode: the example round has no progress field" "$SDD_EXAMPLE" '[Ledger: Task 2: fix round 1/2 (2 addressed, 0 open; commits d4e5f6a..b7c8d9e; resumed)]'
 for gone in 'progress p -> q' 'stalled progress' 'round 1 of 5' 'Fix round R of 5' 'Progress: 18' '"R = 5?"'; do
-  lacks "subagent mode drops: $gone" "$SDD" "$gone"
+  check "subagent mode drops: $gone" "$(sdd_text | grep -cF -- "$gone")" "0"
 done
 only_older "subagent mode names R/5 only for older runs" "$SDD"
+only_older "the ledger names R/5 only for older runs" "$SDD_LEDGER"
 names "inline mode: delegated fix rounds stop at 2" "$INLINE" 'fix rounds up to 2 and'
 names "inline mode: the breaker row" "$INLINE" "| \`breaker\` | A delegated task's findings still open after round 2/2 |"
 only_older "inline mode names R/5 only for older runs" "$INLINE"
@@ -214,12 +216,12 @@ lacks "waves no longer count five rounds" "$PW" 'It counts toward the five'
 only_older "waves name R/5 only for older runs" "$PW"
 names "writing-plans: the optional Wave check header line" "$WP" '**Wave check:** [waves only, optional:'
 names "writing-plans: the waves rule names the Wave check" "$WP" '`**Wave check:**`, optional, names a faster command'
-names "subagent mode: the merged grammar" "$SDD" 'Wave <k>: merged (head <sha7>; check at wave <m>)'
-names "subagent mode: the integrated grammar" "$SDD" 'Wave <k>: integrated (head <sha7>; <command> → pass[; baseline failures only])'
+names "subagent mode: the merged grammar" "$SDD_LEDGER" 'Wave <k>: merged (head <sha7>; check at wave <m>)'
+names "subagent mode: the integrated grammar" "$SDD_LEDGER" 'Wave <k>: integrated (head <sha7>; <command> → pass[; baseline failures only])'
 names "subagent mode: compaction reads a merged line as closed" "$SDD" 'A `Wave <k>: started` line with no later `integrated` or `merged` line'
-names "subagent mode: recovery reads merged as closed" "$SDD" '`Wave <k>: merged` closes the wave as `integrated` does'
+names "subagent mode: recovery reads merged as closed" "$SDD_LEDGER" '`Wave <k>: merged` closes the wave as `integrated` does'
 names "subagent mode: a one-task wave proves its base and closes by §5" "$SDD" 'A wave of one task runs in the checkout, proves its base first and closes by §5'
-lacks "subagent mode: the old integrated grammar is gone" "$SDD" 'Wave <k>: integrated (head <sha7>; <command> → pass)'
+lacks "subagent mode: the old integrated grammar is gone" "$SDD_LEDGER" 'Wave <k>: integrated (head <sha7>; <command> → pass)'
 
 
 # The controller reads a review through task-step verdict and an AMEND through
@@ -233,14 +235,14 @@ names "a failed verdict is a Ruling line" "$DT" 'restored the committed state an
 names "a second failure takes the fallback judge" "$DT" 'A second failure dispatches the route'"'"'s fallback judge'
 names "the risk-3 check reads the report's last section" "$DT" 'A report whose `## Codex findings` section is not its last'
 lacks "the risk-3 check no longer reads the reply" "$DT" 'A reply whose `### Codex findings`'
-for f in "$SDD" "$INLINE"; do
-  s=$(basename "$(dirname "$f")")
+for f in "$SDD_RULING_SEAT" "$INLINE"; do
+  s=$(basename "$(dirname "$f")")/$(basename "$f")
   names "$s: an AMEND applies from the report" "$f" 'scripts/plan-amend PLAN_FILE --report <workspace>/rulings-<point>-<task>-report.md --id A<k>'
   lacks "$s: an AMEND is no longer copied by hand" "$f" 'copy the entry, from its `## A?` line'
   names "$s: the ruling report is read by its Verdict section" "$f" 'read only its `## Verdict` section'
 done
-names "the example workflow reads the verdict with task-step" "$SDD" '[task-step verdict PLAN_FILE 1:'
-names "a header amendment's confirmation reads the first report" "$SDD" 'then the path of the first seat'"'"'s report'
+names "the example workflow reads the verdict with task-step" "$SDD_EXAMPLE" '[task-step verdict PLAN_FILE 1:'
+names "a header amendment's confirmation reads the first report" "$SDD_RULING_SEAT" 'then the path of the first seat'"'"'s report'
 names "by hand: the review prompt's two report placeholders" "$DT" '`[IMPLEMENTER_REPORT_FILE]` set to the implementer'"'"'s report and `[REPORT_FILE]` to `<workspace>/task-<N>-review-report.md`'
 names "the lane's review prompt no longer names a Verification Scores section" "$P/reference/executor-lane.md" 'rather than a markdown report file'
 names "a group review is read through verdict --group" "$DT" '`bash <plugin-root>/scripts/task-step verdict PLAN_FILE N M … --group`'

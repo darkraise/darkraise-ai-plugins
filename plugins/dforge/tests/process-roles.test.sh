@@ -5,6 +5,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
+. "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -103,8 +104,8 @@ names "re-review: both acceptance test name forms" "$P/skills/subagent-driven-de
 names "final review: demos are counted from the spec" "$FR" 'counted from the final report, except `<d>`: the number of the spec'"'"'s'
 names "final review: qa findings join the Claude list" "$FR" '`[qa]` finding from step 0.5 and every lens finding'
 names "final review: qa findings skip the verifier" "$FR" 'A `[qa]` finding is not given to the verifier: it enters the fix wave as'
-for f in "$P/skills/subagent-driven-development/SKILL.md" "$P/skills/executing-plans/SKILL.md"; do
-  s=$(basename "$(dirname "$f")")
+for f in "$SDD_LEDGER" "$P/skills/executing-plans/SKILL.md"; do
+  s=$(basename "$(dirname "$f")")/$(basename "$f")
   names "$s: dispatched line" "$f" 'Acceptance QA: dispatched (base <sha7>)'
   names "$s: complete line" "$f" 'Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo'
   names "$s: recovery points at step 0.5" "$f" '`Acceptance QA:` lines are written by'
