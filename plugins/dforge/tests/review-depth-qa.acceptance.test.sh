@@ -450,7 +450,6 @@ HO="$PLUGIN/skills/handoff/SKILL.md"
 FR="$PLUGIN/reference/final-review.md"
 FIN="$PLUGIN/skills/finishing-a-development-branch/SKILL.md"
 EX="$PLUGIN/skills/executing-plans/SKILL.md"
-SD="$PLUGIN/skills/subagent-driven-development/SKILL.md"
 . "$HERE/fixtures/sdd-text.sh"
 UD="$PLUGIN/skills/using-dforge/SKILL.md"
 README="$PLUGIN/README.md"
@@ -599,7 +598,7 @@ if want A15; then
   present "A15: final-review step 4 does so whatever its reason" "$S4" 'whatever its reason'
   absent "A15: final-review step 4 does not limit itself to reason=cap" "$S4" '(only|just) .?reason=cap|lens-skipped <id> reason=cap'
   present "A15: final-review step 4 names depth among the reasons" "$S4" 'cap.? or .?depth'
-  FN=$(cat "$FIN" "$(dirname "$FIN")"/references/*.md | tr '\n' ' ' | tr -s ' ')
+  FN=$(flat_skill "$FIN")
   present "A15: finishing lists every lens-skipped ledger line" "$FN" 'final review lens-skipped <id> reason=<reason>.? ledger line names, whatever its reason'
   absent "A15: finishing does not limit the list to reason=cap" "$FN" 'lens-skipped <id> reason=cap'
   present "A15: auto-run.md Finishing lists lens-skipped lines whatever their reason" "$(flat "$AR")" 'lens-skipped <id> reason=<reason>.? line in the ledger, whatever its reason'

@@ -44,7 +44,7 @@ names "finishing: get reads the spec line" "$FIN" '`Finish:` line itself and rec
 names "finishing: a final residual keeps a merge" "$FIN" 'the run added. `merge` also keeps when the run added a deferred row whose'
 names "finishing: the final message lists residuals" "$FIN" 'it; the `final review residual` rows among them),'
 names "finishing: a deferred task keeps its rows deferred" "$FIN" '`(deferred by the auto run)` is set with'
-check "finishing: no read-the-spec-and-set clause" "$(cat "$FIN" "$P/skills/finishing-a-development-branch/references/"*.md | grep -c 'first run `scripts/finish-choice set <action> --plan PLAN_FILE`:')" "0"
+check "finishing: no read-the-spec-and-set clause" "$(cat "$FIN" "$P/skills/finishing-a-development-branch/references/"*.md | tr '\n' ' ' | tr -s ' ' | grep -c 'first run `scripts/finish-choice set <action> --plan PLAN_FILE`:')" "0"
 names "rulings are imported" "$P/skills/brainstorming/references/auto-by-default.md" '`scripts/auto-run ruling add "Fable, spec: <line>"`'
 names "the old pin survives" "$B" '`autoRun=off`: never offer an auto run'
 names "a Codex host runs attended" "$P/skills/brainstorming/references/auto-by-default.md" 'and on a Codex host `on` behaves as `off`. Steps 1-5'
@@ -89,6 +89,44 @@ says "auto-run.md: no second Fable round at standard" "$AR" 'at depth `standard`
 says "auto-run.md: finishing lists every lens-skipped line" "$AR" '`final review lens-skipped <id> reason=<reason>` line in the ledger, whatever its reason'
 says "auto-run.md: light finishing lists the unverified test statements" "$AR" 'every `test` statement of the spec under `not verified (depth light)`'
 says "brainstorming: the open line decides a second round only at full" "$P/skills/brainstorming/references/architecture-critic.md" 'decides whether a second round runs at depth `full`; at `standard` none runs.'
+
+# Docs pointers and test cleanups: pointers name the file that holds their target.
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+SDD_REFS="$P/skills/subagent-driven-development/references"
+check "process-graph: no label points into ./references/" "$(grep -c '\./references/' "$SDD_REFS/process-graph.md")" "0"
+for template in implementer-prompt group-reviewer-prompt task-reviewer-prompt ruling-prompt re-review-prompt; do
+  names "process-graph: a label names ./$template.md" "$SDD_REFS/process-graph.md" "(./$template.md)"
+done
+says "subagent-driven-development: an older run's R/5 points at ledger.md" "$P/skills/subagent-driven-development/SKILL.md" '`R/5` maps as ledger.md §Recovery says'
+says "subagent-driven-development setup: the Recovery table is in ledger.md" "$SDD_REFS/setup.md" 'the Recovery table in [ledger.md](ledger.md) §Recovery'
+says "executing-plans: the Recovery table is in recovery.md" "$P/skills/executing-plans/SKILL.md" 'see the Recovery table in [recovery.md](references/recovery.md)'
+says "executing-plans setup: the Recovery table is in recovery.md" "$P/skills/executing-plans/references/setup.md" 'the Recovery table in [recovery.md](recovery.md)'
+lacks "no Recovery pointer goes through The Ledger" <(cat "$P/skills/subagent-driven-development/SKILL.md" "$SDD_REFS/setup.md" "$P/skills/executing-plans/SKILL.md" "$P/skills/executing-plans/references/setup.md") "under The Ledger"
+lacks "no Recovery pointer names The Ledger's Recovery" "$P/skills/subagent-driven-development/SKILL.md" "The Ledger's Recovery"
+check "the Recovery pointers resolve" "$([ -s "$SDD_REFS/ledger.md" ] && [ -s "$P/skills/executing-plans/references/recovery.md" ] && echo yes || echo no)" "yes"
+says "writing-plans: the execution-strategy question is in design-phase.md" "$W" '[design-phase.md](../brainstorming/references/design-phase.md)'
+lacks "writing-plans: the question is not named by a section of brainstorming's SKILL.md" "$W" 'dforge:brainstorming §Choosing the execution strategy'
+check "the review-depth acceptance tests carry no unused SD= line" "$(cat "$HERE/review-depth.acceptance.test.sh" "$HERE/review-depth-qa.acceptance.test.sh" | grep -c '^SD=')" "0"
+check "review-depth-qa builds the finishing text with flat_skill" "$(grep -c 'FN=\$(flat_skill "\$FIN")' "$HERE/review-depth-qa.acceptance.test.sh")" "1"
+
+# impl-clauses.test.sh counts occurrences, so a clause written twice in one agent fails it.
+mkdir -p "$TMP/clauses/tests" "$TMP/clauses/agents"
+cp "$HERE/impl-clauses.test.sh" "$TMP/clauses/tests/"
+cp "$P/agents"/impl-*.md "$TMP/clauses/agents/"
+check "impl-clauses: an unmodified copy prints no FAIL line" "$(bash "$TMP/clauses/tests/impl-clauses.test.sh" 2>&1 | grep -c '^FAIL')" "0"
+for twice in "$TMP/clauses/agents"/impl-*.md; do break; done
+printf '\nNever edit or delete an existing test unless the brief names it.\n' >> "$twice"
+check "impl-clauses: a clause written twice in one agent prints a FAIL line" \
+  "$(bash "$TMP/clauses/tests/impl-clauses.test.sh" 2>&1 | grep -c "^FAIL - $(basename "$twice" .md): existing tests are immutable")" "1"
+
+NOTE="$P/../../docs/dforge/notes/2026-10-28-pipeline-smoke.md"
+says "pipeline-smoke note: a Caveats section" "$NOTE" '## Caveats'
+says "pipeline-smoke note: the figures come from the last result event only" "$NOTE" 'come from the last `result` event of each run only'
+says "pipeline-smoke note: the timeline includes subagent messages" "$NOTE" 'subagent messages included'
+says "pipeline-smoke note: the no-polling reading rests on the filtered check" "$NOTE" 'rests on the `parent_tool_use_id`-filtered check'
+says "pipeline-smoke note: p1_overlap was changed mid-run" "$NOTE" '`p1_overlap` check'
+says "pipeline-smoke note: p1_overlap now groups by message id" "$NOTE" 'to group tool uses by message id'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

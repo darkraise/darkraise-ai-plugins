@@ -385,7 +385,6 @@ WP="$PLUGIN/skills/writing-plans/SKILL.md"
 HO="$PLUGIN/skills/handoff/SKILL.md"
 FR="$PLUGIN/reference/final-review.md"
 EP="$PLUGIN/skills/executing-plans/SKILL.md"
-SD="$PLUGIN/skills/subagent-driven-development/SKILL.md"
 . "$HERE/fixtures/sdd-text.sh"
 FIN="$PLUGIN/skills/finishing-a-development-branch/SKILL.md"
 
