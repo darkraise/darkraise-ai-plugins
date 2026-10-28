@@ -12,9 +12,12 @@ import { DATA, PLUGIN, WORK, git, run as launch, sh } from './sh.mjs';
 const CASE_SECONDS = 3600;
 const BUDGET_USD = '10';
 const DISPATCH_TOOLS = new Set(['Agent', 'Task']);
-// Variables that would let a run reach the host's Claude Code state, kept out
-// of the child's environment; credentials for the API stay in.
-const HOST_STATE = /^(CLAUDE|DCC_|DFORGE_)/;
+// The only host variables the child sees: the executable search path, locale,
+// terminal, user and temp names, the Windows system variables a process needs
+// to start, and the credentials for the API. The child runs with permissions
+// bypassed, so anything else (cloud and registry tokens, SSH_AUTH_SOCK, GH_*)
+// stays out. HOME, XDG_*, CLAUDE_CONFIG_DIR and TMPDIR are set by isolatedEnv.
+const HOST_ENV = /^(PATH|LANG|LANGUAGE|LC_[A-Z_]+|TERM|TZ|SHELL|USER|LOGNAME|TMP|TEMP|SYSTEMROOT|COMSPEC|PATHEXT|WINDIR)$/i;
 const CREDENTIALS = /^(ANTHROPIC_|CLAUDE_CODE_OAUTH_TOKEN$|CLAUDE_CODE_USE_(BEDROCK|VERTEX)$)/;
 
 // armPlugin REF ROOT — the dforge plugin directory of REF's tree under ROOT/arms,
@@ -27,10 +30,10 @@ export function armPlugin(ref, root) {
   return plugin;
 }
 
-// isolatedEnv DIR — the child's environment: its own HOME, XDG and Claude
-// config directories under DIR, nothing of the host's Claude Code state.
+// isolatedEnv DIR — the child's environment: the allowlisted host variables,
+// and its own HOME, XDG and Claude config directories under DIR.
 function isolatedEnv(dir) {
-  const kept = Object.entries(process.env).filter(([key]) => CREDENTIALS.test(key) || !HOST_STATE.test(key));
+  const kept = Object.entries(process.env).filter(([key]) => CREDENTIALS.test(key) || HOST_ENV.test(key));
   const env = {
     ...Object.fromEntries(kept),
     HOME: join(dir, 'home'),
@@ -84,9 +87,13 @@ function controllerPrompt(c) {
 }
 
 function ledgerLines(work, plan, env) {
-  const dir = sh('bash', [resolve(PLUGIN, 'scripts/sdd-workspace'), plan], { cwd: work, env }).out.trim();
+  const r = sh('bash', [resolve(PLUGIN, 'scripts/sdd-workspace'), plan], { cwd: work, env });
+  const dir = r.out.trim();
+  // A failed call is a fault of the harness: read as an empty ledger it would
+  // record a product FAIL that settles the cell and is never rerun.
+  if (r.code !== 0 || !dir) throw new Error(`sdd-workspace exited ${r.code}: ${(r.err || r.out).trim().slice(0, 120)}`);
   const file = join(dir, 'progress.md');
-  return dir && existsSync(file) ? readFileSync(file, 'utf8').replace(/\r/g, '').split('\n') : [];
+  return existsSync(file) ? readFileSync(file, 'utf8').replace(/\r/g, '').split('\n') : [];
 }
 
 // dispatches CONFIG — the subagent dispatches the controller made, counted in

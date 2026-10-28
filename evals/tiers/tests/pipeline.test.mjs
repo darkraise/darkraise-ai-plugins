@@ -125,8 +125,40 @@ test('a harness error after the session ran keeps the session cost', async () =>
   try {
     const result = await runPipelineCase({ c: row, arm: 'baseline@1111111', ref: fx.planned, run: 5, root });
     assert.deepEqual([result.outcome, result.costUsd], ['ERROR', 0.5]);
-    assert.match(result.detail, /^error: git diff/);
+    assert.match(result.detail, /^error: sdd-workspace exited 2: .*not inside a git repository/);
   } finally {
     process.env.TIER_EVAL_CLAUDE = saved;
+  }
+});
+
+test('a ledger that cannot be read is an ERROR that keeps the session cost, not a failed product', async () => {
+  const script = join(fx.top, 'claude-removes-plan');
+  writeFileSync(script, `#!/bin/sh\ncat >/dev/null\nrm -f "${PLAN}"\nprintf '%s' '{"type":"result","total_cost_usd":0.5,"is_error":false,"result":"done"}'\n`);
+  chmodSync(script, 0o755);
+  const saved = process.env.TIER_EVAL_CLAUDE;
+  process.env.TIER_EVAL_CLAUDE = script;
+  try {
+    const result = await runPipelineCase({ c: row, arm: 'baseline@1111111', ref: fx.planned, run: 6, root });
+    assert.deepEqual([result.outcome, result.costUsd], ['ERROR', 0.5]);
+    assert.match(result.detail, /^error: sdd-workspace exited [1-9]/);
+  } finally {
+    process.env.TIER_EVAL_CLAUDE = saved;
+  }
+});
+
+test('the child sees the allowlisted host variables and the API credentials, and nothing else', async () => {
+  const secrets = { GH_TOKEN: 'gh-secret', AWS_SECRET_ACCESS_KEY: 'aws-secret', NPM_TOKEN: 'npm-secret', SSH_AUTH_SOCK: '/tmp/agent.sock', SOME_REGISTRY_PASSWORD: 'pw' };
+  const savedKey = process.env.ANTHROPIC_API_KEY;
+  Object.assign(process.env, secrets, { ANTHROPIC_API_KEY: 'sk-ant-test-key-0123456789abcdef' });
+  try {
+    modes(fx.stub, 'loop');
+    const before = calls().length;
+    await runPipelineCase({ c: row, arm: 'baseline@1111111', ref: fx.planned, run: 7, root });
+    const keys = calls()[before].envKeys;
+    for (const key of Object.keys(secrets)) assert.ok(!keys.includes(key), `${key} reached the child`);
+    for (const key of ['PATH', 'HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'CLAUDE_CONFIG_DIR', 'TMPDIR', 'ANTHROPIC_API_KEY']) assert.ok(keys.includes(key), `${key} is missing`);
+  } finally {
+    for (const key of Object.keys(secrets)) delete process.env[key];
+    if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = savedKey;
   }
 });

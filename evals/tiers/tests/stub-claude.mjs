@@ -13,7 +13,7 @@ const dir = process.env.STUB_DIR;
 const list = readFileSync(join(dir, 'modes'), 'utf8').split('\n').filter(Boolean);
 const mode = list[0];
 if (list.length > 1) writeFileSync(join(dir, 'modes'), list.slice(1).join('\n') + '\n');
-appendFileSync(join(dir, 'calls.log'), JSON.stringify({ mode, cwd: process.cwd(), args: process.argv.slice(2), claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS, env: Object.fromEntries(ISOLATION.map(k => [k, process.env[k]])), config: process.env.CLAUDE_CONFIG_DIR && existsSync(process.env.CLAUDE_CONFIG_DIR) ? readdirSync(process.env.CLAUDE_CONFIG_DIR).sort() : [], prompt: readFileSync(0, 'utf8') }) + '\n');
+appendFileSync(join(dir, 'calls.log'), JSON.stringify({ mode, cwd: process.cwd(), args: process.argv.slice(2), claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS, env: Object.fromEntries(ISOLATION.map(k => [k, process.env[k]])), envKeys: Object.keys(process.env).sort(), config: process.env.CLAUDE_CONFIG_DIR && existsSync(process.env.CLAUDE_CONFIG_DIR) ? readdirSync(process.env.CLAUDE_CONFIG_DIR).sort() : [], prompt: readFileSync(0, 'utf8') }) + '\n');
 
 const reply = (result, extra = {}) => console.log(JSON.stringify({ type: 'result', is_error: false, result, total_cost_usd: 0.5, num_turns: 3, modelUsage: { 'stub-model': {} }, ...extra }));
 const apply = () => spawnSync('git', ['apply', join(dir, 'greet.patch')], { stdio: 'ignore' });

@@ -63,7 +63,7 @@ const realStub = process.env.TIER_EVAL_CLAUDE;
 const rec = join(fx.top, 'recorded');
 mkdirSync(rec);
 const wrapper = join(fx.top, 'claude-recorder');
-writeFileSync(wrapper, `#!/bin/sh\nd="$REC/$$"\nmkdir -p "$d"\npwd > "$d/cwd"\nprintf '%s\\n' "$@" > "$d/args"\nenv > "$d/env"\nexec "$REAL" "$@"\n`);
+writeFileSync(wrapper, `#!/bin/sh\nd="${rec}/$$"\nmkdir -p "$d"\npwd > "$d/cwd"\nprintf '%s\\n' "$@" > "$d/args"\nenv > "$d/env"\nexec "${realStub}" "$@"\n`);
 chmodSync(wrapper, 0o755);
 
 const arms = JSON.parse(readFileSync(join(fx.data, 'arms.json'), 'utf8'));
@@ -78,8 +78,6 @@ const grid = rep => spawnSync(process.execPath, [GRID, '--stage', 'pipeline', '-
     ...process.env,
     TIER_EVAL_JOBS: '1',
     TIER_EVAL_CLAUDE: wrapper,
-    REC: rec,
-    REAL: realStub,
     HOME: hostHome,
     CLAUDE_CONFIG_DIR: hostConfig,
     CLAUDE_PROJECT_DIR: hostProject,
@@ -201,7 +199,7 @@ test('A13: nothing of the host session leaks into a run', () => {
     assert.equal(c.env.DCC_SENTINEL, undefined);
     assert.notEqual(c.env.CLAUDE_CODE_SESSION_ID, 'host-session');
     for (const [key, value] of Object.entries(c.env)) {
-      if (['PATH', 'REC', 'REAL', 'STUB_DIR'].includes(key) || key.startsWith('TIER_EVAL_')) continue;
+      if (key === 'PATH') continue;
       assert.ok(!value.includes(hostHome) && !value.includes(hostConfig) && !value.includes(hostProject), `${key}=${value} names a host directory`);
     }
   }
