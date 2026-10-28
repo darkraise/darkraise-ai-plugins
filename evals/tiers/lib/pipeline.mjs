@@ -16,9 +16,9 @@ const DISPATCH_TOOLS = new Set(['Agent', 'Task']);
 // terminal, user and temp names, the Windows system variables a process needs
 // to start, and the credentials for the API. The child runs with permissions
 // bypassed, so anything else (cloud and registry tokens, SSH_AUTH_SOCK, GH_*)
-// stays out. HOME, XDG_*, CLAUDE_CONFIG_DIR and TMPDIR are set by isolatedEnv.
+// stays out. HOME, XDG_*, CLAUDE_CONFIG_DIR, TMPDIR, TMP and TEMP are set by isolatedEnv.
 const HOST_ENV = /^(PATH|LANG|LANGUAGE|LC_[A-Z_]+|TERM|TZ|SHELL|USER|LOGNAME|TMP|TEMP|SYSTEMROOT|COMSPEC|PATHEXT|WINDIR)$/i;
-const CREDENTIALS = /^(ANTHROPIC_|CLAUDE_CODE_OAUTH_TOKEN$|CLAUDE_CODE_USE_(BEDROCK|VERTEX)$)/;
+const CREDENTIALS = /^(ANTHROPIC_|CLAUDE_CODE_OAUTH_TOKEN$)/;
 
 // armPlugin REF ROOT — the dforge plugin directory of REF's tree under ROOT/arms,
 // materialised once. No git worktree is created.
@@ -31,7 +31,7 @@ export function armPlugin(ref, root) {
 }
 
 // isolatedEnv DIR — the child's environment: the allowlisted host variables,
-// and its own HOME, XDG and Claude config directories under DIR.
+// and its own HOME, XDG, Claude config and temp directories under DIR.
 function isolatedEnv(dir) {
   const kept = Object.entries(process.env).filter(([key]) => CREDENTIALS.test(key) || HOST_ENV.test(key));
   const env = {
@@ -43,6 +43,8 @@ function isolatedEnv(dir) {
     XDG_STATE_HOME: join(dir, 'xdg/state'),
     CLAUDE_CONFIG_DIR: join(dir, 'claude'),
     TMPDIR: join(dir, 'tmp'),
+    TMP: join(dir, 'tmp'),
+    TEMP: join(dir, 'tmp'),
     CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1',
     IS_SANDBOX: '1',
   };
