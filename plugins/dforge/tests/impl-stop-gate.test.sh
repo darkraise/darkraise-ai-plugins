@@ -19,6 +19,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
+export TMPDIR="$TMP/tmp"; mkdir -p "$TMPDIR"
 unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
 
 fjq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
@@ -156,6 +157,36 @@ check "and neither adds a log line" "$(wc -l < "$LOG" | tr -d ' ')" "1"
 gate "$(input dforge:impl-sonnet-high agent-3 "$M1")"
 gate "$(input dforge:impl-sonnet-high agent-3 "$DONE")"
 check "a block followed by a complete report passes" "$CODE|$OUT|$ERR" "0||"
+
+# --- a retry that repeats its reply word for word cannot loop for ever ---
+C6="$STATE/impl-stop-gate/agent-rep"
+R6=$(for i in 1 2 3 4 5 6; do gate "$(input dforge:impl-sonnet-high agent-rep "$M1")"; printf '%s ' "$CODE"; done)
+check "the same failing reply six times: five blocks, then a pass" "$R6" "2 2 2 2 2 0 "
+check "the repeats never raised the block count" "$(sed -n 1p "$C6")" "1"
+check "the fire count is the fourth counter line" "$(sed -n 4p "$C6")" "6"
+check "the pass-through is logged once, naming the cap" "$(grep -c 'agent-rep dforge:impl-sonnet-high pass-through after 5 fires — ' "$LOG")" "1"
+gate "$(input dforge:impl-sonnet-high agent-rep "$M1")"
+check "and the agent passes from then on" "$CODE|$OUT|$ERR" "0||"
+
+# --- a gate that cannot do its job says so in a log ---
+FALLBACK="$TMPDIR/impl-stop-gate.log"
+check "the malformed input of the first checks was logged" "$(grep -c 'input is not JSON' "$FALLBACK")" "1"
+check "a stop that the gate has no reason to look at logs nothing" "$(wc -l < "$FALLBACK" | tr -d ' ')" "1"
+gate '{"agent_type":"dforge:impl-haiku"'
+check "unparseable input passes and is logged" "$CODE|$OUT|$ERR|$(grep -c 'input is not JSON' "$FALLBACK")" "0|||2"
+NOJQ="$TMP/nojq"; mkdir -p "$NOJQ"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v dirname)" > "$NOJQ/dirname"
+chmod +x "$NOJQ/dirname"
+OUT=$(PATH="$NOJQ" "$BASH" "$GATE" <<<"$(input dforge:impl-sonnet-high a-nojq "$DONE")" 2>&1); CODE=$?
+check "without jq the gate passes and is logged" "$CODE|$OUT|$(grep -c 'jq is not installed' "$FALLBACK")" "0||1"
+REPO2="$TMP/repo2"
+git init -q "$REPO2"
+STATE2=$(cd "$REPO2" && bash "$PATHS" state | tr -d '\r')
+mkdir -p "$STATE2" && : > "$STATE2/impl-stop-gate"
+gate "$(fjq -nc --arg c "$REPO2" --arg m $'**Status:** DONE\nAll done.' '{cwd:$c,agent_id:"a-nostate",agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
+check "a counter that cannot be kept lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nostate .*cannot keep the block counter' "$FALLBACK")" "0|||1"
+gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nocwd",agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
+check "a missing working directory lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nocwd .*cannot enter /nonexistent/dir' "$FALLBACK")" "0|||1"
 
 # --- no test runner, no network ---
 STUBS="$TMP/stubs"; mkdir -p "$STUBS"

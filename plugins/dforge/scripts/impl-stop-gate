@@ -10,18 +10,24 @@
 # does not use the status contract. It runs no tests and makes no network call.
 #
 # <state>/impl-stop-gate/<agent_id> holds the block count (line 1), the
-# sha256 of the last blocked message (line 2) and "passed" once the gate has
-# let a stop through (line 3). A stop whose hash equals the stored one is the
-# same stop fired twice and does not raise the count. After two blocks the next
-# distinct failing stop passes and appends one line to
-# <state>/impl-stop-gate.log.
+# sha256 of the last blocked message (line 2), "passed" once the gate has
+# let a stop through (line 3) and the number of times the gate has fired for
+# the agent (line 4). A stop whose hash equals the stored one is the same stop
+# fired twice and does not raise the count. After two blocks the next distinct
+# failing stop passes, and so does any stop after 5 fires, so an agent that
+# repeats its reply cannot be blocked for ever; each appends one line to
+# <state>/impl-stop-gate.log. When the gate has to let a stop through because
+# it cannot read its input or keep its counter, it appends a line to
+# ${TMPDIR:-/tmp}/impl-stop-gate.log instead.
 set -uo pipefail
 export LC_ALL=C
 
+note() { printf '%s impl-stop-gate: %s\n' "$(date +%s 2>/dev/null)" "$1" >> "${TMPDIR:-/tmp}/impl-stop-gate.log" 2>/dev/null || true; }
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-command -v jq >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || { note "jq is not installed; the gate is off"; exit 0; }
 input=$(cat 2>/dev/null || true)
-jq -e . >/dev/null 2>&1 <<<"$input" || exit 0
+jq -e . >/dev/null 2>&1 <<<"$input" || { note "input is not JSON; the stop passes unchecked"; exit 0; }
 
 agent_type=$(jq -r '.agent_type // empty' <<<"$input" | tr -d '\r')
 agent_id=$(jq -r '.agent_id // empty' <<<"$input" | tr -d '\r\n' | tr -c 'A-Za-z0-9._-' '-')
@@ -79,26 +85,33 @@ block() {
   exit 2
 }
 
-cd "${cwd:-$PWD}" 2>/dev/null || exit 0
-state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || exit 0
-[ -n "$state" ] || exit 0
+unkept() { note "$agent_id $agent_type: $1; the stop passes unchecked ($reason)"; exit 0; }
+cd "${cwd:-$PWD}" 2>/dev/null || unkept "cannot enter ${cwd:-$PWD}"
+state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || unkept "cannot find the state directory"
+[ -n "$state" ] || unkept "cannot find the state directory"
 dir="$state/impl-stop-gate"
-mkdir -p "$dir" 2>/dev/null || exit 0
+mkdir -p "$dir" 2>/dev/null || unkept "cannot keep the block counter in $dir"
 counter="$dir/$agent_id"
 
-count=0 last="" passed=""
+count=0 last="" passed="" fires=0
 if [ -f "$counter" ]; then
-  { IFS= read -r count; IFS= read -r last; IFS= read -r passed; } < <(tr -d '\r' < "$counter")
+  { IFS= read -r count; IFS= read -r last; IFS= read -r passed; IFS= read -r fires; } < <(tr -d '\r' < "$counter")
 fi
 case $count in '' | *[!0-9]*) count=0 ;; esac
+case $fires in '' | *[!0-9]*) fires=0 ;; esac
 hash=$(printf '%s' "$message" | sha256)
 
 [ "$passed" = passed ] && exit 0
-[ "$hash" = "$last" ] && block
-if [ "$count" -ge 2 ]; then
-  printf '%s\n%s\npassed\n' "$count" "$last" > "$counter"
-  printf '%s %s %s pass-through after 2 blocks — %s\n' "$(date +%s)" "$agent_id" "$agent_type" "$reason" >> "$state/impl-stop-gate.log"
+fires=$((fires + 1))
+via=""
+if [ "$fires" -gt 5 ]; then via="5 fires"
+elif [ "$hash" != "$last" ] && [ "$count" -ge 2 ]; then via="2 blocks"
+fi
+if [ -n "$via" ]; then
+  printf '%s\n%s\npassed\n%s\n' "$count" "$last" "$fires" > "$counter"
+  printf '%s %s %s pass-through after %s — %s\n' "$(date +%s)" "$agent_id" "$agent_type" "$via" "$reason" >> "$state/impl-stop-gate.log"
   exit 0
 fi
-printf '%s\n%s\n' "$((count + 1))" "$hash" > "$counter"
+if [ "$hash" != "$last" ]; then count=$((count + 1)) last=$hash; fi
+printf '%s\n%s\n\n%s\n' "$count" "$last" "$fires" > "$counter"
 block
