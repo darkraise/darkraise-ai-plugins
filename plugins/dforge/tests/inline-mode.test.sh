@@ -11,6 +11,7 @@ P="$HERE/.."
 INLINE="$P/skills/executing-plans/SKILL.md"
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 FINAL="$P/reference/final-review.md"
+. "$HERE/fixtures/sdd-text.sh"
 # task-brief prints the budget line, which measures a Codex rollout and appends
 # an observation row. This suite runs against the real HOME, so send the rollout
 # search somewhere that does not exist: on a Codex host the live rollout is the
@@ -98,8 +99,8 @@ done
 present "reads the Dispatch line" "$INLINE" '`**Dispatch:** delegated'
 present "links the delegated loop" "$INLINE" "../../reference/delegated-task.md"
 present "a handoff waits for the task in flight" "$INLINE" 'Never hand off in the middle of a task,'
-present "subagent mode finishes the task before a handoff" "$SDD" 'finish the task in flight — its reviews, fix rounds and'
-present "subagent mode's last task is a soft stop" "$SDD" 'continue to Final Review in this session'
+present "subagent mode finishes the task before a handoff" "$SDD_BUDGET" 'finish the task in flight — its reviews, fix rounds and'
+present "subagent mode's last task is a soft stop" "$SDD_BUDGET" 'continue to Final Review in this session'
 present "a delegating plan gets a preflight" "$INLINE" 'send one `preflight` item'
 present "the preflight keys on a heavy task" "$INLINE" 'naming at least one `(heavy)` task'
 absent "the kinds table no longer keys the preflight on any delegation" "$INLINE" 'when the plan delegates any task'
@@ -123,7 +124,7 @@ present "states the fix cap" "$INLINE" "fix round R/3"
 present "inline writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
 present "subagent mode reads the escalation line" "$SDD" "escalated inline -> subagent"
 ESC="$P/skills/subagent-driven-development/references/escalation.md"
-present "the inline recovery row ranks above both" "$SDD" "ranked strictly above both the task's \`**Implementer:**\` agent and the inline session's rung"
+present "the inline recovery row ranks above both" "$SDD_LEDGER" "ranked strictly above both the task's \`**Implementer:**\` agent and the inline session's rung"
 present "escalation names the inline exit" "$ESC" '## Escalating out of inline mode'
 present "escalation walks from the higher rung" "$ESC" 'dispatch its successor on the'
 present "escalation gives the worked example" "$ESC" '`impl-opus-high`, not `impl-opus-low`'
@@ -135,10 +136,10 @@ absent "inline no longer marks the switch on a fix-round line" "$INLINE" "escala
 # One ledger grammar for both modes.
 for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean' 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
   present "inline ledger has: $line" "$INLINE" "$line"
-  present "subagent ledger has: $line" "$SDD" "$line"
+  present "subagent ledger has: $line" "$SDD_LEDGER" "$line"
 done
-for f in "$INLINE" "$SDD"; do
-  s=$(basename "$(dirname "$f")")
+for f in "$INLINE" "$SDD_LEDGER"; do
+  s=$(basename "$(dirname "$f")")/$(basename "$f")
   present "$s: a skipped QA line counts as complete on recovery" "$f" 'Acceptance QA: skipped (depth light)` counts as `complete` on recovery.'
   present "$s: the Review depth line is never recomputed" "$f" 'and is read on recovery, never recomputed; it is'
   for line in 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
@@ -161,10 +162,10 @@ present "final review routes the Claude seat" "$FINAL" '`scripts/review-route PL
 absent "final review drops the most capable model" "$FINAL" 'most capable'
 present "final review routes the fix subagent" "$FINAL" '`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]`'
 present "final review ledgers the fix subagent" "$FINAL" '`Final fix: implementer <agent> (assigned; base <sha7>)`'
-absent "subagent mode drops the most capable final seat" "$SDD" 'most capable available'
-absent "subagent mode drops the most capable final reviewer" "$SDD" 'final reviewer on the most capable model'
-present "subagent ledger has the Final fix line" "$SDD" 'Final fix: implementer <agent> (assigned; base <sha7>)'
-present "subagent mode recovers a lost fix wave" "$SDD" 'A `Final fix:` line and no `Final review:` line'
+absent "subagent mode drops the most capable final seat" <(sdd_text) 'most capable available'
+absent "subagent mode drops the most capable final reviewer" <(sdd_text) 'final reviewer on the most capable model'
+present "subagent ledger has the Final fix line" "$SDD_LEDGER" 'Final fix: implementer <agent> (assigned; base <sha7>)'
+present "subagent mode recovers a lost fix wave" "$SDD_LEDGER" 'A `Final fix:` line and no `Final review:` line'
 present "inline mode names the final seat" "$INLINE" '`scripts/review-route PLAN_FILE --final` prints'
 present "judge-opus takes every final review" "$P/agents/judge-opus.md" 'every final whole-branch review'
 present "README names the final seat" "$P/README.md" 'The final whole-branch review runs on `judge-opus`'
@@ -172,8 +173,8 @@ present "README names the final seat" "$P/README.md" 'The final whole-branch rev
 # A standing project constraint outranks a spec, so both execution skills read
 # it at Setup. Without this, a plan can be executed against a constraint and
 # nothing notices until a handoff.
-for f in "$INLINE" "$SDD"; do
-  present "setup loads distilled constraints: $(basename "$(dirname "$f")")" \
+for f in "$INLINE" "$SDD_SETUP"; do
+  present "setup loads distilled constraints: $(basename "$(dirname "$f")")/$(basename "$f")" \
     "$f" 'distilled/constraints.md'
 done
 
@@ -203,10 +204,10 @@ for h in '## Contract' '## Seats' '## 1. Dispatch the implementer' '## 2. Handle
 done
 for h in '### 1. Dispatch the implementer' '### 2. Handle the report' '### 3. Review the task' \
          '### 4. The fix loop' '### 5. Complete the task'; do
-  check "subagent mode no longer holds: $h" "$(grep -cxF -- "$h" "$SDD")" "0"
+  check "subagent mode no longer holds: $h" "$(sdd_text | grep -cxF -- "$h")" "0"
 done
 present "subagent mode links the delegated loop" "$SDD" "../../reference/delegated-task.md"
-present "subagent mode defers per-task recovery" "$SDD" 'Apply [delegated-task.md](../../reference/delegated-task.md) §Recovery'
+present "subagent mode defers per-task recovery" "$SDD_LEDGER" 'Apply [delegated-task.md](../../../reference/delegated-task.md) §Recovery'
 
 # A Codex host reaches both documents by the same paths a Claude host does, and
 # `review-route` exits 2 for task and ruling seats on every `Host: codex` plan. Each place that reads an
@@ -233,11 +234,11 @@ present "the budget reference states the Codex line carries no verdict" "$SB" \
   'measured — unknown'
 present "the budget reference names the observations mode" "$SB" '--observations'
 present "native Codex names the measured line" "$NC" 'measured — unknown — source: rollout'
-absent "subagent mode no longer denies the Codex budget line" "$SDD" \
+absent "subagent mode no longer denies the Codex budget line" "$SDD_BUDGET" \
   'On Codex there is no budget line'
 absent "inline mode no longer denies the Codex budget line" "$INLINE" \
   'and there is no budget'
-present "subagent mode names the measured Codex line" "$SDD" \
+present "subagent mode names the measured Codex line" "$SDD_BUDGET" \
   'carries a measured number but no verdict'
 present "inline mode names the measured Codex line" "$INLINE" \
   'carries a measured number but no verdict'

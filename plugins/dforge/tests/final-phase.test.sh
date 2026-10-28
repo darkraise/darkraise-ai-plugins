@@ -17,13 +17,14 @@ names() { # names <label> <file> <text>
 }
 
 SDD="$P/skills/subagent-driven-development/SKILL.md"
+. "$HERE/fixtures/sdd-text.sh"
 EP="$P/skills/executing-plans/SKILL.md"
 FIN="$P/skills/finishing-a-development-branch/SKILL.md"
 H="$P/skills/handoff/SKILL.md"
 FR="$P/reference/final-review.md"
 
-names "subagent mode: --final is for the record" "$SDD" '`scripts/context-size --final` for the record, then'
-names "subagent mode: the final phase never hands off" "$SDD" 'prints: the final phase never hands off, and a `review-package` budget line'
+names "subagent mode: --final is for the record" "$SDD_BUDGET" '`scripts/context-size --final` for the record, then'
+names "subagent mode: the final phase never hands off" "$SDD_BUDGET" 'prints: the final phase never hands off, and a `review-package` budget line'
 names "subagent mode: Final Review stays here" "$SDD" 'This runs in the session that completed the last task. Only a stop the'
 names "inline mode: never a stop" "$EP" 'The last task completing is never a stop: the final review, its fix wave and'
 names "inline mode: --final never hands off" "$EP" 'task'"'"'s `Task <N>: complete` line for the record: it never says `handoff`.'
@@ -40,10 +41,10 @@ names "subagent mode: phase final right after the last task" "$SDD" '`scripts/au
 names "inline mode: phase final right after the last task" "$EP" 'merge), run `scripts/auto-run phase final` next, before any budget check and'
 names "finishing: get reads the spec's line" "$FIN" 'with nothing recorded in this checkout'"'"'s plan workspace it reads the spec'"'"'s'
 names "README: the last task completing is never a stop" "$P/README.md" 'The last task completing is never a stop'
-names "subagent mode: the spec's Finish line replaces the question" "$SDD" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
+names "subagent mode: the spec's Finish line replaces the question" "$SDD_SETUP" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
 names "inline mode: the spec's Finish line replaces the question" "$EP" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'
 check "handoff: no spec-to-plan trigger is left" "$(grep -c 'spec-to-plan' "$H")" "0"
-for f in "$SDD" "$EP" "$H" "$FR"; do
+for f in "$SDD" "$SDD_BATCHING" "$SDD_BUDGET" "$SDD_EXAMPLE" "$SDD_FINISH_RULINGS" "$SDD_GRAPH" "$SDD_LEDGER" "$SDD_RATIONALE" "$SDD_RATIONALIZATIONS" "$SDD_RULING_SEAT" "$SDD_SETUP" "$EP" "$H" "$FR"; do
   check "${f#"$P"/} no longer hands off after --final" "$(tr '\n' ' ' < "$f" | tr -s ' ' | grep -cE -- '--final` (said|says) `handoff`')" "0"
 done
 

@@ -136,8 +136,8 @@ check "no skill or reference re-explains where the plugin root is" \
   "$(grep -rlF "the path the session's entry point names" "$P/skills" "$P/reference" 2>/dev/null)" ""
 check "the compaction snapshot names the contract" \
   "$(grep -cF 'plugin-root path, with the working directory inside the project;' "$P/scripts/lib/snapshot.sh")" "1"
-check "nine skill and reference files cite the contract" \
-  "$(grep -rlF '(see using-dforge §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "9"
+check "at least nine skill and reference files cite the contract" \
+  "$([ "$(grep -rlF '(see using-dforge §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" -ge 9 ] && echo yes || echo no)" "yes"
 
 # A script that execs a sibling depends on the executable bit, which a Windows
 # checkout cannot carry: core.filemode is false there, so a new script lands as

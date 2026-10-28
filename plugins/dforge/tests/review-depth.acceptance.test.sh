@@ -382,6 +382,7 @@ HO="$PLUGIN/skills/handoff/SKILL.md"
 FR="$PLUGIN/reference/final-review.md"
 EP="$PLUGIN/skills/executing-plans/SKILL.md"
 SD="$PLUGIN/skills/subagent-driven-development/SKILL.md"
+. "$HERE/fixtures/sdd-text.sh"
 FIN="$PLUGIN/skills/finishing-a-development-branch/SKILL.md"
 
 a9() {
@@ -421,7 +422,7 @@ a10() {
 
 a11() {
   local fr ep sd head0 step05 step2
-  fr=$(doc "$FR"); ep=$(doc "$EP"); sd=$(doc "$SD")
+  fr=$(doc "$FR"); ep=$(doc "$EP"); sd=$(doc "$SDD_LEDGER")
   has "A11: final-review.md skips acceptance QA at light with the ledger line" "$fr" 'Acceptance QA: skipped (depth light)'
   matches "A11: recovery treats the skipped line as complete" "$fr" 'skipped \(depth light\).{0,300}complete|complete.{0,300}skipped \(depth light\)'
   has "A11: the Codex round skipped is said in one line" "$fr" 'codex round skipped (depth'

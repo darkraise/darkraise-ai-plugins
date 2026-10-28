@@ -512,7 +512,7 @@ a7() {
   has "A7: and the prompt tells the next session to write the members' complete lines" "$out" "then write their complete lines"
 
   local sdd delegated
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")
+  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
   delegated=$(doc "$PLUGIN/reference/delegated-task.md")
   matches "A7: the skill's recovery table reads awaiting group review as the next group dispatch" "$sdd" 'awaiting group review. \| Reviewed by the next group dispatch .* never re-dispatch its implementer'
   matches "A7: delegated-task's recovery table says the same" "$delegated" 'awaiting group review \(commits …\). \| Held: never re-dispatch its implementer'
@@ -523,7 +523,7 @@ a7() {
 a8() {
   local delegated sdd
   delegated=$(doc "$PLUGIN/reference/delegated-task.md")
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")
+  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/process-graph.md")
   matches "A8: held tasks accumulate in sequential mode" "$delegated" 'In sequential mode held tasks accumulate'
   matches "A8: the group review runs when 4 tasks are held" "$delegated" 'runs when 4 tasks are held'
   matches "A8: and before a task review-route reviews alone is dispatched" "$delegated" 'before you dispatch a task .review-route. reviews alone'
@@ -642,7 +642,7 @@ EOF
 
 a10() {
   local sdd waves
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")
+  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
   waves=$(doc "$PLUGIN/reference/parallel-waves.md")
   matches "A10: the skill's ledger grammar attributes each finding clause to its task" "$sdd" 'Group <list>: review round R/2 \(Task <N>: <k> open — <one-liners> \| clean; …; commits <a7>\.\.<b7> \(Task <N>\)\[, <a7>\.\.<b7> \(Task <M>\)\]\)'
   matches "A10: parallel-waves shows the same attributed line" "$waves" 'Group <list>: review round R/2 \(Task <N>: <k> open — <one-liners> \| clean; …; commits <a7>\.\.<b7> \(Task <N>\)'
@@ -720,9 +720,9 @@ a11() {
   matches "A11: an executor task's round 2 leaves the lane by HANDBACK" "$esc" 'round 2 leaves the lane by .HANDBACK. instead of climbing a rung'
   matches "A11: executor-lane.md hands round 2 back to the task's Implementer" "$exec_doc" 'HANDBACK'
   matches "A11: a finding still open after round 2 goes to the breaker" "$delegated" 'A finding still open after round 2 goes to the breaker|still open after (fix )?round 2 (goes|go) to the breaker|round 2 .{0,80}(goes|go) to the breaker'
-  matches "A11: the ledger's fix-round line is R/2" "$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")" 'Task <N>: fix round R/2'
+  matches "A11: the ledger's fix-round line is R/2" "$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")" 'Task <N>: fix round R/2'
   absent "A11: the re-review prompt no longer carries a Progress section" "$(cat "$PLUGIN/skills/subagent-driven-development/references/re-review-prompt.md")" '\*\*Progress:\*\*'
-  absent "A11: nor the stall rule's progress field in the fix-round grammar" "$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")" 'progress [a-z-]+ -> '
+  absent "A11: nor the stall rule's progress field in the fix-round grammar" "$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")" 'progress [a-z-]+ -> '
 }
 
 # --- A12 ---------------------------------------------------------------------
@@ -773,7 +773,7 @@ a12() {
 
   # Task and Wave lines are read by the controller from the recovery tables.
   local sdd delegated waves
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")
+  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
   delegated=$(doc "$PLUGIN/reference/delegated-task.md")
   waves=$(doc "$PLUGIN/reference/parallel-waves.md")
   matches "A12: the skill maps R/5 on a Task, Group or Wave line: R = 1 resumes at round 2, R >= 2 goes to the breaker" "$sdd" 'A .Task., .Group. or .Wave. round line written before the two-round cap reads .R/5.: R = 1 resumes at round 2, and R >= 2 goes to the breaker'
@@ -846,7 +846,7 @@ a13() {
 a14() {
   local waves sdd
   waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")
+  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
   matches "A14: a wave of one task closes like any wave" "$waves" 'A wave of one task is an ordinary task: .* and it closes by §5 like any wave'
   matches "A14: every wave closes with an integrated or a merged line, one-task and serialized waves included" "$waves" 'Every wave closes with an .integrated. or a .merged. line, one-task and serialized waves included'
   matches "A14: the ledger grammar has the merged line" "$waves" 'Wave <k>: merged \(head <sha7>; check at wave <m>\)'
@@ -871,7 +871,7 @@ a15() {
   matches "A15: the fix dispatch gets every task diff since the last passing check" "$waves" 'The fix dispatch gets every task diff since the last passing check, the last .Wave <j>: integrated. line'
   matches "A15: the diff runs from that line's head to HEAD through review-package" "$waves" 'review-package PLAN_FILE <its head> HEAD'
   matches "A15: from the first wave's base when there is no passing check" "$waves" 'from the first wave.s base when there is none'
-  matches "A15: the skill's ledger grammar has the baseline clause" "$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")" 'Wave <k>: integrated \(head <sha7>; <command> → pass\[; baseline failures only\]\)'
+  matches "A15: the skill's ledger grammar has the baseline clause" "$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")" 'Wave <k>: integrated \(head <sha7>; <command> → pass\[; baseline failures only\]\)'
 }
 
 # --- A16 ---------------------------------------------------------------------
@@ -1254,7 +1254,7 @@ a23() {
   local nc delegated sdd lad
   nc=$(doc "$PLUGIN/reference/native-codex.md")
   delegated=$(doc "$PLUGIN/reference/delegated-task.md")
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")
+  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
   lad=$(doc "$PLUGIN/reference/ladder.md")
   matches "A23: native-codex.md preserves the five-round review cap" "$nc" 'the five-round review cap'
   matches "A23: delegated-task.md keeps five rounds on a Host: codex plan" "$delegated" 'On a .Host: codex. plan the loop keeps five rounds'

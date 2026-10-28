@@ -49,7 +49,7 @@ EPF="$P/skills/executing-plans/SKILL.md"
 names "executing-plans: step 7 runs task-complete" "$EPF" 'auto run, run `scripts/auto-run task-complete`, then the Fable batch when'
 names "executing-plans: step 8 moves to the final phase" "$EPF" '`scripts/context-size --final`; in an auto run it moves the run to the'
 names "executing-plans: the budget section says so too" "$EPF" 'Finishing is never budget-checked. In an auto run `--final` also moves the'
-names "subagent-driven-development: the budget section says so" "$P/skills/subagent-driven-development/SKILL.md" 'from the ledger. In an auto run `--final` also moves the run to the final'
+names "subagent-driven-development: the budget section says so" "$P/skills/subagent-driven-development/references/budget.md" 'from the ledger. In an auto run `--final` also moves the run to the final'
 names "executing-plans: the mode switch clears by phase" "$EPF" '`scripts/auto-run clear --phase`, and end the turn with'
 names "executing-plans: the mode switch in an auto run" "$EPF" 'not need. In an auto run, run dforge:handoff steps 0-4, then'
 names "delegated-task.md: task-complete after the complete line" "$P/reference/delegated-task.md" 'In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when'

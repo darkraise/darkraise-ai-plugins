@@ -448,6 +448,7 @@ FR="$PLUGIN/reference/final-review.md"
 FIN="$PLUGIN/skills/finishing-a-development-branch/SKILL.md"
 EX="$PLUGIN/skills/executing-plans/SKILL.md"
 SD="$PLUGIN/skills/subagent-driven-development/SKILL.md"
+. "$HERE/fixtures/sdd-text.sh"
 UD="$PLUGIN/skills/using-dforge/SKILL.md"
 README="$PLUGIN/README.md"
 
@@ -500,7 +501,7 @@ fi
 
 # =====================================================================
 if want A11; then
-  F=$(flat "$FR"); EXF=$(flat "$EX"); SDF=$(flat "$SD")
+  F=$(flat "$FR"); EXF=$(flat "$EX"); SDF=$(flat "$SDD_LEDGER")
   QA=$(sect "$FR" '^- 0\.5 \*\*Acceptance QA' '^[0-9]\. \*\*|^- 0\.[0-9] ')
   present "A11: final-review.md skips acceptance QA at light with the ledger line" "$QA" 'At depth light, skip this step: append .?Acceptance QA: skipped \(depth light\).? to the ledger'
   present "A11: final-review.md: recovery treats the skipped line as complete" "$QA" 'Recovery reads that line as .?Acceptance QA: complete'
