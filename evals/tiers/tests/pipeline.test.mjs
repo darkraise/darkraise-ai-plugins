@@ -162,3 +162,26 @@ test('the child sees the allowlisted host variables and the API credentials, and
     if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = savedKey;
   }
 });
+
+test('the child gets no cloud-provider switches from the host, and every temp variable points into its run directory', async () => {
+  const dump = join(fx.top, 'child-env.txt');
+  const script = join(fx.top, 'claude-dumps-env');
+  writeFileSync(script, `#!/bin/sh\ncat >/dev/null\nenv > "${dump}"\nprintf '%s' '{"type":"result","total_cost_usd":0.5,"is_error":false,"result":"done"}'\n`);
+  chmodSync(script, 0o755);
+  const hostTmp = join(fx.top, 'host-tmp');
+  mkdirSync(hostTmp);
+  const host = { CLAUDE_CODE_USE_BEDROCK: '1', CLAUDE_CODE_USE_VERTEX: '1', TMP: hostTmp, TEMP: hostTmp };
+  const saved = { ...Object.fromEntries(Object.keys(host).map(key => [key, process.env[key]])), TIER_EVAL_CLAUDE: process.env.TIER_EVAL_CLAUDE };
+  Object.assign(process.env, host, { TIER_EVAL_CLAUDE: script });
+  try {
+    await runPipelineCase({ c: row, arm: 'baseline@1111111', ref: fx.planned, run: 8, root });
+    const env = Object.fromEntries(readFileSync(dump, 'utf8').split('\n').filter(line => line.includes('=')).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+    assert.ok(!('CLAUDE_CODE_USE_BEDROCK' in env), 'CLAUDE_CODE_USE_BEDROCK reached the child');
+    assert.ok(!('CLAUDE_CODE_USE_VERTEX' in env), 'CLAUDE_CODE_USE_VERTEX reached the child');
+    for (const key of ['TMPDIR', 'TMP', 'TEMP']) assert.ok(inside(env[key] ?? ''), `${key} is ${env[key]}`);
+    assert.equal(env.TMP, env.TMPDIR);
+    assert.equal(env.TEMP, env.TMPDIR);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
