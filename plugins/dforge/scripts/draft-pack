@@ -84,4 +84,5 @@ done <<<"$rows"
 mv "$tmp" "$plan"
 while IFS=$'\037' read -r a b f; do rm -f "$f"; done <<<"$rows"
 rmdir "$dir" 2>/dev/null || true
+rmdir "$(dirname "$dir")" 2>/dev/null || true
 echo "draft-pack: joined tasks ${covered% } from $count slices into $2"
