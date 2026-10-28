@@ -15,8 +15,8 @@ check() { # check <name> <got> <want>
 
 TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
-# sdd-workspace prints the MSYS form on Git Bash; task-step prints the form git
-# gives, which native jq.exe can open.
+# sdd-workspace and task-step print the form git gives, which native jq.exe can
+# open.
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
@@ -132,8 +132,7 @@ PLAN
 git add -A && git commit -qm "docs: add fixture plans"
 BASE=$(git rev-parse HEAD)
 
-WS_RAW=$(bash "$P/scripts/sdd-workspace" docs/plan.md)
-WS=$(winpath "$WS_RAW")
+WS=$(bash "$P/scripts/sdd-workspace" docs/plan.md)
 LEDGER="$WS/progress.md"
 rm -f "$WS"/*
 step() { out=$(bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; }
@@ -295,7 +294,7 @@ check "review: no runner lines for a judge seat" "$(grep -cE '^(codex|timeout):'
 check "review: no Codex prompt for a judge seat" "$([ -e "$WS/task-1-review-codex-prompt.md" ] && echo yes || echo no)" "no"
 check "review: the judge prompt has no unexpanded placeholder" "$(placeholders "$JP")" "0"
 check "review: base, head and diff file" "$(grep -E '^\*\*(Base|Head|Diff file):\*\*' "$JP" | tr '\n' ' ' | sed 's/ $//')" \
-  "**Base:** $BASE1 **Head:** $C1 **Diff file:** $WS_RAW/review-$(short "$BASE1")..$(short "$C1").diff"
+  "**Base:** $BASE1 **Head:** $C1 **Diff file:** $WS/review-$(short "$BASE1")..$(short "$C1").diff"
 check "review: the diff file exists" "$([ -f "$WS/review-$(short "$BASE1")..$(short "$C1").diff" ] && echo yes || echo no)" "yes"
 check "review: brief and report paths" "$(grep -cE "^(Read the task brief: $WS/task-1-brief.md|Read the implementer's report: $WS/task-1-report.md)\$" "$JP")" "2"
 check "review: the criteria path is expanded" "$(grep -c "Read the criteria file at $PR/criteria/task-review.md and score" "$JP")" "1"
@@ -328,7 +327,7 @@ check "review: the Codex prompt has no unexpanded placeholder" "$(placeholders "
 check "review: the Codex prompt asks for one JSON object" "$(grep -c 'one JSON object' "$CP")" "1"
 check "review: the Codex prompt carries the criteria" "$(grep -c '^#### Spec Compliance {#spec}$' "$CP")" "1"
 check "review: the Codex prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$CP")" "0"
-check "review: the Codex prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS_RAW/review-" "$CP")" "1"
+check "review: the Codex prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS/review-" "$CP")" "1"
 mkdir -p "$TMP/plain"
 state1=$(cat "$WS/task-1-step.json")
 step review docs/plan.md 1 --cwd "$TMP/plain"
@@ -371,7 +370,7 @@ check "review: --head packages base..REF" "$(grep -c "^\*\*Head:\*\* $C1\$" "$JP
 step review docs/plan.md 1
 check "review: a later review reuses the recorded ref" "$(state_of 1 .reviewHead)" "$C1"
 step review docs/plan.md 2 --base "$C1"
-DIFF2="$WS_RAW/review-$(short "$C1")..$(short "$C2").diff"
+DIFF2="$WS/review-$(short "$C1")..$(short "$C2").diff"
 check "review: --base starts the package at SHA" "$(grep -c "^\*\*Diff file:\*\* $DIFF2\$" "$WS/task-2-review-prompt.md")" "1"
 check "review: --base leaves the earlier commit out" "$(grep -c 'add a' "$DIFF2")" "0"
 check "review: --base is recorded" "$(state_of 2 .base)" "$C1"

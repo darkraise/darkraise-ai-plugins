@@ -40,4 +40,6 @@ base="$(dforge_dir state "$root")/sdd"
 dir="$base/$slug"
 mkdir -p "$dir"
 dforge_self_ignore "$base"
-cd "$dir" && pwd
+# git's C:/… form, as task-step prints it: `cd && pwd` would give Git Bash's
+# /c/… form, which native jq.exe cannot open under MSYS_NO_PATHCONV.
+printf '%s\n' "$dir"

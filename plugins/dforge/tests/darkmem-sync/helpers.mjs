@@ -22,9 +22,10 @@ export function scratch(prefix) {
   return dir;
 }
 
+// A loaded Windows shard has taken over ten seconds for a bare `git init`.
 export function git(cwd, ...args) {
-  const result = spawnSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { encoding: "utf8", timeout: 10000 });
-  if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+  const result = spawnSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { encoding: "utf8", timeout: 60000 });
+  if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.error?.message ?? result.stderr}`);
   return result.stdout.trim();
 }
 
