@@ -6,6 +6,9 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
+SKILL_VIEW_DIR=$(mktemp -d)
+trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
+. "$HERE/skill-view.sh"
 S="$P/skills/ui-ux/SKILL.md"
 R="$P/skills/ui-ux/references"
 
@@ -41,7 +44,7 @@ check "no macOS or iOS guide" "$(ls "$R/platforms" | grep -ciE 'mac|ios')" "0"
 
 # --- the gate sites ---
 FR="$P/reference/final-review.md"
-FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+FIN="$(skill_view finishing-a-development-branch)"
 VBC="$P/skills/verification-before-completion/SKILL.md"
 names "final review runs the gate" "$FR" 'scripts/ui-proof check --base MERGE_BASE --spec <the plan'"'"'s Spec>'
 names "final review: exit 1 stops it like a red gate" "$FR" 'Exit 1 stops the review like a red gate'

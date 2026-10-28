@@ -44,7 +44,7 @@ names "finishing: get reads the spec line" "$FIN" '`Finish:` line itself and rec
 names "finishing: a final residual keeps a merge" "$FIN" 'the run added. `merge` also keeps when the run added a deferred row whose'
 names "finishing: the final message lists residuals" "$FIN" 'it; the `final review residual` rows among them),'
 names "finishing: a deferred task keeps its rows deferred" "$FIN" '`(deferred by the auto run)` is set with'
-check "finishing: no read-the-spec-and-set clause" "$(grep -c 'first run `scripts/finish-choice set <action> --plan PLAN_FILE`:' "$FIN")" "0"
+check "finishing: no read-the-spec-and-set clause" "$(cat "$FIN" "$P/skills/finishing-a-development-branch/references/"*.md | grep -c 'first run `scripts/finish-choice set <action> --plan PLAN_FILE`:')" "0"
 names "rulings are imported" "$P/skills/brainstorming/references/auto-by-default.md" '`scripts/auto-run ruling add "Fable, spec: <line>"`'
 names "the old pin survives" "$B" '`autoRun=off`: never offer an auto run'
 names "a Codex host runs attended" "$P/skills/brainstorming/references/auto-by-default.md" 'and on a Codex host `on` behaves as `off`. Steps 1-5'

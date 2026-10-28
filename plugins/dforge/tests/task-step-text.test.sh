@@ -7,13 +7,16 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
+SKILL_VIEW_DIR=$(mktemp -d)
+trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
+. "$HERE/skill-view.sh"
 DT="$P/reference/delegated-task.md"
 PW="$P/reference/parallel-waves.md"
 FR="$P/reference/final-review.md"
 FIN="$P/skills/finishing-a-development-branch/SKILL.md"
 IP="$P/skills/subagent-driven-development/references/implementer-prompt.md"
 SDD="$P/skills/subagent-driven-development/SKILL.md"
-INLINE="$P/skills/executing-plans/SKILL.md"
+INLINE="$(skill_view executing-plans)"
 . "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0

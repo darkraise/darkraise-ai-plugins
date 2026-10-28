@@ -502,7 +502,7 @@ a14() {
 
 a15() {
   local fr step4 fin ar
-  fr=$(doc "$FR"); fin=$(doc "$FIN"); ar=$(doc "$AR")
+  fr=$(doc "$FR"); fin=$(skill_doc "$FIN"); ar=$(doc "$AR")
   step4=$(between "$fr" '4. **Report.**' '## Fixing what it finds')
   check "A15: final-review.md step 4 is found" "$([ -n "$step4" ] && echo yes || echo no)" "yes"
   has "A15: step 4 writes lens-skipped lines to the ledger" "$step4" 'final review lens-skipped'

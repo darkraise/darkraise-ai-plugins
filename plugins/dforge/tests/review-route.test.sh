@@ -24,6 +24,10 @@ absent() { # absent <name> <file> <needle>
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+SKILL_VIEW_DIR="$TMP/views"
+mkdir "$SKILL_VIEW_DIR"
+. "$HERE/skill-view.sh"
+EP_VIEW="$(skill_view executing-plans)"
 
 # Routing reads this session's Codex gate file. A fixed session id and a
 # temporary directory keep the machine's real session state out of every case.
@@ -467,8 +471,8 @@ present "the scoped re-review names its judge seats" "$DT" '| Scoped re-review |
 present "a carried breaker gap lets the task complete" "$DT" 'confirmed and carried into a later task, with a ruling at the cap'
 present "the dependent task's dispatch takes the carried gap" "$DT" 'carried a CONFIRMED-GAP to this task, the dispatch names the gap'
 present "the flow graph completes a task whose gap is carried" "$SDD_GRAPH" '"Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete"'
-present "inline mode never fixes a delegated task's gap itself" "$P/skills/executing-plans/SKILL.md" "A delegated task's gap is"
-present "inline mode carries a delegated breaker gap forward" "$P/skills/executing-plans/SKILL.md" 'into the next dependent task'"'"'s dispatch (with none, the next task in plan'
+present "inline mode never fixes a delegated task's gap itself" "$EP_VIEW" "A delegated task's gap is"
+present "inline mode carries a delegated breaker gap forward" "$EP_VIEW" 'into the next dependent task'"'"'s dispatch (with none, the next task in plan'
 present "a gap with no dependent task goes to the next task in plan order" "$DT" 'the next task in plan order; after the last task, to the final review'
 present "a gap past the last task goes to the final review" "$DT" '`carried to final review`, where it is a confirmed finding'
 present "the final review fixes a carried gap without triage" "$P/reference/final-review.md" 'it goes on the fix list without triage'
@@ -503,10 +507,10 @@ present "judge-opus reviews totals 4 to 6" "$P/agents/judge-opus.md" 'totals 4 t
 # --- risk3-spread is retired -----------------------------------------------------
 for f in "$P/skills/subagent-driven-development/SKILL.md" "$SDD_RULING_SEAT" "$SDD_LEDGER" "$SDD_GRAPH" "$SDD_BATCHING" "$SDD_BUDGET" "$SDD_EXAMPLE" "$SDD_FINISH_RULINGS" "$SDD_RATIONALE" "$SDD_RATIONALIZATIONS" "$SDD_SETUP" \
          "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
-         "$P/skills/executing-plans/SKILL.md"; do
+         "$P/skills/executing-plans/SKILL.md" "$P/skills/executing-plans/references/"*.md; do
   absent "no risk3-spread in ${f#"$P/"}" "$f" 'risk3-spread'
 done
-present "inline mode reaches the executor empty-diff kind" "$P/skills/executing-plans/SKILL.md" 'executor-empty-diff'
+present "inline mode reaches the executor empty-diff kind" "$EP_VIEW" 'executor-empty-diff'
 
 # --- executor-lane and ladder prose ------------------------------------------
 EXEC="$P/reference/executor-lane.md"

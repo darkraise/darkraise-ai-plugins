@@ -599,7 +599,7 @@ if want A15; then
   present "A15: final-review step 4 does so whatever its reason" "$S4" 'whatever its reason'
   absent "A15: final-review step 4 does not limit itself to reason=cap" "$S4" '(only|just) .?reason=cap|lens-skipped <id> reason=cap'
   present "A15: final-review step 4 names depth among the reasons" "$S4" 'cap.? or .?depth'
-  FN=$(flat "$FIN")
+  FN=$(cat "$FIN" "$(dirname "$FIN")"/references/*.md | tr '\n' ' ' | tr -s ' ')
   present "A15: finishing lists every lens-skipped ledger line" "$FN" 'final review lens-skipped <id> reason=<reason>.? ledger line names, whatever its reason'
   absent "A15: finishing does not limit the list to reason=cap" "$FN" 'lens-skipped <id> reason=cap'
   present "A15: auto-run.md Finishing lists lens-skipped lines whatever their reason" "$(flat "$AR")" 'lens-skipped <id> reason=<reason>.? line in the ledger, whatever its reason'

@@ -8,7 +8,10 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
-INLINE="$P/skills/executing-plans/SKILL.md"
+SKILL_VIEW_DIR=$(mktemp -d)
+trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
+. "$HERE/skill-view.sh"
+INLINE="$(skill_view executing-plans)"
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 FINAL="$P/reference/final-review.md"
 . "$HERE/fixtures/sdd-text.sh"
@@ -366,7 +369,7 @@ absent "writing-plans no longer reads executor lines only when delegated" <(cat 
 
 # Inline mode delegates heavy and executor tasks, so no text may say it
 # implements every task.
-for doc in "$P"/skills/executing-plans/SKILL.md "$P"/skills/writing-plans/SKILL.md "$P"/skills/writing-plans/references/*.md "$P"/reference/native-codex.md; do
+for doc in "$P"/skills/executing-plans/SKILL.md "$P"/skills/executing-plans/references/*.md "$P"/skills/writing-plans/SKILL.md "$P"/skills/writing-plans/references/*.md "$P"/reference/native-codex.md; do
   absent "${doc#"$P"/} does not say inline mode implements every task itself" "$doc" 'implements every task itself'
   absent "${doc#"$P"/} does not say inline mode implements every task in the session" "$doc" 'implements every task in'
 done

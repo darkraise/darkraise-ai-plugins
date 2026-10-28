@@ -105,42 +105,7 @@ it would send the next session straight back into this skill.
 
 ## Step 1b: Prove the UI
 
-Run `ui-proof check --base MERGE_BASE --spec <the plan's Spec>` under
-`timeout 120`, where MERGE_BASE is `git merge-base HEAD <base branch>` and
-`<base branch>` is the branch this one was created from (Step 3 explains how
-to find it; determine it now):
-
-```bash
-bash <plugin-root>/scripts/ui-proof check --base "$(git merge-base HEAD <base branch>)" --spec <the plan's Spec>
-```
-
-Drop `--spec` when there is no plan. **Exit 0** (it also prints `ok` when the
-gate is off or no UI file changed): continue to Step 2. Any other status (2
-for a bad base or spec, 124 for the timeout) means the check never ran: treat
-it as exit 1, with its output as the FAIL lines.
-
-**Exit 1:** the UI is unproven, and integrating it is blocked. In an auto
-run, first run the dforge:ui-ux Prove phase and check again; only that second
-exit 1 counts, and when it comes only from `unverifiable` rows, run
-`scripts/auto-run stop --reason "ui proof needs the user"` first. Remember the
-exit 1 for Step 4: it turns a recorded `merge` or `pr` into `keep`. Run
-`scripts/finish-choice get [--plan PLAN_FILE]` now: when it prints `merge`,
-`pr` or `keep` with no `answer` or `firedAt` field, or an auto run is bound,
-continue to Step 2 (Step 4 keeps the branch). Otherwise present only these two options:
-
-```
-The UI is unproven (ui-proof check):
-<its FAIL lines>
-
-1. Prove it first — run the dforge:ui-ux Prove phase, then return to Step 1b
-2. Keep the branch as-is (I'll handle it later)
-
-Which option?
-```
-
-On option 2, run `scripts/finish-choice answer keep [--plan PLAN_FILE]`, skip
-Steps 2 to 4, and carry out Step 5's Option 3 (Keep As-Is) and the steps after
-it.
+Read [ui-proof.md](references/ui-proof.md) before you prove the UI.
 
 ## Step 2: Detect Environment
 
@@ -287,104 +252,7 @@ integration decision is theirs.
 
 ## Step 5: Execute Choice
 
-**Whose choice it is.** When your human partner answers the menu, run
-`scripts/finish-choice answer <merge|pr|keep|discard> [--plan PLAN_FILE]`
-first, then carry out their answer. When Step 4 carries out a recorded
-choice, it is theirs, made before the run. An immediate finish never asks:
-where a step would ask (a refused worktree removal, a failing merged result,
-a rejected push), it stops, leaves everything in place, reports what stopped
-it and shows the menu; never pick a destructive answer for your human
-partner.
-
-### Option 1: Merge Locally
-
-```bash
-# Get main repo root for CWD safety
-MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
-cd "$MAIN_ROOT"
-
-# Merge first — verify success before removing anything
-git checkout <base-branch>
-git pull
-PRE_MERGE=$(git rev-parse HEAD)
-git merge <feature-branch>
-
-echo "$PRE_MERGE"
-
-# Verify the merged result: gates when the project declares a manifest
-# (dforge:running-gates, with the sha printed above as its base), otherwise
-# the full test suite through suite-run. Gates that passed on the branch say
-# nothing about the merged tree, and the merged HEAD is new, so suite-run runs.
-bash <plugin-root>/scripts/suite-run -- <test command>
-```
-
-Shell variables do not survive between Bash calls, so `$PRE_MERGE` is gone by
-the time dforge:running-gates runs. Pass the base as the literal sha the
-`echo` printed. A gates manifest whose `Repo` fields name several
-repositories needs one base per repository: capture each repository's
-pre-merge `git rev-parse HEAD` the same way, before that repository's merge,
-and name each sha with its repository.
-
-If tests fail on the merged result: stop, leave the worktree and branch in
-place, and investigate — nothing has been pushed, so the merge is local
-and recoverable.
-
-Once the merged result is green: record the plan (Step 5b), clean up the
-worktree (Step 6), then
-delete the branch:
-
-```bash
-git branch -d <feature-branch>
-```
-
-### Option 2: Push and Create PR
-
-First record the plan in the completed index (Step 5b) and commit it on the
-branch, so the line travels with the PR. Then:
-
-```bash
-git push -u origin <feature-branch>
-# From a detached HEAD, name the new branch on the remote:
-# git push origin HEAD:refs/heads/<new-branch>
-```
-
-Then create the pull/merge request against <base-branch> with the code host's
-tooling — its CLI if one is available, or the creation URL most forges
-print when you push — following the repo's PR template and conventions if
-present, and report the URL to your human partner.
-
-Keep the worktree — your human partner iterates on PR feedback there.
-
-### Option 3: Keep As-Is
-
-Report: "Keeping branch <name>. Worktree preserved at <path>."
-
-### If your human partner asks to discard the work
-
-This path exists only as a response to an explicit request to throw the
-work away. Confirm first:
-
-```
-This will permanently delete:
-- Branch <name>
-- All commits: <commit-list>
-- Worktree at <path>
-
-Type 'discard' to confirm.
-```
-
-Wait for that exact confirmation. When it arrives:
-
-```bash
-MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
-cd "$MAIN_ROOT"
-```
-
-Then clean up the worktree (Step 6) and force-delete the branch:
-
-```bash
-git branch -D <feature-branch>
-```
+Read [execute-choice.md](references/execute-choice.md) before you carry out the chosen option.
 
 ## Step 5b: Record the plan as completed
 
@@ -477,63 +345,7 @@ Options 1 and 2 only.
 
 ## Step 6: Cleanup Workspace
 
-**Runs for Option 1 and confirmed discards.** Options 2 and 3 always
-preserve the worktree. Both callers have already changed directory to the
-main repo root — worktree removal must run from outside the worktree —
-and use the `GIT_DIR`/`GIT_COMMON`/`WORKTREE_PATH` values captured in
-Step 2, from before that directory change.
-
-A plan's workspace (`<state>/sdd/<plan>/`: briefs, reports, and the ledger
-and `handoff.md` while progress is local) is git-ignored and lives in the
-worktree, so it goes with it — `git worktree remove` deletes ignored files
-without `--force`. Options 2 and 3 keep it for the next session.
-
-**If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. If this
-work came from a plan, delete its workspace — `rm -rf` on the directory
-`scripts/sdd-workspace PLAN_FILE` prints. Done.
-
-**If `WORKTREE_PATH` is under `.worktrees/` or `worktrees/`:** dforge
-created this worktree — we own cleanup:
-
-```bash
-git worktree remove "$WORKTREE_PATH"
-git worktree prune  # Self-healing: clean up any stale registrations
-```
-
-**If removal is refused** (`contains modified or untracked files`): the
-worktree holds files that exist nowhere else — uncommitted plans, notes,
-or scratch work. Never `--force` on your own initiative. Show your human
-partner what is at stake and ask:
-
-```bash
-git -C "$WORKTREE_PATH" status --porcelain -uall
-```
-
-```
-Worktree removal refused — these files were never committed:
-
-<file list>
-
-1. Commit them to <branch> before cleanup
-2. Move them into <main repo root>
-3. Delete them (unrecoverable)
-
-Which?
-```
-
-Carry out the choice, then remove the worktree.
-
-**Otherwise:** The host environment owns this workspace — leave it in
-place. If this work came from a plan, first delete its workspace: running
-`scripts/sdd-workspace PLAN_FILE` from the main repo root (where Step 6
-already is) resolves against the wrong checkout, so `cd "$WORKTREE_PATH"`
-and re-resolve `PLAN_FILE` against that checkout's own copy of the plan
-file — not the absolute path into the main repo root the session may still
-be holding, which `scripts/sdd-workspace` now refuses from inside the
-worktree (`plan_require_same_project` treats a linked worktree and its primary
-checkout as different repositories). Then run `scripts/sdd-workspace
-PLAN_FILE` and `rm -rf` the path it prints. Then, if your platform provides
-a workspace-exit tool, use it.
+Read [cleanup.md](references/cleanup.md) before you remove the worktree.
 
 ## Step 7: Report the Next Step
 
@@ -571,19 +383,4 @@ follow-on work recorded."
 
 ## Common Rationalizations
 
-| Excuse | Reality |
-|--------|---------|
-| "Tests passed earlier this session" | Run the suite on the tree you are about to integrate. A green run only proves the tree it ran on. |
-| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait; only the choice they made before the run acts for them, and it acts at once. |
-| "I'll ask for the merge in prose" | A request buried in a long report goes unseen. The three-option menu, verbatim, is the last thing in the message. |
-| "The open findings are in my report" | The report scrolls away and Step 6 deletes the ledger. Commit them in the followups note. |
-| "They seem done with this feature — I'll offer to discard it" | The menu is complete as written. Discard happens only when your human partner asks for it in so many words. |
-| "'Yeah, get rid of it' counts as confirmation" | Only the typed word `discard` authorizes deletion. |
-| "The PR is up, so the worktree is clutter now" | PR feedback gets fixed in that worktree. It stays until the work lands. |
-| "This other worktree looks stale — I'll clean it too" | Clean up only worktrees under `.worktrees/` or `worktrees/`. Everything else belongs to the host. |
-| "Removal refused — `--force` is just finishing the cleanup" | The refusal means files exist only in that worktree. `--force` destroys them permanently. Show your human partner and ask. |
-| "The merged-result failure is probably flaky" | A failing merged result stops everything. Branch and worktree stay put while you investigate. |
-| "The base branch is obviously main" | Confirm the fork point or ask, unless Step 4 carries out a choice recorded before the run, which takes its base from the record, the plan, the conversation or the upstream. Merging into the wrong base is expensive to undo. |
-| "The push was rejected — force-push will fix it" | A rejected push means the remote moved. Investigate; force-push only on your human partner's explicit request. |
-| "I printed the rulings and the review — that wraps up the run" | Without the menu or a recorded choice nothing integrates. With no recorded choice the options close the message, every time; a run that carried out its choice ends on the next-step block. |
-| "I summarized the outcome — the next step is obvious" | Not to a fresh session or a partner who stepped away. End with the `next-step` block, verbatim. |
+Read [rationalizations.md](references/rationalizations.md) before you skip a step of finishing.

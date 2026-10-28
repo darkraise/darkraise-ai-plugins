@@ -10,7 +10,6 @@ P="$HERE/.."
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 DT="$P/reference/delegated-task.md"
 CODEX="$P/skills/using-dforge/references/codex-tools.md"
-INLINE="$P/skills/executing-plans/SKILL.md"
 . "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0
@@ -34,6 +33,10 @@ polling() {
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+SKILL_VIEW_DIR="$TMP/views"
+mkdir "$SKILL_VIEW_DIR"
+. "$HERE/skill-view.sh"
+INLINE="$(skill_view executing-plans)"
 
 cat > "$TMP/old-wait.md" <<'FIXTURE'
 On Claude Code a bounded stretch is a `Monitor` with an until-loop, never a

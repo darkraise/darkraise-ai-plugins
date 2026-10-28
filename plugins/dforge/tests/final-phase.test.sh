@@ -6,6 +6,9 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
+SKILL_VIEW_DIR=$(mktemp -d)
+trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
+. "$HERE/skill-view.sh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -18,7 +21,7 @@ names() { # names <label> <file> <text>
 
 SDD="$P/skills/subagent-driven-development/SKILL.md"
 . "$HERE/fixtures/sdd-text.sh"
-EP="$P/skills/executing-plans/SKILL.md"
+EP="$(skill_view executing-plans)"
 FIN="$P/skills/finishing-a-development-branch/SKILL.md"
 H="$P/skills/handoff/SKILL.md"
 FR="$P/reference/final-review.md"

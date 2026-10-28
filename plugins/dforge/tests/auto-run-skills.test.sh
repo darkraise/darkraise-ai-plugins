@@ -6,6 +6,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DFORGE_BUDGET CLAUDE_PROJECT_DIR
+SKILL_VIEW_DIR=$(mktemp -d)
+trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
+. "$HERE/skill-view.sh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -45,7 +48,7 @@ for skill in subagent-driven-development executing-plans; do
   names "$skill: the four stops give way" "$F" 'except in an auto run'
 done
 names "subagent-driven-development: a deferred task is not merged" "$P/skills/subagent-driven-development/SKILL.md" "a deferred task's branch is"
-EPF="$P/skills/executing-plans/SKILL.md"
+EPF="$(skill_view executing-plans)"
 names "executing-plans: step 7 runs task-complete" "$EPF" 'auto run, run `scripts/auto-run task-complete`, then the Fable batch when'
 names "executing-plans: step 8 moves to the final phase" "$EPF" '`scripts/context-size --final`; in an auto run it moves the run to the'
 names "executing-plans: the budget section says so too" "$EPF" 'Finishing is never budget-checked. In an auto run `--final` also moves the'
@@ -74,7 +77,7 @@ names "auto-run.md: an untested statement keeps the branch" "$R" '`cannot-test`,
 names "auto-run.md: fail and flaky counts are not read" "$R" 'at it. The line'"'"'s `fail` and `flaky` counts are not read: they are taken'
 names "auto-run.md: a deferred statement or unresolved Blocker keeps the branch" "$R" 'whose Item begins `A<n>:` or whose Note is `critic Blocker unresolved`'
 names "auto-run.md: the final message lists demos and lenses" "$R" 'every `demo` statement of the spec, every lens'
-FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+FIN="$(skill_view finishing-a-development-branch)"
 names "finishing: unverified acceptance keeps the branch" "$FIN" '`merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of'
 names "finishing: an untested statement keeps the branch" "$FIN" '`cannot-test`, or when the run added a deferred register'
 names "finishing: fail and flaky counts are not read" "$FIN" 'The line'"'"'s `fail` and `flaky` counts are not read: they are taken before'

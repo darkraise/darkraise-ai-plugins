@@ -7,6 +7,9 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
+SKILL_VIEW_DIR=$(mktemp -d)
+trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
+. "$HERE/skill-view.sh"
 SKILL="$P/skills/running-gates/SKILL.md"
 
 pass=0 fail=0
@@ -59,7 +62,7 @@ present "gates states a skip" "$SKILL" 'silent skip'
 # After a merge, merge-base is HEAD and the change set is empty; a post-merge
 # caller must name the base or every conditional gate is skipped.
 present "a merged caller names the base" "$SKILL" 'a caller that has already merged names the'
-present "finishing passes the pre-merge base" "$P/skills/finishing-a-development-branch/SKILL.md" 'PRE_MERGE=$(git rev-parse HEAD)'
+present "finishing passes the pre-merge base" "$(skill_view finishing-a-development-branch)" 'PRE_MERGE=$(git rev-parse HEAD)'
 present "milestone closure runs every gate" "$P/skills/closing-a-milestone/SKILL.md" 'with the base `all`'
 
 TPL="$P/skills/running-gates/references/gates-template.md"
@@ -113,7 +116,7 @@ present "template shows the fenced Setup form" "$TPL" 'Setup:'
 present "template shows an image gate" "$TPL" 'Evidence: image'
 present "template carries a blank skeleton" "$TPL" 'Copy the block below for a new gate'
 
-FIN="$P/skills/finishing-a-development-branch/SKILL.md"
+FIN="$(skill_view finishing-a-development-branch)"
 VBC="$P/skills/verification-before-completion/SKILL.md"
 
 present "finishing prefers the gates manifest" "$FIN" 'dforge:running-gates'

@@ -7,6 +7,9 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
+SKILL_VIEW_DIR=$(mktemp -d)
+trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
+. "$HERE/skill-view.sh"
 STATE="$P/reference/project-state.md"
 . "$HERE/fixtures/sdd-text.sh"
 
@@ -179,7 +182,7 @@ present "writing-plans: a design-time deferral becomes a row" "$P/skills/writing
   "deferred"
 
 # --- execution marks rows doing, and the README documents the artifact ---
-for skill_file in "$P/skills/executing-plans/SKILL.md" "$SDD_SETUP"; do
+for skill_file in "$(skill_view executing-plans)" "$SDD_SETUP"; do
   present "execution: rows go to doing at the start ($(basename "$(dirname "$skill_file")")/$(basename "$skill_file"))" \
     "$skill_file" "scripts/register set"
 done
@@ -193,7 +196,7 @@ present "status: an unresolved register row outranks 'between programmes'" "$SKI
 present "status: Open items is omitted when empty" "$SKILL" \
   "omit when no register holds an unresolved row"
 present "finishing: the Program spec is checked too" "$FIN" "when that differs"
-for skill_file in "$P/skills/executing-plans/SKILL.md" "$SDD_SETUP"; do
+for skill_file in "$(skill_view executing-plans)" "$SDD_SETUP"; do
   present "execution: a resolved row is never set back to doing ($(basename "$(dirname "$skill_file")")/$(basename "$skill_file"))" \
     "$skill_file" 'skipping any row already at `verify`'
 done

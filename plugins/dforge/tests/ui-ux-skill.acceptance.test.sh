@@ -851,7 +851,7 @@ flat() { tr '\n' ' ' < "$1" | sed -E 's/[[:space:]]+/ /g'; }
 t_A19() {
   local fr fin
   fr=$(flat "$PLUGIN/reference/final-review.md")
-  fin=$(flat "$PLUGIN/skills/finishing-a-development-branch/SKILL.md")
+  fin=$(flat "$PLUGIN/skills/finishing-a-development-branch/references/ui-proof.md")
   has "A19: the final review names ui-proof check --base MERGE_BASE --spec" "$fr" "ui-proof check --base MERGE_BASE --spec"
   has "A19: the finishing skill names ui-proof check --base MERGE_BASE --spec" "$fin" "ui-proof check --base MERGE_BASE --spec"
   matches "A19: the final review says exit 1 stops it" "$fr" 'ui-proof check --base MERGE_BASE --spec.{0,600}[Ee]xit 1 stops'
