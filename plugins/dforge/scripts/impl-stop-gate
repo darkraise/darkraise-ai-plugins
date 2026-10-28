@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# SubagentStop hook: an implementer that reports DONE or DONE_WITH_CONCERNS
+# must have written its report. Reads the hook input on stdin and blocks the
+# stop (exit 2, one stderr line, which the subagent receives as its next
+# instruction) when the reply has no `Report: <absolute path>` line, the file
+# does not exist, it lacks `## Discovered issues (not fixed)` or
+# `## Assumptions made`, or `## Verified` is missing or holds no bullet of the
+# form "- `<command>` — pass|fail[: <n> passed, <m> failed]". Every other stop
+# passes: other agent types, BLOCKED, NEEDS_CONTEXT, and any dispatch that
+# does not use the status contract. It runs no tests and makes no network call.
+#
+# <state>/impl-stop-gate/<agent_id> holds the block count (line 1), the
+# sha256 of the last blocked message (line 2) and "passed" once the gate has
+# let a stop through (line 3). A stop whose hash equals the stored one is the
+# same stop fired twice and does not raise the count. After two blocks the next
+# distinct failing stop passes and appends one line to
+# <state>/impl-stop-gate.log.
+set -uo pipefail
+export LC_ALL=C
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+command -v jq >/dev/null 2>&1 || exit 0
+input=$(cat 2>/dev/null || true)
+jq -e . >/dev/null 2>&1 <<<"$input" || exit 0
+
+agent_type=$(jq -r '.agent_type // empty' <<<"$input" | tr -d '\r')
+agent_id=$(jq -r '.agent_id // empty' <<<"$input" | tr -d '\r\n' | tr -c 'A-Za-z0-9._-' '-')
+cwd=$(jq -r '.cwd // empty' <<<"$input" | tr -d '\r')
+message=$(jq -r '.last_assistant_message // empty' <<<"$input" | tr -d '\r')
+
+grep -qE '(^|:)impl-' <<<"$agent_type" || exit 0
+grep -qE '\*\*Status:\*\* (DONE|DONE_WITH_CONCERNS)([^A-Z_]|$)' <<<"$message" || exit 0
+[ -n "$agent_id" ] || exit 0
+
+missing=()
+report=$(grep -E '^Report: (.+)$' <<<"$message" | tail -n 1 | sed -E 's/^Report: //; s/[[:space:]]+$//')
+if [ -z "$report" ]; then
+  missing+=("your reply has no \`Report: <absolute path>\` line")
+else
+  case $report in
+    /* | [A-Za-z]:[/\\]*) ;;
+    *) missing+=("the \`Report:\` path \`$report\` is not absolute"); report="" ;;
+  esac
+fi
+if [ -n "$report" ]; then
+  file=${report//\\//}
+  if command -v cygpath >/dev/null 2>&1; then file=$(cygpath -u "$file" 2>/dev/null || printf '%s' "$file"); fi
+  if [ ! -f "$file" ]; then
+    missing+=("the report file \`$report\` does not exist")
+  else
+    body=$(tr -d '\r' < "$file")
+    grep -qE '^## Discovered issues \(not fixed\)[[:space:]]*$' <<<"$body" || missing+=("the report lacks \`## Discovered issues (not fixed)\`")
+    grep -qE '^## Assumptions made[[:space:]]*$' <<<"$body" || missing+=("the report lacks \`## Assumptions made\`")
+    if ! grep -qE '^## Verified[[:space:]]*$' <<<"$body"; then
+      missing+=("the report lacks \`## Verified\`")
+    else
+      bullet=$(awk '
+        /^## / { in_verified = ($0 ~ /^## Verified[ \t]*$/); next }
+        in_verified && /^- `[^`]+` — (pass|fail)(: .*)?$/ { found = 1 }
+        END { print found ? "yes" : "no" }' <<<"$body")
+      [ "$bullet" = yes ] || missing+=("\`## Verified\` holds no bullet like: - \`<command>\` — pass: <n> passed, <m> failed")
+    fi
+  fi
+fi
+[ "${#missing[@]}" -gt 0 ] || exit 0
+
+reason=""
+for part in "${missing[@]}"; do reason="${reason:+$reason; }$part"; done
+reason=$(printf '%s' "$reason" | cut -c1-400)
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 | cut -d' ' -f1
+  else cksum | tr -d ' '
+  fi
+}
+block() {
+  printf 'impl-stop-gate: %s. Fix it, then end your reply again with its **Status:** line and its Report: line.\n' "$reason" >&2
+  exit 2
+}
+
+cd "${cwd:-$PWD}" 2>/dev/null || exit 0
+state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || exit 0
+[ -n "$state" ] || exit 0
+dir="$state/impl-stop-gate"
+mkdir -p "$dir" 2>/dev/null || exit 0
+counter="$dir/$agent_id"
+
+count=0 last="" passed=""
+if [ -f "$counter" ]; then
+  { IFS= read -r count; IFS= read -r last; IFS= read -r passed; } < <(tr -d '\r' < "$counter")
+fi
+case $count in '' | *[!0-9]*) count=0 ;; esac
+hash=$(printf '%s' "$message" | sha256)
+
+[ "$passed" = passed ] && exit 0
+[ "$hash" = "$last" ] && block
+if [ "$count" -ge 2 ]; then
+  printf '%s\n%s\npassed\n' "$count" "$last" > "$counter"
+  printf '%s %s %s pass-through after 2 blocks — %s\n' "$(date +%s)" "$agent_id" "$agent_type" "$reason" >> "$state/impl-stop-gate.log"
+  exit 0
+fi
+printf '%s\n%s\n' "$((count + 1))" "$hash" > "$counter"
+block
