@@ -48,13 +48,12 @@ Subagent ([IMPLEMENTER]):
     fixed)` and continue if your task can proceed; report BLOCKED if it
     cannot.
 
-    While iterating, run the focused test for what you're changing before
-    each commit, not the full suite after every edit. After your final
-    commit, on a clean tree, run the project's full suite once through
-    `bash [PLUGIN_ROOT]/scripts/suite-run -- <the suite command>` and report
-    its digest in your report's test results: it records the HEAD it ran at,
-    so the controller does not run the suite again on a HEAD you already
-    covered.
+    Before each commit, run the focused tests that cover what you changed -
+    the test files or cases for the code you touched - and never the whole
+    suite. The controller runs the full suite beside the review of your
+    final commit, and a failure it finds there comes back to you as a
+    finding. Write each command you ran, with its result, under `## Verified`
+    in your report (see Report Format).
 
     ## You Do Not Dispatch Subagents
 
@@ -70,7 +69,7 @@ Subagent ([IMPLEMENTER]):
 
     ## Run Control Belongs to the Controller
 
-    Never run `scripts/context-size`, `scripts/auto-run` or
+    Never run `[PLUGIN_ROOT]/scripts/context-size`, `scripts/auto-run` or
     `scripts/next-step` yourself: they belong to the controller. Your shell
     carries the controller's session id, so a call from you reads or moves
     the controller's session budget and auto-run state.
@@ -144,16 +143,25 @@ Subagent ([IMPLEMENTER]):
     or, when too much time has passed, a fresh implementer on your tier takes
     over from your report file, so keep it complete.
     Fix them, re-run the tests that cover the amended code, and append a fix
-    report to your report file: what you changed, the covering tests you
-    ran, the command, and the output. Reviewers will not re-run tests for
-    you — your report is the test evidence. Then reply with the same short
-    status contract as your first report.
+    report to your report file: what you changed, and a `## Verified`
+    section in the form below with one bullet per covering command you ran.
+    Reviewers will not re-run tests for you — your report is the test
+    evidence. Then reply with the same short status contract as your first
+    report, ending with its `Report:` line.
 
     ## Report Format
 
     Write your full report to [REPORT_FILE]:
     - What you implemented (or what you attempted, if blocked)
-    - What you tested and test results
+    - What you tested, summarised, and anything you could not run
+    - `## Verified`: one bullet per command you ran to check your work. Each
+      bullet starts at the beginning of its line and has exactly this form,
+      where the separator is a space, an em dash and a space, `pass` means
+      the command exited 0, and the counts are the ones the command printed
+      (a command that prints none is `1 passed, 0 failed` on exit 0 and
+      `0 passed, 1 failed` otherwise):
+      - `<command>` — pass: <n> passed, <m> failed
+      - `<command>` — fail: <n> passed, <m> failed
     - **TDD Evidence** (if TDD was required for this task):
       - RED: command run, relevant failing output before implementation, and why the failure was expected
       - GREEN: command run and relevant passing output after implementation
@@ -173,7 +181,9 @@ Subagent ([IMPLEMENTER]):
     - Commits created (short SHA + subject)
     - One-line test summary (e.g. "14/14 passing, output pristine")
     - Your concerns, if any
-    - The report file path
+    - As the last line of your reply, exactly this on one line, with the
+      path written out in full:
+      `Report: <absolute path of the report file>`
 
     If BLOCKED or NEEDS_CONTEXT, put the specifics in the final message
     itself — the controller acts on it directly.
@@ -188,4 +198,4 @@ Subagent ([IMPLEMENTER]):
   `dforge:impl-sonnet-medium`), passed as `subagent_type` with no
   `model` argument: the agent file pins both model and effort
 - `[PLUGIN_ROOT]` — the resolved dforge plugin directory; expand it before
-  sending, so the `suite-run` call above names a real path
+  sending, so the `context-size` path above names a real path

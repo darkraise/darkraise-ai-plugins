@@ -166,7 +166,7 @@ a1() {
   check "A1: the dispatch file exists" "$([ -f "$D" ] && echo yes || echo no)" "yes"
   has "A1: the dispatch names the brief path" "$(cat "$D")" "$WS/task-1-brief.md"
   has "A1: the dispatch names the report path" "$(cat "$D")" "$WS/task-1-report.md"
-  has "A1: the dispatch carries the expanded plugin root" "$(cat "$D")" "$PLUGIN/scripts/suite-run"
+  has "A1: the dispatch carries the expanded plugin root" "$(cat "$D")" "$PLUGIN/scripts/context-size"
   absent "A1: the dispatch has no unexpanded placeholder" "$(cat "$D")" '\[[A-Z][A-Z_]+\]'
   check "A1: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
   has "A1: the digest prints the subagent_type" "$out" "dforge:impl-sonnet-low"

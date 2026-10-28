@@ -62,8 +62,16 @@ lacks "the wave check output file is gone" "$PW" 'wave-<k>-check.txt'
 names "the final review runs suites through suite-run" "$FR" '`bash <plugin-root>/scripts/suite-run -- <command>`'
 names "finishing runs the suite through suite-run" "$FIN" '`bash <plugin-root>/scripts/suite-run -- <test command>`, in the background'
 names "finishing verifies the merged result through suite-run" "$FIN" 'bash <plugin-root>/scripts/suite-run -- <test command>'
-names "implementers run the full suite through suite-run" "$IP" '`bash [PLUGIN_ROOT]/scripts/suite-run -- <the suite command>` and report'
+lacks "implementers no longer run the full suite through suite-run" "$IP" 'scripts/suite-run'
 lacks "implementers no longer run the full suite before committing" "$IP" 'full suite once before committing, not after every edit.'
+names "implementers run the focused tests that cover their change" "$IP" 'Before each commit, run the focused tests that cover what you changed -'
+names "the controller runs the full suite beside the review" "$IP" 'The controller runs the full suite beside the review of your'
+names "the run-control paragraph names context-size by plugin root" "$IP" 'Never run `[PLUGIN_ROOT]/scripts/context-size`, `scripts/auto-run` or'
+names "the report gains a Verified section" "$IP" '`## Verified`: one bullet per command you ran to check your work.'
+names "the reply ends with the Report line" "$IP" '`Report: <absolute path of the report file>`'
+verified=$(grep -E '^ +- `<command>` — (pass|fail): <n> passed, <m> failed$' "$IP" | sed -E 's/^ +//; s/<command>/bash t.sh/; s/<n>/3/; s/<m>/0/')
+check "the prompt shows both Verified bullet forms" "$(printf '%s\n' "$verified" | grep -c .)" "2"
+check "each Verified bullet form matches the stop gate's grammar" "$(printf '%s\n' "$verified" | grep -cE '^- `[^`]+` — (pass|fail)(: .*)?$')" "2"
 
 names "the example workflow starts a task with task-step" "$SDD_EXAMPLE" '[task-step start PLAN_FILE 1:'
 names "the example workflow reviews with task-step" "$SDD_EXAMPLE" '[task-step review PLAN_FILE 1:'
