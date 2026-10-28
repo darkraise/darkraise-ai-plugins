@@ -51,7 +51,7 @@ const [tscExecutable, tscPrefix] = process.platform === 'win32' ? [process.env.C
 const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
 // plan-lint runs about 240 checks of a few processes each, which take over ten
 // minutes on a Windows runner and under a minute on Linux.
-const suiteSeconds = { 'plan-lint.test.sh': 900, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step.test.sh': 1450 };
+const suiteSeconds = { 'plan-lint.test.sh': 900, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 900, 'task-step.test.sh': 1450 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
 // can hold beside anything else, so it runs as two halves of its tests.
 const suiteParts = {

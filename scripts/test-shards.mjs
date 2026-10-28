@@ -1,6 +1,10 @@
 // Approximate Windows seconds from Actions run 40514782333. That run cut off
 // faster-plans and task-step, whose weights are extrapolated from the share of
 // their checks that ran, and ui-proof, which keeps its weight from 39725084214.
+// Run 40753974623 (2026-10-29) supplied the suites the speed-and-cost plans
+// added and those that had grown; task-step-base, cut off there, is
+// extrapolated from task-step-settle's Windows-to-Linux ratio, and
+// speed-and-cost-followups weighs three times its A12 part, the longest.
 // These are scheduling weights, not timeouts; newly discovered suites receive
 // the default weight. A suite test-all runs in parts splits its weight evenly
 // among them.
@@ -8,7 +12,7 @@ const windowsSeconds = {
   'run-all.sh': 157,
   'auto-run.test.sh': 507,
   'budget-line.test.sh': 123,
-  'codex-gate.test.sh': 97,
+  'codex-gate.test.sh': 122,
   'codex-review.test.sh': 141,
   'context-size.test.sh': 222,
   'darkmem-sync.test.sh': 155,
@@ -21,34 +25,37 @@ const windowsSeconds = {
   'faster-plans.acceptance.test.sh': 1200,
   'finish-choice.test.sh': 78,
   'hook.test.sh': 75,
+  'impl-stop-gate.test.sh': 64,
   'in-flight.test.sh': 36,
   'inline-mode.test.sh': 65,
-  'lens-route.test.sh': 135,
+  'lens-route.test.sh': 185,
   'next-step.test.sh': 500,
-  'plan-amend.test.sh': 235,
+  'plan-amend.test.sh': 333,
   'plan-lib.test.sh': 43,
   'plan-lint.test.sh': 814,
   'plan-revise.test.sh': 355,
   'register.test.sh': 68,
   'repo-audit.test.sh': 53,
-  'review-depth-qa.acceptance.test.sh': 161,
+  'review-depth-qa.acceptance.test.sh': 288,
   'review-depth.acceptance.test.sh': 160,
-  'review-route.test.sh': 382,
+  'review-route.test.sh': 458,
   'roadmap.test.sh': 125,
   'roots.test.sh': 84,
-  // Run 40748702288: the follow-ups suite was cut off at 600 s in A12.
-  'speed-and-cost-followups.acceptance.test.sh': 1200,
-  'speed-and-cost.acceptance.test.sh': 146,
+  'speed-and-cost-followups.acceptance.test.sh': 2250,
+  'speed-and-cost.acceptance.test.sh': 230,
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 720,
   'task-state.test.sh': 47,
+  'task-step-base.test.sh': 550,
+  'task-step-settle.test.sh': 180,
+  'task-step-suite.test.sh': 150,
   'task-step.test.sh': 1340,
   'turn-end.test.sh': 251,
   'ui-hooks.test.sh': 65,
   'ui-proof.test.sh': 195,
   'ui-ux-skill.acceptance.test.sh': 362,
   'wave.test.sh': 75,
-  'working-directory.test.sh': 64,
+  'working-directory.test.sh': 82,
 };
 
 export function selectShard(jobs, shard) {
