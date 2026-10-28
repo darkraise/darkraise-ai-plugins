@@ -618,9 +618,7 @@ a11() {
   result_at toolu_a3 2026-10-26T11:40:00.000Z $'Async agent launched successfully.\nagentId: a13 (internal ID)'
 
   local out code
-  # in-flight runs as in its own suite: its transcript lookup yields the MSYS
-  # form, which jq.exe opens only with path conversion on.
-  out=$(TZ=UTC0 env -u MSYS_NO_PATHCONV bash "$INFLIGHT"); code=$?
+  out=$(TZ=UTC0 bash "$INFLIGHT"); code=$?
   check "A11: running launches: exit 1" "$code" "1"
   matches "A11: a shell: start time and idle minutes from the file its result names" "$out" '^- shell b11 08:05 idle (46|47|48)m Run the suite$'
   matches "A11: an agent: start time and idle minutes from its output_file" "$out" '^- agent a11 09:30 idle (11|12|13)m Implement task 4$'

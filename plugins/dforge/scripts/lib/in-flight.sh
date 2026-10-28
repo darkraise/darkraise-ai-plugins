@@ -53,6 +53,8 @@ inflight_idle() {
 # The start is the launch result's own timestamp in local time ("-" when it
 # has none); the idle age is inflight_idle's; <what> is cut at 80 characters.
 # Returns 1 when the transcript could not be scanned, which is not "nothing".
+# jq reads it on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /c/...
+# form the session record's lookup yields.
 inflight_scan() {
   local tp=$1 since=${2:-} events launched stopped latest running kind id start out what
   [ -n "$tp" ] && [ -f "$tp" ] || return 0
@@ -75,7 +77,7 @@ inflight_scan() {
             elif ($text | test("^(<tool_use_error>)?No task found with ID: ")) then
               "S\t\(($text | capture("No task found with ID: (?<id>[A-Za-z0-9_-]+)").id) // "-")"
             else empty end
-        else empty end' "$tp" 2>/dev/null | tr -d '\r') || return 1
+        else empty end' 2>/dev/null <"$tp" | tr -d '\r') || return 1
   launched=$(awk -F '\t' '$1 == "L" && $2 != "-"' <<<"$events")
   [ -n "$launched" ] || return 0
   stopped=$(awk -F '\t' '$1 == "S" && $2 != "-" { print $2 }' <<<"$events" | sort -u)
@@ -86,7 +88,7 @@ inflight_scan() {
   latest=$(set -o pipefail; jq -rR 'fromjson? | select(.isSidechain? != true)
       | [ .attachment.prompt?, (select(.type? == "queue-operation") | .content?),
           (select(.type? == "user") | .message.content? | if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end) ]
-      | .[] | strings | select(contains("<task-notification>")) | gsub("[\r\n]+"; " ")' "$tp" 2>/dev/null \
+      | .[] | strings | select(contains("<task-notification>")) | gsub("[\r\n]+"; " ")' 2>/dev/null <"$tp" \
       | awk '
         # One line per delivered text; a text can carry several notifications.
         # A notification names the launch by task id and, usually, by tool_use
