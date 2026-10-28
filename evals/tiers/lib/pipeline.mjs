@@ -63,6 +63,9 @@ function gradingFor(c) {
     const result = git(['log', '--reverse', '--format=%H%x09%s', `${c.base}..HEAD`]).split('\n').filter(Boolean)
       .map(line => line.split('\t')).find(([, subject]) => messages.includes(subject))?.[0];
     if (!result) throw new Error(`no commit after ${c.base} carries the message of Task ${c.task}`);
+    // Checked before the launch: found only after it, a missing test would
+    // re-run the paid session on every invocation.
+    for (const test of tests) if (sh('git', ['cat-file', '-e', `${result}:${test}`]).code !== 0) throw new Error(`${test} is missing at ${result}`);
     return { allowed, tests, result };
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -114,6 +117,7 @@ function dispatches(config) {
 // directory: nothing the run touches lies outside it.
 export async function runPipelineCase({ c, arm, ref, run, root }) {
   const failed = (detail, extra = {}) => ({ outcome: 'ERROR', costUsd: 0, seconds: 0, dispatches: 0, fixRounds: 0, detail, ...extra });
+  let inv = null;
   try {
     const plugin = armPlugin(ref, root);
     const grading = gradingFor(c);
@@ -140,7 +144,7 @@ export async function runPipelineCase({ c, arm, ref, run, root }) {
     const r = await launch(process.env.TIER_EVAL_CLAUDE ?? 'claude', args, { cwd: work, seconds: CASE_SECONDS, input: prompt, env });
     writeFileSync(join(dir, 'output.json'), r.out);
     writeFileSync(join(dir, 'stderr.txt'), r.err);
-    const inv = classify(r, (Date.now() - started) / 1000);
+    inv = classify(r, (Date.now() - started) / 1000);
     if (inv.kind === 'limit' || inv.kind === 'error') return failed(`${inv.kind}: ${inv.text.slice(0, 200)}`, { costUsd: inv.cost, seconds: inv.seconds });
 
     const ledger = ledgerLines(work, c.plan, env);
@@ -158,7 +162,8 @@ export async function runPipelineCase({ c, arm, ref, run, root }) {
     const passed = inv.kind === 'ok' && complete && tested.pass && outside.length === 0;
     return { outcome: passed ? 'PASS' : 'FAIL', costUsd: inv.cost, seconds: inv.seconds, dispatches: dispatches(env.CLAUDE_CONFIG_DIR), fixRounds, detail };
   } catch (error) {
-    return failed(`error: ${error.message.slice(0, 200)}`);
+    // A session that ran has spent money, so the spend cap must count it.
+    return failed(`error: ${error.message.slice(0, 200)}`, inv ? { costUsd: inv.cost, seconds: inv.seconds } : {});
   }
 }
 

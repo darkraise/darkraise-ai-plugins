@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { after, test } from 'node:test';
 import { spawnSync } from 'node:child_process';
@@ -98,4 +98,35 @@ test('the pipeline stage stops at the spend cap and refuses a missing manifest',
   const none = grid(['--rep', '3']);
   assert.equal(none.status, 2);
   assert.match(none.stderr, /no pipeline manifest/);
+});
+
+test('a test file absent at the result commit stops the case before any session', async () => {
+  const g = (...args) => { const r = spawnSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: fx.repo, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
+  const plan = 'docs/gap-plan.md';
+  writeFileSync(join(fx.repo, plan), ['# Gap Plan', '', '**Goal:** a gap', '', '---', '', '### Task 1: Gap', '', '**Files:**', '- Create: `src/gap.sh`', '- Test: `tests/gap.test.sh`', '', '- [ ] **Step 1: Commit**', '', '```bash', 'git commit -m "feat: add gap"', '```', ''].join('\n'));
+  g('add', '-A'); g('commit', '-q', '-m', 'docs: plan the gap');
+  const base = g('rev-parse', 'HEAD');
+  writeFileSync(join(fx.repo, 'src/gap.sh'), 'echo gap\n');
+  g('add', '-A'); g('commit', '-q', '-m', 'feat: add gap');
+  modes(fx.stub, 'loop');
+  const before = calls().length;
+  const result = await runPipelineCase({ c: { case: 'p-gap', plan, task: '1', base, fixRounds: '0' }, arm: 'baseline@1111111', ref: fx.planned, run: 1, root });
+  assert.deepEqual([result.outcome, result.costUsd], ['ERROR', 0]);
+  assert.match(result.detail, /tests\/gap\.test\.sh is missing at [0-9a-f]{40}/);
+  assert.equal(calls().length, before);
+});
+
+test('a harness error after the session ran keeps the session cost', async () => {
+  const script = join(fx.top, 'claude-breaks-git');
+  writeFileSync(script, `#!/bin/sh\ncat >/dev/null\nrm -rf .git\nprintf '%s' '{"type":"result","total_cost_usd":0.5,"is_error":false,"result":"done"}'\n`);
+  chmodSync(script, 0o755);
+  const saved = process.env.TIER_EVAL_CLAUDE;
+  process.env.TIER_EVAL_CLAUDE = script;
+  try {
+    const result = await runPipelineCase({ c: row, arm: 'baseline@1111111', ref: fx.planned, run: 5, root });
+    assert.deepEqual([result.outcome, result.costUsd], ['ERROR', 0.5]);
+    assert.match(result.detail, /^error: git diff/);
+  } finally {
+    process.env.TIER_EVAL_CLAUDE = saved;
+  }
 });
