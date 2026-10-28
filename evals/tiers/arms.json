@@ -9,5 +9,6 @@
   },
   "review": ["judge-opus@high", "judge-opus@medium", "judge-sonnet-high"],
   "slice": ["impl-sonnet-high", "impl-opus-medium", "impl-opus-high"],
-  "grader": { "model": "opus", "effort": "low" }
+  "grader": { "model": "opus", "effort": "low" },
+  "pipeline": { "baseline": "main", "candidate": "HEAD" }
 }

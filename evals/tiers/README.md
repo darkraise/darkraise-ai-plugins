@@ -24,6 +24,7 @@ Run them from the repository root.
 | `node evals/tiers/run-grid.mjs --stage STAGE [--rep N] [--minutes M] [--pass P]` | Runs the unscored cells of `smoke`, `written`, `stripped`, `review` or `slice`, two at a time; `--minutes` stops starting cells after M minutes; `--pass` grades every review again as passes P and P + 1 |
 | `node evals/tiers/run-case.mjs CASE_ID ARM [--rep N]` | Runs and grades one cell |
 | `node evals/tiers/run-case.mjs CASE_ID ARM [--rep N] --exclude REASON` | Runs nothing: takes the case out of the repetition for every arm, with the reason |
+| `node evals/tiers/run-grid.mjs --stage pipeline [--rep N] [--minutes M]` | Replays every case of `cases/pipeline.tsv` under the baseline and the candidate ref of `arms.json`'s `pipeline` entry, two runs each, into `results/pipeline.tsv`; a cell with a settled row is skipped |
 | `node evals/tiers/grade-case.mjs RUN_DIR` | Re-grades a finished implementation run |
 | `node evals/tiers/grade-review.mjs CASE_ID ARM [--rep N] [--pass P]` | Grades one review against its rubric |
 | `node evals/tiers/report.mjs [--rep N] [--pass P]` | Prints the decision table, reading review grades of pass P |
@@ -49,7 +50,10 @@ A manifest built before dforge 4.0.0 names a start commit without `plugins/dforg
 | `cases/reviews/cases.json` | The ten review cases |
 | `cases/reviews/<case>.md` | The known defects of one review case, one `## D<n>:` heading each |
 | `results/results.tsv` | One line per run |
+| `results/pipeline.tsv` | One line per pipeline run: `rep, case, arm, run, outcome, costUsd, seconds, dispatches, fixRounds, detail`; `arm` is `<label>@<ref7>` |
 | `results/review-grades.tsv` | One line per rubric defect per graded review |
 
 Snapshots and transcripts go to `~/.cache/dr-tier-eval`, outside the
 repository, under `rep<N>/<case>/<arm>/`.
+
+The pipeline stage materialises each arm's repository tree under `~/.cache/dr-tier-eval/pipeline/rep<N>/arms/<ref7>` and runs one `claude -p --plugin-dir <arm>/plugins/dforge` session per cell in a clone of the case's base commit. Each run has its own HOME, XDG directories, `CLAUDE_CONFIG_DIR` and `TMPDIR` beneath that root. The environment keeps the host's `ANTHROPIC_*` variables and `CLAUDE_CODE_OAUTH_TOKEN`, and the run's config directory receives a copy of the session's `.credentials.json` and nothing else, so the run is logged in but reads none of the owner's settings or plugins. No git worktree is created.

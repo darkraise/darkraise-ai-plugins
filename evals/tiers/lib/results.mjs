@@ -6,6 +6,8 @@ export const RESULTS = resolve(DATA, 'results/results.tsv');
 export const GRADES = resolve(DATA, 'results/review-grades.tsv');
 export const RESULT_COLUMNS = ['rep', 'stage', 'case', 'pool', 'row', 'arm', 'outcome', 'model', 'cost', 'seconds', 'turns', 'detail'];
 export const GRADE_COLUMNS = ['rep', 'case', 'arm', 'pass', 'defect', 'found', 'severity', 'quote'];
+export const PIPELINE_RESULTS = resolve(DATA, 'results/pipeline.tsv');
+export const PIPELINE_COLUMNS = ['rep', 'case', 'arm', 'run', 'outcome', 'costUsd', 'seconds', 'dispatches', 'fixRounds', 'detail'];
 
 // armDir REP CASE ARM — where one cell keeps its snapshot and transcripts.
 export const armDir = (rep, id, arm) => join(WORK, `rep${rep}`, id, arm.replace('@', '-at-'));
