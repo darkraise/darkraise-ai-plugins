@@ -378,9 +378,16 @@ answered by `verdict` itself: `exists` by `git cat-file -e` (a path) or
 command at the task's base commit as the suite is run there (log
 `<workspace>/task-<N>-baseline-<k>.log` for the k-th). A file at the
 repository root is written `./<name>`, so it is read as a path and not as a
-symbol. A `baseline` command's text comes from a review seat, and a review
-seat has no shell: `verdict` runs it on the controller host, unsandboxed and
-with your rights, as the suite is run there. An item whose check could not
+symbol. A `baseline` command runs only when the plan names it: the step file's
+suite command, the plan header's `**Integration check:**` command, or the first
+code span of one of the task's `Run:` or `**Check:**` lines, byte for byte
+after trimming. `verdict` runs the plan's copy of the command, never the seat's
+text. A plan-named command still runs on the controller host, unsandboxed and
+with your rights, as the suite is run there. Any other `baseline` command is
+not run: it stays for the ruling seat, its digest line ending
+` (command not named in the plan)`. Review seats can write only their report
+files (the cockpit refuses any other write), so a seat cannot add a command to
+the plan, its amendments or the step file. An item whose check could not
 run (an unknown commit, a git error, a command that timed out or was not
 found) stays for the ruling seat. An answer that matches
 `expect` is logged

@@ -1145,10 +1145,45 @@ check_tracked() {
   echo "check tracked: clean"
 }
 
+# plan_named_commands TASK STEP_FILE: the baseline commands the plan names for
+# TASK, one per line: the step file's suite command, the header's Integration
+# check, then the first code span of each of the task's Run: and **Check:**
+# lines outside fenced blocks. Reads $src, the amended plan. A suite command
+# with a newline is left out: a one-line item can never equal it.
+plan_named_commands() {
+  local n=$1 step=$2 suite line integ
+  suite=$(jq -r '.suite // empty' "$step" | tr -d '\r')
+  case $suite in '' | *$'\n'*) ;; *) printf '%s\n' "$suite" ;; esac
+  line=$(plan_header "$src" | plan_lines 'Integration check' | sed -n 1p)
+  integ=$(printf '%s' "${line#\*\*Integration check:\*\*}" | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//; s/^`(.*)`$/\1/')
+  [ -z "$integ" ] || printf '%s\n' "$integ"
+  # A lone * before a blank is a list marker, so the ** of **Check:** is never
+  # stripped. A span opened by a double backtick, unclosed, empty or closed by
+  # a double backtick names nothing.
+  plan_task_text "$src" "$n" | awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    {
+      rest = $0
+      while (match(rest, /^[ \t|]+/) || match(rest, /^([-*+]|[0-9]+[.)])[ \t]/)) rest = substr(rest, RLENGTH + 1)
+      if (index(rest, "Run:") == 1) rest = substr(rest, 5)
+      else if (index(rest, "**Check:**") == 1) rest = substr(rest, 11)
+      else next
+      i = index(rest, "`")
+      if (!i) next
+      rest = substr(rest, i + 1)
+      if (substr(rest, 1, 1) == "`") next
+      j = index(rest, "`")
+      if (!j || substr(rest, j + 1, 1) == "`") next
+      print substr(rest, 1, j - 1)
+    }
+  '
+}
+
 # settle_item ITEM BASE HEAD LOG: answers one structured cannot-verify item.
 # Prints "<exists|baseline>\t<evidence>\t<match|mismatch>\t<check>, expect <answer>"
 # and returns 0; returns 1 for free text, an item without expect, a malformed
-# item, or a check that could not run.
+# item or a check that could not run, and 2 for a baseline command the plan
+# does not name (a whole line of $named_file).
 settle_item() {
   local item=$1 base=$2 head=$3 log=$4 rest spec want got res target where sha hit ev cmd code grc
   case $item in
@@ -1192,7 +1227,13 @@ settle_item() {
       want=${spec##*, expect }
       cmd=${spec%, expect *}
       case $want in pass | fail) ;; *) return 1 ;; esac
-      [ -n "$cmd" ] && [ -n "$base" ] || return 1
+      cmd=${cmd#"${cmd%%[![:blank:]]*}"}
+      cmd=${cmd%"${cmd##*[![:blank:]]}"}
+      [ -n "$cmd" ] || return 1
+      # The seat's text runs only when it is byte for byte a command the plan
+      # names, so a review seat cannot choose what runs on the controller host.
+      [ -n "${named_file:-}" ] && [ -r "$named_file" ] && LC_ALL=C grep -qxF -- "$cmd" "$named_file" || return 2
+      [ -n "$base" ] || return 1
       code=$(run_at_base "$base" "$cmd" "$log") || return 1
       # Only an exit the command itself produced answers pass or fail: a
       # timeout, a command that cannot run and one that is not found go to the seat.
@@ -1212,15 +1253,20 @@ settle_item() {
 # fix-file loop below writes it and the digest prints it. Free text, items
 # without expect and items it could not check reach the ruling seat. A kept
 # item loses its "cannot-verify: " prefix, which the digest line adds back.
+# A baseline item whose command the plan does not name (plan_named_commands)
+# is not run and is kept with " (command not named in the plan)" appended.
 # The k-th baseline item writes task-N-baseline-k.log.
 settle_cannot_verify() {
-  local item out kind ev res label one line base head bk=0 j seen="" open=()
+  local item out kind ev res label one line base head src_rc named_file bk=0 j seen="" open=()
   [ "$vgroup" -eq 0 ] || return 0
+  named_file=$TMP/named-commands
+  plan_named_commands "$first" "$vstate" > "$named_file"
   base=$(jq -r '.base // empty' "$vstate" | tr -d '\r')
   head=$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')
   for item in ${cvs[@]+"${cvs[@]}"}; do
     case $item in 'cannot-verify: baseline '*) bk=$((bk + 1)) ;; esac
-    if out=$(settle_item "$item" "$base" "$head" "$ws/task-$first-baseline-$bk.log"); then
+    out=$(settle_item "$item" "$base" "$head" "$ws/task-$first-baseline-$bk.log"); src_rc=$?
+    if [ "$src_rc" -eq 0 ]; then
       IFS=$'\t' read -r kind ev res label <<<"$out"
       if [ "$res" = mismatch ]; then
         one="$label — got $ev"
@@ -1237,6 +1283,8 @@ settle_cannot_verify() {
         ledger_init
         printf '%s\n' "$line" >> "$ledger"
       fi
+    elif [ "$src_rc" -eq 2 ]; then
+      open+=("${item#cannot-verify: } (command not named in the plan)")
     else
       open+=("${item#cannot-verify: }")
     fi
