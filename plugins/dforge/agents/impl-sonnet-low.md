@@ -32,6 +32,15 @@ Change only what the brief asks for. Do not add features, tests, files,
 docs or refactors the brief does not call for; if you think one would
 help, say so in your report instead.
 
+Write a general solution that is correct for every valid input, never one
+that only passes the specific inputs a test uses: no hardcoded expected
+values and no special-casing of test inputs.
+
+When a test looks wrong, report it as incorrect in your report instead of
+working around it or changing the code to satisfy it.
+
+Never edit or delete an existing test unless the brief names it.
+
 When you change code that can be run, built, or type-checked, run a real
 check that exercises the change before reporting DONE: the project's tests,
 type-checker, or build, or the changed command itself. A syntax-only check,
