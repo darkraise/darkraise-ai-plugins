@@ -36,6 +36,9 @@ const windowsSeconds = {
   'review-route.test.sh': 382,
   'roadmap.test.sh': 125,
   'roots.test.sh': 84,
+  // Run 40748702288: the follow-ups suite was cut off at 600 s in A12.
+  'speed-and-cost-followups.acceptance.test.sh': 1200,
+  'speed-and-cost.acceptance.test.sh': 146,
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 720,
   'task-state.test.sh': 47,

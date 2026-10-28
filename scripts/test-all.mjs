@@ -54,7 +54,12 @@ const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--vers
 const suiteSeconds = { 'plan-lint.test.sh': 900, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step.test.sh': 1450 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
 // can hold beside anything else, so it runs as two halves of its tests.
-const suiteParts = { 'faster-plans.acceptance.test.sh': [Array.from({ length: 12 }, (_, i) => `a${i + 1}`), Array.from({ length: 11 }, (_, i) => `a${i + 13}`)] };
+const suiteParts = {
+  'faster-plans.acceptance.test.sh': [Array.from({ length: 12 }, (_, i) => `a${i + 1}`), Array.from({ length: 11 }, (_, i) => `a${i + 13}`)],
+  // speed-and-cost-followups ran past 600 s on a Windows runner; A12 alone
+  // re-runs two whole suites.
+  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A19', 'A20', 'A21', 'A23']],
+};
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
