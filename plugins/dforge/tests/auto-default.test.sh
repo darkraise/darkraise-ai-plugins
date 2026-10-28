@@ -80,7 +80,7 @@ says "brainstorming: the owner sets the depth under Changes needed" "$P/skills/b
 says "brainstorming: no rulings to import at light" "$P/skills/brainstorming/references/auto-by-default.md" '(none at depth light)'
 says "brainstorming: self-review checks the Depth line" "$P/skills/brainstorming/references/spec-self-review.md" 'its first word is `light`, `standard` or `full`'
 says "brainstorming: every architectural spec carries the Depth line" "$P/skills/brainstorming/references/spec-document.md" 'carries a `**Depth:**` line directly below its `**Execution strategy:**` line'
-lacks "brainstorming: the fold no longer keys on the Process line's triggers" "$B" 'your Process line names neither irreducible risk nor a new'
+lacks "brainstorming: the fold no longer keys on the Process line's triggers" <(cat "$P/skills/brainstorming/SKILL.md" "$P/skills/brainstorming/references/"*.md) 'your Process line names neither irreducible risk nor a new'
 says "auto-run.md: the spec depth sizes the phase" "$AR" 'The spec'"'"'s `**Depth:**` line sizes this phase'
 says "auto-run.md: light dispatches no critic and no Fable review" "$AR" 'dispatch no critic and no Fable review, record no spec ruling'
 says "auto-run.md: light under ask reaches execution with no reader" "$AR" 'reaches execution with no reader of the written spec'

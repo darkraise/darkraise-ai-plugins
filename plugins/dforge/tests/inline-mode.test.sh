@@ -106,7 +106,7 @@ present "the preflight keys on a heavy task" "$INLINE" 'naming at least one `(he
 absent "the kinds table no longer keys the preflight on any delegation" "$INLINE" 'when the plan delegates any task'
 present "the preflight arises only for a heavy task" "$INLINE" '`preflight` arises only for a plan with a heavy task'
 present "inline mode names both delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`'
-absent "writing-plans no longer defines four-band tasks" "$P/skills/writing-plans/SKILL.md" 'four-band'
+absent "writing-plans no longer defines four-band tasks" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'four-band'
 absent "inline mode no longer delegates total-4 tasks" "$INLINE" 'total-4'
 absent "using-dforge no longer delegates total-4 tasks" "$P/skills/using-dforge/SKILL.md" 'total-4'
 absent "README no longer delegates total-4 tasks" "$P/README.md" 'total-4'
@@ -362,13 +362,13 @@ present "the delegated loop delegates every Executor line" "$P/reference/delegat
 present "writing-plans gates the roster per executor" "$P/skills/writing-plans/references/assignment-procedure.md" 'for every executor whose gate prints `lane=true`'
 present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/references/assignment-procedure.md" 'A task carries at most one `**Executor:**` line'
 absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
-absent "writing-plans no longer reads executor lines only when delegated" "$P/skills/writing-plans/SKILL.md" 'the lines are read only for the delegated tasks'
+absent "writing-plans no longer reads executor lines only when delegated" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'the lines are read only for the delegated tasks'
 
 # Inline mode delegates heavy and executor tasks, so no text may say it
 # implements every task.
-for doc in skills/executing-plans/SKILL.md skills/writing-plans/SKILL.md reference/native-codex.md; do
-  absent "$doc does not say inline mode implements every task itself" "$P/$doc" 'implements every task itself'
-  absent "$doc does not say inline mode implements every task in the session" "$P/$doc" 'implements every task in'
+for doc in "$P"/skills/executing-plans/SKILL.md "$P"/skills/writing-plans/SKILL.md "$P"/skills/writing-plans/references/*.md "$P"/reference/native-codex.md; do
+  absent "${doc#"$P"/} does not say inline mode implements every task itself" "$doc" 'implements every task itself'
+  absent "${doc#"$P"/} does not say inline mode implements every task in the session" "$doc" 'implements every task in'
 done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

@@ -160,19 +160,19 @@ AI="$P/skills/writing-plans/references/assigning-implementers.md"
 PR="$P/criteria/plan-review.md"
 ALLOWED='a configuration value, a generated-file or migration command, or a fixed constant the spec names'
 says "shape: a task is a feature slice" "$WP" 'A task is a feature slice'
-lacks "shape: bite-sized granularity is gone" "$WP" '## Bite-Sized Task Granularity'
-lacks "shape: no bite-sized wording" "$WP" 'bite-sized'
+lacks "shape: bite-sized granularity is gone" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) '## Bite-Sized Task Granularity'
+lacks "shape: no bite-sized wording" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'bite-sized'
 says "shape: the task carries its interfaces, tests and verify commands" "$WP" 'its interfaces, the complete code of its tests, the decisions it embodies'
 says "shape: implementation code only where no test pins it" "$WP" "$ALLOWED"
 says "shape: Step 3 describes the implementation" "$WP" 'Step 3 describes the implementation; it carries no implementation code'
-lacks "shape: Step 3 no longer carries the implementation" "$WP" 'Step 3 carries the whole implementation.'
+lacks "shape: Step 3 no longer carries the implementation" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'Step 3 carries the whole implementation.'
 says "shape: a Codex host keeps code-given tasks" "$WP" 'On a Codex host, tasks keep the code-given shape'
 says "shape: tests that assert nothing are placeholders" "$WP" 'Tests that describe behaviour without asserting it'
-lacks "shape: the old how-not-shown ban is reworded" "$WP" 'Steps that describe what to do without showing how'
+lacks "shape: the old how-not-shown ban is reworded" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'Steps that describe what to do without showing how'
 says "shape: a Claude code task scores spec 2" "$P/skills/writing-plans/references/assignment-procedure.md" 'so it scores spec 2'
 says "shape: Rule S at 6 on a Claude plan" "$P/skills/writing-plans/references/assignment-procedure.md" 'On a Claude plan, if `files + spec + coupling >= 6`'
 says "shape: Rule S at 4 on a Codex plan" "$P/skills/writing-plans/references/assignment-procedure.md" 'on a `Host: codex` plan, if it is `>= 4`'
-lacks "shape: no host-blind Rule S at 4" "$WP" 'If `files + spec + coupling >= 4`, split'
+lacks "shape: no host-blind Rule S at 4" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'If `files + spec + coupling >= 4`, split'
 says "drafter prompt: tests and interfaces, not code" "$DPR" 'gives the complete code of its tests'
 says "drafter prompt: implementation code only where no test pins it" "$DPR" "$ALLOWED"
 says "drafter prompt: tests fail on the current tree" "$DPR" 'confirm each fails for the reason the task fixes'
@@ -188,7 +188,7 @@ says "assigning: the Claude cap is 8" "$AI" 'Rule S caps a compliant Claude tota
 lacks "assigning: no cap at 6" "$AI" 'Rule S also caps a compliant total at 6'
 says "spec review: Fable's second round needs an open Blocker or High" "$P/skills/brainstorming/references/auto-by-default.md" 'a second only when round 1 leaves a Blocker or High finding open'
 says "spec review: the folded critic gets no second Fable round" "$P/skills/brainstorming/references/architecture-critic.md" 'No second Fable round runs at standard'
-lacks "spec review: no unconditional answer check" "$BS" 'which checks each Blocker and High answer'
+lacks "spec review: no unconditional answer check" <(cat "$P/skills/brainstorming/SKILL.md" "$P/skills/brainstorming/references/"*.md) 'which checks each Blocker and High answer'
 says "auto-run.md: Fable's second round needs an open Blocker or High" "$P/reference/auto-run.md" 'A second runs only when round 1 leaves a Blocker or High finding open'
 lacks "auto-run.md: no unconditional second round" "$P/reference/auto-run.md" 'At most two Fable rounds run (review, revise, re-review)'
 

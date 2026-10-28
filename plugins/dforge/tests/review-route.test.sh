@@ -385,7 +385,7 @@ present "writing-plans caps rounds by score" "$P/skills/writing-plans/references
 present "writing-plans re-rounds only on Critical or a low score" "$P/skills/writing-plans/references/lint-and-review.md" 'Run the next round only when a round returned'
 present "writing-plans gives a Codex plan's Critical at the cap one more round" "$P/skills/writing-plans/references/lint-and-review.md" 'earns exactly one more'
 present "writing-plans caps a Claude plan at two rounds" "$P/skills/writing-plans/references/lint-and-review.md" 'On a Claude plan the cap is 2 whatever the task totals'
-absent "writing-plans no longer derives a Claude cap from the totals" "$WP" 'printed: 1 when the plan'"'"'s highest'
+absent "writing-plans no longer derives a Claude cap from the totals" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'printed: 1 when the plan'"'"'s highest'
 present "writing-plans states the heavy-majority rule" "$P/skills/writing-plans/references/execution-line.md" '`subagent` when more than half the tasks are heavy'
 present "writing-plans raises a delegating inline effort" "$P/skills/writing-plans/references/execution-line.md" 'raised to `high` when any task is'
 present "writing-plans falls back to Opus on exit 2" "$P/skills/writing-plans/references/lint-and-review.md" 'exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native'
@@ -396,7 +396,7 @@ present "using-dforge states the mixed-mode rule" "$P/skills/using-dforge/SKILL.
 present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
 present "README caps plan review at two rounds" "$P/README.md" 'at most two rounds on a Claude plan'
 absent "README no longer caps plan review by task total" "$P/README.md" 'capped by the plan'"'"'s highest task total'
-absent "writing-plans no longer dispatches a fresh full review each round" "$WP" 'dispatch a fresh full review'
+absent "writing-plans no longer dispatches a fresh full review each round" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'dispatch a fresh full review'
 present "the prompt file has a Codex round-1 section" "$PRP" '## Round 1 on Codex'
 present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-schema.json'
 # A Claude judge reads files with a Read tool; Codex has none, and its only
@@ -427,7 +427,7 @@ present "brainstorming gives a revision one new round" "$BS" 'A revision your hu
 present "writing-plans gives a revision one new round" "$WP" 'A revision your human partner asks for gets one new round'
 present "writing-plans posts the block before plan review" "$WP" 'before the first plan-review round'
 present "brainstorming flags a skipped round" "$BS" 'I'"'"'ll skip the self-review'
-absent "brainstorming no longer re-runs a review loop" "$BS" 're-run the spec review loop'
+absent "brainstorming no longer re-runs a review loop" <(cat "$P/skills/brainstorming/SKILL.md" "$P/skills/brainstorming/references/"*.md) 're-run the spec review loop'
 
 # --- what a spec must carry -------------------------------------------------------
 present "brainstorming proposes a do-less approach" "$P/skills/brainstorming/references/design-phase.md" 'Make one of them the do-less option'
