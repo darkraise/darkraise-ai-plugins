@@ -49,7 +49,8 @@ these steps directly.
 
 **Open the task with one call:**
 `bash <plugin-root>/scripts/task-step start PLAN_FILE N` (a batch passes every
-task number, `N M …`; a wave task adds `--wave K`). It runs `task-brief`,
+task number, `N M …`; a wave task adds `--wave K`; every start adds
+`--suite '<suite command>'`, below). It runs `task-brief`,
 records BASE in `<workspace>/task-<N>-step.json`, writes the
 assigned line (below), and writes `<workspace>/task-<N>-dispatch.md`:
 [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
@@ -70,6 +71,16 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
   the reserve table of [ladder.md](ladder.md) — any `xhigh` or
   `max` agent, or any Fable tier — is a human ruling: dispatch it as written
   and note `reserve tier`. See [escalation.md](../skills/subagent-driven-development/references/escalation.md).
+- **Suite command.** Resolve the plan's suite command once and pass it to
+  every `task-step start` as `--suite '<suite command>'`, a wave task's too:
+  the command on the plan header's `**Integration check:**` line; else the
+  test command `<docs>/gates.md` declares (the `Command` of the gate that runs
+  the project's tests); else one you decide from the project's manifest
+  (`package.json` `scripts.test`, a Makefile `test` target, `cargo test`,
+  `go test ./...`, `pytest`) and keep for the rest of the plan. `start` records
+  it as the step file's `suite`, and the first `start --suite` on a plan
+  logs `Task <N>: Ruling: suite command — <command> — none`. The implementer
+  runs only the focused tests that cover its change; §2 has you run the suite.
 - **Task brief:** `task-step start` extracted it to
   `<workspace>/task-<N>-brief.md` (see using-dforge §Session Budget). The
   brief stays the single source of requirements: the dispatch file tells the
@@ -154,6 +165,26 @@ diff and records `t0`, the time the cache rule in step 4 needs.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review: in subagent mode hold the task first, as DONE says, so a task `review-route` grades `review=group` waits for its group review. A correctness or scope concern takes a grouped task out of its group (below).
 
+**The suite runs beside the review.** A task reviewed alone (`hold` exited 4,
+every task inline mode delegates, a batch) starts its suite as soon as its
+DONE or DONE_WITH_CONCERNS report is in. Run
+`bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'` as a
+background Bash command from the checkout's top level (a wave task: from its
+`--cwd` worktree), at the task's head, and in the same turn run
+`task-step review` and dispatch its seat (§3). `<suite command>` is the one
+`task-step start --suite` recorded, character for character: `verdict` finds
+the run by the quoted form `suite-run` records for that command, so a command
+typed differently, or run from a subdirectory, is never found. The report's
+`## Verified` section lists the focused tests the implementer ran; this run is
+the full suite. End the turn when only waiting remains, and run
+`task-step verdict` only once both the seat's report and the suite's
+completion notification are in. A suite still running at a handoff shows in
+`scripts/in-flight`, and the next session starts it again. A held task starts
+no suite now: its group's suite starts with the group review (§3a), and a
+wave's grouped tasks get none, because the wave's merged check is their suite.
+On a `Host: codex` plan `task-step` does not run: *The steps by hand* §2 starts
+the suite.
+
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided.
 If the answer is mechanical - a path, a name, a value that the header, an
 earlier task's report or the ledger already holds - supply it and re-dispatch
@@ -226,9 +257,13 @@ needed.
   context, and a reviewer is never dispatched without it.
 - **The seat:** dispatch the `seat:` line's `subagent_type`, with no `model`
   or `effort` argument, and the prompt "your complete instructions are in
-  `<prompt file>`: read it first and follow it". When a judge seat returns,
-  run `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N` with the
-  review's task numbers, and act on its digest.
+  `<prompt file>`: read it first and follow it". When a judge seat returns
+  and the suite's notification is in (§2), run
+  `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N` with the
+  review's task numbers, and act on its digest. When the suite's notification
+  reads `suite: FAIL`, `verdict` may run the suite once at the base commit,
+  which takes up to ten minutes: start it as a background command and end
+  the turn.
   Never Read the report file yourself: the digest carries the verdicts, the
   scores, one line per Critical or Important finding and the cannot-verify
   items, and verdict has already written the fix file and logged the Minor
@@ -273,7 +308,8 @@ needed.
 - Do not add open-ended directives like "check all uses" or "run race tests
   if useful" without a concrete, task-specific reason
 - Do not ask a reviewer to re-run tests the implementer already ran on the
-  same code — the implementer's report carries the test evidence
+  same code — the implementer's report carries the test evidence, and the
+  suite run of §2 covers the rest
 - Do not pre-judge findings for the reviewer — never instruct a reviewer to
   ignore or not flag a specific issue. If you believe a finding would be a
   false positive, let the reviewer raise it; the review loop and, at the
@@ -300,6 +336,47 @@ found something is a finding for the fix loop. A reviewer's cannot-verify item
 that a `clean` line answers is settled without a seat (subagent-driven-development,
 The Ruling Seat).
 
+**The suite line.** When the step file records a suite command, the verdict
+digest carries exactly one `suite:` line, read from the run §2 started:
+
+- `suite: pass (clean|dirty)`: nothing more to do. A `dirty` run counts: your
+  own ledger lines leave the tree dirty, and the tracked-file check already
+  guards the reviewed state.
+- `suite: red (<k> failing, <b> baseline)`: each failing line that the base
+  commit does not also fail is an Important finding,
+  `suite: <failing line> fails at <head7>`, in the fix file, and `fix:` names
+  that file. Only a base failure excuses a failing line. `verdict` reuses, in
+  order, a `suites.tsv` row at the base commit in the checkout's state, then
+  `<workspace>/task-<N>-base-failures.txt`, and only then runs the suite once
+  at the base commit in a temporary worktree (after the header's
+  `**Worktree setup:**`, bounded at 600 seconds), keeping that file and
+  `<workspace>/task-<N>-base.log`. With `k` at 0 every failure is a base
+  failure, and the task may complete.
+- `suite: not run (<command>)`: no run was recorded at the review head, and
+  `verdict` exits 7 with no fix file. Run the suite (§2) at the review head
+  and call `verdict` again.
+- `suite: none recorded`: the task was started before `--suite` existed; the
+  loop is as it was.
+
+The reviewer's
+`cannot-verify: exists <path|symbol> at <base|head>, expect <present|absent> — <why>`
+and `cannot-verify: baseline <command>, expect <pass|fail> — <why>` items are
+answered by `verdict` itself: `exists` by `git cat-file -e` (a path) or
+`git grep -nwF` (a symbol) at the named commit, `baseline` by running the
+command at the task's base commit as the suite is run there (log
+`<workspace>/task-<N>-baseline-<k>.log` for the k-th). A file at the
+repository root is written `./<name>`, so it is read as a path and not as a
+symbol. A `baseline` command runs unsandboxed on the controller host, as the
+suite does. An answer that matches
+`expect` is logged
+`Task <N>: Ruling: cannot-verify — settled by task-step check <exists|baseline> — <evidence>`
+and the item does not appear in the digest, so no seat sees it. An answer
+that does not match is an Important finding, file `cannot-verify`, line 0,
+`<check>, expect <answer> — got <evidence>`, in the fix file, and `fix:`
+names that file as for a reviewer finding. An item without `expect`, in any
+other form, or whose check could not run, stays a `cannot-verify:` line for
+the ruling seat.
+
 **When `task-step verdict` fails.** Exit 5 means the seat wrote no report,
 or one outside the grammar (a line under Findings or Cannot verify that is
 neither a bullet nor its indented detail, or a `spec: fail`,
@@ -320,6 +397,9 @@ the judge after `fallback:` on the `seat:` line when it names one, otherwise
 judge-opus; say so. A third failure is `Task <N>: BLOCKED — review seat —
 no usable report after three dispatches`. Exit 6 with
 `run task-step review … first` means the review step never ran: run it.
+Exit 7 is not a seat failure: it means the suite has no record at the review
+head, so write no `Ruling:` line and re-dispatch no seat; run the suite and
+call `verdict` again. Exits 5 and 6 are checked before 7.
 
 **Codex seats.** `task-step review` wrote the task-reviewer prompt for Codex,
 as [executor-lane.md](executor-lane.md) §Codex task review
@@ -391,8 +471,10 @@ On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
   runs the mechanical checks for every member, and prints the `seat:` line,
   the check lines, the state it recorded and the budget line. Dispatch the
   `seat:` line's judge as §3 says for a judge, with the prompt "your complete
-  instructions are in `<prompt file>`: read it first and follow it". When the
-  group's seat returns, run
+  instructions are in `<prompt file>`: read it first and follow it". In
+  sequential mode start the group's suite (§2) once, in that same turn, at the
+  last held member's head; a wave's group gets none. When the group's seat
+  returns and that suite's notification is in, run
   `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N M … --group`
   with every member's number and act on its digest: it reads
   `group-<list>-review-report.md`, prints one verdict line per member
@@ -498,7 +580,9 @@ and returns the short contract. Before re-dispatching the reviewer, confirm
 the fix report contains the covering tests, the command run, and the
 output; dispatch the re-review once all three are present. Name the
 covering test files in the fix message — a one-line fix does not need the
-whole suite.
+whole suite. The full suite is yours: when the fix is committed, start it at
+the new head as §2 says and run `rereview` in the same turn, so the fix head
+has its own suite run beside its re-review.
 
 **The fix message** is the file `<workspace>/task-<N>-fix-<R>.md`, `R` being
 the round you are starting (1 for the first). Its first lines are one bullet
@@ -544,6 +628,14 @@ that finding's file, and the task is not risk 3. It prints
 prompt: count the finding addressed, dispatch no seat, and write the fix-round
 line with `re-review skipped (<n> lines)`. A skipped re-review still counts
 as its round. Without `--covered`, or in any other case, the re-review runs.
+When the step file records a suite, `--covered` also needs the suite run at
+the fix head to have finished: pass it only after that run's notification is
+in. `rereview` then skips only when the fix head's suite passes or fails with
+base failures only; otherwise it prints
+`re-review: not skipped (suite <red|not run>)` and writes the prompt as it
+does without `--covered`. A red fix-head suite can make `--covered` run the
+suite once at the base commit, which takes up to ten minutes: start
+`rereview --covered` as a background command and end the turn.
 
 **After each round,** append to the ledger:
 `Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)`
@@ -565,6 +657,11 @@ pre-judging with a different name. Every verdict is a ledger entry — a silent
 discard is forbidden.
 
 ## 5. Complete the task
+
+A task is marked complete only after `task-step verdict` passes: its digest
+shows `fix: none` and a `suite:` line that is `pass`, `red` with 0 failing,
+or `none recorded`. A `suite: not run` (exit 7) or a `red` with failing lines
+leaves the task open, and the fix loop (§4) or a suite run (§2) comes first.
 
 When the review comes back clean — or every open finding is parked, or
 confirmed and carried into a later task, with a ruling at the cap — append the
@@ -631,6 +728,13 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   with the plan's Global Constraints and Contracts" and the report-file path
   named after the brief. Write the assigned line
   `Task <N>: implementer <agent> (assigned; base <sha7>)`.
+- **§2.** On a DONE report, run
+  `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
+  background at the task's head and treat a non-baseline failure as §3's
+  Important finding. `<suite command>` is resolved as §1's Suite command says.
+  A failing line that the task's base commit also fails is baseline: run the
+  suite once there, in a temporary worktree, and compare the failing lines as
+  [parallel-waves.md](parallel-waves.md) §1 does.
 - **§3.** Run `scripts/review-package PLAN_FILE BASE HEAD` (or, without bash:
   `git log --oneline`, `git diff --stat` and `git diff -U10` for the range,
   redirected to one uniquely named file) and pass the reviewer the path it
