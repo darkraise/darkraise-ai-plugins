@@ -18,11 +18,28 @@
 # repeats its reply cannot be blocked for ever; each appends one line to
 # <state>/impl-stop-gate.log. When the gate has to let a stop through because
 # it cannot read its input or keep its counter, it appends a line to
-# ${TMPDIR:-/tmp}/impl-stop-gate.log instead.
+# ${XDG_STATE_HOME:-$HOME/.local/state}/dforge/impl-stop-gate.log instead
+# (private, never through a symlink, control characters dropped).
 set -uo pipefail
 export LC_ALL=C
 
-note() { printf '%s impl-stop-gate: %s\n' "$(date +%s 2>/dev/null)" "$1" >> "${TMPDIR:-/tmp}/impl-stop-gate.log" 2>/dev/null || true; }
+clean() { printf '%s' "${1//[[:cntrl:]]/}"; }
+
+# Appends one line to the fallback log in the user's own state directory,
+# created private. A symlink in place of the directory or the file is never
+# followed, and control characters, newlines included, are dropped from the line.
+note() {
+  local dir="${XDG_STATE_HOME:-${HOME:-}/.local/state}/dforge" file line
+  [ -n "${XDG_STATE_HOME:-}${HOME:-}" ] || return 0
+  file=$dir/impl-stop-gate.log
+  line="$(date +%s 2>/dev/null) impl-stop-gate: $(clean "$1")"
+  (
+    umask 077
+    mkdir -p "$dir" 2>/dev/null
+    [ ! -L "$dir" ] && [ ! -L "$file" ] || exit 0
+    printf '%s\n' "$line" >> "$file"
+  ) 2>/dev/null || true
+}
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v jq >/dev/null 2>&1 || { note "jq is not installed; the gate is off"; exit 0; }
@@ -109,7 +126,7 @@ elif [ "$hash" != "$last" ] && [ "$count" -ge 2 ]; then via="2 blocks"
 fi
 if [ -n "$via" ]; then
   printf '%s\n%s\npassed\n%s\n' "$count" "$last" "$fires" > "$counter"
-  printf '%s %s %s pass-through after %s — %s\n' "$(date +%s)" "$agent_id" "$agent_type" "$via" "$reason" >> "$state/impl-stop-gate.log"
+  printf '%s %s %s pass-through after %s — %s\n' "$(date +%s)" "$agent_id" "$(clean "$agent_type")" "$via" "$(clean "$reason")" >> "$state/impl-stop-gate.log"
   exit 0
 fi
 if [ "$hash" != "$last" ]; then count=$((count + 1)) last=$hash; fi

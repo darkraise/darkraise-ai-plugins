@@ -19,7 +19,6 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-export TMPDIR="$TMP/tmp"; mkdir -p "$TMPDIR"
 unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
 
 fjq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
@@ -169,7 +168,7 @@ gate "$(input dforge:impl-sonnet-high agent-rep "$M1")"
 check "and the agent passes from then on" "$CODE|$OUT|$ERR" "0||"
 
 # --- a gate that cannot do its job says so in a log ---
-FALLBACK="$TMPDIR/impl-stop-gate.log"
+FALLBACK="$HOME/.local/state/dforge/impl-stop-gate.log"
 check "the malformed input of the first checks was logged" "$(grep -c 'input is not JSON' "$FALLBACK")" "1"
 check "a stop that the gate has no reason to look at logs nothing" "$(wc -l < "$FALLBACK" | tr -d ' ')" "1"
 gate '{"agent_type":"dforge:impl-haiku"'
@@ -187,6 +186,20 @@ gate "$(fjq -nc --arg c "$REPO2" --arg m $'**Status:** DONE\nAll done.' '{cwd:$c
 check "a counter that cannot be kept lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nostate .*cannot keep the block counter' "$FALLBACK")" "0|||1"
 gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nocwd",agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
 check "a missing working directory lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nocwd .*cannot enter /nonexistent/dir' "$FALLBACK")" "0|||1"
+
+LINES0=$(wc -l < "$FALLBACK" | tr -d ' ')
+gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nl",agent_type:"dforge:impl-haiku\nFAKE injected line\u001b[31m",last_assistant_message:$m}')"
+check "a value with a newline or an escape logs one clean line" "$CODE|$(($(wc -l < "$FALLBACK" | tr -d ' ') - LINES0))|$(grep -c '^FAKE' "$FALLBACK")|$(grep -c "$(printf '\033')" "$FALLBACK")" "0|1|0|0"
+
+# A symlink planted where the log goes is not followed.
+HOME2="$TMP/home2"; mkdir -p "$HOME2/.local/state/dforge"
+ln -s "$TMP/victim" "$HOME2/.local/state/dforge/impl-stop-gate.log"
+HOME="$HOME2" gate '{"agent_type":"dforge:impl-haiku"'
+check "a symlinked log file is not written through" "$CODE|$([ -e "$TMP/victim" ] && echo written || echo untouched)" "0|untouched"
+HOME3="$TMP/home3"; mkdir -p "$HOME3/.local/state" "$TMP/victim-dir"
+ln -s "$TMP/victim-dir" "$HOME3/.local/state/dforge"
+HOME="$HOME3" gate '{"agent_type":"dforge:impl-haiku"'
+check "a symlinked log directory is not written through" "$CODE|$(ls "$TMP/victim-dir" | wc -l | tr -d ' ')" "0|0"
 
 # --- no test runner, no network ---
 STUBS="$TMP/stubs"; mkdir -p "$STUBS"
