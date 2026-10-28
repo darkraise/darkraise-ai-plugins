@@ -979,6 +979,38 @@ describe('review seat write guard', () => {
     expect((await write($, 'judge-1', 'C:\\Users\\me\\shop\\.dforge\\sdd\\p\\amendments.md')).deny).toMatch(GUARD)
   })
 
+  test('captures a report path whose root holds spaces and parentheses', async ($, on) => {
+    const root = '/x/John Smith (dev)/repo'
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    const named = `${root}/.dforge/sdd/p/task-1-review-report.md`
+    await $.agent.spawn(dispatch(`Write your full report to ${named}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', named)).deny).toBeUndefined()
+    expect((await write($, 'judge-1', `${root}/.dforge/sdd/p/amendments.md`)).deny).toMatch(GUARD)
+    expect((await write($, 'judge-1', `${root}/.dforge/sdd/p/task-2-review-report.md`)).deny).toMatch(GUARD)
+  })
+
+  test('captures a Windows report path whose root holds a space, in either slash', async ($, on) => {
+    const root = 'C:\\Users\\John Smith\\repo'
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch('Write your report to C:/Users/John Smith/repo/.dforge/sdd/p/task-1-review-report.md and reply.', 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', 'C:\\Users\\John Smith\\repo\\.dforge\\sdd\\p\\task-1-review-report.md')).deny).toBeUndefined()
+    expect((await write($, 'judge-1', 'C:\\Users\\John Smith\\repo\\.dforge\\sdd\\p\\amendments.md')).deny).toMatch(GUARD)
+  })
+
+  test('takes the Git Bash /c/ spelling of a report path on a drive host', async ($, on) => {
+    const root = 'C:/Users/me/shop'
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root, primary: root })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch('Write your report to /c/Users/me/shop/.dforge/sdd/p/task-1-review-report.md and reply.', 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', 'C:/Users/me/shop/.dforge/sdd/p/task-1-review-report.md')).deny).toBeUndefined()
+    expect((await write($, 'judge-1', 'C:/Users/me/shop/.dforge/sdd/p/amendments.md')).deny).toMatch(GUARD)
+  })
+
   test('keeps a running judge in the spawn record past fifty later dispatches', async ($, on) => {
     world(on, { tokens: 10_000, agentIds: ['judge-1', ...Array.from({ length: 55 }, (_, i) => `impl-${i}`)] })
     on('agent.list', () => ({ value: [] }) as never)

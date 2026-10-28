@@ -125,6 +125,7 @@ The guard works whether or not the engine's stat rejection carries an error code
 2. The review dispatch also names the implementer's report (`task-<N>-report.md`, which ends in `-report.md`), so a judge may rewrite that file as well as its own report.
 3. On Windows, task-step names report paths in the `C:/…` long form (`dforge_workspace`, `scripts/lib/roots.sh:21-34`), the form the cockpit's roots take. `canonPath` maps a Git Bash `/c/…` spelling to `c:/…` only when the checkout or primary root is itself spelled with a drive letter; on any other host `/c/…` stays a POSIX path. No Windows host ran this probe.
 4. The guard refuses a spelling mismatch, a `..` segment, a target under no known root, a symbolic link between the root and the target or at the target (seen live for a symlinked directory, in Symlink check above), and a stat rejection with any code other than `ENOENT`; a refusal stands even when it cannot be added to the refusal list. It does not fail closed in one case: when a stat rejection carries no code, a failure other than not-found on a path whose parent is an existing directory reads as missing, and the write is allowed.
+5. A report path is captured whole when its root (`<checkout>/.dforge` or `<primary>/.dforge`) holds spaces or parentheses, by matching the root literally; below the root a path still stops at whitespace. No host with such a root ran this probe.
 
 ## Verdict
 

@@ -203,6 +203,8 @@ const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
 // An absolute path ending -report.md, as a dispatch prompt spells it: not
 // begun inside a relative path, not ending before more of a name.
 const REPORT_PATH = /(?<![\w.~/\\-])(?:\/|[A-Za-z]:[\\/])[^\s'"`<>()|*?[\]{},;]*-report\.md(?![\w-]|\.[\w-])/g
+// The rest of a report path, read from just past a root matched literally.
+const REPORT_TAIL = /^[\\/][^\s'"`<>()|*?[\]{},;]*-report\.md(?![\w-]|\.[\w-])/
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -4060,11 +4062,27 @@ function rootOf(canon: string, roots: readonly string[]): string | undefined {
   return roots.find(root => key.startsWith(`${pathKey(root)}/`))
 }
 
+// Each root is also matched literally, in either slash, so a path under a root
+// that holds spaces or parentheses is captured whole; below the root a path
+// still stops at them, as REPORT_TAIL says.
 function reportPathsIn(prompt: string, roots: readonly string[]): string[] {
   const found: string[] = []
-  for (const [path] of prompt.matchAll(REPORT_PATH)) {
+  const add = (path: string) => {
     const canon = canonPath(path)
     if (canon !== null && rootOf(canon, roots) !== undefined && !found.includes(path)) found.push(path)
+  }
+  for (const [path] of prompt.matchAll(REPORT_PATH)) add(path)
+  for (const dir of [S.where.checkout, S.where.primary]) {
+    if (dir === null) continue
+    const raw = `${dir}/.dforge`
+    for (const spelling of new Set([raw, raw.replace(/\\/g, '/'), raw.replace(/\//g, '\\')])) {
+      const literal = spelling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const head = new RegExp(`(?<![\\w.~/\\\\-])${literal}`, /^[A-Za-z]:/.test(spelling) ? 'gi' : 'g')
+      for (const at of prompt.matchAll(head)) {
+        const tail = REPORT_TAIL.exec(prompt.slice(at.index + at[0].length))
+        if (tail !== null) add(at[0] + tail[0])
+      }
+    }
   }
   return found
 }
