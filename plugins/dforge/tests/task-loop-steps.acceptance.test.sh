@@ -46,8 +46,8 @@ TMP="$(mktemp -d)"
 # MSYS_NO_PATHCONV below hands git.exe this path untranslated, so it must be a
 # Windows path or git initialises a repository somewhere else.
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
-# sdd-workspace prints the MSYS form on Git Bash; task-step prints the form git
-# gives, which native jq.exe can open.
+# sdd-workspace and task-step print the form git gives, which native jq.exe can
+# open.
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
