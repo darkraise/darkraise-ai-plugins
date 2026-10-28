@@ -29,7 +29,7 @@ export SUITE_MARK="$TMP/marks"
 # The helpers run before task-step's rereview dispatch, which exits before any
 # later definition exists.
 dispatch=$(grep -n '^if \[ "\${1:-}" = rereview \]; then$' "$S/task-step" | head -n 1 | cut -d: -f1)
-for fn in suite_key suite_row suite_failing_lines suite_base_lines run_at_base suite_gap; do
+for fn in suite_key suite_row suite_failing_lines suite_fail_set suite_unfinished suite_base_sha suite_base_lines run_at_base suite_gap; do
   at=$(grep -n "^$fn() {" "$S/task-step" | head -n 1 | cut -d: -f1)
   check "$fn is defined before the rereview dispatch" "$([ -n "$at" ] && [ -n "$dispatch" ] && [ "$at" -lt "$dispatch" ] && echo yes || echo no)" "yes"
 done
@@ -57,6 +57,12 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |4. Four
 |5. Five
 |6. Six
+|7. Seven
+|8. Eight
+|9. Nine
+|10. Ten
+|11. Eleven
+|12. Twelve
 |
 |### Task 1: One
 |
@@ -105,12 +111,61 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |
 |**Implementer:** dforge:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 7: Seven
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 8: Eight
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 9: Nine
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 10: Ten
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 11: Eleven
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
+|
+|### Task 12: Twelve
+|
+|**Files:**
+|- Modify: `app.txt`
+|
+|**Implementer:** dforge:impl-sonnet-low
+|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 PLAN
 cat > "$REPO/suite.sh" <<'SUITE'
 #!/usr/bin/env bash
 if [ -f setup.done ]; then echo setup >> "$SUITE_MARK"; else echo plain >> "$SUITE_MARK"; fi
 if grep -q broken app.txt; then echo 'not ok 7 - app-broken'; fi
 if [ -s failing.txt ]; then cat failing.txt; fi
+if [ -f slow.txt ]; then sleep 20; fi
 ! { [ -s failing.txt ] || grep -q broken app.txt; }
 SUITE
 seq 1 10 | sed 's/^/line /' > "$REPO/app.txt"
@@ -122,6 +177,7 @@ ts() { # ts <args...> — task-step in the fixture repo; sets out, err, rc
   err=$(cat "$TMP/err")
 }
 sr() { (cd "$REPO" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1); } # the controller's own suite run
+sr_timeout() { (cd "$REPO" && SUITE_RUN_KILL_AFTER=1 bash "$S/suite-run" --timeout 1 -- bash -c 'bash suite.sh' >/dev/null 2>&1); } # a run that records exit 124
 commit() { g add -A && g commit -qm "$1"; }
 set_failing() { printf '%s' "$1" > "$REPO/failing.txt"; }
 marks() { grep -c "^$1\$" "$SUITE_MARK" 2>/dev/null || true; }
@@ -200,24 +256,27 @@ commit "work 4"
 ts review docs/plan.md 4
 R0=$(g rev-parse HEAD)
 cp "$WS/task-4-step.json" "$TMP/state4.0"
-rr_case() { # rr_case <name> <fix: mod|broken|green> <run suite: yes|no> <want>
+rr_case() { # rr_case <name> <fix: mod|broken|green|slow> <run suite: yes|no|timeout> <want>
   g reset -q --hard "$R0"
   cp "$TMP/state4.0" "$WS/task-4-step.json"
   rm -f "$WS"/task-4-fix-*.md "$WS"/task-4-rereview-*-prompt.md
   case $2 in
     mod) awk 'NR == 2 { print "changed"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt" ;;
     broken) awk 'NR == 2 { print "broken"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt" ;;
+    slow) awk 'NR == 2 { print "changed"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt"; : > "$REPO/slow.txt" ;;
     green) awk 'NR == 2 { print "changed"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt"; : > "$REPO/failing.txt" ;;
   esac
   commit fix
   printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-4-fix-1.md"
   [ "$3" != yes ] || sr
+  [ "$3" != timeout ] || sr_timeout
   ts rereview docs/plan.md 4 --covered
   check "rereview $1" "$rc $(grep '^re-review: ' <<<"$out") $([ -f "$WS/task-4-rereview-1-prompt.md" ] && echo prompt || echo none)" "$4"
 }
 rr_case "no suite row for the fix head: not skipped" mod no "0 re-review: not skipped (suite not run) prompt"
 rr_case "a non-baseline failure at the fix head: not skipped" broken yes "0 re-review: not skipped (suite red) prompt"
 rr_case "baseline failures only: skipped" mod yes "0 re-review: skipped (2 changed lines, 1 finding, app.txt) none"
+rr_case "a suite that timed out with baseline lines only: not skipped" slow timeout "0 re-review: not skipped (suite red) prompt"
 rr_case "a passing suite: skipped" green yes "0 re-review: skipped (3 changed lines, 1 finding, app.txt) none"
 check "task 4: the base run happened once" "$(marks setup)" "3"
 
@@ -246,6 +305,101 @@ check "task 6: no base run, no baseline" "$(grep '^suite: ' <<<"$out")" "suite: 
 check "task 6: the stderr says why" "$(grep -c 'no base run' <<<"$err") $(grep -c 'worktree setup failed' <<<"$err")" "1 1"
 check "task 6: no file is kept, so the next verdict tries again" "$([ -e "$WS/task-6-base-failures.txt" ] && echo file || echo nofile)" "nofile"
 check "task 6: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
+sed 's/^\(\*\*Worktree setup:\*\* \).*$/\1`touch setup.done`/' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"
+commit "setup that works"
+
+# Tasks 7 and 8: a sequential group. Task 8 starts at Task 7's head, so a test
+# Task 7 broke fails at Task 8's base too; the group is compared with the base
+# of its first member.
+set_failing ''
+commit "green for the group"
+ts start docs/plan.md 7 --suite 'bash suite.sh'
+set_failing $'not ok 1 - regress\n'
+commit "member 1 breaks a test"
+ts start docs/plan.md 8 --suite 'bash suite.sh'
+printf 'impl 8\n' >> "$REPO/app.txt"
+commit "member 2"
+sr
+G_HEAD=$(g rev-parse HEAD)
+jq -n --arg h "$G_HEAD" --arg c "$REPO" '{tasks: [7, 8], reviewHead: $h, t0: 0, reviewChecks: [{cwd: $c, head: $h, dirty: []}]}' > "$WS/group-7,8-step.json"
+for t in 7 8; do
+  jq --arg h "$G_HEAD" '.reviewHead = $h | .group = "7,8"' "$WS/task-$t-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-$t-step.json"
+done
+{
+  printf '## Verdict\n'
+  for t in 7 8; do
+    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
+  done
+} > "$WS/group-7,8-review-report.md"
+ts verdict docs/plan.md 7 8 --group
+check "group: a regression made by an earlier member is not baseline" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+check "group: the finding is in the last member's fix file" "$(grep '^fix: ' <<<"$out")" "fix: $WS/task-8-fix-1.md (1 finding)"
+check "group: the fix file names the regression" "$(grep -cF regress "$WS/task-8-fix-1.md")" "2"
+
+# Task 9: a red suite whose failing lines are all baseline lets the task complete.
+set_failing $'not ok 1 - alpha\n'
+commit "alpha fails at the base"
+sr
+ts start docs/plan.md 9 --suite 'bash suite.sh'
+printf 'impl 9\n' >> "$REPO/app.txt"
+commit "work 9"
+sr
+ts review docs/plan.md 9
+clean_report 9
+ts verdict docs/plan.md 9
+check "task 9: all-baseline failures are no finding" "$rc $(grep '^suite: ' <<<"$out") $(grep '^findings: ' <<<"$out") $(grep '^fix: ' <<<"$out")" \
+  "0 suite: red (0 failing, 1 baseline) findings: 0 Critical, 0 Important, 0 Minor fix: none"
+check "task 9: no fix file is written" "$([ -e "$WS/task-9-fix-1.md" ] && echo file || echo nofile)" "nofile"
+
+# Task 10: a base that fails with no recognisable test line is red, not green.
+set_failing $'boom\n'
+commit "a suite that fails without test lines"
+sr
+ts start docs/plan.md 10 --suite 'bash suite.sh'
+printf 'impl 10\n' >> "$REPO/app.txt"
+commit "work 10"
+sr
+ts review docs/plan.md 10
+clean_report 10
+ts verdict docs/plan.md 10
+check "task 10: a red base row without test lines excuses the head" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (0 failing, 1 baseline)"
+
+# Task 11: the same, when the suite has to run at the base.
+printf 'more\n' >> "$REPO/app.txt"
+commit "no suite row at this commit"
+ts start docs/plan.md 11 --suite 'bash suite.sh'
+printf 'impl 11\n' >> "$REPO/app.txt"
+commit "work 11"
+sr
+ts review docs/plan.md 11
+clean_report 11
+ts verdict docs/plan.md 11
+check "task 11: a red base run without test lines excuses the head" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (0 failing, 1 baseline)"
+check "task 11: the base failures hold the exit code" "$(cat "$WS/task-11-base-failures.txt")" "command exit 1"
+
+# Task 12: a base run that times out is not paid again.
+set_failing $'not ok 1 - alpha\n'
+: > "$REPO/slow.txt"
+commit "a base that is slow"
+ts start docs/plan.md 12 --suite 'bash suite.sh'
+g rm -q slow.txt
+commit "work 12"
+sr
+ts review docs/plan.md 12
+clean_report 12
+runs0=$(marks setup)
+export TASK_STEP_BASE_TIMEOUT=1 SUITE_RUN_KILL_AFTER=1
+ts verdict docs/plan.md 12
+check "task 12: a timed-out base excuses nothing" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+check "task 12: the base ran once" "$(($(marks setup) - runs0))" "1"
+check "task 12: the timeout is recorded" "$([ -e "$WS/task-12-base-timeout" ] && echo marker || echo none)" "marker"
+check "task 12: no base failures file" "$([ -e "$WS/task-12-base-failures.txt" ] && echo file || echo nofile)" "nofile"
+ts verdict docs/plan.md 12
+unset TASK_STEP_BASE_TIMEOUT SUITE_RUN_KILL_AFTER
+check "task 12: a second verdict does not run the base again" "$(($(marks setup) - runs0)) $(grep '^suite: ' <<<"$out")" "1 suite: red (1 failing, 0 baseline)"
+check "task 12: the stderr says the base timed out" "$(grep -c 'timed out' <<<"$err")" "1"
+check "task 12: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

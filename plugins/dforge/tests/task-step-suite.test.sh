@@ -173,6 +173,21 @@ step verdict docs/plan.md 1
 check "verdict, failing run without test lines: one failing line" "$(grep '^suite: red' <<<"$out")" "suite: red (1 failing, 0 baseline)"
 check "verdict, failing run without test lines: the finding names the exit code" "$(grep '^Important ' <<<"$out")" "Important 1 suite:0 — suite: command exit 1 fails at $H7"
 
+# --- verdict: a run cut short is red even when its partial log shows only baseline lines ---
+printf '%s\n' 'echo "not ok 1 - alpha"' 'sleep 20' > slow.sh
+git add slow.sh && git commit -qm "slow suite"
+HEAD_SHA=$(git rev-parse HEAD | tr -d '\r')
+H7=${HEAD_SHA:0:7}
+step start docs/plan.md 3 --suite 'bash slow.sh'
+set_review 3 "$HEAD_SHA" "$REPO"
+(SUITE_RUN_KILL_AFTER=1 bash "$SUITE" --timeout 1 -- bash -c 'bash slow.sh' >/dev/null 2>&1; true)
+check "suite-run records exit 124 for the slow suite" "$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $4 }' .dforge/suites.tsv | tail -n 1)" "124"
+printf 'not ok - alpha\n' > "$WS/task-3-base-failures.txt"
+report "$WS/task-3-review-report.md"
+step verdict docs/plan.md 3
+check "verdict, timed-out run: the baseline line is excused, the cut-short run is not" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 1 baseline)"
+check "verdict, timed-out run: the finding says the suite did not finish" "$(grep '^Important ' <<<"$out")" "Important 3 suite:0 — suite: suite did not finish (exit 124) at $H7"
+
 # --- verdict: a row at another head or from a subdirectory does not match ---
 commit_result green green green
 set_review 1 "$HEAD_SHA" "$REPO"

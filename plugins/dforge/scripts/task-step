@@ -96,14 +96,50 @@ suite_failing_lines() {
   tr -d '\r' < "$1" | grep -E '^[[:space:]]*(not ok|\(fail\)|FAIL)' | cut -c1-200 | sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'
 }
 
-# run_at_base BASE_SHA COMMAND OUT_LOG: runs COMMAND once at BASE_SHA in a
-# temporary detached worktree, after the plan header's **Worktree setup:**
-# command when it names one, through suite-run --timeout 600. Copies the run's
+# suite_fail_set LOG CODE: the failing lines of a failed run's log, one per
+# line, or "command exit CODE" when the log holds none, so a base and a head
+# that both fail without a recognised test line still compare equal.
+suite_fail_set() {
+  local lines
+  lines=$(suite_failing_lines "$1" || true)
+  if [ -n "$lines" ]; then printf '%s\n' "$lines"; else printf 'command exit %s\n' "$2"; fi
+}
+
+# suite_unfinished CODE: succeeds for an exit that says the run was cut short
+# (124 timed out or was killed) or could not start or was signalled (126 and
+# up), whatever its partial log shows.
+suite_unfinished() {
+  [ "$1" = 124 ] || { [[ $1 =~ ^[0-9]+$ ]] && [ "$1" -ge 126 ]; }
+}
+
+# suite_base_sha STEP_FILE: the commit a step file's suite is compared with.
+# A member of a sequential group (its step file names the group and has no
+# head ref) starts at the previous member's head, so the group is compared
+# with its first member's base; anything else uses its own.
+suite_base_sha() {
+  local group first fstep base
+  base=$(jq -r '.base // empty' "$1" | tr -d '\r')
+  group=$(jq -r '.group // empty' "$1" | tr -d '\r')
+  if [ -n "$group" ] && [ -z "$(jq -r '.head // empty' "$1" | tr -d '\r')" ]; then
+    first=${group%%,*}
+    fstep=$(dirname "$1")/task-$first-step.json
+    if [ -f "$fstep" ]; then
+      first=$(jq -r '.base // empty' "$fstep" | tr -d '\r')
+      [ -z "$first" ] || base=$first
+    fi
+  fi
+  printf '%s\n' "$base"
+}
+
+# run_at_base BASE_SHA COMMAND OUT_LOG [SECONDS]: runs COMMAND once at
+# BASE_SHA in a temporary detached worktree, after the plan header's
+# **Worktree setup:** command when it names one, through suite-run --timeout
+# SECONDS (default 600). Copies the run's
 # log to OUT_LOG and prints the command's exit code. Prints nothing, and
 # returns 1, when the worktree, its setup or the run's log is missing. The
 # header is read from $src, the amended plan, when the caller has one.
 run_at_base() {
-  local sha=$1 cmd=$2 out=$3 wt line setup="" run log code rc=1
+  local sha=$1 cmd=$2 out=$3 secs=${4:-600} wt line setup="" run log code rc=1
   if [ -n "${src:-}" ] && [ -f "$src" ]; then
     line=$(plan_header_line "$src" 'Worktree setup')
     setup=$(printf '%s' "${line#\*\*Worktree setup:\*\*}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^`(.*)`$/\1/')
@@ -119,7 +155,7 @@ run_at_base() {
   if [ -n "$setup" ] && ! (cd "$wt" && bash -c "$setup") >/dev/null 2>&1; then
     echo "task-step: the worktree setup failed at ${sha:0:7}" >&2
   else
-    run=$(cd "$wt" && bash "$HERE/suite-run" --timeout 600 -- bash -c "$cmd")
+    run=$(cd "$wt" && bash "$HERE/suite-run" --timeout "$secs" -- bash -c "$cmd")
     code=$?
     log=$(printf '%s\n' "$run" | tr -d '\r' | sed -n 's/^log: //p' | tail -n 1)
     if [ -n "$log" ] && [ -f "$log" ] && cp "$log" "$out"; then
@@ -133,18 +169,21 @@ run_at_base() {
 }
 
 # suite_base_lines STEP_FILE N [DIR]: the base commit's failing lines for the
-# step file's suite command, one per line, nothing for a passing base. It
-# reuses a suites.tsv row at the base in the checkout's state (then DIR's),
-# then <workspace>/task-N-base-failures.txt, and only then runs the suite at
-# the base. A base run that cannot finish writes no file, so a later call tries
-# again, and every failing line counts as new meanwhile.
+# step file's suite command, one per line, nothing for a passing base. The
+# base is suite_base_sha's. It reuses a suites.tsv row at the base in the
+# checkout's state (then DIR's), then <workspace>/task-N-base-failures.txt, and
+# only then runs the suite at the base, for TASK_STEP_BASE_TIMEOUT seconds
+# (default 3600). A base run that cannot start writes no file, so a later call
+# tries again; one that timed out leaves task-N-base-timeout, so a later call
+# does not run it again. Every failing line counts as new meanwhile.
 suite_base_lines() {
-  local step=$1 n=$2 dir=${3:-} cmd base ws file row code log
+  local step=$1 n=$2 dir=${3:-} cmd base ws file marker row code log
   cmd=$(jq -r '.suite // empty' "$step" | tr -d '\r')
-  base=$(jq -r '.base // empty' "$step" | tr -d '\r')
+  base=$(suite_base_sha "$step")
   [ -n "$cmd" ] && [ -n "$base" ] || return 0
   ws=$(dirname "$step")
   file=$ws/task-$n-base-failures.txt
+  marker=$ws/task-$n-base-timeout
   row=$(suite_row "$step" "$base")
   [ -n "$row" ] || [ -z "$dir" ] || row=$(suite_row "$step" "$base" "$dir")
   if [ -n "$row" ]; then
@@ -152,19 +191,28 @@ suite_base_lines() {
     log=$(cut -f5 <<<"$row")
     [ "$code" != 0 ] || return 0
     if [ "$code" != 124 ] && [ -f "$log" ]; then
-      suite_failing_lines "$log" || true
+      suite_fail_set "$log" "$code"
       return 0
     fi
   fi
   if [ -f "$file" ]; then cat "$file"; return 0; fi
-  if ! code=$(run_at_base "$base" "$cmd" "$ws/task-$n-base.log") || [ "$code" = 124 ]; then
+  if [ -f "$marker" ]; then
+    echo "task-step: the base run at ${base:0:7} timed out earlier; every failing line counts as new" >&2
+    return 0
+  fi
+  if ! code=$(run_at_base "$base" "$cmd" "$ws/task-$n-base.log" "${TASK_STEP_BASE_TIMEOUT:-3600}"); then
     echo "task-step: no base run at ${base:0:7}; every failing line counts as new" >&2
+    return 0
+  fi
+  if [ "$code" = 124 ]; then
+    : > "$marker"
+    echo "task-step: the base run at ${base:0:7} timed out; every failing line counts as new" >&2
     return 0
   fi
   if [ "$code" = 0 ]; then
     : > "$file"
   else
-    suite_failing_lines "$ws/task-$n-base.log" > "$file" || true
+    suite_fail_set "$ws/task-$n-base.log" "$code" > "$file"
   fi
   cat "$file"
 }
@@ -173,20 +221,19 @@ suite_base_lines() {
 # or SHA's suite row passes or fails with baseline lines only; otherwise "not
 # run" (no row) or "red".
 suite_gap() {
-  local step=$1 n=$2 sha=$3 dir=${4:-.} row log base_lines line k=0
+  local step=$1 n=$2 sha=$3 dir=${4:-.} row code log base_lines line
   [ -n "$(jq -r '.suite // empty' "$step" | tr -d '\r')" ] || return 0
   row=$(suite_row "$step" "$sha" "$dir")
   if [ -z "$row" ]; then echo "not run"; return 0; fi
-  [ "$(cut -f4 <<<"$row")" != 0 ] || return 0
+  code=$(cut -f4 <<<"$row")
+  [ "$code" != 0 ] || return 0
   log=$(cut -f5 <<<"$row")
-  if [ ! -f "$log" ]; then echo red; return 0; fi
+  if [ ! -f "$log" ] || suite_unfinished "$code"; then echo red; return 0; fi
   base_lines=$(suite_base_lines "$step" "$n" "$dir")
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    k=$((k + 1))
     if ! grep -qxF -- "$line" <<<"$base_lines"; then echo red; return 0; fi
-  done < <(suite_failing_lines "$log" || true)
-  [ "$k" -gt 0 ] || echo red
+  done < <(suite_fail_set "$log" "$code")
 }
 
 rr_usage() {
@@ -1223,8 +1270,12 @@ suite_check() {
     return 0
   fi
   suite_state=red
-  fails=$(suite_failing_lines "$log")
-  [ -n "$fails" ] || fails="command exit $code"
+  if suite_unfinished "$code"; then
+    fails=$(suite_failing_lines "$log" || true)
+    fails="${fails:+$fails$'\n'}suite did not finish (exit $code)"
+  else
+    fails=$(suite_fail_set "$log" "$code")
+  fi
   printf '%s\n' "$fails" > "$TMP/suite-fails"
   suite_base_lines "$st" "$target" "${cwd_arg:-.}" > "$TMP/suite-base"
   if [ -s "$TMP/suite-base" ]; then grep -vxF -f "$TMP/suite-base" "$TMP/suite-fails" > "$TMP/suite-new"; else cp "$TMP/suite-fails" "$TMP/suite-new"; fi
@@ -1233,7 +1284,10 @@ suite_check() {
   nbase=$((nfail - nnew))
   suite_line="suite: red ($nnew failing, $nbase baseline)"
   head -n 20 "$TMP/suite-new" | while IFS= read -r line; do
-    printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line//$'\t'/ }" "$head7"
+    case $line in
+      'suite did not finish'*) printf '%s\tImportant\tsuite\t0\tsuite: %s at %s\n' "$target" "$line" "$head7" ;;
+      *) printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line//$'\t'/ }" "$head7" ;;
+    esac
   done > "$TMP/suite-findings"
 }
 
