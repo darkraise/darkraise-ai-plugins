@@ -201,7 +201,7 @@ your own: QA commits on this branch.
    the same message as the Claude review, dispatch each printed `seat` with
    the prompt below, so they run in parallel; on a Codex host, a native judge
    at rank 8 or above, and
-   each lens seat writes its report to `<workspace>/lens-<id>.md`:
+   each lens seat writes its report to `<workspace>/lens-<id>-report.md`:
    the Claude list for step 3 is the Claude review's findings plus every
    `[qa]` finding from step 0.5 and every lens finding, tagged `[lens:<id>]`,
    and the dedupe judge and the fixer receive the lens file paths.
@@ -221,7 +221,8 @@ your own: QA commits on this branch.
    You are a specialist reviewer. Read the lens at <criteria path>: its
    criteria are defect patterns, not a rubric, so do not score them. Review
    the branch diff in <package path> against the spec <spec path> and the
-   plan <plan path>. Write your full report to <workspace>/lens-<id>.md,
+   plan <plan path>. Write your full report to
+   <workspace>/lens-<id>-report.md,
    write nothing else, and reply in at most 10 lines: the counts by
    severity and the report path. The report opens with `## Verdict` holding
    `findings: <c> Critical, <i> Important, <m> Minor`, then lists each hit

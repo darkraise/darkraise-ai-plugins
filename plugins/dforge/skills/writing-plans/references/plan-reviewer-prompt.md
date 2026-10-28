@@ -84,7 +84,7 @@ Subagent ([JUDGE]):
 - `[PLAN_FILE]`, `[SPEC_FILE]` - REQUIRED: absolute paths.
 - `[LINT_FILE]` - REQUIRED: `<workspace>/plan-lint.txt`, written with
   `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt` before dispatch.
-- `[REPORT_FILE]` - REQUIRED: `<workspace>/plan-review-round-<r>.md`, `<r>` being this round's number.
+- `[REPORT_FILE]` - REQUIRED: `<workspace>/plan-review-round-<r>-report.md`, `<r>` being this round's number.
 
 **Reviewer writes** findings graded Critical, Important or Minor, and four
 scores, to [REPORT_FILE] **and returns** a reply of at most 10 lines.
@@ -211,7 +211,8 @@ Subagent ([JUDGE]):
 - `[ROUND]` - REQUIRED: this round's number.
 - `[DELTA_FILE]` - REQUIRED: `<workspace>/plan-delta-<r>.diff`.
 - `[PRIOR_FINDINGS_FILE]` - REQUIRED: the previous round's
-  `<workspace>/plan-review-round-<r-1>.json` or `.md`.
+  `<workspace>/plan-review-round-<r-1>.json` or
+  `<workspace>/plan-review-round-<r-1>-report.md`.
 
 **Reviewer writes** a verdict per prior Critical or Important finding, new
 findings graded Critical, Important or Minor, and four scores for the whole

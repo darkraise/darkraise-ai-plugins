@@ -29,7 +29,9 @@ const baseKnown = () => spawnSync('git', ['cat-file', '-e', `${BASE}^{commit}`],
 // purpose: the first to point at the reference that now holds the table it
 // names, the rest when the follow-ups pointed the Recovery and
 // execution-strategy pointers at the files that hold them and dropped
-// ./references/ from the process graph's labels.
+// ./references/ from the process graph's labels, and the last four when the
+// plan-review report file was renamed to end -report.md, the only name the
+// judge write guard lets a judge write.
 const norm = s => s.replace(/\]\([^)]*\)/g, ']').replace(/\r/g, '').replace(/\s+/g, ' ').trim();
 const REWORDED = [
   'escalated inline -> subagent` ledger line, and the Recovery table below says what to do with it.',
@@ -45,6 +47,10 @@ const REWORDED = [
   "R=1 resume or fresh by cache state; R=2 successor rung, fresh\" -> \"Dispatch scoped re-review (./references/re-review-prompt.md)\"; \"Dispatch scoped re-review (./references/re-review-prompt.md)\" -> \"All findings addressed?\"; \"All findings addressed?\" -> \"Append completion to ledger, mark todo complete\" [label=\"yes\"]; \"All findings addressed?\" -> \"R = 2?\" [label=\"no\"]; \"R = 2?\" -> \"Fix round R of 2:",
   "R=1 resume or fresh by cache state; R=2 successor rung, fresh\" [label=\"no - next round\"]; \"R = 2?\" -> \"Ruling seat adjudicates each open finding\" [label=\"yes - breaker trips\"]; \"Ruling seat adjudicates each open finding\" -> \"Any CONFIRMED-GAP or AMEND?\"; \"Any CONFIRMED-GAP or AMEND?\" -> \"Carry the fix or amendment forward; BLOCKED stops\" [label=\"yes\"]; \"Carry the fix or amendment forward; BLOCKED stops\" -> \"Append completion to ledger, mark todo complete\" [label=\"gap carried\"]; \"Any CONFIRMED-GAP or AMEND?\" -> \"Park findings in ledger with rulings\" [label=\"no\"]; \"Park findings in ledger with rulings\" -> \"Append completion to ledger, mark todo complete\"; \"Append completion to ledger, mark todo complete\" -> \"More tasks remain?\"; \"More tasks remain?\" -> \"Dispatch the assigned implementer or executor (./references/implementer-prompt.md)\" [label=\"yes\"]; \"More tasks remain?\" -> \"Final review:",
   "When the spec has none — it predates the question, or there is no spec — ask your human partner the question in dforge:brainstorming §Choosing the execution strategy before you draft any task, and wait for the answer; when the `executionStrategy` setting is `sequential` or `parallel` (dforge:brainstorming §Settings; the default is `parallel`), take that value and do not ask.",
+  "the full-plan template in round 1, the Later rounds template after it, each with `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`.",
+  "dispatch the printed `fallback` (`dforge:judge-opus`) with the full-plan template and `[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`, and say why.",
+  "Dispatch it with the full-plan template and `[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`, and say `codex off — <reason>`, quoting the gate line's `reason` (`untrusted` when it printed `usable=true`).",
+  "Write `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`, dispatch the seat with the Later rounds template, passing that file and the previous round's findings file, with `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`.",
 ];
 // Sentences the main branch's "review light plans once" change removed or
 // reworded in writing-plans after BASE; the split cannot have lost them.

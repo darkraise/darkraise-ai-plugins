@@ -80,13 +80,13 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 [Write the diff file, then dispatch dforge:judge-opus]
   DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
-  DIFF_FILE: .dforge/review-3df7661.diff
+  DIFF_FILE: /home/me/project/.dforge/review-3df7661.diff
   PLAN_OR_REQUIREMENTS: Task 2 from <docs>/plans/deployment-plan.md
   BASE_SHA: a7981ec
   HEAD_SHA: 3df7661
-  REPORT_FILE: .dforge/review-3df7661-report.md
+  REPORT_FILE: /home/me/project/.dforge/review-3df7661-report.md
 
-[Subagent replies]: ready to merge: with fixes — 1 Important, 1 Minor — .dforge/review-3df7661-report.md
+[Subagent replies]: ready to merge: with fixes — 1 Important, 1 Minor — /home/me/project/.dforge/review-3df7661-report.md
 
 You: [Fix progress indicators]
 [Continue to Task 3]
