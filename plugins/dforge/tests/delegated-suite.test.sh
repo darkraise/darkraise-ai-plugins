@@ -42,7 +42,11 @@ has "verdict reads the suite line: not run" in_loop '`suite: not run (<command>)
 has "verdict reads the suite line: none recorded" in_loop '`suite: none recorded`'
 has "a new failure is an Important finding" in_loop '`suite: <failing line> fails at <head7>`'
 has "the base failures are reused in order" in_loop 'task-<N>-base-failures.txt'
-has "the base run is bounded" in_loop 'bounded at 600 seconds'
+has "the base run is bounded" in_loop 'bounded at 3600 seconds'
+has "a timed-out base run is recorded" in_loop 'task-<N>-base-timeout'
+has "a group is compared with its first member's base" in_loop "group's first member's base"
+has "verdict is always started in the background" in_loop 'Always start `verdict` as a'
+has "a baseline command runs unsandboxed from a seat with no shell" in_loop 'seat has no shell: `verdict` runs it'
 has "exit 7 re-runs the suite and writes no ruling" in_loop 'Exit 7 is not a seat failure'
 has "--covered waits for the fix head's suite" in_loop 'only after that run'"'"'s notification is'
 has "a covered skip can be refused by the suite" in_loop '`re-review: not skipped (suite <red|not run>)`'

@@ -260,10 +260,13 @@ needed.
   `<prompt file>`: read it first and follow it". When a judge seat returns
   and the suite's notification is in (§2), run
   `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N` with the
-  review's task numbers, and act on its digest. When the suite's notification
-  reads `suite: FAIL`, `verdict` may run the suite once at the base commit,
-  which takes up to ten minutes: start it as a background command and end
-  the turn.
+  review's task numbers, and act on its digest. Always start `verdict` as a
+  background Bash command and end the turn until its notification arrives: it
+  may run the suite once at the base commit after a red suite (up to an hour),
+  and it runs every `baseline` cannot-verify item (up to ten minutes each).
+  You never read the report, so you cannot tell beforehand that a `baseline`
+  item is there, and a foreground `verdict` that the Bash tool times out writes
+  no fix file and no digest.
   Never Read the report file yourself: the digest carries the verdicts, the
   scores, one line per Critical or Important finding and the cannot-verify
   items, and verdict has already written the fix file and logged the Minor
@@ -349,9 +352,18 @@ digest carries exactly one `suite:` line, read from the run §2 started:
   order, a `suites.tsv` row at the base commit in the checkout's state, then
   `<workspace>/task-<N>-base-failures.txt`, and only then runs the suite once
   at the base commit in a temporary worktree (after the header's
-  `**Worktree setup:**`, bounded at 600 seconds), keeping that file and
-  `<workspace>/task-<N>-base.log`. With `k` at 0 every failure is a base
-  failure, and the task may complete.
+  `**Worktree setup:**`, bounded at 3600 seconds, or
+  `TASK_STEP_BASE_TIMEOUT`), keeping that file and
+  `<workspace>/task-<N>-base.log`. A base run that times out leaves
+  `<workspace>/task-<N>-base-timeout`: later calls do not run it again, and
+  every failure counts as new. A base that fails with no recognised test line
+  counts as the one line `command exit <code>`, as the head does. A task held
+  in a sequential group is compared with the group's first member's base,
+  because each later member starts at the previous member's head. With `k` at 0
+  every failure is a base failure, and the task may complete. A suite run that
+  was cut short (exit 124, or 126 and up) adds the finding
+  `suite: suite did not finish (exit <code>) at <head7>` whatever its partial
+  log shows.
 - `suite: not run (<command>)`: no run was recorded at the review head, and
   `verdict` exits 7 with no fix file. Run the suite (§2) at the review head
   and call `verdict` again.
@@ -366,8 +378,11 @@ answered by `verdict` itself: `exists` by `git cat-file -e` (a path) or
 command at the task's base commit as the suite is run there (log
 `<workspace>/task-<N>-baseline-<k>.log` for the k-th). A file at the
 repository root is written `./<name>`, so it is read as a path and not as a
-symbol. A `baseline` command runs unsandboxed on the controller host, as the
-suite does. An answer that matches
+symbol. A `baseline` command's text comes from a review seat, and a review
+seat has no shell: `verdict` runs it on the controller host, unsandboxed and
+with your rights, as the suite is run there. An item whose check could not
+run (an unknown commit, a git error, a command that timed out or was not
+found) stays for the ruling seat. An answer that matches
 `expect` is logged
 `Task <N>: Ruling: cannot-verify — settled by task-step check <exists|baseline> — <evidence>`
 and the item does not appear in the digest, so no seat sees it. An answer
