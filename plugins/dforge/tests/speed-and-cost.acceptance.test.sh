@@ -281,14 +281,10 @@ if selected A6 || selected A7; then
 fi
 
 if selected A6; then
-  check "A6: verdict exits 0 on the structured items" "$rc3" "0"
-  check "A6: the two path items are logged as settled by task-step with their evidence" \
-    "$(grep -cx 'Task 3: Ruling: cannot-verify — settled by task-step check exists — path present' <<<"$ledger3")" "2"
-  matches "A6: the symbol item is logged with its file:line evidence" "$ledger3" '^Task 3: Ruling: cannot-verify — settled by task-step check exists — lib/new\.sh:[0-9]+$'
-  matches "A6: the baseline item is logged as settled with the base run's log" "$ledger3" '^Task 3: Ruling: cannot-verify — settled by task-step check baseline — .*\.log'
-  lacks "A6: no structured exists item is left in the digest for a seat" "$out3" "cannot-verify: exists"
-  lacks "A6: no structured baseline item is left in the digest for a seat" "$out3" "cannot-verify: baseline"
-  check "A6: the digest carries no cannot-verify line at all" "$(grep -c '^cannot-verify: ' <<<"$out3")" "0"
+  # Skipped: these checks write the items in spec Design §2's form, without
+  # `expect`, which the 2026-10-28 owner decision (amendment A21) overrides.
+  # Deferred as register row 26 in docs/dforge/registers/2026-10-27-speed-and-cost.md.
+  echo "skip: A6 spec-form checks (register row 26)"
 
   # The reviewer prompt's own form carries `expect`; the same items in that form.
   check "A6 (expect form): verdict exits 0" "$rc4" "0"
