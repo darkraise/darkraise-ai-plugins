@@ -377,19 +377,19 @@ check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:light fallba
 # --- plan review prose ---------------------------------------------------------
 WP="$P/skills/writing-plans/SKILL.md"
 PRP="$P/skills/writing-plans/references/plan-reviewer-prompt.md"
-present "writing-plans routes each round" "$WP" 'scripts/review-route PLAN_FILE --plan-round <r>'
-present "writing-plans snapshots the plan before each round" "$WP" '<workspace>/plan-round-<r>.md'
-present "writing-plans runs the Codex plan kind" "$WP" '--kind plan'
-present "writing-plans writes the delta" "$WP" '<workspace>/plan-delta-<r>.diff'
-present "writing-plans caps rounds by score" "$WP" 'below the `cap=` that `review-route` printed'
-present "writing-plans re-rounds only on Critical or a low score" "$WP" 'Run the next round only when a round returned'
-present "writing-plans gives a Codex plan's Critical at the cap one more round" "$WP" 'earns exactly one more'
-present "writing-plans caps a Claude plan at two rounds" "$WP" 'On a Claude plan the cap is 2 whatever the task totals'
+present "writing-plans routes each round" "$P/skills/writing-plans/references/lint-and-review.md" 'scripts/review-route PLAN_FILE --plan-round <r>'
+present "writing-plans snapshots the plan before each round" "$P/skills/writing-plans/references/lint-and-review.md" '<workspace>/plan-round-<r>.md'
+present "writing-plans runs the Codex plan kind" "$P/skills/writing-plans/references/lint-and-review.md" '--kind plan'
+present "writing-plans writes the delta" "$P/skills/writing-plans/references/lint-and-review.md" '<workspace>/plan-delta-<r>.diff'
+present "writing-plans caps rounds by score" "$P/skills/writing-plans/references/lint-and-review.md" 'below the `cap=` that `review-route` printed'
+present "writing-plans re-rounds only on Critical or a low score" "$P/skills/writing-plans/references/lint-and-review.md" 'Run the next round only when a round returned'
+present "writing-plans gives a Codex plan's Critical at the cap one more round" "$P/skills/writing-plans/references/lint-and-review.md" 'earns exactly one more'
+present "writing-plans caps a Claude plan at two rounds" "$P/skills/writing-plans/references/lint-and-review.md" 'On a Claude plan the cap is 2 whatever the task totals'
 absent "writing-plans no longer derives a Claude cap from the totals" "$WP" 'printed: 1 when the plan'"'"'s highest'
-present "writing-plans states the heavy-majority rule" "$WP" '`subagent` when more than half the tasks are heavy'
-present "writing-plans raises a delegating inline effort" "$WP" 'raised to `high` when any task is'
-present "writing-plans falls back to Opus on exit 2" "$WP" 'exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native'
-present "writing-plans dispatches the native plan-review seat" "$WP" '**`primary=native:<model>/<effort>`** (every round of a Codex-host plan)'
+present "writing-plans states the heavy-majority rule" "$P/skills/writing-plans/references/execution-line.md" '`subagent` when more than half the tasks are heavy'
+present "writing-plans raises a delegating inline effort" "$P/skills/writing-plans/references/execution-line.md" 'raised to `high` when any task is'
+present "writing-plans falls back to Opus on exit 2" "$P/skills/writing-plans/references/lint-and-review.md" 'exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native'
+present "writing-plans dispatches the native plan-review seat" "$P/skills/writing-plans/references/lint-and-review.md" '**`primary=native:<model>/<effort>`** (every round of a Codex-host plan)'
 present "final review records the native fix seat" "$P/reference/final-review.md" 'On a Codex-host plan it prints `primary=native:<model>/<effort>`'
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
 present "using-dforge states the mixed-mode rule" "$P/skills/using-dforge/SKILL.md" 'an inline plan delegates those'
@@ -412,16 +412,16 @@ present "the delta template verdicts prior findings" "$PRP" '[ADDRESSED|NOT ADDR
 present "the delta template may read beyond the delta" "$PRP" 'The delta is where to look first, not the limit of'
 
 # --- the session gate in writing-plans -------------------------------------------
-present "writing-plans runs the gate before each round" "$WP" 'run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),'
-present "writing-plans routes a codex-off round 1 by intricacy" "$WP" '**`reason=codex-off`** (round 1 while the gate has not opened the review'
-present "writing-plans offers the lane only on lane=true" "$WP" 'for every executor whose gate prints `lane=true`'
+present "writing-plans runs the gate before each round" "$P/skills/writing-plans/references/lint-and-review.md" 'run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),'
+present "writing-plans routes a codex-off round 1 by intricacy" "$P/skills/writing-plans/references/lint-and-review.md" '**`reason=codex-off`** (round 1 while the gate has not opened the review'
+present "writing-plans offers the lane only on lane=true" "$P/skills/writing-plans/references/assignment-procedure.md" 'for every executor whose gate prints `lane=true`'
 
 # --- planning self-review ------------------------------------------------------
 BS="$P/skills/brainstorming/SKILL.md"
 present "brainstorming names the self-review block" "$BS" '`Self-review (round 1 of 1):`'
 present "writing-plans names the self-review block" "$WP" '`Self-review (round 1 of 1):`'
 present "brainstorming self-reviews a bounded design" "$BS" '4. **Self-review the design**'
-present "brainstorming keeps the round with the main agent" "$BS" 'never through a subagent'
+present "brainstorming keeps the round with the main agent" "$P/skills/brainstorming/references/spec-self-review.md" 'never through a subagent'
 present "writing-plans keeps the round with the main agent" "$WP" 'never through a subagent'
 present "brainstorming gives a revision one new round" "$BS" 'A revision your human partner asks for gets one new round'
 present "writing-plans gives a revision one new round" "$WP" 'A revision your human partner asks for gets one new round'
@@ -430,16 +430,16 @@ present "brainstorming flags a skipped round" "$BS" 'I'"'"'ll skip the self-revi
 absent "brainstorming no longer re-runs a review loop" "$BS" 're-run the spec review loop'
 
 # --- what a spec must carry -------------------------------------------------------
-present "brainstorming proposes a do-less approach" "$BS" 'Make one of them the do-less option'
-present "a spec carries an Acceptance section" "$BS" 'Every spec has an `## Acceptance` section'
-present "acceptance names what must not happen" "$BS" 'at least one thing that must not happen'
-present "a spec carries its riskiest assumption" "$BS" 'Every spec has a `## Riskiest assumption` section'
-present "an unverified riskiest assumption goes first in the plan" "$BS" '`unverified — the plan'"'"'s first task verifies it`'
-present "the spec self-review checks acceptance" "$BS" '6. **Acceptance:**'
-present "the spec self-review checks the riskiest assumption" "$BS" '7. **Riskiest assumption:**'
+present "brainstorming proposes a do-less approach" "$P/skills/brainstorming/references/design-phase.md" 'Make one of them the do-less option'
+present "a spec carries an Acceptance section" "$P/skills/brainstorming/references/spec-document.md" 'Every spec has an `## Acceptance` section'
+present "acceptance names what must not happen" "$P/skills/brainstorming/references/spec-document.md" 'at least one thing that must not happen'
+present "a spec carries its riskiest assumption" "$P/skills/brainstorming/references/spec-document.md" 'Every spec has a `## Riskiest assumption` section'
+present "an unverified riskiest assumption goes first in the plan" "$P/skills/brainstorming/references/spec-document.md" '`unverified — the plan'"'"'s first task verifies it`'
+present "the spec self-review checks acceptance" "$P/skills/brainstorming/references/spec-self-review.md" '6. **Acceptance:**'
+present "the spec self-review checks the riskiest assumption" "$P/skills/brainstorming/references/spec-self-review.md" '7. **Riskiest assumption:**'
 present "the plan's first task verifies the spec's riskiest assumption" "$WP" 'Task 1 is that verifying step'
-present "the live spec self-review checks acceptance ratings" "$BS" 'no rating other than `high` or `confirmed` appears'
-present "the live spec self-review requires assumption evidence" "$BS" 'section is present and names its evidence'
+present "the live spec self-review checks acceptance ratings" "$P/skills/brainstorming/references/spec-self-review.md" 'no rating other than `high` or `confirmed` appears'
+present "the live spec self-review requires assumption evidence" "$P/skills/brainstorming/references/spec-self-review.md" 'section is present and names its evidence'
 
 # --- task review prose -----------------------------------------------------------
 SDD="$P/skills/subagent-driven-development/SKILL.md"

@@ -53,6 +53,9 @@ printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"
 export PLAN_LINT_ROSTER="$TMP/roster-stub"
 
 doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
+skill_doc() { # skill_doc <SKILL.md> — the skill and its references as one line, whitespace collapsed
+  { doc "$1"; for ref in "$(dirname "$1")"/references/*.md; do doc "$ref"; done; }
+}
 between() { # between <text> <start> <end> — the text after the first <start> up to the next <end>
   local t=${1#*"$2"}
   [ "$t" != "$1" ] || { printf ''; return 0; }
@@ -387,7 +390,7 @@ FIN="$PLUGIN/skills/finishing-a-development-branch/SKILL.md"
 
 a9() {
   local bs
-  bs=$(doc "$BS")
+  bs=$(skill_doc "$BS")
   has "A9: brainstorming reports the skipped critic at light" "$bs" 'Critic: skipped (depth light)'
   lacks "A9: the fold no longer keys on the Process line's triggers" "$bs" 'names neither irreducible risk nor a new'
   matches "A9: the spec review message carries the depth" "$bs" 'Depth: <[a-z]+> — <reason'
@@ -398,7 +401,7 @@ a9() {
 
 a10() {
   local wp ho out_with out_without
-  wp=$(doc "$WP"); ho=$(doc "$HO")
+  wp=$(skill_doc "$WP"); ho=$(doc "$HO")
   has "A10: writing-plans records the skipped plan review at light" "$wp" '**Plan review:** <YYYY-MM-DD> — skipped (depth light)'
   has "A10: writing-plans runs the handoff steps first" "$wp" 'handoff steps 0-4'
   has "A10: a light plan of 1-3 tasks is the one that continues" "$wp" 'A light plan of 1-3 tasks runs'
@@ -457,7 +460,7 @@ a12() {
   claude=$(between "$fr" 'Then run `scripts/review-route PLAN_FILE --final` and dispatch the `primary` it prints' '2. **Codex round.**')
   claudehead=$(between "$fr" '1. **Claude review.**' '**Lenses.**')
   fixwave=${fr#*'## Fixing what it finds'}
-  bs=$(doc "$BS")
+  bs=$(skill_doc "$BS")
   gate=$(between "$bs" 'In an auto run (`scripts/auto-run status` exits 0), skip this gate' 'Otherwise, after posting')
   step5=$(between "$bs" '5. **The spec review**, the one stop' '6. **Start the run.**')
   step5rest=${step5//'`specReview=false` does not skip this stop'/}
@@ -482,12 +485,12 @@ a12() {
   lacks "A12: the spec review stop is not skipped by a depth" "$step5" 'skip the spec review'
   lacks "A12: the spec review stop has no other skip" "$step5rest" 'skip '
   lacks "A12: nor is the stop said to be skipped" "$step5rest" 'is skipped'
-  has "A12: the light approve option says the plan is not a stop" "$(doc "$BS")" 'depth light: the plan is not a stop'
+  has "A12: the light approve option says the plan is not a stop" "$(skill_doc "$BS")" 'depth light: the plan is not a stop'
 }
 
 a14() {
   local ud bs spec_text
-  ud=$(doc "$UD"); bs=$(doc "$BS")
+  ud=$(doc "$UD"); bs=$(skill_doc "$BS")
   has "A14: using-dforge states the architectural Process line" "$ud" 'Process: architectural, <inline|subagent>, depth <d> — <triggers>'
   has "A14: brainstorming states it too" "$bs" 'Process: architectural, <inline|subagent>, depth <d> — <triggers>'
   matches "A14: brainstorming writes the Depth line" "$bs" '\*\*Depth:\*\* <[^>]+> — <reason'

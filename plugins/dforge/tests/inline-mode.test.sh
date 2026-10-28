@@ -355,12 +355,12 @@ rm -rf "$DTMP"
 # any one of them is caught here rather than in a plan that misroutes a task.
 EXEC_REASON='and every task carrying an `**Executor:**` line'
 present "inline mode delegates every Executor line" "$INLINE" "$EXEC_REASON"
-present "writing-plans delegates every Executor line" "$P/skills/writing-plans/SKILL.md" "$EXEC_REASON"
+present "writing-plans delegates every Executor line" "$P/skills/writing-plans/references/execution-line.md" "$EXEC_REASON"
 present "using-dforge delegates every Executor line" "$P/skills/using-dforge/SKILL.md" "$EXEC_REASON"
 present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
 present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" "$EXEC_REASON"
-present "writing-plans gates the roster per executor" "$P/skills/writing-plans/SKILL.md" 'for every executor whose gate prints `lane=true`'
-present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/SKILL.md" 'A task carries at most one `**Executor:**` line'
+present "writing-plans gates the roster per executor" "$P/skills/writing-plans/references/assignment-procedure.md" 'for every executor whose gate prints `lane=true`'
+present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/references/assignment-procedure.md" 'A task carries at most one `**Executor:**` line'
 absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
 absent "writing-plans no longer reads executor lines only when delegated" "$P/skills/writing-plans/SKILL.md" 'the lines are read only for the delegated tasks'
 

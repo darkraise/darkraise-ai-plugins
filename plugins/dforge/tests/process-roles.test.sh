@@ -34,21 +34,21 @@ check "qa: the report lists only the statements given" "$(grep -qF -- 'demo — 
 
 BS="$P/skills/brainstorming/SKILL.md"
 names "analyst: the checklist step" "$BS" '7. **Draft acceptance** — numbered, tagged, rated statements'
-names "analyst: auto-run offer follows it" "$BS" 'right after the Draft acceptance step and before you'
-names "analyst: the line format" "$BS" '`A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`'
-names "analyst: the verdict options" "$BS" '**Right**, **Wrong, or not wanted** and **Not sure**'
-names "analyst: not sure defers" "$BS" '--state deferred --note "Q: <question>"'
-names "analyst: confirmed is the human's" "$BS" '`confirmed` is reserved for a verdict from your human partner'
-names "analyst: self-review item" "$BS" 'every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>]'
+names "analyst: auto-run offer follows it" "$P/skills/brainstorming/references/auto-run-offer.md" 'right after the Draft acceptance step and before you'
+names "analyst: the line format" "$P/skills/brainstorming/references/drafting-acceptance.md" '`A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`'
+names "analyst: the verdict options" "$P/skills/brainstorming/references/drafting-acceptance.md" '**Right**, **Wrong, or not wanted** and **Not sure**'
+names "analyst: not sure defers" "$P/skills/brainstorming/references/auto-by-default.md" '--state deferred --note "Q: <question>"'
+names "analyst: confirmed is the human's" "$P/skills/brainstorming/references/drafting-acceptance.md" '`confirmed` is reserved for a verdict from your human partner'
+names "analyst: self-review item" "$P/skills/brainstorming/references/spec-self-review.md" 'every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>]'
 after=$(grep -n '^## After the Design (architectural path)$' "$BS" | cut -d: -f1)
 draft=$(grep -n '^\*\*Drafting acceptance:\*\*$' "$BS" | cut -d: -f1)
 offer=$(grep -n '^\*\*Offering an auto run:\*\*$' "$BS" | cut -d: -f1)
 check "analyst: drafting sits between After the Design and the auto-run offer" \
   "$([ -n "$after" ] && [ -n "$draft" ] && [ -n "$offer" ] && [ "$after" -lt "$draft" ] && [ "$draft" -lt "$offer" ] && echo yes || echo no)" "yes"
-names "analyst: the process graph" "$BS" '"Draft acceptance\n(rate; ask below high)" -> "Offer an auto run\n(once, unless autoRun=off)";'
-names "analyst: live spec self-review checks the format" "$BS" \
+names "analyst: the process graph" "$P/skills/brainstorming/references/process-flow.md" '"Draft acceptance\n(rate; ask below high)" -> "Offer an auto run\n(once, unless autoRun=off)";'
+names "analyst: live spec self-review checks the format" "$P/skills/brainstorming/references/spec-self-review.md" \
   'no rating other than `high` or `confirmed` appears'
-names "analyst: plans never build on a deferred statement" "$P/skills/writing-plans/SKILL.md" \
+names "analyst: plans never build on a deferred statement" "$P/skills/writing-plans/references/register-rows.md" \
   'A row whose Item begins `A<n>:` is a deferred acceptance statement'
 
 AC="$P/criteria/architecture-critique.md"
@@ -60,14 +60,14 @@ names "critic: the prompt does not score" "$CP" 'do not score them 1-20'
 names "critic: ranked findings" "$CP" 'Blocker / High / Medium / Nit'
 names "critic: one change" "$CP" 'If I could change one thing, it would be'
 names "critic: checklist step" "$BS" '11. **Architecture critic** — one `dforge:judge-opus` round'
-names "critic: findings section" "$BS" 'answered in a `## Critic findings` section'
-names "critic: counts in the review request" "$BS" 'Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium'
+names "critic: findings section" "$P/skills/brainstorming/references/architecture-critic.md" 'answered in a `## Critic findings` section'
+names "critic: counts in the review request" "$P/skills/brainstorming/references/architecture-critic.md" 'Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium'
 names "critic: live Fable review checks answers" "$P/reference/auto-run.md" \
   'each answer to a Blocker or High finding'
-names "critic: the process graph" "$BS" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
-names "critic: folded into Fable at depth standard" "$BS" 'and the spec'"'"'s depth is `standard`, dispatch no critic.'
-names "critic: depth full keeps the separate round" "$BS" 'new-subsystem trigger gives it, keeps the separate critic round.'
-names "critic: the folded counts say so" "$BS" 'followed by ` (in Fable'"'"'s review)` when the critic was folded into it.'
+names "critic: the process graph" "$P/skills/brainstorming/references/process-flow.md" '"Architecture critic\n(one judge-opus round)" -> "User reviews spec?";'
+names "critic: folded into Fable at depth standard" "$P/skills/brainstorming/references/architecture-critic.md" 'and the spec'"'"'s depth is `standard`, dispatch no critic.'
+names "critic: depth full keeps the separate round" "$P/skills/brainstorming/references/architecture-critic.md" 'new-subsystem trigger gives it, keeps the separate critic round.'
+names "critic: the folded counts say so" "$P/skills/brainstorming/references/architecture-critic.md" 'followed by ` (in Fable'"'"'s review)` when the critic was folded into it.'
 names "auto-run.md: the critic may fold into Fable" "$P/reference/auto-run.md" 'which folds the critic into'
 
 FR="$P/reference/final-review.md"
@@ -169,9 +169,9 @@ lacks "shape: Step 3 no longer carries the implementation" "$WP" 'Step 3 carries
 says "shape: a Codex host keeps code-given tasks" "$WP" 'On a Codex host, tasks keep the code-given shape'
 says "shape: tests that assert nothing are placeholders" "$WP" 'Tests that describe behaviour without asserting it'
 lacks "shape: the old how-not-shown ban is reworded" "$WP" 'Steps that describe what to do without showing how'
-says "shape: a Claude code task scores spec 2" "$WP" 'so it scores spec 2'
-says "shape: Rule S at 6 on a Claude plan" "$WP" 'On a Claude plan, if `files + spec + coupling >= 6`'
-says "shape: Rule S at 4 on a Codex plan" "$WP" 'on a `Host: codex` plan, if it is `>= 4`'
+says "shape: a Claude code task scores spec 2" "$P/skills/writing-plans/references/assignment-procedure.md" 'so it scores spec 2'
+says "shape: Rule S at 6 on a Claude plan" "$P/skills/writing-plans/references/assignment-procedure.md" 'On a Claude plan, if `files + spec + coupling >= 6`'
+says "shape: Rule S at 4 on a Codex plan" "$P/skills/writing-plans/references/assignment-procedure.md" 'on a `Host: codex` plan, if it is `>= 4`'
 lacks "shape: no host-blind Rule S at 4" "$WP" 'If `files + spec + coupling >= 4`, split'
 says "drafter prompt: tests and interfaces, not code" "$DPR" 'gives the complete code of its tests'
 says "drafter prompt: implementation code only where no test pins it" "$DPR" "$ALLOWED"
@@ -186,8 +186,8 @@ lacks "plan review criteria: no host-blind complete-code rule" "$PR" 'exact file
 says "assigning: a Claude code task scores spec 2" "$AI" 'gives its tests and interfaces but not its implementation, so it scores 2'
 says "assigning: the Claude cap is 8" "$AI" 'Rule S caps a compliant Claude total at 8'
 lacks "assigning: no cap at 6" "$AI" 'Rule S also caps a compliant total at 6'
-says "spec review: Fable's second round needs an open Blocker or High" "$BS" 'a second only when round 1 leaves a Blocker or High finding open'
-says "spec review: the folded critic gets no second Fable round" "$BS" 'No second Fable round runs at standard'
+says "spec review: Fable's second round needs an open Blocker or High" "$P/skills/brainstorming/references/auto-by-default.md" 'a second only when round 1 leaves a Blocker or High finding open'
+says "spec review: the folded critic gets no second Fable round" "$P/skills/brainstorming/references/architecture-critic.md" 'No second Fable round runs at standard'
 lacks "spec review: no unconditional answer check" "$BS" 'which checks each Blocker and High answer'
 says "auto-run.md: Fable's second round needs an open Blocker or High" "$P/reference/auto-run.md" 'A second runs only when round 1 leaves a Blocker or High finding open'
 lacks "auto-run.md: no unconditional second round" "$P/reference/auto-run.md" 'At most two Fable rounds run (review, revise, re-review)'

@@ -72,6 +72,9 @@ session() { # session <review true|false> <lane true|false> | absent — this se
 session absent
 
 doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
+skill_doc() { # skill_doc <SKILL.md> — the skill and its references as one line, whitespace collapsed
+  { doc "$1"; for ref in "$(dirname "$1")"/references/*.md; do doc "$ref"; done; }
+}
 lines_of() { printf '%s\n' "$1" | grep -c .; }
 
 # --- fixtures: a task-loop repository --------------------------------------
@@ -273,7 +276,7 @@ lint_probe() { # lint_probe <file> — the same, with the lane probe on
 
 a1() {
   local skill drafter reviewer criteria
-  skill=$(doc "$PLUGIN/skills/writing-plans/SKILL.md")
+  skill=$(skill_doc "$PLUGIN/skills/writing-plans/SKILL.md")
   drafter=$(doc "$PLUGIN/skills/writing-plans/references/drafter-prompt.md")
   reviewer=$(doc "$PLUGIN/skills/writing-plans/references/plan-reviewer-prompt.md")
   criteria=$(doc "$PLUGIN/criteria/plan-review.md")
@@ -906,8 +909,8 @@ a17() {
   check "A17: a plan of light tasks is capped at 2 as well" "$rc" "2"
 
   local wp bs ar
-  wp=$(doc "$PLUGIN/skills/writing-plans/SKILL.md")
-  bs=$(doc "$PLUGIN/skills/brainstorming/SKILL.md")
+  wp=$(skill_doc "$PLUGIN/skills/writing-plans/SKILL.md")
+  bs=$(skill_doc "$PLUGIN/skills/brainstorming/SKILL.md")
   ar=$(doc "$PLUGIN/reference/auto-run.md")
   matches "A17: the next plan-review round runs only on a Critical finding or a score of 8 or below" "$wp" 'Run the next round only when a round returned a Critical finding or any score of 8 or below'
   matches "A17: on a Claude plan the cap is 2 and there is no third" "$wp" 'On a Claude plan the cap is 2 whatever the task totals: round 2 is the delta round, and there is no third'
@@ -1263,7 +1266,7 @@ a23() {
   matches "A23: the skill reads a Codex R/5 line as live, not older" "$sdd" 'On a .Host: codex. plan a .Task. or .Wave. round line reading .R/5. is live, not older'
   matches "A23: native-codex.md keeps Rule S at 4 for the Codex score" "$nc" 'Apply Rule S first: files \+ spec \+ coupling must be'
   matches "A23: the ladder keeps the Codex carve-out at reducible >= 4" "$lad" 'Host: codex. plan keeps .reducible >= 4.|keeps .reducible >= 4.'
-  matches "A23: writing-plans keeps code-given tasks on a Codex host" "$(doc "$PLUGIN/skills/writing-plans/SKILL.md")" 'On a Codex host, tasks keep the code-given shape'
+  matches "A23: writing-plans keeps code-given tasks on a Codex host" "$(skill_doc "$PLUGIN/skills/writing-plans/SKILL.md")" 'On a Codex host, tasks keep the code-given shape'
 }
 
 ALL="a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23"

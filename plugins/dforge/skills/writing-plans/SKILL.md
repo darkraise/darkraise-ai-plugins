@@ -32,33 +32,7 @@ the `dforge:using-git-worktrees` skill at execution time.
 
 ## Auto run
 
-When `scripts/auto-run status` exits 0, this plan is written unattended
-([auto-run.md](../../reference/auto-run.md)). Run `scripts/auto-run phase plan`
-first. Then nothing in this skill waits on your human partner:
-
-- **The execution strategy:** take the spec's `**Execution strategy:**` line;
-  with none, take the `executionStrategy` setting (`parallel` by default) as
-  Parallel waves says, and write `sequential` when it is `ask`.
-- **An approach or planning choice** you would ask about goes to
-  `dforge:judge-opus` first, then the ladder in auto-run.md §Rulings.
-  dforge:selecting-approaches runs as usual otherwise.
-- **The executor offer:** tick only what a constraint ticks without asking;
-  start no timed question.
-- **At the review cap,** a Critical finding or a score of 8 or below goes on
-  the pending list, and the Fable batch rules on it with the rest.
-- **Once the plan is reviewed** (at depth light, once it is linted):
-  `scripts/auto-run attach --plan PLAN_FILE`,
-  the Fable batch when `scripts/auto-run decision list` prints anything, then
-  the switch instead of Execution Handoff: when the spec's `## Decisions`
-  holds a `Finish: <action>` line, `scripts/finish-choice set <action> --plan
-  PLAN_FILE`; dforge:handoff steps 0-3 only; `scripts/next-step PLAN_FILE`
-  (on exit 5, wait for or stop what `scripts/in-flight` lists and run it
-  again, as auto-run.md §The switch step 3 says);
-  then `scripts/auto-run switch` and end the turn with `Auto run: switching`
-  as its last line, as auto-run.md §The switch says.
-- **One plan.** An auto run writes one plan for the whole spec and amends it
-  in place through the ruling seat's AMEND path (`scripts/plan-amend`); it
-  never writes a follow-up plan or a second plan version.
+Read [auto-run-plan.md](references/auto-run-plan.md) before you write this plan when `scripts/auto-run status` exits 0.
 
 ## Scope Check
 
@@ -181,46 +155,9 @@ That pair runs the main session for the whole plan. A subagent plan names
 highest weighted routing score. `scripts/plan-lint` warns on any other pair,
 and errors on an inline pair below that score.
 
-**Read the settings first.** Two workflow settings shape a plan,
-`executionMode` and `executionStrategy`. They arrive in the session-start line
-`dforge settings in force (…)`. With no such line in context,
-run `scripts/dforge-config workflow` before you choose the Execution line
-or ask the strategy question; it prints nothing when both are at their
-defaults. A key the line does not name is at its default, and your human
-partner's own instructions outrank a setting.
+**Read the settings first, then choose the Execution line.**
 
-**Choosing the Execution line.** The plan decides its execution mode:
-
-A task is **heavy** when its total is 5 or more or its risk is 3, on any part.
-An inline plan delegates its heavy tasks
-and every task carrying an `**Executor:**` line: each runs through
-[delegated-task.md](../../reference/delegated-task.md) with an implementer
-subagent — or, for an Executor line, that executor's wrapper — and the full
-per-task review. The tasks not delegated are the **self-implemented** tasks.
-
-- `subagent` when more than half the tasks are heavy, and always when the
-  plan runs parallel waves (see Parallel waves):
-  `claude --model sonnet --effort high`. The controller owns no judgment calls
-  — the ruling seat does — so it needs no stronger model.
-- Otherwise `inline`, the default, on `sonnet`: every self-implemented task
-  (total 4 or less, risk below 3) is assigned to Sonnet, and heavy
-  tasks are delegated. `<e>`
-  is the assignment-table effort of the highest self-implemented total
-  (`impl-haiku` counts as `low`), raised to `high` when any task is delegated:
-  `claude --model sonnet --effort <e>`. When every task is heavy
-  and your human partner overrides the line to inline, use
-  `claude --model opus --effort high`.
-- Your human partner may override the line; `plan-lint` checks its grammar,
-  warns when it disputes the majority rule, and lists the delegated tasks with
-  their reasons.
-- The `executionMode` setting fixes the
-  line when it is `inline` or `subagent`, in place of the majority rule.
-  `inline` also makes the plan sequential, whatever the spec's
-  `**Execution strategy:**` line or the `executionStrategy` setting says,
-  because an inline session implements its own tasks one after another: write
-  `**Parallelism:** sequential — executionMode is inline`
-  and group no waves. An inline plan still delegates its heavy tasks and every
-  task carrying an `**Executor:**` line.
+Read [execution-line.md](references/execution-line.md) before you write the header's Execution line.
 
 ## Parallel waves
 
@@ -401,110 +338,11 @@ git commit -m "feat: add specific feature"
 
 ## Assign an implementer to every task
 
-Every task records which implementer runs it, so the choice is a property of
-the plan rather than a judgment made from memory at dispatch time. Do this
-after the tasks are drafted and before the plan is committed. Retrofitting an
-existing plan is the same process: read it, rename any skill or agent written
-under an older plugin prefix to its `dforge:` name, score each task, and add
-the lines.
-
-**Codex host:** follow [native-codex.md](../../reference/native-codex.md) — its
-`codex-v4` selector, plan headers, assignment-source fields, and conversion
-rules replace the Claude table, fleet, and external CLI lane below. Honor the
-user's inline or delegation preference on either host.
-
-1. **Score** each task on the four axes in
-   [ladder.md](../../reference/ladder.md) — files, spec completeness,
-   coupling, risk. Never restate its tables or work from memory. Score the
-   task as its brief will carry it — the task text plus the header's Global
-   Constraints and Contracts: if those contain the complete code and exact
-   signatures, spec completeness is 0. Count file shapes, not file instances.
-   A Claude plan's code task carries its tests and interfaces but no
-   implementation, so it scores spec 2.
-2. **Apply Rule S before the table.** On a Claude plan, if
-   `files + spec + coupling >= 6`, split the task where a reviewer could
-   reject one half while approving the other, and re-score both halves; on a
-   `Host: codex` plan, if it is `>= 4`, do the same. If `spec = 3`, the
-   approach is undecided: settle it with dforge:selecting-approaches, rewrite
-   the task with the decision in its steps, and re-score. Never answer a
-   reducible axis with a bigger model.
-3. **Assign** from the assignment table, which the total indexes directly.
-   Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
-   tier. Only a human edit puts one in a plan.
-4. **Offer an external executor** and apply the lane gate — see
-   [executor-lane.md](../../reference/executor-lane.md) §Planning. Every id
-   `scripts/executors list` prints has its own gate; run each, resolved with
-   `bash "$(bash scripts/executors path <id> gate)"`, before the roster, and
-   make the offer once per plan
-   for every executor whose gate prints `lane=true`. If none is usable, ask
-   nothing.
-5. **Write the lines** directly below the task's `**Depends on:**` line, or
-   its `**Items:**` line, or its `**Interfaces:**` block when it has neither,
-   in this order:
-   - `**Implementer:**` — always; the fully qualified agent, for example
-     `dforge:impl-sonnet-low`
-   - `**Executor:**` — only when the lane gate passed, for example
-     `codex gpt-6.1-sol / low`
-   - `**Evaluation:**` — always, for example
-     `files 0 - spec 1 - coupling 1 - risk 0 = 2`
-   - `**Approach:**` — only when the task involved an approach decision:
-     `inline`, `advisor`, or `best-of-3`, a dash, and a one-line reason; an
-     `inline` reason cites a skip condition by number
-   - `**Lenses:**` — only on a task scored risk 3, and optional there: the
-     lens ids under `criteria/lenses/` that match why the task is risky,
-     comma-separated, for example `security` for an authentication change. The
-     task's Claude review seat reads them as defect patterns; `plan-lint`
-     rejects the line below risk 3 and an id with no lens file.
-
-   ```markdown
-   **Implementer:** dforge:impl-sonnet-high
-   **Evaluation:** files 1 - spec 0 - coupling 2 - risk 2 = 5
-   **Approach:** inline - skip 2: follows the existing exporter pattern
-   ```
-
-6. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
-   task by a heading that begins with `Task <N>`.
-
-**A task carries at most one `**Executor:**` line, and you choose it.** When
-two ticked executors' gates both admit a task, nothing mechanical picks
-between them: write one line, and `plan-lint` validates only what is written.
-No precedence rule is introduced here — with one registered executor there is
-no choice to make, and a rule invented now would be untested against a real
-second executor.
-
-A human may edit any `**Implementer:**` line by hand;
-dforge:subagent-driven-development obeys it and never recomputes.
-Leave the `**Evaluation:**` line in place — the gap between the score and the
-choice is the interesting part. A hand edit that breaks a checked rule — a
-reserve tier, a kept `spec = 3`, a table mismatch — carries an
-`**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
-reports it as a warning. Never write an Override line yourself. Under
-dforge:executing-plans the lines are read for the delegated tasks,
-which include every task carrying an `**Executor:**` line.
-[assigning-implementers.md](references/assigning-implementers.md) explains why
-each of these rules exists.
+Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.
 
 ## Assign the register rows
 
-When a register covers this plan's spec, the plan is where its rows become
-work.
-
-1. Set every row this plan schedules with
-   `scripts/register set <register> <id> planned --assigned <this plan's
-   repository-relative path>`, and give it an `--acceptance` if it has none:
-   that cell is what lets finishing decide between `done` and `verify`.
-2. Put the identifiers on the tasks that discharge them, as `**Items:**` lines.
-3. Record a deferral as a row, not as prose. An item this plan will not answer
-   is `scripts/register set <register> <id> deferred --note "<the reason>"`. An
-   "Out of scope" heading is read by nothing, which is how design-time
-   deferrals were lost.
-4. A row whose Item begins `A<n>:` is a deferred acceptance statement: your
-   human partner or the ruling ladder left it unsettled. No task's `**Items:**`
-   line names it, and no task builds on it.
-
-`plan-lint` then checks both directions: an assigned row no task cites, and a
-task citing a row no register holds. It also rejects a bare identifier that
-more than one covering register holds.
+Read [register-rows.md](references/register-rows.md) before you tie register rows to the plan's tasks.
 
 ## No Placeholders
 
@@ -551,121 +389,8 @@ A revision your human partner asks for gets one new round.
 
 ## Lint and Review
 
-1. **Lint.** Run `scripts/plan-lint PLAN_FILE`
-   (see using-dforge §Session Budget) until it reports `0 errors`.
-   Fix each WARN, or
-   explain it in one line of the plan's Assumptions. The checker covers the
-   header sections, the task headings and index, the Execution line,
-   placeholders, and every task's assignment lines.
-   Then run `scripts/depth-route PLAN_FILE` and say its line aloud
-   (`depth=<d> spec=<d> tasks=<d> reason=<items>`). The depth sizes the review
-   below and the handoff after it; `review-route` reads the same depth, so
-   never pick it by hand.
-2. **Review.** Write the lint output to the plan's workspace:
-   `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
-   `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
-   Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.
-   At depth light (step 1's line) skip `scripts/codex-gate`: no seat runs, so
-   run only `scripts/review-route PLAN_FILE --plan-round 1`. Otherwise
-   run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),
-   then `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
-   seat it prints, using
-   [plan-reviewer-prompt.md](references/plan-reviewer-prompt.md). The gate
-   keeps an off answer for the session, so add `--refresh` when Codex may have
-   come back since then, such as after a login. Every seat
-   scores executability, coherence, coverage and assumptions (1-20) against
-   [plan-review.md](../../criteria/plan-review.md) and lists findings. On
-   exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native
-   judge at Astra high or above) and say why, quoting its message.
-   - **`primary=none`** (`reason=depth-light`, round 1 of a light plan). No
-     review round runs: dispatch no seat, skip step 3, and record the skip in
-     step 4.
-   - **`primary=native:<model>/<effort>`** (every round of a Codex-host plan).
-     Dispatch a native judge at that pair or above
-     ([native-codex.md](../../reference/native-codex.md)): the full-plan
-     template in round 1, the Later rounds template after it, each with
-     `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`. No Codex CLI
-     round runs.
-   - **`primary=codex:plan`** (round 1). Write the prompt its Round 1 on Codex
-     section describes to `<workspace>/plan-review-prompt.md`, then run, as a
-     background Bash call with `timeout` = (row bound + 120) × 1000 ms, 5520000
-     today (the rung's bound is longer than a foreground call's ten-minute cap,
-     and a background call's limit defaults to 30 minutes):
-
-     ```bash
-     bash scripts/run-codex-review.sh --kind plan --cwd <repository-root> \
-       --out <workspace>/plan-review-round-1.json --prompt <workspace>/plan-review-prompt.md
-     ```
-
-     Read its one status line. `OK` and `FALLBACK` are a review: read the four
-     scores and `findings` from the JSON. On `FALLBACK`, or a line naming
-     `gpt-6.1-sol/xhigh` with `status=OK`, say the substitution aloud with the
-     runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
-     no review: dispatch the printed `fallback` (`dforge:judge-opus`)
-     with the full-plan template and
-     `[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`, and say why.
-     Never run the Codex seat twice in one round.
-   - **`reason=codex-off`** (round 1 while the gate has not opened the review
-     surface). No Codex seat runs. The `primary` is `dforge:judge-opus`.
-     Dispatch it with the full-plan template and
-     `[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`, and say
-     `codex off — <reason>`, quoting the gate line's `reason` (`untrusted`
-     when it printed `usable=true`).
-   - **`primary=dforge:judge-opus`** (every later round). Write
-     `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
-     dispatch the seat with the Later rounds template, passing that file and
-     the previous round's findings file, with
-     `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`.
-
-   The seat writes its report to that file and replies in at most 10 lines.
-   Read the report's `## Verdict` section and its Critical and Important
-   findings; the reply carries only the scores, the finding counts and the
-   report path, never the findings themselves.
-3. **Fix and repeat.** Fix every Critical and Important finding and re-lint;
-   Minor findings are advisory. Run the next round only when a round returned
-   a Critical finding or any score of 8 or below, and only while the round is
-   below the `cap=` that `review-route` printed.
-   On a Claude plan the cap is 2 whatever the task totals: round 2 is the
-   delta round, and there is no third. Only the plan's depth lowers it: 1 at
-   standard, so round 1 is the only round, and 0 at light, so none runs. On a
-   Codex-host plan the cap follows the highest raw task total, not the weighted
-   routing score, at every depth: 1 when it is 3 or less, 2 for 4 or 5, 3 for
-   6. At the cap a Codex-host plan's Critical finding
-   earns exactly one more delta round (`reason=cap-critical`), scoped to its
-   fix, which earns no other; a Claude plan has no such round. A delta round
-   replaces a fresh full review. Any Critical finding still open after the
-   last round, and any score of 8 or below at the cap, go to your human partner
-   (in an auto run, onto the pending list). A borderline score (9-13) gets
-   a one-line decision in the plan's Assumptions.
-4. **Record.** Only now, add the header line
-   `**Plan review:** <YYYY-MM-DD> — <seat> — executability e / coherence c / coverage v / assumptions a (round r)`
-   as the last line of the header, directly above `## Global Constraints`.
-   `<seat>` is the seat that ran the last round:
-   `codex <model> / <effort>` from the runner's status line, or the judge
-   agent. The header template deliberately omits it, so `plan-lint` warns
-   until the review has run. At depth light no review ran: write
-   `**Plan review:** <YYYY-MM-DD> — skipped (depth light)` in the same place,
-   and `plan-lint` accepts it.
+Read [lint-and-review.md](references/lint-and-review.md) before you lint the plan or dispatch a plan review round.
 
 ## Execution Handoff
 
-A saved, reviewed plan is a hard stop (except at depth light, below): execution
-starts in a fresh session (in
-an auto run the session switches in place instead; see Auto run).
-Invoke dforge:handoff. It commits (or pushes) the plan and the spec, writes
-`<latest.md>`, runs `scripts/next-step PLAN_FILE`, and ends
-your message with the resume guide — the launch command from the Execution
-line and the first prompt for the skill that line names. Offer no execution
-choice: the Execution line already made it.
-
-The exception is a plan at depth light, which is no hard stop outside an auto
-run (an auto run switches at every depth). A light plan of 4 or more tasks
-still ends with dforge:handoff as above. A light plan of 1-3 tasks runs
-dforge:handoff steps 0-4 only (reconcile background work, commit the plan and
-the spec, write the handoff notes, `scripts/next-step PLAN_FILE`), so that
-`latest.md` names this plan, then plain `scripts/context-size`: the task
-budget, not `--plan`, which measures room to write a plan. On `ok`, say in one
-line that the Execution line's model and effort are not applied in this
-session, and invoke the skill that line names; print no resume guide. On any
-other result, run handoff step 5 and end the session as above. The task count
-decides only this, never the depth.
+Read [execution-handoff.md](references/execution-handoff.md) before you end the planning session.

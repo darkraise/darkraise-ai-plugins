@@ -34,6 +34,7 @@ absent() { # absent <name> <haystack> <ERE>
   else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
 }
 flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
+flat_skill() { cat "$1" "$(dirname "$1")"/references/*.md | tr '\n' ' ' | tr -s ' '; } # a skill and its references as one line
 sect() { # sect FILE START_ERE END_ERE — flattened text from the first START line to the line before the next END match
   # ENVIRON, not -v: gawk turns the \* and \. of a -v value into * and .
   S="$2" E="$3" awk '!on && $0 ~ ENVIRON["S"] { on = 1; print; next } on && $0 ~ ENVIRON["E"] { exit } on { print }' "$1" | tr '\n' ' ' | tr -s ' '
@@ -443,6 +444,8 @@ fi
 BR="$PLUGIN/skills/brainstorming/SKILL.md"
 AR="$PLUGIN/reference/auto-run.md"
 WP="$PLUGIN/skills/writing-plans/SKILL.md"
+BRR="$PLUGIN/skills/brainstorming/references"
+WPR="$PLUGIN/skills/writing-plans/references"
 HO="$PLUGIN/skills/handoff/SKILL.md"
 FR="$PLUGIN/reference/final-review.md"
 FIN="$PLUGIN/skills/finishing-a-development-branch/SKILL.md"
@@ -453,8 +456,8 @@ UD="$PLUGIN/skills/using-dforge/SKILL.md"
 README="$PLUGIN/README.md"
 
 if want A9; then
-  B=$(flat "$BR"); R=$(flat "$AR")
-  BC=$(sect "$BR" '^\*\*Architecture critic:\*\*' '^\*\*The spec review.s report')
+  B=$(flat_skill "$BR"); R=$(flat "$AR")
+  BC=$(sect "$BRR/architecture-critic.md" '^\*\*Architecture critic:\*\*' '^\*\*The spec review.s report')
   RS=$(sect "$AR" '^## The spec$' '^## Rulings$')
   present "A9: brainstorming reports Critic: skipped (depth light)" "$B" 'Critic: skipped \(depth light\)'
   present "A9: brainstorming at light dispatches no critic and no Fable spec review" "$BC" 'light.{0,60}(neither|no) (the )?(separate )?critic.{0,40}(nor|no|and no) (a )?Fable'
@@ -469,13 +472,13 @@ if want A9; then
   present "A9: brainstorming: an owner full line without a risk trigger gets the separate critic" "$BC" 'Depth:.{0,6} full — owner.{0,160}separate critic'
   absent "A9: brainstorming does not key the fold on a missing risk or new-subsystem trigger" "$BC" '(fold|folded)[^.]{0,120}(no|without|neither)[^.]{0,30}(risk|new-subsystem)'
   absent "A9: auto-run.md does not key the fold on a missing risk or new-subsystem trigger" "$RS" '(fold|folded)[^.]{0,120}(no|without|neither)[^.]{0,30}(risk|new-subsystem)'
-  present "A9: the spec review message names Critic: skipped at light (User Review Gate)" "$(sect "$BR" '^\*\*User Review Gate:\*\*' '^\*\*Implementation:\*\*')" 'light.{0,40}Critic: skipped \(depth light\)'
+  present "A9: the spec review message names Critic: skipped at light (User Review Gate)" "$(sect "$BRR/user-review-gate.md" '^\*\*User Review Gate:\*\*' '^\*\*Implementation:\*\*')" 'light.{0,40}Critic: skipped \(depth light\)'
 fi
 
 # =====================================================================
 if want A10; then
-  W=$(flat "$WP"); WH=$(sect "$WP" '^## Execution Handoff' '^## NEVER_MATCHES$'); HF=$(flat "$HO")
-  WR=$(sect "$WP" '^4\. \*\*Record\.\*\*' '^## Execution Handoff')
+  W=$(flat_skill "$WP"); WH=$(sect "$WPR/execution-handoff.md" '^## Execution Handoff' '^## NEVER_MATCHES$'); HF=$(flat "$HO")
+  WR=$(sect "$WPR/lint-and-review.md" '^4\. \*\*Record\.\*\*' '^## Execution Handoff')
   present "A10: writing-plans records the skipped Plan review line at light" "$WR" '\*\*Plan review:\*\* <YYYY-MM-DD> — skipped \(depth light\)'
   today=$(date +%F)
   lintp=$(mkplan a10-lint s-light - "**Plan review:** $today — skipped (depth light)" r0t1 r1t2)
@@ -534,7 +537,7 @@ if want A12; then
   present "A12: README table keeps gates, UI proof and the Claude review at every depth" "$(cat "$README")" '\| 0 Gates \| runs \| runs \| runs \|'
   present "A12: README table keeps the UI proof at every depth" "$(cat "$README")" '\| 0\.2 UI proof \| runs \| runs \| runs \|'
   present "A12: README table keeps the Claude review at every depth" "$(cat "$README")" '\| 1 Claude review[^|]*\| runs \| runs \| runs \|'
-  BT=$(flat "$BR")
+  BT=$(flat_skill "$BR")
   present "A12: the depth never removes the spec approval" "$BT" 'never removes the approval'
   present "A12: specReview=false does not skip the spec review stop" "$BT" 'specReview=false. does not skip this stop'
   present "A12: at light the approve option still keeps the normal stops" "$BT" 'light.?, the \*\*Approve, keep the normal stops\*\* option adds'
@@ -574,7 +577,7 @@ fi
 
 # =====================================================================
 if want A14; then
-  UT=$(flat "$UD"); BT=$(flat "$BR")
+  UT=$(flat "$UD"); BT=$(flat_skill "$BR")
   present "A14: using-dforge states the architectural Process line" "$UT" 'Process: architectural, <[^>]+>, depth <d> — <triggers>'
   present "A14: brainstorming states the architectural Process line" "$BT" 'Process: architectural, <[^>]+>, depth <d> — <triggers>'
   present "A14: the spike and bounded Process line is kept" "$BT" 'Process: <spike\|bounded\|architectural>, <inline\|subagent> — <trigger \| no trigger>'

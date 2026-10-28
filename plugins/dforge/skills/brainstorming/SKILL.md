@@ -160,71 +160,7 @@ and 12-13 run as Auto by default says)
 
 ## Process Flow
 
-```dot
-digraph brainstorming {
-    "Classify: spike / bounded / architectural" [shape=diamond];
-    "Present question + probe (2-3 sentences)" [shape=box];
-    "Ask clarifying questions (bounded)" [shape=box];
-    "Present short design in chat\n+ self-review block" [shape=box];
-    "Human approves?" [shape=diamond];
-    "Investigate; report recommendation" [shape=doublecircle];
-    "Implement via normal workflow (no plan doc)" [shape=doublecircle];
-    "Explore project context" [shape=box];
-    "Ask clarifying questions" [shape=box];
-    "Propose 2-3 approaches" [shape=box];
-    "Ask execution strategy\n(parallel or sequential)" [shape=box];
-    "Present design sections" [shape=box];
-    "User approves design?" [shape=diamond];
-    "Draft acceptance\n(rate; ask below high)" [shape=box];
-    "Offer an auto run\n(once, unless autoRun=off)" [shape=box];
-    "Write design doc" [shape=box];
-    "Spec self-review\n(one round, shown)" [shape=box];
-    "Architecture critic\n(one judge-opus round)" [shape=box];
-    "User reviews spec?" [shape=diamond];
-    "Invoke writing-plans skill" [shape=doublecircle];
-    "Hidden complexity? Upgrade path" [shape=box];
-    "Write spec directly\n(autoRun=on, with ## Decisions)" [shape=box];
-    "Draft acceptance in the spec\n(ask nothing yet)" [shape=box];
-    "Fable spec review\n(at most two rounds)" [shape=box];
-    "Spec review\n(the one stop)" [shape=diamond];
-    "Revise spec\n+ one new self-review round" [shape=box];
-
-    "Classify: spike / bounded / architectural" -> "Present question + probe (2-3 sentences)" [label="spike"];
-    "Classify: spike / bounded / architectural" -> "Ask clarifying questions (bounded)" [label="bounded"];
-    "Classify: spike / bounded / architectural" -> "Explore project context" [label="architectural"];
-    "Present question + probe (2-3 sentences)" -> "Human approves?";
-    "Ask clarifying questions (bounded)" -> "Present short design in chat\n+ self-review block";
-    "Present short design in chat\n+ self-review block" -> "Human approves?";
-    "Human approves?" -> "Investigate; report recommendation" [label="spike: yes"];
-    "Human approves?" -> "Implement via normal workflow (no plan doc)" [label="bounded: yes"];
-    "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
-    "Explore project context" -> "Ask clarifying questions";
-    "Ask clarifying questions" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Ask execution strategy\n(parallel or sequential)";
-    "Ask execution strategy\n(parallel or sequential)" -> "Present design sections";
-    "Present design sections" -> "User approves design?";
-    "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Draft acceptance\n(rate; ask below high)" [label="yes"];
-    "Draft acceptance\n(rate; ask below high)" -> "Offer an auto run\n(once, unless autoRun=off)";
-    "Offer an auto run\n(once, unless autoRun=off)" -> "Write design doc";
-    "Write design doc" -> "Spec self-review\n(one round, shown)";
-    "Spec self-review\n(one round, shown)" -> "Architecture critic\n(one judge-opus round)";
-    "Architecture critic\n(one judge-opus round)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
-    "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
-    "Ask execution strategy\n(parallel or sequential)" -> "Write spec directly\n(autoRun=on, with ## Decisions)" [label="autoRun=on"];
-    "Write spec directly\n(autoRun=on, with ## Decisions)" -> "Draft acceptance in the spec\n(ask nothing yet)";
-    "Draft acceptance in the spec\n(ask nothing yet)" -> "Spec self-review\n(one round, shown)";
-    "Architecture critic\n(one judge-opus round)" -> "Fable spec review\n(at most two rounds)" [label="autoRun=on"];
-    "Spec self-review\n(one round, shown)" -> "Fable spec review\n(at most two rounds)" [label="Fable reviews;\ndepth standard"];
-    "Spec self-review\n(one round, shown)" -> "Spec review\n(the one stop)" [label="depth light\n(autoRun=on)"];
-    "Spec self-review\n(one round, shown)" -> "User reviews spec?" [label="depth light\n(attended)"];
-    "Fable spec review\n(at most two rounds)" -> "Spec review\n(the one stop)";
-    "Spec review\n(the one stop)" -> "Revise spec\n+ one new self-review round" [label="changes needed"];
-    "Revise spec\n+ one new self-review round" -> "Spec review\n(the one stop)";
-    "Spec review\n(the one stop)" -> "Invoke writing-plans skill" [label="either approval"];
-}
-```
+Read [process-flow.md](references/process-flow.md) before you change the order of the spec phase or the path a request takes through it.
 
 **Terminal states are path-bound.** Architectural: the ONLY skill you
 invoke after brainstorming is writing-plans — never frontend-design,
@@ -302,346 +238,39 @@ Below the design, in the same message, post `Self-review (round 1 of 1):` with
 one line per item: clean, or what you fixed. Do not re-review after fixing.
 A revision your human partner asks for gets one new round.
 
-**Exploring approaches:**
+**Exploring approaches, choosing the execution strategy, presenting the design:**
 
-- Propose 2-3 different approaches with trade-offs
-- Make one of them the do-less option: the smallest change that could meet the
-  goal (delete or simplify something, change a configuration, or change
-  nothing), so the others have to beat it. Recommend it when they do not.
-- Present options conversationally with your recommendation and reasoning
-- Lead with your recommended option and explain why
-- YAGNI ruthlessly - remove unnecessary features from every approach and design
-
-**Choosing the execution strategy:**
-
-When `executionStrategy` is `sequential` or `parallel` (see Settings), skip the
-question and record that value. Otherwise, once the approach is settled and
-before you present the design, ask your human partner one multiple-choice
-question, on its own:
-
-> How should the plan execute?
-> 1. **Sequential** (default) — one task at a time; the safest choice, and the
->    right one when the work is one chain of dependent changes.
-> 2. **Parallel subagents** — independent tasks run at the same time, each in
->    its own worktree, merged and checked together after each wave; faster
->    when the work splits into parts that share no files.
-
-Recommend one: parallel only when you can already name two or more parts that
-share no file and do not consume each other's output; sequential otherwise.
-Parallel runs only in subagent mode on Claude Code. On a Codex host do not
-ask: the plan is sequential, and you say so in one line.
-
-Record the answer near the top of the spec, below its title, as
-`**Execution strategy:** parallel — <reason>` or
-`**Execution strategy:** sequential — <reason>`. The plan inherits it.
-
-When the answer is parallel, the design leans toward independence, because a
-part that shares nothing is a part that cannot break its sibling:
-
-- **Settle shared things first.** Types, interfaces, schemas, configuration
-  keys and file layout that several parts use belong to one foundation part
-  that runs before the others.
-- **Give every file one owner.** Registries, barrels and index files, route
-  tables, dependency manifests and lockfiles, migrations and version files are
-  where parallel work collides; assign each to exactly one part, or to the
-  foundation part.
-- **Keep risk alone.** Security, data-loss, migration and concurrency work
-  runs on its own, never beside a sibling.
-- **Isolate the tests.** Say how parts' tests avoid each other at run time —
-  ports, databases, fixed paths, global state — or that they share nothing.
-- Add a `## Parallel decomposition` section to the spec: the parts, the files
-  each owns, what each consumes from the foundation, and which parts may run
-  together. writing-plans turns it into waves.
-
-Never bend a design out of shape to make it parallel: a part that genuinely
-needs another's output waits for it.
-
-**Presenting the design:**
-
-- Once you believe you understand what you're building, present the design
-- Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
-- Ask after each section whether it looks right so far; with `designApproval=whole`, present every section in one message and ask once (see Settings); under `autoRun=on` present no design (see Auto by default), on Claude Code only
-- Cover: architecture, components, data flow, error handling, testing, how the
-  work will be accepted, and the riskiest assumption
-- On Claude Code, when an option is genuinely clearer shown than described, present it visually with the Artifact tool
-- Be ready to go back and clarify if something doesn't make sense
-
-**Design for isolation and clarity:**
-
-- Break the system into smaller units that each have one clear purpose, communicate through well-defined interfaces, and can be understood and tested independently
-- For each unit, you should be able to answer: what does it do, how do you use it, and what does it depend on?
-- Can someone understand what a unit does without reading its internals? Can you change the internals without breaking consumers? If not, the boundaries need work.
-- Smaller, well-bounded units are also easier for you to work with - you reason better about code you can hold in context at once, and your edits are more reliable when files are focused. When a file grows large, that's often a signal that it's doing too much.
-
-**Working in existing codebases:**
-
-- Explore the current structure before proposing changes. Follow existing patterns.
-- Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
-- Don't propose unrelated refactoring. Stay focused on what serves the current goal.
+Read [design-phase.md](references/design-phase.md) before you propose approaches, ask the execution strategy or present the design.
 
 ## Auto by default (`autoRun=on`)
 
-The default on Claude Code. Only the architectural path changes: a spike or a
-bounded task runs as above, and on a Codex host `on` behaves as `off`. Steps 1-5
-of the checklist run as written; the execution-strategy question is asked only
-when the setting is `ask`. Then:
-
-1. **Write the spec directly.** Present no design section and ask no
-   acceptance question first. One spec covers the whole request: no
-   sub-project decomposition, no program spec, no `**Program:**` line. A new
-   product still goes to dforge:planning-a-product.
-2. **Record the decisions.** Below its `**Execution strategy:**` and
-   `**Depth:**` lines the spec carries a `## Decisions` section: every
-   clarifying question and approach
-   choice, with your human partner's answer quoted. The critic and Fable check
-   the spec against it in place of approved design sections.
-3. **Acceptance in the spec.** Draft and rate the statements as Drafting
-   acceptance says, but ask nothing yet: a statement rated below `high` keeps
-   its `Q:` until the spec review.
-4. **Reviews before the stop,** by the spec's depth. At `light`, run the spec
-   self-review round and nothing else: no critic, no Fable review, no
-   `## Review rulings` section. At `standard`, run it, then one
-   `dforge:judge-fable` round on the spec against its `## Decisions` with the
-   critic folded into it (Architecture critic), and no second round. At
-   `full`, run it, then the architecture critic, then `dforge:judge-fable` on
-   the spec against its `## Decisions`: one round, and a second only when
-   round 1 leaves a Blocker or High finding open, checking only those
-   answers. Apply what Fable rules and list each ruling as one line in a
-   `## Review rulings` section of the spec.
-5. **The spec review**, the one stop: one message, its questions asked with the
-   multiple-choice prompt, at most four per call:
-   - the spec path, `Depth: <d> — <reasons>` (the `depth=` and `reason=` of
-     `scripts/depth-route --spec-triggers`, or `owner`), the `Critic: …` counts
-     (at `light`, `Critic: skipped (depth light)`) and the number of Fable
-     rulings;
-   - every statement rated below `high`, asked as Drafting acceptance asks it;
-     a deferral runs
-     `scripts/register add <register> "A<n>: <statement>" --state deferred --note "Q: <question>"`;
-     with no register open, first open `<docs>/registers/<date>-<spec-slug>.md`
-     as Opening an item register says;
-   - every item Fable left undecided, and every critic Blocker it did not
-     settle, with the recommended option first;
-   - when `finishAction` is `ask`: merge into `<current branch>`, open a pull
-     request, or keep the branch, recorded as its own paragraph (no list
-     marker, nothing after the value) holding one
-     `Finish: <merge|pr|keep>` line in `## Decisions`;
-   - **Approve and run unattended**, **Approve, keep the normal stops**, or
-     **Changes needed**.
-
-   At `light`, the **Approve, keep the normal stops** option adds "(depth
-   light: the plan is not a stop; execution follows in this session)". Your
-   human partner sets the depth by hand under **Changes needed**: write
-   `**Depth:** <d> — owner` in the spec. The plan checkpoint can still raise
-   it, and the ratchet never replaces an owner line.
-
-   Apply the answers to the spec. **Changes needed** gets the revision and one
-   new self-review round; the critic and Fable do not run again. Then present
-   this step's message again, with the questions still open, until your human
-   partner picks one of the two approvals.
-   `specReview=false` does not skip this stop.
-6. **Start the run.** On **Approve and run unattended**, commit the spec and
-   the register, run `scripts/auto-run start --spec <spec>` (add
-   `--register <path>` when a register is open, and always the register
-   step 5's deferrals went to), then import each
-   `## Review rulings` line with
-   `scripts/auto-run ruling add "Fable, spec: <line>"` (none at depth light).
-   Invoke dforge:writing-plans in this session: `scripts/context-size --plan`
-   does not run. On exit 2 or 4 from `start`, say why in one line and continue
-   as **Approve, keep the normal stops**.
-7. **Approve, keep the normal stops** commits the spec and the register and
-   continues at Implementation below, with no run.
-
-From step 6 on, [auto-run.md](../../reference/auto-run.md) applies.
+Read [auto-by-default.md](references/auto-by-default.md) before you write the spec under `autoRun=on`.
 
 ## After the Design (architectural path)
 
 **Drafting acceptance:**
 
-Under `autoRun=on` skip this step and the offer below: the statements are
-drafted in the spec and settled at the spec review (see Auto by default).
-
-Once your human partner approves the last design section, draft the spec's
-acceptance statements before the auto-run offer, while they are still here to
-answer. Each statement is one line:
-
-`A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`
-
-- `A<n>` numbers are never reused. A deferred statement leaves the line
-  `A<n>. deferred — register row <id>`.
-- `test` means an automated test can check it; `demo` means only a person
-  watching the result can (visual output, an interactive screen).
-- `neg` marks a statement about what must not happen; at least one carries it.
-- Rate each statement while drafting: `high` when it follows directly from what
-  your human partner said, from code you read this session, or from a recorded
-  seat ruling; `medium` or `low` otherwise, each with the exact question that
-  would settle it. `confirmed` is reserved for a verdict from your human partner.
-
-1. Show the whole list in chat.
-2. Ask about every statement rated below `high` with the multiple-choice
-   prompt, at most four per call: the statement, why it is uncertain and the
-   settling question, with the options **Right**, **Wrong, or not wanted** and **Not sure**.
-   Keep a typed note verbatim.
-3. **Right**: the statement becomes `confirmed`. **Wrong**: rewrite it from the
-   note and ask once more; a second **Wrong** or **Not sure** defers it.
-   **Not sure**: defer it.
-4. To defer a statement, run
-   `scripts/register add <register> "A<n>: <statement>" --state deferred --note "Q: <question>"`.
-   With no register open, first open `<docs>/registers/<date>-<spec-slug>.md`
-   as Opening an item register says; its `**Covers:**` stays `-` until the spec
-   is written. A register row whose Item begins `A<n>:` is a deferred acceptance
-   statement wherever dforge refers to one.
-
-The step asks nothing when every statement is `high`. A statement you add or
-change while writing the spec, rated below `high`, is asked the same way before
-the spec is committed; in an auto run it goes up the ruling ladder instead
-([auto-run.md](../../reference/auto-run.md) §Rulings).
+Read [drafting-acceptance.md](references/drafting-acceptance.md) before you draft the spec's acceptance statements.
 
 **Offering an auto run:**
 
-Unless `autoRun=off` (see Settings) or this is a Codex host, ask this once, as
-its own message, right after the Draft acceptance step and before you
-write the spec. `<finish>` follows the `finishAction`
-setting (`scripts/dforge-config get finishAction`): `merge` reads "merge to
-<the current branch>", `pr` reads "open a pull request", and `keep`, `ask` and
-`wait` read "keep the branch".
-
-```
-Run the rest unattended? Spec → Fable spec review → plan → execution →
-final review → finish (<finish>).
-I won't ask anything else: undecided items go to Opus, then to Fable in
-batches, and what neither settles goes on the deferred list.
-
-1. Yes, run unattended
-2. No, keep the normal stops
-
-Which option?
-```
-
-On yes, run `scripts/auto-run start --spec <the spec's path>` (add
-`--register <path>` when an item register is open) from this checkout, before
-writing the spec, and follow [auto-run.md](../../reference/auto-run.md) from
-here to the finished branch. On exit 2 or 4, say why in one line and continue
-without an auto run. On no, continue as below.
+Read [auto-run-offer.md](references/auto-run-offer.md) before you offer an auto run.
 
 **Documentation:**
 
-- Write the validated design (spec) to `<docs>/specs/YYYY-MM-DD-<topic>-design.md`
-  - (User preferences for spec location override this default)
-- Every architectural spec carries a `**Depth:**` line directly below its
-  `**Execution strategy:**` line: `**Depth:** <light|standard|full> — <reason ids>`,
-  the `depth=` and `reason=` that `scripts/depth-route --spec-triggers`
-  printed for the Process line's triggers, or `**Depth:** <d> — owner` when
-  your human partner set it. `## Decisions` sits below it. A spec without the
-  line routes at `full`.
-- Every spec has an `## Acceptance` section holding the statements settled in
-  Drafting acceptance, one per line in the form
-  `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`. Cover the main
-  path, the errors and edge cases, and at least one thing that must not happen
-  (`neg`). State observable behaviour, not the implementation, and give a word
-  like "fast" its number. When a register covers the spec, a row's Acceptance
-  cell can cite these numbers.
-- Every spec has a `## Riskiest assumption` section: the one assumption that,
-  if wrong, sinks the design, with its evidence (a command and the date it ran,
-  a `file:line`, or a documentation URL). Without evidence, find out before the
-  plan, as cheaply as correctness allows, and record what you found. When only
-  code the plan builds can tell, write
-  `unverified — the plan's first task verifies it`, so a wrong design fails
-  before the rest is built on it.
-- Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git (push instead while documents live in darkmem; see project-state.md)
+Read [spec-document.md](references/spec-document.md) before you write the spec document.
 
 **Spec Self-Review:**
-After writing the spec document, look at it with fresh eyes. This round is
-required, and it is yours: run it once, never through a subagent.
 
-1. **Placeholder scan:** Any "TBD", "TODO", incomplete sections, or vague requirements? Fix them.
-2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
-3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition (not under `autoRun=on` on Claude Code)?
-4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
-5. **Execution strategy:** The `**Execution strategy:**` line is present. When it says parallel, every file in the Parallel decomposition has exactly one owner, and no part that may run beside another consumes its output. The `**Depth:**` line is present below it, and its first word is `light`, `standard` or `full`.
-6. **Acceptance:** The `## Acceptance` section is present, every statement matches `A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>` and is checkable by a test or a demo, at least one carries `neg`, and no rating other than `high` or `confirmed` appears. Under `autoRun=on`, a statement rated `medium` or `low` passes when it carries its `Q:`; the spec review settles it.
-7. **Riskiest assumption:** The `## Riskiest assumption` section is present and names its evidence, or reads `unverified — the plan's first task verifies it`.
-
-Fix any issues inline, then post `Self-review (round 1 of 1):` with one line
-per item: clean, or what you fixed. Do not re-review after fixing.
-A revision your human partner asks for gets one new round.
+Read [spec-self-review.md](references/spec-self-review.md) before you self-review the written spec.
 
 **Architecture critic:**
 
-The spec's `**Depth:**` line decides which reviews run. At `light`, neither the
-critic nor a Fable spec review runs: the self-review round is the whole spec
-phase. At `standard`, when Fable reviews the spec (under `autoRun=on`, or in an
-auto run) no separate critic runs and Fable's first round takes its job
-(Folded into Fable, below); when Fable does not review it (attended), the
-critic round below runs as written. At `full`, the separate critic round runs,
-then Fable for one or two rounds. The depth decides, not the trigger list: a
-spec whose line reads `**Depth:** full — owner` and holds no risk trigger gets
-the separate critic. On a Codex host the spec phase runs as `full` at every
-depth.
-
-After the self-review block, dispatch the critic once with
-[architecture-critic-prompt.md](references/architecture-critic-prompt.md): the
-spec path, the approved design sections verbatim (under `autoRun=on`, the
-spec's `## Decisions` section) and the repository root. Set `[REPORT_FILE]` to
-`<state>/critic-<spec name>-report.md`; read its `## Verdict` section and its
-Blocker and High findings. It
-runs in an auto run too, before the Fable review. A revision of the spec does
-not earn a second critic round.
-
-**Folded into Fable.** When Fable will review this spec (under `autoRun=on`, or
-in an auto run) and the spec's depth is `standard`, dispatch no critic. Give
-Fable's first round the critic's job as well: the criteria path
-`[PLUGIN_ROOT]/criteria/architecture-critique.md`, read as lenses and not
-scored, and the critic prompt's Output section, so its report carries the
-critic's ranked findings under their own heading, ## Critic findings, beside its rulings. Handle
-those findings exactly as the critic's below. No second Fable round runs at
-standard: a critic Blocker that round 1 leaves open is asked at the spec
-review as one Fable did not settle, or, in an auto run started from the
-offer, deferred to the register
-([auto-run.md](../../reference/auto-run.md) §The spec). Two seats find more
-than one on a risky or new design, so a spec at depth `full`, which a risk or
-new-subsystem trigger gives it, keeps the separate critic round.
-
-- Fix each Blocker and High finding in the spec, or keep the design with the
-  finding answered in a `## Critic findings` section at the end of the spec:
-  one bullet per finding, with the reason the design stands.
-- List every Medium and Nit finding in that section too; they need no answer.
-- Commit the spec, then state the counts in the review request below:
-  `Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium`,
-  followed by ` (in Fable's review)` when the critic was folded into it.
-  At depth light the review request says `Critic: skipped (depth light)`
-  instead, since no critic ran.
-
-**The spec review's report.** Every Fable spec review round names a report
-file, `<state>/spec-review-<spec name>-<r>-report.md`, and tells the seat to
-write its full report there, write nothing else, and reply in at most 10 lines.
-The report opens with a
-`## Verdict` section of `rulings: <k>`, `undecided: <k>` and
-`open: <b> Blocker, <h> High` (the Blocker and High findings still unanswered
-after this round, its own and a folded critic's), then `## Rulings` (one
-`- <item> — <ruling>` line each), `## Undecided` (one
-`- <item> — <options, recommended first>` line each) and, when the critic is
-folded in, `## Critic findings` in the critic's grammar. Read the Verdict
-section, then the Rulings and Undecided lines; the `open:` line decides whether
-a second round runs at depth `full`; at `standard` none runs.
+Read [architecture-critic.md](references/architecture-critic.md) before you run the architecture critic or Fable's spec review.
 
 **User Review Gate:**
-Under `autoRun=on`, this gate is the spec review message in Auto by default.
-In an auto run (`scripts/auto-run status` exits 0), skip this gate: run the
-Fable spec review in [auto-run.md](../../reference/auto-run.md) §The spec, then
-go to Implementation.
-Outside `autoRun=on`, the `specReview` setting can skip this gate.
-With `specReview=false` (see Settings), skip this gate and go to Implementation.
-Otherwise, after posting the self-review block, ask the user to review the
-written spec before proceeding:
 
-> "Spec written and committed to `<path>`. Depth: <d> — <reasons>. Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
-
-At depth light, `Critic: skipped (depth light)` replaces the counts. Your human
-partner may set the depth in the reply; write `**Depth:** <d> — owner` in the
-spec.
-
-Wait for the user's response. If they request changes, make them and run one new self-review round. Only proceed once the user approves.
+Read [user-review-gate.md](references/user-review-gate.md) before you ask your human partner to review the written spec.
 
 **Implementation:**
 
