@@ -249,7 +249,7 @@ type World = {
   notes?: string[]
   env?: Record<string, string>
   /** Files the plugin reads, by path, with their modification time. */
-  files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other' }>
+  files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other'; isLink?: boolean }>
   /** What the plugin writes, by path. */
   written?: Record<string, string>
   /** Each request the plugin sends through $.http.fetch. */
@@ -511,7 +511,7 @@ function world(on: On, w: World) {
   on('fs.stat', (_$, e) => {
     const file = w.files?.[e.path]
     if (file === undefined) throw new Error('ENOENT')
-    return { value: { kind: file.kind ?? 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: false } }
+    return { value: { kind: file.kind ?? 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: file.isLink ?? false } }
   })
   on('fs.list', (_$, e) => {
     const prefix = `${e.path}/`
@@ -805,6 +805,167 @@ describe('seat check', () => {
     expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_3', model: 'sonnet' } as never)).deny).toBeUndefined()
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /✗ Agent: dforge: name a seat/ })).toBeDefined()
+  })
+})
+
+describe('review seat write guard', () => {
+  const STATE = '/home/me/code/shop/.dforge'
+  const WS = `${STATE}/sdd/2026-10-28-plan`
+  const REVIEW = `${WS}/task-1-review-report.md`
+  const GUARD = /^dforge: a review seat writes only the report file its dispatch names \(/
+  const dispatch = (prompt: string, subagentType: string, n: number) =>
+    ({ tool_use_id: `toolu_${n}`, prompt, description: 'Review task 1', subagentType, provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false }) as never
+  const write = ($: Parameters<TestBody>[0], agentId: string | undefined, path: string, tool = 'Write') =>
+    $.tool.call({ tool, ...(tool === 'NotebookEdit' ? { notebook_path: path } : { file_path: path }), content: 'x', ...(agentId === undefined ? {} : { agentId }) } as never)
+  // A judge (agent judge-1) that names `named`, and an implementer (impl-1), started in a session at /home/me/code/shop.
+  const started = async ($: Parameters<TestBody>[0], on: On, named: string[] = [REVIEW], extra: Partial<World> = {}, list: () => unknown = () => ({ value: [] })) => {
+    world(on, { tokens: 10_000, agentIds: ['judge-1', 'impl-1'], ...extra })
+    on('agent.list', list as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch(`Review task 1 of the plan. Write your full report to ${named.join(' and ')}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
+    await $.agent.spawn(dispatch('Implement task 1.', 'dforge:impl-sonnet-low', 2))
+  }
+
+  test('refuses a judge write to anything but the report its dispatch names, and allows that report', async ($, on) => {
+    await started($, on)
+    const refused = [
+      `${WS}/amendments.md`,
+      `${WS}/task-1-step.json`,
+      '/home/me/code/shop/docs/dforge/plans/2026-10-28-plan.md',
+      '/home/me/code/shop/src/index.ts',
+      '/etc/passwd',
+      `${WS}/task-1-report.md`,
+      `${WS}/task-2-review-report.md`,
+      'task-1-review-report.md',
+      `${WS}/../amendments.md`,
+      `${WS}/other/../task-1-review-report.md`,
+    ]
+    const tools = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
+    const got: (string | undefined)[] = []
+    const want: string[] = []
+    for (const path of refused) {
+      for (const tool of tools) {
+        got.push((await write($, 'judge-1', path, tool)).deny)
+        want.push(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${path} is not one.`)
+      }
+    }
+    expect(got).toEqual(want)
+    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined, undefined])
+    expect((await write($, 'judge-1', `${WS}/./task-1-review-report.md`)).deny).toBeUndefined()
+    // Only the four write tools are looked at.
+    expect((await $.tool.call({ tool: 'Read', file_path: `${WS}/amendments.md`, agentId: 'judge-1' } as never)).deny).toBeUndefined()
+  })
+
+  test('lists a refused write with the other refusals', async ($, on) => {
+    await started($, on)
+    await write($, 'judge-1', `${WS}/amendments.md`)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /✗ Write: dforge: a review seat writes only the report file/ })).toBeDefined()
+  })
+
+  test('leaves an implementer, the main loop and an unknown loop alone', async ($, on) => {
+    await started($, on)
+    expect((await write($, 'impl-1', `${WS}/amendments.md`)).deny).toBeUndefined()
+    expect((await write($, undefined, `${WS}/amendments.md`)).deny).toBeUndefined()
+    expect((await write($, 'workflow-agent-9', `${WS}/amendments.md`)).deny).toBeUndefined()
+  })
+
+  test('lists every report path the dispatch names under a state root, and none that lies elsewhere', async ($, on) => {
+    const second = `${WS}/task-1-report.md`
+    await started($, on, [REVIEW, second, '/tmp/elsewhere-report.md', 'docs/relative-report.md', `${WS}/../escape-report.md`, `${WS}/task-9-report.md.bak`])
+    expect((await write($, 'judge-1', second)).deny).toBeUndefined()
+    expect((await write($, 'judge-1', '/tmp/elsewhere-report.md')).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}, ${second}); /tmp/elsewhere-report.md is not one.`)
+  })
+
+  test('a judge whose dispatch names no report file may write no file', async ($, on) => {
+    world(on, { tokens: 10_000, agentIds: ['judge-1'] })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch('Review task 1 and reply in 10 lines.', 'dforge:judge-opus', 1))
+    expect((await write($, 'judge-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
+  })
+
+  test('takes a judge the spawn record does not hold from $.agent.list()', async ($, on) => {
+    world(on, { tokens: 10_000 })
+    on('agent.list', () => ({ value: [{ id: 'listed-1', type: 'dforge:judge-opus', description: 'Review', status: 'running' }] }) as never)
+    await $.session.start(START)
+    expect((await write($, 'listed-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
+  })
+
+  test('refuses a report reached through a symlinked directory or itself a symlink', async ($, on) => {
+    const linkedDir = `${STATE}/sdd/linked`
+    const linkedFile = `${WS}/task-2-review-report.md`
+    const through = `${linkedDir}/task-1-review-report.md`
+    await started($, on, [REVIEW, linkedFile, through], {
+      files: {
+        [linkedDir]: { text: '', kind: 'dir', isLink: true },
+        [linkedFile]: { text: 'x', isLink: true },
+      },
+    })
+    expect((await write($, 'judge-1', through)).deny).toMatch(GUARD)
+    expect((await write($, 'judge-1', linkedFile)).deny).toMatch(GUARD)
+    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
+
+  test('takes the roots from the checkout and the primary, and a moved checkout', async ($, on) => {
+    const world1: World = { tokens: 10_000, agentIds: ['judge-1', 'judge-2', 'judge-3'], checkout: '/home/me/code/shop-wt', primary: '/home/me/code/shop' }
+    world(on, world1)
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    const fromWorktree = '/home/me/code/shop-wt/.dforge/sdd/p/task-1-review-report.md'
+    const fromPrimary = '/home/me/code/shop/.dforge/sdd/p/task-1-review-report.md'
+    await $.agent.spawn(dispatch(`Write your report to ${fromWorktree} and ${fromPrimary}.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', fromWorktree)).deny).toBeUndefined()
+    expect((await write($, 'judge-1', fromPrimary)).deny).toBeUndefined()
+    // The session moves into another worktree: its .dforge is a root from then on.
+    world1.checkout = '/home/me/code/shop-wt2'
+    await $.tool.call({ tool: 'EnterWorktree' } as never)
+    const moved = '/home/me/code/shop-wt2/.dforge/sdd/p/task-1-review-report.md'
+    await $.agent.spawn(dispatch(`Write your report to ${moved}.`, 'dforge:judge-sonnet-high', 2))
+    expect((await write($, 'judge-2', moved)).deny).toBeUndefined()
+    // A path under no root is not captured.
+    await $.agent.spawn(dispatch(`Write your report to ${fromWorktree.replace('shop-wt', 'other')}.`, 'dforge:judge-sonnet-high', 3))
+    expect((await write($, 'judge-3', fromWorktree.replace('shop-wt', 'other'))).deny).toMatch(GUARD)
+  })
+
+  test('compares a Windows path without regard to slashes, case or the drive letter case', async ($, on) => {
+    const root = 'C:/Users/me/shop'
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root, primary: root })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch('Write your report to C:\\Users\\me\\shop\\.dforge\\sdd\\p\\task-1-review-report.md and reply.', 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', 'c:/users/ME/shop/.dforge/sdd/p/task-1-review-report.md')).deny).toBeUndefined()
+    expect((await write($, 'judge-1', 'C:\\Users\\me\\shop\\.dforge\\sdd\\p\\task-1-review-report.md')).deny).toBeUndefined()
+    expect((await write($, 'judge-1', 'C:\\Users\\me\\shop\\.dforge\\sdd\\p\\amendments.md')).deny).toMatch(GUARD)
+  })
+
+  test('keeps a running judge in the spawn record past fifty later dispatches', async ($, on) => {
+    world(on, { tokens: 10_000, agentIds: ['judge-1', ...Array.from({ length: 55 }, (_, i) => `impl-${i}`)] })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch(`Write your report to ${REVIEW}.`, 'dforge:judge-sonnet-high', 1))
+    for (let n = 0; n < 55; n++) await $.agent.spawn(dispatch('Implement a task.', 'dforge:impl-sonnet-low', n + 2))
+    expect((await write($, 'judge-1', `${WS}/amendments.md`)).deny).toMatch(GUARD)
+    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
+
+  test('refuses a judge write when the check itself fails, whatever guardAttribution says', async ($, on) => {
+    await started($, on, [REVIEW], { config: { guardAttribution: false } }, () => {
+      throw new Error('agent list unavailable')
+    })
+    const ran = await write($, 'judge-1', REVIEW)
+    expect(ran.deny).toMatch(/^dforge: the review-seat write guard could not check this write \(.+\); it is refused\.$/)
+    expect((await write($, 'impl-1', `${WS}/amendments.md`)).deny).toBeUndefined()
+    expect((await write($, undefined, `${WS}/amendments.md`)).deny).toBeUndefined()
+  })
+
+  test('a failing agent list blocks no implementer write while the attribution guard is on', async ($, on) => {
+    await started($, on, [REVIEW], { config: { guardAttribution: true } }, () => {
+      throw new Error('agent list unavailable')
+    })
+    expect((await write($, 'judge-1', REVIEW)).deny).toMatch(/^dforge: the review-seat write guard could not check this write \(.+\); it is refused\.$/)
+    expect((await write($, 'impl-1', `${WS}/notes.md`)).deny).toBeUndefined()
+    expect((await write($, undefined, `${WS}/notes.md`)).deny).toBeUndefined()
   })
 })
 
