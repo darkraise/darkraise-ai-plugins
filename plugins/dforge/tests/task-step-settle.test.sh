@@ -188,5 +188,33 @@ check "a baseline mismatch logs no settled line" "$(ledger_count "Task 2: Ruling
 check "a baseline mismatch is an Important finding" "$(grep '^Important ' <<<"$out")" "Important 2 cannot-verify:0 — baseline bash check.sh, expect pass — got exit 1, log $WS/task-2-baseline-1.log"
 check "a baseline mismatch names the fix file" "$(grep '^fix: ' <<<"$out")" "fix: $WS/task-2-fix-1.md (1 finding)"
 
+# A check that could not run is not an answer: a command that is not found,
+# and a commit the repository does not have, reach the ruling seat.
+cat > "$WS/task-2-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: baseline no_such_command_zz, expect fail — the brief says the command fails
+- cannot-verify: exists lib/old.sh at base, expect absent — the brief says it is new
+
+## Assessment
+Fine.
+REPORT
+jq '.base = "0123456789abcdef0123456789abcdef01234567"' "$WS/task-2-step.json" > "$TMP/s2.json" && mv "$TMP/s2.json" "$WS/task-2-step.json"
+settled=$(grep -c 'settled by task-step check' "$LEDGER")
+ts verdict docs/plan.md 2
+check "an unrunnable baseline command and an unknown base commit are left for the seat" "$(grep '^cannot-verify: ' <<<"$out")" \
+  "cannot-verify: baseline no_such_command_zz, expect fail — the brief says the command fails
+cannot-verify: exists lib/old.sh at base, expect absent — the brief says it is new"
+check "neither is settled or a finding" "$(grep -c 'settled by task-step check' "$LEDGER") $(grep '^findings: ' <<<"$out")" "$settled findings: 0 Critical, 0 Important, 0 Minor"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

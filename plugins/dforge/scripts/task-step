@@ -1150,7 +1150,7 @@ check_tracked() {
 # and returns 0; returns 1 for free text, an item without expect, a malformed
 # item, or a check that could not run.
 settle_item() {
-  local item=$1 base=$2 head=$3 log=$4 rest spec want got res target where sha hit ev cmd code
+  local item=$1 base=$2 head=$3 log=$4 rest spec want got res target where sha hit ev cmd code grc
   case $item in
     'cannot-verify: exists '*' — '*)
       rest=${item#cannot-verify: exists }
@@ -1164,13 +1164,19 @@ settle_item() {
       case $where in base) sha=$base ;; head) sha=$head ;; *) return 1 ;; esac
       case $target in '' | *' '*) return 1 ;; esac
       [ -n "$sha" ] || return 1
+      # An unknown commit, a shallow clone or a wrong directory must reach the
+      # ruling seat, not read as "absent".
+      git cat-file -e "$sha^{commit}" 2>/dev/null || return 1
       got=present
       if git cat-file -e "$sha:${target#./}" 2>/dev/null; then
         ev="path present"
       elif [[ $target == */* ]]; then
         ev="path absent" got=absent
       else
-        hit=$(git grep -nwF -e "$target" "$sha" 2>/dev/null | head -n 1 | tr -d '\r')
+        # git grep exits 1 for no match and 141 when head closed the pipe on a hit.
+        hit=$(git grep -nwF -e "$target" "$sha" 2>/dev/null | head -n 1 | tr -d '\r'; exit "${PIPESTATUS[0]}")
+        grc=$?
+        case $grc in 0 | 1 | 141) ;; *) return 1 ;; esac
         if [ -n "$hit" ]; then
           ev=$(printf '%s\n' "${hit#"$sha":}" | awk -F: '{ print $1 ":" $2 }')
         else
@@ -1188,6 +1194,9 @@ settle_item() {
       case $want in pass | fail) ;; *) return 1 ;; esac
       [ -n "$cmd" ] && [ -n "$base" ] || return 1
       code=$(run_at_base "$base" "$cmd" "$log") || return 1
+      # Only an exit the command itself produced answers pass or fail: a
+      # timeout, a command that cannot run and one that is not found go to the seat.
+      case $code in 124 | 126 | 127) return 1 ;; esac
       got=fail; [ "$code" != 0 ] || got=pass
       res=mismatch; [ "$got" != "$want" ] || res=match
       printf 'baseline\texit %s, log %s\t%s\tbaseline %s, expect %s\n' "$code" "$log" "$res" "$cmd" "$want" ;;
