@@ -124,7 +124,7 @@ names "the recovery table resumes a group review's round 2 per open member" "$SD
 names "the recovery table sends a group review's open findings to the breaker" "$SDD_LEDGER" 'Go to the breaker: a group review'"'"'s line (its clause starts `Task <N>:`) sends each member'"'"'s open findings, a batch'"'"'s line the batch'"'"'s |'
 check "the recovery table has one row per Group round" "$(grep -c '^| `review round [12]/2` on a' "$SDD_LEDGER")" "2"
 names "after compaction a held task waits for its group" "$SDD" '`awaiting group review` is reviewed by the next group dispatch'
-names "the process graph names the group template" "$SDD_GRAPH" './references/group-reviewer-prompt.md'
+names "the process graph names the group template" "$SDD_GRAPH" './group-reviewer-prompt.md'
 lacks "the overview no longer reviews every task alone" <(sdd_text) 'a judge-scored task review after each task;'
 names "waves hold a grouped task at its ref, in its worktree" "$PW" '`task-step hold PLAN_FILE N --head <TASK_REF> --cwd <worktree>`'
 names "a wave task's hold carries its worktree" "$DT" '`--head <task ref> --cwd <worktree>`'

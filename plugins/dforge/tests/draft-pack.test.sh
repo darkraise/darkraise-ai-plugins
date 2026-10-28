@@ -47,6 +47,7 @@ check "join: the message" "$out" "draft-pack: joined tasks 1 2 3 4 from 2 slices
 expected=$( { header 4; printf '\n### Task 1: Step 1\n\nBody 1.\n\n### Task 2: Step 2\n\nBody 2.\n\n### Task 3: Step 3\n\nBody 3.\n\n### Task 4: Step 4\n\nBody 4.\n'; } )
 check "join: slices appended in task order" "$(cat docs/plan.md)" "$expected"
 check "join: slices deleted" "$([ -e "$D" ] && echo present || echo gone)" "gone"
+check "join: the emptied drafts directory is gone too" "$([ -e "$REPO/.dforge/drafts" ] && echo present || echo gone)" "gone"
 
 run --join docs/plan.md
 check "nothing missing, no slices: exit 0" "$code" "0"
@@ -82,6 +83,11 @@ slice 10 11; slice 4 5; slice 6 9; slice 2 3
 run --join docs/plan.md
 check "numeric order: exit 0" "$code" "0"
 check "numeric order: tasks 1-11 in order" "$(grep -o '^### Task [0-9]*' docs/plan.md | tr -d '\n')" "### Task 1### Task 2### Task 3### Task 4### Task 5### Task 6### Task 7### Task 8### Task 9### Task 10### Task 11"
+
+reset 2; slice 1 2; mkdir -p "$REPO/.dforge/drafts/other"; printf 'x\n' > "$REPO/.dforge/drafts/other/tasks-1-1.md"
+run --join docs/plan.md
+check "another plan's slices: exit 0" "$code" "0"
+check "another plan's slices: kept, with their drafts directory" "$(ls "$REPO/.dforge/drafts/other" 2>/dev/null)" "tasks-1-1.md"
 
 reset 3
 run --join docs/plan.md

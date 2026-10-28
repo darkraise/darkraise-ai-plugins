@@ -52,6 +52,14 @@ ok   - defaults to world
 - Cost, turns, milliseconds: 0.41851839999999996	6	17669
 - Outcome: pass
 
+## Caveats
+
+The cost, turn and millisecond figures above come from the last `result` event of each run only, so they are not run totals: P1's 4371 ms cannot cover a run that includes `sleep 25`, and a session that resumes after a completion notification emits more than one `result` event. Do not size the pipeline stage's cost cap or timeouts from them.
+
+The P1 timeline lists every assistant message, subagent messages included, because its jq has no `parent_tool_use_id` filter. The second `Bash` and the `Read` therefore cannot be attributed to the main session from that table, and the Conclusion's no-polling reading rests on the `parent_tool_use_id`-filtered check, whose output this note does not show.
+
+The plan's `p1_overlap` check collected tool names per stream event, which finds no overlap when the two tool uses of one message arrive as separate events with the same message id. It was changed mid-run to group tool uses by message id, which is why the note reports `pass` for the message id above. The historical plan keeps the original check.
+
 ## Conclusion
 
 Under `claude -p` a turn that ends on pending background work resumes on each completion notification, and the controller finished a task loop without a human. The pipeline stage can drive `claude -p`; design section 5 stands.
