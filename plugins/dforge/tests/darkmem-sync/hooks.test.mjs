@@ -33,18 +33,12 @@ const fit = (input, lines, chars) => bash(["-c", '. "$1"; _darkmem_fit "$2" "$3"
 const WATCHDOG_SKIP = process.platform === "win32" && "the hooks use GNU timeout on Windows, never the watchdog";
 
 // A killed process can outlive its kill by a moment, longest on Windows.
+// The pid is bash's $!, so bash checks it: on Git Bash that is an MSYS pid,
+// which Node's process.kill would look up among unrelated Windows pids.
 async function assertGone(pidFile) {
-  const pid = Number(fs.readFileSync(pidFile, "utf8"));
-  for (let i = 0; i < 50; i++) {
-    try {
-      process.kill(pid, 0);
-    } catch (error) {
-      if (error.code === "ESRCH") return;
-      throw error;
-    }
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  assert.fail("the command's child was killed too");
+  const pid = fs.readFileSync(pidFile, "utf8").trim();
+  const gone = await bash(["-c", 'for _ in $(seq 50); do kill -0 "$1" 2>/dev/null || exit 0; sleep 0.1; done; exit 1', "assert-gone", pid], { cwd: path.dirname(pidFile), env: process.env });
+  assert.equal(gone.code, 0, "the command's child was killed too");
 }
 
 function hookEnv(home) {
