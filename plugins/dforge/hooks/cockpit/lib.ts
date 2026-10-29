@@ -1130,6 +1130,7 @@ export type DenseInput = {
   todos: { done: number; total: number; current: string | null } | null
   repo: RepoState | null
   refused: number
+  isGuardOn: boolean
   now: number
 }
 
@@ -1204,7 +1205,8 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
       return [denseLabel('⎇', 'magenta'), ...join([branch, r.changed > 0 ? [{ text: `~${r.changed} changed`, color: 'yellow' }] : [], r.untracked > 0 ? [{ text: `?${r.untracked}`, dim: true }] : []])]
     }
     case 'guard':
-      return input.refused === 0 ? null : [denseLabel('grd'), { text: `✗ ${input.refused} refused`, color: 'red' }]
+      if (input.refused > 0) return [denseLabel('grd'), { text: `✗ ${input.refused} refused`, color: 'red' }]
+      return [denseLabel('grd'), { text: input.isGuardOn ? 'on · none refused' : 'off', dim: true }]
   }
 }
 

@@ -1168,6 +1168,7 @@ export const register: Register = on => {
         todos: items.length === 0 ? null : { done: doneCount, total: items.length, current: items.find(item => item.status === 'in_progress')?.text ?? null },
         repo: git,
         refused: refused.length,
+        isGuardOn: o.guardAttribution,
         now,
       }
       const rows = o.shown.flatMap(name => {
@@ -1322,8 +1323,8 @@ export const register: Register = on => {
 
     const engineNow = await read($, engine)
     const turnsLeft = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
-    // Why the plan section reads checkout paths rather than the roots.
     const isFinishingPast = head !== null && head.isFinishing && head.tokens >= head.limit
+    // Why the plan section reads checkout paths rather than the roots.
     const rootsLine = rootsNow !== null && (
       <Text key="plan-roots" color="red" wrap="truncate-end">
         {rootsNow}
@@ -1491,8 +1492,8 @@ export const register: Register = on => {
                 · ≈{turnsLeft} {turnsLeft === 1 ? 'turn' : 'turns'}
               </Text>
             )}
-          </Text>
             {isFinishingPast && <Text dimColor> · finishing</Text>}
+          </Text>
         ),
         ...contextBody,
         actions,
@@ -1711,23 +1712,27 @@ export const register: Register = on => {
             </Text>
           ),
         ),
-      guard:
-        refused.length > 0 &&
-        section(
-          'guard',
-          'Guard',
-          'red',
+      guard: section(
+        'guard',
+        'Guard',
+        'red',
+        refused.length > 0 ? (
           <Text key="guard-head" color="red" bold>
             {refused.length} refused
-          </Text>,
-          refused.slice(-3).map((refusal, index) => (
-            <Text key={`guard-${refusal.at}-${index}`} wrap="truncate-end">
-              <Text color="red">✗ </Text>
-              {refusal.tool}
-              <Text dimColor>: {refusal.line}</Text>
-            </Text>
-          )),
+          </Text>
+        ) : (
+          <Text key="guard-head" dimColor>
+            {o.guardAttribution ? 'on · none refused' : 'off'}
+          </Text>
         ),
+        refused.slice(-3).map((refusal, index) => (
+          <Text key={`guard-${refusal.at}-${index}`} wrap="truncate-end">
+            <Text color="red">✗ </Text>
+            {refusal.tool}
+            <Text dimColor>: {refusal.line}</Text>
+          </Text>
+        )),
+      ),
     }
 
     if (isDesktop) {
@@ -1982,15 +1987,13 @@ export const register: Register = on => {
               },
             ],
           ),
-        guard:
-          refused.length > 0 &&
-          panel(
-            'guard',
-            'Guard',
-            'red',
-            [{ text: `${refused.length} refused`, color: 'red' }],
-            refused.slice(-3).map(refusal => ({ kind: 'text', left: [{ text: '✗  ', color: 'red' }, { text: refusal.tool }, { text: `: ${refusal.line}`, dim: true }] })),
-          ),
+        guard: panel(
+          'guard',
+          'Guard',
+          'red',
+          refused.length > 0 ? [{ text: `${refused.length} refused`, color: 'red' }] : [{ text: o.guardAttribution ? 'on · none refused' : 'off', dim: true }],
+          refused.slice(-3).map(refusal => ({ kind: 'text', left: [{ text: '✗  ', color: 'red' }, { text: refusal.tool }, { text: `: ${refusal.line}`, dim: true }] })),
+        ),
       }
       const gauged = GAUGED.flatMap(kind => limits.filter(limit => limit.kind === kind))
       const tiles: { dial: string; key: string; notes: PanelRun[][]; alt: string }[] = []
@@ -3201,10 +3204,10 @@ async function readRun($: EngineInterface) {
       done: ledger.tasks.filter(one => one.state === 'complete').length,
       total: numbers.length,
       isFinished: ledger.isFinished,
+      isPlanRead: planPath !== null,
     }
     if (reading !== S.runReads) return
     // A plan the ledger names but no checkout holds yet is looked for again at the next read.
-      isPlanRead: planPath !== null,
     S.runKey = ledger.plan !== null && planPath === null ? '' : runKey
     S.runPlan = planPath
     // A run whose every task was done before this session started is history:
@@ -3419,10 +3422,10 @@ async function refresh(
     : tuning.isRelaxed
       ? finalLimitFor(window, compactWindow)
       : budgetFor(handoffTokens, undefined, window, compactWindow)
+  const isFinishing = !isAuto && !tuning.isRelaxed && isTail
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
-  const isFinishing = !isAuto && !tuning.isRelaxed && isTail
     before?.tokens !== tokens ||
     before.limit !== limit ||
     before.usd !== usd ||

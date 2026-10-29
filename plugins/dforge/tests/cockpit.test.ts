@@ -1762,6 +1762,22 @@ describe('minimized band', () => {
     expect(await ui.find({ type: 'Text', text: /✗ 1 refused/ })).toBeDefined()
   })
 
+  for (const surface of ['terminal', 'desktop'] as const) {
+    test(`draws the Guard section on the ${surface} with nothing refused`, async ($, on) => {
+      world(on, { tokens: 284_000 })
+      const ui = await $.ui.mount({ ...PANE, surface })
+      expect(await ui.find({ type: 'Text', text: /on · none refused/ })).toBeDefined()
+    })
+
+    test(`says on the ${surface} when the attribution guard is off`, async ($, on) => {
+      world(on, { tokens: 284_000, config: { guardAttribution: false } })
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface })
+      expect(await ui.find({ type: 'Text', text: /^off$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /none refused/ })).toBeUndefined()
+    })
+  }
+
   test('draws above the prompt on the terminal across its width, the hint line left alone', async ($, on) => {
     world(on, SIGNED_IN)
     signedIn(on, configured({ layout: 'compact' }))
@@ -3127,7 +3143,7 @@ describe('now row', () => {
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, blank))).toBe('◐ background · 1 shell · npm test · 3m')
     const empty = { shells: [{ command: ' \n', startedAt: 20_000 }], agents: 0 }
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, empty))).toBe('◐ background · 1 shell · 3m')
-    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, estimate: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, now: at }
+    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, estimate: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, isGuardOn: true, now: at }
     expect(flat(denseLine('shells', dense) ?? [])).toBe('$    1 shell · npm test · 3m')
     expect(flat(denseLine('shells', { ...dense, shells: empty.shells }) ?? [])).toBe('$    1 shell · 3m')
   })
@@ -3184,6 +3200,7 @@ describe('dense rows', () => {
     todos: null,
     repo: { branch: 'main', ahead: 2, behind: 0, changed: 3, untracked: 1 },
     refused: 0,
+    isGuardOn: true,
     now: 340_000,
   }
 
@@ -3195,7 +3212,8 @@ describe('dense rows', () => {
     expect(flat(denseLine('agents', INPUT) ?? [])).toBe('agt  2 running · impl-sonnet-medium, judge-opus')
     expect(flat(denseLine('plan', INPUT) ?? [])).toBe('plan ▰▰▰▱▱ 3/5 · Task 4: Draw the card')
     expect(flat(denseLine('repo', INPUT) ?? [])).toBe('⎇    main ↑2 · ~3 changed · ?1')
-    expect(denseLine('guard', INPUT)).toBeNull()
+    expect(flat(denseLine('guard', INPUT) ?? [])).toBe('grd  on · none refused')
+    expect(flat(denseLine('guard', { ...INPUT, isGuardOn: false }) ?? [])).toBe('grd  off')
     expect(flat(denseLine('guard', { ...INPUT, refused: 2 }) ?? [])).toBe('grd  ✗ 2 refused')
   })
 
@@ -3264,7 +3282,7 @@ describe('dense rows', () => {
     expect(flat(denseLine('context', empty) ?? [])).toBe('ctx  no reading yet')
     expect(flat(denseLine('context', { ...empty, estimate: 218_000 }) ?? [])).toBe('ctx  ≈218k estimated')
     expect(flat(denseLine('usage', empty) ?? [])).toBe('lim  no reading yet')
-    for (const section of ['shells', 'agents', 'plan', 'repo', 'guard'] as const) expect(denseLine(section, empty)).toBeNull()
+    for (const section of ['shells', 'agents', 'plan', 'repo'] as const) expect(denseLine(section, empty)).toBeNull()
     expect(flat(denseLine('plan', { ...empty, todos: { done: 1, total: 4, current: 'Write the tests' } }) ?? [])).toBe('plan ▰▱▱▱ 1/4 · Write the tests')
   })
 })
@@ -4427,7 +4445,7 @@ describe('run card', () => {
       '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
       [CONFIG]: { text: JSON.stringify({ handoffTokens: 350_000 }) },
     }
-    world(on, { ...SIGNED_IN, tokens: 500_000, files })
+    world(on, { ...SIGNED_IN, tokens: 400_000, files })
     signedIn(on, files)
     await $.session.start(START)
     await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
@@ -4436,8 +4454,26 @@ describe('run card', () => {
     await spawn('dforge:judge-opus')
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(await handoffShown($)).toBe('350k')
+    expect(await finishingShown($)).toBe(false)
     await spawn('dforge:impl-sonnet-low')
     await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(await handoffShown($)).toBe('350k')
+    expect(await finishingShown($)).toBe(true)
+  })
+
+  test('a ledger that moves during the session puts it at its tail', async ($, on) => {
+    const files: World['files'] = {
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(2, false), mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
+    }
+    world(on, { ...SIGNED_IN, tokens: 500_000, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(await handoffShown($)).toBe('465k')
+    expect(await finishingShown($)).toBe(false)
+    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
+    await $.tool.call({ tool: 'Bash', command: 'echo "Task 3: complete" >> .dforge/sdd/p/progress.md' })
     expect(await handoffShown($)).toBe('465k')
     expect(await finishingShown($)).toBe(true)
   })
@@ -4458,23 +4494,6 @@ describe('run card', () => {
     expect(await finishingShown($)).toBe(false)
   })
 
-  test('a ledger that moves during the session puts it at its tail', async ($, on) => {
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(2, false), mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
-    }
-    world(on, { ...SIGNED_IN, tokens: 400_000, files })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(await handoffShown($)).toBe('465k')
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
-    await $.tool.call({ tool: 'Bash', command: 'echo "Task 3: complete" >> .dforge/sdd/p/progress.md' })
-    expect(await handoffShown($)).toBe('350k')
-    expect(await finishingShown($)).toBe(true)
-    expect(await finishingShown($)).toBe(false)
-  })
-
   test('a recorded finish choice starts no once-a-second redraw', async ($, on) => {
     const files = {
       ...runFiles(LEDGER),
@@ -4488,7 +4507,6 @@ describe('run card', () => {
     })
     signedIn(on, files)
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    expect(await finishingShown($)).toBe(false)
     await $.session.start(START)
     await clock.advance(5_000)
     expect(redraws).toBe(0)

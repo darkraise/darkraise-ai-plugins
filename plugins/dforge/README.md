@@ -760,7 +760,8 @@ desktop window joins the session, unless you closed it.
   yourself. Work done without a plan shows the row on the Plan card.
 - **Repo** names the repository (`owner/name` from its remote, else its folder)
   and the working folder, then the branch, ahead and behind counts and changes.
-- **Guard** lists commits and pull requests the attribution guard refused.
+- **Guard** says whether the attribution guard is on (`on · none refused`, or
+  `off`) and lists the commits and pull requests it refused.
 
 **Collapsing.** Each section's title is a button: `▾ Usage` collapses the
 section to its title row and headline, and `▸ Usage` expands it again. Each
