@@ -230,15 +230,20 @@ ctx_find_rollout() {
 
 # autoCompactWindow from the user, then project, then local settings, the last
 # file that sets it winning as in Claude Code's own merge; or nothing. Project
-# settings are read only when Claude Code names the project directory. Read
-# without jq so the budget stays printable when jq is missing.
+# settings are read only when Claude Code names the project directory. Only the
+# top-level key counts: a file can carry per-model ones under modelSettings.
+# Without jq the first key in the file is read, so the budget stays printable.
 ctx_auto_compact_window() {
   local f v acw=""
   for f in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" \
            ${CLAUDE_PROJECT_DIR:+"$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json"}; do
     [ -f "$f" ] || continue
-    v=$(tr -d '\r' <"$f" | grep -oE '"autoCompactWindow"[[:space:]]*:[[:space:]]*[0-9]+' \
-      | head -n 1 | grep -oE '[0-9]+$' || true)
+    if ctx_have_jq; then
+      v=$(ctx_jq -r '.autoCompactWindow | numbers | floor' <"$f" 2>/dev/null | tr -d '\r' || true)
+    else
+      v=$(tr -d '\r' <"$f" | grep -oE '"autoCompactWindow"[[:space:]]*:[[:space:]]*[0-9]+' \
+        | head -n 1 | grep -oE '[0-9]+$' || true)
+    fi
     [ -z "$v" ] || acw=$v
   done
   printf '%s' "$acw"

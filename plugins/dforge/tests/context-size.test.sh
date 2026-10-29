@@ -121,6 +121,11 @@ check "a project autoCompactWindow overrides the user's" "$out" "budget: 285k of
 printf '{"autoCompactWindow": 400000}\n' > "$TMP/project/.claude/settings.local.json"
 CLAUDE_PROJECT_DIR="$TMP/project" run
 check "a local autoCompactWindow overrides the project's" "$out" "budget: 285k of 232k (122%) — handoff — source: record"
+rm -f "$TMP/project/.claude/settings.json" "$TMP/project/.claude/settings.local.json"
+printf '{\n  "modelSettings": { "claude-opus-5-5": { "autoCompactWindow": 400000 } },\n  "autoCompactWindow": 650000\n}\n' > "$HOME/.claude/settings.json"
+run
+check "a per-model autoCompactWindow is not the top-level one" "$out" "budget: 285k of 465k (61%) — ok — source: record"
+settings 650000
 run
 check "project settings are read only under CLAUDE_PROJECT_DIR" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 asst 15000 false claude-sonnet-5 > "$T"
