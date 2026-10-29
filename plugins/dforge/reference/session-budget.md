@@ -13,10 +13,10 @@ never earlier.
 | Item | Value | Source |
 |------|-------|--------|
 | Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window, and never below a fifth of that window, so 20k at 100,000; `DFORGE_BUDGET` overrides, then the `handoffTokens` setting | Owner ruling, 2026-09-19 |
-| Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DFORGE_BUDGET` does not move it | Owner ruling, 2026-10-02 |
+| Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DFORGE_BUDGET` does not move it. Only relaxed mode and the plan after the spec measure against it | Owner ruling, 2026-10-02; strict mode revised 2026-10-29 |
 | Relaxed handoff | With the `handoffMode` setting at `relaxed`, a plain task and a wave are measured against the final-phase limit (a wave less 140,000 per extra task) and the line reads `budget (relaxed)`; the pinned budget then has no effect. A worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on | Owner ruling, 2026-10-12 |
 | Plan after the spec | 150% of the task budget (`DFORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
-| Tail | The last 2 tasks are measured against the final-phase limit; finishing is never measured | Owner ruling, 2026-10-10 |
+| Tail | Strict: the last 2 tasks and the final phase are measured against the handoff budget and never hand off, so the plan finishes in the session past its budget. Relaxed: both are measured against the final-phase limit, and a tail task past it hands off. Finishing is never measured | Owner ruling, 2026-10-10; strict mode revised 2026-10-29 |
 | Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
 | `autoCompactWindow` | 800,000 with `DFORGE_BUDGET` pinned at 465,000, in `~/.claude/settings.json` (650,000 before) | Set 2026-09-11; raised 2026-10-02 |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
@@ -30,9 +30,11 @@ starts under budget always finishes before compaction.
 
 The tail trades that margin for a session. A fresh session reloads its system
 prompt, tools and the durable record before it does anything, which costs more
-than finishing one or two tasks and the final phase here. So the last two
-tasks start whenever the session is under the final-phase limit; in the rare
-case where both hit a worst-case fix loop the session may compact, and the
+than finishing one or two tasks and the final phase here. So in strict mode the
+last two tasks and the final phase keep the handoff budget as their limit but
+never hand off: their lines say `ok` past it, and the plan finishes here. In
+relaxed mode they measure against the final-phase limit instead. Either way, a
+worst-case fix loop late in the plan may compact the session, and the
 compaction snapshot below carries it on. `scripts/lib/context.sh`
 reads `autoCompactWindow` from the user, then the project, then the local
 `settings.json` (the last that sets it wins, as in Claude Code; project files
@@ -45,6 +47,7 @@ the budget follows either when they change, and agrees with the cockpit's.
 budget: 312k of 465k (67%) — ok — source: record
 budget: 470k of 465k (101%) — handoff — source: record
 budget: unknown of 465k — unknown — no transcript found
+budget (last task): 512k of 465k (110%) — ok — source: record
 budget (relaxed): 512k of 680k (75%) — ok — source: record
 ```
 
@@ -96,12 +99,11 @@ under `ok` is not a reason to stop.
   `Task N: complete` line.
 - **executing-plans:** the budget line on every `task-brief`; then
   `context-size --final` after the last `Task N: complete` line.
-- **The tail:** the brief of each of the plan's last two tasks (counted from
-  the ledger's complete lines) prints `budget (last 2 tasks)` or
-  `budget (last task)`, measured against the final-phase limit
-  (`context-size --tail R`). Only that line's verdict decides; a
-  `review-package` line saying `handoff` inside a tail task does not stop the
-  plan after it.
+- **The tail:** every budget line printed for the plan's last two tasks
+  (counted from the ledger's complete lines) — the brief, `review-package` and
+  the `task-step` digests — reads `budget (last 2 tasks)` or
+  `budget (last task)` (`context-size --tail R`). Once every task is complete
+  they read `budget (final)`. In strict mode neither hands off.
 - **Finishing:** never checked. Once the final review is clean, finishing
   runs in the same session.
 - **Acting on `handoff`:** finish the task in flight through its
@@ -141,8 +143,8 @@ To give the final phase more room without lengthening task sessions, raise
 }
 ```
 
-Tasks then still hand off at 465k, the final phase continues below 680k, and
-compaction fires at about 744k.
+Tasks then still hand off at 465k, the last tasks and the final phase run on
+past it, and compaction fires at about 744k.
 
 ## Auto run
 

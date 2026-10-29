@@ -52,8 +52,9 @@ const REWORDED = [
   "Dispatch it with the full-plan template and `[REPORT_FILE]` set to `<workspace>/plan-review-round-1.md`, and say `codex off — <reason>`, quoting the gate line's `reason` (`untrusted` when it printed `usable=true`).",
   "Write `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`, dispatch the seat with the Later rounds template, passing that file and the previous round's findings file, with `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`.",
 ];
-// Sentences the main branch's "review light plans once" change removed or
-// reworded in writing-plans after BASE; the split cannot have lost them.
+// Sentences later changes on the main branch removed or reworded after BASE:
+// "review light plans once" in writing-plans, and the strict-mode tail in the
+// execution skills. The split cannot have lost them.
 const REMOVED = [
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
@@ -65,6 +66,9 @@ const REMOVED = [
   '1 at standard, so round 1 is the only round, and 0 at light, so none runs.',
   'At depth light no review ran:',
   'write `**Plan review:** <YYYY-MM-DD> — skipped (depth light)` in the same place, and `plan-lint` accepts it.',
+  "The plan's last two tasks are measured against the final-phase limit:",
+  "- The plan's last two tasks are measured against the final-phase limit:",
+  "their brief prints `budget (last 2 tasks)` or `budget (last task)`, and only that line's verdict decides.",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

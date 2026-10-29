@@ -61,27 +61,35 @@ out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
 check "task-brief: budget line says handoff" "$(tail -n 1 <<<"$out")" \
   "budget: 500k of 465k (107%) — handoff — source: record"
 
-# --- the plan's last two tasks measure against the final-phase limit ---
-# 553k is 85% of the 650k window: the tail finishes here rather than paying a
-# fresh session's baseline and reload for one or two tasks.
+# --- the plan's last two tasks and its final phase keep the task budget ---
+# In strict mode they are measured against it but never hand off, so the plan
+# finishes here; review-package says where the plan stands as task-brief does.
 L="$REPO/.dforge/sdd/plan/progress.md"
 mkdir -p "$(dirname "$L")"
 printf '# SDD ledger — plan: docs/plan.md
 Task 1: complete (commit abc1234)
 ' > "$L"
 out=$(bash "$P/scripts/task-brief" docs/plan.md 2 2>/dev/null)
-check "task-brief: two tasks left: the tail limit" "$(tail -n 1 <<<"$out")" \
-  "budget (last 2 tasks): 500k of 553k (90%) — ok — source: record"
+check "task-brief: two tasks left: the tail line" "$(tail -n 1 <<<"$out")" \
+  "budget (last 2 tasks): 500k of 465k (107%) — ok — source: record"
+out=$(bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null)
+check "review-package: two tasks left: the tail line" "$(tail -n 1 <<<"$out")" \
+  "budget (last 2 tasks): 500k of 465k (107%) — ok — source: record"
 printf 'Task 2: complete (commit abc1235)
 ' >> "$L"
 out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null)
-check "task-brief: one task left: the tail limit" "$(tail -n 1 <<<"$out")" \
-  "budget (last task): 500k of 553k (90%) — ok — source: record"
+check "task-brief: one task left: the tail line" "$(tail -n 1 <<<"$out")" \
+  "budget (last task): 500k of 465k (107%) — ok — source: record"
 printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":560000}}}\n' > "$T"
 out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null); status=$?
-check "task-brief: past the tail limit: handoff" "$(tail -n 1 <<<"$out")" \
-  "budget (last task): 560k of 553k (101%) — handoff — source: record"
-check "task-brief: past the tail limit: exit unchanged" "$status" "0"
+check "task-brief: far past the budget in the tail: still ok" "$(tail -n 1 <<<"$out")" \
+  "budget (last task): 560k of 465k (120%) — ok — source: record"
+check "task-brief: far past the budget in the tail: exit unchanged" "$status" "0"
+printf 'Task 3: complete (commit abc1236)
+' >> "$L"
+out=$(bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null)
+check "review-package: every task complete: the final line" "$(tail -n 1 <<<"$out")" \
+  "budget (final): 560k of 465k (120%) — ok — source: record"
 rm -f "$L"
 printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
 

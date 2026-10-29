@@ -564,9 +564,10 @@ needs. dforge hands off instead.
 - **Stops.** A saved plan outside an auto run (an auto run switches in place)
   and a switch from inline to subagent mode are hard stops.
   The last task completing is never a stop: the final whole-branch review and
-  finishing always run in the same session, measured against the final phase's
-  own limit, 85% of the compaction window, which the plan's last two tasks
-  share; finishing itself is never budget-checked. A
+  finishing always run in the same session. In strict mode the plan's last two
+  tasks and the final phase keep the handoff budget and run past it; in relaxed
+  mode they measure against 85% of the compaction window. Finishing itself is
+  never budget-checked. A
   `handoff` verdict waits for the task in flight to complete. The
   budget is the compaction point minus one task's worst growth, derived from
   `autoCompactWindow` and the model's window; see
@@ -933,7 +934,7 @@ The same settings can be set with
 | Minimized | `bandLine1` | empty | The minimized band's first line, in order, comma-separated: `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Empty shows `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`; `none` hides the line. The tab's chips add a segment last on a line and take it off the other. |
 | Minimized | `bandLine2` | empty | The second line, from the same names. Empty shows `ctx`, `cache`, `cost`, `5h`, `7d`; `none` hides it. A name on both lines shows on the first. In the desktop app the picked `ctx`, `cache`, `5h` and `7d` are its meters and the rest its text rows. |
 | Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
-| Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
+| Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget, except that a plan's last two tasks and its final phase run past it to finish the plan. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
 | Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
 | Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dforge` sessions. |
 | Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |

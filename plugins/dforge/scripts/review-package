@@ -50,5 +50,11 @@ echo "wrote ${out}: ${commits} commit(s), $(wc -c < "$out" | tr -d ' ') bytes"
 
 # The budget line rides on a call the controller already makes before every
 # review, so checking the session budget costs no extra request. It must never
-# fail the package.
-DFORGE_BUDGET_CALLER=review-package bash "$(cd "$(dirname "$0")" && pwd)/context-size" 2>/dev/null || true
+# fail the package. Inside the plan's tail or final phase it says so, as the
+# brief does, so a final review never reads a task budget's handoff.
+here=$(cd "$(dirname "$0")" && pwd)
+budget_mode=()
+if . "$here/lib/context.sh" 2>/dev/null; then
+  read -r -a budget_mode <<<"$(ctx_plan_mode "$plan" "$(dforge_ledger_dir "$(basename "$plan" .md)")/progress.md" 2>/dev/null)" || budget_mode=()
+fi
+DFORGE_BUDGET_CALLER=review-package bash "$here/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true

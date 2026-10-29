@@ -85,7 +85,7 @@ export default {
   handoffMode: {
     type: 'enum', values: ['strict', 'relaxed'], default: 'strict', enforcedBy: 'script', group: 'Context', target: 'dforge',
     label: 'Handoff mode', title: 'Handoff mode',
-    description: 'strict hands off at the handoff budget. relaxed measures every task against the final-phase limit, 85% of the window, and the handoff budget then has no effect.',
+    description: 'strict hands off at the handoff budget, except that a plan\'s last two tasks and its final phase run past it to finish the plan. relaxed measures every task against the final-phase limit, 85% of the window, and the handoff budget then has no effect.',
   },
   warnAt: {
     type: 'number', default: 80, min: 1, max: 99, step: 5, unit: '%', group: 'Context', target: 'dforge',

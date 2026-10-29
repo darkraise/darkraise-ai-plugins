@@ -247,9 +247,8 @@ budget before every task at no extra request:
   then invoke dforge:handoff. Never hand off in the middle of a task,
   delegated ones included. The budget holds one task's worst growth.
 
-The plan's last two tasks are measured against the final-phase limit: their
-brief prints `budget (last 2 tasks)` or `budget (last task)`, and only that
-line's verdict decides. Run `scripts/context-size --final` after the last
+The plan's last two tasks never hand off in strict mode: their brief prints
+`budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. Run `scripts/context-size --final` after the last
 task's `Task <N>: complete` line for the record: it never says `handoff`.
 After every earlier task, the next brief's budget line is the check.
 Finishing is never budget-checked. In an auto run `--final` also moves the

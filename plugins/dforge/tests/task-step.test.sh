@@ -618,6 +618,17 @@ check "rereview skip: the digest fits 15 lines" "$([ "$(wc -l <<<"$rr_out")" -le
 check "rereview skip: the digest names the state" "$(grep -c "^state: base .* review-head $(rr_git rev-parse --short HEAD) round 1 t0 " <<<"$rr_out")" "1"
 check "rereview skip: the digest ends with the budget line" "$(tail -n 1 <<<"$rr_out" | cut -c1-7)" "budget:"
 check "rereview skip: no prompt is written" "$(ls "$RR_WS"/task-1-rereview-*-prompt.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+# With the plan's other tasks complete the digest's budget line names the tail,
+# which never hands off in strict mode.
+cp "$RR_WS/progress.md" "$RR_TMP/ledger.keep"
+printf 'Task 2: complete (commit abc1234)\nTask 3: complete (commit abc1235)\n' >> "$RR_WS/progress.md"
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1 --covered
+check "rereview: in the plan's last task the budget line names the tail" "$(tail -n 1 <<<"$rr_out" | cut -c1-19)" "budget (last task):"
+cp "$RR_TMP/ledger.keep" "$RR_WS/progress.md"
 
 # A written prompt: the judge seat, no unexpanded placeholder, the open
 # findings, the fix base and the diff file.

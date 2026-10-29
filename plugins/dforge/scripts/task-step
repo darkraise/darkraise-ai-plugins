@@ -28,6 +28,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
+# plan_budget_line SCRIPTS CALLER PLAN_SRC LEDGER — the session budget line,
+# naming the plan's tail or final phase as the brief does.
+plan_budget_line() {
+  local mode=()
+  read -r -a mode <<<"$(. "$1/lib/context.sh" && ctx_plan_mode "$3" "$4" 2>/dev/null)" || mode=()
+  DFORGE_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
+}
 usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
 
 # dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
@@ -463,7 +470,7 @@ cmd_rereview() (
   fi
   printf 'state: base %s review-head %s round %s t0 %s\n' \
     "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
-  DFORGE_BUDGET_CALLER="task-step:rereview" bash "$here/context-size" 2>/dev/null || true
+  plan_budget_line "$here" task-step:rereview "$src" "$(dforge_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
 )
 
 if [ "${1:-}" = rereview ]; then
@@ -906,7 +913,7 @@ do_hold() {
     printf 'task %s: already held for group review (commits %s..%s)\n' "$first" "${base:0:7}" "${held:0:7}"
   fi
   printf 'state: base %s held-head %s\n' "${base:0:7}" "${held:0:7}"
-  budget=$(DFORGE_BUDGET_CALLER=task-step:hold bash "$HERE/context-size" 2>/dev/null | budget_of)
+  budget=$(plan_budget_line "$HERE" task-step:hold "$src" "$ledger" | budget_of)
   printf '%s\n' "${budget:-budget: unknown}"
 }
 
@@ -1025,7 +1032,7 @@ do_group() {
   printf 'seat: %s prompt: %s%s\n' "$judge" "$prompt" "$note"
   printf '%s\n%s\n' "$id_line" "$at_line"
   printf 'state: group %s review-head %s round 0 t0 %s\n' "$list" "${ghead:0:7}" "$t0"
-  budget=$(DFORGE_BUDGET_CALLER=task-step:review-group bash "$HERE/context-size" 2>/dev/null | budget_of)
+  budget=$(plan_budget_line "$HERE" task-step:review-group "$src" "$ledger" | budget_of)
   printf '%s\n' "${budget:-budget: unknown}"
 }
 
@@ -1561,7 +1568,7 @@ do_verdict() {
   fi
   printf 'minor: %s logged as deferred\n' "$minor"
   printf '%s\n' "$check_line"
-  budget=$(DFORGE_BUDGET_CALLER="task-step:verdict" bash "$HERE/context-size" 2>/dev/null | budget_of)
+  budget=$(plan_budget_line "$HERE" task-step:verdict "$src" "$ledger" | budget_of)
   printf '%s\n' "${budget:-budget: unknown}"
 }
 

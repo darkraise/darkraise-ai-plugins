@@ -10,14 +10,15 @@
 
 # Auto-compaction fires at about 93% of the effective window; the budget sits
 # one worst-case task's growth below that, so a task in flight always lands.
-# The final phase (final review, its one fix wave, finishing) grows far less
-# than a task's fix loop, so it gets its own, higher limit.
+# In relaxed handoff mode the final phase (final review, its fix wave,
+# finishing) and a plan's last tasks get their own, higher limit; in strict
+# mode they keep the task budget and run past it to finish the plan.
 CTX_COMPACT_PCT=93
 CTX_TASK_MARGIN=140000
 CTX_FINAL_PCT=85
-# A plan's last tasks join the final phase: once this many or fewer remain, the
-# brief measures them against the final-phase limit. Finishing them here costs
-# less than a fresh session's baseline plus its reload.
+# A plan's last tasks join the final phase: once this many or fewer remain, they
+# never hand off. Finishing them here costs less than a fresh session's
+# baseline plus its reload.
 CTX_TAIL_TASKS=2
 # After a committed spec, the plan is written in the same session while the
 # context is under 150% of the task budget, capped at the final-phase limit so
@@ -292,6 +293,25 @@ ctx_pinned_budget() {
   printf '%s' "$pinned"
 }
 
+# ctx_plan_mode PLAN_SRC LEDGER — the context-size arguments for a check made
+# while a plan runs: --final once every task has a complete line, --tail R
+# while R tasks of CTX_TAIL_TASKS or fewer remain, nothing before that. Needs
+# lib/plan.sh.
+ctx_plan_mode() {
+  local done_tasks="" counts total remaining
+  [ ! -f "$2" ] || done_tasks=$(ledger_done "$2" || true)
+  counts=$(plan_tasks "$1" | cut -f1 | DONE="$done_tasks" awk '
+    BEGIN { n = split(ENVIRON["DONE"], d, "\n"); for (i = 1; i <= n; i++) done[d[i]] = 1 }
+    !seen[$1]++ { t++; if (!($1 in done)) r++ } END { print t + 0, r + 0 }')
+  read -r total remaining <<<"$counts"
+  [ "$total" -gt 0 ] || return 0
+  if [ "$remaining" -eq 0 ]; then
+    echo --final
+  elif [ "$remaining" -le "$CTX_TAIL_TASKS" ]; then
+    echo "--tail $remaining"
+  fi
+}
+
 # ctx_plan_budget MODEL — the limit for writing the plan after the spec:
 # CTX_PLAN_PCT of the task budget (DFORGE_BUDGET included), never above
 # the final-phase limit.
@@ -366,10 +386,12 @@ ctx_auto_line() {
 }
 
 # ctx_line [final | tail R | plan | wave W] — print the budget line; return 0 ok, 5
-# handoff, 6 compact (an auto run only), 3 unknown. With final, measure against
-# the final-phase limit instead of the task budget; tail R does the same before
-# one of a plan's last R tasks (CTX_TAIL_TASKS), so the tail of a plan and its
-# final phase share one limit. With wave W, reserve one task's worst growth for
+# handoff, 6 compact (an auto run only), 3 unknown. With final, the plan's final
+# phase: measured against the task budget, it never hands off. tail R does the
+# same before one of a plan's last R tasks (CTX_TAIL_TASKS), so the plan
+# finishes in this session past its budget. With the handoffMode setting at
+# relaxed both measure against the final-phase limit instead, and a tail task
+# past it hands off. With wave W, reserve one task's worst growth for
 # each of the W - 1 tasks that run beside the first, so a parallel wave that
 # starts under its budget lands before compaction just as one task does
 # (reference/parallel-waves.md). With the handoffMode setting at relaxed, a
@@ -382,10 +404,14 @@ ctx_auto_line() {
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
   local label=budget extra=0
-  local limit=task auto=0 width=1 regime
-  [ "${1:-}" = final ] && label="budget (final)" limit=final
+  local limit=task auto=0 width=1 regime mode finishing=0
+  mode=$(dforge_setting handoffMode strict)
+  if [ "${1:-}" = final ]; then
+    label="budget (final)" finishing=1
+    [ "$mode" != relaxed ] || limit=final
+  fi
   if [ "${1:-}" = tail ]; then
-    limit=final
+    if [ "$mode" = relaxed ]; then limit=final; else finishing=1; fi
     if [ "${2:-1}" = 1 ]; then label="budget (last task)"; else label="budget (last ${2} tasks)"; fi
   fi
   [ "${1:-}" = plan ] && label="budget (plan)" limit=plan
@@ -404,7 +430,7 @@ ctx_line() {
       label=$(ctx_auto_label normal "$width")
     fi
   fi
-  if [ "$limit" = task ] && [ "$(dforge_setting handoffMode strict)" = relaxed ]; then
+  if [ "$limit" = task ] && [ "$mode" = relaxed ]; then
     limit=relaxed
     if [ "${1:-}" = wave ]; then label="budget (relaxed, wave of ${2:-1})"; else label="budget (relaxed)"; fi
   fi
@@ -468,9 +494,9 @@ ctx_line() {
   fi
   tk=$(( (tokens + 500) / 1000 ))
   pct=$(( tokens * 100 / budget ))
-  # The final phase never hands off (reference/session-budget.md §Stops): an
-  # over-limit --final line still says ok.
-  if [ "$tokens" -ge "$budget" ] && [ "${1:-}" != final ]; then
+  # The final phase never hands off (reference/session-budget.md §Stops), nor in
+  # strict mode does a plan's tail: an over-limit line still says ok.
+  if [ "$tokens" -ge "$budget" ] && [ "$finishing" -eq 0 ]; then
     echo "$label: ${tk}k of ${bk}k (${pct}%) — handoff — source: $CTX_SOURCE"
     return 5
   fi

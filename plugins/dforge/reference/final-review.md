@@ -8,9 +8,10 @@ of the work being done.
 
 - **Either execution mode:** the session that completed the last task: the
   final phase never hands off. The final phase - this review, its one fix wave
-  and finishing - is measured against that final-phase limit, not the task
-  budget, so a `review-package` budget line saying `handoff` here does not
-  stop it. Once the review is clean, finishing follows with no budget check.
+  and finishing - is measured against the handoff budget in strict mode and
+  the final-phase limit in relaxed mode, and its `budget (final)` lines say
+  `ok` past either; a plain budget line saying `handoff` here does not stop it.
+  Once the review is clean, finishing follows with no budget check.
 - **In an auto run** ([auto-run.md](auto-run.md)) the budget line prints the
   run's verdict, and a `compact` line does end the turn here: finish the step
   in flight, with no reviewer or fixer still running, and end the turn as

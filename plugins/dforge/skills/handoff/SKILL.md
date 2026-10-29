@@ -29,8 +29,8 @@ cleanly."
   final review and finishing run in the same session whatever
   `scripts/context-size --final` prints. A task budget line printed during
   that final phase does not stop it, and nothing stops finishing once the
-  final review is clean. The plan's last two tasks are measured against the
-  same final-phase limit, so a short tail never hands off on the task budget.
+  final review is clean. In strict mode the plan's last two tasks never hand
+  off either: their budget lines say `ok` past the budget.
 - On Codex: after every 3 completed tasks, or after any task that needed 3 or
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.

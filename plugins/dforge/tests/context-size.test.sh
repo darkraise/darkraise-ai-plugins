@@ -180,36 +180,36 @@ check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
 run extra
 check "usage: exit 2" "$status" "2"
 
-# --- the final-phase limit: 85% of the compaction window ---
+# --- strict: the final phase and a plan's last tasks keep the task budget ---
+# They are measured against it but never hand off: the plan finishes in this
+# session even past the budget.
 asst 500000 > "$T"
 record s-1 "$T"
 run --final
-check "final: past the task budget, below the final limit: exit 0" "$status" "0"
-check "final: line" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
-asst 560000 > "$T"
+check "final: past the task budget: exit 0" "$status" "0"
+check "final: line" "$out" "budget (final): 500k of 465k (107%) — ok — source: record"
+asst 700000 > "$T"
 run --final
-check "final: over: exit 0, the final phase never hands off" "$status" "0"
-check "final: over: line" "$out" "budget (final): 560k of 553k (101%) — ok — source: record"
+check "final: far over: exit 0, the final phase never hands off" "$status:$out" "0:budget (final): 700k of 465k (150%) — ok — source: record"
 asst 500000 > "$T"
 DFORGE_BUDGET=300000 run --final
-check "final: the task override does not move it" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
+check "final: a pinned budget is its limit" "$out" "budget (final): 500k of 300k (166%) — ok — source: record"
 settings 800000
 DFORGE_BUDGET=465000 run
 check "800k window, pinned task budget: tasks still hand off at 465k" "$out" "budget: 500k of 465k (107%) — handoff — source: record"
 DFORGE_BUDGET=465000 run --final
-check "800k window, pinned task budget: the final phase continues" "$out" "budget (final): 500k of 680k (73%) — ok — source: record"
+check "800k window, pinned task budget: the final phase shows the pinned budget" "$out" "budget (final): 500k of 465k (107%) — ok — source: record"
 settings 650000
 
-# --- a plan's last tasks share the final-phase limit ---
 asst 500000 > "$T"
 run --tail 1
-check "tail of 1: past the task budget, below the final limit: exit 0" "$status" "0"
-check "tail of 1: line" "$out" "budget (last task): 500k of 553k (90%) — ok — source: record"
+check "tail of 1: past the task budget: exit 0" "$status" "0"
+check "tail of 1: line" "$out" "budget (last task): 500k of 465k (107%) — ok — source: record"
 DFORGE_BUDGET=300000 run --tail 2
-check "tail of 2: the task override does not move it" "$out" "budget (last 2 tasks): 500k of 553k (90%) — ok — source: record"
-asst 560000 > "$T"
+check "tail of 2: a pinned budget is its limit" "$out" "budget (last 2 tasks): 500k of 300k (166%) — ok — source: record"
+asst 700000 > "$T"
 run --tail 2
-check "tail: over: exit 5" "$status" "5"
+check "tail: far over: exit 0, the tail never hands off" "$status" "0"
 run --tail 3
 check "tail of 3: usage" "$status" "2"
 run --tail 0
@@ -244,9 +244,9 @@ run --wave 0
 check "wave of 0: usage" "$status" "2"
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run --final
-check "final: haiku's 200k window" "$out" "budget (final): 30k of 170k (17%) — ok — source: record"
+check "final: haiku's 200k window" "$out" "budget (final): 30k of 46k (65%) — ok — source: record"
 DFORGE_JQ=no-such-jq run --final
-check "final: no jq: line" "$out" "budget (final): unknown of 553k — unknown — no jq"
+check "final: no jq: line" "$out" "budget (final): unknown of 465k — unknown — no jq"
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
 
@@ -265,15 +265,19 @@ run --wave 2
 check "relaxed wave: exit 5" "$status" "5"
 check "relaxed wave: one task margin reserved" "$out" "budget (relaxed, wave of 2): 500k of 413k (121%) — handoff — source: record"
 run --final
-check "relaxed: the final check is unchanged" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
+check "relaxed: the final phase measures against the final-phase limit" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
 run --tail 1
-check "relaxed: the tail check is unchanged" "$out" "budget (last task): 500k of 553k (90%) — ok — source: record"
+check "relaxed: the tail measures against the final-phase limit" "$out" "budget (last task): 500k of 553k (90%) — ok — source: record"
 run --plan
 check "relaxed: the plan check is unchanged" "$out" "budget (plan): 500k of 553k (90%) — ok — source: record"
 asst 560000 > "$T"
 run
 check "relaxed: past the final-phase limit: exit 5" "$status" "5"
 check "relaxed: past the final-phase limit: line" "$out" "budget (relaxed): 560k of 553k (101%) — handoff — source: record"
+run --tail 2
+check "relaxed: a tail task past the final-phase limit: exit 5" "$status" "5"
+run --final
+check "relaxed: the final phase never hands off" "$status:$out" "0:budget (final): 560k of 553k (101%) — ok — source: record"
 # The handoffTokens setting pins the task budget; DFORGE_BUDGET still wins.
 printf '{"handoffTokens":300000}\n' > "$HOME/.dforge/config.json"
 asst 285000 > "$T"

@@ -13,10 +13,10 @@ request:
   `Task N: complete` line — then invoke dforge:handoff. Start no new
   task. The budget holds one task's worst growth, so the task lands before
   compaction.
-- The plan's last two tasks are measured against the final-phase limit:
-  their brief prints `budget (last 2 tasks)` or `budget (last task)`, and only
-  that line's verdict decides. A short tail costs less to finish here than a
-  fresh session's baseline and reload.
+- The plan's last two tasks never hand off in strict mode: their budget
+  lines read `budget (last 2 tasks)` or `budget (last task)` and say `ok` past
+  the budget. A short tail costs less to finish here than a fresh session's
+  baseline and reload.
 - After the last task's `Task N: complete` line, run
   `scripts/context-size --final` for the record, then
   continue to Final Review in this session and on to finishing, whatever it
