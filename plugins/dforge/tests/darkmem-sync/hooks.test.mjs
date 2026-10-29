@@ -37,6 +37,7 @@ const WATCHDOG_SKIP = process.platform === "win32" && "the hooks use GNU timeout
 // which Node's process.kill would look up among unrelated Windows pids.
 async function assertGone(pidFile) {
   const pid = fs.readFileSync(pidFile, "utf8").trim();
+  assert.match(pid, /^\d+$/, "the pid file holds a pid");
   const gone = await bash(["-c", 'for _ in $(seq 50); do kill -0 "$1" 2>/dev/null || exit 0; sleep 0.1; done; exit 1', "assert-gone", pid], { cwd: path.dirname(pidFile), env: process.env });
   assert.equal(gone.code, 0, "the command's child was killed too");
 }
