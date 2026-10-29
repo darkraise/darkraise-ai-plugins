@@ -635,7 +635,7 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
   const layout = input.lines ?? BAND_DEFAULT_LINES
   const out: [Run[], Run[]] = [lineOf(layout[0]), lineOf(layout[1])]
   if (input.isBackground === true) {
-    const at = Math.max(0, layout.findIndex(names => names.some(name => name === 'agents' || name === 'shells' || name === 'turn')))
+    const at = layout.findIndex(names => names.some(name => name === 'agents' || name === 'shells' || name === 'turn')) === 1 ? 1 : 0
     out[at] = [{ text: '◐ ', color: AMBER_RUN, bold: true }, ...out[at]]
   }
   return out

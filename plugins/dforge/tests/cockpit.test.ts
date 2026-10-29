@@ -4144,7 +4144,7 @@ describe('run card', () => {
   })
 
   test("says a second plan's tasks though the first had the same numbers", async ($, on) => {
-    const files = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task' }) } }
+    const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task' }) } }
     const fetches: World['fetches'] = []
     world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
@@ -4173,7 +4173,7 @@ describe('run card', () => {
   })
 
   test('a brief message names no task title and no agent description', async ($, on) => {
-    const files = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task,agent', notifyDetail: 'brief' }) } }
+    const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task,agent', notifyDetail: 'brief' }) } }
     const fetches: World['fetches'] = []
     world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
@@ -4300,7 +4300,7 @@ describe('run card', () => {
     expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
   })
 
-  const handoffShown = async ($: Parameters<Parameters<typeof test>[1]>[0]) => {
+  const handoffShown = async ($: Parameters<TestBody>[0]) => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     const legend = (await ui.findAll({ type: 'Text' })).map(one => one.text).find(text => /^\d+k of /.test(text))
     await ui.unmount()
