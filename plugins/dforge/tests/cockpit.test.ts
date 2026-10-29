@@ -2893,6 +2893,22 @@ describe('account', () => {
       expect(w.opened).toEqual([])
       expect(w.closed).toEqual([])
     })
+
+    test(`leaves the pane up for a minimized cockpit in the session a ${reason} carries the process into`, async ($, on) => {
+      const wipe = wipesState(on)
+      const w: World = { ...SIGNED_IN, opened: [], closed: [], config: { layout: 'compact' } }
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      await $.session.start(START)
+      await $.session.end({ reason, sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      wipe()
+      w.sessionId = 'sess-2'
+      w.opened!.length = 0
+      w.closed!.length = 0
+      await clock.advance(2_000)
+      expect(w.opened).toEqual([])
+      expect(w.closed).toEqual([])
+    })
   }
 
   test('reads nothing again after a session end that ends the process', async ($, on) => {
