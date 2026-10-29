@@ -191,6 +191,16 @@ check "verdict, 25 failing lines: the digest counts the rest and names the fix f
   "suite: 5 more failing lines in $WS/task-1-fix-1.md;suite: red (25 failing, 0 baseline);"
 check "verdict, 25 failing lines: the fix line counts 25" "$(grep '^fix: ' <<<"$out")" "fix: $WS/task-1-fix-1.md (25 findings)"
 
+# --- verdict: the more-failing-lines line counts toward the 20 non-finding lines ---
+report "$WS/task-1-review-report.md"
+printf '%s\n' '' '## Cannot verify' >> "$WS/task-1-review-report.md"
+for i in $(seq 1 12); do printf -- '- cannot-verify: item %02d cannot be checked from the diff\n' "$i" >> "$WS/task-1-review-report.md"; done
+rm -f "$WS"/task-1-fix-*.md
+step verdict docs/plan.md 1
+check "verdict, 25 failing lines and 12 cannot-verify items: at most 20 lines besides the findings" \
+  "$(grep -cvE '^(Critical|Important|Minor) [0-9]' <<<"$out")" "20"
+report "$WS/task-1-review-report.md"
+
 # --- verdict: past round 2 the rest of the failing lines are in the suite log ---
 LOG25=$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $5 }' .dforge/suites.tsv | tail -n 1 | tr -d '\r')
 jq '.round = 2' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"

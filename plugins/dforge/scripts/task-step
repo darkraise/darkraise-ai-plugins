@@ -1534,12 +1534,14 @@ do_verdict() {
   [ "$suite_more" -eq 0 ] || printf 'suite: %s more failing lines in %s\n' "$suite_more" "$suite_fix"
   printf '%s\n' "$suite_line"
   # Every line but the finding lines fits in 20: the first, the verdict lines,
-  # and the findings, suite, fix, minor, check and budget lines leave this many. A
-  # group too large for that still gets one line saying how many items wait.
+  # and the findings, suite, fix, minor, check and budget lines, with the suite
+  # line counting the rest when there is one, leave this many. A group too
+  # large for that still gets one line saying how many items wait.
   room=$((20 - nv - 7))
   [ "$room" -ge 1 ] || room=1
   nc=${#cvs[@]}
   if [ "$nc" -le "$room" ]; then
+  [ "$suite_more" -eq 0 ] || room=$((room - 1))
     for i in ${cvs[@]+"${!cvs[@]}"}; do printf 'cannot-verify: %s\n' "${cvs[$i]}"; done
   else
     for ((i = 0; i < room - 1; i++)); do printf 'cannot-verify: %s\n' "${cvs[$i]}"; done
