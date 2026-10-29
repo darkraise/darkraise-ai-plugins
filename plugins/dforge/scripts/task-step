@@ -1175,8 +1175,8 @@ check_tracked() {
 # plan_named_commands TASK STEP_FILE: the baseline commands the plan names for
 # TASK, one per line: the step file's suite command, the header's Integration
 # check, then the first code span of each of the task's Run: and **Check:**
-# lines outside fenced blocks. The suite and Integration check commands are
-# trimmed of edge blanks, as settle_item trims the seat's text. Reads $src, the
+# lines outside fenced blocks. Each is trimmed of edge blanks, as settle_item
+# trims the seat's text, and a span left empty names nothing. Reads $src, the
 # amended plan. A suite command with a newline is left out: a one-line item can
 # never equal it.
 plan_named_commands() {
@@ -1203,7 +1203,9 @@ plan_named_commands() {
       if (substr(rest, 1, 1) == "`") next
       j = index(rest, "`")
       if (!j || substr(rest, j + 1, 1) == "`") next
-      print substr(rest, 1, j - 1)
+      span = substr(rest, 1, j - 1)
+      gsub(/^[ \t]+|[ \t]+$/, "", span)
+      if (span != "") print span
     }
   '
 }
