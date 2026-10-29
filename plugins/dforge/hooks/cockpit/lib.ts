@@ -776,6 +776,16 @@ export function isAbsolutePath(path: string): boolean {
 }
 
 /**
+ * Whether a stat rejection means the path does not exist: only for ENOENT, or,
+ * with no code, when the path above it is a directory and not a link. Any other
+ * code refuses.
+ */
+export function statMissing(error: unknown, isAboveDir: boolean): boolean {
+  const code = (error as { code?: unknown } | null)?.code
+  return typeof code === 'string' ? code === 'ENOENT' : isAboveDir
+}
+
+/**
  * Where a ledger's plan name may be read, in order (darkmem store options spec
  * §7.1 and §7.3): an absolute name as written; a document name under the docs
  * root while documents are in darkmem, else under each checkout's own docs

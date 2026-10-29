@@ -85,6 +85,7 @@ import {
   sectionsToggled,
   sparkline,
   stackedRuns,
+  statMissing,
   tasksEnded,
   termColor,
   themeColor,
@@ -4064,12 +4065,15 @@ function rootOf(canon: string, roots: readonly string[]): string | undefined {
 
 // Each root is also matched literally, in either slash, so a path under a root
 // that holds spaces or parentheses is captured whole; below the root a path
-// still stops at them, as REPORT_TAIL says.
+// still stops at them, as REPORT_TAIL says. The implementer's report
+// (task-<N>-report.md), which a review dispatch also names, is never a judge's
+// to write.
 function reportPathsIn(prompt: string, roots: readonly string[]): string[] {
   const found: string[] = []
   const add = (path: string) => {
     const canon = canonPath(path)
-    if (canon !== null && rootOf(canon, roots) !== undefined && !found.includes(path)) found.push(path)
+    if (canon === null || /\/task-\d+-report\.md$/i.test(canon)) return
+    if (rootOf(canon, roots) !== undefined && !found.includes(path)) found.push(path)
   }
   for (const [path] of prompt.matchAll(REPORT_PATH)) add(path)
   for (const dir of [S.where.checkout, S.where.primary]) {
@@ -4088,10 +4092,9 @@ function reportPathsIn(prompt: string, roots: readonly string[]): string[] {
 }
 
 // The root is trusted as an existing directory; each path below it down to
-// the target must not be a symbolic link. A stat rejection means the path does
-// not exist only when its code is ENOENT, or, with no code, when the path
-// above it is a directory and not a link; any other rejection refuses. The
-// walk stops at the first missing path, as nothing below it exists.
+// the target must not be a symbolic link. A stat rejection that statMissing
+// does not read as a missing path refuses. The walk stops at the first missing
+// path, as nothing below it exists.
 async function isNamedReport($: EngineInterface, target: string, allowed: readonly string[]): Promise<boolean> {
   const canon = canonPath(target)
   if (canon === null) return false
@@ -4110,8 +4113,7 @@ async function isNamedReport($: EngineInterface, target: string, allowed: readon
     try {
       info = await $.fs.stat(parts.slice(0, at).join('/'))
     } catch (error) {
-      const code = (error as { code?: unknown } | null)?.code
-      return typeof code === 'string' ? code === 'ENOENT' : isAboveDir
+      return statMissing(error, isAboveDir)
     }
     if (info.isLink === true) return false
     isAboveDir = info.kind === 'dir'

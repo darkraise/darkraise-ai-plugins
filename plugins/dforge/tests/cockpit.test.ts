@@ -62,6 +62,7 @@ import {
   sparkline,
   stackedRuns,
   shellAge,
+  statMissing,
   tasksEnded,
   termColor,
   themeColor,
@@ -250,7 +251,7 @@ type World = {
   env?: Record<string, string>
   /** Files the plugin reads, by path, with their modification time. */
   files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other'; isLink?: boolean }>
-  /** Paths whose stat rejects with this error code. */
+  /** Paths whose stat rejects; the kit drops the code, so the mod sees a rejection with none. */
   statErrors?: Record<string, string>
   /** What the plugin writes, by path. */
   written?: Record<string, string>
@@ -875,10 +876,25 @@ describe('review seat write guard', () => {
   })
 
   test('lists every report path the dispatch names under a state root, and none that lies elsewhere', async ($, on) => {
-    const second = `${WS}/task-1-report.md`
+    const second = `${WS}/task-1-rereview-1-report.md`
     await started($, on, [REVIEW, second, '/tmp/elsewhere-report.md', 'docs/relative-report.md', `${WS}/../escape-report.md`, `${WS}/task-9-report.md.bak`])
     expect((await write($, 'judge-1', second)).deny).toBeUndefined()
     expect((await write($, 'judge-1', '/tmp/elsewhere-report.md')).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}, ${second}); /tmp/elsewhere-report.md is not one.`)
+  })
+
+  test('leaves out the implementer report a review dispatch also names', async ($, on) => {
+    const implementer = `${WS}/task-1-report.md`
+    await started($, on, [implementer, REVIEW])
+    expect((await write($, 'judge-1', implementer)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${implementer} is not one.`)
+    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
+
+  test('refuses every judge write while no root is known', async ($, on) => {
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: '', commonDir: '/home/me/code/shop/.git/modules/sub' })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch(`Write your report to ${REVIEW}.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
   })
 
   test('a judge whose dispatch names no report file may write no file', async ($, on) => {
@@ -923,6 +939,19 @@ describe('review seat write guard', () => {
   test('allows a report whose directory is not there yet', async ($, on) => {
     await started($, on, [REVIEW], { files: { [`${STATE}/sdd`]: { text: '', kind: 'dir' } }, statErrors: { [WS]: 'ENOENT' } })
     expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+  })
+
+  // The kit drops a stat rejection's code, so the coded branches are pinned on
+  // the rule itself.
+  test('reads a stat rejection as a missing path only for ENOENT, or with no code below a directory', () => {
+    const coded = (code: unknown) => Object.assign(new Error(String(code)), { code })
+    expect(statMissing(coded('ENOENT'), false)).toBe(true)
+    expect(statMissing(coded('EACCES'), true)).toBe(false)
+    expect(statMissing(coded('ENOTDIR'), true)).toBe(false)
+    expect(statMissing(new Error('gone'), true)).toBe(true)
+    expect(statMissing(new Error('gone'), false)).toBe(false)
+    expect(statMissing(coded(13), true)).toBe(true)
+    expect(statMissing(null, true)).toBe(true)
   })
 
   test('keeps a POSIX root under a one-letter directory exact, and walks it for links', async ($, on) => {
@@ -1037,6 +1066,7 @@ describe('review seat write guard', () => {
     })
     expect((await write($, 'judge-1', REVIEW)).deny).toMatch(/^dforge: the review-seat write guard could not check this write \(.+\); it is refused\.$/)
     expect((await write($, 'impl-1', `${WS}/notes.md`)).deny).toBeUndefined()
+    expect((await write($, 'unrecorded-1', `${WS}/notes.md`)).deny).toBeUndefined()
     expect((await write($, undefined, `${WS}/notes.md`)).deny).toBeUndefined()
   })
 })
