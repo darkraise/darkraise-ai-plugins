@@ -264,7 +264,9 @@ needed.
   review's task numbers, and act on its digest. Always start `verdict` as a
   background Bash command and end the turn until its notification arrives: it
   may run the suite once at the base commit after a red suite (up to an hour),
-  and it runs every `baseline` cannot-verify item (up to ten minutes each).
+  and it runs every `baseline` cannot-verify item (up to ten minutes each);
+  each run takes as long again for a **Worktree setup:** command in the plan
+  header.
   You never read the report, so you cannot tell beforehand that a `baseline`
   item is there, and a foreground `verdict` that the Bash tool times out writes
   no fix file and no digest.
@@ -664,7 +666,8 @@ base failures only; otherwise it prints
 `re-review: not skipped (suite <red|not run>)` and writes the prompt as it
 does without `--covered`. A red fix-head suite can make `--covered` run the
 suite once at the base commit, which takes up to an hour
-(`TASK_STEP_BASE_TIMEOUT`): start `rereview --covered` as a background
+(`TASK_STEP_BASE_TIMEOUT`), and as long again for a **Worktree setup:**
+command in the plan header: start `rereview --covered` as a background
 command and end the turn.
 
 **After each round,** append to the ledger:

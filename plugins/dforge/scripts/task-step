@@ -141,11 +141,12 @@ require_step_file() {
 # BASE_SHA in a temporary detached worktree, after the plan header's
 # **Worktree setup:** command when it names one, through suite-run --timeout
 # SECONDS (default 600). The setup is bounded by the same SECONDS and its
-# output is kept in OUT_LOG.setup.log. Copies the run's
-# log to OUT_LOG and prints the command's exit code; a setup that times out
-# prints 124 and returns 0, with the setup log as OUT_LOG. Prints nothing, and
-# returns 1, when the worktree, its setup or the run's log is missing. The
-# header is read from $src, the amended plan, when the caller has one.
+# output is kept in OUT_LOG.setup.log, which is removed when no setup runs.
+# Copies the run's log to OUT_LOG and prints the command's exit code; a setup
+# that times out prints 124 and returns 0, with the setup log as OUT_LOG.
+# Prints nothing, and returns 1, when the worktree cannot be made, the setup
+# fails or the run's log is missing. The header is read from $src, the amended
+# plan, when the caller has one.
 run_at_base() {
   local sha=$1 cmd=$2 out=$3 secs=${4:-600} wt line setup="" run log code scode=0 rc=1
   if [ -n "${src:-}" ] && [ -f "$src" ]; then
@@ -164,6 +165,8 @@ run_at_base() {
     (cd "$wt" && timeout -k "${SUITE_RUN_KILL_AFTER:-10}" "$secs" bash -c "$setup" < /dev/null) > "$out.setup.log" 2>&1
     scode=$?
     [ "$scode" -ne 137 ] || scode=124
+  else
+    rm -f "$out.setup.log"
   fi
   if [ "$scode" -eq 124 ]; then
     if cp "$out.setup.log" "$out"; then

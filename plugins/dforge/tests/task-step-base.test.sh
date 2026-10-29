@@ -488,6 +488,15 @@ check "task 14: the setup log is kept beside the baseline log" "$(cat "$WS/task-
 check "task 14: nothing is settled and nothing is a finding" "$(grep -c 'Task 14: Ruling: cannot-verify' "$WS/progress.md") $(grep '^findings: ' <<<"$out")" "0 findings: 0 Critical, 0 Important, 0 Minor"
 check "task 14: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
 
+# Task 14 again: once the plan names no setup, no setup log from the earlier run stays.
+cp "$WS/task-14-review-report.md" "$TMP/task-14-review-report.md"
+set_setup none
+commit "the plan names no setup"
+ts review docs/plan.md 14
+cp "$TMP/task-14-review-report.md" "$WS/task-14-review-report.md"
+ts verdict docs/plan.md 14
+check "task 14 without a setup: the earlier setup log is gone" "$rc $([ -e "$WS/task-14-baseline-1.log.setup.log" ] && echo kept || echo gone)" "0 gone"
+
 # Task 15: a passing suites.tsv row at the base answers without a base run.
 set_setup 'touch setup.done'
 set_failing ''
@@ -560,6 +569,7 @@ check "task 18: rereview --base on a grouped wave task is accepted and recorded"
 dt=$(tr -d '\r' < "$DT" | tr '\n' ' ' | tr -s ' ')
 check "the doc says a base run under rereview --covered takes up to an hour" "$(grep -cF 'which takes up to an hour (`TASK_STEP_BASE_TIMEOUT`)' <<<"$dt")" "1"
 check "the doc no longer says it takes up to ten minutes" "$(grep -cF 'which takes up to ten minutes' <<<"$dt")" "0"
+check "the doc gives a Worktree setup its own time limit, twice" "$(grep -oF 'as long again for a **Worktree setup:**' <<<"$dt" | wc -l | tr -d ' ')" "2"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
